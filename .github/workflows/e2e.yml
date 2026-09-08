@@ -1,0 +1,87 @@
+name: E2E
+
+# Runs on relevant PRs and blocks merging on failure once added as a required check in branch
+# protection settings. Skipped (not failed) on PRs that don't touch backend/frontend/tests, so
+# it never blocks unrelated changes (e.g. docs-only PRs). Can also be run manually.
+on:
+  pull_request:
+    branches:
+      - main
+      - "sprint/*"
+  workflow_dispatch: {}
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      changed: ${{ steps.filter.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          git fetch --no-tags --prune --depth=1 origin ${{ github.base_ref }}
+          changed=$(git diff --name-only --diff-filter=AM HEAD origin/${{ github.base_ref }} -- tests/ frontend/ backend/ | wc -l)
+          if [ "$changed" -gt 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e:
+    needs: [detect-changes]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.changed == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Start backend
+        working-directory: backend
+        run: uv run uvicorn app.main:app --port 8000 &
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Start frontend
+        working-directory: frontend
+        run: npm run dev -- --port 5173 &
+
+      - name: Install e2e dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for servers
+        run: npx wait-on http://localhost:8000/health http://localhost:5173
+
+      - name: Run e2e tests
+        working-directory: tests
+        run: npm test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/playwright-report/
+          retention-days: 7

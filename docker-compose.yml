@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: connectsphere
+      POSTGRES_PASSWORD: connectsphere
+      POSTGRES_DB: connectsphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - connectsphere_db_data:/var/lib/postgresql/data
+
+volumes:
+  connectsphere_db_data:

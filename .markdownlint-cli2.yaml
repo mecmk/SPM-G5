@@ -1,0 +1,10 @@
+ignores:
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/dist/**"
+
+config:
+  default: true
+  MD013: false # line length
+  MD033: false # allow inline HTML
+  MD041: false # first line doesn't have to be a top-level heading
