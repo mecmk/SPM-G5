@@ -1,0 +1,19 @@
+# Normalize all text files to LF in the repository, regardless of each developer's local
+# git config (core.autocrlf) or OS. This prevents whole-file diffs and merge conflicts caused
+# purely by line-ending differences across a mixed Windows/macOS/Linux team.
+* text=auto eol=lf
+
+# Windows batch/cmd scripts need CRLF to run correctly via cmd.exe
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files — do not touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

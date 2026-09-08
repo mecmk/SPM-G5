@@ -1,0 +1,26 @@
+{
+  "name": "connectsphere",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Convenience scripts to start/test the whole ConnectSphere stack from the repo root. See README.md.",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "setup": "npm install && uv --directory backend sync && npm --prefix frontend install && npm --prefix tests install && npm --prefix tests exec -- playwright install --with-deps chromium",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "uv --directory backend run uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "uv --directory backend run pytest",
+    "test:frontend": "npm --prefix frontend run lint && npm --prefix frontend run build",
+    "test:e2e": "npm --prefix tests test",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:backend": "uv --directory backend run ruff check . && uv --directory backend run ruff format --check .",
+    "lint:frontend": "npm --prefix frontend run lint && npm --prefix frontend run format:check",
+    "format": "uv --directory backend run ruff format . && npm --prefix frontend run format"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

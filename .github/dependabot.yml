@@ -1,0 +1,29 @@
+version: 2
+
+# Dependabot requires a single fixed target branch, but sprint/<N> branches are short-lived, so
+# we point everything at main. If a dependency bump is needed mid-sprint, cherry-pick the PR's
+# commit onto the current sprint branch manually.
+updates:
+  - package-ecosystem: "uv"
+    directory: "/backend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/tests"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
