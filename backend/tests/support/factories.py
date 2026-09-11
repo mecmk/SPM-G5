@@ -7,14 +7,21 @@ back anyway). Use unique names/emails so tests never collide with the seed.
 from __future__ import annotations
 
 import itertools
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.passwords import hash_password
+from app.events.models import Event, EventStatus
 from app.venues.models import Venue
+from tests.support.seed import Users
 
 _counter = itertools.count(1)
+_EVENT_PERIOD = (
+    datetime(2026, 12, 1, 9, 0, tzinfo=timezone.utc),
+    datetime(2026, 12, 1, 17, 0, tzinfo=timezone.utc),
+)
 
 
 def make_user(
@@ -50,6 +57,29 @@ def make_venue(db: Session, **overrides) -> Venue:
     db.add(venue)
     db.flush()
     return venue
+
+
+def make_event(db: Session, *, status: str = EventStatus.SUBMITTED, **overrides) -> Event:
+    """An event in any lifecycle status.
+
+    Non-DRAFT rows must carry the mandatory fields (``ck_events_submitted_fields_complete``),
+    so those are filled in unless the caller overrides them.
+    """
+    n = next(_counter)
+    starts_at, ends_at = _EVENT_PERIOD
+    event = Event(
+        organiser_id=overrides.pop("organiser_id", Users.ORGANISER.id),
+        name=overrides.pop("name", f"Test Event {n}"),
+        status=status,
+        purpose=overrides.pop("purpose", "Testing"),
+        starts_at=overrides.pop("starts_at", starts_at),
+        ends_at=overrides.pop("ends_at", ends_at),
+        expected_attendance=overrides.pop("expected_attendance", 25),
+        **overrides,
+    )
+    db.add(event)
+    db.flush()
+    return event
 
 
 def venue_payload(**overrides) -> dict:
