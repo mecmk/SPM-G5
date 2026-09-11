@@ -14,6 +14,25 @@ This is a **traditional CRUD web app** — plain REST endpoints, a relational-is
 form-driven UI. There is no AI/agentic functionality in this project; do not introduce LLM
 calls, agents, or AI SDKs unless a story explicitly asks for one.
 
+## Coding Conventions
+
+This file is the source of truth for process — stack, commands, branching, Definition of Done.
+The rules for writing the code itself live beside the code:
+
+| Path | File | Holds |
+| --- | --- | --- |
+| root | `CLAUDE.md` | Layout, cross-subsystem facts, and the resolution rule |
+| `backend/`, `frontend/`, `tests/` | `CLAUDE.md` | Setup, domain, architecture, hard prohibitions, feature workflow |
+| `backend/`, `frontend/`, `tests/` | `STYLE.md` | Graded coding rules, each anchored to a real file and line in this repo |
+
+**Read the `CLAUDE.md` and `STYLE.md` of the subsystem you are touching before writing code**, and
+defer to the most specific `CLAUDE.md` for the code in front of you. A rule graded `blocking` in a
+`STYLE.md` is one a reviewer will block the pull request on.
+
+Some rules are enforced by tooling rather than review — `ruff` for the backend, `oxlint` and
+`prettier` for the frontend, `markdownlint` for documentation. Each `STYLE.md` states exactly what
+its linter owns, so nothing below that line needs restating in review.
+
 ## Tech Stack & Commands
 
 - **Backend**: Python 3.12+ with FastAPI, PostgreSQL (via SQLAlchemy + psycopg3)

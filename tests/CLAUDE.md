@@ -4,6 +4,11 @@ Playwright end-to-end specs, a separate npm package from `frontend/`. Convention
 test layers live in [docs/testing/README.md](../docs/testing/README.md) — read that first. This
 file holds only what is specific to `tests/` and not obvious from reading the specs.
 
+**Before writing or reviewing specs in `tests/`, read [STYLE.md](STYLE.md)** — the graded
+conventions for this subsystem, and the note that nothing here is linted or formatted.
+
+@STYLE.md
+
 ## Setup and commands
 
 ```bash

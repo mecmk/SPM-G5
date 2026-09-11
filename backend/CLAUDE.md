@@ -5,6 +5,11 @@ FastAPI + SQLAlchemy over PostgreSQL. Setup, branching and Definition of Done ar
 [docs/database/README.md](../docs/database/README.md). This file holds only what is specific to
 `backend/` and not obvious from reading the code.
 
+**Before writing or reviewing code in `backend/`, read [STYLE.md](STYLE.md)** — the graded
+coding rules for this subsystem, with the sites in this repo each one is anchored to.
+
+@STYLE.md
+
 ## Setup and commands
 
 ```bash
