@@ -138,7 +138,7 @@ CONTRIBUTING.md
 README.md
 ```
 
-Branches, commits, and PRs reference a ticket/story ID (e.g. `A1`, `B2`) from whatever backlog
+Branches, commits, and PRs reference a ticket/story ID (e.g. `1.1`, `8.3`) from whatever backlog
 tool the team is using that sprint. This file doesn't track backlog content itself — just the
 convention of referencing IDs so code can be traced back to a story. Don't scaffold a new
 feature area speculatively; add one only when a real story needs it.
@@ -148,14 +148,16 @@ feature area speculatively; add one only when a real story needs it.
 ```text
 main                    ← stable, protected. Only merges at sprint end.
 └── sprint/<N>           ← sprint integration branch (e.g. sprint/1)
-    ├── story/<ID>-<slug> ← feature branch, e.g. story/A1-login
+    ├── story/<ID>-<slug> ← feature branch, e.g. story/1.1-login
     ├── fix/<ID>-<slug>   ← bug fix
     ├── refactor/<slug>   ← restructuring, no behavior change
-    └── test/<slug>       ← test-only changes
+    ├── test/<slug>       ← test-only changes
+    └── docs/<slug>       ← documentation only
 ```
 
 - **Never commit directly to `main` or `sprint/<N>`.** Always branch off the current
-  `sprint/<N>` using `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, or `test/<slug>`.
+  `sprint/<N>` using `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`,
+  or `docs/<slug>`.
 - Run tests locally before pushing.
 - Open the PR against `sprint/<N>` (not `main`). PRs into `main` only happen at sprint end,
   from `sprint/<N>`.
@@ -167,9 +169,9 @@ main                    ← stable, protected. Only merges at sprint end.
 
 ## Commit & PR Conventions
 
-- Conventional Commits style: `feat: add login form (A1)`, `fix: correct venue availability query (D3)`.
+- Conventional Commits style: `feat: add login form (1.1)`, `fix: correct venue availability query (8.3)`.
   Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
-- Reference the story ID in the commit/PR title, e.g. `feat: submit event request (B2)`.
+- Reference the story ID in the commit/PR title, e.g. `feat: assign coordinator to event (5.1)`.
 - PR description should state which story/AC it addresses and how it was tested.
 
 ## Definition of Done

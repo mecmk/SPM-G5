@@ -198,11 +198,13 @@ main                     ← stable, protected. Only merges at sprint end, from 
     ├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
     ├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
     ├── refactor/<slug>    ← restructuring, no behavior change
-    └── test/<slug>        ← test-only changes
+    ├── test/<slug>        ← test-only changes
+    └── docs/<slug>        ← documentation only
 ```
 
 Branches are created from the current `sprint/<N>` using the appropriate prefix
-(`story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, or `test/<slug>`). Pull requests are
+(`story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`).
+Pull requests are
 opened against `sprint/<N>`, never `main`, and require one approving review before a squash
 merge. At the end of a sprint, `sprint/<N>` is merged into `main` with a regular merge.
 
