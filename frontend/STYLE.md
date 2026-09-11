@@ -4,8 +4,8 @@ Personal coding idioms for `frontend/`. Follow these when writing or reviewing c
 document only contains things Claude would get wrong without being told: not standard React or
 TypeScript conventions, and not patterns already covered in [CLAUDE.md](CLAUDE.md).
 
-**What these rules are for.** One idea sits under nearly all of them: *a reader should not have
-to open the function body, or another file, to know what something does.* Names carry type and
+**What these rules are for.** One idea sits under nearly all of them: _a reader should not have
+to open the function body, or another file, to know what something does._ Names carry type and
 intent, failures are typed and loud, values are never unnamed, and indirection has to earn its
 place. Where a rule below looks fussy, that is the thing it is protecting.
 
@@ -16,8 +16,8 @@ single quotes, trailing commas, 100 columns. There is **no type-aware linting**;
 `npm run build` is the only type check, and there is no test runner at all. Everything below is
 enforced by review.
 
-**Provenance.** Every rule ends with the sites in this repo it was drawn from — an *exemplar*
-that does it right, a *counter-site* that does not, or a count of both. That anchor is the only
+**Provenance.** Every rule ends with the sites in this repo it was drawn from — an _exemplar_
+that does it right, a _counter-site_ that does not, or a count of both. That anchor is the only
 justification a rule gets here: open the file and check. A rule with nothing to point at was
 removed rather than kept on the strength of where it came from. See
 [Considered and rejected](#considered-and-rejected) for what was deliberately left out.
@@ -25,11 +25,11 @@ removed rather than kept on the strength of where it came from. See
 **Rule strength.** Every rule carries its weight, and a non-blocking weight is genuinely the
 author's call. Never flatten a `taste` into a "must".
 
-| Grade | Meaning |
-| --- | --- |
-| `blocking` | A reviewer blocks the PR on it. |
+| Grade      | Meaning                                                 |
+| ---------- | ------------------------------------------------------- |
+| `blocking` | A reviewer blocks the PR on it.                         |
 | `expected` | The default. Deviating needs a reason stated in the PR. |
-| `taste` | Raised as a suggestion, the author decides. |
+| `taste`    | Raised as a suggestion, the author decides.             |
 
 ## Constants and magic values
 
@@ -49,8 +49,8 @@ author's call. Never flatten a `taste` into a "must".
   { to: '/venues/manage', permission: 'venues:manage' }     // AppLayout.tsx
   ```
 
-  *`blocking` · currently violated
-  at `src/App.tsx:25` and `src/layout/AppLayout.tsx:17` — see Standing divergences*
+  _`blocking` · currently violated
+  at `src/App.tsx:25` and `src/layout/AppLayout.tsx:17` — see Standing divergences_
 
 ## Styling
 
@@ -73,8 +73,8 @@ author's call. Never flatten a `taste` into a "must".
   Adding a colour means adding a token to `index.css` in **both** the light block and the
   `prefers-color-scheme: dark` block, then referencing it.
 
-  *`expected` · exemplars `src/App.css:201-202` (`var(--accent)`), 24 `var(--…)` uses;
-  10 counter-sites at `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`*
+  _`expected` · exemplars `src/App.css:201-202` (`var(--accent)`), 24 `var(--…)` uses;
+  10 counter-sites at `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`_
 
 ## Control flow and failure
 
@@ -96,13 +96,13 @@ author's call. Never flatten a `taste` into a "must".
   {error && <p className="error">{error}</p>}
   ```
 
-  *`blocking` · exemplars `src/venues/VenueManagePage.tsx:45`, `src/auth/LoginPage.tsx:81`,
-  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:31`*
+  _`blocking` · exemplars `src/venues/VenueManagePage.tsx:45`, `src/auth/LoginPage.tsx:81`,
+  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:31`_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
   needs surfacing to the user through the error rule above.
 
-  *`expected` · 0 counter-sites*
+  _`expected` · 0 counter-sites_
 
 ## Data fetching
 
@@ -133,8 +133,8 @@ author's call. Never flatten a `taste` into a "must".
   }, [includeWithdrawn])
   ```
 
-  *`expected` · exemplars `src/venues/VenueManagePage.tsx:13-25`, `src/auth/AuthProvider.tsx:10-25`,
-  `src/venues/VenueFormPage.tsx`*
+  _`expected` · exemplars `src/venues/VenueManagePage.tsx:13-25`, `src/auth/AuthProvider.tsx:10-25`,
+  `src/venues/VenueFormPage.tsx`_
 
 - `expected` — **A custom hook returns a named object, never a tuple.** Positional unpacking
   breaks silently when the hook grows a new value: every call site shifts by one and still
@@ -151,19 +151,19 @@ author's call. Never flatten a `taste` into a "must".
   const [user, loading, signIn, signOut, can] = useAuth()
   ```
 
-  This is the same rule as the backend's *return several values as one typed object*; both exist
+  This is the same rule as the backend's _return several values as one typed object_; both exist
   because a positional container has no name to fail against.
 
-  *`expected` · exemplar `src/auth/authContext.ts:17` (`useAuth` returns `AuthContextValue`, 5
+  _`expected` · exemplar `src/auth/authContext.ts:17` (`useAuth` returns `AuthContextValue`, 5
   named members), consumed at `RequireAuth.tsx:6`, `:18`, `LoginPage.tsx:17`, `AppLayout.tsx:21`,
-  `HomePage.tsx:4`; 0 counter-sites*
+  `HomePage.tsx:4`; 0 counter-sites_
 
 - `expected` — **A `useCallback` dependency array is exhaustive.** Every component-scoped value the
   callback reads goes in the array, or the value is hoisted to module scope so it cannot go stale.
   Nothing lints this here — there is no `exhaustive-deps` rule configured — so it is on review.
 
-  *`expected` · exemplar
-  `src/auth/AuthProvider.tsx:41-44`, where `can` correctly depends on `[user]`*
+  _`expected` · exemplar
+  `src/auth/AuthProvider.tsx:41-44`, where `can` correctly depends on `[user]`_
 
 ## Naming
 
@@ -178,14 +178,14 @@ author's call. Never flatten a `taste` into a "must".
   const [saving, setSaving] = useState(false)
   ```
 
-  *`expected` · 4 counter-sites, see
-  Standing divergences*
+  _`expected` · 4 counter-sites, see
+  Standing divergences_
 
 - `expected` — **Name a function for the specific domain operation, as a verb phrase.** Not a
   generic description of the operation in the abstract, and never a name that reads like a class.
 
-  *`expected` · exemplars
-  `src/api/venues.ts` (`fetchVenueReferenceData`), `src/auth/homeFor.ts`*
+  _`expected` · exemplars
+  `src/api/venues.ts` (`fetchVenueReferenceData`), `src/auth/homeFor.ts`_
 
 ## Component patterns
 
@@ -206,8 +206,8 @@ author's call. Never flatten a `taste` into a "must".
   <button onClick={async () => { await signOut(); navigate('/login') }}>Sign out</button>
   ```
 
-  *`expected` · exemplar
-  `src/layout/AppLayout.tsx:24`; 22 inline handlers remain, see Standing divergences*
+  _`expected` · exemplar
+  `src/layout/AppLayout.tsx:24`; 22 inline handlers remain, see Standing divergences_
 
 - `taste` — **Render loading, empty and error as three separate explicit states.**
   A single spinner-or-content branch makes "no venues yet" look like a failure.
@@ -218,7 +218,7 @@ author's call. Never flatten a `taste` into a "must".
   {venues && venues.length === 0 && <p className="muted">No venues recorded yet.</p>}
   ```
 
-  *`taste` · exemplar `src/venues/VenueManagePage.tsx:44-50`*
+  _`taste` · exemplar `src/venues/VenueManagePage.tsx:44-50`_
 
 ## Types
 
@@ -234,8 +234,8 @@ author's call. Never flatten a `taste` into a "must".
   export type VenueSummary = { id: string; name: string }
   ```
 
-  *`expected` · already holds throughout:
-  `src/api/venues.ts:3`, `:17` (interfaces) and `:15` (union as `type`)*
+  _`expected` · already holds throughout:
+  `src/api/venues.ts:3`, `:17` (interfaces) and `:15` (union as `type`)_
 
 - `expected` — **Pass an explicit type parameter to `useState` when the initial value does not
   carry the domain type** — a union, an enum, or anything nullable. Inference from `false`, `0` or
@@ -252,9 +252,9 @@ author's call. Never flatten a `taste` into a "must".
   const [isSaving, setIsSaving] = useState(false)
   ```
 
-  *`expected` · exemplars `src/venues/VenueManagePage.tsx:8`, `:10`;
+  _`expected` · exemplars `src/venues/VenueManagePage.tsx:8`, `:10`;
   `src/auth/AuthProvider.tsx:6`; `src/venues/VenueFormPage.tsx:148-150`; 0 counter-sites —
-  every nullable state in the tree already annotates, every primitive correctly infers*
+  every nullable state in the tree already annotates, every primitive correctly infers_
 
 - `taste` — **Import types with the inline `type` modifier when the module also supplies values;
   use a standalone `import type` line only when nothing but types is imported.**
@@ -272,8 +272,8 @@ author's call. Never flatten a `taste` into a "must".
   Graded `taste`: the only argument for it is matching what is already here, which is not enough
   to block a PR over.
 
-  *`taste` · exemplars `src/auth/AuthProvider.tsx:2`, `src/venues/VenueManagePage.tsx:4`;
-  standalone form at `src/auth/authContext.ts:2`*
+  _`taste` · exemplars `src/auth/AuthProvider.tsx:2`, `src/venues/VenueManagePage.tsx:4`;
+  standalone form at `src/auth/authContext.ts:2`_
 
 ## Traceability
 
@@ -291,21 +291,21 @@ author's call. Never flatten a `taste` into a "must".
   can: (permission: string) => boolean
   ```
 
-  *`expected` · exemplars `src/venues/VenueManagePage.tsx:6`, `src/venues/VenueFormPage.tsx:143`,
+  _`expected` · exemplars `src/venues/VenueManagePage.tsx:6`, `src/venues/VenueFormPage.tsx:143`,
   `src/auth/RequireAuth.tsx:14`, `src/auth/homeFor.ts:2`, `src/auth/authContext.ts:11`,
-  `src/layout/AppLayout.tsx:7`; 9 sites in `src/`*
+  `src/layout/AppLayout.tsx:7`; 9 sites in `src/`_
 
 ## Considered and rejected
 
 Conventions weighed against this codebase and left out, recorded so nobody re-adds them:
 
-| Convention | Why not here |
-| --- | --- |
-| **No comments or JSDoc — names must be self-documenting** | This tree's docblocks carry story and AC references that the grading rubric depends on, and the cross-boundary notes (`src/api/auth.ts:3`, `src/layout/AppLayout.tsx:12`) are the only thing linking a permission string to its backend definition. |
-| `[Category][Context].tsx` component naming (`FormUpdateUser`, `DialogDeleteConversation`) | This tree is consistently `[Context]Page` (`VenueFormPage`, `LoginPage`, `HomePage`). Adopting the other scheme would rename every file for no gain. |
-| Semantic colour tokens, no raw palette or opacity-composite classes, `cn()` over string interpolation | Tailwind-specific. There is no Tailwind, no `cn()` and no token config here — styling is plain global CSS with custom properties. |
-| Dialog, Table, Button, Form, Skeleton and Notice patterns | All built on Radix, shadcn, TanStack Table and react-hook-form. None is installed here, and [CLAUDE.md](CLAUDE.md) forbids adding them without team agreement. |
-| Shared helpers belong in `src/lib/utils.ts` | No `lib/` folder here; the equivalent shared module is `src/api/client.ts`. |
+| Convention                                                                                            | Why not here                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No comments or JSDoc — names must be self-documenting**                                             | This tree's docblocks carry story and AC references that the grading rubric depends on, and the cross-boundary notes (`src/api/auth.ts:3`, `src/layout/AppLayout.tsx:12`) are the only thing linking a permission string to its backend definition. |
+| `[Category][Context].tsx` component naming (`FormUpdateUser`, `DialogDeleteConversation`)             | This tree is consistently `[Context]Page` (`VenueFormPage`, `LoginPage`, `HomePage`). Adopting the other scheme would rename every file for no gain.                                                                                                |
+| Semantic colour tokens, no raw palette or opacity-composite classes, `cn()` over string interpolation | Tailwind-specific. There is no Tailwind, no `cn()` and no token config here — styling is plain global CSS with custom properties.                                                                                                                   |
+| Dialog, Table, Button, Form, Skeleton and Notice patterns                                             | All built on Radix, shadcn, TanStack Table and react-hook-form. None is installed here, and [CLAUDE.md](CLAUDE.md) forbids adding them without team agreement.                                                                                      |
+| Shared helpers belong in `src/lib/utils.ts`                                                           | No `lib/` folder here; the equivalent shared module is `src/api/client.ts`.                                                                                                                                                                         |
 
 ## Standing divergences
 
@@ -313,13 +313,13 @@ Rules the existing tree violates. Naming them here is what stops someone copying
 good faith because they found it first. **Fix these under their own ticket, never opportunistically
 in an unrelated PR.**
 
-| Rule | Violating sites | Status |
-| --- | --- | --- |
-| One exported constant for a cross-file string | 2: `src/App.tsx:25`, `src/layout/AppLayout.tsx:17` (both hardcode `'venues:manage'`) | carried rule, newly adopted — worth fixing early, since this one fails silently |
-| Extract named handlers | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx` | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
-| Colour comes from a token, never a literal | 10: `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296` | **breaks dark mode today** — `.error` and `.success` are the worst affected; worth its own ticket rather than waiting |
-| Boolean `is`/`can`/`has` prefix | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted |
-| Components use named exports | 1: `src/App.tsx:39` | licensed exception — conventional default export for the Vite entry point |
+| Rule                                          | Violating sites                                                                                                                                          | Status                                                                                                                  |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| One exported constant for a cross-file string | 2: `src/App.tsx:25`, `src/layout/AppLayout.tsx:17` (both hardcode `'venues:manage'`)                                                                     | carried rule, newly adopted — worth fixing early, since this one fails silently                                         |
+| Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx`                                                                                    | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
+| Colour comes from a token, never a literal    | 10: `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`                                                                                    | **breaks dark mode today** — `.error` and `.success` are the worst affected; worth its own ticket rather than waiting   |
+| Boolean `is`/`can`/`has` prefix               | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted                                                                                             |
+| Components use named exports                  | 1: `src/App.tsx:39`                                                                                                                                      | licensed exception — conventional default export for the Vite entry point                                               |
 
 ## Maintaining this file
 
@@ -328,7 +328,7 @@ in an unrelated PR.**
   a counter-site that does not. Record a correction in the PR thread; add it here only when a
   second, independent case appears.
 - **Record divergences with counts**, not "some legacy code does this".
-- **A dead anchor gets a marker, not a deletion.** Mark it *(path since deleted)* and give a live
+- **A dead anchor gets a marker, not a deletion.** Mark it _(path since deleted)_ and give a live
   substitute. The rule does not depend on the anchor.
 - **Match the way it is already done here, even when the local choice is worse.** Settle a dispute
   by the majority of existing untouched code, name the canonical module to copy from, and raise

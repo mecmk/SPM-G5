@@ -4,6 +4,11 @@ React 19 + TypeScript SPA built with Vite. Setup, branching and Definition of Do
 [AGENTS.md](../AGENTS.md). This file holds only what is specific to `frontend/` and not obvious
 from reading the code.
 
+**Before writing or reviewing code in `frontend/`, read [STYLE.md](STYLE.md)** — the graded
+coding rules for this subsystem, with the sites in this repo each one is anchored to.
+
+@STYLE.md
+
 ## Setup and commands
 
 ```bash
@@ -31,8 +36,8 @@ Read from `frontend/.env` (copy `frontend/.env.sample`). Vite only exposes names
 
 **Required: none.**
 
-| Optional | Default | Note |
-| --- | --- | --- |
+| Optional            | Default                 | Note                                  |
+| ------------------- | ----------------------- | ------------------------------------- |
 | `VITE_API_BASE_URL` | `http://localhost:8000` | Consumed once, in `src/api/client.ts` |
 
 ## Domain
@@ -49,17 +54,17 @@ link simply stops appearing. Grep both sides when changing one.
 
 ## Architecture
 
-| Path | Holds | May import |
-| --- | --- | --- |
-| `src/api/<feature>.ts` | Types mirroring backend schemas, and one function per endpoint | `./client` only |
-| `src/api/client.ts` | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError` | nothing |
-| `src/<feature>/` | Pages for one feature area, e.g. `src/venues/` | `../api/<feature>`, `../auth/authContext` |
-| `src/auth/` | `AuthProvider`, `authContext`, route guards, `LoginPage`, `homeFor` | `../api/auth` |
-| `src/layout/AppLayout.tsx` | Header and the permission-filtered nav | `../auth/authContext` |
-| `src/pages/` | Pages belonging to no feature area (`HomePage`) | anything above |
-| `src/App.tsx` | The route map | everything |
+| Path                       | Holds                                                                | May import                                |
+| -------------------------- | -------------------------------------------------------------------- | ----------------------------------------- |
+| `src/api/<feature>.ts`     | Types mirroring backend schemas, and one function per endpoint       | `./client` only                           |
+| `src/api/client.ts`        | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError` | nothing                                   |
+| `src/<feature>/`           | Pages for one feature area, e.g. `src/venues/`                       | `../api/<feature>`, `../auth/authContext` |
+| `src/auth/`                | `AuthProvider`, `authContext`, route guards, `LoginPage`, `homeFor`  | `../api/auth`                             |
+| `src/layout/AppLayout.tsx` | Header and the permission-filtered nav                               | `../auth/authContext`                     |
+| `src/pages/`               | Pages belonging to no feature area (`HomePage`)                      | anything above                            |
+| `src/App.tsx`              | The route map                                                        | everything                                |
 
-Routing is **react-router v7**, imported from the `react-router` package — *not*
+Routing is **react-router v7**, imported from the `react-router` package — _not_
 `react-router-dom`, which is not installed.
 
 State is plain React: `useState` + `useEffect`, with a `cancelled` flag in the cleanup so a slow
