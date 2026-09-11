@@ -91,6 +91,7 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   # Good
   def create_venue(db: Session, data: VenueCreate, *, actor: User) -> Venue: ...
 
+
   # Bad
   def create_venue(db: Session, data: VenueCreate, actor: User) -> Venue: ...
   ```
@@ -206,6 +207,7 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
       description: str | None
       setup_minutes_default: int
 
+
   # Bad — a forgotten field silently becomes None
   class VenueOut(BaseModel):
       description: str | None = None
@@ -248,10 +250,12 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
 
   ```python
   # Good
-  "Invalid email or password."   "Your role does not permit this action."
+  INVALID_CREDENTIALS_MESSAGE = "Invalid email or password."
+  NOT_PERMITTED_MESSAGE = "Your role does not permit this action."
 
   # Bad
-  "invalid credentials"          "forbidden"
+  INVALID_CREDENTIALS_MESSAGE = "invalid credentials"
+  NOT_PERMITTED_MESSAGE = "forbidden"
   ```
 
   *`expected` · exemplars
