@@ -7,12 +7,15 @@ back anyway). Use unique names/emails so tests never collide with the seed.
 from __future__ import annotations
 
 import itertools
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.passwords import hash_password
+from app.bookings.models import VenueBooking
 from app.venues.models import Venue
+from tests.support.seed import Events, Users
 
 _counter = itertools.count(1)
 
@@ -50,6 +53,35 @@ def make_venue(db: Session, **overrides) -> Venue:
     db.add(venue)
     db.flush()
     return venue
+
+
+def make_booking(
+    db: Session,
+    *,
+    venue_id,
+    starts_at: datetime,
+    ends_at: datetime,
+    status: str = "PENDING",
+    **overrides,
+) -> VenueBooking:
+    """A venue booking. Refreshed after flush so the trigger-computed held_from/held_until
+    (see app/bookings/models.py) are populated on the returned object, not just in the row -
+    the conflict check compares those fields in Python.
+    """
+    booking = VenueBooking(
+        event_id=overrides.pop("event_id", Events.APPROVED),
+        venue_id=venue_id,
+        requested_by_id=overrides.pop("requested_by_id", Users.COORDINATOR.id),
+        starts_at=starts_at,
+        ends_at=ends_at,
+        expected_attendance=overrides.pop("expected_attendance", 10),
+        status=status,
+        **overrides,
+    )
+    db.add(booking)
+    db.flush()
+    db.refresh(booking)
+    return booking
 
 
 def venue_payload(**overrides) -> dict:

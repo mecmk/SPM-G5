@@ -1,0 +1,185 @@
+"""Story 14.2 - be: block approval of conflicting bookings.
+
+Scope note: story 13.2 ("approve venue booking request", teammate Yu Bing) does not exist
+yet, so there is no HTTP endpoint to test here - these tests exercise the conflict-detection
+service function directly (app/bookings/service.py::assert_no_conflict), which 13.2 is meant
+to call before approving a booking. The ``_approve`` helper below is test scaffolding standing
+in for that future endpoint (check, then flip status) so AC3 can be demonstrated end-to-end;
+it is not part of the shipped solution.
+
+AC1 Approval is refused where the requested period overlaps a confirmed booking for the same
+    venue.
+AC2 The refusal identifies the conflicting booking.
+AC3 Where two pending requests overlap, approving one causes the other's approval to be
+    refused.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy.orm import Session
+
+from app.bookings import service
+from app.bookings.models import VenueBooking
+from tests.support.factories import make_booking
+from tests.support.seed import Bookings, Users, Venues
+
+
+def _approve(db: Session, booking: VenueBooking, *, actor_id) -> None:
+    """Stand-in for story 13.2's approve action: check for conflicts, then flip status."""
+    service.assert_no_conflict(db, booking)
+    booking.status = "APPROVED"
+    booking.decided_by_id = actor_id
+    db.flush()
+
+
+# --- AC1: overlap with a confirmed booking is refused ---------------------------------------
+@pytest.mark.story("14.2", ac=1)
+def test_pending_request_overlapping_an_approved_booking_is_refused(db: Session):
+    """Bookings.APPROVED_GRAND_HALL holds Grand Hall 08:00-19:00 incl. setup/teardown."""
+    overlapping = make_booking(
+        db,
+        venue_id=Venues.GRAND_HALL,
+        starts_at=datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(service.BookingConflict):
+        service.assert_no_conflict(db, overlapping)
+
+
+@pytest.mark.story("14.2", ac=1)
+def test_request_that_does_not_overlap_any_approved_booking_is_not_refused(db: Session):
+    clear = make_booking(
+        db,
+        venue_id=Venues.GRAND_HALL,
+        starts_at=datetime(2026, 12, 10, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    service.assert_no_conflict(db, clear)  # does not raise
+
+
+@pytest.mark.story("14.2", ac=1)
+def test_request_touching_the_boundary_of_an_approved_booking_is_not_refused(db: Session):
+    """Held periods are half-open [) (story 14.1 AC3): starting when another ends is fine."""
+    touching = make_booking(
+        db,
+        venue_id=Venues.GRAND_HALL,
+        starts_at=datetime(2026, 11, 25, 19, 0, tzinfo=timezone.utc),  # == held_until
+        ends_at=datetime(2026, 11, 25, 20, 0, tzinfo=timezone.utc),
+    )
+
+    service.assert_no_conflict(db, touching)  # does not raise
+
+
+@pytest.mark.story("14.2", ac=1)
+def test_overlap_with_a_non_approved_booking_is_not_refused(db: Session):
+    """Only an APPROVED ('confirmed') booking blocks the venue - a rejected one does not."""
+    rejected = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        status="REJECTED",
+        starts_at=datetime(2026, 12, 1, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 1, 11, 0, tzinfo=timezone.utc),
+    )
+    overlapping = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 12, 1, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 1, 12, 0, tzinfo=timezone.utc),
+    )
+
+    service.assert_no_conflict(db, overlapping)  # does not raise
+    assert rejected.status == "REJECTED"
+
+
+@pytest.mark.story("14.2", ac=1)
+def test_overlap_on_a_different_venue_is_not_refused(db: Session):
+    """AC1 is scoped to 'the same venue' - an overlapping period elsewhere is irrelevant."""
+    elsewhere = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc),
+    )
+
+    service.assert_no_conflict(db, elsewhere)  # does not raise: Grand Hall booking is elsewhere
+
+
+# --- AC2: the refusal identifies the conflicting booking -------------------------------------
+@pytest.mark.story("14.2", ac=2)
+def test_refusal_identifies_the_conflicting_booking(db: Session):
+    overlapping = make_booking(
+        db,
+        venue_id=Venues.GRAND_HALL,
+        starts_at=datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(service.BookingConflict) as excinfo:
+        service.assert_no_conflict(db, overlapping)
+
+    assert excinfo.value.conflicting_booking.id == Bookings.APPROVED_GRAND_HALL
+    assert str(Bookings.APPROVED_GRAND_HALL) in str(excinfo.value)
+
+
+@pytest.mark.story("14.2", ac=2)
+def test_find_conflicting_booking_returns_none_when_clear(db: Session):
+    clear = make_booking(
+        db,
+        venue_id=Venues.GRAND_HALL,
+        starts_at=datetime(2026, 12, 10, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert service.find_conflicting_booking(db, clear) is None
+
+
+# --- AC3: approving one of two overlapping pending requests refuses the other ---------------
+@pytest.mark.story("14.2", ac=3)
+def test_approving_one_of_two_overlapping_pending_requests_refuses_the_other(db: Session):
+    first = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 12, 3, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 3, 11, 0, tzinfo=timezone.utc),
+    )
+    second = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 12, 3, 10, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 3, 12, 0, tzinfo=timezone.utc),
+    )
+
+    _approve(db, first, actor_id=Users.VENUE_STAFF.id)  # succeeds: nothing APPROVED yet
+
+    with pytest.raises(service.BookingConflict) as excinfo:
+        _approve(db, second, actor_id=Users.VENUE_STAFF.id)
+
+    assert excinfo.value.conflicting_booking.id == first.id
+    assert second.status == "PENDING"  # refused: the second request is left untouched
+
+
+@pytest.mark.story("14.2", ac=3)
+def test_approving_non_overlapping_pending_requests_both_succeed(db: Session):
+    first = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 12, 4, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 4, 11, 0, tzinfo=timezone.utc),
+    )
+    second = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2026, 12, 4, 12, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 12, 4, 14, 0, tzinfo=timezone.utc),
+    )
+
+    _approve(db, first, actor_id=Users.VENUE_STAFF.id)
+    _approve(db, second, actor_id=Users.VENUE_STAFF.id)
+
+    assert first.status == "APPROVED"
+    assert second.status == "APPROVED"
