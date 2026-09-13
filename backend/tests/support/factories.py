@@ -58,3 +58,11 @@ def venue_payload(**overrides) -> dict:
     body = {"name": f"API Venue {n}", "location": "Tower Z, Level 9", "capacity": 40}
     body.update(overrides)
     return body
+
+
+def event_payload(**overrides) -> dict:
+    """A valid POST /events body (story 2.1 AC1 minimum: just a name) with optional overrides."""
+    n = next(_counter)
+    body = {"name": f"Test Event Request {n}"}
+    body.update(overrides)
+    return body

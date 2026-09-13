@@ -76,3 +76,18 @@ class Events:
 class Bookings:
     APPROVED_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000001")
     PENDING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000002")
+
+
+def _q(n: int) -> uuid.UUID:
+    return uuid.UUID(f"77777777-0000-0000-0000-{n:012d}")
+
+
+class EquipmentTypes:
+    PROJECTOR_PORTABLE = _q(1)
+    WIRELESS_MIC = _q(2)
+    LAPEL_MIC = _q(3)
+    LAPTOP = _q(4)
+    SPEAKER_SET = _q(5)
+    VIDEO_CAMERA = _q(6)
+    LED_SCREEN = _q(7)
+    CONF_PHONE = _q(8)

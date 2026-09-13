@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-10 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-13 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
