@@ -59,9 +59,9 @@ npx playwright install --with-deps chromium
 ```
 
 Copy `backend/.env.sample` to `backend/.env` and `frontend/.env.sample` to `frontend/.env`,
-adjusting values as needed. `npm run poc` (repo root) installs missing tools and packages, starts
-PostgreSQL in Docker on host port **5433**, migrates + seeds it, then starts both servers.
-Database-only: `npm run db:ready`. Root npm scripts call uv through `scripts/uv.mjs`, which
+adjusting values as needed. From the repo root, `npm run setup` installs all packages,
+`npm run db:ready` starts PostgreSQL in Docker on host port **5433** and migrates + seeds it, and
+`npm run dev` starts both servers. Root npm scripts call uv through `scripts/uv.mjs`, which
 locates or installs uv, so use that wrapper in any new root script too.
 
 ### Run (two terminals)
@@ -147,7 +147,7 @@ frontend/
     layout/             # AppLayout (header + permission-filtered nav)
     <feature>/          # pages for one feature area
 tests/                  # Playwright e2e specs, separate from backend/frontend
-scripts/                # repo-root Node helpers: poc.mjs (npm run poc), uv.mjs (uv wrapper)
+scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root npm scripts)
 docs/
   ARCHITECTURE.md
   database/             # README + generated DATA_DICTIONARY.md and ERD.excalidraw

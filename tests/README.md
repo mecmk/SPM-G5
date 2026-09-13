@@ -14,7 +14,7 @@ npx playwright install --with-deps chromium
 ## Run
 
 Make sure the database, backend (`http://localhost:8000`) and frontend (`http://localhost:5173`)
-are running - `npm run poc` from the repo root does all three - then:
+are running - `npm run db:ready` then `npm run dev` from the repo root - then:
 
 ```bash
 npm test

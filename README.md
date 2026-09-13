@@ -21,10 +21,6 @@ Install the following before proceeding. Windows commands use
 [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) (built into Windows
 10/11); macOS/Linux equivalents are listed alongside.
 
-> **Shortcut:** only Node.js 22 has to be installed by hand. `npm run poc` installs uv, Python,
-> the project packages and, after asking, Docker Desktop and DBeaver. The manual steps below are
-> for anyone who prefers to install things themselves.
-
 ### Python 3.12 or later
 
 ```powershell
@@ -54,8 +50,23 @@ distribution's package manager.
 
 ### Docker Desktop (optional — only required to run a local PostgreSQL instance)
 
-Download from [docker.com](https://www.docker.com/products/docker-desktop/), or use an
-existing PostgreSQL 16 server instead.
+```powershell
+winget install -e --id Docker.DockerDesktop
+```
+
+macOS: `brew install --cask docker-desktop`. Or download it from
+[docker.com](https://www.docker.com/products/docker-desktop/), or use an existing PostgreSQL 16
+server instead. After installing, open Docker Desktop once and wait for "Engine running".
+
+### DBeaver Community (optional — database viewer)
+
+```powershell
+winget install -e --id DBeaver.DBeaver.Community
+```
+
+macOS: `brew install --cask dbeaver-community`. Or download it from
+[dbeaver.io](https://dbeaver.io/download/). Connection settings are in
+[docs/database/README.md](docs/database/README.md#viewing-the-data).
 
 ## Setup
 
@@ -96,7 +107,7 @@ configuration.
 - Data is stored in a named Docker volume (`connectsphere_db_data`) rather than inside the
   container itself, so removing or recreating the container does not delete existing data;
   only removing the volume does.
-- `npm run poc` runs `docker compose up -d` for you, so you rarely need these commands directly.
+- `npm run db:ready` runs `docker compose up -d` for you, so you rarely need these commands directly.
 
 Common commands:
 
@@ -112,37 +123,19 @@ at it instead.
 
 ## Running the App
 
+With Docker Desktop open, run these from the repo root:
+
 ```powershell
-npm run poc
+npm run db:ready
+npm run dev
 ```
 
-This is the one command to remember, including on a brand-new laptop. It checks each piece,
-installs or starts whatever is missing, prepares the database and starts the app:
+1. `npm run db:ready` starts PostgreSQL in Docker, creates the database if it is missing, applies
+   pending migrations, reloads the sample data and verifies it. It never duplicates data, so run
+   it at the start of every session.
+2. `npm run dev` starts the backend and frontend together. Press Ctrl+C to stop both.
 
-1. Checks that Node.js is version 22 or newer.
-2. Starts Docker Desktop if it is stopped. If it is not installed, it asks, installs it, and
-   tells you to open it once and run `npm run poc` again.
-3. Installs uv if it is missing. uv downloads Python 3.12 by itself when needed.
-4. Installs npm packages when `package.json` or `package-lock.json` changed, and runs `uv sync`.
-5. Creates `backend/.env` and `frontend/.env` from the samples if they do not exist.
-6. Starts PostgreSQL, applies pending migrations, reloads the sample data and verifies it.
-7. Offers once to install [DBeaver](https://dbeaver.io), a free database viewer, and remembers
-   if you say no.
-8. Starts the backend and frontend together.
-
-Every step skips work that is already done, so run it at the start of every session. It never
-duplicates data. Options go after `--`:
-
-| Command | Effect |
-| --- | --- |
-| `npm run poc -- --yes` | Install everything without asking |
-| `npm run poc -- --skip-dbeaver` | Do not check for or offer DBeaver |
-| `npm run poc -- --no-start` | Prepare everything without starting the servers |
-| `npm run poc -- --help` | List the steps and options |
-
-Docker Desktop and DBeaver are installed with winget on Windows and Homebrew on macOS. On Linux
-the script tells you what to install instead. `npm run dev` starts only the two servers, and
-`npm run db:ready` does only the database part.
+Run `npm run setup` again whenever a pull adds or updates packages.
 
 The frontend is served at [http://localhost:5173](http://localhost:5173) and opens on the
 sign-in page. The backend's API documentation (Swagger UI) is available at
@@ -161,7 +154,7 @@ Sample accounts (password `Password123!` for all):
 ### Database commands
 
 ```powershell
-npm run db:ready    # start Postgres, migrate, seed, verify (what `poc` runs first)
+npm run db:ready    # start Postgres, migrate, seed, verify
 npm run db:status   # applied / pending / drifted migrations
 npm run db:reset    # wipe the local database and rebuild it from migrations + seed
 npm run db:docs     # regenerate docs/database/DATA_DICTIONARY.md and ERD.excalidraw
@@ -180,7 +173,7 @@ npm run lint         # lint and format-check the backend and frontend
 npm run format       # auto-fix formatting issues in the backend and frontend
 npm run test         # backend tests (needs Postgres running) and a frontend build check
 npm run test:trace   # backend tests + docs/testing/TRACEABILITY.md (story/AC -> test matrix)
-npm run test:e2e     # end-to-end tests; requires `npm run poc` running in another terminal
+npm run test:e2e     # end-to-end tests; requires `npm run dev` running in another terminal
 ```
 
 Backend tests build their own `connectsphere_test` database from the real migrations and seed,

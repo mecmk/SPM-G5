@@ -38,15 +38,14 @@ Story 1 AC3 ("schema can be populated with sample data without integrity errors"
 3. **SQL schema** - `backend/db/migrations/001_initial_schema.sql` (28 tables covering all 20
    core features, not just Sprint 1) plus idempotent seed files.
 
-## `npm run poc`
+## Running it locally
 
-Runs, in order: check Node.js, install or start Docker Desktop, install uv (which fetches
-Python), install npm and Python packages when they changed, create `.env` files from the
-samples, `docker compose up -d`, create the database if missing, apply pending migrations
-(refusing if an applied file was edited - "drift"), re-run the seed upserts, verify key tables
-are populated, offer once to install DBeaver, then start backend + frontend. It is safe to run
-every day; it never duplicates data. Installing Docker Desktop or DBeaver always asks first
-unless you pass `--yes`. See `npm run poc -- --help`.
+`npm run setup` installs every package, and installs uv first if it is missing. With Docker
+Desktop open, `npm run db:ready` runs `docker compose up -d`, creates the database if missing,
+applies pending migrations (refusing if an applied file was edited - "drift"), re-runs the seed
+upserts and verifies key tables are populated. It is safe to run every day; it never duplicates
+data. `npm run dev` then starts backend + frontend. Docker Desktop and DBeaver are installed by
+hand (see the README prerequisites).
 
 ### Save state vs fresh rebuild - the recommendation
 
@@ -109,9 +108,8 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 3. Password hashing uses scrypt from the Python standard library (no `bcrypt`/`argon2`
    dependency). The hash string is self-describing, so the algorithm can change later.
 4. `.information/` (customer briefing, backlog export) is now listed in `.gitignore`.
-5. `npm run poc` installs software on teammates' laptops: uv automatically, Docker Desktop and
-   DBeaver after a yes/no prompt. Every root npm script now reaches uv through
-   `scripts/uv.mjs`, so uv no longer has to be on PATH.
+5. Every root npm script reaches uv through `scripts/uv.mjs`, which installs uv if it is
+   missing, so uv no longer has to be on PATH.
 
 ## Next steps for the team
 
@@ -127,8 +125,8 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 
 ### Everyone, before starting a story
 
-1. `git checkout sprint/1 && git pull`, then `npm run poc` (daily). Run `npm run setup` once
-   as well if you will run the Playwright end-to-end tests.
+1. `git checkout sprint/1 && git pull`, then `npm run setup` (after package changes),
+   `npm run db:ready` and `npm run dev` (daily).
 2. Read `docs/database/README.md` (5 min), `docs/testing/README.md` (5 min) and the
    "Adding a feature" checklist at the end of `docs/ARCHITECTURE.md`.
 3. Use the seed accounts (password `Password123!`) - one per role - for manual testing.
@@ -176,7 +174,7 @@ docker-compose.yml, backend/.env.sample         port 5433
 docs/database/{README,DATA_DICTIONARY}.md, ERD.excalidraw
 docs/testing/{README,TRACEABILITY}.md
 docs/ARCHITECTURE.md, README.md, AGENTS.md, backend/README.md, tests/README.md
-package.json                                    poc, db:*, test:trace scripts (uv via scripts/uv.mjs)
-scripts/poc.mjs, scripts/uv.mjs, scripts/lib/   one-command setup and the uv wrapper
-.gitignore                                      .poc-state.json (remembered poc answers)
+package.json                                    db:*, test:trace scripts (uv via scripts/uv.mjs)
+scripts/uv.mjs, scripts/lib/                    the uv wrapper
+.gitignore                                      .information/ (customer briefing, backlog export)
 ```

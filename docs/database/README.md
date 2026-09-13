@@ -19,8 +19,7 @@ before touching anything under `backend/db/`.
 
 | Command | What it does |
 | --- | --- |
-| `npm run poc` | **The one to remember.** Installs anything missing (uv, Python, npm packages, and after asking Docker Desktop and DBeaver), starts Postgres, creates the DB if missing, applies pending migrations, re-runs the seed, verifies key tables have rows, prints the sample logins, then starts backend + frontend. `npm run poc -- --help` lists the options. |
-| `npm run db:ready` | Same as above without starting the app. |
+| `npm run db:ready` | **The one to remember.** Starts Postgres in Docker, creates the DB if missing, applies pending migrations, re-runs the seed, verifies key tables have rows and prints the sample logins. Run it at the start of every session, then `npm run dev`. |
 | `npm run db:status` | Which migrations are applied / pending / edited-after-apply ("drifted"). |
 | `npm run db:reset` | Drop every object in the **local** database and rebuild from migrations + seed. Refuses to run against a non-localhost URL. |
 | `npm run db:seed` | Re-run the seed files only. |
@@ -34,7 +33,8 @@ uv even when it is not on PATH and installs it when it is missing. From `backend
 
 ## Viewing the data
 
-`npm run poc` offers to install DBeaver Community, a free desktop database viewer. MySQL
+Install DBeaver Community, a free desktop database viewer, with
+`winget install -e --id DBeaver.DBeaver.Community` or from <https://dbeaver.io/download/>. MySQL
 Workbench cannot open PostgreSQL. In DBeaver, create a PostgreSQL connection with:
 
 | Setting | Value |
@@ -56,10 +56,10 @@ Ignore the `connectsphere_test` database. The backend tests delete and rebuild i
 Both, deliberately:
 
 - **Migrations are applied once and tracked** in `schema_migrations` (with a checksum), so your
-  local data survives `npm run poc` day to day. Rows you add while developing stay.
-- **Seed files are idempotent upserts**, so every `npm run poc` re-asserts the canonical sample
-  rows (fixed UUIDs) without duplicating them or touching yours. If you mangle a sample venue,
-  the next start heals it.
+  local data survives `npm run db:ready` day to day. Rows you add while developing stay.
+- **Seed files are idempotent upserts**, so every `npm run db:ready` re-asserts the canonical
+  sample rows (fixed UUIDs) without duplicating them or touching yours. If you mangle a sample
+  venue, the next run heals it.
 - **`npm run db:reset`** gives you a clean slate whenever you want one.
 - **Tests never use your dev database.** `backend/tests/conftest.py` drops and rebuilds
   `connectsphere_test` from the same migrations + seed on every run, and wraps each test in a

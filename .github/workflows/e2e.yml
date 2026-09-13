@@ -92,7 +92,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Wait for servers
-        run: npx wait-on http://localhost:8000/health http://localhost:5173
+        run: npx wait-on --timeout 120000 http-get://localhost:8000/health http://localhost:5173
 
       - name: Run e2e tests
         working-directory: tests
