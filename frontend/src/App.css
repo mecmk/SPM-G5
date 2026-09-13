@@ -1,8 +1,4 @@
-/* Application layout & shared components. Base typography/colours live in index.css. */
-
-#root {
-  text-align: left;
-}
+/* Application layout & shared components. Tokens and base typography live in index.css. */
 
 .app-shell {
   display: flex;
@@ -16,14 +12,16 @@
   align-items: center;
   gap: 0.75rem 1.5rem;
   padding: 0.75rem 1.5rem;
+  background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
 }
 
 .brand {
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.25rem;
   color: var(--text-h);
   text-decoration: none;
-  font-size: 1.15rem;
 }
 
 .app-header nav {
@@ -34,10 +32,14 @@
 }
 
 .app-header nav a {
-  color: var(--text);
+  color: var(--text-muted);
   text-decoration: none;
   padding: 0.25rem 0;
   border-bottom: 2px solid transparent;
+}
+
+.app-header nav a:hover {
+  color: var(--text-h);
 }
 
 .app-header nav a.active {
@@ -52,14 +54,19 @@
   margin-left: auto;
 }
 
+.user-name {
+  font-size: 0.9rem;
+  color: var(--text-h);
+}
+
 .app-main {
-  padding: 1.5rem;
+  padding: 2rem;
   flex: 1;
 }
 
 .login-page {
-  max-width: 420px;
-  margin: 3rem auto;
+  max-width: 26rem;
+  margin: 4rem auto;
   padding: 0 1.5rem;
   text-align: center;
 }
@@ -71,6 +78,7 @@
 
 .sample-accounts {
   margin-top: 1.5rem;
+  font-size: 0.85rem;
   text-align: left;
 }
 
@@ -80,10 +88,10 @@
 
 .card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
-  background: var(--bg);
+  background: var(--surface);
 }
 
 fieldset.card {
@@ -91,7 +99,7 @@ fieldset.card {
 }
 
 legend {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-h);
   padding: 0 0.4rem;
 }
@@ -102,7 +110,7 @@ legend {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .page-header h1 {
@@ -112,8 +120,11 @@ legend {
 label {
   display: block;
   margin: 0.75rem 0;
-  font-size: 0.95rem;
-  color: var(--text-h);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 label input,
@@ -124,11 +135,21 @@ label textarea {
   box-sizing: border-box;
   margin-top: 0.3rem;
   padding: 0.5rem 0.6rem;
-  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-h);
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+}
+
+label input:focus,
+label select:focus,
+label textarea:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 label.checkbox {
@@ -136,11 +157,17 @@ label.checkbox {
   align-items: center;
   gap: 0.5rem;
   margin: 0.4rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-h);
 }
 
 label.checkbox input {
   width: auto;
   margin: 0;
+  accent-color: var(--accent);
 }
 
 .row {
@@ -161,7 +188,7 @@ label.checkbox input {
   align-items: center;
   gap: 0.5rem 1rem;
   padding: 0.25rem 0;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--hairline);
 }
 
 .check-list li:last-child {
@@ -179,11 +206,17 @@ label.checkbox input {
   flex: 1 1 120px;
   min-width: 0;
   padding: 0.35rem 0.5rem;
-  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text-h);
+}
+
+.inline-fields input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .form-actions {
@@ -195,19 +228,36 @@ label.checkbox input {
 
 button,
 .button {
-  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.5;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   text-decoration: none;
   cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+button:hover,
+.button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: default;
+}
+
+button:disabled:hover {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .button.secondary,
@@ -217,13 +267,24 @@ button.secondary {
   border-color: var(--border);
 }
 
+.button.secondary:hover,
+button.secondary:hover {
+  background: transparent;
+  border-color: var(--accent);
+}
+
 button.link {
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent);
+  color: var(--brand);
   text-decoration: underline;
   font: inherit;
+}
+
+button.link:hover {
+  background: none;
+  color: var(--brand-hover);
 }
 
 .table-wrap {
@@ -238,9 +299,20 @@ table {
 th,
 td {
   text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--hairline);
   white-space: nowrap;
+}
+
+th {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-inset);
+  border-bottom-color: var(--border);
 }
 
 th.num,
@@ -251,17 +323,24 @@ td.num {
 .badge {
   display: inline-block;
   padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   border: 1px solid var(--border);
 }
 
 .badge-active {
-  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
 }
 
 .badge-withdrawn {
-  background: rgba(239, 68, 68, 0.15);
+  color: var(--neutral);
+  background: var(--neutral-bg);
+  border-color: var(--neutral-border);
 }
 
 .permission-list {
@@ -270,7 +349,7 @@ td.num {
 }
 
 .muted {
-  color: var(--text);
+  color: var(--text-muted);
 }
 
 .small {
@@ -278,23 +357,23 @@ td.num {
 }
 
 .req {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .error {
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 6px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.75rem;
   margin: 0.75rem 0;
 }
 
 .success {
-  color: #166534;
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  border-radius: 6px;
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.75rem;
   margin: 0.75rem 0;
 }
