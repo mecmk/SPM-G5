@@ -14,6 +14,25 @@ This is a **traditional CRUD web app** — plain REST endpoints, a relational-is
 form-driven UI. There is no AI/agentic functionality in this project; do not introduce LLM
 calls, agents, or AI SDKs unless a story explicitly asks for one.
 
+## Coding Conventions
+
+This file is the source of truth for process — stack, commands, branching, Definition of Done.
+The rules for writing the code itself live beside the code:
+
+| Path | File | Holds |
+| --- | --- | --- |
+| root | `CLAUDE.md` | Layout, cross-subsystem facts, and the resolution rule |
+| `backend/`, `frontend/`, `tests/` | `CLAUDE.md` | Setup, domain, architecture, hard prohibitions, feature workflow |
+| `backend/`, `frontend/`, `tests/` | `STYLE.md` | Graded coding rules, each anchored to a real file and line in this repo |
+
+**Read the `CLAUDE.md` and `STYLE.md` of the subsystem you are touching before writing code**, and
+defer to the most specific `CLAUDE.md` for the code in front of you. A rule graded `blocking` in a
+`STYLE.md` is one a reviewer will block the pull request on.
+
+Some rules are enforced by tooling rather than review — `ruff` for the backend, `oxlint` and
+`prettier` for the frontend, `markdownlint` for documentation. Each `STYLE.md` states exactly what
+its linter owns, so nothing below that line needs restating in review.
+
 ## Tech Stack & Commands
 
 - **Backend**: Python 3.12+ with FastAPI, PostgreSQL (via SQLAlchemy + psycopg3)
@@ -40,9 +59,9 @@ npx playwright install --with-deps chromium
 ```
 
 Copy `backend/.env.sample` to `backend/.env` and `frontend/.env.sample` to `frontend/.env`,
-adjusting values as needed. `npm run poc` (repo root) installs missing tools and packages, starts
-PostgreSQL in Docker on host port **5433**, migrates + seeds it, then starts both servers.
-Database-only: `npm run db:ready`. Root npm scripts call uv through `scripts/uv.mjs`, which
+adjusting values as needed. From the repo root, `npm run setup` installs all packages,
+`npm run db:ready` starts PostgreSQL in Docker on host port **5433** and migrates + seeds it, and
+`npm run dev` starts both servers. Root npm scripts call uv through `scripts/uv.mjs`, which
 locates or installs uv, so use that wrapper in any new root script too.
 
 ### Run (two terminals)
@@ -128,7 +147,7 @@ frontend/
     layout/             # AppLayout (header + permission-filtered nav)
     <feature>/          # pages for one feature area
 tests/                  # Playwright e2e specs, separate from backend/frontend
-scripts/                # repo-root Node helpers: poc.mjs (npm run poc), uv.mjs (uv wrapper)
+scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root npm scripts)
 docs/
   ARCHITECTURE.md
   database/             # README + generated DATA_DICTIONARY.md and ERD.excalidraw
@@ -138,7 +157,7 @@ CONTRIBUTING.md
 README.md
 ```
 
-Branches, commits, and PRs reference a ticket/story ID (e.g. `A1`, `B2`) from whatever backlog
+Branches, commits, and PRs reference a ticket/story ID (e.g. `1.1`, `8.3`) from whatever backlog
 tool the team is using that sprint. This file doesn't track backlog content itself — just the
 convention of referencing IDs so code can be traced back to a story. Don't scaffold a new
 feature area speculatively; add one only when a real story needs it.
@@ -148,14 +167,16 @@ feature area speculatively; add one only when a real story needs it.
 ```text
 main                    ← stable, protected. Only merges at sprint end.
 └── sprint/<N>           ← sprint integration branch (e.g. sprint/1)
-    ├── story/<ID>-<slug> ← feature branch, e.g. story/A1-login
+    ├── story/<ID>-<slug> ← feature branch, e.g. story/1.1-login
     ├── fix/<ID>-<slug>   ← bug fix
     ├── refactor/<slug>   ← restructuring, no behavior change
-    └── test/<slug>       ← test-only changes
+    ├── test/<slug>       ← test-only changes
+    └── docs/<slug>       ← documentation only
 ```
 
 - **Never commit directly to `main` or `sprint/<N>`.** Always branch off the current
-  `sprint/<N>` using `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, or `test/<slug>`.
+  `sprint/<N>` using `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`,
+  or `docs/<slug>`.
 - Run tests locally before pushing.
 - Open the PR against `sprint/<N>` (not `main`). PRs into `main` only happen at sprint end,
   from `sprint/<N>`.
@@ -167,9 +188,9 @@ main                    ← stable, protected. Only merges at sprint end.
 
 ## Commit & PR Conventions
 
-- Conventional Commits style: `feat: add login form (A1)`, `fix: correct venue availability query (D3)`.
+- Conventional Commits style: `feat: add login form (1.1)`, `fix: correct venue availability query (8.3)`.
   Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
-- Reference the story ID in the commit/PR title, e.g. `feat: submit event request (B2)`.
+- Reference the story ID in the commit/PR title, e.g. `feat: assign coordinator to event (5.1)`.
 - PR description should state which story/AC it addresses and how it was tested.
 
 ## Definition of Done

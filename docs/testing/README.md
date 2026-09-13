@@ -10,13 +10,13 @@ failure cases, so the conventions below exist to make that cheap.
 | --- | --- | --- | --- |
 | Backend unit + API | pytest + FastAPI `TestClient` | `backend/tests/` | A throw-away `connectsphere_test` database rebuilt from migrations + seed each run |
 | Frontend build/lint | tsc + oxlint | `frontend/` | - |
-| End-to-end | Playwright | `tests/e2e/` | The running dev servers (`npm run poc`) and your dev database |
+| End-to-end | Playwright | `tests/e2e/` | The running dev servers (`npm run dev`) and your dev database (`npm run db:ready`) |
 
 ```powershell
 npm run test:backend   # pytest
 npm run test:trace     # pytest + writes docs/testing/TRACEABILITY.md
 npm run test:frontend  # lint + type-check/build
-npm run test:e2e       # needs `npm run poc` running in another terminal
+npm run test:e2e       # needs `npm run dev` running in another terminal
 ```
 
 ## Backend tests

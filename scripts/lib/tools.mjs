@@ -1,5 +1,5 @@
 /**
- * Helpers shared by the repo-root scripts (`npm run poc` and the uv wrapper).
+ * Helpers for `scripts/uv.mjs`, the wrapper every root npm script uses to run uv.
  *
  * Node built-ins only, so they work on a fresh clone before `npm install` has ever run.
  */
@@ -11,21 +11,16 @@ import { fileURLToPath } from 'node:url'
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const IS_WINDOWS = process.platform === 'win32'
-export const IS_MAC = process.platform === 'darwin'
 
 const useColour = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR
 const paint = (code) => (text) => (useColour ? `\u001b[${code}m${text}\u001b[0m` : text)
 export const colour = {
-  bold: paint('1'),
-  dim: paint('2'),
   red: paint('31'),
   green: paint('32'),
   yellow: paint('33'),
-  cyan: paint('36'),
 }
 
 export const log = {
-  step: (text) => console.log(`\n${colour.cyan('==>')} ${colour.bold(text)}`),
   ok: (text) => console.log(`  ${colour.green('ok')}  ${text}`),
   info: (text) => console.log(`      ${text}`),
   warn: (text) => console.log(`  ${colour.yellow('!!')}  ${text}`),
@@ -56,18 +51,6 @@ export function capture(command, args = [], options = {}) {
 
 export function commandExists(command, versionArgs = ['--version']) {
   return capture(command, versionArgs).ok
-}
-
-/**
- * How to run npm without a shell. npm is a .cmd file on Windows, which Node cannot start
- * directly, so reuse the npm that launched this script when there is one.
- */
-export function npmInvocation(args) {
-  const npmCli = process.env.npm_execpath
-  if (npmCli && /\.c?js$/.test(npmCli)) {
-    return { command: process.execPath, args: [npmCli, ...args], shell: false }
-  }
-  return { command: `npm ${args.join(' ')}`, args: [], shell: true }
 }
 
 const UV_EXE = IS_WINDOWS ? 'uv.exe' : 'uv'

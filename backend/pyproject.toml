@@ -30,7 +30,9 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+# RET: no `else` after an `if` that exits, no bare variable before a `return`.
+# Passes clean repo-wide as of adoption; see backend/STYLE.md "Automated enforcement".
+select = ["E", "F", "I", "RET"]
 
 [build-system]
 requires = ["hatchling"]

@@ -8,7 +8,6 @@
   },
   "scripts": {
     "setup": "npm install && node scripts/uv.mjs --directory backend sync && npm --prefix frontend install && npm --prefix tests install && npm --prefix tests exec -- playwright install --with-deps chromium",
-    "poc": "node scripts/poc.mjs",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "node scripts/uv.mjs --directory backend run uvicorn app.main:app --reload --port 8000",
     "dev:frontend": "npm --prefix frontend run dev",

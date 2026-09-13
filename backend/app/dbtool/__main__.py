@@ -7,7 +7,7 @@ migrate  Apply pending migrations.
 seed     Run the seed files (idempotent).
 reset    Drop everything in the database, then migrate + seed + docs.  (local only)
 ready    Wait for the server, create the DB if missing, migrate, seed, verify, print a summary.
-         This is what `npm run poc` runs before starting the app.
+         This is what `npm run db:ready` runs.
 docs     Regenerate docs/database/DATA_DICTIONARY.md and ERD.excalidraw from the live schema.
 drop     Drop every object in the database (no rebuild).                (local only)
 

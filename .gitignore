@@ -37,6 +37,3 @@ npm-debug.log*
 
 # --- Project Details ---
 .information
-
-# --- Local tool state (npm run poc) ---
-.poc-state.json
