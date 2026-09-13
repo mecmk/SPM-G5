@@ -69,7 +69,7 @@ jobs:
 
       - name: Start backend
         working-directory: backend
-        run: uv run uvicorn app.main:app --port 8000 &
+        run: uv run uvicorn app.main:app --port 8000 > /tmp/backend.log 2>&1 &
 
       - uses: actions/setup-node@v4
         with:
@@ -81,7 +81,7 @@ jobs:
 
       - name: Start frontend
         working-directory: frontend
-        run: npm run dev -- --port 5173 &
+        run: npm run dev -- --port 5173 > /tmp/frontend.log 2>&1 &
 
       - name: Install e2e dependencies
         working-directory: tests
@@ -97,6 +97,16 @@ jobs:
       - name: Run e2e tests
         working-directory: tests
         run: npm test
+
+      - name: Show server logs
+        if: failure()
+        run: |
+          echo "::group::backend.log"
+          cat /tmp/backend.log || true
+          echo "::endgroup::"
+          echo "::group::frontend.log"
+          cat /tmp/frontend.log || true
+          echo "::endgroup::"
 
       - name: Upload Playwright report
         if: failure()
