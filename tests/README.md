@@ -24,8 +24,8 @@ npm test
 
 | File | Story |
 | --- | --- |
-| `e2e/health.spec.ts` | smoke: login page loads, backend reachable |
-| `e2e/auth.spec.ts` | 1.1 login / logout / redirect |
+| `e2e/health.spec.ts` | smoke: placeholder page loads, backend reachable |
 
-`e2e/support.ts` has the seed accounts and a `signIn` helper. Specs run against your local
-development database, so use unique names for anything you create.
+Sprint 1 is backend-only, so this is the only spec; the login, role and venue specs were removed
+with the UI (see commit `6db5a5b`). Specs run against your local development database, so use
+unique names for anything you create.

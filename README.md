@@ -137,11 +137,13 @@ npm run dev
 
 Run `npm run setup` again whenever a pull adds or updates packages.
 
-The frontend is served at [http://localhost:5173](http://localhost:5173) and opens on the
-sign-in page. The backend's API documentation (Swagger UI) is available at
+The frontend is served at [http://localhost:5173](http://localhost:5173) and displays a
+placeholder page that calls the backend's `GET /health` endpoint (Sprint 1 is backend-only). The
+backend's API documentation (Swagger UI) is available at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 
-Sample accounts (password `Password123!` for all):
+Sample accounts for signing in through the API with `POST /auth/login`, for example from Swagger
+UI (password `Password123!` for all):
 
 | Role | Email |
 | --- | --- |

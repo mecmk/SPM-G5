@@ -4,10 +4,12 @@ Personal coding idioms for `frontend/`. Follow these when writing or reviewing c
 document only contains things Claude would get wrong without being told: not standard React or
 TypeScript conventions, and not patterns already covered in [CLAUDE.md](CLAUDE.md).
 
-**Removed paths.** Sprint 1 is backend-only, so the story 8.3 venue pages were removed:
-`src/venues/` and `src/api/venues.ts` _(paths since deleted)_, and with them story 1.2's
-`RequirePermission`, `can()` and permission-filtered nav _(since deleted)_. Anchors below that
-point at them are dead, and the counts still include them; read the code at commit `6db5a5b`.
+**Removed paths.** Sprint 1 is backend-only, so the whole Sprint 1 UI was removed and `src/` is
+back to the scaffold placeholder: `src/auth/`, `src/layout/`, `src/pages/`, `src/venues/`,
+`src/api/auth.ts`, `src/api/client.ts` and `src/api/venues.ts` are _(paths since deleted)_, and
+`src/App.tsx` and `src/App.css` are the scaffold versions again. Every anchor below except
+`src/index.css` is dead and the counts describe the removed code; read it at commit `6db5a5b`.
+The rules stand as the conventions for the rebuilt UI.
 
 **What these rules are for.** One idea sits under nearly all of them: _a reader should not have
 to open the function body, or another file, to know what something does._ Names carry type and
@@ -85,7 +87,7 @@ author's call. Never flatten a `taste` into a "must".
 
 - `blocking` — **Render every API error as `<p role="alert" className="error">` with the text from
   `formatApiError`.**
-  `role="alert"` is not decoration: two e2e assertions locate the message with
+  `role="alert"` is not decoration: e2e specs locate the message with
   `getByRole('alert')`, so a visually identical `<p className="error">` passes review, renders
   fine, and fails the suite.
 
@@ -102,7 +104,7 @@ author's call. Never flatten a `taste` into a "must".
   ```
 
   _`blocking` · exemplars `src/venues/VenueManagePage.tsx:45`, `src/auth/LoginPage.tsx:81`,
-  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29`_
+  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29` (path since deleted)_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
   needs surfacing to the user through the error rule above.

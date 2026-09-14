@@ -142,10 +142,8 @@ backend/
   pyproject.toml
 frontend/
   src/
-    api/                # one <feature>.ts per backend feature + client.ts
-    auth/               # AuthProvider, route guards, LoginPage
-    layout/             # AppLayout (header + permission-filtered nav)
-    <feature>/          # pages for one feature area
+    api/                # calls to the backend (health.ts today; Sprint 1 is backend-only)
+    <feature>/          # pages for one feature area, added as stories are picked up
 tests/                  # Playwright e2e specs, separate from backend/frontend
 scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root npm scripts)
 docs/

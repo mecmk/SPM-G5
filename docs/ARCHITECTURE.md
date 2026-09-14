@@ -11,10 +11,10 @@ backed by PostgreSQL.
 └────────────┘                                   └──────────────┘                    └────────────┘
 ```
 
-- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, routed with
-  `react-router`. `src/App.tsx` is the route map; `src/auth/` holds the session context and
-  route guards; each feature area gets its own folder (`src/<feature>/`) with its pages, and a
-  matching `src/api/<feature>.ts` for the calls it makes.
+- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite. Sprint 1 is backend-only,
+  so it is the scaffold placeholder page that calls `GET /health`; the Sprint 1 login and venue
+  pages were removed (see commit `6db5a5b`). Feature pages will live in `src/<feature>/`, with a
+  matching `src/api/<feature>.ts` for the calls they make.
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
@@ -87,6 +87,6 @@ service, next to the record they need - not in the permission matrix.
    `app/main.py`; add permissions to `app/auth/permissions.py` if the story introduces new
    functions.
 3. Tests: `backend/tests/<feature>/test_<story>.py` with `@pytest.mark.story(...)` markers.
-4. Frontend: `src/api/<feature>.ts`, `src/<feature>/<Page>.tsx`, a route in `App.tsx` and a
-   `NAV_ITEMS` entry in `src/layout/AppLayout.tsx`, hiding both from roles without the permission.
+4. Frontend, once UI work resumes: `src/api/<feature>.ts` and `src/<feature>/<Page>.tsx`, hiding
+   anything the role lacks the permission for (see `frontend/CLAUDE.md`).
 5. E2E: one Playwright spec for the user-visible flow.

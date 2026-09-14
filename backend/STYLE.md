@@ -259,7 +259,8 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   ```
 
   *`expected` · exemplars
-  `auth/router.py:19`, `auth/deps.py:33`, `:47`; asserted verbatim in `tests/e2e/auth.spec.ts:29`*
+  `auth/router.py:19`, `auth/deps.py:33`, `:47`; asserted in `tests/auth/test_login_logout.py:77`
+  (the verbatim e2e check at `tests/e2e/auth.spec.ts:29` is since deleted)*
 
 ## Traceability
 
@@ -298,7 +299,7 @@ in an unrelated PR.**
 | --- | --- | --- |
 | Annotate every signature | 9: `venues/schemas.py:77`, `:106`, `:136`, `:140`; `venues/service.py:227`; `auth/deps.py:40`; `db.py:45`; `dbtool/docs.py:461`, `:652` | carried rule, newly adopted — existing code predates it |
 | Return a typed object, not a tuple | 2: `auth/service.py:45` (`tuple[UserSession, str]`), `dbtool/docs.py:710` | carried rule, newly adopted |
-| A URL names a resource | 2: `auth/router.py:38` (`/login`), `:57` (`/logout`) | licensed exception — `POST /auth/login` is near-universal convention and the e2e specs assert the path; not a precedent for other features |
+| A URL names a resource | 2: `auth/router.py:38` (`/login`), `:57` (`/logout`) | licensed exception — `POST /auth/login` is near-universal convention and the backend tests call the path (the e2e specs that asserted it are since deleted); not a precedent for other features |
 | One `except` per type | 1: `venues/router.py:96` | pre-existing, not precedent |
 | Private helper defined above its caller | `venues/service.py:186-238` (helper block at the bottom) | pre-existing, not precedent — `auth/router.py:22` shows the intended shape |
 | `is_` on booleans | 3: `venues/service.py:70` (`include_withdrawn`), `:207` (`only_present`), `common/audit.py:44` (`commit`) | licensed exception — all three read as flags and the prefix would worsen them |
