@@ -7,6 +7,7 @@ back anyway). Use unique names/emails so tests never collide with the seed.
 from __future__ import annotations
 
 import itertools
+import uuid
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -58,7 +59,7 @@ def make_venue(db: Session, **overrides) -> Venue:
 def make_booking(
     db: Session,
     *,
-    venue_id,
+    venue_id: uuid.UUID,
     starts_at: datetime,
     ends_at: datetime,
     status: str = "PENDING",
