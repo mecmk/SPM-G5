@@ -30,6 +30,7 @@ def test_verify_rejects_malformed_hashes(garbage):
     assert not verify_password("anything", garbage)
 
 
+@pytest.mark.story("1.1", ac=3)
 def test_empty_password_cannot_be_hashed():
     with pytest.raises(ValueError):
         hash_password("")

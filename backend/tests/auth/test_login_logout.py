@@ -115,10 +115,17 @@ def test_no_user_has_a_plain_text_password(db: Session):
 @pytest.mark.story("1.1", ac=4)
 @pytest.mark.parametrize("user", Users.ONE_PER_ROLE, ids=lambda u: u.role)
 def test_login_response_tells_the_frontend_the_role_for_redirection(client, user):
-    """The frontend maps role_code -> landing page (frontend/src/auth/homeFor.ts)."""
+    """A client picks the authenticated landing page from role_code and permissions."""
     body = client.login(user)
     assert body["role_code"] == user.role
     assert isinstance(body["permissions"], list)
+
+
+@pytest.mark.story("1.1", ac=4)
+def test_login_response_is_the_same_user_record_as_me(client):
+    """A client can route straight from the login response, without a second lookup."""
+    body = client.login(Users.VENUE_STAFF)
+    assert body == client.get("/auth/me").json()
 
 
 # --- AC5 -------------------------------------------------------------------------------
@@ -167,5 +174,6 @@ def test_deactivating_a_user_kills_their_live_session(client, db: Session):
     assert client.get("/auth/me").status_code == 401
 
 
+@pytest.mark.story("1.1", ac=1)
 def test_unauthenticated_request_is_rejected(client):
     assert client.get("/auth/me").status_code == 401

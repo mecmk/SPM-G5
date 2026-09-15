@@ -11,10 +11,10 @@ backed by PostgreSQL.
 └────────────┘                                   └──────────────┘                    └────────────┘
 ```
 
-- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, routed with
-  `react-router`. `src/App.tsx` is the route map; `src/auth/` holds the session context and
-  route guards; each feature area gets its own folder (`src/venues/`, ...) with its pages, and a
-  matching `src/api/<feature>.ts` for the calls it makes.
+- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite. Sprint 1 is backend-only,
+  so it is the scaffold placeholder page that calls `GET /health`; the Sprint 1 login and venue
+  pages were removed (see commit `6db5a5b`). Feature pages will live in `src/<feature>/`, with a
+  matching `src/api/<feature>.ts` for the calls they make.
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
@@ -53,8 +53,8 @@ lists them.
 
 ## How a request flows (example: Venue Staff edits a venue)
 
-1. The browser calls `PATCH /venues/{id}` with the session cookie
-   (`frontend/src/api/venues.ts` -> `api/client.ts`, `credentials: 'include'`).
+1. A client calls `PATCH /venues/{id}` with the session cookie set by `POST /auth/login` (for
+   now Swagger UI at `/docs`, since Sprint 1 ships no venue pages).
 2. `app/auth/deps.py:get_current_user` resolves the cookie to a live row in `user_sessions`
    (rejects if missing, revoked or expired) -> 401.
 3. `require_permission(Permission.VENUES_MANAGE)` checks the user's role against the matrix in
@@ -63,7 +63,7 @@ lists them.
    capacity etc.) -> 422, then calls `app/venues/service.py:update_venue`.
 5. The service applies the change, checks cross-field rules, writes an `audit_log` row in the
    same transaction and commits. Uniqueness is enforced by the database (409 on conflict).
-6. The response is the full venue record; the frontend navigates back to the list.
+6. The response is the full venue record.
 
 Relationship-based rules ("an organiser sees only their own events") belong in the feature's
 service, next to the record they need - not in the permission matrix.
@@ -75,8 +75,9 @@ service, next to the record they need - not in the permission matrix.
   goes to the browser in an `HttpOnly`, `SameSite=Lax` cookie.
 - Logout sets `revoked_at`; expired or revoked sessions are refused. Deactivating a user
   (`users.is_active = false`) kills their sessions immediately.
-- `GET /auth/me` returns the user with their permission list, which the frontend uses to hide
-  navigation and actions the role cannot use (story 1.2 AC2). The backend re-checks every call.
+- `POST /auth/login` and `GET /auth/me` return the user with their permission list, so a client
+  can hide navigation and actions the role cannot use (story 1.2 AC2). The backend re-checks every
+  call.
 
 ## Adding a feature (checklist)
 
@@ -86,6 +87,6 @@ service, next to the record they need - not in the permission matrix.
    `app/main.py`; add permissions to `app/auth/permissions.py` if the story introduces new
    functions.
 3. Tests: `backend/tests/<feature>/test_<story>.py` with `@pytest.mark.story(...)` markers.
-4. Frontend: `src/api/<feature>.ts`, `src/<feature>/<Page>.tsx`, a route in `App.tsx` under the
-   matching `RequirePermission`, and a `NAV_ITEMS` entry in `src/layout/AppLayout.tsx`.
+4. Frontend, once UI work resumes: `src/api/<feature>.ts` and `src/<feature>/<Page>.tsx`, hiding
+   anything the role lacks the permission for (see `frontend/CLAUDE.md`).
 5. E2E: one Playwright spec for the user-visible flow.

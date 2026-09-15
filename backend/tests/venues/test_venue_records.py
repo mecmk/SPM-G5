@@ -242,7 +242,21 @@ def test_venue_staff_can_create_and_edit(venue_staff_client):
     assert edited.status_code == 200 and edited.json()["location"] == "Moved"
 
 
-# --- read side used by the management screen (and later by 8.1 / 8.2) ----------------------
+@pytest.mark.story("8.3", ac=4)
+def test_signed_out_visitors_cannot_create_or_edit_venues(client, db: Session):
+    venue_count = db.execute(text("SELECT count(*) FROM venues")).scalar()
+
+    assert client.post("/venues", json=venue_payload()).status_code == 401
+    assert client.patch(f"/venues/{Venues.BOARDROOM}", json={"capacity": 1}).status_code == 401
+
+    assert db.execute(text("SELECT count(*) FROM venues")).scalar() == venue_count
+    boardroom_capacity = db.execute(
+        text("SELECT capacity FROM venues WHERE id = :id"), {"id": Venues.BOARDROOM}
+    ).scalar()
+    assert boardroom_capacity == 16
+
+
+# --- read side, used by stories 8.1 / 8.2 ---------------------------------------------------
 @pytest.mark.story("8.3")
 @pytest.mark.story("8.1", ac=3)
 def test_list_hides_withdrawn_venues_unless_asked(coordinator_client):

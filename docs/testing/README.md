@@ -87,9 +87,10 @@ tables, and the DB-level guards (double-booking exclusion, mandatory fields once
 
 ## End-to-end tests
 
-`tests/e2e/support.ts` has `signIn(page, ACCOUNTS.venueStaff)`. Keep e2e specs to the flows a
-user would actually click through (login, role-gated navigation, create/edit a venue); put the
-detailed rule checks in backend tests where they are fast and deterministic.
+Sprint 1 is backend-only, so `tests/e2e/health.spec.ts` is the only spec; the login, role and venue
+specs were removed with the UI (see commit `6db5a5b`). When pages return, keep e2e specs to the
+flows a user would actually click through (login, role-gated navigation, create/edit a venue); put
+the detailed rule checks in backend tests where they are fast and deterministic.
 
 Because e2e runs against your dev database, use unique names (`E2E Room ${Date.now()}`) and
 `npm run db:reset` when you want to clear the leftovers.

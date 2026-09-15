@@ -25,7 +25,7 @@ author's call. Never flatten a `taste` into a "must".
 
 - `expected` — **Match the frontend's prettier settings by hand: no semicolons, single quotes,
   trailing commas, 100 columns.**
-  Nothing here reformats on save or on commit, so the only thing keeping these five files
+  Nothing here reformats on save or on commit, so the only thing keeping these files
   consistent with the rest of the repo is the person writing them. A file that drifts will not be
   caught by any check.
 
