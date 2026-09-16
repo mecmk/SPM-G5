@@ -37,27 +37,30 @@ against a stopped stack every spec fails on navigation rather than reporting any
 | Path | Holds |
 | --- | --- |
 | `e2e/<feature>.spec.ts` | One spec per story area, headed by a docblock naming the story and the ACs it covers |
-| `e2e/support.ts` *(path since deleted)* | Held `ACCOUNTS`, `PASSWORD`, `signIn(page, email)` and `expectSignedIn(page)`; restore it from commit `6db5a5b` when a spec needs to sign in |
+| `e2e/support.ts` | Holds `ACCOUNTS`, `PASSWORD`, `signIn(page, email)` and `expectSignedIn(page)` for specs that need to sign in |
 
 **These specs run against your development database, not an isolated one.** Unlike
 `backend/tests/`, there is no per-test transaction and no rollback — anything a spec creates is
 still there afterwards, and `fullyParallel: true` means specs share that database concurrently.
-So give every created record a unique name (`E2E Room ${Date.now()}`, as
-`e2e/venues.spec.ts:9` did *(path since deleted)*) and run `npm run db:reset` from the root to clear leftovers.
+So give every created record a unique name (`E2E Room ${Date.now()}`, as `e2e/venues.spec.ts:9`
+does) and run `npm run db:reset` from the root to clear leftovers.
 
-Accounts a spec signs in with (formerly `e2e/support.ts` *(path since deleted)*) are rows in
-`backend/db/seed/020_sample_data.sql`, which is also
-mirrored in `backend/tests/support/seed.py`. A seed change means editing all three.
+Accounts a spec signs in with (`e2e/support.ts`) are rows in `backend/db/seed/020_sample_data.sql`,
+which is also mirrored in `backend/tests/support/seed.py`. A seed change means editing all three.
 
 Traceability here is by **test title**, not by a marker: titles begin with the story and AC
-(`'1.1 AC2: unknown email shows exactly the same message'`, from a spec since deleted). Only backend tests feed
+(`'1.1 AC2: unknown email shows exactly the same message'`). Only backend tests feed
 `docs/testing/TRACEABILITY.md`, via `@pytest.mark.story`.
 
 ## Do not
 
 - Do not put detailed rule or validation checks here. E2E covers flows a user clicks through;
   boundary values, 401/403 refusals and conflict cases belong in `backend/tests/`, where they
-  are faster and deterministic.
+  are faster and deterministic. **Exception:** a boundary case that is purely client-side (blocks
+  submit before any request fires — a required-field message, a zod schema check) has no backend
+  call to assert against and no other runner (frontend has none, see
+  [frontend/CLAUDE.md](../frontend/CLAUDE.md)), so it belongs here instead, as its own titled
+  case.
 - Do not create records with fixed names — parallel specs and reruns will collide.
 - Do not reach into the database or call the API directly to set up a test; drive the UI, or add
   the coverage as a backend test instead.
@@ -71,8 +74,8 @@ Traceability here is by **test title**, not by a marker: titles begin with the s
 
 1. `e2e/<feature>.spec.ts` — docblock naming the story and its ACs, mirroring the existing specs.
 2. Title each test `'<story> AC<n>: <behaviour>'`.
-3. Sign in with `signIn(page, ACCOUNTS.<role>)` (restore `e2e/support.ts` from `6db5a5b` first)
-   rather than filling the login form, unless the login flow itself is what is under test.
+3. Sign in with `signIn(page, ACCOUNTS.<role>)` from `e2e/support.ts` rather than filling the
+   login form, unless the login flow itself is what is under test.
 4. Add the spec to the table in [README.md](README.md).
 
 ## Git and PR workflow

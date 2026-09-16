@@ -26,6 +26,5 @@ npm test
 | --- | --- |
 | `e2e/health.spec.ts` | smoke: placeholder page loads, backend reachable |
 
-Sprint 1 is backend-only, so this is the only spec; the login, role and venue specs were removed
-with the UI (see commit `6db5a5b`). Specs run against your local development database, so use
-unique names for anything you create.
+Login, role-gated navigation and venue specs are being added alongside the pages. Specs run
+against your local development database, so use unique names for anything you create.

@@ -260,7 +260,7 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
 
   *`expected` · exemplars
   `auth/router.py:19`, `auth/deps.py:33`, `:47`; asserted in `tests/auth/test_login_logout.py:77`
-  (the verbatim e2e check at `tests/e2e/auth.spec.ts:29` is since deleted)*
+  and the e2e check at `tests/e2e/auth.spec.ts:29`*
 
 ## Traceability
 
@@ -299,7 +299,7 @@ in an unrelated PR.**
 | --- | --- | --- |
 | Annotate every signature | 9: `venues/schemas.py:77`, `:106`, `:136`, `:140`; `venues/service.py:227`; `auth/deps.py:40`; `db.py:45`; `dbtool/docs.py:461`, `:652` | carried rule, newly adopted — existing code predates it |
 | Return a typed object, not a tuple | 2: `auth/service.py:45` (`tuple[UserSession, str]`), `dbtool/docs.py:710` | carried rule, newly adopted |
-| A URL names a resource | 2: `auth/router.py:38` (`/login`), `:57` (`/logout`) | licensed exception — `POST /auth/login` is near-universal convention and the backend tests call the path (the e2e specs that asserted it are since deleted); not a precedent for other features |
+| A URL names a resource | 2: `auth/router.py:38` (`/login`), `:57` (`/logout`) | licensed exception — `POST /auth/login` is near-universal convention and both the backend and e2e tests call the path; not a precedent for other features |
 | One `except` per type | 1: `venues/router.py:96` | pre-existing, not precedent |
 | Private helper defined above its caller | `venues/service.py:186-238` (helper block at the bottom) | pre-existing, not precedent — `auth/router.py:22` shows the intended shape |
 | `is_` on booleans | 3: `venues/service.py:70` (`include_withdrawn`), `:207` (`only_present`), `common/audit.py:44` (`commit`) | licensed exception — all three read as flags and the prefix would worsen them |
@@ -314,8 +314,6 @@ in an unrelated PR.**
   a counter-site that does not. Record a correction in the PR thread; add it here only when a
   second, independent case appears.
 - **Record divergences with counts**, not "some legacy code does this".
-- **A dead anchor gets a marker, not a deletion.** Mark it *(path since deleted)* and give a live
-  substitute. The rule does not depend on the anchor.
 - **Match the way it is already done here, even when the local choice is worse.** Settle a dispute
   by the majority of existing untouched code, name the canonical module to copy from, and raise
   standardization as its own PR rather than fixing it in passing.

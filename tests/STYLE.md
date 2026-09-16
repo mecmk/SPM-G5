@@ -47,5 +47,3 @@ prohibitions and facts rather than idioms, so they live in [CLAUDE.md](CLAUDE.md
   yet. A new rule needs a site in this repo it can point at — an exemplar that does it right or
   a counter-site that does not. Record a correction in the PR thread; add it here only when a
   second, independent case appears.
-- **A dead anchor gets a marker, not a deletion.** Mark it *(path since deleted)* and give a live
-  substitute. The rule does not depend on the anchor.

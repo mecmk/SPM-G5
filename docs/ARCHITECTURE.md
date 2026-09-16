@@ -11,10 +11,8 @@ backed by PostgreSQL.
 └────────────┘                                   └──────────────┘                    └────────────┘
 ```
 
-- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite. Sprint 1 is backend-only,
-  so it is the scaffold placeholder page that calls `GET /health`; the Sprint 1 login and venue
-  pages were removed (see commit `6db5a5b`). Feature pages will live in `src/<feature>/`, with a
-  matching `src/api/<feature>.ts` for the calls they make.
+- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite. Feature pages live in
+  `src/<feature>/`, with a matching `src/api/<feature>.ts` for the calls they make.
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds

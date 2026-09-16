@@ -4,13 +4,6 @@ Personal coding idioms for `frontend/`. Follow these when writing or reviewing c
 document only contains things Claude would get wrong without being told: not standard React or
 TypeScript conventions, and not patterns already covered in [CLAUDE.md](CLAUDE.md).
 
-**Removed paths.** Sprint 1 is backend-only, so the whole Sprint 1 UI was removed and `src/` is
-back to the scaffold placeholder: `src/auth/`, `src/layout/`, `src/pages/`, `src/venues/`,
-`src/api/auth.ts`, `src/api/client.ts` and `src/api/venues.ts` are _(paths since deleted)_, and
-`src/App.tsx` and `src/App.css` are the scaffold versions again. Every anchor below except
-`src/index.css` is dead and the counts describe the removed code; read it at commit `6db5a5b`.
-The rules stand as the conventions for the rebuilt UI.
-
 **What these rules are for.** One idea sits under nearly all of them: _a reader should not have
 to open the function body, or another file, to know what something does._ Names carry type and
 intent, failures are typed and loud, values are never unnamed, and indirection has to earn its
@@ -56,8 +49,8 @@ author's call. Never flatten a `taste` into a "must".
   { to: '/venues/manage', permission: 'venues:manage' }     // AppLayout.tsx
   ```
 
-  _`blocking` · last violated at `src/App.tsx:25` and `src/layout/AppLayout.tsx:17` (both lines
-  since deleted) — see Standing divergences_
+  _`blocking` · last violated at `src/App.tsx:25` and `src/layout/AppLayout.tsx:17` — see
+  Standing divergences_
 
 ## Styling
 
@@ -104,7 +97,7 @@ author's call. Never flatten a `taste` into a "must".
   ```
 
   _`blocking` · exemplars `src/venues/VenueManagePage.tsx:45`, `src/auth/LoginPage.tsx:81`,
-  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29` (path since deleted)_
+  `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29`_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
   needs surfacing to the user through the error rule above.
@@ -322,7 +315,7 @@ in an unrelated PR.**
 
 | Rule                                          | Violating sites                                                                                                                                          | Status                                                                                                                  |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| One exported constant for a cross-file string | 0: both copies of `'venues:manage'` (`src/App.tsx:25`, `src/layout/AppLayout.tsx:17`) went with the venue pages                                          | resolved by removal — apply the rule when a page is gated on a permission again                                         |
+| One exported constant for a cross-file string | 2: both copies of `'venues:manage'` (`src/App.tsx:25`, `src/layout/AppLayout.tsx:17`)                                                                    | fix when a page is next gated on this permission                                                                        |
 | Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx`                                                                                    | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
 | Colour comes from a token, never a literal    | 10: `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`                                                                                    | **breaks dark mode today** — `.error` and `.success` are the worst affected; worth its own ticket rather than waiting   |
 | Boolean `is`/`can`/`has` prefix               | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted                                                                                             |
@@ -335,8 +328,6 @@ in an unrelated PR.**
   a counter-site that does not. Record a correction in the PR thread; add it here only when a
   second, independent case appears.
 - **Record divergences with counts**, not "some legacy code does this".
-- **A dead anchor gets a marker, not a deletion.** Mark it _(path since deleted)_ and give a live
-  substitute. The rule does not depend on the anchor.
 - **Match the way it is already done here, even when the local choice is worse.** Settle a dispute
   by the majority of existing untouched code, name the canonical module to copy from, and raise
   standardization as its own PR rather than fixing it in passing.

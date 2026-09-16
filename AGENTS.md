@@ -142,7 +142,7 @@ backend/
   pyproject.toml
 frontend/
   src/
-    api/                # calls to the backend (health.ts today; Sprint 1 is backend-only)
+    api/                # calls to the backend (health.ts today)
     <feature>/          # pages for one feature area, added as stories are picked up
 tests/                  # Playwright e2e specs, separate from backend/frontend
 scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root npm scripts)
@@ -184,6 +184,43 @@ main                    ← stable, protected. Only merges at sprint end.
 - If you don't know the current sprint number or don't see a matching `sprint/<N>` branch, ask
   before creating one.
 
+## Feature Development Workflow (Test-First)
+
+Every story starts with a test plan, not code — across whichever subsystems it touches (backend,
+frontend, e2e).
+
+1. **Sketch out a test plan before writing any test or implementation code.** For each acceptance
+   criterion, cover every one of these categories, not just the happy path: the happy path
+   itself, boundary/validation values, role/permission refusals (401/403), conflict cases
+   (double-booking, over-committed equipment, etc.), and any other edge case the AC implies. Skip
+   a category only when it genuinely doesn't apply to that AC, and say why. Assign each case to
+   exactly **one** layer: `backend/tests/` for rule/boundary/permission/conflict detail;
+   `tests/e2e/` for the flow a user would actually click through. One exception — a
+   boundary/validation case that is purely client-side (blocks submit before any request fires)
+   has no backend call to assert against and no other runner, so it lands in `tests/e2e/`
+   instead (see [tests/CLAUDE.md](tests/CLAUDE.md)). Outside that exception, never split a case
+   across both layers; a case proven at one is not repeated at the other. **Agree the plan
+   before writing any test code** — cases can still get added, cut, or reprioritized at this
+   point.
+2. **Write the tests from the agreed plan before the implementation — e2e specs included, not
+   just backend tests.** An e2e spec assigned in step 1 is added to `tests/e2e/` now, against the
+   servers as they currently stand, not deferred until the page exists. Run every test written
+   here and confirm each one fails for the right reason (the behavior doesn't exist yet — a
+   missing route, a 404, an element `getByRole` can't find), not from a typo or missing fixture.
+3. **Implement until the tests pass**, following the conventions in the touched subsystem's
+   `CLAUDE.md`/`STYLE.md`.
+4. **Once the implementation is done, re-run every test written in step 2** — plus the rest of
+   the touched suite — and confirm they're all green.
+5. **Leave every test in the repo, filed in its proper home**: `backend/tests/<feature>/`,
+   tagged `@pytest.mark.story("<id>", ac=<n>)`; `tests/e2e/<feature>.spec.ts`, titled
+   `'<story> AC<n>: <behaviour>'`. There is no frontend unit test runner (see
+   [frontend/CLAUDE.md](frontend/CLAUDE.md)) — frontend behavior is proven through e2e specs or
+   manual exercise in the browser, not a new test type of its own.
+
+This sets the order the per-subsystem "Feature dev workflow" sections
+(`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `tests/CLAUDE.md`) run in — tests from the confirmed
+plan first, then the steps they describe — it doesn't replace them.
+
 ## Commit & PR Conventions
 
 - Conventional Commits style: `feat: add login form (1.1)`, `fix: correct venue availability query (8.3)`.
@@ -195,8 +232,12 @@ main                    ← stable, protected. Only merges at sprint end.
 
 A story isn't done until:
 
+- [ ] A test plan was sketched out and agreed before implementation, covering all of: happy
+      path, boundary, edge, permission, and conflict cases (or noting why one doesn't apply) —
+      see Feature Development Workflow above.
 - [ ] Acceptance criteria from the backlog are met.
-- [ ] Backend tests pass for the touched area; lint/format checks are clean.
+- [ ] The tests written from that plan exist, are filed in the right suite (`backend/tests/` or
+      `tests/e2e/`), and pass; lint/format checks are clean.
 - [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser.
 - [ ] No secrets, API keys, or `.env` values committed.
 - [ ] PR opened against `sprint/<N>`, one review obtained, CI green.

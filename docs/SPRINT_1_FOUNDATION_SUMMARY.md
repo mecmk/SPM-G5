@@ -9,9 +9,9 @@ Everything below is on the branch `story/1-database-schema` (created from `sprin
 | Story | Title | Status | Where |
 | --- | --- | --- | --- |
 | 1 | chore: set up database schema | Done | `backend/db/migrations/001_initial_schema.sql`, `backend/db/seed/*.sql`, `backend/app/dbtool/`, `docs/database/` |
-| 1.1 | fe/be: implement user login and logout | Done (backend only) | `backend/app/auth/` |
-| 1.2 | fe/be: enforce role-based access control | Done (backend only) | `backend/app/auth/permissions.py`, `deps.py` |
-| 8.3 | fe/be: create and update venue records | Done (backend only) | `backend/app/venues/` |
+| 1.1 | fe/be: implement user login and logout | Done (backend) | `backend/app/auth/` |
+| 1.2 | fe/be: enforce role-based access control | Done (backend) | `backend/app/auth/permissions.py`, `deps.py` |
+| 8.3 | fe/be: create and update venue records | Done (backend) | `backend/app/venues/` |
 | 12.1 | fe/be: raise venue booking request | **Skipped - blocked** | see "Story 12.1" below |
 
 ### Acceptance criteria evidence
@@ -101,8 +101,8 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 
 ## Decisions the team should confirm (made unilaterally to keep moving)
 
-1. `react-router` v7 was added to the frontend, then removed on 2026-09-13 with the rest of the
-   Sprint 1 UI when the team agreed Sprint 1 is backend-only. No new dependency remains.
+1. `react-router` v7 was added to the frontend on 2026-09-13, then rolled back pending the
+   updated UI plan; add it back when routing is needed.
 2. Docker host port moved from 5432 to 5433 (`docker-compose.yml`, `backend/.env.sample`,
    default in `config.py`). Existing `backend/.env` files need the port updated.
 3. Password hashing uses scrypt from the Python standard library (no `bcrypt`/`argon2`
