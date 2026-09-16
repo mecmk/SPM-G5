@@ -137,8 +137,8 @@ npm run dev
 
 Run `npm run setup` again whenever a pull adds or updates packages.
 
-The frontend is served at [http://localhost:5173](http://localhost:5173) and displays a
-placeholder page that calls the backend's `GET /health` endpoint (Sprint 1 is backend-only). The
+The frontend is served at [http://localhost:5173](http://localhost:5173) and currently displays a
+placeholder page that calls the backend's `GET /health` endpoint, pending the rebuilt UI. The
 backend's API documentation (Swagger UI) is available at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 

@@ -1,9 +1,9 @@
 """Story 1.2 - fe/be: enforce role-based access control.
 
 AC1 Each user role has a defined set of permitted functions.
-AC2 Navigation and action controls outside a user's permitted set are not displayed. (Sprint 1 is
-    backend-only: the login response and /auth/me list exactly the role's permissions, so a
-    client can hide everything else.)
+AC2 Navigation and action controls outside a user's permitted set are not displayed. (Proven at
+    the API level here: the login response and /auth/me list exactly the role's permissions, so
+    a client can hide everything else.)
 AC3 Users can only view and perform functions permitted for their role.
 AC4 Attempts to access unauthorised functions are rejected, including through direct URLs or
     API requests.

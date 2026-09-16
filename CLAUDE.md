@@ -18,17 +18,18 @@ agent and human on this repo. Read it first; this file deliberately does not rep
 ## Cross-subsystem facts
 
 - **No shared type generation.** Frontend request/response types are hand-written mirrors of
-  the backend's Pydantic schemas. The Sprint 1 example, `frontend/src/api/auth.ts:3` mirroring
-  `UserOut` in `backend/app/auth/schemas.py`, is *(path since deleted)*; see commit `6db5a5b`.
-  Change an API contract and you update both sides by hand. The same applies to the permission
-  codes in `backend/app/auth/permissions.py`: a frontend that gates on them compares plain
-  strings, so a renamed code fails silently rather than at compile time.
+  the backend's Pydantic schemas — `frontend/src/api/auth.ts:3` mirrors `UserOut` in
+  `backend/app/auth/schemas.py`. Change an API contract and you update both sides by hand. The
+  same applies to the permission codes in `backend/app/auth/permissions.py`: a frontend that
+  gates on them compares plain strings, so a renamed code fails silently rather than at compile
+  time.
 - **E2E fixtures are backend seed rows.** Any account an e2e spec signs in with must be a row in
-  `backend/db/seed/020_sample_data.sql` (the Sprint 1 list, `tests/e2e/support.ts`, is
-  *(path since deleted)*). Change one, change the other.
+  `backend/db/seed/020_sample_data.sql` (see `tests/e2e/support.ts`). Change one, change the
+  other.
 - **Three ports have to agree.** Backend `:8000`, frontend `:5173`, PostgreSQL `:5433` — not
   the default 5432. `CORS_ORIGINS` in `backend/.env` must list the frontend's origin, and
   `VITE_API_BASE_URL` in `frontend/.env` must point at the backend.
 - **Keep a change scoped to one subsystem** unless the task genuinely spans both.
+- **Tests come before code.** Full process: [AGENTS.md](AGENTS.md#feature-development-workflow-test-first).
 
 **Defer to the most specific `CLAUDE.md` for the code you are touching.**
