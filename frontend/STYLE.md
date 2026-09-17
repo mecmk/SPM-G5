@@ -56,11 +56,13 @@ author's call. Never flatten a `taste` into a "must".
 
 - `expected` — **Use the custom properties from `src/index.css` for colour; never a raw hex or
   `rgba()` in `src/App.css`.**
-  `index.css` defines 23 tokens and redefines them under `@media (prefers-color-scheme: dark)`, so
-  a token adapts and a literal does not. This is not hypothetical: `.error` is `#b91c1c` on a
-  `--bg` of `#16171d` in dark mode — dark red text on a near-black panel, which is the one message
-  the alert rule above exists to make readable. Opacity-composited colours have the same defect,
-  compositing against whatever sits behind them.
+  `index.css` defines 59 tokens and redefines the colour ones under
+  `@media (prefers-color-scheme: dark)`, so a token adapts and a literal does not. This was not
+  hypothetical: `.error` used to be `#b91c1c` on a `--bg` of `#16171d` in dark mode — dark red
+  text on a near-black panel, which is the one message the alert rule above exists to make
+  readable. Opacity-composited colours have the same defect, compositing against whatever sits
+  behind them. The token values are the Figma prototype's Tailwind classes; `--radius-sm` is `0`
+  on purpose because the prototype's `rounded-sm` resolves to 0px.
 
   ```css
   /* Good */
@@ -73,8 +75,8 @@ author's call. Never flatten a `taste` into a "must".
   Adding a colour means adding a token to `index.css` in **both** the light block and the
   `prefers-color-scheme: dark` block, then referencing it.
 
-  _`expected` · exemplars `src/App.css:201-202` (`var(--accent)`), 24 `var(--…)` uses;
-  10 counter-sites at `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`_
+  _`expected` · exemplars `src/App.css` (`.error`, `.badge-active`, `.calendar-entry-danger`);
+  0 counter-sites — every colour in `src/App.css` is a `var(--…)`_
 
 ## Control flow and failure
 
@@ -317,7 +319,7 @@ in an unrelated PR.**
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | One exported constant for a cross-file string | 2: both copies of `'venues:manage'` (`src/App.tsx:25`, `src/layout/AppLayout.tsx:17`)                                                                    | fix when a page is next gated on this permission                                                                        |
 | Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx`                                                                                    | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
-| Colour comes from a token, never a literal    | 10: `src/App.css:203`, `:260`, `:264`, `:281`, `:285-287`, `:294-296`                                                                                    | **breaks dark mode today** — `.error` and `.success` are the worst affected; worth its own ticket rather than waiting   |
+| Colour comes from a token, never a literal    | 0 — resolved in story c3 (`src/App.css` is token-only)                                                                                                   | resolved                                                                                                                |
 | Boolean `is`/`can`/`has` prefix               | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted                                                                                             |
 | Components use named exports                  | 1: `src/App.tsx:39`                                                                                                                                      | licensed exception — conventional default export for the Vite entry point                                               |
 

@@ -4,13 +4,18 @@
  * Design tokens. Every colour used anywhere in the app is one of these custom properties, defined
  * once for light and once for dark so a component adapts without knowing which theme it is in.
  * Component classes live in App.css and reference these by name only.
+ *
+ * Values come from the Figma prototype's Tailwind classes: the named hexes are its palette, the
+ * status families are Tailwind's emerald / amber / red / blue / violet / teal / orange / gray
+ * shades (50 = bg, 100 = soft, 200 = border, 600-700 = text, 800 = deep text for alerts).
  */
 :root {
   /* surfaces */
   --bg: #f7f6f3;
   --surface: #ffffff;
   --surface-alt: #ebe9e3;
-  --surface-inset: #fbfaf8;
+  --surface-inset: #fdfcfa;
+  --surface-hover: rgba(255, 255, 255, 0.5);
   --border: #d9d6ce;
   --hairline: #f0ede8;
 
@@ -28,41 +33,55 @@
   --brand-hover: #235347;
   --brand-contrast: #ffffff;
 
-  /* semantic status tints: text / background / border */
+  /* semantic status tints */
   --success: #047857;
+  --success-deep: #065f46;
   --success-bg: #ecfdf5;
+  --success-soft: #d1fae5;
   --success-border: #a7f3d0;
   --warning: #b45309;
+  --warning-deep: #92400e;
   --warning-bg: #fffbeb;
+  --warning-soft: #fef3c7;
   --warning-border: #fde68a;
-  --danger: #b91c1c;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-deep: #991b1b;
   --danger-bg: #fef2f2;
+  --danger-soft: #fee2e2;
   --danger-border: #fecaca;
-  --danger-strong: #dc2626;
-  --danger-contrast: #ffffff;
   --info: #1d4ed8;
+  --info-deep: #1e40af;
   --info-bg: #eff6ff;
+  --info-soft: #dbeafe;
   --info-border: #bfdbfe;
   --highlight: #6d28d9;
   --highlight-bg: #f5f3ff;
   --highlight-border: #ddd6fe;
+  --teal: #0f766e;
+  --teal-bg: #f0fdfa;
+  --teal-border: #99f6e4;
+  --orange: #c2410c;
+  --orange-bg: #fff7ed;
+  --orange-border: #fed7aa;
   --neutral: #4b5563;
   --neutral-bg: #f3f4f6;
   --neutral-border: #e5e7eb;
 
   /* overlays and elevation */
   --backdrop: rgba(26, 35, 50, 0.45);
-  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 
-  /* shape and type */
+  /* shape and type. --radius-sm is 0 on purpose: the prototype's `rounded-sm` resolves to 0px. */
   --radius: 4px;
-  --radius-sm: 3px;
+  --radius-sm: 0;
+  --sidebar-width: 14rem;
   --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
   --font-mono: 'DM Mono', ui-monospace, Consolas, monospace;
 
-  font: 15px/1.5 var(--font-sans);
-  letter-spacing: 0;
+  font-size: 16px;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -78,6 +97,7 @@
     --surface: #23221e;
     --surface-alt: #2a2924;
     --surface-inset: #1f1e1a;
+    --surface-hover: rgba(255, 255, 255, 0.06);
     --border: #3b3933;
     --hairline: #2e2c27;
 
@@ -94,28 +114,42 @@
     --brand-contrast: #0e2019;
 
     --success: #6ee7b7;
+    --success-deep: #a7f3d0;
     --success-bg: #0c2b22;
+    --success-soft: #134e3a;
     --success-border: #146c4b;
     --warning: #fcd34d;
+    --warning-deep: #fde68a;
     --warning-bg: #33260a;
+    --warning-soft: #4a3610;
     --warning-border: #8a5a0c;
-    --danger: #fca5a5;
+    --danger: #f87171;
+    --danger-strong: #fca5a5;
+    --danger-deep: #fecaca;
     --danger-bg: #351313;
+    --danger-soft: #4a1d1d;
     --danger-border: #8f2727;
-    --danger-strong: #ef4444;
-    --danger-contrast: #ffffff;
     --info: #93c5fd;
+    --info-deep: #bfdbfe;
     --info-bg: #12203a;
+    --info-soft: #1b2f57;
     --info-border: #274a8a;
     --highlight: #c4b5fd;
     --highlight-bg: #221a3c;
     --highlight-border: #4f3a9a;
+    --teal: #5eead4;
+    --teal-bg: #0b2a27;
+    --teal-border: #0f5f58;
+    --orange: #fdba74;
+    --orange-bg: #3a2210;
+    --orange-border: #8a4a12;
     --neutral: #a8a29e;
     --neutral-bg: #2a2924;
     --neutral-border: #3b3933;
 
     --backdrop: rgba(0, 0, 0, 0.6);
-    --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+    --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -127,11 +161,13 @@
 
 body {
   margin: 0;
+  font: 0.875rem/1.25rem var(--font-sans);
 }
 
 h1,
 h2,
 h3 {
+  margin: 0;
   font-family: var(--font-serif);
   font-weight: 400;
   color: var(--text-h);
@@ -139,21 +175,18 @@ h3 {
 }
 
 h1 {
-  font-size: 2rem;
-  line-height: 1.2;
-  margin: 1.5rem 0 0.75rem;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
 }
 
 h2 {
-  font-size: 1.35rem;
-  line-height: 1.25;
-  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 2rem;
 }
 
 h3 {
-  font-size: 1.1rem;
-  line-height: 1.3;
-  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
 }
 
 p {
