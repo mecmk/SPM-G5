@@ -1,16 +1,19 @@
+import { Link, NavLink } from 'react-router'
+import { HOME_PATH } from '../routes'
+
 export interface SidebarNavItem {
   label: string
-  href: string
+  /** Route path. The link shows as active only on this exact path. */
+  to: string
   /** Section heading this item is grouped under. Items without one render first, ungrouped. */
   group?: string
-  isActive?: boolean
 }
 
 export interface SidebarProps {
   navItems: SidebarNavItem[]
   userName: string
   userRole: string
-  /** Omit to hide the sign-out control (e.g. while auth doesn't exist yet). */
+  /** Omit to hide the sign-out control. */
   onSignOut?: () => void
 }
 
@@ -34,11 +37,10 @@ function groupNavItems(items: SidebarNavItem[]): SidebarNavGroup[] {
 }
 
 /**
- * Story c3 - the prototype's sidebar shell. Presentational only: it takes plain nav items and
- * knows nothing about routing or permissions - the page assembling it decides what to pass and
- * which item is active. Plain `<a>` tags for now; swap for `NavLink` once react-router is added
- * (`frontend/CLAUDE.md`). The wordmark is the page's site heading (accessible name
- * "ConnectSphere"), which `tests/e2e/health.spec.ts` looks for.
+ * Story c3 - the prototype's sidebar shell. Presentational: the page assembling it decides which
+ * items to pass. Story 1.1 - links are router `NavLink`s, which mark the current page active, and
+ * the wordmark links to the main page. The page's own `<h1>` is its heading, so the wordmark is
+ * not one.
  */
 export function Sidebar({ navItems, userName, userRole, onSignOut }: SidebarProps) {
   const groups = groupNavItems(navItems)
@@ -46,9 +48,9 @@ export function Sidebar({ navItems, userName, userRole, onSignOut }: SidebarProp
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <h1 className="wordmark">
+        <Link to={HOME_PATH} className="wordmark">
           Connect<em>Sphere</em>
-        </h1>
+        </Link>
         <span className="wordmark-tagline">Event Management</span>
       </div>
 
@@ -57,14 +59,9 @@ export function Sidebar({ navItems, userName, userRole, onSignOut }: SidebarProp
           <div key={group.label ?? '_ungrouped'} className="nav-group">
             {group.label && <div className="nav-group-label">{group.label}</div>}
             {group.items.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className={item.isActive ? 'active' : undefined}
-                aria-current={item.isActive ? 'page' : undefined}
-              >
+              <NavLink key={item.to} to={item.to} end>
                 {item.label}
-              </a>
+              </NavLink>
             ))}
           </div>
         ))}

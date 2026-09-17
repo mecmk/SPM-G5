@@ -38,7 +38,7 @@ Read from `frontend/.env` (copy `frontend/.env.sample`). Vite only exposes names
 
 | Optional            | Default                 | Note                                  |
 | ------------------- | ----------------------- | ------------------------------------- |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Consumed once, in `src/api/health.ts` |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Consumed once, in `src/api/client.ts` |
 
 ## Domain
 
@@ -54,18 +54,22 @@ link simply stops appearing. Grep both sides when changing one.
 
 ## Architecture
 
-| Path                       | Holds                                                                | May import                                |
-| -------------------------- | -------------------------------------------------------------------- | ----------------------------------------- |
-| `src/api/<feature>.ts`     | Types mirroring backend schemas, and one function per endpoint       | `./client` only                           |
-| `src/api/client.ts`        | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError` | nothing                                   |
-| `src/<feature>/`           | Pages for one feature area, e.g. `src/venues/`                       | `../api/<feature>`, `../auth/authContext` |
-| `src/auth/`                | `AuthProvider`, `authContext`, `RequireAuth`, `LoginPage`, `homeFor` | `../api/auth`                             |
-| `src/layout/AppLayout.tsx` | Header and nav                                                       | `../auth/authContext`                     |
-| `src/pages/`               | Pages belonging to no feature area (`HomePage`)                      | anything above                            |
-| `src/App.tsx`              | The route map                                                        | everything                                |
+| Path                     | Holds                                                                                                                                    | May import                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                           | `./client` only                                              |
+| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                     | `../errors/registry` only                                    |
+| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                         | nothing                                                      |
+| `src/routes.ts`          | Route paths used by more than one file                                                                                                   | nothing                                                      |
+| `src/components/`        | Shared presentational pieces from story c3 (`Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …). Props only: no API calls, no auth    | `../routes`                                                  |
+| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/`                                                                                           | `../api/<feature>`, `../auth/authContext`, `../components/*` |
+| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth`, `LoginPage`, `homeFor`                                                                     | `../api/auth`                                                |
+| `src/layout/`            | `AppLayout` (the signed-in frame around `Sidebar`) and `LoadingState`                                                                    | `../auth/authContext`, `../components/*`                     |
+| `src/pages/`             | Pages belonging to no feature area (`HomePage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only) | anything above                                               |
+| `src/App.tsx`            | The route map                                                                                                                            | everything                                                   |
 
 Routing is **react-router v7**, imported from the `react-router` package — _not_
-`react-router-dom`. Add it as a dependency when routing is introduced.
+`react-router-dom`. Paths used in more than one file are constants in `src/routes.ts`, and links
+are router `Link` / `NavLink`, never a bare `<a href>` to an in-app path.
 
 State is plain React: `useState` + `useEffect`, with a `cancelled` flag in the cleanup so a slow
 response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). Auth
@@ -74,7 +78,18 @@ There is no Redux, Zustand, TanStack Query or SWR, and adding one is a team deci
 
 Styling is plain global CSS: colour and font tokens as custom properties in `src/index.css`
 (`--text`, `--accent`, `--border`, …), component classes in `src/App.css`. No CSS modules, no
-Tailwind, no styled-components.
+Tailwind, no styled-components. Build pages from the story c3 classes (`button.secondary`,
+`.card`, `.badge-<status>`, `label > input`, `.table-wrap`, …) and components before adding
+new ones.
+
+### Errors
+
+Every failure a user can see is named in `src/errors/registry.ts`. `api<T>()` turns any failed
+request into an `ApiError` with a registry `code`; an endpoint that gives a status a specific
+meaning passes `errorCodes` (for example `{ 401: 'INVALID_CREDENTIALS' }` in `src/api/auth.ts`).
+The message shown is the backend's own `detail` sentence when there is one, otherwise the
+registry's fallback, so pages render `formatApiError(error)` and branch on `error.code`, never on
+message text.
 
 ### Permission checks here are UX, not security
 
@@ -89,8 +104,9 @@ frontend check as the thing that protects data.
   `src/api/client.ts`, which sends the session cookie (`credentials: 'include'`) and raises
   `ApiError`. A bare `fetch` silently drops the session. The scaffold's `src/api/health.ts`
   needs no session, so it is the exception.
-- Do not read `import.meta.env.VITE_API_BASE_URL` outside the one API module
-  (`src/api/health.ts` today).
+- Do not read `import.meta.env.VITE_API_BASE_URL` outside `src/api/client.ts`.
+- Do not write a user-facing error string in a page. Add it to `src/errors/registry.ts`, or let
+  the backend's `detail` sentence through `formatApiError`.
 - Do not add a state-management or data-fetching library, a component library, or a CSS framework.
 - Do not add a unit test runner without team agreement.
 - Do not use default exports for components — `App.tsx` is the single exception.

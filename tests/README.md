@@ -24,7 +24,8 @@ npm test
 
 | File | Story |
 | --- | --- |
-| `e2e/health.spec.ts` | smoke: placeholder page loads, backend reachable |
+| `e2e/health.spec.ts` | smoke: sign-in page loads, backend reachable |
+| `e2e/auth.spec.ts` | 1.1 sign in, sign out, redirects, generic failure message |
 
-Login, role-gated navigation and venue specs are being added alongside the pages. Specs run
-against your local development database, so use unique names for anything you create.
+`e2e/support.ts` has the seed accounts and a `signIn` helper. Specs run against your local
+development database, so use unique names for anything you create.

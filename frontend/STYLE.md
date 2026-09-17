@@ -56,7 +56,7 @@ author's call. Never flatten a `taste` into a "must".
 
 - `expected` — **Use the custom properties from `src/index.css` for colour; never a raw hex or
   `rgba()` in `src/App.css`.**
-  `index.css` defines 59 tokens and redefines the colour ones under
+  `index.css` defines 62 tokens and redefines the colour ones under
   `@media (prefers-color-scheme: dark)`, so a token adapts and a literal does not. This was not
   hypothetical: `.error` used to be `#b91c1c` on a `--bg` of `#16171d` in dark mode — dark red
   text on a near-black panel, which is the one message the alert rule above exists to make

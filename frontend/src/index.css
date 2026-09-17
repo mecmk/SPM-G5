@@ -68,6 +68,11 @@
   --neutral-bg: #f3f4f6;
   --neutral-border: #e5e7eb;
 
+  /* the sign-in page's brand panel: dark in both themes (story 1.1) */
+  --brand-panel: #1a2332;
+  --on-brand-panel: #f7f6f3;
+  --on-brand-panel-muted: #a9b1bf;
+
   /* overlays and elevation */
   --backdrop: rgba(26, 35, 50, 0.45);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
@@ -147,6 +152,10 @@
     --neutral-bg: #2a2924;
     --neutral-border: #3b3933;
 
+    --brand-panel: #11100e;
+    --on-brand-panel: #f4f2ed;
+    --on-brand-panel-muted: #8e8b84;
+
     --backdrop: rgba(0, 0, 0, 0.6);
     --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
     --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
@@ -191,6 +200,11 @@ h3 {
 
 p {
   margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 code {
