@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchCurrentUser, login, logout, type CurrentUser } from '../api/auth'
 import { AuthContext, type AuthContextValue } from './authContext'
+import type { Permission } from './permissions'
 
 /** Story 1.1: holds the signed-in user for the whole app. */
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -39,9 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const can = useCallback(
+    (permission: Permission) => user?.permissions.includes(permission) ?? false,
+    [user],
+  )
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, signIn, signOut }),
-    [user, isLoading, signIn, signOut],
+    () => ({ user, isLoading, signIn, signOut, can }),
+    [user, isLoading, signIn, signOut, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

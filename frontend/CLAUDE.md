@@ -54,18 +54,18 @@ link simply stops appearing. Grep both sides when changing one.
 
 ## Architecture
 
-| Path                     | Holds                                                                                                                                    | May import                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                           | `./client` only                                              |
-| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                     | `../errors/registry` only                                    |
-| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                         | nothing                                                      |
-| `src/routes.ts`          | Route paths used by more than one file                                                                                                   | nothing                                                      |
-| `src/components/`        | Shared presentational pieces from story c3 (`Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …). Props only: no API calls, no auth    | `../routes`                                                  |
-| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/`                                                                                           | `../api/<feature>`, `../auth/authContext`, `../components/*` |
-| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth`, `LoginPage`, `homeFor`                                                                     | `../api/auth`                                                |
-| `src/layout/`            | `AppLayout` (the signed-in frame around `Sidebar`) and `LoadingState`                                                                    | `../auth/authContext`, `../components/*`                     |
-| `src/pages/`             | Pages belonging to no feature area (`HomePage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only) | anything above                                               |
-| `src/App.tsx`            | The route map                                                                                                                            | everything                                                   |
+| Path                     | Holds                                                                                                                                                                          | May import                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                                                                 | `./client` only                                                      |
+| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                                                           | `../errors/registry` only                                            |
+| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                               | nothing                                                              |
+| `src/routes.ts`          | Route paths used by more than one file                                                                                                                                         | nothing                                                              |
+| `src/components/`        | Shared presentational pieces from story c3 (`Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …) and story 1.2's `Icon`. Props only: no API calls, no auth                   | `../routes`                                                          |
+| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/`                                                                                                                                 | `../api/<feature>`, `../auth/authContext`, `../components/*`         |
+| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth` / `RequirePermission`, `LoginPage`, `homeFor`, `permissions.ts`                                                                   | `../api/auth`, `../layout/LoadingState`, `../pages/NotPermittedPage` |
+| `src/layout/`            | `AppLayout` (the signed-in frame: collapsible `Sidebar`, phone bar and drawer), `navigation.ts` (every section and the permission it needs), `LoadingState`                    | `../auth/authContext`, `../components/*`                             |
+| `src/pages/`             | Pages belonging to no feature area (`HomePage`, `ComingSoonPage`, `NotPermittedPage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only) | anything above                                                       |
+| `src/App.tsx`            | The route map                                                                                                                                                                  | everything                                                           |
 
 Routing is **react-router v7**, imported from the `react-router` package — _not_
 `react-router-dom`. Paths used in more than one file are constants in `src/routes.ts`, and links
@@ -93,9 +93,16 @@ message text.
 
 ### Permission checks here are UX, not security
 
-`RequirePermission` and the `NAV_ITEMS` filter exist so a role does not see doors it cannot open
+`RequirePermission` and `visibleNavSections` exist so a role does not see doors it cannot open
 (story 1.2 AC2/AC4). The backend independently rejects every unpermitted call. Never treat a
 frontend check as the thing that protects data.
+
+Permission codes are constants in `src/auth/permissions.ts`, mirrored from
+`backend/app/auth/permissions.py`. Every section of the app is one `NavItem` in
+`src/layout/navigation.ts`, with the permission it needs, and both the sidebar and the main page
+are built from that list (team decision, 17 Sep 2026: a role sees everything it can use there).
+An item whose page is not built yet has `isAvailable: false`, and `App.tsx` routes it to
+`ComingSoonPage`, which names the story that delivers it.
 
 ## Do not
 
@@ -122,9 +129,11 @@ Adding `<feature>` end to end, after the backend endpoints exist:
    it mirrors, the way `src/api/auth.ts:3` does.
 2. `src/<feature>/<Name>Page.tsx` — named export. Loading, empty, and error states all rendered;
    errors through `formatApiError` into `<p role="alert" className="error">`.
-3. `src/App.tsx` — add the route inside `<RequireAuth>` / `<AppLayout>`, behind a permission
-   guard when the feature is role-restricted (`RequirePermission` is the model).
-4. `src/layout/AppLayout.tsx` — add a `NAV_ITEMS` entry, hidden from roles without its permission.
+3. `src/App.tsx` — add the route inside `<RequireAuth>` / `<AppLayout>`, behind
+   `<RequirePermission>` when the feature is role-restricted.
+4. `src/layout/navigation.ts` — set the section's `isAvailable` to `true` (or add a `NavItem`
+   if the section is new). The sidebar and main page pick it up for every role holding its
+   permission.
 5. `src/auth/homeFor.ts` — only if a role should land on this page after login.
 6. `src/App.css` — any new class names, following the existing flat naming.
 7. `tests/e2e/<feature>.spec.ts` — in the `tests/` subsystem, since nothing here runs tests.

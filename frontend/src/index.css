@@ -81,7 +81,7 @@
   /* shape and type. --radius-sm is 0 on purpose: the prototype's `rounded-sm` resolves to 0px. */
   --radius: 4px;
   --radius-sm: 0;
-  --sidebar-width: 14rem;
+  --sidebar-width: 15.5rem;
   --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
   --font-mono: 'DM Mono', ui-monospace, Consolas, monospace;

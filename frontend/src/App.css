@@ -13,17 +13,31 @@
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   width: var(--sidebar-width);
+  height: 100svh;
   background: var(--surface-alt);
   border-right: 1px solid var(--border);
+  transition: width 0.15s;
 }
 
 .sidebar-brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 1.25rem 1rem;
   border-bottom: 1px solid var(--border);
+}
+
+.sidebar-brand-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin: -0.375rem -0.5rem 0 0;
 }
 
 .wordmark {
@@ -69,7 +83,9 @@
 }
 
 .sidebar-nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
@@ -1147,6 +1163,191 @@ td.num {
   }
 }
 
+/* ---------- collapsible sidebar and phone drawer (story 1.2) ---------- */
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.icon-button:hover {
+  border-color: transparent;
+  background: var(--surface-hover);
+  color: var(--text-h);
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-hint {
+  padding: 0 0.25rem;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.nav-group-divider {
+  margin: 0.25rem 0.5rem;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar.is-collapsed {
+  width: 4.25rem;
+}
+
+.sidebar.is-collapsed .sidebar-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar.is-collapsed .sidebar-brand-actions {
+  flex-direction: column;
+  margin: -0.375rem 0 0;
+}
+
+.sidebar.is-collapsed .sidebar-nav a,
+.sidebar.is-collapsed .sidebar-signout {
+  display: flex;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.mobile-bar {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.mobile-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--backdrop);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 41;
+  width: min(18rem, 85vw);
+  box-shadow: var(--shadow);
+}
+
+.drawer .sidebar {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- main page tiles and notices (story 1.2) ---------- */
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.tile:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.tile-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--surface-alt);
+  color: var(--text-h);
+}
+
+.tile-title {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.tile-text {
+  flex: 1;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--text-muted);
+}
+
+.notice-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.notice-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 0.25rem;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.notice-title {
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.notice-block .button {
+  margin-top: 0.5rem;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 860px) {
@@ -1154,58 +1355,18 @@ td.num {
     flex-direction: column;
   }
 
-  .sidebar {
+  .app-shell > .sidebar {
+    position: static;
     width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    height: auto;
   }
 
-  .sidebar-brand {
-    border-bottom: none;
-    border-right: 1px solid var(--border);
+  .app-shell.has-mobile-bar > .sidebar {
+    display: none;
   }
 
-  .sidebar-nav {
-    flex: 1;
-    padding: 0.5rem;
-  }
-
-  .nav-group {
+  .app-shell.has-mobile-bar > .mobile-bar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .nav-group + .nav-group {
-    margin-top: 0;
-  }
-
-  .nav-group-label {
-    padding: 0 0.25rem;
-  }
-
-  .sidebar-nav a + a {
-    margin-top: 0;
-  }
-
-  .sidebar-footer {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-top: none;
-    border-left: 1px solid var(--border);
-  }
-
-  .sidebar-user {
-    padding: 0;
-  }
-
-  .sidebar-signout {
-    width: auto;
   }
 }
 
