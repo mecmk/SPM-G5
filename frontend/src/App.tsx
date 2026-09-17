@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getHealth } from './api/health'
+import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import './App.css'
 
 function App() {
@@ -11,15 +12,8 @@ function App() {
       .catch(() => setStatus('unreachable'))
   }, [])
 
-  return (
-    <main>
-      <h1>ConnectSphere</h1>
-      <p>Event-planning &amp; venue-booking system — SMU IS212</p>
-      <p>
-        Backend status: <strong>{status}</strong>
-      </p>
-    </main>
-  )
+  // Story c3 - the shared-component gallery is the whole app until real pages replace it.
+  return <ComponentGalleryPage backendStatus={status} />
 }
 
 export default App
