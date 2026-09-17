@@ -20,12 +20,13 @@ export function login(email: string, password: string): Promise<CurrentUser> {
     method: 'POST',
     body: { email, password },
     errorCodes: { 401: 'INVALID_CREDENTIALS' },
+    notify: false,
   })
 }
 
 /** Story 1.1 AC5: revoke the server-side session. */
 export function logout(): Promise<void> {
-  return api<void>('/auth/logout', { method: 'POST' })
+  return api<void>('/auth/logout', { method: 'POST', notify: false })
 }
 
 /** The user behind the session cookie; rejects with NOT_SIGNED_IN when there is none. */

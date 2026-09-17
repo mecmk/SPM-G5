@@ -62,13 +62,48 @@ def test_auth_me_lists_exactly_the_roles_permissions(client, user):
 # --- AC3 / AC4: enforced on the API, role by role ------------------------------------------
 # expected HTTP status per (role, action) for every venue endpoint. 403 = signed in but not
 # permitted. "refdata" is the venue form's pick-lists.
-VENUE_ACTIONS = ["list", "view", "refdata", "create", "update"]
+VENUE_ACTIONS = ["list", "view", "refdata", "create", "update", "delete"]
 MATRIX = {
-    "EVENT_ORGANISER": {"list": 403, "view": 403, "refdata": 403, "create": 403, "update": 403},
-    "EVENT_COORDINATOR": {"list": 200, "view": 200, "refdata": 200, "create": 403, "update": 403},
-    "VENUE_STAFF": {"list": 200, "view": 200, "refdata": 200, "create": 201, "update": 200},
-    "TECH_SUPPORT_STAFF": {"list": 200, "view": 200, "refdata": 200, "create": 403, "update": 403},
-    "ATTENDEE": {"list": 403, "view": 403, "refdata": 403, "create": 403, "update": 403},
+    "EVENT_ORGANISER": {
+        "list": 403,
+        "view": 403,
+        "refdata": 403,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
+    "EVENT_COORDINATOR": {
+        "list": 200,
+        "view": 200,
+        "refdata": 200,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
+    "VENUE_STAFF": {
+        "list": 200,
+        "view": 200,
+        "refdata": 200,
+        "create": 201,
+        "update": 200,
+        "delete": 204,
+    },
+    "TECH_SUPPORT_STAFF": {
+        "list": 200,
+        "view": 200,
+        "refdata": 200,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
+    "ATTENDEE": {
+        "list": 403,
+        "view": 403,
+        "refdata": 403,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
 }
 
 
@@ -81,6 +116,8 @@ def _act(client, action: str):
         return client.get("/venues/reference-data")
     if action == "create":
         return client.post("/venues", json=venue_payload())
+    if action == "delete":
+        return client.delete(f"/venues/{Venues.BOARDROOM}")
     return client.patch(f"/venues/{Venues.BOARDROOM}", json={"capacity": 18})
 
 

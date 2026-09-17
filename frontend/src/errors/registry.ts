@@ -22,6 +22,18 @@ export type ErrorCode =
   | 'SERVER_ERROR'
   | 'UNEXPECTED'
   | 'INVALID_CREDENTIALS'
+  | 'VENUE_NOT_FOUND'
+  | 'VENUE_NAME_TAKEN'
+  | 'VENUE_IN_USE'
+  | 'VENUE_NAME_REQUIRED'
+  | 'VENUE_LOCATION_REQUIRED'
+  | 'VENUE_CAPACITY_INVALID'
+  | 'VENUE_FLOOR_AREA_INVALID'
+  | 'VENUE_HOURS_INCOMPLETE'
+  | 'VENUE_HOURS_OUT_OF_ORDER'
+  | 'VENUE_TURNAROUND_INVALID'
+  | 'VENUE_QUANTITY_INVALID'
+  | 'VENUE_LAYOUT_CAPACITY_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -65,6 +77,59 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   INVALID_CREDENTIALS: {
     title: 'Sign-in failed',
     message: 'Invalid email or password.',
+  },
+
+  // Story 8.3: venue records. These API codes usually arrive with the backend's own sentence.
+  VENUE_NOT_FOUND: {
+    title: 'Venue not found',
+    message: 'This venue no longer exists. It may have been deleted.',
+  },
+  VENUE_NAME_TAKEN: {
+    title: 'Venue name already used',
+    message: 'Another venue already has this name. Choose a different one.',
+  },
+  VENUE_IN_USE: {
+    title: 'Venue has bookings',
+    message: 'You cannot delete a venue that has bookings. Withdraw it from service instead.',
+  },
+
+  // Story 8.3: checks the venue form makes before anything is sent.
+  VENUE_NAME_REQUIRED: {
+    title: 'Venue name needed',
+    message: 'Enter a name for the venue.',
+  },
+  VENUE_LOCATION_REQUIRED: {
+    title: 'Location needed',
+    message: 'Enter where the venue is.',
+  },
+  /** Story 8.3 AC3. */
+  VENUE_CAPACITY_INVALID: {
+    title: 'Check the capacity',
+    message: 'Capacity must be a positive whole number.',
+  },
+  VENUE_FLOOR_AREA_INVALID: {
+    title: 'Check the floor area',
+    message: 'Floor area must be a number above zero, with at most two decimal places.',
+  },
+  VENUE_HOURS_INCOMPLETE: {
+    title: 'Check the operating hours',
+    message: 'Enter both an opening and a closing time, or leave both empty.',
+  },
+  VENUE_HOURS_OUT_OF_ORDER: {
+    title: 'Check the operating hours',
+    message: 'The closing time must be after the opening time.',
+  },
+  VENUE_TURNAROUND_INVALID: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown times must be whole numbers of minutes, zero or more.',
+  },
+  VENUE_QUANTITY_INVALID: {
+    title: 'Check facility quantities',
+    message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  VENUE_LAYOUT_CAPACITY_INVALID: {
+    title: 'Check layout capacities',
+    message: 'A layout capacity must be a positive whole number, or left empty.',
   },
 }
 

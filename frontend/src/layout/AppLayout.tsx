@@ -3,6 +3,8 @@ import { Link, Outlet, useNavigate } from 'react-router'
 import { useAuth } from '../auth/authContext'
 import { Icon } from '../components/Icon'
 import { Sidebar, type SidebarNavItem } from '../components/Sidebar'
+import { NotificationBell } from '../notifications/NotificationBell'
+import { ToastStack } from '../notifications/ToastStack'
 import { HOME_PATH, LOGIN_PATH } from '../routes'
 import { visibleNavSections, type NavSection } from './navigation'
 
@@ -44,6 +46,8 @@ function sidebarItems(sections: NavSection[]): SidebarNavItem[] {
  * Story 1.1: the sidebar shows who is signed in and a way to sign out (AC5).
  * Story 1.2 AC2: the sidebar lists only the role's sections. It collapses to icons on a wide
  * screen and becomes a drawer on a phone (team decision, 17 Sep 2026).
+ * Story 8.3: the notification centre's bell sits beside the wordmark, and toasts appear bottom
+ * right.
  */
 export function AppLayout() {
   const { user, can, signOut } = useAuth()
@@ -86,6 +90,7 @@ export function AppLayout() {
         onSignOut={handleSignOut}
         isCollapsed={isCollapsed}
         onToggleCollapsed={toggleCollapsed}
+        brandActions={<NotificationBell />}
       />
 
       <header className="mobile-bar">
@@ -102,6 +107,7 @@ export function AppLayout() {
           Connect<em>Sphere</em>
         </Link>
         <div className="mobile-bar-actions">
+          <NotificationBell />
           <button type="button" className="secondary button-sm" onClick={handleSignOut}>
             Sign out
           </button>
@@ -135,6 +141,7 @@ export function AppLayout() {
       <main className="app-main">
         <Outlet />
       </main>
+      <ToastStack />
     </div>
   )
 }

@@ -11,8 +11,12 @@ backed by PostgreSQL.
 └────────────┘                                   └──────────────┘                    └────────────┘
 ```
 
-- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite. Feature pages live in
-  `src/<feature>/`, with a matching `src/api/<feature>.ts` for the calls they make.
+- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, styled with the plain-CSS design system
+  from story c3.
+  Sign-in (story 1.1), the role-based sidebar and main page (1.2) and venue management (8.3)
+  are built; every other section a role can use is listed and opens a page naming its story.
+  Feature pages live in `src/<feature>/`, with a matching `src/api/<feature>.ts`. See
+  [frontend/CLAUDE.md](../frontend/CLAUDE.md).
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
@@ -51,8 +55,8 @@ lists them.
 
 ## How a request flows (example: Venue Staff edits a venue)
 
-1. A client calls `PATCH /venues/{id}` with the session cookie set by `POST /auth/login` (for
-   now Swagger UI at `/docs`, since Sprint 1 ships no venue pages).
+1. The venue form (`frontend/src/venues/VenueFormPage.tsx`) calls `PATCH /venues/{id}` through
+   `src/api/venues.ts`, with the session cookie set by `POST /auth/login`.
 2. `app/auth/deps.py:get_current_user` resolves the cookie to a live row in `user_sessions`
    (rejects if missing, revoked or expired) -> 401.
 3. `require_permission(Permission.VENUES_MANAGE)` checks the user's role against the matrix in
@@ -61,7 +65,9 @@ lists them.
    capacity etc.) -> 422, then calls `app/venues/service.py:update_venue`.
 5. The service applies the change, checks cross-field rules, writes an `audit_log` row in the
    same transaction and commits. Uniqueness is enforced by the database (409 on conflict).
-6. The response is the full venue record.
+6. The response is the full venue record. The frontend's API client reports the result to the
+   notification centre, and a refusal arrives as an `ApiError` whose code comes from
+   `frontend/src/errors/registry.ts`.
 
 Relationship-based rules ("an organiser sees only their own events") belong in the feature's
 service, next to the record they need - not in the permission matrix.

@@ -17,6 +17,11 @@ export type IconName =
   | 'lock'
   | 'arrow-right'
   | 'sign-out'
+  | 'bell'
+  | 'plus'
+  | 'search'
+  | 'pencil'
+  | 'trash'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
@@ -90,6 +95,26 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5" />
       <path d="M15 8l4 4-4 4M19 12H9" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" />
+      <path d="M10 20.5a2 2 0 0 0 4 0" />
+    </>
+  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </>
+  ),
+  pencil: <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-4-4L4 16z M14 6l4 4" />,
+  trash: (
+    <>
+      <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13" />
+      <path d="M10 11v5.5M14 11v5.5" />
     </>
   ),
 }

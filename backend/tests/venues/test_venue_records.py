@@ -4,6 +4,9 @@ AC1 A venue can be created with, at minimum, a name, location, and capacity.
 AC2 Existing venue characteristics can be edited and saved.
 AC3 Capacity accepts positive whole numbers only.
 AC4 Only Venue Staff can create or edit venue records.
+
+The team meeting of 17 Sep 2026 widened this to full CRUD: Venue Staff can also delete a venue,
+as long as no booking refers to it.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.venues.service import VENUE_IN_USE_MESSAGE
 from tests.support.factories import venue_payload
 from tests.support.seed import Users, Venues
 
@@ -254,6 +258,83 @@ def test_signed_out_visitors_cannot_create_or_edit_venues(client, db: Session):
         text("SELECT capacity FROM venues WHERE id = :id"), {"id": Venues.BOARDROOM}
     ).scalar()
     assert boardroom_capacity == 16
+
+
+# --- delete: Venue Staff have full CRUD (team decision, 17 Sep 2026) ------------------------
+@pytest.mark.story("8.3")
+def test_venue_staff_can_delete_an_unused_venue(venue_staff_client):
+    created = venue_staff_client.post("/venues", json=venue_payload())
+    venue_id = created.json()["id"]
+
+    response = venue_staff_client.delete(f"/venues/{venue_id}")
+
+    assert response.status_code == 204, response.text
+    assert venue_staff_client.get(f"/venues/{venue_id}").status_code == 404
+
+
+@pytest.mark.story("8.3")
+def test_deleting_a_venue_removes_its_characteristics(venue_staff_client, db: Session):
+    response = venue_staff_client.delete(f"/venues/{Venues.BOARDROOM}")
+
+    assert response.status_code == 204, response.text
+    for table in ("venue_facilities", "venue_layouts", "venue_accessibility_features"):
+        remaining = db.execute(
+            text(f"SELECT count(*) FROM {table} WHERE venue_id = :id"), {"id": Venues.BOARDROOM}
+        ).scalar()
+        assert remaining == 0, table
+
+
+@pytest.mark.story("8.3")
+def test_venue_with_bookings_cannot_be_deleted(venue_staff_client, db: Session):
+    response = venue_staff_client.delete(f"/venues/{Venues.GRAND_HALL}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": VENUE_IN_USE_MESSAGE}
+    still_there = db.execute(
+        text("SELECT count(*) FROM venues WHERE id = :id"), {"id": Venues.GRAND_HALL}
+    ).scalar()
+    assert still_there == 1
+
+
+@pytest.mark.story("8.3")
+def test_deleting_a_missing_venue_is_404(venue_staff_client):
+    response = venue_staff_client.delete("/venues/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
+
+
+@pytest.mark.story("8.3", ac=4)
+@pytest.mark.parametrize(
+    "user",
+    [Users.ORGANISER, Users.COORDINATOR, Users.TECH_SUPPORT, Users.ATTENDEE],
+    ids=lambda u: u.role,
+)
+def test_other_roles_cannot_delete_venues(client, db: Session, user):
+    client.login(user)
+
+    assert client.delete(f"/venues/{Venues.BOARDROOM}").status_code == 403
+    still_there = db.execute(
+        text("SELECT count(*) FROM venues WHERE id = :id"), {"id": Venues.BOARDROOM}
+    ).scalar()
+    assert still_there == 1
+
+
+@pytest.mark.story("8.3", ac=4)
+def test_signed_out_visitors_cannot_delete_venues(client):
+    assert client.delete(f"/venues/{Venues.BOARDROOM}").status_code == 401
+
+
+@pytest.mark.story("8.3")
+def test_delete_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
+    venue_staff_client.delete(f"/venues/{Venues.BOARDROOM}")
+    row = db.execute(
+        text(
+            "SELECT actor_id, details FROM audit_log WHERE action = 'VENUE_DELETED' "
+            "AND entity_id = :id"
+        ),
+        {"id": Venues.BOARDROOM},
+    ).one()
+    assert row.actor_id == Users.VENUE_STAFF.id
+    assert row.details == {"name": "Boardroom 3.4"}
 
 
 # --- read side, used by stories 8.1 / 8.2 ---------------------------------------------------

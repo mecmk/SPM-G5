@@ -54,26 +54,28 @@ link simply stops appearing. Grep both sides when changing one.
 
 ## Architecture
 
-| Path                     | Holds                                                                                                                                                                          | May import                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                                                                 | `./client` only                                                      |
-| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                                                           | `../errors/registry` only                                            |
-| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                               | nothing                                                              |
-| `src/routes.ts`          | Route paths used by more than one file                                                                                                                                         | nothing                                                              |
-| `src/components/`        | Shared presentational pieces from story c3 (`Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …) and story 1.2's `Icon`. Props only: no API calls, no auth                   | `../routes`                                                          |
-| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/`                                                                                                                                 | `../api/<feature>`, `../auth/authContext`, `../components/*`         |
-| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth` / `RequirePermission`, `LoginPage`, `homeFor`, `permissions.ts`                                                                   | `../api/auth`, `../layout/LoadingState`, `../pages/NotPermittedPage` |
-| `src/layout/`            | `AppLayout` (the signed-in frame: collapsible `Sidebar`, phone bar and drawer), `navigation.ts` (every section and the permission it needs), `LoadingState`                    | `../auth/authContext`, `../components/*`                             |
-| `src/pages/`             | Pages belonging to no feature area (`HomePage`, `ComingSoonPage`, `NotPermittedPage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only) | anything above                                                       |
-| `src/App.tsx`            | The route map                                                                                                                                                                  | everything                                                           |
+| Path                     | Holds                                                                                                                                                                                  | May import                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                                                                         | `./client` only                                                                        |
+| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                                                                   | `../errors/registry` only                                                              |
+| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                                       | nothing                                                                                |
+| `src/routes.ts`          | Route paths used by more than one file                                                                                                                                                 | nothing                                                                                |
+| `src/components/`        | Shared presentational pieces: story c3's `Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …, story 1.2's `Icon` and story 8.3's `ConfirmDialog`. Props only: no API calls, no auth  | `../routes`                                                                            |
+| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/` (story 8.3)                                                                                                                             | `../api/<feature>`, `../auth/authContext`, `../components/*`, `../layout/LoadingState` |
+| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth` / `RequirePermission`, `LoginPage`, `homeFor`, `permissions.ts`                                                                           | `../api/auth`, `../layout/LoadingState`, `../pages/NotPermittedPage`                   |
+| `src/layout/`            | `AppLayout` (the signed-in frame: collapsible `Sidebar`, phone bar and drawer, notification bell, toasts), `navigation.ts` (every section and the permission it needs), `LoadingState` | `../auth/authContext`, `../components/*`, `../notifications/*`                         |
+| `src/notifications/`     | The notification centre: `NotificationProvider`, `notificationContext`, `NotificationBell`, `ToastStack`                                                                               | `../api/client`, `../components/*`                                                     |
+| `src/pages/`             | Pages belonging to no feature area (`HomePage`, `ComingSoonPage`, `NotPermittedPage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only)         | anything above                                                                         |
+| `src/App.tsx`            | The route map                                                                                                                                                                          | everything                                                                             |
 
 Routing is **react-router v7**, imported from the `react-router` package — _not_
 `react-router-dom`. Paths used in more than one file are constants in `src/routes.ts`, and links
 are router `Link` / `NavLink`, never a bare `<a href>` to an in-app path.
 
 State is plain React: `useState` + `useEffect`, with a `cancelled` flag in the cleanup so a slow
-response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). Auth
-is the one piece of shared state, held in `AuthProvider` and read through `useAuth()`.
+response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). The
+shared state is auth, held in `AuthProvider` and read through `useAuth()`, and the notification
+centre, held in `NotificationProvider` and read through `useNotifications()`.
 There is no Redux, Zustand, TanStack Query or SWR, and adding one is a team decision.
 
 Styling is plain global CSS: colour and font tokens as custom properties in `src/index.css`
@@ -90,6 +92,15 @@ meaning passes `errorCodes` (for example `{ 401: 'INVALID_CREDENTIALS' }` in `sr
 The message shown is the backend's own `detail` sentence when there is one, otherwise the
 registry's fallback, so pages render `formatApiError(error)` and branch on `error.code`, never on
 message text.
+
+### Notifications
+
+Every POST, PUT, PATCH and DELETE lands in the notification centre (team decision, 17 Sep 2026):
+`api<T>()` reports the outcome, and `NotificationProvider` lists it under the bell beside the
+sidebar wordmark and shows it briefly as a toast. Pass `notify: { title, message }` so the entry
+says what changed; failures take their title from the error registry and are always marked
+important. Only sign-in and sign-out pass `notify: false`. The list is per session and clears on
+sign-out.
 
 ### Permission checks here are UX, not security
 

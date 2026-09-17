@@ -4,6 +4,8 @@
  * - Sends the session cookie on every call (story 1.1).
  * - Turns every failure into an `ApiError` carrying a registry code (src/errors/registry.ts), so
  *   pages show `formatApiError(error)` and can branch on `error.code`.
+ * - Reports the outcome of every POST, PUT, PATCH and DELETE to the notification centre (team
+ *   decision, 17 Sep 2026), through `subscribeToMutations`.
  */
 import {
   ERROR_REGISTRY,
@@ -63,11 +65,54 @@ export function formatApiError(error: unknown): string {
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
+export type NotificationImportance = 'important' | 'routine'
+
+/** What the notification centre says when a change succeeds. */
+export interface MutationNotice {
+  title: string
+  message: string
+  importance?: NotificationImportance
+}
+
+/** The result of one POST, PUT, PATCH or DELETE, as the notification centre receives it. */
+export interface MutationOutcome {
+  isSuccess: boolean
+  title: string
+  message: string
+  importance: NotificationImportance
+}
+
 export interface RequestOptions {
   method?: HttpMethod
   body?: unknown
   /** Registry codes for statuses this endpoint gives a specific meaning. */
   errorCodes?: StatusErrorCodes
+  /**
+   * The notice for a successful change. `false` keeps the call out of the notification centre;
+   * only sign-in and sign-out use it, because they change who is signed in.
+   */
+  notify?: MutationNotice | false
+}
+
+type MutationListener = (outcome: MutationOutcome) => void
+
+const mutationListeners = new Set<MutationListener>()
+
+const DEFAULT_SUCCESS_NOTICE: MutationNotice = {
+  title: 'Change saved',
+  message: 'Your change was saved.',
+}
+
+/** Receive the outcome of every change request. Returns the function that stops listening. */
+export function subscribeToMutations(listener: MutationListener): () => void {
+  mutationListeners.add(listener)
+  return () => {
+    mutationListeners.delete(listener)
+  }
+}
+
+function reportMutation(outcome: MutationOutcome): void {
+  mutationListeners.forEach((listener) => listener(outcome))
 }
 
 async function readPayload(response: Response): Promise<unknown> {
@@ -85,9 +130,11 @@ function detailOf(payload: unknown): unknown {
   return payload
 }
 
-export async function api<T>(
+async function send<T>(
   path: string,
-  { method = 'GET', body, errorCodes }: RequestOptions = {},
+  method: HttpMethod,
+  body: unknown,
+  errorCodes: StatusErrorCodes | undefined,
 ): Promise<T> {
   let response: Response
   try {
@@ -110,4 +157,34 @@ export async function api<T>(
     )
   }
   return payload as T
+}
+
+export async function api<T>(
+  path: string,
+  { method = 'GET', body, errorCodes, notify }: RequestOptions = {},
+): Promise<T> {
+  const isReported = method !== 'GET' && notify !== false
+  try {
+    const result = await send<T>(path, method, body, errorCodes)
+    if (isReported) {
+      const notice = notify ?? DEFAULT_SUCCESS_NOTICE
+      reportMutation({
+        isSuccess: true,
+        title: notice.title,
+        message: notice.message,
+        importance: notice.importance ?? 'routine',
+      })
+    }
+    return result
+  } catch (error) {
+    if (isReported && error instanceof ApiError) {
+      reportMutation({
+        isSuccess: false,
+        title: ERROR_REGISTRY[error.code].title,
+        message: error.message,
+        importance: 'important',
+      })
+    }
+    throw error
+  }
 }

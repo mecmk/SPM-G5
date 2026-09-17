@@ -1,5 +1,6 @@
 import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
+import { VENUES_MANAGE_PATH } from '../routes'
 
 /**
  * Story 1.2 AC1/AC2: every section of the app, and the permission a role needs to see it.
@@ -104,13 +105,13 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: false,
       },
       {
-        to: '/venues/manage',
+        to: VENUES_MANAGE_PATH,
         label: 'Manage venues',
         description: 'Create, update and remove the venue records everyone plans with.',
         icon: 'building',
         permission: PERMISSIONS.VENUES_MANAGE,
         story: '8.3',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: '/bookings',
