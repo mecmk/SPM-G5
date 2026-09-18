@@ -32,6 +32,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # The backend test-suite builds a throw-away database from the real migrations + seed
+    # (tests/conftest.py), so CI runs a PostgreSQL service just like `docker compose up -d`.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: connectsphere
+          POSTGRES_PASSWORD: connectsphere
+          POSTGRES_DB: connectsphere
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U connectsphere"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://connectsphere:connectsphere@localhost:5433/connectsphere
     steps:
       - uses: actions/checkout@v4
 
@@ -50,5 +68,16 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      - name: Migrations apply cleanly to an empty database
+        run: uv run python -m app.dbtool ready --no-docs
+
       - name: Test
-        run: uv run pytest
+        run: uv run pytest --traceability=../docs/testing/TRACEABILITY.md
+
+      - name: Upload traceability matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traceability-matrix
+          path: docs/testing/TRACEABILITY.md
+          retention-days: 30

@@ -16,7 +16,8 @@ main                     ← stable, protected. Only merges at sprint end, from 
     ├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
     ├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
     ├── refactor/<slug>    ← restructuring, no behavior change
-    └── test/<slug>        ← test-only changes
+    ├── test/<slug>        ← test-only changes
+    └── docs/<slug>        ← documentation only
 ```
 
 - **`main`** — always stable and deployable. Protected. Only receives merges from a
@@ -29,6 +30,7 @@ main                     ← stable, protected. Only merges at sprint end, from 
 - **`fix/<ID>-<slug>`** — a bug fix branch, e.g. `fix/B1-draft-not-saving`.
 - **`refactor/<slug>`** — restructuring code with no behavior change.
 - **`test/<slug>`** — test-only changes.
+- **`docs/<slug>`** — documentation only, e.g. `docs/claude-md-split`. No source changes.
 
 **There is no `staging`, `release/*`, or `hotfix/*` branch in this project.** This is a
 sprint-trunk model, not GitFlow — keep it that way.
@@ -36,7 +38,7 @@ sprint-trunk model, not GitFlow — keep it that way.
 ## Daily Workflow
 
 1. Branch off the current `sprint/<N>` using the appropriate prefix
-   (`story/`, `fix/`, `refactor/`, or `test/`).
+   (`story/`, `fix/`, `refactor/`, `test/`, or `docs/`).
 2. Implement the change.
 3. Run tests and lint locally (see [AGENTS.md](AGENTS.md) for exact commands).
 4. Push your branch.
