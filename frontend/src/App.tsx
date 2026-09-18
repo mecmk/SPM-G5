@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { EventDetailPage } from './events/EventDetailPage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
@@ -11,6 +12,7 @@ import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
   COMPONENT_GALLERY_PATH,
+  EVENT_DETAIL_PATH,
   HOME_PATH,
   LOGIN_PATH,
   VENUE_EDIT_PATH,
@@ -53,6 +55,13 @@ function App() {
                 <Route path={VENUE_NEW_PATH} element={<VenueFormPage key="new" />} />
                 <Route path={VENUE_EDIT_PATH} element={<VenueFormPage key="edit" />} />
               </Route>
+
+              {/*
+                Story 7.1: full event details. Who may open a given event is a per-record
+                relationship (own event, or any internal role), not a single permission, so this
+                sits behind RequireAuth only - the backend enforces AC2 with a 404.
+              */}
+              <Route path={EVENT_DETAIL_PATH} element={<EventDetailPage />} />
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (
                 <Route key={item.to} element={<RequirePermission permission={item.permission} />}>
