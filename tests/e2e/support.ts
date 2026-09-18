@@ -8,6 +8,7 @@ export const PASSWORD = 'Password123!'
 
 export const ACCOUNTS = {
   organiser: 'organiser@acme.example',
+  organiserOther: 'organiser@nimbus.example',
   coordinator: 'coordinator@connectsphere.example',
   venueStaff: 'venue@connectsphere.example',
   techSupport: 'tech@connectsphere.example',
@@ -15,6 +16,14 @@ export const ACCOUNTS = {
 } as const
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.'
+
+/** Fixed event IDs from backend/db/seed/020_sample_data.sql (mirrored in backend/tests/support/seed.py::Events). */
+export const EVENTS = {
+  draft: '33333333-0000-0000-0000-000000000001', // organiser: organiser
+  submitted: '33333333-0000-0000-0000-000000000002', // organiser: organiser, no coordinator yet
+  approved: '33333333-0000-0000-0000-000000000003', // organiser: organiserOther, coordinator: coordinator
+  rejected: '33333333-0000-0000-0000-000000000004', // organiser: organiserOther, coordinator2
+} as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
 export async function signIn(page: Page, email: string, password: string = PASSWORD) {
