@@ -13,10 +13,14 @@ import {
   COMPONENT_GALLERY_PATH,
   HOME_PATH,
   LOGIN_PATH,
+  VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
   VENUE_NEW_PATH,
+  VENUE_PATH,
   VENUES_MANAGE_PATH,
 } from './routes'
+import { VenueCataloguePage } from './venues/VenueCataloguePage'
+import { VenueDetailPage } from './venues/VenueDetailPage'
 import { VenueFormPage } from './venues/VenueFormPage'
 import { VenueManagePage } from './venues/VenueManagePage'
 import './App.css'
@@ -46,6 +50,12 @@ function App() {
               }
             >
               <Route index element={<HomePage />} />
+
+              {/* Story 8.1: venue catalogue, any internal role that can read venues. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.VENUES_READ} />}>
+                <Route path={VENUE_CATALOGUE_PATH} element={<VenueCataloguePage />} />
+                <Route path={VENUE_PATH} element={<VenueDetailPage />} />
+              </Route>
 
               {/* Story 8.3: venue records, Venue Staff only. */}
               <Route element={<RequirePermission permission={PERMISSIONS.VENUES_MANAGE} />}>
