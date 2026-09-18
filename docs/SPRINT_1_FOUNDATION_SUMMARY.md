@@ -1,17 +1,18 @@
 # Sprint 1 foundation - summary and next steps
 
 Prepared for the ConnectSphere team (IS212 G5) on 2026-09-10 from Joshua's Sprint 1 stories.
-Everything below is on the branch `story/1-database-schema` (created from `sprint/1`),
-**uncommitted**, so it can be reviewed and split into per-story PRs.
+Refreshed on 2026-09-18: everything described below is **merged into `sprint/1`** — the schema in
+PR #11, and the login, role-based access and venue screens in PR #28, which carried all three
+frontend commits because the story branches were stacked.
 
 ## What was delivered
 
 | Story | Title | Status | Where |
 | --- | --- | --- | --- |
 | 1 | chore: set up database schema | Done | `backend/db/migrations/001_initial_schema.sql`, `backend/db/seed/*.sql`, `backend/app/dbtool/`, `docs/database/` |
-| 1.1 | fe/be: implement user login and logout | Done (backend) | `backend/app/auth/` |
-| 1.2 | fe/be: enforce role-based access control | Done (backend) | `backend/app/auth/permissions.py`, `deps.py` |
-| 8.3 | fe/be: create and update venue records | Done (backend) | `backend/app/venues/` |
+| 1.1 | fe/be: implement user login and logout | Done | `backend/app/auth/`, `frontend/src/auth/`, `frontend/src/api/` |
+| 1.2 | fe/be: enforce role-based access control | Done | `backend/app/auth/permissions.py`, `deps.py`, `frontend/src/auth/permissions.ts`, `frontend/src/layout/navigation.ts` |
+| 8.3 | fe/be: create and update venue records | Done | `backend/app/venues/`, `frontend/src/venues/` |
 | 12.1 | fe/be: raise venue booking request | **Skipped - blocked** | see "Story 12.1" below |
 
 ### Acceptance criteria evidence
@@ -21,8 +22,8 @@ tagged with the story and AC it proves. Current state:
 
 | Suite | Result |
 | --- | --- |
-| Backend (pytest, real PostgreSQL) | 133 passed |
-| End-to-end (Playwright) | 1 passed (placeholder page smoke test) |
+| Backend (pytest, real PostgreSQL) | 159 passed |
+| End-to-end (Playwright) | 28 passed (9 sign-in, 10 role-based access, 8 venue management, 1 health) |
 | Backend lint/format (ruff), frontend lint/format/build (oxlint, prettier, tsc), markdownlint | clean |
 
 Story 1 AC3 ("schema can be populated with sample data without integrity errors") is proven by
@@ -35,8 +36,9 @@ Story 1 AC3 ("schema can be populated with sample data without integrity errors"
 2. **ERD (Excalidraw)** - `docs/database/ERD.excalidraw`. Also generated; open it at
    <https://excalidraw.com> (File > Open) or with the VS Code Excalidraw extension. Boxes are
    grouped and coloured by domain; drag them freely, arrows stay attached (crow's-foot = many side).
-3. **SQL schema** - `backend/db/migrations/001_initial_schema.sql` (28 tables covering all 20
-   core features, not just Sprint 1) plus idempotent seed files.
+3. **SQL schema** - `backend/db/migrations/001_initial_schema.sql` (27 tables covering all 20
+   core features, not just Sprint 1; the migration tool adds `schema_migrations` on top) plus
+   idempotent seed files.
 
 ## Running it locally
 
@@ -101,8 +103,9 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 
 ## Decisions the team should confirm (made unilaterally to keep moving)
 
-1. `react-router` v7 was added to the frontend on 2026-09-13, then rolled back pending the
-   updated UI plan; add it back when routing is needed.
+1. `react-router` v7 was added on 2026-09-13, rolled back while Sprint 1 was backend-only, and
+   added again on 2026-09-17 with the login and role-based UI stories. It is in
+   `frontend/package.json` now, and every path lives in `frontend/src/routes.ts`.
 2. Docker host port moved from 5432 to 5433 (`docker-compose.yml`, `backend/.env.sample`,
    default in `config.py`). Existing `backend/.env` files need the port updated.
 3. Password hashing uses scrypt from the Python standard library (no `bcrypt`/`argon2`
@@ -113,20 +116,18 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 
 ## Next steps for the team
 
-### Joshua (this branch)
+### Joshua
 
-1. Review the diff, then split into PRs against `sprint/1` in this order so each is reviewable:
-   `chore: set up database schema (1)` -> `feat: user login and logout (1.1)` ->
-   `feat: role-based access control (1.2)` -> `feat: create and update venue records (8.3)`.
-   The auth/venue PRs depend on the schema PR.
-2. Update `backend/.env` on your machine to port 5433 (the sample is already updated).
-3. Mark 1, 1.1, 1.2, 8.3 as "In Review" on the Sprint 1 sheet; move 12.1 to "Blocked" with
-   the corrected dependencies above.
+1. Done: 1, 1.1, 1.2 and 8.3 are merged into `sprint/1`, backend and frontend both.
+2. Open: PR #30 (`b1.1.1`) makes the sign-in page wait for `GET /auth/me` instead of flashing the
+   form at someone who is already signed in.
+3. Blocked: 12.1, on 2.1, 4.4 and 5.1 — see the dependency table above.
 
 ### Everyone, before starting a story
 
-1. `git checkout sprint/1 && git pull`, then `npm run setup` (after package changes),
-   `npm run db:ready` and `npm run dev` (daily).
+1. `git switch sprint/1 && git pull --rebase`, then `npm run setup` (after package changes),
+   `npm run db:ready` and `npm run dev` (daily). Use `--rebase`: PRs are squash-merged, so a
+   plain `git pull` re-merges the old unsquashed commits and leaves the branch out of step.
 2. Read `docs/database/README.md` (5 min), `docs/testing/README.md` (5 min) and the
    "Adding a feature" checklist at the end of `docs/ARCHITECTURE.md`.
 3. Use the seed accounts (password `Password123!`) - one per role - for manual testing.
@@ -154,7 +155,7 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 ## File map of what changed
 
 ```text
-backend/db/migrations/001_initial_schema.sql   schema (28 tables, comments, constraints, triggers)
+backend/db/migrations/001_initial_schema.sql   schema (27 tables, comments, constraints, triggers)
 backend/db/seed/010_reference_data.sql          roles, facilities, layouts, accessibility, equipment types
 backend/db/seed/020_sample_data.sql             users per role, venues, events, bookings (fixed UUIDs)
 backend/app/dbtool/                             migrate / seed / reset / ready / docs tool
@@ -171,4 +172,16 @@ docs/ARCHITECTURE.md, README.md, AGENTS.md, backend/README.md, tests/README.md
 package.json                                    db:*, test:trace scripts (uv via scripts/uv.mjs)
 scripts/uv.mjs, scripts/lib/                    the uv wrapper
 .gitignore                                      .information/ (customer briefing, backlog export)
+```
+
+Added later, when the frontend stories landed (PR #28, 2026-09-18):
+
+```text
+frontend/src/api/                               client (session cookie, error registry), auth, venues, health
+frontend/src/auth/                              sign-in page, session provider, route guards, permissions
+frontend/src/layout/, components/, pages/       app shell, sidebar, navigation tree, shared UI
+frontend/src/venues/                            venue list, create/edit form, delete confirmation
+frontend/src/notifications/                     toasts and the notification bell
+frontend/src/errors/registry.ts                 one message per error code, shared by every call
+tests/e2e/{auth,rbac,venues,health}.spec.ts     27 story-tagged cases plus the health smoke test
 ```
