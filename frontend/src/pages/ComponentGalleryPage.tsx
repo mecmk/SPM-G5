@@ -7,13 +7,13 @@ import { PageHeader } from '../components/PageHeader'
 import { Sidebar, type SidebarNavItem } from '../components/Sidebar'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
+import { COMPONENT_GALLERY_PATH } from '../routes'
 
 const SAMPLE_NAV_ITEMS: SidebarNavItem[] = [
-  { label: 'My Events', href: '#my-events', group: 'Events', isActive: true },
-  { label: 'New Event Request', href: '#new-event-request', group: 'Events' },
-  { label: 'Venue Catalogue', href: '#venue-catalogue', group: 'Venues' },
-  { label: 'Manage Venues', href: '#manage-venues', group: 'Venues' },
-  { label: 'Components', href: '#components' },
+  { label: 'Components', to: COMPONENT_GALLERY_PATH },
+  { label: 'My Events', to: '/events/mine', group: 'Events' },
+  { label: 'Venue Catalogue', to: '/venues', group: 'Venues' },
+  { label: 'Manage Venues', to: '/venues/manage', group: 'Venues' },
 ]
 
 const SAMPLE_CALENDAR_ENTRIES: CalendarEntry[] = [
@@ -48,17 +48,13 @@ const SAMPLE_STATUSES = [
 
 type GalleryTab = 'buttons' | 'calendar'
 
-export interface ComponentGalleryPageProps {
-  /** Result of the health check, shown so the scaffold's backend status line stays visible. */
-  backendStatus: string
-}
-
 /**
  * Story c3 - development scratch page showing the shared components built for the Figma
  * prototype port, so each one has a consumer while real pages are still being built. Not part of
  * any acceptance criterion; delete once every component below has a real page to live on.
+ * Story 1.1 moved it to its own development-only route, since `/` is now the signed-in main page.
  */
-export function ComponentGalleryPage({ backendStatus }: ComponentGalleryPageProps) {
+export function ComponentGalleryPage() {
   const [month, setMonth] = useState(new Date(2026, 10, 1))
   const [activeTab, setActiveTab] = useState<GalleryTab>('buttons')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all')
@@ -79,14 +75,7 @@ export function ComponentGalleryPage({ backendStatus }: ComponentGalleryPageProp
         <div className="page">
           <PageHeader
             title="Component Gallery"
-            subtitle={
-              <>
-                Shared building blocks for the ConnectSphere prototype ·{' '}
-                <span className="mono">
-                  Backend status: <strong>{backendStatus}</strong>
-                </span>
-              </>
-            }
+            subtitle="Shared building blocks for the ConnectSphere prototype"
           />
 
           <Tabs

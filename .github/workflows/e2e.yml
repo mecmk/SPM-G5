@@ -52,6 +52,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg://connectsphere:connectsphere@localhost:5433/connectsphere
       CORS_ORIGINS: '["http://127.0.0.1:5173"]'
       FRONTEND_URL: http://127.0.0.1:5173
+      # The app must call the API on the same host it is served from: the session cookie is
+      # SameSite=Lax, and Chrome treats localhost and 127.0.0.1 as different sites.
+      VITE_API_BASE_URL: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4
 

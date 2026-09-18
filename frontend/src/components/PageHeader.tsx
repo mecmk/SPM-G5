@@ -1,22 +1,23 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router'
 
 export interface PageHeaderProps {
   title: string
   subtitle?: ReactNode
   action?: ReactNode
-  /** Plain `<a>` for now; swap for a router `Link` once react-router is added. */
-  backHref?: string
+  /** Route path for the back link above the title. */
+  backTo?: string
   backLabel?: string
 }
 
 /** Story c3 - the title block at the top of a page, with an optional back link and action button. */
-export function PageHeader({ title, subtitle, action, backHref, backLabel }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, action, backTo, backLabel }: PageHeaderProps) {
   return (
     <div>
-      {backHref && (
-        <a href={backHref} className="back-link">
+      {backTo && (
+        <Link to={backTo} className="back-link">
           ← {backLabel ?? 'Back'}
-        </a>
+        </Link>
       )}
       <div className="page-header">
         <div>

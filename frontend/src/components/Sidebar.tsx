@@ -1,17 +1,33 @@
+import type { ReactNode } from 'react'
+import { Link, NavLink } from 'react-router'
+import { HOME_PATH } from '../routes'
+import { Icon, type IconName } from './Icon'
+
 export interface SidebarNavItem {
   label: string
-  href: string
+  /** Route path. The link shows as active only on this exact path. */
+  to: string
   /** Section heading this item is grouped under. Items without one render first, ungrouped. */
   group?: string
-  isActive?: boolean
+  icon?: IconName
+  /** A short tag after the label, e.g. "soon". Hidden from screen readers. */
+  hint?: string
 }
 
 export interface SidebarProps {
   navItems: SidebarNavItem[]
   userName: string
   userRole: string
-  /** Omit to hide the sign-out control (e.g. while auth doesn't exist yet). */
+  /** Omit to hide the sign-out control. */
   onSignOut?: () => void
+  /** Icons only. Each link keeps its label as its accessible name. */
+  isCollapsed?: boolean
+  /** Shows the collapse control when given. */
+  onToggleCollapsed?: () => void
+  /** Called after a link is chosen, e.g. to close the phone drawer. */
+  onNavigate?: () => void
+  /** Extra controls beside the wordmark, e.g. the drawer's close button. */
+  brandActions?: ReactNode
 }
 
 interface SidebarNavGroup {
@@ -34,50 +50,107 @@ function groupNavItems(items: SidebarNavItem[]): SidebarNavGroup[] {
 }
 
 /**
- * Story c3 - the prototype's sidebar shell. Presentational only: it takes plain nav items and
- * knows nothing about routing or permissions - the page assembling it decides what to pass and
- * which item is active. Plain `<a>` tags for now; swap for `NavLink` once react-router is added
- * (`frontend/CLAUDE.md`). The wordmark is the page's site heading (accessible name
- * "ConnectSphere"), which `tests/e2e/health.spec.ts` looks for.
+ * Story c3 - the prototype's sidebar shell. Presentational: the page assembling it decides which
+ * items to pass.
+ * Story 1.1 - links are router `NavLink`s, which mark the current page active, and the wordmark
+ * links to the main page. The page's own `<h1>` is its heading, so the wordmark is not one.
+ * Story 1.2 - it collapses to icons (team decision, 17 Sep 2026), and the same component fills
+ * the phone drawer.
  */
-export function Sidebar({ navItems, userName, userRole, onSignOut }: SidebarProps) {
+export function Sidebar({
+  navItems,
+  userName,
+  userRole,
+  onSignOut,
+  isCollapsed = false,
+  onToggleCollapsed,
+  onNavigate,
+  brandActions,
+}: SidebarProps) {
   const groups = groupNavItems(navItems)
+  const toggleLabel = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
 
   return (
-    <aside className="sidebar">
+    <aside className={isCollapsed ? 'sidebar is-collapsed' : 'sidebar'}>
       <div className="sidebar-brand">
-        <h1 className="wordmark">
-          Connect<em>Sphere</em>
-        </h1>
-        <span className="wordmark-tagline">Event Management</span>
+        {!isCollapsed && (
+          <div>
+            <Link to={HOME_PATH} className="wordmark" onClick={onNavigate}>
+              Connect<em>Sphere</em>
+            </Link>
+            <span className="wordmark-tagline">Event Management</span>
+          </div>
+        )}
+        {(brandActions || onToggleCollapsed) && (
+          <div className="sidebar-brand-actions">
+            {brandActions}
+            {onToggleCollapsed && (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={toggleLabel}
+                aria-expanded={!isCollapsed}
+                title={toggleLabel}
+                onClick={onToggleCollapsed}
+              >
+                <Icon name="sidebar" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <nav className="sidebar-nav" aria-label="Main">
         {groups.map((group) => (
           <div key={group.label ?? '_ungrouped'} className="nav-group">
-            {group.label && <div className="nav-group-label">{group.label}</div>}
+            {group.label &&
+              (isCollapsed ? (
+                <hr className="nav-group-divider" />
+              ) : (
+                <div className="nav-group-label">{group.label}</div>
+              ))}
             {group.items.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className={item.isActive ? 'active' : undefined}
-                aria-current={item.isActive ? 'page' : undefined}
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end
+                aria-label={isCollapsed ? item.label : undefined}
+                title={isCollapsed ? item.label : undefined}
+                onClick={onNavigate}
               >
-                {item.label}
-              </a>
+                {item.icon && <Icon name={item.icon} />}
+                {!isCollapsed && (
+                  <span className="nav-label" title={item.label}>
+                    {item.label}
+                  </span>
+                )}
+                {!isCollapsed && item.hint && (
+                  <span className="nav-hint" aria-hidden="true">
+                    {item.hint}
+                  </span>
+                )}
+              </NavLink>
             ))}
           </div>
         ))}
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-user">
-          <div className="user-name">{userName}</div>
-          <div className="user-role">{userRole}</div>
-        </div>
+        {!isCollapsed && (
+          <div className="sidebar-user">
+            <div className="user-name">{userName}</div>
+            <div className="user-role">{userRole}</div>
+          </div>
+        )}
         {onSignOut && (
-          <button type="button" className="sidebar-signout" onClick={onSignOut}>
-            Sign out
+          <button
+            type="button"
+            className="sidebar-signout"
+            aria-label={isCollapsed ? 'Sign out' : undefined}
+            title={isCollapsed ? 'Sign out' : undefined}
+            onClick={onSignOut}
+          >
+            {isCollapsed ? <Icon name="sign-out" /> : 'Sign out'}
           </button>
         )}
       </div>

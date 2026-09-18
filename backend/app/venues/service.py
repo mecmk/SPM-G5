@@ -1,4 +1,4 @@
-"""Business logic for the venue catalogue (story 8.3 create/update; reads for 8.1/8.2).
+"""Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2).
 
 Routers translate the exceptions raised here into HTTP statuses; keeping the rules in plain
 functions makes them easy to unit-test and to reuse from other features (e.g. booking
@@ -48,6 +48,21 @@ class UnknownReferenceCode(ValueError):
 
 class InvalidOperatingHours(ValueError):
     pass
+
+
+# Name PostgreSQL gives the only foreign key that blocks deleting a venue.
+_BOOKINGS_VENUE_FOREIGN_KEY = "venue_bookings_venue_id_fkey"
+
+VENUE_IN_USE_MESSAGE = (
+    "You cannot delete a venue that has bookings. Withdraw it from service instead."
+)
+
+
+class VenueInUse(ValueError):
+    """Raised when a venue still has booking rows, which the database refuses to orphan."""
+
+    def __init__(self) -> None:
+        super().__init__(VENUE_IN_USE_MESSAGE)
 
 
 # --- reads -------------------------------------------------------------------------------
@@ -180,6 +195,34 @@ def update_venue(db: Session, venue_id: uuid.UUID, data: VenueUpdate, *, actor: 
     db.commit()
     db.refresh(venue)
     return venue
+
+
+def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
+    """Remove a venue nothing refers to (team decision, 17 Sep 2026: Venue Staff have full CRUD).
+
+    Facilities, layouts, accessibility features and unavailability periods go with it. A venue
+    with booking rows is refused by the database's foreign key, translated to VenueInUse.
+    """
+    venue = get_venue(db, venue_id)
+    name = venue.name
+    db.delete(venue)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if _BOOKINGS_VENUE_FOREIGN_KEY in str(exc.orig):
+            raise VenueInUse() from exc
+        raise
+    record_audit(
+        db,
+        actor=actor,
+        action="VENUE_DELETED",
+        entity_type="venue",
+        entity_id=venue_id,
+        details={"name": name},
+        commit=False,
+    )
+    db.commit()
 
 
 # --- helpers -----------------------------------------------------------------------------

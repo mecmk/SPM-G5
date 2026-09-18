@@ -56,7 +56,7 @@ author's call. Never flatten a `taste` into a "must".
 
 - `expected` — **Use the custom properties from `src/index.css` for colour; never a raw hex or
   `rgba()` in `src/App.css`.**
-  `index.css` defines 59 tokens and redefines the colour ones under
+  `index.css` defines 62 tokens and redefines the colour ones under
   `@media (prefers-color-scheme: dark)`, so a token adapts and a literal does not. This was not
   hypothetical: `.error` used to be `#b91c1c` on a `--bg` of `#16171d` in dark mode — dark red
   text on a near-black panel, which is the one message the alert rule above exists to make
@@ -317,7 +317,7 @@ in an unrelated PR.**
 
 | Rule                                          | Violating sites                                                                                                                                          | Status                                                                                                                  |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| One exported constant for a cross-file string | 2: both copies of `'venues:manage'` (`src/App.tsx:25`, `src/layout/AppLayout.tsx:17`)                                                                    | fix when a page is next gated on this permission                                                                        |
+| One exported constant for a cross-file string | 0: permission codes are constants in `src/auth/permissions.ts` (story 1.2)                                                                               | resolved                                                                                                                |
 | Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx`                                                                                    | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
 | Colour comes from a token, never a literal    | 0 — resolved in story c3 (`src/App.css` is token-only)                                                                                                   | resolved                                                                                                                |
 | Boolean `is`/`can`/`has` prefix               | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted                                                                                             |
