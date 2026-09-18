@@ -28,6 +28,7 @@ npm test
 | `e2e/auth.spec.ts` | 1.1 sign in, sign out, redirects, generic failure message |
 | `e2e/rbac.spec.ts` | 1.2 role-specific sidebar and main page, blocked direct URLs, collapse and phone drawer |
 | `e2e/venues.spec.ts` | 8.3 create, edit, delete, search and filter venues; capacity check; notifications |
+| `e2e/events.spec.ts` | 7.1 full event details: core details, requirements, coordinator, unassigned state, relationship-based access, read-only fields |
 
 `e2e/support.ts` has the seed accounts and a `signIn` helper. Specs run against your local
 development database, so use unique names for anything you create.
