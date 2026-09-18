@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { formatApiError } from '../api/client'
 import { getHealth } from '../api/health'
+import { LoadingState } from '../layout/LoadingState'
 import { useAuth } from './authContext'
 import { homeFor } from './homeFor'
 
@@ -31,7 +32,7 @@ interface LocationState {
 
 /** Story 1.1: sign in with an email and password. */
 export function LoginPage() {
-  const { user, signIn } = useAuth()
+  const { user, isLoading, signIn } = useAuth()
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,6 +53,10 @@ export function LoginPage() {
       cancelled = true
     }
   }, [])
+
+  // Until `/auth/me` answers the session is unknown, so show the check instead of flashing the
+  // sign-in form at someone who is already signed in. RequireAuth guards the same way.
+  if (isLoading) return <LoadingState label="Checking your session…" />
 
   // Story 1.1 AC4: once signed in, continue to the requested page or the main page.
   if (user) {

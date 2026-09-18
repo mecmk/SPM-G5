@@ -85,3 +85,23 @@ test('1.1 AC5: signing out ends the session', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/login$/)
 })
+
+test('b1.1.1: opening sign-in with a live session shows the check, not the form', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await expectSignedIn(page)
+
+  // Hold /auth/me in flight so the state before it answers can be asserted at all.
+  await page.route('**/auth/me', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
+  await page.goto('/login')
+
+  await expect(page.getByRole('status')).toHaveText(/Checking your session/)
+  await expect(page.getByLabel('Email')).toHaveCount(0)
+
+  await page.unroute('**/auth/me')
+  await expect(page).toHaveURL(/\/$/)
+})
