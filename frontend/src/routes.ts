@@ -13,3 +13,10 @@ export const VENUE_EDIT_PATH = '/venues/:venueId/edit'
 export function venueEditPath(venueId: string): string {
   return VENUE_EDIT_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
+
+// Story 7.1: full event details.
+export const EVENT_DETAIL_PATH = '/events/:eventId'
+
+export function eventDetailPath(eventId: string): string {
+  return EVENT_DETAIL_PATH.replace(':eventId', encodeURIComponent(eventId))
+}
