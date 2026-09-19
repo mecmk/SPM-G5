@@ -1,0 +1,93 @@
+"""Small factories for rows tests need beyond the seed data.
+
+Each returns a persisted ORM object (flushed, not committed - the test transaction is rolled
+back anyway). Use unique names/emails so tests never collide with the seed.
+"""
+
+from __future__ import annotations
+
+import itertools
+import uuid
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from app.auth.models import User
+from app.auth.passwords import hash_password
+from app.bookings.models import VenueBooking
+from app.venues.models import Venue
+from tests.support.seed import Events, Users
+
+_counter = itertools.count(1)
+
+
+def make_user(
+    db: Session,
+    *,
+    role: str = "EVENT_ORGANISER",
+    password: str = "Password123!",
+    is_active: bool = True,
+    **overrides,
+) -> User:
+    n = next(_counter)
+    user = User(
+        email=overrides.pop("email", f"user{n}@test.example"),
+        password_hash=hash_password(password),
+        full_name=overrides.pop("full_name", f"Test User {n}"),
+        role_code=role,
+        is_active=is_active,
+        **overrides,
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
+def make_venue(db: Session, **overrides) -> Venue:
+    n = next(_counter)
+    venue = Venue(
+        name=overrides.pop("name", f"Test Venue {n}"),
+        location=overrides.pop("location", "Test Tower"),
+        capacity=overrides.pop("capacity", 50),
+        **overrides,
+    )
+    db.add(venue)
+    db.flush()
+    return venue
+
+
+def make_booking(
+    db: Session,
+    *,
+    venue_id: uuid.UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+    status: str = "PENDING",
+    **overrides,
+) -> VenueBooking:
+    """A venue booking. Refreshed after flush so the trigger-computed held_from/held_until
+    (see app/bookings/models.py) are populated on the returned object, not just in the row -
+    the conflict check compares those fields in Python.
+    """
+    booking = VenueBooking(
+        event_id=overrides.pop("event_id", Events.APPROVED),
+        venue_id=venue_id,
+        requested_by_id=overrides.pop("requested_by_id", Users.COORDINATOR.id),
+        starts_at=starts_at,
+        ends_at=ends_at,
+        expected_attendance=overrides.pop("expected_attendance", 10),
+        status=status,
+        **overrides,
+    )
+    db.add(booking)
+    db.flush()
+    db.refresh(booking)
+    return booking
+
+
+def venue_payload(**overrides) -> dict:
+    """A valid POST /venues body (story 8.3 AC1 minimum) with optional overrides."""
+    n = next(_counter)
+    body = {"name": f"API Venue {n}", "location": "Tower Z, Level 9", "capacity": 40}
+    body.update(overrides)
+    return body
