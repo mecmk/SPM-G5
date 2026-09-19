@@ -22,6 +22,7 @@ export type IconName =
   | 'search'
   | 'pencil'
   | 'trash'
+  | 'image'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
@@ -115,6 +116,13 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13" />
       <path d="M10 11v5.5M14 11v5.5" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3.5" y="5" width="17" height="14" rx="1.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M4 17l5-4.5 3.5 3 3-2.5L20 17" />
     </>
   ),
 }
