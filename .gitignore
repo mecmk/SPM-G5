@@ -34,6 +34,3 @@ Thumbs.db
 # --- Logs ---
 *.log
 npm-debug.log*
-
-# --- Project Details ---
-.information
