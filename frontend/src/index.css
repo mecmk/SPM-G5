@@ -1,93 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
-
-/*
- * Design tokens. Every colour used anywhere in the app is one of these custom properties, defined
- * once for light and once for dark so a component adapts without knowing which theme it is in.
- * Component classes live in App.css and reference these by name only.
- *
- * Values come from the Figma prototype's Tailwind classes: the named hexes are its palette, the
- * status families are Tailwind's emerald / amber / red / blue / violet / teal / orange / gray
- * shades (50 = bg, 100 = soft, 200 = border, 600-700 = text, 800 = deep text for alerts).
- */
 :root {
-  /* surfaces */
-  --bg: #f7f6f3;
-  --surface: #ffffff;
-  --surface-alt: #ebe9e3;
-  --surface-inset: #fdfcfa;
-  --surface-hover: rgba(255, 255, 255, 0.5);
-  --border: #d9d6ce;
-  --hairline: #f0ede8;
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  /* text */
-  --text: #1a2332;
-  --text-h: #1a2332;
-  --text-muted: #6b7280;
-  --text-faint: #9ca3af;
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
 
-  /* primary (navy) and brand (green) actions */
-  --accent: #1a2332;
-  --accent-hover: #243044;
-  --accent-contrast: #ffffff;
-  --brand: #2d6b5a;
-  --brand-hover: #235347;
-  --brand-contrast: #ffffff;
-
-  /* semantic status tints */
-  --success: #047857;
-  --success-deep: #065f46;
-  --success-bg: #ecfdf5;
-  --success-soft: #d1fae5;
-  --success-border: #a7f3d0;
-  --warning: #b45309;
-  --warning-deep: #92400e;
-  --warning-bg: #fffbeb;
-  --warning-soft: #fef3c7;
-  --warning-border: #fde68a;
-  --danger: #dc2626;
-  --danger-strong: #b91c1c;
-  --danger-deep: #991b1b;
-  --danger-bg: #fef2f2;
-  --danger-soft: #fee2e2;
-  --danger-border: #fecaca;
-  --info: #1d4ed8;
-  --info-deep: #1e40af;
-  --info-bg: #eff6ff;
-  --info-soft: #dbeafe;
-  --info-border: #bfdbfe;
-  --highlight: #6d28d9;
-  --highlight-bg: #f5f3ff;
-  --highlight-border: #ddd6fe;
-  --teal: #0f766e;
-  --teal-bg: #f0fdfa;
-  --teal-border: #99f6e4;
-  --orange: #c2410c;
-  --orange-bg: #fff7ed;
-  --orange-border: #fed7aa;
-  --neutral: #4b5563;
-  --neutral-bg: #f3f4f6;
-  --neutral-border: #e5e7eb;
-
-  /* the sign-in page's brand panel: dark in both themes (story 1.1) */
-  --brand-panel: #1a2332;
-  --on-brand-panel: #f7f6f3;
-  --on-brand-panel-muted: #a9b1bf;
-
-  /* overlays and elevation */
-  --backdrop: rgba(26, 35, 50, 0.45);
-  --hero-shade: rgba(17, 20, 28, 0.72);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-
-  /* shape and type. --radius-sm is 0 on purpose: the prototype's `rounded-sm` resolves to 0px. */
-  --radius: 4px;
-  --radius-sm: 0;
-  --sidebar-width: 15.5rem;
-  --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
-  --font-mono: 'DM Mono', ui-monospace, Consolas, monospace;
-
-  font-size: 16px;
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -95,125 +23,87 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1916;
-    --surface: #23221e;
-    --surface-alt: #2a2924;
-    --surface-inset: #1f1e1a;
-    --surface-hover: rgba(255, 255, 255, 0.06);
-    --border: #3b3933;
-    --hairline: #2e2c27;
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --border: #2e303a;
+    --code-bg: #1f2028;
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-border: rgba(192, 132, 252, 0.5);
+    --social-bg: rgba(47, 48, 58, 0.5);
+    --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  }
 
-    --text: #e8e6e1;
-    --text-h: #f4f2ed;
-    --text-muted: #a3a099;
-    --text-faint: #77746d;
-
-    --accent: #d5dce8;
-    --accent-hover: #e3e8f0;
-    --accent-contrast: #1a2332;
-    --brand: #7bbfa8;
-    --brand-hover: #93cdb9;
-    --brand-contrast: #0e2019;
-
-    --success: #6ee7b7;
-    --success-deep: #a7f3d0;
-    --success-bg: #0c2b22;
-    --success-soft: #134e3a;
-    --success-border: #146c4b;
-    --warning: #fcd34d;
-    --warning-deep: #fde68a;
-    --warning-bg: #33260a;
-    --warning-soft: #4a3610;
-    --warning-border: #8a5a0c;
-    --danger: #f87171;
-    --danger-strong: #fca5a5;
-    --danger-deep: #fecaca;
-    --danger-bg: #351313;
-    --danger-soft: #4a1d1d;
-    --danger-border: #8f2727;
-    --info: #93c5fd;
-    --info-deep: #bfdbfe;
-    --info-bg: #12203a;
-    --info-soft: #1b2f57;
-    --info-border: #274a8a;
-    --highlight: #c4b5fd;
-    --highlight-bg: #221a3c;
-    --highlight-border: #4f3a9a;
-    --teal: #5eead4;
-    --teal-bg: #0b2a27;
-    --teal-border: #0f5f58;
-    --orange: #fdba74;
-    --orange-bg: #3a2210;
-    --orange-border: #8a4a12;
-    --neutral: #a8a29e;
-    --neutral-bg: #2a2924;
-    --neutral-border: #3b3933;
-
-    --brand-panel: #11100e;
-    --on-brand-panel: #f4f2ed;
-    --on-brand-panel-muted: #8e8b84;
-
-    --backdrop: rgba(0, 0, 0, 0.6);
-    --hero-shade: rgba(0, 0, 0, 0.78);
-    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
-    --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  #social .button-icon {
+    filter: invert(1) brightness(2);
   }
 }
 
 #root {
+  width: 1126px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font: 0.875rem/1.25rem var(--font-sans);
 }
 
 h1,
-h2,
-h3 {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-weight: 400;
+h2 {
+  font-family: var(--heading);
+  font-weight: 500;
   color: var(--text-h);
-  letter-spacing: 0;
 }
 
 h1 {
-  font-size: 1.875rem;
-  line-height: 2.25rem;
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
 }
-
 h2 {
-  font-size: 1.5rem;
-  line-height: 2rem;
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
 }
-
-h3 {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
-}
-
 p {
   margin: 0;
 }
 
-:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
 }
 
 code {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
-  color: var(--text-h);
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
 }
