@@ -68,9 +68,12 @@ def _e(n: int) -> uuid.UUID:
 
 class Events:
     DRAFT = _e(1)  # organiser 1, incomplete
-    SUBMITTED = _e(2)  # organiser 1, no coordinator yet
+    SUBMITTED = _e(2)  # organiser 1, coordinator 1, awaiting decision
     APPROVED = _e(3)  # organiser 2, coordinator 1, approved booking of Grand Hall
     REJECTED = _e(4)  # organiser 2, coordinator 2
+    UNDER_REVIEW = _e(5)  # organiser 2, coordinator 1, awaiting decision
+    CLARIFICATION_REQUESTED = _e(6)  # organiser 1, coordinator 1, awaiting decision
+    SUBMITTED_2 = _e(7)  # organiser 1, coordinator 1, awaiting decision
 
 
 class Bookings:

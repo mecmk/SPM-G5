@@ -48,6 +48,16 @@ def test_entry_shows_name_organiser_and_dates(coordinator_client):
     assert entry["submitted_at"].startswith("2026-09-08")
 
 
+@pytest.mark.story("4.1", ac=2)
+def test_entry_carries_the_cover_image_url(coordinator_client, db: Session):
+    event = make_event(db, cover_image_url="/images/events/test.svg")
+
+    body = coordinator_client.get("/events/review-queue").json()
+    entry = next(row for row in body if row["id"] == str(event.id))
+
+    assert entry["cover_image_url"] == "/images/events/test.svg"
+
+
 # --- AC3: ordering ---------------------------------------------------------------------------
 @pytest.mark.story("4.1", ac=3)
 def test_default_order_is_by_submission_date(coordinator_client, db: Session):
@@ -122,13 +132,15 @@ def test_coordinator_filter_narrows_the_queue(coordinator_client, db: Session):
     someone_elses = make_event(
         db, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=Users.COORDINATOR_2.id
     )
+    unassigned = make_event(db, status=EventStatus.UNDER_REVIEW)
 
     response = coordinator_client.get(f"/events/review-queue?coordinator_id={Users.COORDINATOR.id}")
     ids = [row["id"] for row in response.json()]
 
     assert str(mine.id) in ids
     assert str(someone_elses.id) not in ids
-    assert str(Events.SUBMITTED) not in ids  # unassigned in the seed
+    assert str(unassigned.id) not in ids
+    assert str(Events.SUBMITTED) in ids  # assigned to coordinator 1 in the seed
 
 
 @pytest.mark.story("4.1", ac=4)
