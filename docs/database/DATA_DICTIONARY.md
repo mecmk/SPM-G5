@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-10 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-19 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -319,6 +319,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `name` | `text` | no | - | - | Event name. The only field required even for a draft. |
 | `purpose` | `text` | yes | - | - | Why the event is held (story 2.1 AC1). Mandatory once submitted. |
 | `description` | `text` | yes | - | - | Longer description / general programme (story 2.1 AC1). Routine field (story 7.2). |
+| `cover_image_url` | `text` | yes | - | - | Root-relative path of the event picture, served by the frontend from frontend/public (e.g. /images/events/<file>); NULL shows the placeholder. Team decision, 17 Sep 2026: events have a thumbnail. Routine field. |
 | `starts_at` | `timestamp with time zone` | yes | - | - | Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist. |
 | `ends_at` | `timestamp with time zone` | yes | - | - | Proposed end date-time. Must be after starts_at (story 2.1 AC2). |
 | `expected_attendance` | `integer` | yes | - | - | Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1). |

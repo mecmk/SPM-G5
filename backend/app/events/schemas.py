@@ -19,7 +19,8 @@ class ReviewQueueSort(StrEnum):
 
 
 class ReviewQueueEntry(BaseModel):
-    """AC2: name, organiser, proposed date, submission date. No defaults (response schema)."""
+    """AC2: name, organiser, proposed date, submission date, and the optional picture.
+    No defaults (response schema)."""
 
     id: uuid.UUID
     name: str
@@ -28,6 +29,7 @@ class ReviewQueueEntry(BaseModel):
     ends_at: datetime
     submitted_at: datetime | None  # not covered by that CHECK, so honest about NULL
     status: str
+    cover_image_url: str | None
 
     @classmethod
     def from_event(cls, event: Event) -> ReviewQueueEntry:
@@ -44,4 +46,5 @@ class ReviewQueueEntry(BaseModel):
             ends_at=ends_at,
             submitted_at=event.submitted_at,
             status=event.status,
+            cover_image_url=event.cover_image_url,
         )

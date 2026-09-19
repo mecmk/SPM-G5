@@ -47,6 +47,7 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     purpose: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
+    cover_image_url: Mapped[str | None] = mapped_column(Text)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expected_attendance: Mapped[int | None] = mapped_column(Integer)
