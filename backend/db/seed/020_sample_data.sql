@@ -106,29 +106,42 @@ ON CONFLICT (id) DO UPDATE SET
 -- ---------------------------------------------------------------------
 -- Events in several lifecycle stages
 -- ---------------------------------------------------------------------
-INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, cover_image_url, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, required_layout_code, accessibility_none_required,
                     registration_required, registration_capacity, registration_closes_at,
                     contact_name, contact_email, submitted_at, decided_at, decided_by_id, decision_reason) VALUES
     -- 3333..01: a draft, deliberately incomplete
     ('33333333-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Q1 Sales Kick-off (draft)', NULL, 'Still gathering requirements.', NULL, NULL, NULL, 'DRAFT',
+     'Q1 Sales Kick-off (draft)', NULL, 'Still gathering requirements.', NULL, NULL, NULL, NULL, 'DRAFT',
      NULL, NULL, NULL, FALSE, FALSE, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-    -- 3333..02: submitted, waiting for a coordinator
+    -- 3333..02: submitted and assigned to Chloe, waiting for her decision
     ('33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'SUBMITTED',
-     NULL, 'Tower A', 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-08 10:15+08', NULL, NULL, NULL),
+     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'SUBMITTED',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-08 10:15+08', NULL, NULL, NULL),
     -- 3333..03: approved and assigned; has an approved venue booking
     ('33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'APPROVED',
+     'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', NULL, '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'APPROVED',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..04: rejected with a reason
     ('33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Rooftop Networking Night', 'Networking', NULL, '2026-10-30 19:00+08', '2026-10-30 23:00+08', 120, 'REJECTED',
-     '11111111-0000-0000-0000-000000000004', 'Rooftop', 'STANDING', TRUE, FALSE, NULL, NULL, NULL, NULL, '2026-09-05 16:00+08', '2026-09-07 11:00+08', '11111111-0000-0000-0000-000000000004', 'No outdoor venues are available after 22:00.')
+     'Rooftop Networking Night', 'Networking', NULL, NULL, '2026-10-30 19:00+08', '2026-10-30 23:00+08', 120, 'REJECTED',
+     '11111111-0000-0000-0000-000000000004', 'Rooftop', 'STANDING', TRUE, FALSE, NULL, NULL, NULL, NULL, '2026-09-05 16:00+08', '2026-09-07 11:00+08', '11111111-0000-0000-0000-000000000004', 'No outdoor venues are available after 22:00.'),
+    -- 3333..05: under review, assigned to Chloe (more review-queue test data)
+    ('33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Nimbus Leadership Offsite', 'Internal meeting', 'Quarterly leadership planning session.', NULL, '2026-12-02 09:00+08', '2026-12-02 16:00+08', 25, 'UNDER_REVIEW',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', 'BOARDROOM', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-10 08:00+08', NULL, NULL, NULL),
+    -- 3333..06: sent back for clarification, assigned to Chloe
+    ('33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Diversity & Inclusion Forum', 'Community outreach', 'Panel discussion and workshops on workplace inclusion.', NULL, '2026-11-05 09:30+08', '2026-11-05 15:00+08', 150, 'CLARIFICATION_REQUESTED',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-03 09:00+08', NULL, NULL, NULL),
+    -- 3333..07: submitted, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
+    ('33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'SUBMITTED',
+     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', 'STANDING', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
-    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     required_layout_code = EXCLUDED.required_layout_code, accessibility_none_required = EXCLUDED.accessibility_none_required,
@@ -168,12 +181,25 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000003', 'UNDER_REVIEW', 'APPROVED', '11111111-0000-0000-0000-000000000003', '2026-09-03 14:30+08', NULL),
     ('99999999-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000004', NULL, 'DRAFT', '11111111-0000-0000-0000-000000000002', '2026-09-05 15:00+08', NULL),
     ('99999999-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000004', 'DRAFT', 'SUBMITTED', '11111111-0000-0000-0000-000000000002', '2026-09-05 16:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000004', 'SUBMITTED', 'REJECTED', '11111111-0000-0000-0000-000000000004', '2026-09-07 11:00+08', 'No outdoor venues are available after 22:00.')
+    ('99999999-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000004', 'SUBMITTED', 'REJECTED', '11111111-0000-0000-0000-000000000004', '2026-09-07 11:00+08', 'No outdoor venues are available after 22:00.'),
+    ('99999999-0000-0000-0000-000000000010', '33333333-0000-0000-0000-000000000005', NULL, 'DRAFT', '11111111-0000-0000-0000-000000000002', '2026-09-09 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000011', '33333333-0000-0000-0000-000000000005', 'DRAFT', 'SUBMITTED', '11111111-0000-0000-0000-000000000002', '2026-09-10 08:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000012', '33333333-0000-0000-0000-000000000005', 'SUBMITTED', 'UNDER_REVIEW', '11111111-0000-0000-0000-000000000003', '2026-09-11 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000006', NULL, 'DRAFT', '11111111-0000-0000-0000-000000000001', '2026-09-02 15:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000006', 'DRAFT', 'SUBMITTED', '11111111-0000-0000-0000-000000000001', '2026-09-03 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000006', 'SUBMITTED', 'CLARIFICATION_REQUESTED', '11111111-0000-0000-0000-000000000003', '2026-09-04 10:00+08', 'Please add expected headcount by department.'),
+    ('99999999-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000007', NULL, 'DRAFT', '11111111-0000-0000-0000-000000000001', '2026-09-14 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000007', 'DRAFT', 'SUBMITTED', '11111111-0000-0000-0000-000000000001', '2026-09-15 14:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
     ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-02 09:30+08'),
-    ('aaaaaaaa-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-06 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-06 09:00+08'),
+    -- Assigned automatically on submission (team decision, 17 Sep 2026): no human assigner.
+    ('aaaaaaaa-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-08 10:15+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-10 08:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-03 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-15 14:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------

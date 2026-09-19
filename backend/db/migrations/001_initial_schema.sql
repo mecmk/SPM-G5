@@ -309,6 +309,7 @@ CREATE TABLE events (
     name                        TEXT NOT NULL,
     purpose                     TEXT,
     description                 TEXT,
+    cover_image_url             TEXT,
     starts_at                   TIMESTAMPTZ,
     ends_at                     TIMESTAMPTZ,
     expected_attendance         INTEGER,
@@ -363,6 +364,7 @@ COMMENT ON COLUMN events.organisation_id IS 'FK -> client_organisations.id. Clie
 COMMENT ON COLUMN events.name IS 'Event name. The only field required even for a draft.';
 COMMENT ON COLUMN events.purpose IS 'Why the event is held (story 2.1 AC1). Mandatory once submitted.';
 COMMENT ON COLUMN events.description IS 'Longer description / general programme (story 2.1 AC1). Routine field (story 7.2).';
+COMMENT ON COLUMN events.cover_image_url IS 'Root-relative path of the event picture, served by the frontend from frontend/public (e.g. /images/events/<file>); NULL shows the placeholder. Team decision, 17 Sep 2026: events have a thumbnail. Routine field.';
 COMMENT ON COLUMN events.starts_at IS 'Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist.';
 COMMENT ON COLUMN events.ends_at IS 'Proposed end date-time. Must be after starts_at (story 2.1 AC2).';
 COMMENT ON COLUMN events.expected_attendance IS 'Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1).';

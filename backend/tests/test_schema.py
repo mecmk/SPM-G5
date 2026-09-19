@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 import app.auth.models  # noqa: F401  (register models on Base.metadata)
 import app.common.audit  # noqa: F401
+import app.events.models  # noqa: F401
 import app.venues.models  # noqa: F401
 from app.db import Base
 from app.dbtool import migrate

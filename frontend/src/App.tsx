@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
@@ -11,6 +12,7 @@ import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
   COMPONENT_GALLERY_PATH,
+  EVENTS_INBOX_PATH,
   HOME_PATH,
   LOGIN_PATH,
   VENUE_EDIT_PATH,
@@ -52,6 +54,11 @@ function App() {
                 <Route path={VENUES_MANAGE_PATH} element={<VenueManagePage />} />
                 <Route path={VENUE_NEW_PATH} element={<VenueFormPage key="new" />} />
                 <Route path={VENUE_EDIT_PATH} element={<VenueFormPage key="edit" />} />
+              </Route>
+
+              {/* Story 4.1: the coordinator review queue. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_REVIEW} />}>
+                <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (

@@ -9,6 +9,7 @@ export const PASSWORD = 'Password123!'
 export const ACCOUNTS = {
   organiser: 'organiser@acme.example',
   coordinator: 'coordinator@connectsphere.example',
+  coordinator2: 'coordinator2@connectsphere.example',
   venueStaff: 'venue@connectsphere.example',
   techSupport: 'tech@connectsphere.example',
   attendee: 'attendee@example.com',

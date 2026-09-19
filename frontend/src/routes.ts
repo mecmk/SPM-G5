@@ -13,3 +13,6 @@ export const VENUE_EDIT_PATH = '/venues/:venueId/edit'
 export function venueEditPath(venueId: string): string {
   return VENUE_EDIT_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
+
+// Story 4.1: the coordinator review queue.
+export const EVENTS_INBOX_PATH = '/events/inbox'
