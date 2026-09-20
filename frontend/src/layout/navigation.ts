@@ -1,6 +1,6 @@
 import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
-import { EVENTS_INBOX_PATH, VENUES_MANAGE_PATH } from '../routes'
+import { EVENT_NEW_PATH, EVENTS_INBOX_PATH, VENUES_MANAGE_PATH } from '../routes'
 
 /**
  * Story 1.2 AC1/AC2: every section of the app, and the permission a role needs to see it.
@@ -34,6 +34,16 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Events',
     items: [
+      {
+        to: EVENT_NEW_PATH,
+        label: 'New event request',
+        description:
+          'Tell us about your event, the venue and accessibility it needs, and the equipment you want.',
+        icon: 'plus',
+        permission: PERMISSIONS.EVENTS_CREATE,
+        story: '2.1',
+        isAvailable: true,
+      },
       {
         to: '/events/mine',
         label: 'My events',

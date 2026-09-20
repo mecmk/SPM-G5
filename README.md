@@ -175,12 +175,15 @@ npm run lint         # lint and format-check the backend and frontend
 npm run format       # auto-fix formatting issues in the backend and frontend
 npm run test         # backend tests (needs Postgres running) and a frontend build check
 npm run test:trace   # backend tests + docs/testing/TRACEABILITY.md (story/AC -> test matrix)
-npm run test:e2e     # end-to-end tests; requires `npm run dev` running in another terminal
+npm run test:e2e     # end-to-end tests on a throwaway database and their own servers
 ```
 
-Backend tests build their own `connectsphere_test` database from the real migrations and seed,
-so they never touch your development data. Conventions (fixtures, story markers, traceability)
-are in [docs/testing/README.md](docs/testing/README.md).
+Neither kind of test touches your development data. Backend tests build their own
+`connectsphere_test` database from the real migrations and seed. `npm run test:e2e` rebuilds
+`connectsphere_e2e` on the same PostgreSQL server (it only needs `npm run db:up`), starts its own
+API on `:8001` and app on `:5174`, and empties the database afterwards, so your `npm run dev`
+stack can stay up. Conventions (fixtures, story markers, traceability) are in
+[docs/testing/README.md](docs/testing/README.md).
 
 ## Branching Model
 

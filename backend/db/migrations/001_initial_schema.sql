@@ -315,10 +315,12 @@ CREATE TABLE events (
     expected_attendance         INTEGER,
     status                      TEXT NOT NULL DEFAULT 'DRAFT',
     assigned_coordinator_id     UUID REFERENCES users (id),
-    -- venue requirements captured on the request (story 2.1 AC4)
+    -- venue requirements captured on the request (story 2.1 AC4): a layout, facilities (in
+    -- event_required_facilities) and free text, or venue_none_required
     preferred_location          TEXT,
     required_layout_code        TEXT REFERENCES room_layouts (code),
     venue_requirement_notes     TEXT,
+    venue_none_required         BOOLEAN NOT NULL DEFAULT FALSE,
     -- accessibility (story 2.1 AC5): selected features live in event_accessibility_needs
     accessibility_none_required BOOLEAN NOT NULL DEFAULT FALSE,
     accessibility_notes         TEXT,
@@ -370,9 +372,10 @@ COMMENT ON COLUMN events.ends_at IS 'Proposed end date-time. Must be after start
 COMMENT ON COLUMN events.expected_attendance IS 'Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1).';
 COMMENT ON COLUMN events.status IS 'Current lifecycle stage: DRAFT, SUBMITTED, UNDER_REVIEW, CLARIFICATION_REQUESTED, APPROVED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history.';
 COMMENT ON COLUMN events.assigned_coordinator_id IS 'FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments.';
-COMMENT ON COLUMN events.preferred_location IS 'Venue requirement: preferred building/area (story 2.1 AC4).';
+COMMENT ON COLUMN events.preferred_location IS 'Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid.';
 COMMENT ON COLUMN events.required_layout_code IS 'FK -> room_layouts.code. Venue requirement: required room layout (story 2.1 AC4).';
 COMMENT ON COLUMN events.venue_requirement_notes IS 'Free-text venue requirements not captured elsewhere.';
+COMMENT ON COLUMN events.venue_none_required IS 'TRUE = organiser explicitly stated no venue requirements (no layout, facilities or notes). FALSE with none of those recorded = not yet specified (story 2.1 AC4). A request cannot be submitted until one or the other is given (story 2.1 AC10).';
 COMMENT ON COLUMN events.accessibility_none_required IS 'TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable).';
 COMMENT ON COLUMN events.accessibility_notes IS 'Free-text accessibility needs beyond the selectable features.';
 COMMENT ON COLUMN events.registration_required IS 'Whether attendees must register (story 2.4 AC1).';
@@ -399,12 +402,15 @@ CREATE INDEX ix_events_starts_at ON events (starts_at);
 CREATE TABLE event_required_facilities (
     event_id      UUID NOT NULL REFERENCES events (id) ON DELETE CASCADE,
     facility_code TEXT NOT NULL REFERENCES facilities (code),
+    quantity      INTEGER,
     notes         TEXT,
-    PRIMARY KEY (event_id, facility_code)
+    PRIMARY KEY (event_id, facility_code),
+    CONSTRAINT ck_event_required_facilities_quantity CHECK (quantity IS NULL OR quantity > 0)
 );
-COMMENT ON TABLE event_required_facilities IS 'Stories: 2.1, 10.3, 11.1, 12.1. Facilities the event requires of its venue (many-to-many).';
+COMMENT ON TABLE event_required_facilities IS 'Stories: 2.1, 10.3, 11.1, 12.1. Facilities the event requires of its venue (many-to-many), optionally how many.';
 COMMENT ON COLUMN event_required_facilities.event_id IS 'FK -> events.id.';
 COMMENT ON COLUMN event_required_facilities.facility_code IS 'FK -> facilities.code.';
+COMMENT ON COLUMN event_required_facilities.quantity IS 'How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number (story 2.1 AC3).';
 COMMENT ON COLUMN event_required_facilities.notes IS 'Free text, e.g. "needs HDMI input".';
 
 CREATE TABLE event_accessibility_needs (

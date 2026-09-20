@@ -8,15 +8,15 @@ failure cases, so the conventions below exist to make that cheap.
 
 | Layer | Tool | Where | Runs against |
 | --- | --- | --- | --- |
-| Backend unit + API | pytest + FastAPI `TestClient` | `backend/tests/` | A throw-away `connectsphere_test` database rebuilt from migrations + seed each run |
+| Backend unit + API | pytest + FastAPI `TestClient` | `backend/tests/` | A throw-away `connectsphere_test` database rebuilt from migrations + seed each run, each test rolled back |
 | Frontend build/lint | tsc + oxlint | `frontend/` | - |
-| End-to-end | Playwright | `tests/e2e/` | The running dev servers (`npm run dev`) and your dev database (`npm run db:ready`) |
+| End-to-end | Playwright | `tests/e2e/` | A throw-away `connectsphere_e2e` database and its own servers, all started and removed by `npm run test:e2e` |
 
 ```powershell
 npm run test:backend   # pytest
 npm run test:trace     # pytest + writes docs/testing/TRACEABILITY.md
 npm run test:frontend  # lint + type-check/build
-npm run test:e2e       # needs `npm run dev` running in another terminal
+npm run test:e2e       # rebuilds connectsphere_e2e, starts its own API + app, runs Playwright, cleans up
 ```
 
 ## Backend tests
@@ -92,8 +92,25 @@ being added alongside the pages. Keep e2e specs to the flows a user would actual
 (login, role-gated navigation, create/edit a venue); put the detailed rule checks in backend
 tests where they are fast and deterministic.
 
-Because e2e runs against your dev database, use unique names (`E2E Room ${Date.now()}`) and
-`npm run db:reset` when you want to clear the leftovers.
+### Neither layer touches the development database
+
+| | Database | Rebuilt | Guard |
+| --- | --- | --- | --- |
+| pytest | `connectsphere_test` (`TEST_DATABASE_URL`, default `<dev db>_test`) | Once per session; every test is rolled back | `conftest.py` exits if it would be the dev database |
+| Playwright | `connectsphere_e2e` (`E2E_DATABASE_URL`) | Every `npm run test:e2e`; emptied afterwards | `scripts/e2e.mjs` refuses a name not ending `_e2e`; `tests/global-setup.ts` refuses to run at all without `E2E_ISOLATED_DB=1` |
+
+`npm run test:e2e -- e2e/venues.spec.ts` passes extra arguments to Playwright. Set `E2E_LOG_DIR` to a
+folder to keep each server's output (`backend.log`, `frontend.log`) when a run needs debugging. The runner uses
+`127.0.0.1` on API port `8001` and app port `5174` (override with `E2E_BACKEND_PORT` /
+`E2E_FRONTEND_PORT`), so a dev stack on `8000` / `5173` can keep running; it stops if either port
+is already taken, because the specs would otherwise talk to whatever is listening. It needs
+PostgreSQL up (`npm run db:up`) but never opens the dev database.
+
+Specs share one database within a run and run in parallel, so still give every record they create
+a unique name (`E2E Room ${Date.now()}`). Nothing survives the run. Running `npm test` by hand
+inside `tests/` is refused unless you set `E2E_ISOLATED_DB=1` to say the stack behind
+`FRONTEND_URL` uses a disposable database. CI does, because its PostgreSQL service container is
+discarded with the job.
 
 ## Continuous integration
 

@@ -13,12 +13,16 @@ npx playwright install --with-deps chromium
 
 ## Run
 
-Make sure the database, backend (`http://localhost:8000`) and frontend (`http://localhost:5173`)
-are running - `npm run db:ready` then `npm run dev` from the repo root - then:
+From the repo root, with PostgreSQL up (`npm run db:up`):
 
 ```bash
-npm test
+npm run test:e2e                          # every spec
+npm run test:e2e -- e2e/venues.spec.ts    # one spec
 ```
+
+This rebuilds a throwaway `connectsphere_e2e` database, starts its own API (`:8001`) and app
+(`:5174`) on it, runs the specs and cleans up. It never touches your development database, and a
+bare `npm test` in this folder is refused (see `global-setup.ts`).
 
 ## Specs
 
@@ -30,7 +34,8 @@ npm test
 | `e2e/venue-catalogue.spec.ts` | 8.1 browse venues, capacity filter, withdrawn venues excluded |
 | `e2e/venue-detail.spec.ts` | 8.2 venue characteristics, "Not recorded" for unset fields, Venue Staff read access |
 | `e2e/venues.spec.ts` | 8.3 create, edit, delete, search and filter venues; capacity check; notifications |
+| `e2e/event-request.spec.ts` | 2.1 raise an event request: details, dates (2-year and 14-day limits) and numbers checked live in the browser, what is still needed to submit, equipment availability and the hold made on submit, venue requirements with facility quantities, "No venue requirements" and "No accessibility needs" (vs left empty), equipment, edit/remove, submit from the new page or a draft and read-only, what is missing named, organiser-only |
 | `e2e/review-queue.spec.ts` | 4.1 coordinator review queue: stage tabs (Under Review wired, others placeholders), own vs all requests, ordering, hidden drafts/decided, search, not permitted |
 
-`e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueRow` locator. Specs run
-against your local development database, so use unique names for anything you create.
+`e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueRow` locator. Specs share
+one throwaway database and run in parallel, so use unique names for anything you create.

@@ -96,10 +96,15 @@ npm run build
 # From the repo root instead: npm run lint (backend + frontend lint/format-check),
 # npm run format (auto-fixes backend + frontend formatting)
 
-# E2E — test command (requires both dev servers running)
-cd tests
-npm test
+# E2E — from the repo root. Needs PostgreSQL up (npm run db:up) but not your dev servers: it
+# rebuilds a throwaway connectsphere_e2e database and starts its own API and app on it.
+# Never run specs against the development database.
+npm run test:e2e
+npm run test:e2e -- e2e/venues.spec.ts   # one spec
 ```
+
+Backend tests likewise run on their own `connectsphere_test` database. Neither suite touches the
+development database (see [docs/testing/README.md](docs/testing/README.md)).
 
 Run the relevant lint/test commands for whatever you touched before opening a PR — CI will
 also run them, but don't rely on CI to catch what you could catch locally.

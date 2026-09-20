@@ -14,14 +14,22 @@ conventions for this subsystem, and the note that nothing here is linted or form
 ```bash
 npm install
 npx playwright install --with-deps chromium   # chromium only; no other browser is configured
-npm test                                      # playwright test
-npm test -- e2e/health.spec.ts                # one spec
-npm test -- --headed --debug                  # watch it run
 ```
 
-Both dev servers **and** a seeded database must already be running — `npm run poc` from the repo
-root does all three. Nothing here starts them: `playwright.config.ts` sets no `webServer`, so
-against a stopped stack every spec fails on navigation rather than reporting anything useful.
+Run the specs from the **repo root**, never with a bare `npm test` here:
+
+```bash
+npm run test:e2e                          # every spec
+npm run test:e2e -- e2e/health.spec.ts    # one spec
+npm run test:e2e -- --headed --debug      # watch it run
+```
+
+`scripts/e2e.mjs` rebuilds a throwaway `connectsphere_e2e` database, starts its own API (`:8001`)
+and Vite server (`:5174`) on it, runs Playwright, then stops the servers and empties the database.
+It only needs PostgreSQL up (`npm run db:up`); a dev stack on `:8000` / `:5173` can stay running.
+`playwright.config.ts` sets no `webServer`, and `global-setup.ts` refuses to start unless
+`E2E_ISOLATED_DB=1` is set (the runner and CI set it), so specs cannot be pointed at a dev database
+by accident.
 
 ## Environment variables
 
@@ -39,11 +47,11 @@ against a stopped stack every spec fails on navigation rather than reporting any
 | `e2e/<feature>.spec.ts` | One spec per story area, headed by a docblock naming the story and the ACs it covers |
 | `e2e/support.ts` | Holds `ACCOUNTS`, `PASSWORD`, `signIn(page, email)` and `expectSignedIn(page)` for specs that need to sign in |
 
-**These specs run against your development database, not an isolated one.** Unlike
-`backend/tests/`, there is no per-test transaction and no rollback — anything a spec creates is
-still there afterwards, and `fullyParallel: true` means specs share that database concurrently.
-So give every created record a unique name (`E2E Room ${Date.now()}`, as `e2e/venues.spec.ts:9`
-does) and run `npm run db:reset` from the root to clear leftovers.
+**These specs run against a throwaway database, never your development one.** Unlike
+`backend/tests/`, there is no per-test transaction and no rollback: within a run, anything a spec
+creates stays until the run ends, and `fullyParallel: true` means specs share that database
+concurrently. So give every created record a unique name (`E2E Room ${Date.now()}`, as
+`e2e/venues.spec.ts:9` does). Nothing survives the run, so there is no leftover to clear.
 
 Accounts a spec signs in with (`e2e/support.ts`) are rows in `backend/db/seed/020_sample_data.sql`,
 which is also mirrored in `backend/tests/support/seed.py`. A seed change means editing all three.
@@ -64,8 +72,10 @@ Traceability here is by **test title**, not by a marker: titles begin with the s
 - Do not create records with fixed names — parallel specs and reruns will collide.
 - Do not reach into the database or call the API directly to set up a test; drive the UI, or add
   the coverage as a backend test instead.
-- Do not add a `webServer` block to `playwright.config.ts` — the team starts the stack with
-  `npm run poc`.
+- Do not add a `webServer` block to `playwright.config.ts` — `scripts/e2e.mjs` starts the stack on
+  the throwaway database, and a `webServer` would start it on whatever `DATABASE_URL` says.
+- Do not run, or document running, the specs against the development database, or set
+  `E2E_ISOLATED_DB=1` for a stack whose database is not disposable.
 - Do not add browsers beyond chromium, or a visual-regression/screenshot dependency, without asking.
 - Do not select elements by CSS class or test id — every existing spec uses accessible roles and
   labels (`getByRole`, `getByLabel`), which is also what makes them double as an a11y check.

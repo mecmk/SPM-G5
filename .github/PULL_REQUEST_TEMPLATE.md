@@ -28,7 +28,7 @@
 <!-- Commands run and their result. -->
 
 - Backend: `uv run pytest` — <!-- e.g. 12 passed -->
-- E2E: `npm test` — <!-- e.g. 3 passed -->
+- E2E: `npm run test:e2e` — <!-- e.g. 3 passed -->
 - Manual: <!-- anything exercised by hand in the browser -->
 
 ## Definition of Done

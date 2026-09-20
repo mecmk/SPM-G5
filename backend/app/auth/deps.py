@@ -36,16 +36,30 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]) 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
+NOT_PERMITTED_MESSAGE = "Your role does not permit this action."
+
 
 def require_permission(*required: Permission):
     """Build a dependency that admits only users whose role holds every ``required`` permission."""
 
     def dependency(user: CurrentUser) -> User:
         if not role_has(user.role_code, *required):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Your role does not permit this action.",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_PERMITTED_MESSAGE)
+        return user
+
+    return dependency
+
+
+def require_any_permission(*allowed: Permission):
+    """Build a dependency that admits users whose role holds at least one of ``allowed``.
+
+    For a route several roles reach by different permissions (an organiser reading their own
+    events, staff reading every event), where the record then decides what each may see.
+    """
+
+    def dependency(user: CurrentUser) -> User:
+        if not any(role_has(user.role_code, permission) for permission in allowed):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_PERMITTED_MESSAGE)
         return user
 
     return dependency

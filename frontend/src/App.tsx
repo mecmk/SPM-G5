@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
@@ -12,6 +13,8 @@ import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
   COMPONENT_GALLERY_PATH,
+  EVENT_EDIT_PATH,
+  EVENT_NEW_PATH,
   EVENTS_INBOX_PATH,
   HOME_PATH,
   LOGIN_PATH,
@@ -64,6 +67,12 @@ function App() {
                 <Route path={VENUES_MANAGE_PATH} element={<VenueManagePage />} />
                 <Route path={VENUE_NEW_PATH} element={<VenueFormPage key="new" />} />
                 <Route path={VENUE_EDIT_PATH} element={<VenueFormPage key="edit" />} />
+              </Route>
+
+              {/* Story 2.1: raise and edit an event request, Event Organisers only. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_CREATE} />}>
+                <Route path={EVENT_NEW_PATH} element={<EventRequestFormPage key="new" />} />
+                <Route path={EVENT_EDIT_PATH} element={<EventRequestFormPage key="edit" />} />
               </Route>
 
               {/* Story 4.1: the coordinator review queue. */}

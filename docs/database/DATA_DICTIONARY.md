@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-19 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-20 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -34,7 +34,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
 | Events | [`events`](#events) | 2.1, 2.4, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
-| Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many) |
+| Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
 | Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.x, 16.4, 17.3 | One line per equipment type an event asks for, with quantity and technical notes |
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
@@ -325,9 +325,10 @@ An event request and, once approved, the event itself - one row for the whole li
 | `expected_attendance` | `integer` | yes | - | - | Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1). |
 | `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, SUBMITTED, UNDER_REVIEW, CLARIFICATION_REQUESTED, APPROVED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
-| `preferred_location` | `text` | yes | - | - | Venue requirement: preferred building/area (story 2.1 AC4). |
+| `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Venue requirement: required room layout (story 2.1 AC4). |
 | `venue_requirement_notes` | `text` | yes | - | - | Free-text venue requirements not captured elsewhere. |
+| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no venue requirements (no layout, facilities or notes). FALSE with none of those recorded = not yet specified (story 2.1 AC4). A request cannot be submitted until one or the other is given (story 2.1 AC10). |
 | `accessibility_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable). |
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
 | `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.4 AC1). |
@@ -370,13 +371,18 @@ Rules and indexes:
 
 **Stories:** 2.1, 10.3, 11.1, 12.1
 
-Facilities the event requires of its venue (many-to-many).
+Facilities the event requires of its venue (many-to-many), optionally how many.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `event_id` | `uuid` | no | - | PK FK → `events.id` | FK -> events.id. |
 | `facility_code` | `text` | no | - | PK FK → `facilities.code` | FK -> facilities.code. |
+| `quantity` | `integer` | yes | - | - | How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number (story 2.1 AC3). |
 | `notes` | `text` | yes | - | - | Free text, e.g. "needs HDMI input". |
+
+Rules and indexes:
+
+- check `ck_event_required_facilities_quantity`: `CHECK (((quantity IS NULL) OR (quantity > 0)))`
 
 ### event_accessibility_needs
 

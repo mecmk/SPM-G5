@@ -34,6 +34,21 @@ export type ErrorCode =
   | 'VENUE_TURNAROUND_INVALID'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
+  | 'EVENT_NOT_FOUND'
+  | 'EVENT_ALREADY_SUBMITTED'
+  | 'EVENT_NAME_REQUIRED'
+  | 'EVENT_END_BEFORE_START'
+  | 'EVENT_DATE_IN_PAST'
+  | 'EVENT_DATE_INVALID'
+  | 'EVENT_DATE_INCOMPLETE'
+  | 'EVENT_TOO_FAR_AHEAD'
+  | 'EVENT_TOO_LONG'
+  | 'EVENT_ATTENDANCE_INVALID'
+  | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'EVENT_EQUIPMENT_TYPE_REQUIRED'
+  | 'EVENT_EQUIPMENT_DUPLICATE'
+  | 'EVENT_EQUIPMENT_UNAVAILABLE'
+  | 'EVENT_QUANTITY_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -130,6 +145,81 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_LAYOUT_CAPACITY_INVALID: {
     title: 'Check layout capacities',
     message: 'A layout capacity must be a positive whole number, or left empty.',
+  },
+
+  // Story 2.1: event requests. These API codes usually arrive with the backend's own sentence.
+  EVENT_NOT_FOUND: {
+    title: 'Request not found',
+    message: 'This request does not exist, or it is not yours to open.',
+  },
+  EVENT_ALREADY_SUBMITTED: {
+    title: 'Request already submitted',
+    message: 'This request has been submitted and can no longer be changed.',
+  },
+
+  // Story 2.1: checks the request form makes before anything is sent.
+  EVENT_NAME_REQUIRED: {
+    title: 'Event name needed',
+    message: 'Enter a name for the event.',
+  },
+  /** Story 2.1 AC2. */
+  EVENT_END_BEFORE_START: {
+    title: 'Check the dates',
+    message: 'The proposed end date and time must be after the start date and time.',
+  },
+  /** Story 2.1 AC2. */
+  EVENT_DATE_IN_PAST: {
+    title: 'Check the dates',
+    message: 'The proposed date and time cannot be in the past.',
+  },
+  /** Story 2.1 AC2: the backend allows a start at most 2 years ahead. */
+  EVENT_TOO_FAR_AHEAD: {
+    title: 'Check the dates',
+    message: 'The proposed start cannot be more than 2 years from now.',
+  },
+  /** Story 2.1 AC2: the backend allows an event to run for at most 14 days. */
+  EVENT_TOO_LONG: {
+    title: 'Check the dates',
+    message: 'An event cannot run for more than 14 days.',
+  },
+  EVENT_DATE_INCOMPLETE: {
+    title: 'Check the dates',
+    message:
+      'Finish entering the date and time, including AM or PM. If every part is filled in, ' +
+      'check the day exists in that month: 29 February is only valid in a leap year, and ' +
+      'there is no 31st in April, June, September or November.',
+  },
+  EVENT_DATE_INVALID: {
+    title: 'Check the dates',
+    message: 'Enter a valid date and time, with a four-digit year.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_ATTENDANCE_INVALID: {
+    title: 'Check the attendance',
+    message: 'Expected attendance must be a positive whole number.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_FACILITY_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  EVENT_EQUIPMENT_TYPE_REQUIRED: {
+    title: 'Choose the equipment',
+    message: 'Choose a type for every equipment item, or remove it.',
+  },
+  /** Story 2.1 AC6: the backend refuses more than is free for the dates. */
+  EVENT_EQUIPMENT_UNAVAILABLE: {
+    title: 'Not enough equipment',
+    message: 'Request no more than is available for these dates.',
+  },
+  EVENT_EQUIPMENT_DUPLICATE: {
+    title: 'Check the equipment',
+    message: 'Each equipment type can appear only once on a request.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'Equipment quantity must be a positive whole number.',
   },
 }
 
