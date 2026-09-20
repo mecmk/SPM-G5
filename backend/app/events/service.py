@@ -1,4 +1,4 @@
-"""Business logic for event requests (story 2.1) and event review (story 4.1).
+"""Business logic for event requests (story 2.1) and event review (story 4.1) and the approve/reject decision (stories 4.4, 4.5).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -169,6 +169,12 @@ class MissingSubmissionDetails(InvalidEventRequest):
         self.missing = missing
 
 
+NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may decide it."
+EVENT_NOT_AWAITING_DECISION_MESSAGE = (
+    "This request is {status}, so it cannot be approved or rejected."
+)
+EVENT_NOT_VISIBLE_MESSAGE = "You do not have access to this event."
+
 # --- reads -------------------------------------------------------------------------------
 
 
@@ -219,7 +225,7 @@ def _can_view(viewer: User, event: Event) -> bool:
 
 
 def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
-    """AC8: the organiser sees their own request; internal roles see every submitted one. A draft
+    """AC8 / 4.4 AC1 / 4.5 AC2: the organiser sees their own request; internal roles see every submitted one. A draft
     is private to its organiser, and anything else the viewer may not see is simply not found."""
     event = db.get(Event, event_id)
     if event is None or not _can_view(viewer, event):
@@ -687,3 +693,117 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     db.commit()
     db.refresh(event)
     return event
+
+
+class EventNotVisible(PermissionError):
+    """4.4 AC4 / 4.5 AC3's counterpart: an organiser may see only their own events."""
+
+    def __init__(self) -> None:
+        super().__init__(EVENT_NOT_VISIBLE_MESSAGE)
+
+
+class NotAssignedCoordinator(PermissionError):
+    """Only the coordinator ``events.assigned_coordinator_id`` names may decide the request."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
+
+
+class EventNotAwaitingDecision(ValueError):
+    """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
+    refuses repeat or invalid-state decisions (e.g. a request already decided, still a draft,
+    or past PLANNING)."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status))
+        self.event = event
+
+# --- decisions -----------------------------------------------------------------------------
+
+
+def _assert_assigned_coordinator(event: Event, actor: User) -> None:
+    if event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator()
+
+
+def _assert_awaiting_decision(event: Event) -> None:
+    if event.status not in _AWAITING_DECISION_STATUSES:
+        raise EventNotAwaitingDecision(event)
+
+
+def _record_transition(
+    db: Session,
+    event: Event,
+    *,
+    from_status: str,
+    actor: User,
+    at: datetime,
+    reason: str | None,
+) -> None:
+    db.add(
+        EventStatusHistory(
+            event_id=event.id,
+            from_status=from_status,
+            to_status=event.status,
+            changed_by_id=actor.id,
+            changed_at=at,
+            reason=reason,
+        )
+    )
+
+
+def approve_event(db: Session, event: Event, *, actor: User) -> None:
+    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time."""
+    _assert_assigned_coordinator(event, actor)
+    _assert_awaiting_decision(event)
+
+    from_status = event.status
+    decided_at = datetime.now(UTC)
+    event.status = EventStatus.APPROVED
+    event.decided_by_id = actor.id
+    event.decided_at = decided_at
+    _record_transition(db, event, from_status=from_status, actor=actor, at=decided_at, reason=None)
+    db.flush()
+
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_APPROVED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"from_status": from_status},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
+
+
+def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
+    """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
+    time. Same guards as ``approve_event``. ``reason`` is expected already validated non-blank.
+    """
+    _assert_assigned_coordinator(event, actor)
+    _assert_awaiting_decision(event)
+
+    from_status = event.status
+    decided_at = datetime.now(UTC)
+    event.status = EventStatus.REJECTED
+    event.decided_by_id = actor.id
+    event.decided_at = decided_at
+    event.decision_reason = reason
+    _record_transition(
+        db, event, from_status=from_status, actor=actor, at=decided_at, reason=reason
+    )
+    db.flush()
+
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_REJECTED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"from_status": from_status, "reason": reason},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)

@@ -1,4 +1,5 @@
-"""Request and response shapes for event requests (story 2.1) and the review queue (story 4.1)."""
+"""Request and response shapes for event requests (story 2.1) and the review queue (story 4.1) and the approve/reject
+decision (stories 4.4, 4.5)."""
 
 from __future__ import annotations
 
@@ -372,3 +373,24 @@ class EventDetailOut(BaseModel):
             created_at=event.created_at,
             updated_at=event.updated_at,
         )
+
+
+# --- decision (4.4 approve, 4.5 reject) ---------------------------------------------------
+class EventRejection(BaseModel):
+    """4.5 AC1: a reason is mandatory - blank or whitespace-only does not count."""
+
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class UserSummary(BaseModel):
+    """An organiser cannot resolve a user id to a name, so the id travels with it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str

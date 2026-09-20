@@ -257,3 +257,26 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by=(EventEquipmentRequest.created_at, EventEquipmentRequest.id),
     )
+    decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])
+
+
+class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
+    """Append-only log of every event status transition (stories 4.6, 6.1, 6.4). Written by
+    story 4.4/4.5's approve/reject and, later, 6.1/6.4's other transitions - never updated or
+    deleted. No ``created_at``/``updated_at``: ``changed_at`` is the only timestamp.
+    """
+
+    __tablename__ = "event_status_history"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    from_status: Mapped[str | None] = mapped_column(Text)
+    to_status: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
