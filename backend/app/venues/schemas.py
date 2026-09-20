@@ -72,6 +72,13 @@ def _strip(value: str | None) -> str | None:
     return value.strip() if isinstance(value, str) else value
 
 
+def _blank_to_none(value: str | None) -> str | None:
+    """Whitespace-only input becomes None, not a stored-but-invisible value (story 8.2 AC2:
+    "not recorded" must mean null, never a blank string that renders empty)."""
+    stripped = _strip(value)
+    return stripped or None
+
+
 class _OperatingHoursMixin(BaseModel):
     @model_validator(mode="after")
     def _check_operating_hours(self):
@@ -106,6 +113,11 @@ class VenueCreate(_OperatingHoursMixin):
     def _strip_required(cls, value):
         return _strip(value)
 
+    @field_validator("operating_notes", mode="before")
+    @classmethod
+    def _normalize_operating_notes(cls, value):
+        return _blank_to_none(value)
+
 
 class VenueUpdate(_OperatingHoursMixin):
     """AC2: partial update - only the fields present in the request change.
@@ -135,6 +147,11 @@ class VenueUpdate(_OperatingHoursMixin):
     @classmethod
     def _strip_required(cls, value):
         return _strip(value)
+
+    @field_validator("operating_notes", mode="before")
+    @classmethod
+    def _normalize_operating_notes(cls, value):
+        return _blank_to_none(value)
 
     @model_validator(mode="after")
     def _check_operating_hours(self):

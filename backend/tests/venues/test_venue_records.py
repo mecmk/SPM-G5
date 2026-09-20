@@ -153,6 +153,16 @@ def test_update_can_clear_optional_characteristics(venue_staff_client):
     assert response.json()["facilities"] == []
 
 
+@pytest.mark.story("8.2", ac=2)
+def test_whitespace_only_notes_are_stored_as_not_recorded(venue_staff_client):
+    """A blank-but-present string must not masquerade as recorded (AC2: unknown, not absent)."""
+    response = venue_staff_client.patch(
+        f"/venues/{Venues.BOARDROOM}", json={"operating_notes": "   "}
+    )
+    assert response.status_code == 200
+    assert response.json()["operating_notes"] is None
+
+
 @pytest.mark.story("8.3", ac=2)
 def test_update_cannot_leave_operating_hours_half_set(venue_staff_client):
     response = venue_staff_client.patch(

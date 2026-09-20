@@ -30,3 +30,8 @@ export async function signIn(page: Page, email: string, password: string = PASSW
 export async function expectSignedIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 }
+
+/** A row in a venue table (Manage venues), matched by name. */
+export function venueRow(page: Page, name: string) {
+  return page.getByRole('row', { name: new RegExp(name) })
+}
