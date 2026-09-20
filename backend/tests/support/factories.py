@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import itertools
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.passwords import hash_password
 from app.bookings.models import VenueBooking
+from app.events.models import Event, EventStatus
 from app.venues.models import Venue
 from tests.support.seed import Events, Users
 
@@ -41,6 +42,26 @@ def make_user(
     db.add(user)
     db.flush()
     return user
+
+
+def make_event(db: Session, *, status: str = EventStatus.SUBMITTED, **overrides) -> Event:
+    """A persisted event that satisfies ck_events_submitted_fields_complete for any non-DRAFT
+    status. Pass e.g. ``assigned_coordinator_id=`` or ``submitted_at=`` to override."""
+    n = next(_counter)
+    event = Event(
+        organiser_id=overrides.pop("organiser_id", Users.ORGANISER.id),
+        name=overrides.pop("name", f"Test Event {n}"),
+        purpose=overrides.pop("purpose", "Testing"),
+        starts_at=overrides.pop("starts_at", datetime(2026, 12, 1, 9, 0, tzinfo=UTC)),
+        ends_at=overrides.pop("ends_at", datetime(2026, 12, 1, 17, 0, tzinfo=UTC)),
+        expected_attendance=overrides.pop("expected_attendance", 20),
+        submitted_at=overrides.pop("submitted_at", datetime(2026, 9, 10, 9, 0, tzinfo=UTC)),
+        status=status,
+        **overrides,
+    )
+    db.add(event)
+    db.flush()
+    return event
 
 
 def make_venue(db: Session, **overrides) -> Venue:

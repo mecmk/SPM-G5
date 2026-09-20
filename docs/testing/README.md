@@ -52,8 +52,7 @@ does not have? Use `tests/support/factories.py` (`make_user`, `make_venue`, `ven
 
 ```python
 @pytest.mark.story("8.3", ac=3)
-def test_capacity_rejects_zero(venue_staff_client):
-    ...
+def test_capacity_rejects_zero(venue_staff_client): ...
 ```
 
 Multiple markers are fine when one test proves several ACs. `npm run test:trace` turns the
@@ -68,6 +67,7 @@ straight into the Week 12 submission (deliverable 3). CI uploads it as an artifa
 AC1 A reason must be provided when rejecting.
 ...
 """
+
 
 @pytest.mark.story("4.5", ac=1)
 def test_rejection_without_reason_is_refused(coordinator_client):
