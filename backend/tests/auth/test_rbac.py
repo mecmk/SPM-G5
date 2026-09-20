@@ -61,7 +61,8 @@ def test_auth_me_lists_exactly_the_roles_permissions(client, user):
 
 # --- AC3 / AC4: enforced on the API, role by role ------------------------------------------
 # expected HTTP status per (role, action) for every venue endpoint. 403 = signed in but not
-# permitted. "refdata" is the venue form's pick-lists.
+# permitted. "refdata" is the venue form's pick-lists. "view" (story 8.2 AC3) is 200 for
+# TECH_SUPPORT_STAFF too (see VENUES_READ in permissions.py).
 VENUE_ACTIONS = ["list", "view", "refdata", "create", "update", "delete"]
 MATRIX = {
     "EVENT_ORGANISER": {
@@ -123,6 +124,7 @@ def _act(client, action: str):
 
 @pytest.mark.story("1.2", ac=3)
 @pytest.mark.story("1.2", ac=4)
+@pytest.mark.story("8.2", ac=3)
 @pytest.mark.parametrize("action", VENUE_ACTIONS)
 @pytest.mark.parametrize("user", Users.ONE_PER_ROLE, ids=lambda u: u.role)
 def test_venue_actions_are_allowed_only_for_permitted_roles(client, user, action):
