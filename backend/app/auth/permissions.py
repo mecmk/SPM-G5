@@ -39,7 +39,10 @@ class Permission(StrEnum):
     """Functions a role may perform. Grouped by functionality area / backlog epic."""
 
     # --- Venue catalogue (8.x) & availability (9.x) ---
-    VENUES_READ = "venues:read"  # browse catalogue, view characteristics (8.1, 8.2)
+    # Browse catalogue, view characteristics (8.1, 8.2). AC3 names Event Coordinator and Venue
+    # Staff; Technical Support Staff keeps it too (confirmed 20 Sep 2026) via _INTERNAL_COMMON
+    # rather than carving out a venues-specific permission.
+    VENUES_READ = "venues:read"
     VENUES_MANAGE = "venues:manage"  # create / update / withdraw venues (8.3, 8.4)
     VENUE_UNAVAILABILITY_MANAGE = "venue_unavailability:manage"  # maintenance periods (9.3)
     VENUE_CALENDAR_READ = "venue_calendar:read"  # availability calendar & search (9.x, 10.x)

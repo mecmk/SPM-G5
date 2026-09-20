@@ -5,6 +5,14 @@ export const LOGIN_PATH = '/login'
 /** Story c3's component gallery, served in development builds only. */
 export const COMPONENT_GALLERY_PATH = '/dev/components'
 
+// Story 8.1: venue catalogue.
+export const VENUE_CATALOGUE_PATH = '/venues'
+export const VENUE_PATH = '/venues/:venueId'
+
+export function venuePath(venueId: string): string {
+  return VENUE_PATH.replace(':venueId', encodeURIComponent(venueId))
+}
+
 // Story 8.3: venue records.
 export const VENUES_MANAGE_PATH = '/venues/manage'
 export const VENUE_NEW_PATH = '/venues/new'

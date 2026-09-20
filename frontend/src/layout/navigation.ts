@@ -102,7 +102,7 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.VENUES_READ,
         hiddenWith: PERMISSIONS.VENUES_MANAGE,
         story: '8.1',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: VENUES_MANAGE_PATH,

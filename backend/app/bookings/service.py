@@ -17,22 +17,29 @@ pre-check only - they do not by themselves close the race between two concurrent
 ``ex_venue_bookings_no_double_booking`` exclusion constraint is the actual last word, so
 ``approve_booking`` attempts the write directly and translates that constraint's
 ``IntegrityError`` into ``BookingConflict``, mirroring ``app/venues/service.py::create_venue``'s
-write-then-catch pattern.
+write-then-catch pattern. That constraint only guards two *different* overlapping bookings; it
+does nothing to stop two concurrent approvals of the *same* booking (both could read PENDING
+and both write APPROVED). Story 13.2 closes that gap: its router fetches the booking through
+``get_booking_for_decision`` (``SELECT ... FOR UPDATE``), so a second concurrent approval blocks
+on the row lock and, once it proceeds, sees the already-APPROVED row and is refused by the
+``BookingNotPending`` check below rather than racing the write.
 
-Scope note: story 13.2 ("approve venue booking request", teammate Yu Bing) does not exist yet.
-Once it does, its approve endpoint must call ``approve_booking`` (not just
-``assert_no_conflict``) and translate ``BookingConflict`` into the HTTP response AC1/AC2 need.
+Story 13.2 ("approve venue booking request") is what calls ``approve_booking`` and translates
+``BookingNotPending`` / ``BookingConflict`` into the HTTP response its AC1/AC4 need.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
 from app.bookings.models import BookingStatus, VenueBooking
+from app.common.audit import record_audit
 
 _CONFLICT_CONSTRAINT = "ex_venue_bookings_no_double_booking"
 
@@ -40,6 +47,12 @@ BOOKING_CONFLICT_MESSAGE = (
     "This request overlaps approved booking {conflicting_id} for the same venue, held from "
     "{held_from} to {held_until}."
 )
+
+BOOKING_NOT_PENDING_MESSAGE = "This request is already {status}, so it cannot be approved."
+
+
+class BookingNotFound(LookupError):
+    pass
 
 
 class BookingConflict(ValueError):
@@ -54,6 +67,15 @@ class BookingConflict(ValueError):
             )
         )
         self.conflicting_booking = conflicting_booking
+
+
+class BookingNotPending(ValueError):
+    """13.2 AC1: only a PENDING request may be approved - refuses repeat or invalid-state
+    approval (e.g. a request that was already decided, or since withdrawn/cancelled)."""
+
+    def __init__(self, booking: VenueBooking) -> None:
+        super().__init__(BOOKING_NOT_PENDING_MESSAGE.format(status=booking.status))
+        self.booking = booking
 
 
 def find_conflicting_booking(db: Session, booking: VenueBooking) -> VenueBooking | None:
@@ -77,6 +99,24 @@ def find_conflicting_booking(db: Session, booking: VenueBooking) -> VenueBooking
     ).first()
 
 
+def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """13.2 AC3: plain read, e.g. for the requesting coordinator to check the outcome."""
+    booking = db.get(VenueBooking, booking_id)
+    if booking is None:
+        raise BookingNotFound(booking_id)
+    return booking
+
+
+def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """Row-locked read for an approve/reject action - see the module docstring's concurrency
+    note. Two simultaneous decisions on the same booking serialize on this lock instead of
+    racing the write."""
+    booking = db.scalar(select(VenueBooking).where(VenueBooking.id == booking_id).with_for_update())
+    if booking is None:
+        raise BookingNotFound(booking_id)
+    return booking
+
+
 def assert_no_conflict(db: Session, booking: VenueBooking) -> None:
     """Fast, friendly pre-check only - see the module docstring's "Race safety" note.
 
@@ -89,14 +129,21 @@ def assert_no_conflict(db: Session, booking: VenueBooking) -> None:
 
 
 def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) -> None:
-    """Approve ``booking``, refusing it (AC1/AC2) if doing so would double-book its venue.
+    """13.2 AC1: approve ``booking``, recording the approver and time. Refuses a request that
+    is not PENDING (``BookingNotPending``) or whose period would double-book its venue
+    (``BookingConflict``, AC4 / 14.2 AC1-AC2).
 
-    AC3 falls out of this for free: whichever of two overlapping PENDING requests is approved
-    first wins; approving the second one then hits this same check. This is the function
-    story 13.2's approve endpoint must call.
+    14.2 AC3 falls out of this for free: whichever of two overlapping PENDING requests is
+    approved first wins; approving the second one then hits the conflict check below. Callers
+    must fetch ``booking`` via ``get_booking_for_decision`` - see the module docstring's
+    concurrency note.
     """
+    if booking.status != BookingStatus.PENDING:
+        raise BookingNotPending(booking)
+
     booking.status = BookingStatus.APPROVED
     booking.decided_by_id = actor_id
+    booking.decided_at = datetime.now(UTC)
     try:
         db.flush()
     except IntegrityError as exc:
@@ -107,3 +154,15 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
         if conflict is None:
             raise
         raise BookingConflict(conflict) from exc
+
+    record_audit(
+        db,
+        actor=db.get(User, actor_id),
+        action="BOOKING_APPROVED",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(booking)
