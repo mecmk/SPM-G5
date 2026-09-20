@@ -130,6 +130,9 @@ def test_seed_constants_match_database(db: Session):
         (Events.SUBMITTED, "SUBMITTED"),
         (Events.APPROVED, "APPROVED"),
         (Events.REJECTED, "REJECTED"),
+        (Events.UNDER_REVIEW, "UNDER_REVIEW"),
+        (Events.CLARIFICATION_REQUESTED, "CLARIFICATION_REQUESTED"),
+        (Events.SUBMITTED_2, "SUBMITTED"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
