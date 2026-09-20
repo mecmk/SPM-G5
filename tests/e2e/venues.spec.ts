@@ -10,7 +10,7 @@
  * backend/tests/venues/test_venue_records.py.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn } from './support'
+import { ACCOUNTS, signIn, venueRow } from './support'
 
 const MANAGE_PATH = /\/venues\/manage$/
 
@@ -22,10 +22,6 @@ async function createVenue(page: Page, name: string, capacity = '45') {
   await page.getByLabel('Maximum capacity').fill(capacity)
   await page.getByRole('button', { name: 'Create venue' }).click()
   await expect(page).toHaveURL(MANAGE_PATH)
-}
-
-function venueRow(page: Page, name: string) {
-  return page.getByRole('row', { name: new RegExp(name) })
 }
 
 test('8.3 AC1/AC2: venue staff create a venue, then edit it', async ({ page }) => {

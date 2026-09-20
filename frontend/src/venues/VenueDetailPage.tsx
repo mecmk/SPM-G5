@@ -76,8 +76,10 @@ export function VenueDetailPage() {
 
       <div className="layout-split">
         <div className="stack">
-          <section className="card stack">
-            <p className="eyebrow">Capacity</p>
+          <section className="card stack" aria-labelledby="venue-capacity-heading">
+            <p className="eyebrow" id="venue-capacity-heading">
+              Capacity
+            </p>
             {venue.layouts.length === 0 ? (
               <p className="muted">{NOT_RECORDED}</p>
             ) : (
@@ -92,8 +94,10 @@ export function VenueDetailPage() {
             )}
           </section>
 
-          <section className="card stack">
-            <p className="eyebrow">Facilities</p>
+          <section className="card stack" aria-labelledby="venue-facilities-heading">
+            <p className="eyebrow" id="venue-facilities-heading">
+              Facilities
+            </p>
             <div className="cluster">
               {venue.facilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
               {venue.facilities.map((item) => (
@@ -106,8 +110,10 @@ export function VenueDetailPage() {
             </div>
           </section>
 
-          <section className="card stack">
-            <p className="eyebrow">Accessibility</p>
+          <section className="card stack" aria-labelledby="venue-accessibility-heading">
+            <p className="eyebrow" id="venue-accessibility-heading">
+              Accessibility
+            </p>
             <div className="cluster">
               {venue.accessibility_features.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
               {venue.accessibility_features.map((item) => (
@@ -120,8 +126,10 @@ export function VenueDetailPage() {
             </div>
           </section>
 
-          <section className="card stack">
-            <p className="eyebrow">Operating information</p>
+          <section className="card stack" aria-labelledby="venue-operating-heading">
+            <p className="eyebrow" id="venue-operating-heading">
+              Operating information
+            </p>
             <ul className="check-list">
               <li>
                 <span className="grow-text">Hours</span>
@@ -145,14 +153,16 @@ export function VenueDetailPage() {
               </li>
               <li>
                 <span className="grow-text">Notes</span>
-                <span>{venue.operating_notes ?? NOT_RECORDED}</span>
+                <span>{venue.operating_notes || NOT_RECORDED}</span>
               </li>
             </ul>
           </section>
         </div>
 
-        <aside className="card stack">
-          <p className="eyebrow">Quick facts</p>
+        <aside className="card stack" aria-labelledby="venue-quick-facts-heading">
+          <p className="eyebrow" id="venue-quick-facts-heading">
+            Quick facts
+          </p>
           <ul className="check-list">
             <li>
               <span className="grow-text">Max capacity</span>
