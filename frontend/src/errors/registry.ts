@@ -34,6 +34,16 @@ export type ErrorCode =
   | 'VENUE_TURNAROUND_INVALID'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
+  | 'EVENT_NOT_FOUND'
+  | 'EVENT_ALREADY_SUBMITTED'
+  | 'EVENT_NAME_REQUIRED'
+  | 'EVENT_END_BEFORE_START'
+  | 'EVENT_DATE_IN_PAST'
+  | 'EVENT_ATTENDANCE_INVALID'
+  | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'EVENT_EQUIPMENT_TYPE_REQUIRED'
+  | 'EVENT_EQUIPMENT_DUPLICATE'
+  | 'EVENT_QUANTITY_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -130,6 +140,55 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_LAYOUT_CAPACITY_INVALID: {
     title: 'Check layout capacities',
     message: 'A layout capacity must be a positive whole number, or left empty.',
+  },
+
+  // Story 2.1: event requests. These API codes usually arrive with the backend's own sentence.
+  EVENT_NOT_FOUND: {
+    title: 'Request not found',
+    message: 'This request does not exist, or it is not yours to open.',
+  },
+  EVENT_ALREADY_SUBMITTED: {
+    title: 'Request already submitted',
+    message: 'This request has been submitted and can no longer be changed.',
+  },
+
+  // Story 2.1: checks the request form makes before anything is sent.
+  EVENT_NAME_REQUIRED: {
+    title: 'Event name needed',
+    message: 'Enter a name for the event.',
+  },
+  /** Story 2.1 AC2. */
+  EVENT_END_BEFORE_START: {
+    title: 'Check the dates',
+    message: 'The proposed end date and time must be after the start date and time.',
+  },
+  /** Story 2.1 AC2. */
+  EVENT_DATE_IN_PAST: {
+    title: 'Check the dates',
+    message: 'The proposed date and time cannot be in the past.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_ATTENDANCE_INVALID: {
+    title: 'Check the attendance',
+    message: 'Expected attendance must be a positive whole number.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_FACILITY_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  EVENT_EQUIPMENT_TYPE_REQUIRED: {
+    title: 'Choose the equipment',
+    message: 'Choose a type for every equipment item, or remove it.',
+  },
+  EVENT_EQUIPMENT_DUPLICATE: {
+    title: 'Check the equipment',
+    message: 'Each equipment type can appear only once on a request.',
+  },
+  /** Story 2.1 AC3. */
+  EVENT_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'Equipment quantity must be a positive whole number.',
   },
 }
 

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import itertools
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -112,3 +113,46 @@ def venue_payload(**overrides) -> dict:
     body = {"name": f"API Venue {n}", "location": "Tower Z, Level 9", "capacity": 40}
     body.update(overrides)
     return body
+
+
+def future_datetime(*, days: int = 30, hours: int = 0) -> datetime:
+    """A timezone-aware moment safely after "now" (story 2.1 AC2 rejects the past)."""
+    return datetime.now(UTC).replace(microsecond=0) + timedelta(days=days, hours=hours)
+
+
+def event_request_payload(**overrides) -> dict:
+    """A valid, complete POST /events body (story 2.1) with optional overrides."""
+    n = next(_counter)
+    starts_at = future_datetime(days=30)
+    body = {
+        "name": f"API Event {n}",
+        "purpose": "Staff training",
+        "description": "One-day hands-on workshop.",
+        "starts_at": starts_at.isoformat(),
+        "ends_at": (starts_at + timedelta(hours=8)).isoformat(),
+        "expected_attendance": 40,
+    }
+    body.update(overrides)
+    return body
+
+
+def submittable_event_request_payload(**overrides) -> dict:
+    """A request that can be submitted: every event detail filled in, and both venue requirements
+    and accessibility answered with "none required" (story 2.1 AC10). Override a flag to False
+    when the test supplies real requirements instead."""
+    answers = {"venue_none_required": True, "accessibility_none_required": True}
+    return event_request_payload(**{**answers, **overrides})
+
+
+def create_event_request(client: Any, **overrides) -> dict:
+    """POST /events as whoever ``client`` is signed in as; returns the created draft's body."""
+    response = client.post("/events", json=event_request_payload(**overrides))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def create_submittable_event_request(client: Any, **overrides) -> dict:
+    """Like ``create_event_request``, for a draft that is ready to submit."""
+    response = client.post("/events", json=submittable_event_request_payload(**overrides))
+    assert response.status_code == 201, response.text
+    return response.json()

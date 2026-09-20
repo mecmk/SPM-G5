@@ -11,7 +11,7 @@ agent and human on this repo. Read it first; this file deliberately does not rep
 | --- | --- | --- |
 | `backend/` | Python 3.12 + FastAPI + SQLAlchemy, PostgreSQL | `backend/CLAUDE.md`, `backend/STYLE.md` |
 | `frontend/` | React 19 + TypeScript SPA, built with Vite | `frontend/CLAUDE.md`, `frontend/STYLE.md` |
-| `tests/` | Playwright e2e. Own `package.json`; needs both dev servers plus a seeded database | `tests/CLAUDE.md`, `tests/STYLE.md` |
+| `tests/` | Playwright e2e. Own `package.json`; run from the root with `npm run test:e2e`, which builds a throwaway database and its own servers | `tests/CLAUDE.md`, `tests/STYLE.md` |
 | `scripts/` | Repo-root Node helpers: `poc.mjs`, `uv.mjs` | Root scripts reach uv through `scripts/uv.mjs`, which locates or installs it. Use that wrapper in any new root script, never a bare `uv`. |
 | `docs/` | Architecture, database and testing docs | `docs/database/DATA_DICTIONARY.md`, `docs/database/ERD.excalidraw` and `docs/testing/TRACEABILITY.md` are **generated — never hand-edit them.** Regenerate with `npm run db:docs` / `npm run test:trace`. |
 

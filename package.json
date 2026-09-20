@@ -22,7 +22,7 @@
     "test:backend": "node scripts/uv.mjs --directory backend run pytest",
     "test:trace": "node scripts/uv.mjs --directory backend run pytest --traceability=../docs/testing/TRACEABILITY.md",
     "test:frontend": "npm --prefix frontend run lint && npm --prefix frontend run build",
-    "test:e2e": "npm --prefix tests test",
+    "test:e2e": "node scripts/e2e.mjs",
     "lint": "npm run lint:backend && npm run lint:frontend",
     "lint:backend": "node scripts/uv.mjs --directory backend run ruff check . && node scripts/uv.mjs --directory backend run ruff format --check .",
     "lint:frontend": "npm --prefix frontend run lint && npm --prefix frontend run format:check",

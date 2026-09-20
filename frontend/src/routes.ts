@@ -24,3 +24,11 @@ export function venueEditPath(venueId: string): string {
 
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
+
+// Story 2.1: raising and editing an event request.
+export const EVENT_NEW_PATH = '/events/new'
+export const EVENT_EDIT_PATH = '/events/:eventId/edit'
+
+export function eventEditPath(eventId: string): string {
+  return EVENT_EDIT_PATH.replace(':eventId', encodeURIComponent(eventId))
+}

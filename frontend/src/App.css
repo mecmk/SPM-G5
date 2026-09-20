@@ -1986,3 +1986,15 @@ tbody tr:hover td {
     columns: 1;
   }
 }
+
+/* Story 2.1: one equipment item on an event request. */
+.equipment-item {
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.equipment-item > button {
+  margin-top: 0.75rem;
+}
