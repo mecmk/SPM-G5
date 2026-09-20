@@ -96,7 +96,6 @@ def test_rejecting_any_awaiting_decision_status_is_allowed(coordinator_client, e
 @pytest.mark.parametrize(
     "status",
     [
-        EventStatus.DRAFT,
         EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
@@ -123,6 +122,19 @@ def test_rejecting_a_request_not_awaiting_decision_is_refused(
     assert row.status == status
     assert row.decided_by_id is None
     assert row.decision_reason is None
+
+
+@pytest.mark.story("4.5", ac=2)
+def test_rejecting_a_draft_is_not_found(coordinator_client, db: Session):
+    # A draft is private to its organiser (service.get_event), so even the coordinator it names
+    # cannot see it, let alone decide it.
+    event = make_event(db, status=EventStatus.DRAFT, assigned_coordinator_id=Users.COORDINATOR.id)
+
+    response = coordinator_client.post(
+        f"/events/{event.id}/reject", json={"reason": "Refused for the boundary check."}
+    )
+
+    assert response.status_code == 404
 
 
 @pytest.mark.story("4.5", ac=2)

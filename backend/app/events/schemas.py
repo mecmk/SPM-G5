@@ -1,5 +1,5 @@
-"""Request and response shapes for event requests (story 2.1) and the review queue (story 4.1) and the approve/reject
-decision (stories 4.4, 4.5)."""
+"""Request and response shapes for event requests (story 2.1), the review queue (story 4.1),
+and the approve/reject decision (stories 4.4, 4.5)."""
 
 from __future__ import annotations
 
@@ -303,6 +303,15 @@ class EquipmentLineOut(BaseModel):
         )
 
 
+class UserSummary(BaseModel):
+    """An organiser cannot resolve a user id to a name, so the id travels with it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+
+
 class EventDetailOut(BaseModel):
     """AC1/AC4-AC6/AC8: everything recorded on a request, as the organiser and the reviewing
     coordinator both see it. No defaults (response schema).
@@ -333,6 +342,9 @@ class EventDetailOut(BaseModel):
     accessibility_needs: list[AccessibilityNeedOut]
     accessibility_notes: str | None
     equipment: list[EquipmentLineOut]
+    decided_by: UserSummary | None
+    decided_at: datetime | None
+    decision_reason: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -370,6 +382,9 @@ class EventDetailOut(BaseModel):
             ],
             accessibility_notes=event.accessibility_notes,
             equipment=[EquipmentLineOut.from_line(line) for line in event.equipment_requests],
+            decided_by=UserSummary.model_validate(event.decided_by) if event.decided_by else None,
+            decided_at=event.decided_at,
+            decision_reason=event.decision_reason,
             created_at=event.created_at,
             updated_at=event.updated_at,
         )
@@ -385,12 +400,3 @@ class EventRejection(BaseModel):
     @classmethod
     def _strip(cls, value):
         return value.strip() if isinstance(value, str) else value
-
-
-class UserSummary(BaseModel):
-    """An organiser cannot resolve a user id to a name, so the id travels with it."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    full_name: str

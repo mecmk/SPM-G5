@@ -1,4 +1,5 @@
-"""Business logic for event requests (story 2.1) and event review (story 4.1) and the approve/reject decision (stories 4.4, 4.5).
+"""Business logic for event requests (story 2.1), event review (story 4.1), and the
+approve/reject decision (stories 4.4, 4.5).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -225,8 +226,9 @@ def _can_view(viewer: User, event: Event) -> bool:
 
 
 def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
-    """AC8 / 4.4 AC1 / 4.5 AC2: the organiser sees their own request; internal roles see every submitted one. A draft
-    is private to its organiser, and anything else the viewer may not see is simply not found."""
+    """AC8 / 4.4 AC1 / 4.5 AC2: the organiser sees their own request; internal roles see every
+    submitted one. A draft is private to its organiser, and anything else the viewer may not
+    see is simply not found."""
     event = db.get(Event, event_id)
     if event is None or not _can_view(viewer, event):
         raise EventNotFound(event_id)
@@ -711,12 +713,14 @@ class NotAssignedCoordinator(PermissionError):
 
 class EventNotAwaitingDecision(ValueError):
     """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
-    refuses repeat or invalid-state decisions (e.g. a request already decided, still a draft,
-    or past PLANNING)."""
+    refuses repeat or invalid-state decisions (e.g. a request already decided, or past
+    PLANNING). A draft never reaches this guard: ``get_event`` hides it from the coordinator
+    first, so that case is a 404, not a 409."""
 
     def __init__(self, event: Event) -> None:
         super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status))
         self.event = event
+
 
 # --- decisions -----------------------------------------------------------------------------
 

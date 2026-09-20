@@ -1,5 +1,5 @@
-"""HTTP endpoints for story 2.1 (event requests) and story 4.1 (coordinator review queue) and stories 4.4/4.5 (approve /
-reject an event request).
+"""HTTP endpoints for story 2.1 (event requests), story 4.1 (coordinator review queue), and
+stories 4.4/4.5 (approve / reject an event request).
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from app.events.schemas import (
     EventCreate,
     EventDetailOut,
     EventReferenceData,
+    EventRejection,
     EventUpdate,
     ReviewQueueEntry,
     ReviewQueueSort,
@@ -134,12 +135,12 @@ def submit_event(
     return EventDetailOut.from_event(event)
 
 
-@router.post("/{event_id}/approve", response_model=EventOut)
+@router.post("/{event_id}/approve", response_model=EventDetailOut)
 def approve_event(
     event_id: uuid.UUID,
     db: DbSession,
     actor: Annotated[CurrentUser, CanReview],
-) -> EventOut:
+) -> EventDetailOut:
     """4.4 AC1-AC3: approves the request, recording the deciding coordinator and time."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
@@ -151,16 +152,16 @@ def approve_event(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EventNotAwaitingDecision as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    return EventOut.from_event(event)
+    return EventDetailOut.from_event(event)
 
 
-@router.post("/{event_id}/reject", response_model=EventOut)
+@router.post("/{event_id}/reject", response_model=EventDetailOut)
 def reject_event(
     event_id: uuid.UUID,
     payload: EventRejection,
     db: DbSession,
     actor: Annotated[CurrentUser, CanReview],
-) -> EventOut:
+) -> EventDetailOut:
     """4.5 AC1-AC3: rejects the request with a reason, recording the deciding coordinator and
     time. AC1 (reason mandatory) is enforced by ``EventRejection`` - a blank body is a 422
     before this function runs.
@@ -175,4 +176,4 @@ def reject_event(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EventNotAwaitingDecision as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    return EventOut.from_event(event)
+    return EventDetailOut.from_event(event)

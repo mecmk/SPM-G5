@@ -70,7 +70,6 @@ def test_approving_any_awaiting_decision_status_is_allowed(coordinator_client, e
 @pytest.mark.parametrize(
     "status",
     [
-        EventStatus.DRAFT,
         EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
@@ -95,6 +94,17 @@ def test_approving_a_request_not_awaiting_decision_is_refused(
     assert row.status == status
     assert row.decided_by_id is None
     assert row.decided_at is None
+
+
+@pytest.mark.story("4.4", ac=1)
+def test_approving_a_draft_is_not_found(coordinator_client, db: Session):
+    # A draft is private to its organiser (service.get_event), so even the coordinator it names
+    # cannot see it, let alone decide it.
+    event = make_event(db, status=EventStatus.DRAFT, assigned_coordinator_id=Users.COORDINATOR.id)
+
+    response = coordinator_client.post(f"/events/{event.id}/approve")
+
+    assert response.status_code == 404
 
 
 @pytest.mark.story("4.4", ac=1)
@@ -175,8 +185,10 @@ def test_owning_organiser_can_read_the_approved_outcome(login_as):
 
 @pytest.mark.story("4.4", ac=4)
 def test_a_different_organiser_cannot_read_the_event(login_as):
+    # Existence is not revealed to an organiser it does not belong to (see the module docstring
+    # of app/events/service.py) - same 404, not 403, as test_event_request_details.py:1184.
     response = login_as(Users.ORGANISER).get(f"/events/{Events.UNDER_REVIEW}")
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 @pytest.mark.story("4.4", ac=4)
