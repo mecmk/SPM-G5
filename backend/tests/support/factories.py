@@ -11,12 +11,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.passwords import hash_password
 from app.bookings.models import VenueBooking
-from app.events.models import Event, EventStatus
+from app.events.models import (
+    EquipmentReservation,
+    EquipmentType,
+    EquipmentUnavailabilityPeriod,
+    Event,
+    EventStatus,
+)
 from app.venues.models import Venue
 from tests.support.seed import Events, Users
 
@@ -156,3 +163,54 @@ def create_submittable_event_request(client: Any, **overrides) -> dict:
     response = client.post("/events", json=submittable_event_request_payload(**overrides))
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def make_equipment_hold(
+    db: Session,
+    *,
+    type_code: str,
+    quantity: int,
+    starts_at: datetime,
+    ends_at: datetime,
+    status: str = "RESERVED",
+    released_quantity: int = 0,
+    event_id: uuid.UUID = Events.APPROVED,
+) -> EquipmentReservation:
+    """Units of an equipment type held for another event over a period (2.1 availability)."""
+    equipment_type = db.scalar(select(EquipmentType).where(EquipmentType.code == type_code))
+    hold = EquipmentReservation(
+        event_id=event_id,
+        equipment_type_id=equipment_type.id,
+        quantity=quantity,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        status=status,
+        reserved_by_id=Users.TECH_SUPPORT.id,
+        released_quantity=released_quantity,
+    )
+    db.add(hold)
+    db.flush()
+    return hold
+
+
+def make_equipment_out_of_service(
+    db: Session,
+    *,
+    type_code: str,
+    quantity: int,
+    starts_at: datetime,
+    ends_at: datetime | None = None,
+    reason: str = "MAINTENANCE",
+) -> EquipmentUnavailabilityPeriod:
+    """Units of an equipment type that are out of service; ``ends_at=None`` is open-ended."""
+    equipment_type = db.scalar(select(EquipmentType).where(EquipmentType.code == type_code))
+    period = EquipmentUnavailabilityPeriod(
+        equipment_type_id=equipment_type.id,
+        quantity=quantity,
+        reason=reason,
+        starts_at=starts_at,
+        ends_at=ends_at,
+    )
+    db.add(period)
+    db.flush()
+    return period

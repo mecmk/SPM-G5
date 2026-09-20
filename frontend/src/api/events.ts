@@ -184,3 +184,18 @@ export function submitEvent(eventId: string, name: string): Promise<EventDetail>
     },
   })
 }
+
+/** Mirrors `EquipmentAvailabilityOut`: units of one equipment type free for a period. */
+export interface EquipmentAvailability {
+  equipment_type_code: string
+  available: number
+}
+
+/** Story 2.1 AC6: how many of each equipment type are free for the proposed dates. */
+export function fetchEquipmentAvailability(
+  startsAt: string,
+  endsAt: string,
+): Promise<EquipmentAvailability[]> {
+  const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  return api<EquipmentAvailability[]>(`/events/equipment-availability?${params.toString()}`)
+}

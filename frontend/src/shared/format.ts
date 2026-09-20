@@ -46,6 +46,11 @@ export function inputToInstant(inputValue: string): string {
   return `${inputValue}:00${SINGAPORE_UTC_OFFSET}`
 }
 
+/** The current moment as a Singapore `datetime-local` value, e.g. for a picker's `min`. */
+export function nowAsInput(): string {
+  return instantToInput(new Date().toISOString())
+}
+
 /** The reverse of `inputToInstant`: a server timestamp as a Singapore `datetime-local` value. */
 export function instantToInput(stamp: string): string {
   // The Swedish locale writes "2026-11-18 09:00:00", which is the input's format bar the space.

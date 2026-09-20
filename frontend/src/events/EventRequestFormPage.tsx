@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import {
   createEvent,
+  fetchEquipmentAvailability,
   fetchEventReferenceData,
   getEvent,
   submitEvent,
@@ -12,27 +13,52 @@ import {
 } from '../api/events'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
-import { ERROR_REGISTRY } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { HOME_PATH, eventEditPath } from '../routes'
-import { formatDateTime } from '../shared/format'
+import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
   EMPTY_EVENT_FORM,
   EMPTY_FACILITY,
   EMPTY_NOTE,
+  FIELD_ID,
+  MAX_EVENT_DAYS,
+  MAX_LEAD_YEARS,
   eventInputFrom,
   formFromEvent,
+  getEquipmentQuantityId,
+  getEquipmentTypeId,
+  getFacilityQuantityId,
+  getLatestEndInput,
+  getLatestStartInput,
+  getLiveProblems,
+  getMissingForSubmission,
+  isEquipmentTypeTaken,
   newEquipmentDraft,
   toggleEntry,
+  validateDates,
   validateEventForm,
   type EquipmentDraft,
   type EventFormState,
   type FacilityDraft,
+  type FormProblem,
   type NoteDraft,
 } from './eventRequestForm'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
+
+/**
+ * A date field the person started typing but did not finish (say, no AM or PM). The browser then
+ * reports an empty value, which the form would otherwise read as "no date".
+ */
+function findIncompleteDateField(): string | null {
+  for (const id of [FIELD_ID.startsAt, FIELD_ID.endsAt]) {
+    const input = document.getElementById(id)
+    if (input instanceof HTMLInputElement && input.validity.badInput) return id
+  }
+  return null
+}
 
 /** Marks something a request needs before it can be submitted (story 2.1 AC10). */
 function RequiredMark() {
@@ -79,6 +105,21 @@ export function EventRequestFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(noticeFrom(location.state))
   const [isSaving, setIsSaving] = useState(false)
+  // The name is only called empty once the person has been in the field and left it.
+  const [isNameTouched, setIsNameTouched] = useState(false)
+  // How many of each equipment type are free for the dates in the form, tagged with the dates it
+  // was fetched for so an old answer is never shown against other dates.
+  const [availability, setAvailability] = useState<{
+    key: string
+    byType: Record<string, number>
+  } | null>(null)
+  const [availabilityRefresh, setAvailabilityRefresh] = useState(0)
+  // The field a refused save is about, tied to the form as it was then, so any edit clears it.
+  // A date field left half-typed, noticed as the person types or leaves it.
+  const [incompleteDateId, setIncompleteDateId] = useState<string | null>(null)
+  const [invalidField, setInvalidField] = useState<{ id: string; form: EventFormState } | null>(
+    null,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -101,6 +142,84 @@ export function EventRequestFormPage() {
   }, [eventId])
 
   const isReadOnly = event !== null && event.status !== 'DRAFT'
+
+  /** The problem with the dates as they stand now, said under them without waiting for a save. */
+  const dateProblem: FormProblem | null = incompleteDateId
+    ? { code: 'EVENT_DATE_INCOMPLETE', fieldId: incompleteDateId }
+    : form
+      ? validateDates(form, event)
+      : null
+
+  function noteIncompleteDate() {
+    setIncompleteDateId(findIncompleteDateField())
+  }
+
+  function updateDate(key: 'startsAt' | 'endsAt', value: string) {
+    updateField(key, value)
+    noteIncompleteDate()
+  }
+
+  // Availability is asked for once both dates are usable, and again after a refused submission.
+  const datesKey =
+    form && form.startsAt && form.endsAt && !dateProblem && !isReadOnly
+      ? `${form.startsAt}|${form.endsAt}|${availabilityRefresh}`
+      : null
+  const availabilityByType =
+    availability !== null && availability.key === datesKey ? availability.byType : null
+
+  useEffect(() => {
+    if (datesKey === null) return
+    const [startsAt, endsAt] = datesKey.split('|')
+    let cancelled = false
+    fetchEquipmentAvailability(inputToInstant(startsAt), inputToInstant(endsAt))
+      .then((rows) => {
+        if (cancelled) return
+        const byType = Object.fromEntries(rows.map((r) => [r.equipment_type_code, r.available]))
+        setAvailability({ key: datesKey, byType })
+      })
+      .catch(() => {
+        // Availability is a help while filling in; saving and submitting check it again.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [datesKey])
+
+  // Problems with the name and the numbers, said next to each field as it is typed.
+  const liveProblems: Record<string, ErrorCode> = {
+    ...(form ? getLiveProblems(form, availabilityByType) : {}),
+    ...(form && isNameTouched && !form.name.trim()
+      ? { [FIELD_ID.name]: 'EVENT_NAME_REQUIRED' as ErrorCode }
+      : {}),
+  }
+  const missingForSubmission = form ? getMissingForSubmission(form) : []
+
+  /** What the row says about stock: how many are free. */
+  function equipmentAvailabilityNote(line: EquipmentDraft) {
+    if (isReadOnly || line.typeCode === NO_EQUIPMENT_CHOSEN) return null
+    if (datesKey === null) {
+      return <p className="form-hint">Choose the start and end to see how many are available.</p>
+    }
+    if (availabilityByType === null) return <p className="form-hint">Checking availability…</p>
+    const available = availabilityByType[line.typeCode]
+    if (available === undefined) return null
+    return <p className="form-hint">{available} available for these dates</p>
+  }
+
+  /** The id, and the invalid mark when the last save was refused because of this field. */
+  function fieldProps(id: string) {
+    const isInvalid =
+      (invalidField !== null && invalidField.form === form && invalidField.id === id) ||
+      dateProblem?.fieldId === id ||
+      id in liveProblems
+    return { id, 'aria-invalid': isInvalid ? true : undefined }
+  }
+
+  /** What is wrong with a field's value right now, said next to it. */
+  function renderProblem(id: string) {
+    const code = liveProblems[id]
+    return code ? <span className="field-error">{ERROR_REGISTRY[code].message}</span> : null
+  }
 
   function updateField<K extends keyof EventFormState>(key: K, value: EventFormState[K]) {
     setForm((current) => current && { ...current, [key]: value })
@@ -235,9 +354,14 @@ export function EventRequestFormPage() {
   /** Validate, then create the draft or save the edits. Null when nothing was saved. */
   async function saveDraft(): Promise<EventDetail | null> {
     if (!form) return null
-    const problem = validateEventForm(form, event)
+    const incompleteFieldId = findIncompleteDateField()
+    const problem: FormProblem | null = incompleteFieldId
+      ? { code: 'EVENT_DATE_INCOMPLETE', fieldId: incompleteFieldId }
+      : validateEventForm(form, event, availabilityByType)
     if (problem) {
-      setSaveError(ERROR_REGISTRY[problem].message)
+      setSaveError(ERROR_REGISTRY[problem.code].message)
+      setInvalidField({ id: problem.fieldId, form })
+      document.getElementById(problem.fieldId)?.focus()
       return null
     }
     setSaveError(null)
@@ -259,6 +383,8 @@ export function EventRequestFormPage() {
       }
     } catch (err) {
       setSaveError(formatApiError(err))
+      // The stock may be why it failed, so ask again how many are free.
+      setAvailabilityRefresh((count) => count + 1)
     } finally {
       setIsSaving(false)
     }
@@ -287,6 +413,7 @@ export function EventRequestFormPage() {
           setEvent(saved)
           setForm(formFromEvent(saved))
           setSaveError(formatApiError(err))
+          setAvailabilityRefresh((count) => count + 1)
         } else {
           navigate(eventEditPath(saved.id), {
             replace: true,
@@ -296,10 +423,19 @@ export function EventRequestFormPage() {
       }
     } catch (err) {
       setSaveError(formatApiError(err))
+      // The stock may be why it failed, so ask again how many are free.
+      setAvailabilityRefresh((count) => count + 1)
     } finally {
       setIsSaving(false)
     }
   }
+
+  // A type can be on a request once, so there is nothing to add when a line exists for each type.
+  const hasEveryEquipmentType =
+    reference !== null &&
+    form !== null &&
+    reference.equipment_types.length > 0 &&
+    form.equipment.length >= reference.equipment_types.length
 
   const title = isEditing ? (event?.name ?? 'Event request') : 'New event request'
   const subtitle =
@@ -338,9 +474,12 @@ export function EventRequestFormPage() {
                 Event name <RequiredMark />
                 <input
                   required
+                  {...fieldProps(FIELD_ID.name)}
                   value={form.name}
                   onChange={(e) => updateField('name', e.target.value)}
+                  onBlur={() => setIsNameTouched(true)}
                 />
+                {renderProblem(FIELD_ID.name)}
               </label>
               <label>
                 Expected attendance <RequiredMark />
@@ -349,9 +488,11 @@ export function EventRequestFormPage() {
                   inputMode="numeric"
                   min={1}
                   step={1}
+                  {...fieldProps(FIELD_ID.attendance)}
                   value={form.attendance}
                   onChange={(e) => updateField('attendance', e.target.value)}
                 />
+                {renderProblem(FIELD_ID.attendance)}
               </label>
               <label className="span-all">
                 Purpose <RequiredMark />
@@ -373,20 +514,34 @@ export function EventRequestFormPage() {
                 Proposed start <RequiredMark />
                 <input
                   type="datetime-local"
+                  min={nowAsInput()}
+                  max={getLatestStartInput()}
+                  {...fieldProps(FIELD_ID.startsAt)}
                   value={form.startsAt}
-                  onChange={(e) => updateField('startsAt', e.target.value)}
+                  onChange={(e) => updateDate('startsAt', e.target.value)}
+                  onBlur={noteIncompleteDate}
                 />
               </label>
               <label>
                 Proposed end <RequiredMark />
                 <input
                   type="datetime-local"
+                  min={form.startsAt > nowAsInput() ? form.startsAt : nowAsInput()}
+                  max={getLatestEndInput(form.startsAt)}
+                  {...fieldProps(FIELD_ID.endsAt)}
                   value={form.endsAt}
-                  onChange={(e) => updateField('endsAt', e.target.value)}
+                  onChange={(e) => updateDate('endsAt', e.target.value)}
+                  onBlur={noteIncompleteDate}
                 />
               </label>
             </div>
-            <p className="form-hint">All times are Singapore time.</p>
+            {dateProblem && (
+              <p className="field-error">{ERROR_REGISTRY[dateProblem.code].message}</p>
+            )}
+            <p className="form-hint">
+              All times are Singapore time. An event can start up to {MAX_LEAD_YEARS} years from now
+              and run for up to {MAX_EVENT_DAYS} days.
+            </p>
           </fieldset>
 
           <fieldset className="card" disabled={isReadOnly}>
@@ -441,6 +596,7 @@ export function EventRequestFormPage() {
                           className="inline-number"
                           placeholder="How many"
                           aria-label={`${item.name} quantity`}
+                          {...fieldProps(getFacilityQuantityId(item.code))}
                           value={selected.quantity}
                           onChange={(e) => updateFacility(item.code, { quantity: e.target.value })}
                         />
@@ -450,6 +606,7 @@ export function EventRequestFormPage() {
                           value={selected.notes}
                           onChange={(e) => updateFacility(item.code, { notes: e.target.value })}
                         />
+                        {renderProblem(getFacilityQuantityId(item.code))}
                       </div>
                     )}
                   </li>
@@ -531,6 +688,7 @@ export function EventRequestFormPage() {
                   <label className="span-2">
                     Equipment type
                     <select
+                      {...fieldProps(getEquipmentTypeId(line.key))}
                       value={line.typeCode}
                       onChange={(e) => updateEquipment(line.key, { typeCode: e.target.value })}
                     >
@@ -539,11 +697,24 @@ export function EventRequestFormPage() {
                         !reference.equipment_types.some((type) => type.code === line.typeCode) && (
                           <option value={line.typeCode}>{line.typeName}</option>
                         )}
-                      {reference.equipment_types.map((type) => (
-                        <option key={type.code} value={type.code}>
-                          {type.name}
-                        </option>
-                      ))}
+                      {reference.equipment_types.map((type) => {
+                        const isTaken = isEquipmentTypeTaken(form.equipment, line.key, type.code)
+                        const isNoneLeft = availabilityByType?.[type.code] === 0
+                        const note = isTaken
+                          ? ' (already added)'
+                          : isNoneLeft
+                            ? ' (none available)'
+                            : ''
+                        return (
+                          <option
+                            key={type.code}
+                            value={type.code}
+                            disabled={isTaken || isNoneLeft}
+                          >
+                            {`${type.name}${note}`}
+                          </option>
+                        )
+                      })}
                     </select>
                   </label>
                   <label>
@@ -553,9 +724,11 @@ export function EventRequestFormPage() {
                       inputMode="numeric"
                       min={1}
                       step={1}
+                      {...fieldProps(getEquipmentQuantityId(line.key))}
                       value={line.quantity}
                       onChange={(e) => updateEquipment(line.key, { quantity: e.target.value })}
                     />
+                    {renderProblem(getEquipmentQuantityId(line.key))}
                   </label>
                   <label className="span-all">
                     Technical notes
@@ -565,6 +738,7 @@ export function EventRequestFormPage() {
                     />
                   </label>
                 </div>
+                {equipmentAvailabilityNote(line)}
                 <button
                   type="button"
                   className="secondary button-sm"
@@ -574,13 +748,26 @@ export function EventRequestFormPage() {
                 </button>
               </fieldset>
             ))}
-            <button type="button" className="secondary" onClick={addEquipment}>
+            <button
+              type="button"
+              className="secondary"
+              disabled={hasEveryEquipmentType}
+              onClick={addEquipment}
+            >
               Add equipment
             </button>
+            {hasEveryEquipmentType && (
+              <p className="form-hint">Every equipment type is already on this request.</p>
+            )}
           </fieldset>
 
           {!isReadOnly && (
             <div className="form-actions">
+              {missingForSubmission.length > 0 && (
+                <p className="form-hint">
+                  To submit, still needed: {missingForSubmission.join(', ')}.
+                </p>
+              )}
               {saveError && (
                 <p role="alert" className="error">
                   {saveError}

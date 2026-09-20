@@ -6,6 +6,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_any_permission, require_permission
@@ -13,6 +14,7 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.events import service
 from app.events.schemas import (
+    EquipmentAvailabilityOut,
     EventCreate,
     EventDetailOut,
     EventReferenceData,
@@ -47,6 +49,23 @@ def list_review_queue(
 def list_reference_data(db: DbSession) -> EventReferenceData:
     """Story 2.1 AC4-AC6: the pick-lists for the request form."""
     return service.list_reference_data(db)
+
+
+@router.get(
+    "/equipment-availability",
+    response_model=list[EquipmentAvailabilityOut],
+    dependencies=[CanCreate],
+)
+def list_equipment_availability(
+    db: DbSession,
+    starts_at: Annotated[AwareDatetime, Query()],
+    ends_at: Annotated[AwareDatetime, Query()],
+) -> list[EquipmentAvailabilityOut]:
+    """Story 2.1 AC6: how many of each equipment type are free for the proposed dates."""
+    try:
+        return service.list_equipment_availability(db, starts_at=starts_at, ends_at=ends_at)
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
 @router.post("", response_model=EventDetailOut, status_code=status.HTTP_201_CREATED)

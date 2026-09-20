@@ -14,11 +14,14 @@
  *
  * Refuses to run when the database name does not end in `_e2e` (this script empties it), or
  * when either port is already taken (tests would silently hit whatever is listening).
- * Override with E2E_DATABASE_URL, E2E_BACKEND_PORT, E2E_FRONTEND_PORT.
+ * Override with E2E_DATABASE_URL, E2E_BACKEND_PORT, E2E_FRONTEND_PORT. Set E2E_LOG_DIR to keep
+ * each server's output (backend.log, frontend.log) for debugging a failing run.
  *
  * Both servers use 127.0.0.1 so the SameSite=Lax session cookie stays same-site, as in CI.
  */
 import { spawn, spawnSync } from 'node:child_process'
+import { createWriteStream, mkdirSync } from 'node:fs'
+import path from 'node:path'
 import net from 'node:net'
 import { IS_WINDOWS, ROOT, log, requireUv, run } from './lib/tools.mjs'
 
@@ -69,6 +72,12 @@ function startServer(name, command, args, env) {
   }
   child.stdout.on('data', keep)
   child.stderr.on('data', keep)
+  if (process.env.E2E_LOG_DIR) {
+    mkdirSync(process.env.E2E_LOG_DIR, { recursive: true })
+    const file = createWriteStream(path.join(process.env.E2E_LOG_DIR, `${name}.log`))
+    child.stdout.pipe(file, { end: false })
+    child.stderr.pipe(file, { end: false })
+  }
   const server = { name, child, recent }
   servers.push(server)
   return server
@@ -95,6 +104,24 @@ async function waitUntilReady(url, server) {
   log.error(`${server.name} did not become ready at ${url}. Last output:`)
   server.recent.forEach((line) => log.info(line))
   throw new Error(`${server.name} did not start`)
+}
+
+/**
+ * Run a command with its output shown, WITHOUT blocking the event loop. The servers' output is
+ * piped to this process, so while a test run is in progress something must keep reading it: a
+ * blocking spawnSync here would let their output pipes fill (about 64 KB), and the servers would
+ * then hang mid-request on their next log line. Resolves to the exit code, or null if it could
+ * not start.
+ */
+function runWithoutBlocking(command, args, options) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: 'inherit', cwd: ROOT, ...options })
+    child.on('error', (error) => {
+      log.error(`${command}: ${error.message}`)
+      resolve(null)
+    })
+    child.on('exit', (code) => resolve(code))
+  })
 }
 
 function dbtool(...args) {
@@ -167,12 +194,15 @@ async function main() {
   await waitUntilReady(frontendUrl, frontend)
   log.ok(`API ${backendUrl} and app ${frontendUrl} are up, on "${name}"`)
 
-  return (
-    run('npm', ['--prefix', 'tests', 'test', '--', ...process.argv.slice(2)], {
+  const exitCode = await runWithoutBlocking(
+    'npm',
+    ['--prefix', 'tests', 'test', '--', ...process.argv.slice(2)],
+    {
       shell: IS_WINDOWS,
       env: { ...process.env, FRONTEND_URL: frontendUrl, E2E_ISOLATED_DB: '1' },
-    }) ?? 1
+    },
   )
+  return exitCode ?? 1
 }
 
 function cleanUp() {

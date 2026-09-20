@@ -3,7 +3,8 @@
 AC1 The organiser can record the event name, purpose, description, proposed date and time, and
     expected attendance.
 AC2 The proposed end must be after the start, and a date in the past is rejected with an
-    explanatory message.
+    explanatory message. An event may start at most 2 years ahead and may run for at most
+    14 days (decided 20 Sep 2026).
 AC3 Expected attendance, equipment quantities and facility quantities accept positive whole
     numbers only.
 AC4 Venue requirements (room layout, facilities with a quantity, other requirements) can be
@@ -26,13 +27,14 @@ Equipment availability is not checked here (stories 15.x / 16.x).
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.common.audit import AuditLog
+from app.events.service import latest_start_allowed
 from tests.support.factories import (
     create_event_request,
     create_submittable_event_request,
@@ -290,6 +292,164 @@ def test_an_unrelated_edit_is_not_rejected_because_the_saved_start_has_since_pas
     assert response.status_code == 200, response.text
 
 
+@pytest.mark.story("2.1", ac=2)
+def test_an_event_can_run_for_exactly_the_longest_allowed_time(organiser_client):
+    start = future_datetime(days=10)
+    payload = event_request_payload(
+        starts_at=start.isoformat(), ends_at=(start + timedelta(days=14)).isoformat()
+    )
+
+    assert organiser_client.post("/events", json=payload).status_code == 201
+
+
+@pytest.mark.story("2.1", ac=2)
+@pytest.mark.parametrize(
+    "extra",
+    [timedelta(minutes=1), timedelta(days=60), timedelta(days=36500)],
+    ids=["one-minute-over", "sixty-days-over", "a-century-over"],
+)
+def test_an_event_cannot_run_for_more_than_14_days(organiser_client, extra):
+    start = future_datetime(days=10)
+    payload = event_request_payload(
+        starts_at=start.isoformat(), ends_at=(start + timedelta(days=14) + extra).isoformat()
+    )
+
+    response = organiser_client.post("/events", json=payload)
+
+    assert response.status_code == 422
+    assert "14 days" in _detail(response)
+
+
+@pytest.mark.story("2.1", ac=2)
+@pytest.mark.parametrize("change_field", ["ends_at", "starts_at"])
+def test_an_edit_that_makes_the_event_too_long_is_refused(organiser_client, change_field):
+    created = create_event_request(organiser_client)
+    stored_start = datetime.fromisoformat(created["starts_at"])
+    new_value = {
+        "ends_at": stored_start + timedelta(days=15),
+        # earlier than the stored end minus 14 days, but still in the future
+        "starts_at": future_datetime(days=0, hours=1),
+    }[change_field]
+
+    response = organiser_client.patch(
+        f"/events/{created['id']}", json={change_field: new_value.isoformat()}
+    )
+
+    assert response.status_code == 422
+    assert "14 days" in _detail(response)
+
+
+SINGAPORE = timezone(timedelta(hours=8))
+
+
+@pytest.mark.story("2.1", ac=2)
+@pytest.mark.parametrize(
+    "now, latest",
+    [
+        pytest.param(
+            datetime(2026, 9, 20, 12, 0, tzinfo=SINGAPORE),
+            datetime(2028, 9, 20, 12, 0, tzinfo=SINGAPORE),
+            id="ordinary-day-across-a-leap-day",
+        ),
+        pytest.param(
+            datetime(2027, 3, 1, 10, 0, tzinfo=SINGAPORE),
+            datetime(2029, 3, 1, 10, 0, tzinfo=SINGAPORE),
+            id="after-february-so-2029-is-two-years-not-730-days",
+        ),
+        pytest.param(
+            datetime(2028, 2, 29, 9, 0, tzinfo=SINGAPORE),
+            datetime(2030, 3, 1, 9, 0, tzinfo=SINGAPORE),
+            id="from-29-february-the-next-1-march",
+        ),
+        pytest.param(
+            datetime(2024, 2, 29, 20, 0, tzinfo=UTC),
+            datetime(2026, 3, 1, 4, 0, tzinfo=SINGAPORE),
+            id="singapore-date-is-already-1-march-when-utc-is-29-february",
+        ),
+        pytest.param(
+            datetime(2026, 12, 31, 23, 59, tzinfo=SINGAPORE),
+            datetime(2028, 12, 31, 23, 59, tzinfo=SINGAPORE),
+            id="last-minute-of-the-year",
+        ),
+    ],
+)
+def test_the_latest_allowed_start_is_two_calendar_years_ahead(now, latest):
+    assert latest_start_allowed(now) == latest
+
+
+@pytest.mark.story("2.1", ac=2)
+def test_a_start_just_inside_two_years_ahead_is_accepted(organiser_client):
+    start = latest_start_allowed(datetime.now(UTC)) - timedelta(hours=1)
+    payload = event_request_payload(
+        starts_at=start.isoformat(), ends_at=(start + timedelta(hours=8)).isoformat()
+    )
+
+    assert organiser_client.post("/events", json=payload).status_code == 201
+
+
+@pytest.mark.story("2.1", ac=2)
+@pytest.mark.parametrize(
+    "start",
+    [
+        pytest.param(latest_start_allowed(datetime.now(UTC)) + timedelta(hours=1), id="just-over"),
+        pytest.param(datetime(2099, 1, 1, 9, 0, tzinfo=UTC), id="year-2099"),
+        pytest.param(datetime(9999, 6, 15, 9, 0, tzinfo=UTC), id="year-9999"),
+    ],
+)
+def test_a_start_more_than_two_years_ahead_is_refused(organiser_client, start):
+    payload = event_request_payload(
+        starts_at=start.isoformat(), ends_at=(start + timedelta(hours=8)).isoformat()
+    )
+
+    response = organiser_client.post("/events", json=payload)
+
+    assert response.status_code == 422
+    assert "2 years" in _detail(response)
+
+
+@pytest.mark.story("2.1", ac=2)
+def test_an_edit_moving_the_start_beyond_two_years_is_refused(organiser_client):
+    created = create_event_request(organiser_client)
+    start = future_datetime(days=3 * 365)
+
+    response = organiser_client.patch(
+        f"/events/{created['id']}",
+        json={
+            "starts_at": start.isoformat(),
+            "ends_at": (start + timedelta(hours=8)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 422
+    assert "2 years" in _detail(response)
+
+
+@pytest.mark.story("2.1", ac=2)
+@pytest.mark.parametrize(
+    "start, end",
+    [
+        pytest.param("0001-01-01T09:00:00+08:00", "0001-01-01T17:00:00+08:00", id="year-1-east"),
+        pytest.param("0001-01-01T00:00:00+00:00", "0001-01-01T08:00:00+00:00", id="year-1-utc"),
+        pytest.param("0500-06-01T09:00:00+08:00", "0500-06-01T17:00:00+08:00", id="year-500"),
+    ],
+)
+def test_a_very_old_date_is_refused_as_past_and_never_crashes(organiser_client, start, end):
+    response = organiser_client.post(
+        "/events", json=event_request_payload(starts_at=start, ends_at=end)
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.story("2.1", ac=2)
+def test_a_year_beyond_9999_is_refused_and_never_crashes(organiser_client):
+    payload = event_request_payload(
+        starts_at="10000-01-01T09:00:00+08:00", ends_at="10000-01-01T17:00:00+08:00"
+    )
+
+    assert organiser_client.post("/events", json=payload).status_code == 422
+
+
 # --- AC3: positive whole numbers only -----------------------------------------------------------
 @pytest.mark.story("2.1", ac=3)
 @pytest.mark.parametrize("attendance", NOT_WHOLE_POSITIVE)
@@ -357,8 +517,10 @@ def test_an_edit_also_rejects_a_bad_equipment_quantity(organiser_client):
 
 
 @pytest.mark.story("2.1", ac=3)
-@pytest.mark.parametrize("quantity", [1, INT32_MAX], ids=["smallest", "largest"])
+@pytest.mark.parametrize("quantity", [1, 6], ids=["smallest", "all-of-the-stock"])
 def test_equipment_quantity_accepts_the_boundary_values(organiser_client, quantity):
+    """The largest quantity is now all of the stock (6 laptops), not the largest whole number:
+    availability is checked too (test_event_request_equipment.py)."""
     created = create_event_request(organiser_client, equipment=[_equipment("LAPTOP", quantity)])
 
     assert created["equipment"][0]["quantity"] == quantity

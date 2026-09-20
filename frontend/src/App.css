@@ -1998,3 +1998,28 @@ tbody tr:hover td {
 .equipment-item > button {
   margin-top: 0.75rem;
 }
+
+/* Story 2.1: the field the last save was refused for. */
+label input[aria-invalid='true'],
+label select[aria-invalid='true'],
+.inline-fields input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/* Story 2.1: what is wrong with a field, said next to it as soon as it is typed. */
+.field-error {
+  display: block;
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+.inline-fields .field-error {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.form-actions .form-hint {
+  flex: 1 1 100%;
+  margin: 0;
+}

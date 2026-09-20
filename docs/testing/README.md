@@ -99,7 +99,8 @@ tests where they are fast and deterministic.
 | pytest | `connectsphere_test` (`TEST_DATABASE_URL`, default `<dev db>_test`) | Once per session; every test is rolled back | `conftest.py` exits if it would be the dev database |
 | Playwright | `connectsphere_e2e` (`E2E_DATABASE_URL`) | Every `npm run test:e2e`; emptied afterwards | `scripts/e2e.mjs` refuses a name not ending `_e2e`; `tests/global-setup.ts` refuses to run at all without `E2E_ISOLATED_DB=1` |
 
-`npm run test:e2e -- e2e/venues.spec.ts` passes extra arguments to Playwright. The runner uses
+`npm run test:e2e -- e2e/venues.spec.ts` passes extra arguments to Playwright. Set `E2E_LOG_DIR` to a
+folder to keep each server's output (`backend.log`, `frontend.log`) when a run needs debugging. The runner uses
 `127.0.0.1` on API port `8001` and app port `5174` (override with `E2E_BACKEND_PORT` /
 `E2E_FRONTEND_PORT`), so a dev stack on `8000` / `5173` can keep running; it stops if either port
 is already taken, because the specs would otherwise talk to whatever is listening. It needs

@@ -87,6 +87,13 @@ class ReferenceItemOut(BaseModel):
     description: str | None
 
 
+class EquipmentAvailabilityOut(BaseModel):
+    """AC6: how many units of one equipment type are free for a period. No defaults."""
+
+    equipment_type_code: str
+    available: int
+
+
 class EventReferenceData(BaseModel):
     """The pick-lists for the request form (AC4-AC6)."""
 

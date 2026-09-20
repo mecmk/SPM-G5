@@ -107,6 +107,63 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
 
 
+class EquipmentHoldStatus:
+    """Values allowed by ``ck_equipment_reservations_status``."""
+
+    RESERVED = "RESERVED"
+    RELEASED = "RELEASED"
+
+
+class EquipmentReservation(UUIDPrimaryKeyMixin, Base):
+    """A hold of units of an equipment type for an event over a period. Story 2.1 places one per
+    equipment line when a request is submitted; the equipment stories (16.x, 17.x) release them."""
+
+    __tablename__ = "equipment_reservations"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    equipment_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event_equipment_requests.id", ondelete="SET NULL")
+    )
+    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("equipment_types.id"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'RESERVED'"))
+    reserved_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    reserved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    released_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class EquipmentUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Units of an equipment type out of service for a period; ``ends_at`` NULL is open-ended."""
+
+    __tablename__ = "equipment_unavailability_periods"
+
+    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("equipment_types.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+
+
 class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
     """Append-only log of every status transition (stories 6.1, 6.4)."""
 

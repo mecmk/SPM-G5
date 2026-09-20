@@ -39,10 +39,15 @@ export type ErrorCode =
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
+  | 'EVENT_DATE_INVALID'
+  | 'EVENT_DATE_INCOMPLETE'
+  | 'EVENT_TOO_FAR_AHEAD'
+  | 'EVENT_TOO_LONG'
   | 'EVENT_ATTENDANCE_INVALID'
   | 'EVENT_FACILITY_QUANTITY_INVALID'
   | 'EVENT_EQUIPMENT_TYPE_REQUIRED'
   | 'EVENT_EQUIPMENT_DUPLICATE'
+  | 'EVENT_EQUIPMENT_UNAVAILABLE'
   | 'EVENT_QUANTITY_INVALID'
 
 export interface ErrorEntry {
@@ -167,6 +172,27 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the dates',
     message: 'The proposed date and time cannot be in the past.',
   },
+  /** Story 2.1 AC2: the backend allows a start at most 2 years ahead. */
+  EVENT_TOO_FAR_AHEAD: {
+    title: 'Check the dates',
+    message: 'The proposed start cannot be more than 2 years from now.',
+  },
+  /** Story 2.1 AC2: the backend allows an event to run for at most 14 days. */
+  EVENT_TOO_LONG: {
+    title: 'Check the dates',
+    message: 'An event cannot run for more than 14 days.',
+  },
+  EVENT_DATE_INCOMPLETE: {
+    title: 'Check the dates',
+    message:
+      'Finish entering the date and time, including AM or PM. If every part is filled in, ' +
+      'check the day exists in that month: 29 February is only valid in a leap year, and ' +
+      'there is no 31st in April, June, September or November.',
+  },
+  EVENT_DATE_INVALID: {
+    title: 'Check the dates',
+    message: 'Enter a valid date and time, with a four-digit year.',
+  },
   /** Story 2.1 AC3. */
   EVENT_ATTENDANCE_INVALID: {
     title: 'Check the attendance',
@@ -180,6 +206,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_EQUIPMENT_TYPE_REQUIRED: {
     title: 'Choose the equipment',
     message: 'Choose a type for every equipment item, or remove it.',
+  },
+  /** Story 2.1 AC6: the backend refuses more than is free for the dates. */
+  EVENT_EQUIPMENT_UNAVAILABLE: {
+    title: 'Not enough equipment',
+    message: 'Request no more than is available for these dates.',
   },
   EVENT_EQUIPMENT_DUPLICATE: {
     title: 'Check the equipment',

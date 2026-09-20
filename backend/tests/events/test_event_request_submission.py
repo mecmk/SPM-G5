@@ -243,6 +243,8 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
         "status": "SUBMITTED",
         "submitted_at": submitted["submitted_at"],
         "updated_at": submitted["updated_at"],
+        # the equipment is now held for the event (test_event_request_equipment.py)
+        "equipment": [{**line, "status": "RESERVED"} for line in created["equipment"]],
     }
 
 
