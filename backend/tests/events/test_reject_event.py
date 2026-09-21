@@ -21,6 +21,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
+from app.events import service
 from app.events.models import EventStatus
 from tests.support.factories import make_event
 from tests.support.seed import Events, Users
@@ -51,6 +53,32 @@ def test_rejection_with_a_whitespace_only_reason_is_refused(coordinator_client, 
     ).one()
     assert row.status == EventStatus.SUBMITTED
     assert row.decision_reason is None
+
+
+@pytest.mark.story("4.5", ac=1)
+def test_rejection_with_an_unknown_field_is_refused(coordinator_client):
+    # Every sibling request schema sets extra="forbid" (schemas.py); EventRejection should too,
+    # rather than silently drop a key like "status" that looks like it might do something.
+    response = coordinator_client.post(
+        f"/events/{Events.SUBMITTED}/reject",
+        json={"reason": "Budget cut.", "status": "APPROVED"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.story("4.5", ac=1)
+def test_reject_event_refuses_a_blank_reason_even_bypassing_the_schema(db: Session):
+    # AC1's mandatory-reason rule is enforced again in the service (service.py's reject_event),
+    # not only by EventRejection's Pydantic validator, so a caller other than this HTTP endpoint
+    # (a future 4.6 clarification flow, 6.5 cancellation, a seed script) cannot persist a
+    # REJECTED request with no reason.
+    event = make_event(
+        db, status=EventStatus.SUBMITTED, assigned_coordinator_id=Users.COORDINATOR.id
+    )
+    coordinator = db.get(User, Users.COORDINATOR.id)
+
+    with pytest.raises(service.MissingDecisionReason):
+        service.reject_event(db, event, actor=coordinator, reason="   ")
 
 
 @pytest.mark.story("4.5", ac=1)
@@ -183,7 +211,7 @@ def test_owning_organiser_can_read_the_rejection_reason(login_as):
         body["decision_reason"]
         == "Accessibility requirements cannot be met at any available venue."
     )
-    assert body["decided_by"]["full_name"] == Users.COORDINATOR.full_name
+    assert body["decided_by_name"] == Users.COORDINATOR.full_name
 
 
 @pytest.mark.story("4.5", ac=3)

@@ -150,7 +150,7 @@ def approve_event(
         service.approve_event(db, event, actor=actor)
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    except service.EventNotAwaitingDecision as exc:
+    except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return EventDetailOut.from_event(event)
 
@@ -174,6 +174,8 @@ def reject_event(
         service.reject_event(db, event, actor=actor, reason=payload.reason)
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    except service.EventNotAwaitingDecision as exc:
+    except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return EventDetailOut.from_event(event)

@@ -11,10 +11,14 @@ AC4 The outcome is visible to the organiser.
 docstring of ``app/events/service.py``.
 
 Excluded, with reason:
-* A genuine multi-connection concurrency test (two simultaneous approvals of the *same*
-  request) - judged not worth guarding against for this feature, so there is no lock to
-  exercise. The repeated-approval test below still proves the status guard in the ordinary
-  sequential case.
+* A genuine multi-connection concurrency test (two simultaneous approvals, or an approval
+  racing a rejection, of the *same* request) - the fix is a conditional
+  ``UPDATE ... WHERE status IN (the awaiting-decision set)`` with a rowcount check (see
+  ``service.py``'s ``_decide``, the same shape as ``submit_event``'s guard), which a
+  single-session test can't exercise meaningfully - same reasoning as story 13.2's
+  ``test_approve_booking.py`` for its row lock. The repeated-approval test below proves the
+  guard sequentially: the first decision's ``UPDATE`` matches and succeeds, the second's
+  ``WHERE`` clause matches zero rows and is refused rather than overwriting the first.
 * Organiser notification - there is no notification application code anywhere in the backend
   yet (epic 20 is unbuilt), and story 13.2's approve-booking precedent does not write one either.
 """
@@ -43,7 +47,7 @@ def test_coordinator_can_approve_a_request_under_review(coordinator_client, db: 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == EventStatus.APPROVED
-    assert body["decided_by"]["id"] == str(Users.COORDINATOR.id)
+    assert body["decided_by_name"] == Users.COORDINATOR.full_name
     decided_at = datetime.fromisoformat(body["decided_at"])
     assert before <= decided_at <= datetime.now(timezone.utc) + timedelta(seconds=5)
 
@@ -117,7 +121,7 @@ def test_approving_the_same_request_twice_is_refused_the_second_time(coordinator
     assert second.status_code == 409
     # The first decision stands; the refused second attempt did not overwrite it.
     unchanged = coordinator_client.get(f"/events/{Events.UNDER_REVIEW}")
-    assert unchanged.json()["decided_by"] == first.json()["decided_by"]
+    assert unchanged.json()["decided_by_name"] == first.json()["decided_by_name"]
     assert unchanged.json()["decided_at"] == first.json()["decided_at"]
 
 
@@ -130,7 +134,7 @@ def test_approving_a_missing_event_is_404(coordinator_client):
 @pytest.mark.story("4.4", ac=2)
 def test_approval_records_the_decider_full_name(coordinator_client):
     response = coordinator_client.post(f"/events/{Events.UNDER_REVIEW}/approve")
-    assert response.json()["decided_by"]["full_name"] == Users.COORDINATOR.full_name
+    assert response.json()["decided_by_name"] == Users.COORDINATOR.full_name
 
 
 @pytest.mark.story("4.4", ac=2)
@@ -169,6 +173,30 @@ def test_approved_event_leaves_the_review_queue(coordinator_client):
     assert str(Events.UNDER_REVIEW) not in ids
 
 
+@pytest.mark.story("4.4", ac=3)
+def test_approving_a_request_clears_a_stale_decision_reason(coordinator_client, db: Session):
+    # decision_reason is shared with rejection and (story 6.5) cancellation; simulates a request
+    # that carries one from an earlier round-trip (e.g. a future clarification request) and is
+    # now being approved instead - the reason must not survive onto an approved request.
+    event = make_event(
+        db,
+        status=EventStatus.CLARIFICATION_REQUESTED,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        decision_reason="No outdoor venues are available after 22:00.",
+    )
+
+    response = coordinator_client.post(f"/events/{event.id}/approve")
+
+    assert response.status_code == 200
+    assert response.json()["decision_reason"] is None
+    db.expire_all()
+    row = db.execute(
+        text("SELECT status, decision_reason FROM events WHERE id = :id"), {"id": event.id}
+    ).one()
+    assert row.status == EventStatus.APPROVED
+    assert row.decision_reason is None
+
+
 # --- AC4: the outcome is visible to the organiser ---------------------------------------------
 @pytest.mark.story("4.4", ac=4)
 def test_owning_organiser_can_read_the_approved_outcome(login_as):
@@ -179,7 +207,7 @@ def test_owning_organiser_can_read_the_approved_outcome(login_as):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == EventStatus.APPROVED
-    assert body["decided_by"]["full_name"] == Users.COORDINATOR.full_name
+    assert body["decided_by_name"] == Users.COORDINATOR.full_name
     assert body["decided_at"] is not None
 
 

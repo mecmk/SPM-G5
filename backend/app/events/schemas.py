@@ -303,15 +303,6 @@ class EquipmentLineOut(BaseModel):
         )
 
 
-class UserSummary(BaseModel):
-    """An organiser cannot resolve a user id to a name, so the id travels with it."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    full_name: str
-
-
 class EventDetailOut(BaseModel):
     """AC1/AC4-AC6/AC8: everything recorded on a request, as the organiser and the reviewing
     coordinator both see it. No defaults (response schema).
@@ -342,7 +333,7 @@ class EventDetailOut(BaseModel):
     accessibility_needs: list[AccessibilityNeedOut]
     accessibility_notes: str | None
     equipment: list[EquipmentLineOut]
-    decided_by: UserSummary | None
+    decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
     created_at: datetime
@@ -382,7 +373,7 @@ class EventDetailOut(BaseModel):
             ],
             accessibility_notes=event.accessibility_notes,
             equipment=[EquipmentLineOut.from_line(line) for line in event.equipment_requests],
-            decided_by=UserSummary.model_validate(event.decided_by) if event.decided_by else None,
+            decided_by_name=event.decided_by.full_name if event.decided_by else None,
             decided_at=event.decided_at,
             decision_reason=event.decision_reason,
             created_at=event.created_at,
@@ -394,9 +385,11 @@ class EventDetailOut(BaseModel):
 class EventRejection(BaseModel):
     """4.5 AC1: a reason is mandatory - blank or whitespace-only does not count."""
 
+    model_config = ConfigDict(extra="forbid")
+
     reason: str = Field(min_length=1)
 
     @field_validator("reason", mode="before")
     @classmethod
-    def _strip(cls, value):
-        return value.strip() if isinstance(value, str) else value
+    def _strip_reason(cls, value):
+        return _strip(value)

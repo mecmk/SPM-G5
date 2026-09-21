@@ -260,4 +260,6 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by=(EventEquipmentRequest.created_at, EventEquipmentRequest.id),
     )
-    decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])
+    # Default lazy="select": only EventDetailOut's single-row read needs the decider, unlike
+    # organiser/assigned_coordinator above, which every review-queue row also needs joined.
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id])

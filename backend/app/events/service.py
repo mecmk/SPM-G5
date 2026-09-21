@@ -174,7 +174,7 @@ NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this reques
 EVENT_NOT_AWAITING_DECISION_MESSAGE = (
     "This request is {status}, so it cannot be approved or rejected."
 )
-EVENT_NOT_VISIBLE_MESSAGE = "You do not have access to this event."
+DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
 
 # --- reads -------------------------------------------------------------------------------
 
@@ -654,6 +654,31 @@ def _missing_for_submission(event: Event) -> list[str]:
     return missing
 
 
+def _record_transition(
+    db: Session,
+    event: Event,
+    *,
+    from_status: str,
+    to_status: str,
+    actor: User,
+    at: datetime,
+    reason: str | None,
+) -> None:
+    """Append one row to the append-only ``event_status_history`` log. ``to_status`` is taken
+    as given, never read off ``event``, so this does not depend on being called before or after
+    ``event`` itself is updated."""
+    db.add(
+        EventStatusHistory(
+            event_id=event.id,
+            from_status=from_status,
+            to_status=to_status,
+            changed_by_id=actor.id,
+            changed_at=at,
+            reason=reason,
+        )
+    )
+
+
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in."""
     event = _get_own_event(db, event_id, actor)
@@ -667,22 +692,24 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     )
 
     _hold_equipment(db, event, actor)
+    submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
     submitted = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status == EventStatus.DRAFT)
-        .values(status=EventStatus.SUBMITTED, submitted_at=datetime.now(UTC))
+        .values(status=EventStatus.SUBMITTED, submitted_at=submitted_at)
     )
     if submitted.rowcount == 0:
         db.rollback()
         raise EventAlreadySubmitted()
-    db.add(
-        EventStatusHistory(
-            event_id=event.id,
-            from_status=EventStatus.DRAFT,
-            to_status=EventStatus.SUBMITTED,
-            changed_by_id=actor.id,
-        )
+    _record_transition(
+        db,
+        event,
+        from_status=EventStatus.DRAFT,
+        to_status=EventStatus.SUBMITTED,
+        actor=actor,
+        at=submitted_at,
+        reason=None,
     )
     record_audit(
         db,
@@ -697,13 +724,6 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     return event
 
 
-class EventNotVisible(PermissionError):
-    """4.4 AC4 / 4.5 AC3's counterpart: an organiser may see only their own events."""
-
-    def __init__(self) -> None:
-        super().__init__(EVENT_NOT_VISIBLE_MESSAGE)
-
-
 class NotAssignedCoordinator(PermissionError):
     """Only the coordinator ``events.assigned_coordinator_id`` names may decide the request."""
 
@@ -711,7 +731,7 @@ class NotAssignedCoordinator(PermissionError):
         super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
 
 
-class EventNotAwaitingDecision(ValueError):
+class EventNotAwaitingDecision(EventStateConflict):
     """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
     refuses repeat or invalid-state decisions (e.g. a request already decided, or past
     PLANNING). A draft never reaches this guard: ``get_event`` hides it from the coordinator
@@ -720,6 +740,15 @@ class EventNotAwaitingDecision(ValueError):
     def __init__(self, event: Event) -> None:
         super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status))
         self.event = event
+
+
+class MissingDecisionReason(InvalidEventRequest):
+    """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
+    with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
+    clarification flow, 6.5's cancellation, a seed script, a test factory)."""
+
+    def __init__(self) -> None:
+        super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
 
 
 # --- decisions -----------------------------------------------------------------------------
@@ -735,79 +764,75 @@ def _assert_awaiting_decision(event: Event) -> None:
         raise EventNotAwaitingDecision(event)
 
 
-def _record_transition(
-    db: Session,
-    event: Event,
-    *,
-    from_status: str,
-    actor: User,
-    at: datetime,
-    reason: str | None,
+def _decide(
+    db: Session, event: Event, *, actor: User, to_status: str, reason: str | None, action: str
 ) -> None:
-    db.add(
-        EventStatusHistory(
-            event_id=event.id,
-            from_status=from_status,
-            to_status=event.status,
-            changed_by_id=actor.id,
-            changed_at=at,
-            reason=reason,
-        )
-    )
-
-
-def approve_event(db: Session, event: Event, *, actor: User) -> None:
-    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time."""
-    _assert_assigned_coordinator(event, actor)
-    _assert_awaiting_decision(event)
-
-    from_status = event.status
-    decided_at = datetime.now(UTC)
-    event.status = EventStatus.APPROVED
-    event.decided_by_id = actor.id
-    event.decided_at = decided_at
-    _record_transition(db, event, from_status=from_status, actor=actor, at=decided_at, reason=None)
-    db.flush()
-
-    record_audit(
-        db,
-        actor=actor,
-        action="EVENT_APPROVED",
-        entity_type="event",
-        entity_id=event.id,
-        details={"from_status": from_status},
-        commit=False,
-    )
-    db.commit()
-    db.refresh(event)
-
-
-def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
-    """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
-    time. Same guards as ``approve_event``. ``reason`` is expected already validated non-blank.
+    """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
+    decide, and only while the request is awaiting decision. The update is conditional on the
+    event still being in an awaiting-decision status, so two concurrent decisions on the same
+    request cannot both succeed - the same shape as ``submit_event``'s guard against a racing
+    double-submit. ``reason`` is written unconditionally, which is what clears a stale
+    ``decision_reason`` left by an earlier rejection when a later approval reuses this path
+    (relevant once 4.6's clarification round-trip can return a request here more than once).
     """
     _assert_assigned_coordinator(event, actor)
     _assert_awaiting_decision(event)
 
     from_status = event.status
     decided_at = datetime.now(UTC)
-    event.status = EventStatus.REJECTED
-    event.decided_by_id = actor.id
-    event.decided_at = decided_at
-    event.decision_reason = reason
-    _record_transition(
-        db, event, from_status=from_status, actor=actor, at=decided_at, reason=reason
+    decided = db.execute(
+        update(Event)
+        .where(Event.id == event.id, Event.status.in_(_AWAITING_DECISION_STATUSES))
+        .values(
+            status=to_status, decided_by_id=actor.id, decided_at=decided_at, decision_reason=reason
+        )
     )
-    db.flush()
-
+    if decided.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise EventNotAwaitingDecision(event)
+    _record_transition(
+        db,
+        event,
+        from_status=from_status,
+        to_status=to_status,
+        actor=actor,
+        at=decided_at,
+        reason=reason,
+    )
+    details: dict[str, Any] = {"from_status": from_status}
+    if reason is not None:
+        details["reason"] = reason
     record_audit(
         db,
         actor=actor,
-        action="EVENT_REJECTED",
+        action=action,
         entity_type="event",
         entity_id=event.id,
-        details={"from_status": from_status, "reason": reason},
+        details=details,
         commit=False,
     )
     db.commit()
     db.refresh(event)
+
+
+def approve_event(db: Session, event: Event, *, actor: User) -> None:
+    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time."""
+    _decide(
+        db, event, actor=actor, to_status=EventStatus.APPROVED, reason=None, action="EVENT_APPROVED"
+    )
+
+
+def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
+    """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
+    time. Same guards as ``approve_event``."""
+    if not reason.strip():
+        raise MissingDecisionReason()
+    _decide(
+        db,
+        event,
+        actor=actor,
+        to_status=EventStatus.REJECTED,
+        reason=reason,
+        action="EVENT_REJECTED",
+    )
