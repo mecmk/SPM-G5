@@ -1,4 +1,5 @@
-"""Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2).
+"""Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2)
+and its availability calendar (story 9.1).
 
 Routers translate the exceptions raised here into HTTP statuses; keeping the rules in plain
 functions makes them easy to unit-test and to reuse from other features (e.g. booking
@@ -8,6 +9,7 @@ suitability checks in stories 11.x).
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -15,7 +17,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
+from app.events.models import Event
 from app.venues.models import (
     AccessibilityFeature,
     Facility,
@@ -25,8 +29,9 @@ from app.venues.models import (
     VenueFacility,
     VenueLayout,
     VenueStatus,
+    VenueUnavailabilityPeriod,
 )
-from app.venues.schemas import VenueCreate, VenueUpdate
+from app.venues.schemas import BOOKING_REASON, VenueCreate, VenueUnavailableWindowOut, VenueUpdate
 
 
 class VenueNotFound(LookupError):
@@ -48,6 +53,13 @@ class UnknownReferenceCode(ValueError):
 
 class InvalidOperatingHours(ValueError):
     pass
+
+
+class InvalidDateRange(ValueError):
+    pass
+
+
+END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 
 
 # Name PostgreSQL gives the only foreign key that blocks deleting a venue.
@@ -94,6 +106,58 @@ def get_venue(db: Session, venue_id: uuid.UUID) -> Venue:
     if venue is None:
         raise VenueNotFound(venue_id)
     return venue
+
+
+def get_venue_calendar(
+    db: Session, venue_id: uuid.UUID, *, starts_at: datetime, ends_at: datetime
+) -> list[VenueUnavailableWindowOut]:
+    """Story 9.1 AC1/AC2: every approved booking and unavailability period overlapping the
+    range, as a flat list of periods (not pre-expanded per day). Overlap mirrors the database's
+    own half-open exclusion constraint on venue_bookings
+    (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not a
+    conflict. venue_unavailability_periods has no such DB constraint, but is checked the same
+    way for consistency.
+    """
+    get_venue(db, venue_id)
+    if ends_at <= starts_at:
+        raise InvalidDateRange(END_NOT_AFTER_START_MESSAGE)
+
+    bookings = db.execute(
+        select(VenueBooking.held_from, VenueBooking.held_until, Event.name)
+        .join(Event, Event.id == VenueBooking.event_id)
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status == BookingStatus.APPROVED,
+            VenueBooking.held_from < ends_at,
+            VenueBooking.held_until > starts_at,
+        )
+    ).all()
+    windows = [
+        VenueUnavailableWindowOut(
+            starts_at=held_from, ends_at=held_until, reason=BOOKING_REASON, label=event_name
+        )
+        for held_from, held_until, event_name in bookings
+    ]
+
+    closures = db.scalars(
+        select(VenueUnavailabilityPeriod).where(
+            VenueUnavailabilityPeriod.venue_id == venue_id,
+            VenueUnavailabilityPeriod.starts_at < ends_at,
+            VenueUnavailabilityPeriod.ends_at > starts_at,
+        )
+    ).all()
+    windows += [
+        VenueUnavailableWindowOut(
+            starts_at=period.starts_at,
+            ends_at=period.ends_at,
+            reason=period.reason,
+            label=period.notes or period.reason,
+        )
+        for period in closures
+    ]
+
+    windows.sort(key=lambda w: w.starts_at)
+    return windows
 
 
 # --- writes ------------------------------------------------------------------------------

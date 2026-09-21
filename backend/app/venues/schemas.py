@@ -1,4 +1,5 @@
-"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2)."""
+"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2)
+and its availability calendar (story 9.1)."""
 
 from __future__ import annotations
 
@@ -228,3 +229,21 @@ class VenueOut(VenueSummary):
             created_at=venue.created_at,
             updated_at=venue.updated_at,
         )
+
+
+# --- calendar (story 9.1) ----------------------------------------------------------------
+# Sentinel `reason` for an approved booking. Distinct from venue_unavailability_periods' own
+# reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER, see UnavailabilityReason
+# in models.py) - the two are different vocabularies sharing one field, not a single enum.
+BOOKING_REASON = "BOOKED"
+
+
+class VenueUnavailableWindowOut(BaseModel):
+    """One blocked period on the venue calendar (AC1/AC2): either an approved booking or a
+    venue_unavailability_periods row. A flat list of periods, not pre-expanded per day - the
+    frontend expands each into the calendar days it touches."""
+
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+    label: str
