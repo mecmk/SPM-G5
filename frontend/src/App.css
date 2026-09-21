@@ -334,6 +334,35 @@
   color: var(--text-h);
 }
 
+/* ---------- summary stat cards (story 13.1 UI refresh) ---------- */
+
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.stat-card-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.booking-detail-header {
+  margin-bottom: 1.5rem;
+}
+
 /* ---------- fixed-width filter column + results (story 8.1) ---------- */
 
 .catalogue-layout {
