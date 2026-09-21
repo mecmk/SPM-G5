@@ -2,12 +2,20 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Icon } from './Icon'
 
+/** Story 7.1: the page this card was reached from, so its back link can return there. */
+export interface EventCardBackState {
+  from: string
+  fromLabel: string
+}
+
 export interface EventCardProps {
   title: string
   imageUrl: string | null
   details: ReactNode[]
   /** Story 7.1: when given, the whole card links to the event's details page. */
   to?: string
+  /** Passed through to the link, so the details page knows where "back" goes. */
+  state?: EventCardBackState
 }
 
 /**
@@ -15,7 +23,7 @@ export interface EventCardProps {
  * square picture on the left. Story 4.1 is the first user in the real frontend: the square shows
  * `imageUrl` when the event has one and it loads, and a placeholder icon otherwise.
  */
-export function EventCard({ title, imageUrl, details, to }: EventCardProps) {
+export function EventCard({ title, imageUrl, details, to, state }: EventCardProps) {
   const [hasImageFailed, setHasImageFailed] = useState(false)
 
   function markImageFailed() {
@@ -45,7 +53,7 @@ export function EventCard({ title, imageUrl, details, to }: EventCardProps) {
   return (
     <li className="event-card">
       {to ? (
-        <Link to={to} className="event-card-link">
+        <Link to={to} state={state} className="event-card-link">
           {body}
         </Link>
       ) : (

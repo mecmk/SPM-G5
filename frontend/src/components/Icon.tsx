@@ -23,6 +23,7 @@ export type IconName =
   | 'pencil'
   | 'trash'
   | 'image'
+  | 'person'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
@@ -123,6 +124,12 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <rect x="3.5" y="5" width="17" height="14" rx="1.5" />
       <circle cx="9" cy="10" r="1.6" />
       <path d="M4 17l5-4.5 3.5 3 3-2.5L20 17" />
+    </>
+  ),
+  person: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
     </>
   ),
 }

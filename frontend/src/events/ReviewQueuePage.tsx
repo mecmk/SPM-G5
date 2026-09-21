@@ -7,8 +7,10 @@ import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
-import { eventPath } from '../routes'
+import { EVENTS_INBOX_PATH, eventPath } from '../routes'
 import { formatDateTime, formatSchedule } from '../shared/format'
+
+const BACK_TO_INBOX = { from: EVENTS_INBOX_PATH, fromLabel: 'Events inbox' }
 
 const SORT_OPTIONS: { key: ReviewQueueSort; label: string }[] = [
   { key: 'submitted_at', label: 'Submission date' },
@@ -169,6 +171,7 @@ export function ReviewQueuePage() {
                     title={entry.name}
                     imageUrl={entry.cover_image_url}
                     to={eventPath(entry.id)}
+                    state={BACK_TO_INBOX}
                     details={[
                       formatSchedule(entry.starts_at, entry.ends_at),
                       `Requested by ${entry.organiser_name}`,

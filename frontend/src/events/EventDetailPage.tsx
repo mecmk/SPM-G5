@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
 import { Chip } from '../components/Chip'
-import { PageHeader } from '../components/PageHeader'
+import type { EventCardBackState } from '../components/EventCard'
+import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { HOME_PATH } from '../routes'
@@ -20,7 +21,7 @@ function describeFacility(facility: RequiredFacility): string {
   return `${facility.name}${quantity}${notes}`
 }
 
-function formatHeaderSubtitle(event: EventDetail): string {
+function formatHeroMeta(event: EventDetail): string {
   const schedule =
     event.starts_at && event.ends_at
       ? formatSchedule(event.starts_at, event.ends_at)
@@ -40,8 +41,10 @@ function formatHeaderSubtitle(event: EventDetail): string {
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
+  const location = useLocation()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasImageFailed, setHasImageFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -68,146 +71,188 @@ export function EventDetailPage() {
   }
   if (!event) return <LoadingState label="Loading the event…" />
 
-  return (
-    <div className="page page-wide">
-      <PageHeader
-        title={event.name}
-        subtitle={formatHeaderSubtitle(event)}
-        backTo={HOME_PATH}
-        backLabel="Home"
-      />
+  function markImageFailed() {
+    setHasImageFailed(true)
+  }
 
-      <div className="stat-grid">
-        <div className="stat">
-          <p className="eyebrow">Expected attendance</p>
-          <p className="stat-value">{event.expected_attendance ?? NOT_RECORDED}</p>
+  const backState = location.state as EventCardBackState | null
+  const backTo = backState?.from ?? HOME_PATH
+  const backLabel = backState?.fromLabel ?? 'Home'
+
+  return (
+    <div className="page page-wide event-detail-page">
+      <Link to={backTo} className="back-link">
+        ← {backLabel}
+      </Link>
+
+      <div className="venue-hero">
+        {event.cover_image_url && !hasImageFailed ? (
+          <img
+            className="venue-hero-picture"
+            src={event.cover_image_url}
+            alt=""
+            onError={markImageFailed}
+          />
+        ) : (
+          <span aria-hidden="true">
+            <Icon name="image" size={36} />
+          </span>
+        )}
+        <div className="venue-hero-overlay">
+          <h1>{event.name}</h1>
+          <p className="venue-hero-meta">{formatHeroMeta(event)}</p>
         </div>
+      </div>
+
+      <div className="stack">
         <div className="stat">
           <p className="eyebrow">Event status</p>
           <StatusBadge status={event.status} />
         </div>
-        <div className="stat">
-          <p className="eyebrow">Assigned coordinator</p>
-          <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
-        </div>
-      </div>
 
-      <section className="card stack" aria-labelledby="event-info-heading">
-        <h2 id="event-info-heading">Event information</h2>
-        <div>
-          <p className="eyebrow">Purpose</p>
-          <p>{event.purpose ?? NOT_RECORDED}</p>
-        </div>
-        <div>
-          <p className="eyebrow">Description</p>
-          <p>{event.description ?? NOT_RECORDED}</p>
-        </div>
-        <div className="row">
-          <div>
-            <p className="eyebrow">Date</p>
-            <p>{event.starts_at ? formatDate(event.starts_at) : NOT_RECORDED}</p>
+        <div className="stat-grid">
+          <div className="stat">
+            <Icon name="calendar" />
+            <div className="stat-body">
+              <p className="stat-value">
+                {event.starts_at ? formatDate(event.starts_at) : NOT_RECORDED}
+              </p>
+              <p className="eyebrow">Date</p>
+            </div>
           </div>
-          <div>
-            <p className="eyebrow">Time</p>
-            <p>
-              {event.starts_at && event.ends_at
-                ? `${formatTime(event.starts_at)}–${formatTime(event.ends_at)}`
-                : NOT_RECORDED}
-            </p>
+          <div className="stat">
+            <Icon name="calendar-check" />
+            <div className="stat-body">
+              <p className="stat-value">
+                {event.starts_at && event.ends_at
+                  ? `${formatTime(event.starts_at)}–${formatTime(event.ends_at)}`
+                  : NOT_RECORDED}
+              </p>
+              <p className="eyebrow">Time</p>
+            </div>
+          </div>
+          <div className="stat">
+            <Icon name="people" />
+            <div className="stat-body">
+              <p className="stat-value">{event.expected_attendance ?? NOT_RECORDED}</p>
+              <p className="eyebrow">Expected attendance</p>
+            </div>
+          </div>
+          <div className="stat">
+            <Icon name="person" />
+            <div className="stat-body">
+              <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
+              <p className="eyebrow">Assigned coordinator</p>
+            </div>
           </div>
         </div>
-        <div>
-          <p className="eyebrow">Organiser</p>
-          <p>{event.organiser_name}</p>
-        </div>
-      </section>
 
-      <div className="layout-half">
-        <section className="card stack" aria-labelledby="venue-requirements-heading">
-          <h2 id="venue-requirements-heading">Venue requirements</h2>
-          {event.venue_none_required ? (
-            <p className="muted">No venue is required for this event.</p>
-          ) : (
-            <>
-              <div>
-                <p className="eyebrow">Room layout</p>
-                <p>{event.required_layout_name ?? NOT_RECORDED}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Required facilities</p>
-                {event.required_facilities.length === 0 ? (
-                  <p className="muted">{NOT_RECORDED}</p>
-                ) : (
+        <section className="card stack" aria-labelledby="event-info-heading">
+          <h2 id="event-info-heading">Event information</h2>
+          <div className="row">
+            <div>
+              <p className="eyebrow">Purpose</p>
+              <p>{event.purpose ?? NOT_RECORDED}</p>
+            </div>
+            <div>
+              <p className="eyebrow">Description</p>
+              <p>{event.description ?? NOT_RECORDED}</p>
+            </div>
+          </div>
+          <hr className="divider" />
+          <div>
+            <p className="eyebrow">Organiser</p>
+            <p>{event.organiser_name}</p>
+          </div>
+        </section>
+
+        <div className="layout-half">
+          <section className="card stack" aria-labelledby="venue-requirements-heading">
+            <h2 id="venue-requirements-heading">Venue requirements</h2>
+            {event.venue_none_required ? (
+              <p className="muted">No venue is required for this event.</p>
+            ) : (
+              <>
+                <div>
+                  <p className="eyebrow">Room layout</p>
+                  <p>{event.required_layout_name ?? NOT_RECORDED}</p>
+                </div>
+                <div>
+                  <p className="eyebrow">Required facilities</p>
+                  {event.required_facilities.length === 0 ? (
+                    <p className="muted">{NOT_RECORDED}</p>
+                  ) : (
+                    <div className="cluster">
+                      {event.required_facilities.map((facility) => (
+                        <Chip key={facility.code} tone="info" label={describeFacility(facility)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {event.venue_requirement_notes && (
+                  <div>
+                    <p className="eyebrow">Other requirements</p>
+                    <p>{event.venue_requirement_notes}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          <section className="card stack" aria-labelledby="accessibility-heading">
+            <h2 id="accessibility-heading">Accessibility</h2>
+            {event.accessibility_none_required ? (
+              <p className="muted">No accessibility needs recorded.</p>
+            ) : event.accessibility_needs.length === 0 && !event.accessibility_notes ? (
+              <p className="muted">Not yet specified.</p>
+            ) : (
+              <>
+                {event.accessibility_needs.length > 0 && (
                   <div className="cluster">
-                    {event.required_facilities.map((facility) => (
-                      <Chip key={facility.code} tone="info" label={describeFacility(facility)} />
+                    {event.accessibility_needs.map((need) => (
+                      <Chip
+                        key={need.code}
+                        tone="success"
+                        label={need.notes ? `${need.name} (${need.notes})` : need.name}
+                      />
                     ))}
                   </div>
                 )}
-              </div>
-              {event.venue_requirement_notes && (
-                <div>
-                  <p className="eyebrow">Other requirements</p>
-                  <p>{event.venue_requirement_notes}</p>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                {event.accessibility_notes && (
+                  <div>
+                    <p className="eyebrow">Additional notes</p>
+                    <p>{event.accessibility_notes}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
 
-        <section className="card stack" aria-labelledby="accessibility-heading">
-          <h2 id="accessibility-heading">Accessibility</h2>
-          {event.accessibility_none_required ? (
-            <p className="muted">No accessibility needs recorded.</p>
-          ) : event.accessibility_needs.length === 0 && !event.accessibility_notes ? (
-            <p className="muted">Not yet specified.</p>
+        <section className="card stack" aria-labelledby="equipment-heading">
+          <h2 id="equipment-heading">Equipment requirements</h2>
+          {event.equipment.length === 0 ? (
+            <p className="muted">No equipment requested.</p>
           ) : (
-            <>
-              {event.accessibility_needs.length > 0 && (
-                <div className="cluster">
-                  {event.accessibility_needs.map((need) => (
-                    <Chip
-                      key={need.code}
-                      tone="success"
-                      label={need.notes ? `${need.name} (${need.notes})` : need.name}
-                    />
-                  ))}
-                </div>
-              )}
-              {event.accessibility_notes && (
-                <div>
-                  <p className="eyebrow">Additional notes</p>
-                  <p>{event.accessibility_notes}</p>
-                </div>
-              )}
-            </>
+            <ul className="check-list">
+              {event.equipment.map((item) => (
+                <li key={item.id}>
+                  <span className="grow-text">
+                    {item.equipment_type_name}
+                    {item.technical_notes && (
+                      <>
+                        <br />
+                        <span className="small muted">{item.technical_notes}</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="mono">×{item.quantity}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
       </div>
-
-      <section className="card stack" aria-labelledby="equipment-heading">
-        <h2 id="equipment-heading">Equipment requirements</h2>
-        {event.equipment.length === 0 ? (
-          <p className="muted">No equipment requested.</p>
-        ) : (
-          <ul className="check-list">
-            {event.equipment.map((item) => (
-              <li key={item.id}>
-                <span className="grow-text">
-                  {item.equipment_type_name}
-                  {item.technical_notes && (
-                    <>
-                      <br />
-                      <span className="small muted">{item.technical_notes}</span>
-                    </>
-                  )}
-                </span>
-                <span className="mono">×{item.quantity}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   )
 }
