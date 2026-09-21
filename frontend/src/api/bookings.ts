@@ -4,7 +4,6 @@ import { api } from './client'
 export interface BookableEvent {
   id: string
   name: string
-  status: string
   starts_at: string
   ends_at: string
   expected_attendance: number

@@ -30,10 +30,12 @@ Excluded, with reason:
 * Refusing a venue that is too small or lacks a required facility - stories 11.2 / 11.3. 11.3
   AC1 wants a warning the coordinator can override, not a block, so refusing it here would
   pre-empt a decision that story reverses.
-* An e2e spec - there is no page to click through. A coordinator cannot reach an approved event
-  assigned to them until story 4.1's queue or 7.1's detail page exists, so the request flow has
-  no UI entry point yet. Every case here is a rule, boundary or permission case, which
-  AGENTS.md assigns to ``backend/tests/`` anyway.
+* Refusing a second, identical request for the same event and venue - no AC asks for it; the
+  behaviour is pinned by ``test_the_same_venue_can_be_requested_twice_for_one_event`` and
+  raised in the pull request instead of decided here.
+* The flow a coordinator clicks through - that is ``tests/e2e/booking-requests.spec.ts``. Every
+  case here is a rule, boundary, permission or conflict case, which AGENTS.md assigns to
+  ``backend/tests/``, and neither layer repeats the other.
 """
 
 from __future__ import annotations
@@ -353,6 +355,22 @@ def test_a_raised_request_can_then_be_approved_by_venue_staff(client, login_as, 
 
     assert approved.status_code == 200
     assert approved.json()["status"] == BookingStatus.APPROVED
+
+
+@pytest.mark.story("12.1", ac=3)
+def test_the_same_venue_can_be_requested_twice_for_one_event(coordinator_client, db: Session):
+    """No AC forbids it and no constraint stops it, so it is recorded here rather than left to be
+    discovered. The two rows are identical apart from their ids, because AC2 copies the period
+    from the event, so Venue Staff would see the request twice in story 13.1's queue; approving
+    one then makes the other conflict, and 13.2 / 14.2 refuse it. Worth a product decision (refuse
+    the duplicate, or let 12.4's withdraw clean it up) rather than a rule invented here.
+    """
+    first = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
+    second = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
+
+    assert (first.status_code, second.status_code) == (201, 201)
+    assert first.json()["id"] != second.json()["id"]
+    assert _booking_count(db, Events.APPROVED) == 4  # the two seeded rows plus these two
 
 
 @pytest.mark.story("12.1", ac=3)

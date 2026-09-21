@@ -22,7 +22,7 @@ tagged with the story and AC it proves. Current state:
 
 | Suite | Result |
 | --- | --- |
-| Backend (pytest, real PostgreSQL) | 561 passed |
+| Backend (pytest, real PostgreSQL) | 562 passed |
 | End-to-end (Playwright) | 75 passed |
 | Backend lint/format (ruff), frontend lint/format/build (oxlint, prettier, tsc), markdownlint | clean |
 
@@ -103,7 +103,7 @@ rows before 2.1 / 4.4 / 5.1 merged. All three have since landed (#38, #39, #40).
 
 **What shipped:** `POST /bookings` plus `GET /bookings/reference-data` (`app/bookings/`), and the
 coordinator's form at `/bookings/new` (`frontend/src/bookings/`), reached from a "Request a venue"
-sidebar entry. 64 tests across the four ACs - 21 on the pick-list, 43 on the write - plus four
+sidebar entry. 65 tests across the four ACs - 21 on the pick-list, 44 on the write - plus four
 end-to-end cases for the flow itself.
 
 **The entry point was the last thing to settle.** A coordinator has to reach an approved event

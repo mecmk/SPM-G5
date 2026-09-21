@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   createBookingRequest,
   fetchBookingReferenceData,
@@ -16,6 +16,17 @@ import { formatSchedule } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
 const NO_BOOKABLE_EVENTS = 'No approved events are assigned to you yet.'
+const NO_VENUES = 'No venues are in service, so there is nothing to request yet.'
+
+/**
+ * What was sent, captured at submission rather than looked up afterwards: the confirmation has to
+ * render from this alone, so a name that is no longer in the loaded lists cannot silently hide it.
+ */
+interface SentRequest {
+  booking: Booking
+  venueName: string
+  eventName: string
+}
 
 /**
  * Story 12.1 - the Event Coordinator raises a venue booking request.
@@ -35,7 +46,7 @@ export function BookingRequestFormPage() {
   const [eventId, setEventId] = useState('')
   const [venueId, setVenueId] = useState('')
   const [chosenEvent, setChosenEvent] = useState<EventDetail | null>(null)
-  const [sent, setSent] = useState<Booking | null>(null)
+  const [sent, setSent] = useState<SentRequest | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
@@ -64,32 +75,40 @@ export function BookingRequestFormPage() {
     let cancelled = false
     getEvent(eventId)
       .then((detail) => {
-        if (!cancelled) setChosenEvent(detail)
+        if (cancelled) return
+        setChosenEvent(detail)
+        // Clear a previous failure, or a transient one would sit on the page for good.
+        setLoadError(null)
       })
       .catch((error: unknown) => {
-        if (!cancelled) {
-          setChosenEvent(null)
-          setLoadError(formatApiError(error))
-        }
+        if (!cancelled) setLoadError(formatApiError(error))
       })
     return () => {
       cancelled = true
     }
   }, [eventId])
 
-  function chooseEvent(nextEventId: string) {
-    setEventId(nextEventId)
+  function chooseEvent(change: ChangeEvent<HTMLSelectElement>) {
+    setEventId(change.target.value)
     setChosenEvent(null)
+  }
+
+  function chooseVenue(change: ChangeEvent<HTMLSelectElement>) {
+    setVenueId(change.target.value)
   }
 
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
     const venue = venues.find((candidate) => candidate.id === venueId)
-    if (!venue) return
+    if (!venue || !chosenEvent) return
     setSendError(null)
     setIsSending(true)
     try {
-      setSent(await createBookingRequest({ event_id: eventId, venue_id: venueId }, venue.name))
+      const booking = await createBookingRequest(
+        { event_id: eventId, venue_id: venueId },
+        venue.name,
+      )
+      setSent({ booking, venueName: venue.name, eventName: chosenEvent.name })
     } catch (error: unknown) {
       setSendError(formatApiError(error))
     } finally {
@@ -104,13 +123,13 @@ export function BookingRequestFormPage() {
 
   if (events === null) return <LoadingState label="Loading your approved events…" />
 
-  const sentVenue = venues.find((candidate) => candidate.id === sent?.venue_id)
+  const hasNothingToRequest = events.length === 0 || venues.length === 0
 
   return (
     <div className="stack">
       <PageHeader
         title="Request a venue"
-        subtitle="Ask Venue Staff to hold a venue for one of your approved events."
+        subtitle="One approved event, one venue. Venue Staff decide whether to hold it."
       />
 
       {loadError && (
@@ -119,30 +138,33 @@ export function BookingRequestFormPage() {
         </p>
       )}
 
-      {events.length === 0 ? (
+      {hasNothingToRequest && (
         <EmptyState>
-          {NO_BOOKABLE_EVENTS} A venue can only be requested once an event request has been approved
-          and assigned to you.
+          {events.length === 0
+            ? `${NO_BOOKABLE_EVENTS} A venue can only be requested once an event request has been approved and assigned to you.`
+            : NO_VENUES}
         </EmptyState>
-      ) : sent && sentVenue ? (
+      )}
+
+      {!hasNothingToRequest && sent && (
         <section className="card stack" aria-labelledby="booking-sent-heading">
           <h2 id="booking-sent-heading">Request sent</h2>
           <p>
-            {sentVenue.name} was requested for {chosenEvent?.name ?? 'your event'}. Venue Staff will
-            assess it and you will see their decision here.
+            {sent.venueName} was requested for {sent.eventName}. Venue Staff will assess it and you
+            will see their decision here.
           </p>
           <ul className="check-list">
             <li>
               <span className="grow-text">Status</span>
-              <StatusBadge status={sent.status} />
+              <StatusBadge status={sent.booking.status} />
             </li>
             <li>
               <span className="grow-text">Period held</span>
-              <span>{formatSchedule(sent.held_from, sent.held_until)}</span>
+              <span>{formatSchedule(sent.booking.held_from, sent.booking.held_until)}</span>
             </li>
             <li>
               <span className="grow-text">Expected attendance</span>
-              <span className="mono">{sent.expected_attendance}</span>
+              <span className="mono">{sent.booking.expected_attendance}</span>
             </li>
           </ul>
           <div className="form-actions">
@@ -151,11 +173,13 @@ export function BookingRequestFormPage() {
             </button>
           </div>
         </section>
-      ) : (
+      )}
+
+      {!hasNothingToRequest && !sent && (
         <form className="card stack" onSubmit={handleSubmit}>
           <label>
             Event
-            <select value={eventId} onChange={(e) => chooseEvent(e.target.value)} required>
+            <select value={eventId} onChange={chooseEvent} required>
               <option value="">Choose an approved event</option>
               {events.map((event) => (
                 <option key={event.id} value={event.id}>
@@ -167,7 +191,7 @@ export function BookingRequestFormPage() {
 
           <label>
             Venue
-            <select value={venueId} onChange={(e) => setVenueId(e.target.value)} required>
+            <select value={venueId} onChange={chooseVenue} required>
               <option value="">Choose one venue</option>
               {venues.map((venue) => (
                 <option key={venue.id} value={venue.id}>

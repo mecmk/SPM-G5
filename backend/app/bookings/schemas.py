@@ -21,7 +21,6 @@ class BookableEvent(BaseModel):
 
     id: uuid.UUID
     name: str
-    status: str
     starts_at: datetime
     ends_at: datetime
     expected_attendance: int
