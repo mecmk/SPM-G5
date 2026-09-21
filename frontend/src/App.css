@@ -370,6 +370,10 @@
   margin-bottom: 1.5rem;
 }
 
+.booking-detail-header .cluster {
+  gap: 1rem;
+}
+
 /* ---------- fixed-width filter column + results (story 8.1) ---------- */
 
 .catalogue-layout {

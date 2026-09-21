@@ -105,15 +105,15 @@ export function BookingRequestDetailPage() {
       </Link>
 
       <div className="item-card-header booking-detail-header">
-        <h1>{event.name}</h1>
         <div className="cluster">
+          <h1>{event.name}</h1>
           <StatusBadge status={booking.status} />
-          {booking.status === PENDING_STATUS && (
-            <button type="button" className="brand button-sm" onClick={askToApprove}>
-              Approve
-            </button>
-          )}
         </div>
+        {booking.status === PENDING_STATUS && (
+          <button type="button" className="brand button-sm" onClick={askToApprove}>
+            Approve
+          </button>
+        )}
       </div>
 
       <div className="stack">
