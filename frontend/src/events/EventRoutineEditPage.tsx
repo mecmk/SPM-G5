@@ -128,7 +128,7 @@ export function EventRoutineEditPage() {
 
   if (!isAssignedCoordinator || isTerminal) {
     return (
-      <div className="page">
+      <div className="page page-wide event-routine-edit-page">
         <PageHeader backTo={backTo} backLabel={event.name} title="Edit routine information" />
         <p className="muted">
           {isTerminal
@@ -140,7 +140,7 @@ export function EventRoutineEditPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page page-wide event-routine-edit-page">
       <PageHeader
         backTo={backTo}
         backLabel={event.name}
