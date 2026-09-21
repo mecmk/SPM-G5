@@ -3,6 +3,8 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { BookingRequestDetailPage } from './bookings/BookingRequestDetailPage'
+import { BookingRequestsPage } from './bookings/BookingRequestsPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
@@ -12,6 +14,8 @@ import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
+  BOOKING_REQUEST_PATH,
+  BOOKING_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
   EVENT_EDIT_PATH,
   EVENT_NEW_PATH,
@@ -78,6 +82,12 @@ function App() {
               {/* Story 4.1: the coordinator review queue. */}
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_REVIEW} />}>
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
+              </Route>
+
+              {/* Story 13.1: the venue staff booking requests queue. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_DECIDE} />}>
+                <Route path={BOOKING_REQUESTS_PATH} element={<BookingRequestsPage />} />
+                <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
               </Route>
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (

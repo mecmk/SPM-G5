@@ -1,6 +1,12 @@
 import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
-import { EVENT_NEW_PATH, EVENTS_INBOX_PATH, VENUES_MANAGE_PATH } from '../routes'
+import {
+  BOOKING_REQUESTS_PATH,
+  EVENT_NEW_PATH,
+  EVENTS_INBOX_PATH,
+  VENUE_SCHEDULE_PATH,
+  VENUES_MANAGE_PATH,
+} from '../routes'
 
 /**
  * Story 1.2 AC1/AC2: every section of the app, and the permission a role needs to see it.
@@ -124,12 +130,21 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: true,
       },
       {
-        to: '/bookings',
-        label: 'Bookings & schedule',
-        description: 'Approve or reject venue booking requests.',
+        to: BOOKING_REQUESTS_PATH,
+        label: 'Booking Requests',
+        description: 'Incoming venue booking requests awaiting your review.',
         icon: 'calendar-check',
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
+        isAvailable: true,
+      },
+      {
+        to: VENUE_SCHEDULE_PATH,
+        label: 'Venue Schedule',
+        description: 'View venue availability and confirmed bookings.',
+        icon: 'calendar',
+        permission: PERMISSIONS.BOOKINGS_DECIDE,
+        story: '9.1',
         isAvailable: false,
       },
     ],

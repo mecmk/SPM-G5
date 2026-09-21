@@ -306,6 +306,34 @@
   color: var(--text-muted);
 }
 
+/* ---------- subtle fact blocks (story 13.1) ---------- */
+
+.subtle-block {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fact-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 /* ---------- fixed-width filter column + results (story 8.1) ---------- */
 
 .catalogue-layout {
@@ -1137,6 +1165,10 @@ td.num {
 .small {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+
+.self-start {
+  align-self: flex-start;
 }
 
 .mono {

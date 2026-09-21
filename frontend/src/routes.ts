@@ -25,6 +25,17 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
+// Story 13.1: the venue staff booking requests queue. Venue Staff's own section, structured
+// as separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues
+// (which reuses the existing catalogue/manage routes above rather than a duplicate).
+export const BOOKING_REQUESTS_PATH = '/venue-staff/booking-requests'
+export const BOOKING_REQUEST_PATH = '/venue-staff/booking-requests/:bookingId'
+export const VENUE_SCHEDULE_PATH = '/venue-staff/schedule'
+
+export function bookingRequestPath(bookingId: string): string {
+  return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
+}
+
 // Story 2.1: raising and editing an event request.
 export const EVENT_NEW_PATH = '/events/new'
 export const EVENT_EDIT_PATH = '/events/:eventId/edit'
