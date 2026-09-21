@@ -4,6 +4,7 @@ import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
+import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
@@ -17,6 +18,7 @@ import {
   BOOKING_REQUEST_NEW_PATH,
   EVENT_EDIT_PATH,
   EVENT_NEW_PATH,
+  EVENT_PATH,
   EVENTS_INBOX_PATH,
   HOME_PATH,
   LOGIN_PATH,
@@ -86,6 +88,14 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_REVIEW} />}>
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>
+
+              {/*
+                Story 7.1: full event details. Which event a signed-in user may open is a
+                per-record relationship (own event, or an internal role once submitted), not a
+                single permission, so this sits behind RequireAuth only - the backend enforces
+                AC2 by answering with a "not found" response either way.
+              */}
+              <Route path={EVENT_PATH} element={<EventDetailPage />} />
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (
                 <Route key={item.to} element={<RequirePermission permission={item.permission} />}>
