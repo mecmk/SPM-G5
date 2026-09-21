@@ -31,6 +31,20 @@ test('7.1 AC1: a coordinator opens an event from the review queue and sees its f
   await expect(page.getByText('No accessibility needs recorded.')).toBeVisible()
   await expect(page.getByText('Portable projector')).toBeVisible()
   await expect(page.getByText('Room already has one; spare requested')).toBeVisible()
+  await expect(page.locator('img').first()).toHaveAttribute('src', '/images/events/cat.jpg')
+})
+
+test('7.1: the back link returns to wherever the event was opened from', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/events/inbox')
+
+  await page.getByRole('link', { name: 'Data Literacy Workshop' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Data Literacy Workshop', level: 1 }),
+  ).toBeVisible()
+
+  await page.getByRole('link', { name: '← Events inbox' }).click()
+  await expect(page.getByRole('heading', { name: 'Events inbox', level: 1 })).toBeVisible()
 })
 
 test('7.1 AC1: the organiser who owns the event sees its venue, accessibility and equipment requirements', async ({
@@ -75,6 +89,8 @@ test('7.1 AC1: a draft with no dates, attendance or coordinator shows clear empt
   ).toBeVisible()
   await expect(page.getByText('Not yet scheduled · Organised by Olivia Organiser')).toBeVisible()
   await expect(page.getByText('Not yet assigned')).toBeVisible()
+  // AC1: no recorded image falls back to the placeholder rather than a broken or empty image.
+  await expect(page.locator('img')).toHaveCount(0)
 })
 
 test("7.1 AC2: an organiser cannot open another organiser's event by direct URL", async ({
