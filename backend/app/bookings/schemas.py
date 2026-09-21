@@ -10,6 +10,30 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class BookableEvent(BaseModel):
+    """One choice in the booking form's event pick-list (story 12.1 AC1/AC4).
+
+    Deliberately not the whole event: the form needs to name the event and show the period and
+    attendance that AC2 will copy onto the request. The full record is story 7.1's.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    status: str
+    starts_at: datetime
+    ends_at: datetime
+    expected_attendance: int
+
+
+class BookingReferenceData(BaseModel):
+    """Pick-list values for the booking request form. Venue choices come from ``GET /venues``
+    (story 8.1), so they are not repeated here."""
+
+    events: list[BookableEvent]
+
+
 class BookingRequestIn(BaseModel):
     """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
 

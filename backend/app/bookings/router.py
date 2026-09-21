@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.bookings import service
-from app.bookings.schemas import BookingOut, BookingRequestIn
+from app.bookings.schemas import (
+    BookableEvent,
+    BookingOut,
+    BookingReferenceData,
+    BookingRequestIn,
+)
 from app.db import get_db
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -26,6 +31,18 @@ DbSession = Annotated[Session, Depends(get_db)]
 BOOKING_NOT_FOUND_MESSAGE = "Booking request not found."
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
+
+
+@router.get("/reference-data", response_model=BookingReferenceData)
+def reference_data(
+    db: DbSession, actor: Annotated[CurrentUser, CanRequest]
+) -> BookingReferenceData:
+    """Story 12.1 AC1/AC4: the events this coordinator may raise a booking for. Declared above
+    ``/{booking_id}`` so the literal path is not read as a booking id."""
+    data = service.list_reference_data(db, actor=actor)
+    return BookingReferenceData(
+        events=[BookableEvent.model_validate(event) for event in data["events"]]
+    )
 
 
 @router.post("", response_model=BookingOut, status_code=status.HTTP_201_CREATED)

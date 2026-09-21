@@ -246,6 +246,27 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
 
 
 # --- 12.1: raising a request ----------------------------------------------------------------
+def list_reference_data(db: Session, *, actor: User) -> dict[str, list[Event]]:
+    """AC1 and AC4 as a read: the events ``actor`` may raise a booking for, soonest first.
+
+    The same two rules ``create_booking_request`` enforces, so the form cannot offer a choice
+    the write would refuse. Story 5.3 owns the general "events assigned to me" list; this is
+    narrower on purpose.
+    """
+    return {
+        "events": list(
+            db.scalars(
+                select(Event)
+                .where(
+                    Event.assigned_coordinator_id == actor.id,
+                    Event.status.in_(_BOOKABLE_EVENT_STATUSES),
+                )
+                .order_by(Event.starts_at, Event.id)
+            ).all()
+        )
+    }
+
+
 def _bookable_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """The event a request may be raised for, or the reason it may not be.
 
