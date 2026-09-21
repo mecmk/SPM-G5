@@ -342,6 +342,71 @@
   }
 }
 
+/* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
+
+/*
+ * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
+ * so centring within it needs no sidebar-width math - it just has to stop being flush left.
+ */
+.event-detail-page {
+  margin-inline: auto;
+}
+
+.divider {
+  height: 0;
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--hairline);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.stat .icon {
+  display: block;
+  flex-shrink: 0;
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+}
+
+.stat-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  line-height: 2rem;
+  color: var(--text-h);
+}
+
+.layout-half {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .layout-half {
+    grid-template-columns: 1fr;
+  }
+}
+
 .venue-hero {
   position: relative;
   display: grid;
@@ -372,6 +437,15 @@
   margin-top: 0.25rem;
   font-size: 0.8125rem;
   color: var(--on-brand-panel-muted);
+}
+
+/* Story 7.1: a real photo filling the hero, for pages that have one (venues never do). */
+.venue-hero-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .layout-grid {
@@ -1563,6 +1637,13 @@ td.num {
 .event-card:hover {
   border-color: var(--accent);
   box-shadow: var(--shadow-sm);
+}
+
+/* Story 7.1: an optional link wrapping a card's image + body, laid out as if it were not there. */
+.event-card-link {
+  display: contents;
+  color: inherit;
+  text-decoration: none;
 }
 
 .event-card-image {

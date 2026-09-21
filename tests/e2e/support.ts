@@ -37,3 +37,9 @@ export async function expectSignedIn(page: Page) {
 export function venueRow(page: Page, name: string) {
   return page.getByRole('row', { name: new RegExp(name) })
 }
+
+/** Fixed event IDs from backend/db/seed/020_sample_data.sql (mirrored in backend/tests/support/seed.py::Events). */
+export const EVENTS = {
+  draft: '33333333-0000-0000-0000-000000000001',
+  approved: '33333333-0000-0000-0000-000000000003',
+} as const

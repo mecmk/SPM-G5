@@ -91,6 +91,7 @@ export interface EventDetail {
   name: string
   purpose: string | null
   description: string | null
+  cover_image_url: string | null
   starts_at: string | null
   ends_at: string | null
   expected_attendance: number | null

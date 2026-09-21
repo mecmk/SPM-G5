@@ -316,6 +316,7 @@ class EventDetailOut(BaseModel):
     name: str
     purpose: str | None
     description: str | None
+    cover_image_url: str | None
     starts_at: datetime | None
     ends_at: datetime | None
     expected_attendance: int | None
@@ -348,6 +349,7 @@ class EventDetailOut(BaseModel):
             name=event.name,
             purpose=event.purpose,
             description=event.description,
+            cover_image_url=event.cover_image_url,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             expected_attendance=event.expected_attendance,
