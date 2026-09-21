@@ -81,7 +81,10 @@ export function BookingRequestDetailPage() {
       </div>
 
       <div className="stack">
-        <div className="stat-card-grid">
+        <section className="stat-card-grid" aria-labelledby="booking-summary-heading">
+          <h2 id="booking-summary-heading" className="visually-hidden">
+            Booking summary
+          </h2>
           <div className="stat-card">
             <Icon name="building" size={20} />
             <p className="stat-card-value">{venue.name}</p>
@@ -104,7 +107,7 @@ export function BookingRequestDetailPage() {
             <p className="stat-card-value">{booking.expected_attendance}</p>
             <p className="fact-label">Expected attendance</p>
           </div>
-        </div>
+        </section>
 
         <section className="card stack" aria-labelledby="booking-requirements-heading">
           <h2 id="booking-requirements-heading">Venue requirements</h2>
