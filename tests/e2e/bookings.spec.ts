@@ -15,15 +15,29 @@
  * its own dedicated seeded booking (see backend/db/seed/020_sample_data.sql's note) so
  * approving it cannot affect story 13.1's own assertions in a fullyParallel run.
  */
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
+
+/**
+ * A pending request's card, by the short id shown on it (the seeded row's last 8 hex characters,
+ * uppercased - the `#XXXXXXXX` badge `BookingRequestsPage` renders). Filtering by event name
+ * alone is not safe for these two tests: story 12.1's `booking-requests.spec.ts` can raise its
+ * own live request against this same seeded event while this spec runs in parallel, and that
+ * request carries *the event's own* attendance and layout, not this booking's overridden ones
+ * (60 / Classroom / "Breakout track B." here, vs. the event's 350 / Theatre) - so an event-name
+ * match is not interchangeable the way a plain `.first()` would assume.
+ */
+function pendingCard(page: Page, shortId: string) {
+  return page.getByRole('listitem').filter({ hasText: `#${shortId}` })
+}
 
 test('13.1 AC1/AC2: venue staff see a pending request with its summary', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
   await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
-  const card = page.getByRole('listitem').filter({ hasText: 'Nimbus Developer Conference' })
+  const card = pendingCard(page, '00000002')
+  await expect(card).toContainText('Nimbus Developer Conference')
   await expect(card).toContainText('Seminar Room 2.1')
   await expect(card).toContainText('60')
   await expect(card).toContainText('Breakout track B.')
@@ -35,9 +49,12 @@ test('13.1 AC2: the request detail page shows the event, booking and requirement
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
-  const card = page.getByRole('listitem').filter({ hasText: 'Nimbus Developer Conference' })
+  const card = pendingCard(page, '00000002')
   await card.getByRole('link', { name: 'View details' }).click()
 
+  // The queue card's own event name is also a heading, so wait for the URL - the only
+  // unambiguous sign navigation to the detail page actually finished.
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
   await expect(page.getByRole('heading', { name: 'Nimbus Developer Conference' })).toBeVisible()
   await expect(page.getByText('Omar Organiser')).toBeVisible()
   await expect(page.getByText('Annual customer conference')).toBeVisible()
@@ -54,9 +71,7 @@ test('13.1 AC1: the queue shows requests across different events, venues and dat
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
-  await expect(
-    page.getByRole('listitem').filter({ hasText: 'Nimbus Developer Conference' }),
-  ).toBeVisible()
+  await expect(pendingCard(page, '00000002')).toBeVisible()
   await expect(
     page.getByRole('listitem').filter({ hasText: 'Annual Wellness Summit' }),
   ).toBeVisible()
@@ -102,15 +117,16 @@ test('13.2 AC1: approving from the queue card removes it from the pending list',
   await expect(card).toHaveCount(0)
 })
 
-test('13.2 AC1: approving from the detail page shows the request as approved', async ({
-  page,
-}) => {
+test('13.2 AC1: approving from the detail page shows the request as approved', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
   const card = page.getByRole('listitem').filter({ hasText: 'Investor Demo Day' })
   await card.getByRole('link', { name: 'View details' }).click()
 
+  // The queue card's own event name is also a heading, so wait for the URL - the only
+  // unambiguous sign navigation to the detail page actually finished.
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
   await expect(page.getByRole('heading', { name: 'Investor Demo Day' })).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
 
