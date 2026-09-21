@@ -34,6 +34,7 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/venue-catalogue.spec.ts` | 8.1 browse venues, capacity filter, withdrawn venues excluded |
 | `e2e/venue-detail.spec.ts` | 8.2 venue characteristics, "Not recorded" for unset fields, Venue Staff read access |
 | `e2e/venues.spec.ts` | 8.3 create, edit, delete, search and filter venues; capacity check; notifications |
+| `e2e/venue-calendar.spec.ts` | 9.1 venue availability calendar: bookings and maintenance periods shown as unavailable, month navigation |
 | `e2e/event-request.spec.ts` | 2.1 raise an event request: details, dates (2-year and 14-day limits) and numbers checked live in the browser, what is still needed to submit, equipment availability and the hold made on submit, venue requirements with facility quantities, "No venue requirements" and "No accessibility needs" (vs left empty), equipment, edit/remove, submit from the new page or a draft and read-only, what is missing named, organiser-only |
 | `e2e/review-queue.spec.ts` | 4.1 coordinator review queue: stage tabs (Under Review wired, others placeholders), own vs all requests, ordering, hidden drafts/decided, search, not permitted |
 

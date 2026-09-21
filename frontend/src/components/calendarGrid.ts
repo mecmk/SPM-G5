@@ -2,6 +2,7 @@
  * Pure date-grid math for the Calendar component. No React and no JSX here - Calendar.tsx turns
  * these into cells.
  */
+import { instantToInput } from '../shared/format'
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
@@ -41,4 +42,22 @@ export function isWeekendColumn(columnIndex: number): boolean {
 
 export function formatMonthYear(month: Date): string {
   return month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+}
+
+/** Every Singapore-calendar date (`YYYY-MM-DD`) the half-open window `[startsAt, endsAt)`
+ * touches - reuses the same Singapore-time conversion every other timestamp in the app goes
+ * through (shared/format.ts), rather than a second timezone conversion of its own. */
+export function eachDate(startsAt: string, endsAt: string): string[] {
+  const lastInstant = new Date(new Date(endsAt).getTime() - 1).toISOString()
+  const startDate = instantToInput(startsAt).slice(0, 10)
+  const endDate = instantToInput(lastInstant).slice(0, 10)
+
+  const dates: string[] = []
+  const cursor = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return dates
 }
