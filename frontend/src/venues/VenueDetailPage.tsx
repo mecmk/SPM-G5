@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
@@ -10,6 +10,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH } from '../routes'
 import { inputToInstant } from '../shared/format'
+import { useLoaded } from '../shared/useLoaded'
 
 const CALENDAR_LEGEND: CalendarLegendItem[] = [{ tone: 'danger', label: 'Unavailable' }]
 
@@ -40,25 +41,11 @@ const NOT_RECORDED = 'Not recorded'
  */
 export function VenueDetailPage() {
   const { venueId = '' } = useParams()
-  const [venue, setVenue] = useState<Venue | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const loadVenue = useCallback(() => getVenue(venueId), [venueId])
+  const { data: venue, error } = useLoaded(loadVenue)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [windows, setWindows] = useState<VenueUnavailableWindow[] | null>(null)
   const [calendarError, setCalendarError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getVenue(venueId)
-      .then((data) => {
-        if (!cancelled) setVenue(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [venueId])
 
   useEffect(() => {
     let cancelled = false

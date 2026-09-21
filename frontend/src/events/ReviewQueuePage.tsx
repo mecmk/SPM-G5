@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import { formatApiError } from '../api/client'
+import { useCallback, useMemo, useState } from 'react'
 import { listReviewQueue, type ReviewQueueEntry, type ReviewQueueSort } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { EmptyState } from '../components/EmptyState'
@@ -9,6 +8,7 @@ import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_INBOX_PATH, eventPath } from '../routes'
 import { formatDateTime, formatSchedule } from '../shared/format'
+import { useLoaded } from '../shared/useLoaded'
 
 const BACK_TO_INBOX = { from: EVENTS_INBOX_PATH, fromLabel: 'Events inbox' }
 
@@ -58,29 +58,14 @@ function matchesSearch(entry: ReviewQueueEntry, search: string): boolean {
  */
 export function ReviewQueuePage() {
   const { user } = useAuth()
-  const [entries, setEntries] = useState<ReviewQueueEntry[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [sort, setSort] = useState<ReviewQueueSort>('submitted_at')
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<InboxTab>('review')
 
   const coordinatorId = user?.id ?? null
 
-  useEffect(() => {
-    let cancelled = false
-    listReviewQueue({ sort, coordinatorId })
-      .then((data) => {
-        if (cancelled) return
-        setEntries(data)
-        setError(null)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [sort, coordinatorId])
+  const load = useCallback(() => listReviewQueue({ sort, coordinatorId }), [sort, coordinatorId])
+  const { data: entries, error } = useLoaded(load)
 
   const shownEntries = useMemo(
     () => (entries ?? []).filter((entry) => matchesSearch(entry, search)),

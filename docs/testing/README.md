@@ -44,6 +44,12 @@ its acceptance criteria copied from the backlog; name each test after the behavi
 | `login_as` | Factory: `login_as(Users.COORDINATOR_2)`. |
 | `engine` | Session-scoped engine for catalog inspection. |
 
+**Time stands still inside a test.** PostgreSQL's `now()` is fixed for the whole transaction, so
+every `created_at` / `updated_at` a test creates (and any the `set_updated_at` trigger stamps on an
+update) is the same instant. A test of ordering by time must set the timestamps itself
+(`make_event(db, updated_at=...)`); the trigger only fires on UPDATE, so an explicit value on insert
+is kept. See `tests/events/test_my_event_requests.py`.
+
 Seed rows have fixed IDs; refer to them through `tests/support/seed.py`
 (`Users.COORDINATOR`, `Venues.GRAND_HALL`, `Events.APPROVED`, ...). Need something the seed
 does not have? Use `tests/support/factories.py` (`make_user`, `make_venue`, `venue_payload`).
@@ -87,10 +93,10 @@ tables, and the DB-level guards (double-booking exclusion, mandatory fields once
 
 ## End-to-end tests
 
-`tests/e2e/health.spec.ts` is the current spec; login, role-gated navigation and venue specs are
-being added alongside the pages. Keep e2e specs to the flows a user would actually click through
-(login, role-gated navigation, create/edit a venue); put the detailed rule checks in backend
-tests where they are fast and deterministic.
+One spec per story area lives in `tests/e2e/`, listed in [tests/README.md](../../tests/README.md).
+Keep e2e specs to the flows a user would actually click through (login, role-gated navigation,
+create/edit a venue, open one of my requests); put the detailed rule checks in backend tests where
+they are fast and deterministic.
 
 ### Neither layer touches the development database
 
@@ -98,6 +104,19 @@ tests where they are fast and deterministic.
 | --- | --- | --- | --- |
 | pytest | `connectsphere_test` (`TEST_DATABASE_URL`, default `<dev db>_test`) | Once per session; every test is rolled back | `conftest.py` exits if it would be the dev database |
 | Playwright | `connectsphere_e2e` (`E2E_DATABASE_URL`) | Every `npm run test:e2e`; emptied afterwards | `scripts/e2e.mjs` refuses a name not ending `_e2e`; `tests/global-setup.ts` refuses to run at all without `E2E_ISOLATED_DB=1` |
+
+Which command touches which database:
+
+| Command | Database |
+| --- | --- |
+| `npm run test:backend`, `npm run test:trace` | `connectsphere_test` only |
+| `npm run test:e2e` | `connectsphere_e2e` only |
+| `npm run db:up`, `npm run db:down` | none — starts or stops the PostgreSQL container |
+| `npm run db:status`, `npm run db:docs` | the development database, **read-only**. `db:docs` writes the generated data dictionary and ERD *from that schema*, so it is only as current as your dev database: run `db:reset` first if yours predates a schema change. The feature workflow's last step needs it |
+| `npm run db:ready`, `db:reset`, `db:seed`, or a bare `python -m app.dbtool` | **the development database, and they change it** (`DATABASE_URL`). `reset` drops everything first. `--test` targets the test database instead |
+
+Testing never needs the last row. Do not run it as part of a test workflow, and do not run it on
+someone's behalf without asking.
 
 `npm run test:e2e -- e2e/venues.spec.ts` passes extra arguments to Playwright. Set `E2E_LOG_DIR` to a
 folder to keep each server's output (`backend.log`, `frontend.log`) when a run needs debugging. The runner uses
