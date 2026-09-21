@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { FilterPills } from '../components/FilterPills'
 import { Icon } from '../components/Icon'
 import { useNotifications, type AppNotification } from './notificationContext'
@@ -66,51 +67,53 @@ export function NotificationBell() {
         )}
       </button>
 
-      {isOpen && (
-        <>
-          <div className="notification-backdrop" onClick={closePanel} />
-          <section
-            className="notification-panel"
-            aria-label="Notifications"
-            onKeyDown={handlePanelKeyDown}
-          >
-            <header className="notification-panel-header">
-              <h2 className="notification-panel-title">Notifications</h2>
-              <FilterPills
-                options={[
-                  { key: 'all', label: `All (${notifications.length})` },
-                  { key: 'important', label: `Important (${importantCount})` },
-                ]}
-                value={filter}
-                onChange={setFilter}
-              />
-            </header>
-            {shown.length === 0 ? (
-              <p className="notification-empty">
-                {filter === 'all'
-                  ? 'Nothing yet. Changes you save appear here.'
-                  : 'Nothing important right now.'}
-              </p>
-            ) : (
-              <ul className="notification-list">
-                {shown.map((item) => (
-                  <li key={item.id} className={`notification-item ${toneOf(item)}`}>
-                    <span className="notification-dot" aria-hidden="true" />
-                    <div>
-                      <p className="notification-title">
-                        {item.title}
-                        {!item.isRead && <span className="visually-hidden"> (new)</span>}
-                      </p>
-                      <p className="notification-message">{item.message}</p>
-                      <p className="notification-age">{describeAge(item.createdAt)}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
+      {isOpen &&
+        createPortal(
+          <>
+            <div className="notification-backdrop" onClick={closePanel} />
+            <section
+              className="notification-panel"
+              aria-label="Notifications"
+              onKeyDown={handlePanelKeyDown}
+            >
+              <header className="notification-panel-header">
+                <h2 className="notification-panel-title">Notifications</h2>
+                <FilterPills
+                  options={[
+                    { key: 'all', label: `All (${notifications.length})` },
+                    { key: 'important', label: `Important (${importantCount})` },
+                  ]}
+                  value={filter}
+                  onChange={setFilter}
+                />
+              </header>
+              {shown.length === 0 ? (
+                <p className="notification-empty">
+                  {filter === 'all'
+                    ? 'Nothing yet. Changes you save appear here.'
+                    : 'Nothing important right now.'}
+                </p>
+              ) : (
+                <ul className="notification-list">
+                  {shown.map((item) => (
+                    <li key={item.id} className={`notification-item ${toneOf(item)}`}>
+                      <span className="notification-dot" aria-hidden="true" />
+                      <div>
+                        <p className="notification-title">
+                          {item.title}
+                          {!item.isRead && <span className="visually-hidden"> (new)</span>}
+                        </p>
+                        <p className="notification-message">{item.message}</p>
+                        <p className="notification-age">{describeAge(item.createdAt)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>,
+          document.body,
+        )}
     </div>
   )
 }
