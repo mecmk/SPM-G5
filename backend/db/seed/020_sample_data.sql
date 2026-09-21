@@ -137,7 +137,15 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..07: submitted, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
     ('33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'SUBMITTED',
-     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', 'STANDING', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL)
+     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', 'STANDING', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL),
+    -- 3333..08: approved and assigned to Carl; has a pending venue booking (story 13.1 queue data)
+    ('33333333-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Annual Wellness Summit', 'Company-wide wellness and mental health awareness day', 'Talks, workshops and screening booths for staff wellbeing.', NULL, '2026-12-03 09:00+08', '2026-12-03 17:00+08', 180, 'APPROVED',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+    -- 3333..09: approved and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
+    ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'APPROVED',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -203,7 +211,10 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
--- Venue bookings: one APPROVED (blocks Grand Hall on 25 Nov), one PENDING
+-- Venue bookings: one APPROVED (blocks Grand Hall on 25 Nov), three PENDING across three
+-- different events and dates (story 13.1: the queue needs more than one row that all look
+-- alike). Never Boardroom 3.4 - test_venue_records.py::test_deleting_a_venue_removes_its_characteristics
+-- deletes it on the assumption that it carries no bookings.
 -- ---------------------------------------------------------------------
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at) VALUES
@@ -212,7 +223,13 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
      350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08'),
     ('44444444-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 13:00+08', '2026-11-25 18:00+08', 30, 15,
-     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL)
+     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL),
+    ('44444444-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2026-12-03 09:00+08', '2026-12-03 17:00+08', 45, 45,
+     180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL),
+    ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
+     300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,

@@ -74,8 +74,12 @@ class Events:
     UNDER_REVIEW = _e(5)  # organiser 2, coordinator 1, awaiting decision
     CLARIFICATION_REQUESTED = _e(6)  # organiser 1, coordinator 1, awaiting decision
     SUBMITTED_2 = _e(7)  # organiser 1, coordinator 1, awaiting decision
+    APPROVED_2 = _e(8)  # organiser 1, coordinator 2, pending booking of Exhibition Foyer
+    APPROVED_3 = _e(9)  # organiser 2, coordinator 1, pending booking of Grand Hall
 
 
 class Bookings:
     APPROVED_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000001")
     PENDING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000002")
+    PENDING_EXHIBITION_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000003")
+    PENDING_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000004")
