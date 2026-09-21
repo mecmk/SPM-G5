@@ -564,6 +564,105 @@ label.checkbox input {
   border-bottom: none;
 }
 
+/* story 4.6: the decision card's outcome / decided-by / decided-on / reason pairs */
+.detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.detail-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px dashed var(--hairline);
+}
+
+.detail-list > div:last-child {
+  border-bottom: none;
+}
+
+.detail-list dt {
+  flex: 0 0 8rem;
+  color: var(--text-muted);
+}
+
+.detail-list dd {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* story 4.6: the clarification conversation, styled as a two-party chat thread */
+.clarification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.clarification-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.clarification-row-self {
+  flex-direction: row-reverse;
+}
+
+.clarification-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.clarification-avatar-self {
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.clarification-bubble-self {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.clarification-bubble-text {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
 .grow-text {
   flex: 1;
   min-width: 0;

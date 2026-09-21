@@ -109,6 +109,8 @@ export interface EquipmentLine {
  * Mirrors `EventDetailOut`: everything recorded on a request. `accessibility_none_required` true
  * means the organiser said no needs; false with no needs and no notes means not yet specified
  * (story 2.1 AC5). `venue_none_required` works the same way for venue requirements (AC4).
+ * `decided_by_name`/`decided_at`/`decision_reason` are all `null` until the request has been
+ * decided (story 4.6 AC1).
  */
 export interface EventDetail {
   id: string
@@ -139,6 +141,9 @@ export interface EventDetail {
   accessibility_needs: AccessibilityNeed[]
   accessibility_notes: string | null
   equipment: EquipmentLine[]
+  decided_by_name: string | null
+  decided_at: string | null
+  decision_reason: string | null
   created_at: string
   updated_at: string
 }
@@ -182,6 +187,26 @@ export function fetchEventReferenceData(): Promise<EventReferenceData> {
 /** Story 2.1 AC7/AC8: one request, as its organiser or a reviewing internal role sees it. */
 export function getEvent(eventId: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}`, { errorCodes: EVENT_ERROR_CODES })
+}
+
+/** Mirrors `ClarificationOut.kind`. */
+export type ClarificationKind = 'REQUEST' | 'RESPONSE' | 'NOTE'
+
+/** Mirrors `ClarificationOut`: one entry of the clarification conversation on a request. */
+export interface Clarification {
+  id: string
+  kind: ClarificationKind
+  author_id: string
+  author_name: string
+  message: string
+  created_at: string
+}
+
+/** Story 4.6 AC2: the clarification conversation on a request, oldest first. */
+export function listClarifications(eventId: string): Promise<Clarification[]> {
+  return api<Clarification[]>(`/events/${eventId}/clarifications`, {
+    errorCodes: EVENT_ERROR_CODES,
+  })
 }
 
 /** Story 2.1 AC1-AC6: record a new request. It starts as a draft. */
