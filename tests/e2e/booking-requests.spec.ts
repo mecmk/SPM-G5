@@ -35,11 +35,20 @@ function mainNav(page: Page) {
   return page.getByRole('navigation', { name: 'Main' })
 }
 
-/** Open the request form the way a coordinator does: from the sidebar. */
+/**
+ * Open the request form the way a coordinator does: from the sidebar.
+ *
+ * Waiting for the heading, not just the URL, is what makes the label lookups below safe.
+ * `getByLabel` matches a substring - it has to here, because each `<select>` sits inside its
+ * `<label>`, so the options are part of its accessible name and `exact` would never match - and
+ * the home page renders `<section aria-label="Events">` and `"Venues"` from the same nav list.
+ * Until that page unmounts, `getByLabel('Event')` can resolve to the page being left.
+ */
 async function openRequestForm(page: Page) {
   await page.goto('/')
   await mainNav(page).getByRole('link', { name: 'Request a venue', exact: true }).click()
   await expect(page).toHaveURL(REQUEST_PATH)
+  await expect(page.getByRole('heading', { name: 'Request a venue' })).toBeVisible()
 }
 
 test('12.1 AC1/AC2/AC3: a coordinator raises a venue booking request for their approved event', async ({
