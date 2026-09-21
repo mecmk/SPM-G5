@@ -46,3 +46,10 @@ export const EVENT_EDIT_PATH = '/events/:eventId/edit'
 export function eventEditPath(eventId: string): string {
   return EVENT_EDIT_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
+
+// Story 7.1: the canonical event details page, for every role related to the event.
+export const EVENT_PATH = '/events/:eventId'
+
+export function eventPath(eventId: string): string {
+  return EVENT_PATH.replace(':eventId', encodeURIComponent(eventId))
+}
