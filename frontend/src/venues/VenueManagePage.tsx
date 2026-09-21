@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { formatApiError } from '../api/client'
 import { deleteVenue, listVenues, type VenueSummary } from '../api/venues'
@@ -9,6 +9,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_NEW_PATH, venueEditPath } from '../routes'
+import { useLoaded } from '../shared/useLoaded'
 
 const STATUS_LABELS: Record<VenueSummary['status'], string> = {
   ACTIVE: 'In service',
@@ -31,8 +32,6 @@ function matchesFilters(venue: VenueSummary, search: string, minimumCapacity: st
  * search and the capacity filter: team decision, 17 Sep 2026).
  */
 export function VenueManagePage() {
-  const [venues, setVenues] = useState<VenueSummary[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [isShowingWithdrawn, setIsShowingWithdrawn] = useState(false)
   const [search, setSearch] = useState('')
   const [minimumCapacity, setMinimumCapacity] = useState('')
@@ -40,21 +39,8 @@ export function VenueManagePage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    listVenues(isShowingWithdrawn)
-      .then((data) => {
-        if (cancelled) return
-        setVenues(data)
-        setError(null)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isShowingWithdrawn])
+  const load = useCallback(() => listVenues(isShowingWithdrawn), [isShowingWithdrawn])
+  const { data: venues, error, setData: setVenues } = useLoaded(load)
 
   const shownVenues = useMemo(
     () => (venues ?? []).filter((venue) => matchesFilters(venue, search, minimumCapacity)),

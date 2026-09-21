@@ -1,5 +1,6 @@
-"""HTTP endpoints for story 2.1 (event requests), story 4.1 (coordinator review queue),
-stories 4.4/4.5 (approve / reject an event request), and story 7.2 (routine information edits).
+"""HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
+(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), and story 7.2
+(routine information edits).
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from app.events.schemas import (
     EventRejection,
     EventRoutineUpdate,
     EventUpdate,
+    MyEventEntry,
+    MyEventList,
     ReviewQueueEntry,
     ReviewQueueSort,
 )
@@ -32,6 +35,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 CanReview = Depends(require_permission(Permission.EVENTS_REVIEW))
 CanCreate = Depends(require_permission(Permission.EVENTS_CREATE))
 CanEditRoutine = Depends(require_permission(Permission.EVENTS_EDIT_ROUTINE))
+CanReadOwn = Depends(require_permission(Permission.EVENTS_READ_OWN))
 CanRead = Depends(require_any_permission(Permission.EVENTS_READ_OWN, Permission.EVENTS_READ_ALL))
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -50,6 +54,25 @@ def list_review_queue(
 
 
 # The fixed paths above and below stay ahead of "/{event_id}" so they are not read as an id.
+@router.get("/mine", response_model=MyEventList)
+def list_my_events(
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanReadOwn],
+    limit: Annotated[
+        int, Query(ge=1, le=service.MY_EVENTS_MAX_LIMIT)
+    ] = service.MY_EVENTS_MAX_LIMIT,
+    offset: Annotated[int, Query(ge=0, le=service.MY_EVENTS_MAX_OFFSET)] = 0,
+) -> MyEventList:
+    """Story 2.6 AC1-AC6: the signed-in organiser's own requests, newest activity first. AC9: a
+    page of them and the total. AC7: events:read_own only - other roles get 403 from the
+    dependency (1.2 AC4). Nothing here names another organiser, so nobody else's can be asked
+    for (AC3)."""
+    listing = service.list_my_events(db, organiser=actor, limit=limit, offset=offset)
+    return MyEventList(
+        items=[MyEventEntry.from_event(e) for e in listing.events], total=listing.total
+    )
+
+
 @router.get("/reference-data", response_model=EventReferenceData, dependencies=[CanCreate])
 def list_reference_data(db: DbSession) -> EventReferenceData:
     """Story 2.1 AC4-AC6: the pick-lists for the request form."""

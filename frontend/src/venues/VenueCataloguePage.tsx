@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { formatApiError } from '../api/client'
 import { listVenues, type VenueSummary } from '../api/venues'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { venuePath } from '../routes'
+import { useLoaded } from '../shared/useLoaded'
 
 function numberOrNull(value: string): number | null {
   const parsed = Number(value)
@@ -19,6 +19,10 @@ function matchesCapacity(venue: VenueSummary, minCapacity: string, maxCapacity: 
   return (min === null || venue.capacity >= min) && (max === null || venue.capacity <= max)
 }
 
+function loadVenuesInService() {
+  return listVenues(false)
+}
+
 /**
  * Story 8.1: an Event Coordinator browses venues in service. AC1 name/location/capacity, AC2 a
  * link to the full record, AC3 withdrawn venues excluded. The capacity range filter (team
@@ -26,24 +30,9 @@ function matchesCapacity(venue: VenueSummary, minCapacity: string, maxCapacity: 
  * 8.3's Venue Staff list filters by capacity.
  */
 export function VenueCataloguePage() {
-  const [venues, setVenues] = useState<VenueSummary[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { data: venues, error } = useLoaded(loadVenuesInService)
   const [minCapacity, setMinCapacity] = useState('')
   const [maxCapacity, setMaxCapacity] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-    listVenues(false)
-      .then((data) => {
-        if (!cancelled) setVenues(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const shownVenues = useMemo(
     () => (venues ?? []).filter((venue) => matchesCapacity(venue, minCapacity, maxCapacity)),

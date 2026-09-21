@@ -41,6 +41,30 @@ export type EventStatus =
   | 'CANCELLED'
   | 'REJECTED'
 
+/** Mirrors `MyEventEntry`: one row of the organiser's own list. A draft may have no dates. */
+export interface MyEventEntry {
+  id: string
+  name: string
+  starts_at: string | null
+  ends_at: string | null
+  status: EventStatus
+  cover_image_url: string | null
+}
+
+/** Mirrors `MyEventList`: one page of the organiser's requests, and how many they own in all. */
+export interface MyEventList {
+  items: MyEventEntry[]
+  total: number
+}
+
+/**
+ * Story 2.6 AC1-AC6, AC9: the signed-in organiser's own requests, most recently updated first,
+ * from the `offset`th on. The page size is the backend's, so a page is as many as it sends.
+ */
+export function listMyEvents(offset: number): Promise<MyEventList> {
+  return api<MyEventList>(`/events/mine?offset=${offset}`)
+}
+
 /** Mirrors `ReferenceItemOut`: one option of a pick-list on the request form. */
 export interface EventReferenceItem {
   code: string

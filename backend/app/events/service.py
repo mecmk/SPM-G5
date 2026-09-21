@@ -1,5 +1,6 @@
-"""Business logic for event requests (story 2.1), event review (story 4.1), the
-approve/reject decision (stories 4.4, 4.5), and routine information edits (story 7.2).
+"""Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and routine
+information edits (story 7.2).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -10,11 +11,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
@@ -90,6 +92,11 @@ _ROUTINE_FIELDS = (
 
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
+
+# Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
+# call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
+MY_EVENTS_MAX_LIMIT = 100
+MY_EVENTS_MAX_OFFSET = 2_147_483_647
 
 # Columns copied straight from a request body onto the event (the lists are handled apart).
 _DETAIL_FIELDS = (
@@ -218,6 +225,40 @@ def list_review_queue(
     if coordinator_id is not None:
         query = query.where(Event.assigned_coordinator_id == coordinator_id)
     return list(db.scalars(query).all())
+
+
+@dataclass(frozen=True)
+class MyEventsListing:
+    """One page of an organiser's requests, and how many they own in all."""
+
+    events: list[Event]
+    total: int
+
+
+def list_my_events(
+    db: Session,
+    *,
+    organiser: User,
+    limit: int = MY_EVENTS_MAX_LIMIT,
+    offset: int = 0,
+) -> MyEventsListing:
+    """AC1/AC3: every request ``organiser`` owns, in any status, and nobody else's - owned by the
+    organiser, not by their organisation. AC4: drafts included. AC6: most recently updated first,
+    ties broken by id so the order is stable, and so are the pages cut from it (AC9).
+    ``organiser`` and ``assigned_coordinator`` are joined eagerly on ``Event`` for the review
+    queue, which shows their names; this list shows neither, so they are left unloaded rather than
+    joining ``users`` twice for every row."""
+    is_owned = Event.organiser_id == organiser.id
+    page = (
+        select(Event)
+        .options(lazyload(Event.organiser), lazyload(Event.assigned_coordinator))
+        .where(is_owned)
+        .order_by(Event.updated_at.desc(), Event.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    total = db.scalar(select(func.count()).select_from(Event).where(is_owned))
+    return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
 
 
 def list_reference_data(db: Session) -> EventReferenceData:

@@ -1,5 +1,6 @@
-"""Request and response shapes for event requests (story 2.1), the review queue (story 4.1),
-and the approve/reject decision (stories 4.4, 4.5)."""
+"""Request and response shapes for event requests (story 2.1), the organiser's own list of
+them (story 2.6), the review queue (story 4.1), and the approve/reject decision (stories 4.4,
+4.5)."""
 
 from __future__ import annotations
 
@@ -77,6 +78,38 @@ class ReviewQueueEntry(BaseModel):
             status=event.status,
             cover_image_url=event.cover_image_url,
         )
+
+
+# --- my event requests (story 2.6) ---------------------------------------------------------
+class MyEventEntry(BaseModel):
+    """AC1: name, proposed date and current status, plus the optional picture. AC4: a draft can
+    be saved with only a name, so the dates may be null. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime | None
+    ends_at: datetime | None
+    status: str
+    cover_image_url: str | None
+
+    @classmethod
+    def from_event(cls, event: Event) -> MyEventEntry:
+        return cls(
+            id=event.id,
+            name=event.name,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            status=event.status,
+            cover_image_url=event.cover_image_url,
+        )
+
+
+class MyEventList(BaseModel):
+    """AC9: one page of the list, and how many requests the organiser owns in all, so a page can
+    say how many more there are. No defaults (response schema)."""
+
+    items: list[MyEventEntry]
+    total: int
 
 
 # --- reference data (story 2.1) ------------------------------------------------------------

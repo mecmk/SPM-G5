@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { Calendar, type CalendarEntry, type CalendarLegendItem } from '../components/Calendar'
 import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
+import { EventCard, EventCardGrid } from '../components/EventCard'
 import { FilterPills } from '../components/FilterPills'
 import { PageHeader } from '../components/PageHeader'
 import { Sidebar, type SidebarNavItem } from '../components/Sidebar'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
-import { COMPONENT_GALLERY_PATH } from '../routes'
+import { COMPONENT_GALLERY_PATH, EVENTS_MINE_PATH, HOME_PATH } from '../routes'
 
 const SAMPLE_NAV_ITEMS: SidebarNavItem[] = [
   { label: 'Components', to: COMPONENT_GALLERY_PATH },
-  { label: 'My Events', to: '/events/mine', group: 'Events' },
+  { label: 'My Events', to: EVENTS_MINE_PATH, group: 'Events' },
   { label: 'Venue Catalogue', to: '/venues', group: 'Venues' },
   { label: 'Manage Venues', to: '/venues/manage', group: 'Venues' },
 ]
@@ -59,9 +60,14 @@ export function ComponentGalleryPage() {
   const [activeTab, setActiveTab] = useState<GalleryTab>('buttons')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all')
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [isMarkedSeen, setIsMarkedSeen] = useState(false)
 
   // No-op: this page is a static demo, not a signed-in shell.
   function handleSignOut() {}
+
+  function markSeen() {
+    setIsMarkedSeen(true)
+  }
 
   return (
     <div className="app-shell">
@@ -158,6 +164,38 @@ export function ComponentGalleryPage() {
                   <Chip label="Limited" tone="warning" />
                   <Chip label="Unavailable" tone="danger" />
                 </div>
+              </section>
+
+              <section className="card stack">
+                <p className="eyebrow">Event cards</p>
+                <EventCardGrid>
+                  <EventCard
+                    title="Card without a link"
+                    imageUrl={null}
+                    details={['Nothing opens when this is clicked.']}
+                  />
+                  <EventCard
+                    title="Linked card with an action"
+                    imageUrl={null}
+                    to={HOME_PATH}
+                    details={[
+                      'Click anywhere on the card to open it. Its text can still be selected.',
+                      <button
+                        key="action"
+                        type="button"
+                        className="secondary button-sm"
+                        onClick={markSeen}
+                      >
+                        Mark as seen
+                      </button>,
+                      isMarkedSeen && (
+                        <span key="seen" className="success">
+                          Marked as seen
+                        </span>
+                      ),
+                    ]}
+                  />
+                </EventCardGrid>
               </section>
 
               <section className="card stack">
