@@ -89,3 +89,7 @@ class Bookings:
     # reference these from any other test; approving them would make them unusable there.
     PENDING_APPROVE_E2E_CARD = uuid.UUID("44444444-0000-0000-0000-000000000005")
     PENDING_APPROVE_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000006")
+
+
+class Unavailability:
+    MAINTENANCE_SEMINAR_ROOM = uuid.UUID("88888888-0000-0000-0000-000000000001")

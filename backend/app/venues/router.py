@@ -1,7 +1,8 @@
-"""HTTP endpoints for the venue catalogue.
+"""HTTP endpoints for the venue catalogue and its availability calendar.
 
-Story 8.3 (create / update, Venue Staff only) plus the read endpoints stories 8.1 / 8.2 need.
-Delete was added for Venue Staff by the team decision of 17 Sep 2026 (full CRUD on venues).
+Story 8.3 (create / update, Venue Staff only) plus the read endpoints stories 8.1 / 8.2 need,
+and the calendar endpoint story 9.1 needs. Delete was added for Venue Staff by the team decision
+of 17 Sep 2026 (full CRUD on venues).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
@@ -22,12 +24,14 @@ from app.venues.schemas import (
     VenueOut,
     VenueReferenceData,
     VenueSummary,
+    VenueUnavailableWindowOut,
     VenueUpdate,
 )
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
 CanRead = Depends(require_permission(Permission.VENUES_READ))
+CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
 CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -64,6 +68,26 @@ def get_venue(venue_id: uuid.UUID, db: DbSession) -> VenueOut:
         return VenueOut.from_venue(service.get_venue(db, venue_id))
     except service.VenueNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+
+
+@router.get(
+    "/{venue_id}/calendar",
+    response_model=list[VenueUnavailableWindowOut],
+    dependencies=[CanReadCalendar],
+)
+def get_venue_calendar(
+    venue_id: uuid.UUID,
+    db: DbSession,
+    starts_at: Annotated[AwareDatetime, Query()],
+    ends_at: Annotated[AwareDatetime, Query()],
+) -> list[VenueUnavailableWindowOut]:
+    """Story 9.1 AC1/AC2: approved bookings and unavailability periods overlapping the range."""
+    try:
+        return service.get_venue_calendar(db, venue_id, starts_at=starts_at, ends_at=ends_at)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.InvalidDateRange as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
 @router.post("", response_model=VenueOut, status_code=status.HTTP_201_CREATED)

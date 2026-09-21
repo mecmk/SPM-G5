@@ -25,6 +25,9 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
+// Story 12.1: raise a venue booking request.
+export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'
+
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section, structured
 // as separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues
 // (which reuses the existing catalogue/manage routes above rather than a duplicate).

@@ -1,4 +1,21 @@
-"""Conflict-detection logic for venue bookings (story 14.2).
+"""Venue booking rules: raising a request (story 12.1) and conflict detection (story 14.2).
+
+Story 12.1 - "As an Event Coordinator I want to request a venue booking for an event so
+that Venue Staff can assess and confirm it":
+
+* AC1 ``create_booking_request`` refuses an event that is not APPROVED or later, and takes
+  exactly one ``venue_id``, so one request is one venue;
+* AC2 the schedule, attendance, layout and required facilities are copied from the event
+  row rather than taken from the request body - see ``_requirement_notes``;
+* AC3 the row is written PENDING with no decision, which is what story 13.1's queue and
+  story 13.2's ``approve_booking`` below both read;
+* AC4 refused unless the actor is the event's ``assigned_coordinator_id``.
+
+Setup and teardown minutes are left at the column default of 0, so the held period equals
+the event period: recording them is story 12.2. Nothing here checks the requested period
+against existing bookings either - warning the coordinator at submission time is story
+14.1, and an overlapping PENDING row is harmless because the exclusion constraint and
+``approve_booking`` below only treat APPROVED rows as occupying the venue.
 
 Story 14.2 - "As a Venue Staff member, I want the system to block approval of a conflicting
 request so that a venue cannot be double-booked":
@@ -39,7 +56,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
 from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
+from app.events.models import Event, EventRequiredFacility, EventStatus
+from app.venues.models import Facility, Venue, VenueStatus
 
 _CONFLICT_CONSTRAINT = "ex_venue_bookings_no_double_booking"
 
@@ -50,13 +70,74 @@ BOOKING_CONFLICT_MESSAGE = (
 
 BOOKING_NOT_PENDING_MESSAGE = "This request is already {status}, so it cannot be approved."
 
+EVENT_NOT_BOOKABLE_MESSAGE = (
+    "A venue booking can only be requested for an approved event. This event is {status}."
+)
+
+VENUE_NOT_BOOKABLE_MESSAGE = (
+    "This venue has been withdrawn from the catalogue and can no longer be booked."
+)
+
+NOT_ASSIGNED_COORDINATOR_MESSAGE = (
+    "Only the coordinator assigned to this event can request a venue booking for it."
+)
+
+REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
+# A facility may be needed in a quantity, with a note of its own ("3 breakout rooms, HDMI
+# input needed"). Venue Staff read all of it as one sentence, so each is appended to the name.
+FACILITY_QUANTITY_SUFFIX = " ×{quantity}"
+FACILITY_NOTES_SUFFIX = " ({notes})"
+
+# AC1 is worded "an approved event"; the schema's rule is APPROVED *or later* (see the
+# venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
+# planning or confirmed may still need a further venue booked.
+_BOOKABLE_EVENT_STATUSES = frozenset(
+    {EventStatus.APPROVED, EventStatus.PLANNING, EventStatus.CONFIRMED}
+)
+
 
 class BookingNotFound(LookupError):
     pass
 
 
+class EventNotFound(LookupError):
+    """12.1 AC1: the request names an event that does not exist."""
+
+
+class VenueNotFound(LookupError):
+    """12.1 AC1: the request names a venue that does not exist."""
+
+
+class EventNotBookable(ValueError):
+    """12.1 AC1: a booking may only be raised from an approved (or later) event."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(EVENT_NOT_BOOKABLE_MESSAGE.format(status=event.status))
+        self.event = event
+
+
+class VenueNotBookable(ValueError):
+    """12.1 AC1: a withdrawn venue is no longer offered for booking (story 8.4)."""
+
+    def __init__(self, venue: Venue) -> None:
+        super().__init__(VENUE_NOT_BOOKABLE_MESSAGE)
+        self.venue = venue
+
+
+class NotAssignedCoordinator(PermissionError):
+    """12.1 AC4: only the event's assigned coordinator may raise its booking request.
+
+    A relationship rule, not a role rule - every coordinator holds ``bookings:request``, so
+    this needs the event row in hand and belongs here rather than in ``permissions.py``.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
+
+
 class BookingConflict(ValueError):
-    """AC1/AC2: the requested period overlaps an existing APPROVED booking for the venue."""
+    """14.2 AC1/AC2: the requested period overlaps an existing APPROVED booking for the
+    venue."""
 
     def __init__(self, conflicting_booking: VenueBooking) -> None:
         super().__init__(
@@ -185,3 +266,137 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
     )
     db.commit()
     db.refresh(booking)
+
+
+# --- 12.1: raising a request ----------------------------------------------------------------
+def list_reference_data(db: Session, *, actor: User) -> dict[str, list[Event]]:
+    """AC1 and AC4 as a read: the events ``actor`` may raise a booking for, soonest first.
+
+    The same two rules ``create_booking_request`` enforces, so the form cannot offer a choice
+    the write would refuse. Story 5.3 owns the general "events assigned to me" list; this is
+    narrower on purpose.
+    """
+    return {
+        "events": list(
+            db.scalars(
+                select(Event)
+                .where(
+                    Event.assigned_coordinator_id == actor.id,
+                    Event.status.in_(_BOOKABLE_EVENT_STATUSES),
+                )
+                .order_by(Event.starts_at, Event.id)
+            ).all()
+        )
+    }
+
+
+def _bookable_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """The event a request may be raised for, or the reason it may not be.
+
+    AC1 is checked before AC4 on purpose: an event nobody can book is refused on its status
+    whether or not the asker happens to be its coordinator.
+
+    A bookable event always has its period and attendance recorded, so AC2 can copy them
+    unconditionally: ``ck_events_submitted_fields_complete`` only lets a DRAFT row leave
+    ``purpose`` / ``starts_at`` / ``ends_at`` / ``expected_attendance`` null, and DRAFT is
+    not a bookable status.
+    """
+    event = db.get(Event, event_id)
+    if event is None:
+        raise EventNotFound(event_id)
+    if event.status not in _BOOKABLE_EVENT_STATUSES:
+        raise EventNotBookable(event)
+    if event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator()
+    return event
+
+
+def _bookable_venue(db: Session, venue_id: uuid.UUID) -> Venue:
+    venue = db.get(Venue, venue_id)
+    if venue is None:
+        raise VenueNotFound(venue_id)
+    if venue.status != VenueStatus.ACTIVE:
+        raise VenueNotBookable(venue)
+    return venue
+
+
+def _describe_facility(required: EventRequiredFacility) -> str:
+    """One facility as Venue Staff should read it: name, how many, and its own note.
+
+    The quantity and note are the difference between "Breakout rooms" and "Breakout rooms ×3
+    (HDMI input needed)" - without them the request understates what the venue has to provide.
+    """
+    described = required.facility.name
+    if required.quantity is not None:
+        described += FACILITY_QUANTITY_SUFFIX.format(quantity=required.quantity)
+    notes = (required.notes or "").strip()
+    if notes:
+        described += FACILITY_NOTES_SUFFIX.format(notes=notes)
+    return described
+
+
+def _requirement_notes(db: Session, event: Event) -> str | None:
+    """12.1 AC2: the event's required facilities, stated to Venue Staff by name rather than
+    by code and with the quantity and note recorded against each, followed by whatever the event
+    recorded as its own venue requirements.
+
+    ``venue_bookings.requirement_notes`` is the field Venue Staff read ("required facilities and
+    other requirements, as stated to Venue Staff"), and story 13.1 AC2 shows it on the queue.
+    """
+    required_facilities = db.scalars(
+        select(EventRequiredFacility)
+        .join(Facility, Facility.code == EventRequiredFacility.facility_code)
+        .where(EventRequiredFacility.event_id == event.id)
+        .order_by(Facility.sort_order, Facility.name)
+    ).all()
+    sentences = []
+    if required_facilities:
+        sentences.append(
+            REQUIRED_FACILITIES_SENTENCE.format(
+                facilities=", ".join(_describe_facility(each) for each in required_facilities)
+            )
+        )
+    event_notes = (event.venue_requirement_notes or "").strip()
+    if event_notes:
+        sentences.append(event_notes)
+    if not sentences:
+        return None
+    return "\n".join(sentences)
+
+
+def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) -> VenueBooking:
+    """12.1 AC1: raises one request, for one venue, from an approved event. AC2: the period,
+    attendance, layout and required facilities are copied from the event. AC3: the row is
+    PENDING and undecided, ready for Venue Staff. AC4: refused unless ``actor`` is the event's
+    assigned coordinator.
+    """
+    event = _bookable_event(db, data.event_id, actor=actor)
+    venue = _bookable_venue(db, data.venue_id)
+
+    booking = VenueBooking(
+        event_id=event.id,
+        venue_id=venue.id,
+        requested_by_id=actor.id,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        expected_attendance=event.expected_attendance,
+        required_layout_code=event.required_layout_code,
+        requirement_notes=_requirement_notes(db, event),
+        status=BookingStatus.PENDING,
+    )
+    db.add(booking)
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action="BOOKING_REQUESTED",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={"event_id": str(event.id), "venue_id": str(venue.id)},
+        commit=False,
+    )
+    db.commit()
+    # held_from / held_until are set by a database trigger, so they are only on the object
+    # after a reload - same reason tests/support/factories.py::make_booking refreshes.
+    db.refresh(booking)
+    return booking

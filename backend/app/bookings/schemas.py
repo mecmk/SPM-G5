@@ -1,5 +1,5 @@
-"""Response shapes for venue bookings: the single-booking read/approve shape (story 13.2) and
-the venue staff queue (story 13.1).
+"""Request / response shapes for venue bookings: raising a request (story 12.1), the venue
+staff queue (story 13.1), and approval / read (story 13.2).
 """
 
 from __future__ import annotations
@@ -10,6 +10,41 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.bookings.models import VenueBooking
+
+
+class BookableEvent(BaseModel):
+    """One choice in the booking form's event pick-list (story 12.1 AC1/AC4).
+
+    Deliberately not the whole event: the form needs to name the event and show the period and
+    attendance that AC2 will copy onto the request. The full record is story 7.1's.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+    expected_attendance: int
+
+
+class BookingReferenceData(BaseModel):
+    """Pick-list values for the booking request form. Venue choices come from ``GET /venues``
+    (story 8.1), so they are not repeated here."""
+
+    events: list[BookableEvent]
+
+
+class BookingRequestIn(BaseModel):
+    """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
+
+    There is deliberately nothing else to send. AC2 requires the request to carry *the event's*
+    schedule, attendance, layout and required facilities, so the service copies those from the
+    event row; a client cannot book a period or an attendance the event was not approved for.
+    """
+
+    event_id: uuid.UUID
+    venue_id: uuid.UUID
 
 
 class BookingOut(BaseModel):

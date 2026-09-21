@@ -1,6 +1,7 @@
 import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
 import {
+  BOOKING_REQUEST_NEW_PATH,
   BOOKING_REQUESTS_PATH,
   EVENT_NEW_PATH,
   EVENTS_INBOX_PATH,
@@ -127,6 +128,15 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'building',
         permission: PERMISSIONS.VENUES_MANAGE,
         story: '8.3',
+        isAvailable: true,
+      },
+      {
+        to: BOOKING_REQUEST_NEW_PATH,
+        label: 'Request a venue',
+        description: 'Ask Venue Staff to hold a venue for one of your approved events.',
+        icon: 'calendar-check',
+        permission: PERMISSIONS.BOOKINGS_REQUEST,
+        story: '12.1',
         isAvailable: true,
       },
       {
