@@ -145,7 +145,19 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..09: approved and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'APPROVED',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..10: approved and assigned to Chloe; pending venue booking dedicated to the story
+    -- 13.2 approve e2e test (queue card) - no other test/assertion reads this row, since the
+    -- e2e run's fullyParallel database is shared and approving it would break story 13.1's
+    -- queue assertions if it were one of their rows.
+    ('33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Founders Day Fireside Chat', 'A conversation with the founders', 'Casual fireside chat and Q&A for all staff.', NULL, '2027-06-01 15:00+08', '2027-06-01 17:00+08', 200, 'APPROVED',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..11: approved and assigned to Carl; pending venue booking dedicated to the story
+    -- 13.2 approve e2e test (detail page) - see 3333..10's note.
+    ('33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Investor Demo Day', 'Quarterly investor product demo', 'Live product walkthrough for the board and investors.', NULL, '2027-07-01 09:00+08', '2027-07-01 12:00+08', 100, 'APPROVED',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -213,7 +225,8 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- Venue bookings: one APPROVED (blocks Grand Hall on 25 Nov), three PENDING across three
 -- different events and dates (story 13.1: the queue needs more than one row that all look
--- alike). Never Boardroom 3.4 - test_venue_records.py::test_deleting_a_venue_removes_its_characteristics
+-- alike), plus two more PENDING rows dedicated to the story 13.2 approve e2e test (see their
+-- own notes below). Never Boardroom 3.4 - test_venue_records.py::test_deleting_a_venue_removes_its_characteristics
 -- deletes it on the assumption that it carries no bookings.
 -- ---------------------------------------------------------------------
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
@@ -229,7 +242,16 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
      180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL),
     ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
-     300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL)
+     300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL),
+    -- Dedicated to the story 13.2 approve e2e test - see 3333..10/11's note above. Distinct
+    -- venues, dates and events from every other booking, so approving them cannot conflict
+    -- with anything and cannot affect any other test's assertions.
+    ('44444444-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000010', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000003', '2027-06-01 15:00+08', '2027-06-01 17:00+08', 30, 30,
+     200, 'THEATRE', 'Stage mics and a roaming mic for Q&A.', 'PENDING', NULL, NULL),
+    ('44444444-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000011', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-07-01 09:00+08', '2027-07-01 12:00+08', 45, 30,
+     100, 'EXHIBITION', 'Demo booths and a screen for the product walkthrough.', 'PENDING', NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,

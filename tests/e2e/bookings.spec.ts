@@ -6,6 +6,14 @@
  * AC3 decided requests do not appear in the pending queue.
  * Entry shape across several rows, malformed input and 401/403 refusals are backend cases:
  * backend/tests/bookings/test_list_bookings.py.
+ *
+ * Story 13.2 - fe: an Approve action on the queue card and the detail page.
+ * AC1 approving sets the request to Approved and it stops appearing as pending.
+ * The approve/conflict rules themselves (already-decided, double-booking) are backend cases,
+ * proven end to end in backend/tests/bookings/test_approve_booking.py; these two tests only
+ * prove the button correctly drives that endpoint and the page reflects the result. Each uses
+ * its own dedicated seeded booking (see backend/db/seed/020_sample_data.sql's note) so
+ * approving it cannot affect story 13.1's own assertions in a fullyParallel run.
  */
 import { expect, test } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
@@ -76,4 +84,40 @@ test('13.1: a coordinator cannot open the booking requests queue', async ({ page
   await page.goto('/venue-staff/booking-requests')
 
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
+})
+
+test('13.2 AC1: approving from the queue card removes it from the pending list', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Founders Day Fireside Chat' })
+  await card.getByRole('button', { name: 'Approve' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await dialog.getByRole('button', { name: 'Approve' }).click()
+
+  await expect(dialog).not.toBeVisible()
+  await expect(card).toHaveCount(0)
+})
+
+test('13.2 AC1: approving from the detail page shows the request as approved', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Investor Demo Day' })
+  await card.getByRole('link', { name: 'View details' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Investor Demo Day' })).toBeVisible()
+  await page.getByRole('button', { name: 'Approve' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await dialog.getByRole('button', { name: 'Approve' }).click()
+
+  await expect(dialog).not.toBeVisible()
+  await expect(page.getByText('Approved', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
 })
