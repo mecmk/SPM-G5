@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { getBooking, type Booking } from '../api/bookings'
+import { approveBooking, getBooking, type Booking } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail } from '../api/events'
 import { getVenue, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
@@ -12,6 +13,7 @@ import { BOOKING_REQUESTS_PATH } from '../routes'
 import { formatDate, formatTime } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
+const PENDING_STATUS = 'PENDING'
 
 function layoutName(venue: Venue, layoutCode: string | null): string {
   if (layoutCode === null) return 'Any'
@@ -27,8 +29,8 @@ function layoutName(venue: Venue, layoutCode: string | null): string {
  * a dedicated endpoint: Venue Staff already holds BOOKINGS_READ, VENUES_READ and
  * EVENTS_READ_ALL, so nothing new is needed on the backend for this view.
  *
- * Approve/reject (stories 13.2/13.3) are this page's next addition - this page deliberately
- * renders no action for them yet.
+ * Story 13.2 AC1: an Approve action next to the status badge, shown only while the request is
+ * still PENDING. Reject (story 13.3) is a teammate's story and is not built here.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -36,6 +38,9 @@ export function BookingRequestDetailPage() {
   const [venue, setVenue] = useState<Venue | null>(null)
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
+  const [isApproving, setIsApproving] = useState(false)
+  const [approveError, setApproveError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +63,30 @@ export function BookingRequestDetailPage() {
     }
   }, [bookingId])
 
+  function askToApprove() {
+    setApproveError(null)
+    setIsConfirmingApprove(true)
+  }
+
+  function cancelApprove() {
+    setIsConfirmingApprove(false)
+  }
+
+  async function confirmApprove() {
+    if (!booking || !event) return
+    setIsApproving(true)
+    setApproveError(null)
+    try {
+      const updated = await approveBooking(booking.id, event.name)
+      setBooking(updated)
+      setIsConfirmingApprove(false)
+    } catch (err) {
+      setApproveError(formatApiError(err))
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="page">
@@ -77,7 +106,14 @@ export function BookingRequestDetailPage() {
 
       <div className="item-card-header booking-detail-header">
         <h1>{event.name}</h1>
-        <StatusBadge status={booking.status} />
+        <div className="cluster">
+          <StatusBadge status={booking.status} />
+          {booking.status === PENDING_STATUS && (
+            <button type="button" className="brand button-sm" onClick={askToApprove}>
+              Approve
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="stack">
@@ -167,6 +203,23 @@ export function BookingRequestDetailPage() {
           </div>
         </section>
       </div>
+
+      {isConfirmingApprove && (
+        <ConfirmDialog
+          title="Approve this booking?"
+          confirmLabel="Approve"
+          tone="primary"
+          isBusy={isApproving}
+          error={approveError}
+          onConfirm={confirmApprove}
+          onCancel={cancelApprove}
+        >
+          <p>
+            {venue.name} will be booked for {event.name} from {formatDate(booking.starts_at)},{' '}
+            {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}.
+          </p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

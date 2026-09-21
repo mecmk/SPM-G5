@@ -44,3 +44,16 @@ export interface Booking {
 export function getBooking(bookingId: string): Promise<Booking> {
   return api<Booking>(`/bookings/${bookingId}`)
 }
+
+/** Story 13.2 AC1: approve a pending booking request. AC4: refused (409) on a venue conflict. */
+export function approveBooking(bookingId: string, eventName: string): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/approve`, {
+    method: 'POST',
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_CONFLICT' },
+    notify: {
+      title: 'Booking approved',
+      message: `${eventName}'s venue booking was approved.`,
+      importance: 'important',
+    },
+  })
+}

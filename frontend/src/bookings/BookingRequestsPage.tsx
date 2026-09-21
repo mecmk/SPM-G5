@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { listBookingRequests, type BookingQueueEntry } from '../api/bookings'
+import { approveBooking, listBookingRequests, type BookingQueueEntry } from '../api/bookings'
 import { formatApiError } from '../api/client'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
@@ -22,12 +23,16 @@ function requirementsText(notes: string | null): string {
  * stated requirements.
  * AC3: decided requests never appear - the backend query excludes them.
  *
- * Approve/reject (stories 13.2/13.3) act on the request's own detail page, not this list, so
- * that page's actions can be added there without reshaping this queue.
+ * Story 13.2 AC1: an Approve action on each card, so a request that needs no closer look can be
+ * decided without opening its detail page. Reject (story 13.3) is a teammate's story and is not
+ * built here.
  */
 export function BookingRequestsPage() {
   const [entries, setEntries] = useState<BookingQueueEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
+  const [isApproving, setIsApproving] = useState(false)
+  const [approveError, setApproveError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +47,31 @@ export function BookingRequestsPage() {
       cancelled = true
     }
   }, [])
+
+  function askToApprove(entry: BookingQueueEntry) {
+    setApproveError(null)
+    setPendingApprove(entry)
+  }
+
+  function cancelApprove() {
+    setPendingApprove(null)
+  }
+
+  async function confirmApprove() {
+    if (!pendingApprove) return
+    const { id, event_name: eventName } = pendingApprove
+    setIsApproving(true)
+    setApproveError(null)
+    try {
+      await approveBooking(id, eventName)
+      setEntries((current) => current && current.filter((entry) => entry.id !== id))
+      setPendingApprove(null)
+    } catch (err) {
+      setApproveError(formatApiError(err))
+    } finally {
+      setIsApproving(false)
+    }
+  }
 
   return (
     <div className="page page-wide">
@@ -111,17 +141,41 @@ export function BookingRequestsPage() {
                     <p>{requirementsText(entry.requirement_notes)}</p>
                   </div>
 
-                  <Link
-                    to={bookingRequestPath(entry.id)}
-                    className="button secondary button-sm self-start"
-                  >
-                    View details
-                  </Link>
+                  <div className="item-card-footer">
+                    <button
+                      type="button"
+                      className="brand button-sm"
+                      onClick={() => askToApprove(entry)}
+                    >
+                      Approve
+                    </button>
+                    <Link to={bookingRequestPath(entry.id)} className="button secondary button-sm">
+                      View details
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
+      )}
+
+      {pendingApprove && (
+        <ConfirmDialog
+          title="Approve this booking?"
+          confirmLabel="Approve"
+          tone="primary"
+          isBusy={isApproving}
+          error={approveError}
+          onConfirm={confirmApprove}
+          onCancel={cancelApprove}
+        >
+          <p>
+            {pendingApprove.venue_name} will be booked for {pendingApprove.event_name} from{' '}
+            {formatDate(pendingApprove.starts_at)}, {formatTime(pendingApprove.starts_at)}–
+            {formatTime(pendingApprove.ends_at)}.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   )
