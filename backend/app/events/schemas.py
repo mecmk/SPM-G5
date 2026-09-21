@@ -1,6 +1,7 @@
 """Request and response shapes for event requests (story 2.1), the organiser's own list of
-them (story 2.6), the review queue (story 4.1), and the approve/reject decision (stories 4.4,
-4.5)."""
+them (story 2.6), the review queue (story 4.1), the approve/reject decision (stories 4.4,
+4.5), and the decision / clarification history an
+organiser sees (story 4.6)."""
 
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from pydantic import (
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
-from app.events.models import Event, EventEquipmentRequest
+from app.events.models import Event, EventClarification, EventEquipmentRequest
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
 # rejects 0 and below; the ceiling is the largest value the INTEGER columns can hold.
@@ -346,6 +347,9 @@ class EventDetailOut(BaseModel):
     needs and no notes means it has not been specified (AC5). ``venue_none_required`` works the
     same way for the venue requirements (AC4).
 
+    4.6 AC1: ``decided_by_name``/``decided_at``/``decision_reason`` are all ``None`` until the
+    request has been decided.
+
     ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
     without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
     receives it.
@@ -472,3 +476,27 @@ class EventRejection(BaseModel):
     @classmethod
     def _strip_reason(cls, value):
         return _strip(value)
+
+
+# --- clarification history (story 4.6) ------------------------------------------------------
+class ClarificationOut(BaseModel):
+    """AC2: one entry of the clarification conversation, in the order it was written. No
+    defaults (response schema)."""
+
+    id: uuid.UUID
+    kind: str
+    author_id: uuid.UUID
+    author_name: str
+    message: str
+    created_at: datetime
+
+    @classmethod
+    def from_clarification(cls, row: EventClarification) -> ClarificationOut:
+        return cls(
+            id=row.id,
+            kind=row.kind,
+            author_id=row.author_id,
+            author_name=row.author.full_name,
+            message=row.message,
+            created_at=row.created_at,
+        )

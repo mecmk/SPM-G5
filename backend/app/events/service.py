@@ -1,6 +1,6 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and routine
-information edits (story 7.2).
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and the decision / clarification history an
+organiser sees (story 4.6), and routine information edits (story 7.2)..
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -28,6 +28,7 @@ from app.events.models import (
     EquipmentUnavailabilityPeriod,
     Event,
     EventAccessibilityNeed,
+    EventClarification,
     EventEquipmentRequest,
     EventRequiredFacility,
     EventStatus,
@@ -298,6 +299,44 @@ def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
     if event is None or not _can_view(viewer, event):
         raise EventNotFound(event_id)
     return event
+
+
+NOT_RELATED_PARTY_MESSAGE = (
+    "Only the organiser and the coordinator assigned to this request may view its clarifications."
+)
+
+
+class NotRelatedParty(PermissionError):
+    """Only the organiser and the event's assigned coordinator may read the clarification
+    conversation - narrower than ``get_event``'s visibility, which any internal role with
+    ``events:read_all`` satisfies."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_RELATED_PARTY_MESSAGE)
+
+
+def _can_view_clarifications(viewer: User, event: Event) -> bool:
+    return event.organiser_id == viewer.id or event.assigned_coordinator_id == viewer.id
+
+
+def list_clarifications(
+    db: Session, event_id: uuid.UUID, *, viewer: User
+) -> list[EventClarification]:
+    """4.6 AC2: the clarification conversation on a request, oldest first - visible only to the
+    organiser and to the coordinator assigned to this event, not to internal roles generally,
+    even though they can read the event record itself via ``get_event``. A viewer who cannot see
+    the event at all gets ``EventNotFound``, same as ``get_event``; one who can see the event but
+    is not organiser or assigned coordinator gets ``NotRelatedParty`` instead."""
+    event = get_event(db, event_id, viewer=viewer)
+    if not _can_view_clarifications(viewer, event):
+        raise NotRelatedParty()
+    return list(
+        db.scalars(
+            select(EventClarification)
+            .where(EventClarification.event_id == event_id)
+            .order_by(EventClarification.created_at, EventClarification.id)
+        ).all()
+    )
 
 
 def _get_own_event(db: Session, event_id: uuid.UUID, actor: User) -> Event:
