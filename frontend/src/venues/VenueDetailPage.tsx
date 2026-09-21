@@ -1,12 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
-import { getVenue, type Venue } from '../api/venues'
+import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
+import { Calendar, type CalendarEntry, type CalendarLegendItem } from '../components/Calendar'
+import { eachDate, isoDate } from '../components/calendarGrid'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH } from '../routes'
+import { inputToInstant } from '../shared/format'
+
+const CALENDAR_LEGEND: CalendarLegendItem[] = [{ tone: 'danger', label: 'Unavailable' }]
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+/** Singapore-midnight instant for the first day of `month` (see shared/format.ts). */
+function monthBoundary(month: Date): string {
+  return inputToInstant(`${isoDate(month.getFullYear(), month.getMonth(), 1)}T00:00`)
+}
 
 const STATUS_LABELS: Record<Venue['status'], string> = {
   ACTIVE: 'In service',
@@ -28,6 +42,9 @@ export function VenueDetailPage() {
   const { venueId = '' } = useParams()
   const [venue, setVenue] = useState<Venue | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [month, setMonth] = useState(() => startOfMonth(new Date()))
+  const [windows, setWindows] = useState<VenueUnavailableWindow[] | null>(null)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +59,39 @@ export function VenueDetailPage() {
       cancelled = true
     }
   }, [venueId])
+
+  useEffect(() => {
+    let cancelled = false
+    setWindows(null)
+    const rangeStart = monthBoundary(month)
+    const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
+    getVenueCalendar(venueId, rangeStart, rangeEnd)
+      .then((data) => {
+        if (!cancelled) {
+          setWindows(data)
+          setCalendarError(null)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setCalendarError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [venueId, month])
+
+  const calendarEntries: CalendarEntry[] = useMemo(
+    () =>
+      (windows ?? []).flatMap((window) =>
+        eachDate(window.starts_at, window.ends_at).map((date) => ({
+          id: `${window.starts_at}-${date}`,
+          date,
+          label: window.label,
+          tone: 'danger' as const,
+        })),
+      ),
+    [windows],
+  )
 
   if (error) {
     return (
@@ -156,6 +206,26 @@ export function VenueDetailPage() {
                 <span>{venue.operating_notes || NOT_RECORDED}</span>
               </li>
             </ul>
+          </section>
+
+          <section className="card stack" aria-labelledby="venue-availability-heading">
+            <p className="eyebrow" id="venue-availability-heading">
+              Availability
+            </p>
+            {calendarError && (
+              <p role="alert" className="error">
+                {calendarError}
+              </p>
+            )}
+            {windows === null && !calendarError && <LoadingState label="Loading availability…" />}
+            {windows !== null && (
+              <Calendar
+                month={month}
+                onMonthChange={setMonth}
+                entries={calendarEntries}
+                legend={CALENDAR_LEGEND}
+              />
+            )}
           </section>
         </div>
 
