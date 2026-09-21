@@ -1,4 +1,6 @@
-"""HTTP endpoints for story 2.1 (event requests) and story 4.1 (coordinator review queue)."""
+"""HTTP endpoints for story 2.1 (event requests), story 4.1 (coordinator review queue), and
+stories 4.4/4.5 (approve / reject an event request).
+"""
 
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from app.events.schemas import (
     EventCreate,
     EventDetailOut,
     EventReferenceData,
+    EventRejection,
     EventUpdate,
     ReviewQueueEntry,
     ReviewQueueSort,
@@ -125,6 +128,52 @@ def submit_event(
         event = service.submit_event(db, event_id, actor=actor)
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EventDetailOut.from_event(event)
+
+
+@router.post("/{event_id}/approve", response_model=EventDetailOut)
+def approve_event(
+    event_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanReview],
+) -> EventDetailOut:
+    """4.4 AC1-AC3: approves the request, recording the deciding coordinator and time."""
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.approve_event(db, event, actor=actor)
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EventDetailOut.from_event(event)
+
+
+@router.post("/{event_id}/reject", response_model=EventDetailOut)
+def reject_event(
+    event_id: uuid.UUID,
+    payload: EventRejection,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanReview],
+) -> EventDetailOut:
+    """4.5 AC1-AC3: rejects the request with a reason, recording the deciding coordinator and
+    time. AC1 (reason mandatory) is enforced by ``EventRejection`` - a blank body is a 422
+    before this function runs.
+    """
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.reject_event(db, event, actor=actor, reason=payload.reason)
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.InvalidEventRequest as exc:
