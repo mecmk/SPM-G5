@@ -25,6 +25,9 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
+// Story 12.1: raise a venue booking request.
+export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'
+
 // Story 2.1: raising and editing an event request.
 export const EVENT_NEW_PATH = '/events/new'
 export const EVENT_EDIT_PATH = '/events/:eventId/edit'

@@ -49,6 +49,7 @@ export type ErrorCode =
   | 'EVENT_EQUIPMENT_DUPLICATE'
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
   | 'EVENT_QUANTITY_INVALID'
+  | 'BOOKING_NOT_ALLOWED'
 
 export interface ErrorEntry {
   title: string
@@ -220,6 +221,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'Equipment quantity must be a positive whole number.',
+  },
+
+  /**
+   * Story 12.1 AC1: the event is not approved, or the venue has been withdrawn. The backend
+   * names which in its own sentence, so this is only the fallback and the notification title.
+   */
+  BOOKING_NOT_ALLOWED: {
+    title: 'Venue cannot be requested',
+    message: 'A venue booking can only be requested for an approved event.',
   },
 }
 
