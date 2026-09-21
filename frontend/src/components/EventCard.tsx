@@ -1,10 +1,13 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { Icon } from './Icon'
 
 export interface EventCardProps {
   title: string
   imageUrl: string | null
   details: ReactNode[]
+  /** Story 7.1: when given, the whole card links to the event's details page. */
+  to?: string
 }
 
 /**
@@ -12,15 +15,15 @@ export interface EventCardProps {
  * square picture on the left. Story 4.1 is the first user in the real frontend: the square shows
  * `imageUrl` when the event has one and it loads, and a placeholder icon otherwise.
  */
-export function EventCard({ title, imageUrl, details }: EventCardProps) {
+export function EventCard({ title, imageUrl, details, to }: EventCardProps) {
   const [hasImageFailed, setHasImageFailed] = useState(false)
 
   function markImageFailed() {
     setHasImageFailed(true)
   }
 
-  return (
-    <li className="event-card">
+  const body = (
+    <>
       <span className="event-card-image" aria-hidden="true">
         {imageUrl !== null && !hasImageFailed ? (
           <img className="event-card-picture" src={imageUrl} alt="" onError={markImageFailed} />
@@ -36,6 +39,18 @@ export function EventCard({ title, imageUrl, details }: EventCardProps) {
           ))}
         </ul>
       </div>
+    </>
+  )
+
+  return (
+    <li className="event-card">
+      {to ? (
+        <Link to={to} className="event-card-link">
+          {body}
+        </Link>
+      ) : (
+        body
+      )}
     </li>
   )
 }

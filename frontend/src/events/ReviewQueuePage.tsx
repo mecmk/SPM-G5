@@ -7,6 +7,7 @@ import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
+import { eventPath } from '../routes'
 import { formatDateTime, formatSchedule } from '../shared/format'
 
 const SORT_OPTIONS: { key: ReviewQueueSort; label: string }[] = [
@@ -167,6 +168,7 @@ export function ReviewQueuePage() {
                     key={entry.id}
                     title={entry.name}
                     imageUrl={entry.cover_image_url}
+                    to={eventPath(entry.id)}
                     details={[
                       formatSchedule(entry.starts_at, entry.ends_at),
                       `Requested by ${entry.organiser_name}`,
