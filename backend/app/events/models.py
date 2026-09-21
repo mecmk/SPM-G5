@@ -165,7 +165,10 @@ class EquipmentUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
-    """Append-only log of every status transition (stories 6.1, 6.4)."""
+    """Append-only log of every event status transition (stories 4.6, 6.1, 6.4). Written by
+    story 4.4/4.5's approve/reject and, later, 6.1/6.4's other transitions - never updated or
+    deleted. No ``created_at``/``updated_at``: ``changed_at`` is the only timestamp.
+    """
 
     __tablename__ = "event_status_history"
 
@@ -257,3 +260,6 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by=(EventEquipmentRequest.created_at, EventEquipmentRequest.id),
     )
+    # Default lazy="select": only EventDetailOut's single-row read needs the decider, unlike
+    # organiser/assigned_coordinator above, which every review-queue row also needs joined.
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id])

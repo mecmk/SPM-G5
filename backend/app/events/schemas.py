@@ -1,4 +1,5 @@
-"""Request and response shapes for event requests (story 2.1) and the review queue (story 4.1)."""
+"""Request and response shapes for event requests (story 2.1), the review queue (story 4.1),
+and the approve/reject decision (stories 4.4, 4.5)."""
 
 from __future__ import annotations
 
@@ -332,6 +333,9 @@ class EventDetailOut(BaseModel):
     accessibility_needs: list[AccessibilityNeedOut]
     accessibility_notes: str | None
     equipment: list[EquipmentLineOut]
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_reason: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -369,6 +373,23 @@ class EventDetailOut(BaseModel):
             ],
             accessibility_notes=event.accessibility_notes,
             equipment=[EquipmentLineOut.from_line(line) for line in event.equipment_requests],
+            decided_by_name=event.decided_by.full_name if event.decided_by else None,
+            decided_at=event.decided_at,
+            decision_reason=event.decision_reason,
             created_at=event.created_at,
             updated_at=event.updated_at,
         )
+
+
+# --- decision (4.4 approve, 4.5 reject) ---------------------------------------------------
+class EventRejection(BaseModel):
+    """4.5 AC1: a reason is mandatory - blank or whitespace-only does not count."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
