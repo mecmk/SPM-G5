@@ -94,6 +94,30 @@ test('12.1 AC1: the form offers only events that may raise a booking', async ({ 
   await expect(picker).not.toContainText('Diversity & Inclusion Forum')
 })
 
+test('12.1 AC2: the request cannot be sent before the event details arrive', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestForm(page)
+
+  // Hold the event lookup in flight so the state before it answers can be asserted at all - the
+  // same trick auth.spec.ts uses for b1.1.1. Review of PR #42: the button used to be clickable
+  // here, and clicking it did nothing, because the request is built from these details.
+  await page.route('**/events/*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
+
+  await page.getByLabel('Event').selectOption({ label: APPROVED_EVENT })
+  await page.getByLabel('Venue').selectOption({ label: VENUE })
+
+  const send = page.getByRole('button', { name: 'Send request' })
+  await expect(page.getByText("Loading the event's requirements")).toBeVisible()
+  await expect(send).toBeDisabled()
+
+  // Once they arrive, the summary replaces the message and the request can be sent.
+  await expect(page.getByRole('region', { name: 'What this request will carry' })).toBeVisible()
+  await expect(send).toBeEnabled()
+})
+
 test('12.1 AC4: a coordinator with no approved events has nothing to request for', async ({
   page,
 }) => {

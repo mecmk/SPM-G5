@@ -83,6 +83,10 @@ NOT_ASSIGNED_COORDINATOR_MESSAGE = (
 )
 
 REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
+# A facility may be needed in a quantity, with a note of its own ("3 breakout rooms, HDMI
+# input needed"). Venue Staff read all of it as one sentence, so each is appended to the name.
+FACILITY_QUANTITY_SUFFIX = " ×{quantity}"
+FACILITY_NOTES_SUFFIX = " ({notes})"
 
 # AC1 is worded "an approved event"; the schema's rule is APPROVED *or later* (see the
 # venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
@@ -297,22 +301,42 @@ def _bookable_venue(db: Session, venue_id: uuid.UUID) -> Venue:
     return venue
 
 
+def _describe_facility(required: EventRequiredFacility) -> str:
+    """One facility as Venue Staff should read it: name, how many, and its own note.
+
+    The quantity and note are the difference between "Breakout rooms" and "Breakout rooms ×3
+    (HDMI input needed)" - without them the request understates what the venue has to provide.
+    """
+    described = required.facility.name
+    if required.quantity is not None:
+        described += FACILITY_QUANTITY_SUFFIX.format(quantity=required.quantity)
+    notes = (required.notes or "").strip()
+    if notes:
+        described += FACILITY_NOTES_SUFFIX.format(notes=notes)
+    return described
+
+
 def _requirement_notes(db: Session, event: Event) -> str | None:
     """12.1 AC2: the event's required facilities, stated to Venue Staff by name rather than
-    by code, followed by whatever the event recorded as its own venue requirements.
+    by code and with the quantity and note recorded against each, followed by whatever the event
+    recorded as its own venue requirements.
 
     ``venue_bookings.requirement_notes`` is the field Venue Staff read ("required facilities and
     other requirements, as stated to Venue Staff"), and story 13.1 AC2 shows it on the queue.
     """
-    facility_names = db.scalars(
-        select(Facility.name)
-        .join(EventRequiredFacility, EventRequiredFacility.facility_code == Facility.code)
+    required_facilities = db.scalars(
+        select(EventRequiredFacility)
+        .join(Facility, Facility.code == EventRequiredFacility.facility_code)
         .where(EventRequiredFacility.event_id == event.id)
         .order_by(Facility.sort_order, Facility.name)
     ).all()
     sentences = []
-    if facility_names:
-        sentences.append(REQUIRED_FACILITIES_SENTENCE.format(facilities=", ".join(facility_names)))
+    if required_facilities:
+        sentences.append(
+            REQUIRED_FACILITIES_SENTENCE.format(
+                facilities=", ".join(_describe_facility(each) for each in required_facilities)
+            )
+        )
     event_notes = (event.venue_requirement_notes or "").strip()
     if event_notes:
         sentences.append(event_notes)

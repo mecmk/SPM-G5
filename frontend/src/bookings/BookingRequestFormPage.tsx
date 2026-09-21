@@ -6,7 +6,7 @@ import {
   type Booking,
 } from '../api/bookings'
 import { formatApiError } from '../api/client'
-import { getEvent, type EventDetail } from '../api/events'
+import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
 import { listVenues, type VenueSummary } from '../api/venues'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
@@ -17,6 +17,18 @@ import { formatSchedule } from '../shared/format'
 const NOT_RECORDED = 'Not recorded'
 const NO_BOOKABLE_EVENTS = 'No approved events are assigned to you yet.'
 const NO_VENUES = 'No venues are in service, so there is nothing to request yet.'
+const LOADING_REQUIREMENTS = "Loading the event's requirements…"
+
+/**
+ * One required facility as the request will state it - the same shape
+ * `_describe_facility` writes into `requirement_notes` backend-side, so the preview and what
+ * Venue Staff end up reading do not drift.
+ */
+function describeFacility(facility: RequiredFacility): string {
+  const quantity = facility.quantity === null ? '' : ` ×${facility.quantity}`
+  const notes = facility.notes === null ? '' : ` (${facility.notes})`
+  return `${facility.name}${quantity}${notes}`
+}
 
 /**
  * What was sent, captured at submission rather than looked up afterwards: the confirmation has to
@@ -50,6 +62,7 @@ export function BookingRequestFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [isLoadingEvent, setIsLoadingEvent] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -77,11 +90,14 @@ export function BookingRequestFormPage() {
       .then((detail) => {
         if (cancelled) return
         setChosenEvent(detail)
+        setIsLoadingEvent(false)
         // Clear a previous failure, or a transient one would sit on the page for good.
         setLoadError(null)
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoadError(formatApiError(error))
+        if (cancelled) return
+        setIsLoadingEvent(false)
+        setLoadError(formatApiError(error))
       })
     return () => {
       cancelled = true
@@ -91,6 +107,7 @@ export function BookingRequestFormPage() {
   function chooseEvent(change: ChangeEvent<HTMLSelectElement>) {
     setEventId(change.target.value)
     setChosenEvent(null)
+    setIsLoadingEvent(change.target.value !== '')
   }
 
   function chooseVenue(change: ChangeEvent<HTMLSelectElement>) {
@@ -150,8 +167,8 @@ export function BookingRequestFormPage() {
         <section className="card stack" aria-labelledby="booking-sent-heading">
           <h2 id="booking-sent-heading">Request sent</h2>
           <p>
-            {sent.venueName} was requested for {sent.eventName}. Venue Staff will assess it and you
-            will see their decision here.
+            {sent.venueName} was requested for {sent.eventName}. The request is with Venue Staff for
+            review.
           </p>
           <ul className="check-list">
             <li>
@@ -159,7 +176,7 @@ export function BookingRequestFormPage() {
               <StatusBadge status={sent.booking.status} />
             </li>
             <li>
-              <span className="grow-text">Period held</span>
+              <span className="grow-text">Requested period</span>
               <span>{formatSchedule(sent.booking.held_from, sent.booking.held_until)}</span>
             </li>
             <li>
@@ -201,6 +218,8 @@ export function BookingRequestFormPage() {
             </select>
           </label>
 
+          {isLoadingEvent && <p className="muted">{LOADING_REQUIREMENTS}</p>}
+
           {chosenEvent && (
             <section aria-labelledby="booking-carries-heading" className="stack">
               <h2 id="booking-carries-heading">What this request will carry</h2>
@@ -230,7 +249,7 @@ export function BookingRequestFormPage() {
                   <span>
                     {chosenEvent.required_facilities.length === 0
                       ? NOT_RECORDED
-                      : chosenEvent.required_facilities.map((facility) => facility.name).join(', ')}
+                      : chosenEvent.required_facilities.map(describeFacility).join(', ')}
                   </span>
                 </li>
               </ul>
@@ -243,7 +262,12 @@ export function BookingRequestFormPage() {
                 {sendError}
               </p>
             )}
-            <button type="submit" disabled={isSending || eventId === '' || venueId === ''}>
+            {/* Disabled until the event's details are in hand: the request is built from them,
+                so a click before then could not send anything. */}
+            <button
+              type="submit"
+              disabled={isSending || isLoadingEvent || chosenEvent === null || venueId === ''}
+            >
               {isSending ? 'Sending…' : 'Send request'}
             </button>
           </div>

@@ -63,7 +63,7 @@ export function createBookingRequest(
     errorCodes: { 409: 'BOOKING_NOT_ALLOWED' },
     notify: {
       title: 'Venue requested',
-      message: `${venueName} was requested; Venue Staff will assess it.`,
+      message: `${venueName} was requested; it is with Venue Staff for review.`,
     },
   })
 }

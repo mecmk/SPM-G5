@@ -49,7 +49,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
-from app.events.models import EventStatus
+from app.events.models import EventRequiredFacility, EventStatus
 from tests.support.factories import make_event, make_venue
 from tests.support.seed import Events, Users, Venues
 
@@ -66,6 +66,22 @@ def request_body(**overrides) -> dict:
     body = {"event_id": str(Events.APPROVED), "venue_id": str(Venues.GRAND_HALL)}
     body.update(overrides)
     return body
+
+
+def _require_facility(
+    db: Session,
+    event_id: uuid.UUID,
+    code: str,
+    *,
+    quantity: int | None = None,
+    notes: str | None = None,
+) -> None:
+    """Record a facility an event requires. The seed rows carry neither a quantity nor a note, so
+    a test that is about those has to add its own."""
+    db.add(
+        EventRequiredFacility(event_id=event_id, facility_code=code, quantity=quantity, notes=notes)
+    )
+    db.flush()
 
 
 def _booking_count(db: Session, event_id: uuid.UUID) -> int:
@@ -242,6 +258,28 @@ def test_the_request_states_the_events_required_facilities_to_venue_staff(coordi
     assert "Projector & screen" in notes
     assert "Sound system" in notes
     assert "Stage" in notes
+
+
+@pytest.mark.story("12.1", ac=2)
+def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
+    coordinator_client, db: Session
+):
+    """Review of PR #42: "3 breakout rooms with HDMI" has to reach Venue Staff as such. The name
+    alone understates what the venue must provide, and both columns already exist on
+    ``event_required_facilities``.
+    """
+    event = make_event(
+        db, status=EventStatus.APPROVED, assigned_coordinator_id=Users.COORDINATOR.id
+    )
+    _require_facility(db, event.id, "BREAKOUT_ROOMS", quantity=3, notes="HDMI input needed")
+    _require_facility(db, event.id, "PROJECTOR")
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    notes = response.json()["requirement_notes"]
+    assert "Breakout rooms ×3 (HDMI input needed)" in notes
+    # A facility with neither recorded still reads as just its name.
+    assert "Projector & screen," in notes or notes.endswith("Projector & screen.")
 
 
 @pytest.mark.story("12.1", ac=2)
