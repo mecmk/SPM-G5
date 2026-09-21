@@ -19,7 +19,7 @@ import app.events.models  # noqa: F401
 import app.venues.models  # noqa: F401
 from app.db import Base
 from app.dbtool import migrate
-from tests.support.seed import Events, Users, Venues
+from tests.support.seed import Clarifications, Events, Users, Venues
 
 CORE_TABLES = {
     "users": "users",
@@ -138,6 +138,10 @@ def test_seed_constants_match_database(db: Session):
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
             == status
         )
+    for clarification_id in (Clarifications.REQUEST, Clarifications.RESPONSE):
+        assert db.execute(
+            text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}
+        ).scalar()
 
 
 @pytest.mark.story("1")
