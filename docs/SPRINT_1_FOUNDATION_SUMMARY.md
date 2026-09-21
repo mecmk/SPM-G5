@@ -13,7 +13,7 @@ frontend commits because the story branches were stacked.
 | 1.1 | fe/be: implement user login and logout | Done | `backend/app/auth/`, `frontend/src/auth/`, `frontend/src/api/` |
 | 1.2 | fe/be: enforce role-based access control | Done | `backend/app/auth/permissions.py`, `deps.py`, `frontend/src/auth/permissions.ts`, `frontend/src/layout/navigation.ts` |
 | 8.3 | fe/be: create and update venue records | Done | `backend/app/venues/`, `frontend/src/venues/` |
-| 12.1 | fe/be: raise venue booking request | **Skipped - blocked** | see "Story 12.1" below |
+| 12.1 | fe/be: raise venue booking request | **Backend done, UI blocked** | `backend/app/bookings/` (`POST /bookings`); see "Story 12.1" below |
 
 ### Acceptance criteria evidence
 
@@ -22,7 +22,7 @@ tagged with the story and AC it proves. Current state:
 
 | Suite | Result |
 | --- | --- |
-| Backend (pytest, real PostgreSQL) | 159 passed |
+| Backend (pytest, real PostgreSQL) | 222 passed |
 | End-to-end (Playwright) | 28 passed (9 sign-in, 10 role-based access, 8 venue management, 1 health) |
 | Backend lint/format (ruff), frontend lint/format/build (oxlint, prettier, tsc), markdownlint | clean |
 
@@ -84,7 +84,7 @@ Keep state by default, reset on demand:
 - **Docker Postgres on host port 5433**: a locally installed PostgreSQL was silently answering
   on 5432 on Joshua's machine and would do the same on any teammate's laptop that has one.
 
-## Story 12.1 - why it was skipped, and the corrected dependencies
+## Story 12.1 - what shipped, and the corrected dependencies
 
 The backlog lists 12.1 as depending on 4.4, 5.1 and 8.2. Verified against the ACs:
 
@@ -95,11 +95,22 @@ The backlog lists 12.1 as depending on 4.4, 5.1 and 8.2. Verified against the AC
 | 8.2 display venue characteristics | Warren | **No** | 12.1's backend needs venue *records* (8.3, done), not the display page |
 | 2.1 capture event details (not listed) | Matthew | **Yes** | there must be an event to book for; the request copies its date/time/attendance |
 
-So 12.1 genuinely waits on 2.1, 4.4 and 5.1. What is already in place for it: the
-`venue_bookings` table (with `PENDING` status, requester, held period, layout/requirement
-fields), the `bookings:request` permission granted to coordinators, and seed data containing an
-approved event with an assigned coordinator and one pending booking. Once 2.1/4.4/5.1 land,
-12.1 is a router + service + form on top of that.
+Those three dependencies are on *data states*, though, not on code: AC1 and AC4 are checks
+12.1 performs itself against `events.status` and `events.assigned_coordinator_id`, and 4.4 / 5.1
+are what set those columns in production. Both columns, and a seeded approved event with an
+assigned coordinator, have existed since story 1. So the **backend shipped ahead of them**:
+`POST /bookings` (`app/bookings/`), tested against the seed rows, 43 tests covering all four ACs.
+
+What still waits on 4.1 or 7.1 is the **form**: a coordinator has no way to reach an approved
+event assigned to them until one of those screens exists, so nothing in a running app can raise
+a request by clicking today - only the API and its tests exercise it.
+
+Two deliberate omissions inside the backend, each belonging to a later story rather than this
+one: setup/teardown minutes stay at 0 (story 12.2), and there is no conflict warning at
+submission time (story 14.1) - an overlapping `PENDING` row is accepted and refused later at
+approval by 13.2 / 14.2. One earlier worry turned out not to exist: an approved event cannot be
+missing its date or attendance, because `ck_events_submitted_fields_complete` only lets a
+`DRAFT` row leave those null.
 
 ## Decisions the team should confirm (made unilaterally to keep moving)
 
@@ -121,7 +132,9 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 1. Done: 1, 1.1, 1.2 and 8.3 are merged into `sprint/1`, backend and frontend both.
 2. Open: PR #30 (`b1.1.1`) makes the sign-in page wait for `GET /auth/me` instead of flashing the
    form at someone who is already signed in.
-3. Blocked: 12.1, on 2.1, 4.4 and 5.1 — see the dependency table above.
+3. 12.1: the backend is done and tested (`POST /bookings`, 43 tests, all four ACs). The form
+   is the remaining half and waits on 4.1's queue or 7.1's detail page for somewhere to
+   start the flow from — see the dependency table above.
 
 ### Everyone, before starting a story
 
