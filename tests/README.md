@@ -36,6 +36,7 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/venues.spec.ts` | 8.3 create, edit, delete, search and filter venues; capacity check; notifications |
 | `e2e/event-request.spec.ts` | 2.1 raise an event request: details, dates (2-year and 14-day limits) and numbers checked live in the browser, what is still needed to submit, equipment availability and the hold made on submit, venue requirements with facility quantities, "No venue requirements" and "No accessibility needs" (vs left empty), equipment, edit/remove, submit from the new page or a draft and read-only, what is missing named, organiser-only |
 | `e2e/review-queue.spec.ts` | 4.1 coordinator review queue: stage tabs (Under Review wired, others placeholders), own vs all requests, ordering, hidden drafts/decided, search, not permitted |
+| `e2e/booking-requests.spec.ts` | 12.1 raise a venue booking request: only approved events assigned to the coordinator are offered, what the request carries over from the event, the pending outcome, the empty state, and no entry point for Venue Staff |
 
 `e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueRow` locator. Specs share
 one throwaway database and run in parallel, so use unique names for anything you create.

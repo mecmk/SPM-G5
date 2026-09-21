@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
@@ -13,6 +14,7 @@ import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
   COMPONENT_GALLERY_PATH,
+  BOOKING_REQUEST_NEW_PATH,
   EVENT_EDIT_PATH,
   EVENT_NEW_PATH,
   EVENTS_INBOX_PATH,
@@ -76,6 +78,11 @@ function App() {
               </Route>
 
               {/* Story 4.1: the coordinator review queue. */}
+              {/* Story 12.1: the Event Coordinator raises a venue booking request. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_REQUEST} />}>
+                <Route path={BOOKING_REQUEST_NEW_PATH} element={<BookingRequestFormPage />} />
+              </Route>
+
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_REVIEW} />}>
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>

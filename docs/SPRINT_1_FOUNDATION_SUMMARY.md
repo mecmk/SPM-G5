@@ -13,7 +13,7 @@ frontend commits because the story branches were stacked.
 | 1.1 | fe/be: implement user login and logout | Done | `backend/app/auth/`, `frontend/src/auth/`, `frontend/src/api/` |
 | 1.2 | fe/be: enforce role-based access control | Done | `backend/app/auth/permissions.py`, `deps.py`, `frontend/src/auth/permissions.ts`, `frontend/src/layout/navigation.ts` |
 | 8.3 | fe/be: create and update venue records | Done | `backend/app/venues/`, `frontend/src/venues/` |
-| 12.1 | fe/be: raise venue booking request | **Skipped - blocked** | see "Story 12.1" below |
+| 12.1 | fe/be: raise venue booking request | Done | `backend/app/bookings/`, `frontend/src/bookings/`; see "Story 12.1" below |
 
 ### Acceptance criteria evidence
 
@@ -22,8 +22,8 @@ tagged with the story and AC it proves. Current state:
 
 | Suite | Result |
 | --- | --- |
-| Backend (pytest, real PostgreSQL) | 159 passed |
-| End-to-end (Playwright) | 28 passed (9 sign-in, 10 role-based access, 8 venue management, 1 health) |
+| Backend (pytest, real PostgreSQL) | 563 passed |
+| End-to-end (Playwright) | 76 passed |
 | Backend lint/format (ruff), frontend lint/format/build (oxlint, prettier, tsc), markdownlint | clean |
 
 Story 1 AC3 ("schema can be populated with sample data without integrity errors") is proven by
@@ -84,7 +84,7 @@ Keep state by default, reset on demand:
 - **Docker Postgres on host port 5433**: a locally installed PostgreSQL was silently answering
   on 5432 on Joshua's machine and would do the same on any teammate's laptop that has one.
 
-## Story 12.1 - why it was skipped, and the corrected dependencies
+## Story 12.1 - what shipped, and the corrected dependencies
 
 The backlog lists 12.1 as depending on 4.4, 5.1 and 8.2. Verified against the ACs:
 
@@ -95,11 +95,36 @@ The backlog lists 12.1 as depending on 4.4, 5.1 and 8.2. Verified against the AC
 | 8.2 display venue characteristics | Warren | **No** | 12.1's backend needs venue *records* (8.3, done), not the display page |
 | 2.1 capture event details (not listed) | Matthew | **Yes** | there must be an event to book for; the request copies its date/time/attendance |
 
-So 12.1 genuinely waits on 2.1, 4.4 and 5.1. What is already in place for it: the
-`venue_bookings` table (with `PENDING` status, requester, held period, layout/requirement
-fields), the `bookings:request` permission granted to coordinators, and seed data containing an
-approved event with an assigned coordinator and one pending booking. Once 2.1/4.4/5.1 land,
-12.1 is a router + service + form on top of that.
+Those three dependencies are on *data states*, not on code: AC1 and AC4 are checks 12.1 performs
+itself against `events.status` and `events.assigned_coordinator_id`, and 4.4 / 5.1 are what set
+those columns in production. Both columns, and a seeded approved event with an assigned
+coordinator, have existed since story 1, so the backend was written and tested against the seed
+rows before 2.1 / 4.4 / 5.1 merged. All three have since landed (#38, #39, #40).
+
+**What shipped:** `POST /bookings` plus `GET /bookings/reference-data` (`app/bookings/`), and the
+coordinator's form at `/bookings/new` (`frontend/src/bookings/`), reached from a "Request a venue"
+sidebar entry. 66 tests across the four ACs - 21 on the pick-list, 45 on the write - plus five
+end-to-end cases for the flow itself.
+
+**The entry point was the last thing to settle.** A coordinator has to reach an approved event
+assigned to them, and both natural routes to one are other people's: 5.3 ("fe: list events
+assigned to me", Matthew) and 7.1 ("fe: display full event details", Yu Bing), neither merged. So
+the form carries its own pick-list, `GET /bookings/reference-data`, which is deliberately narrower
+than 5.3's list - filtered to what is bookable, and carrying only the fields the form shows. When
+5.3 or 7.1 lands, a "Request a venue" action on an event is the better entry point and this page
+becomes the destination rather than the starting point.
+
+Three deliberate omissions inside the backend, each belonging to a later story: setup/teardown
+minutes stay at 0 (12.2), there is no conflict warning at submission time (14.1 - an overlapping
+`PENDING` row is accepted and refused later at approval by 13.2 / 14.2), and no capacity or
+suitability block (11.2 / 11.3, where 11.3 AC1 wants an overridable warning rather than a
+refusal). One earlier worry turned out not to exist: an approved event cannot be missing its date
+or attendance, because `ck_events_submitted_fields_complete` only lets a `DRAFT` row leave those
+null.
+
+AC3 is met as far as this story reaches: the request is written `PENDING` and undecided, readable
+by Venue Staff, and shown as pending to the coordinator who raised it. The pending *queue* itself
+is story 13.1, which depends on this one.
 
 ## Decisions the team should confirm (made unilaterally to keep moving)
 
@@ -121,7 +146,8 @@ approved event with an assigned coordinator and one pending booking. Once 2.1/4.
 1. Done: 1, 1.1, 1.2 and 8.3 are merged into `sprint/1`, backend and frontend both.
 2. Open: PR #30 (`b1.1.1`) makes the sign-in page wait for `GET /auth/me` instead of flashing the
    form at someone who is already signed in.
-3. Blocked: 12.1, on 2.1, 4.4 and 5.1 — see the dependency table above.
+3. Done: 12.1 is complete, backend and form, after 2.1 / 4.4 / 5.1 landed — see the section
+   above for the entry-point decision and what 12.2 / 14.1 / 11.3 still own.
 
 ### Everyone, before starting a story
 
