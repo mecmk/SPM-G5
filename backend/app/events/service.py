@@ -950,17 +950,23 @@ def update_routine_information(
 ) -> None:
     """AC1-AC3: the coordinator assigned to ``event`` edits its routine fields directly. Only
     the fields sent change, and only ``_ROUTINE_FIELDS`` may ever be touched - never the
-    important fields story 7.3 owns."""
+    important fields story 7.3 owns. The update is conditional on the event not yet being in a
+    closed status, so a routine edit racing another request's status change cannot land on a
+    request AC3 says is frozen - the same shape as ``submit_event``'s and ``_decide``'s guard
+    against a racing status change."""
     _assert_assigned_coordinator(event, actor)
-    if event.status in _ROUTINE_EDIT_CLOSED_STATUSES:
-        raise RoutineEditClosed(event.status)
 
     sent = data.model_fields_set
     changed = {field: getattr(data, field) for field in _ROUTINE_FIELDS if field in sent}
-    for field, value in changed.items():
-        setattr(event, field, value)
-    event.updated_at = datetime.now(UTC)
-    db.flush()
+    updated = db.execute(
+        update(Event)
+        .where(Event.id == event.id, Event.status.notin_(_ROUTINE_EDIT_CLOSED_STATUSES))
+        .values(**changed, updated_at=datetime.now(UTC))
+    )
+    if updated.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise RoutineEditClosed(event.status)
     record_audit(
         db,
         actor=actor,
