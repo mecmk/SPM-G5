@@ -1,6 +1,7 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
 (coordinator review queue), stories 4.4/4.5 (approve / reject an event request), and story 4.6
-(the decision /clarification history an organiser sees), and story 7.2 (routine information edits).."""
+(the decision /clarification history an organiser sees),
+and story 7.2 (routine information edits)."""
 
 from __future__ import annotations
 
