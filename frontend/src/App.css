@@ -192,6 +192,11 @@
   flex-shrink: 0;
 }
 
+/* A page-header with only an action slot (its title lives elsewhere, e.g. a hero banner). */
+.page-header.actions-only {
+  justify-content: flex-end;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 1rem;
