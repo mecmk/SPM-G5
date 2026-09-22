@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
-import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
+import {
+  getEvent,
+  listClarifications,
+  type Clarification,
+  type EventDetail,
+  type RequiredFacility,
+} from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
+import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import type { EventCardBackState } from '../components/EventCard'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -54,6 +61,8 @@ export function EventDetailPage() {
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hasImageFailed, setHasImageFailed] = useState(false)
+  const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
+  const [clarificationsError, setClarificationsError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +72,20 @@ export function EventDetailPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
+
+  useEffect(() => {
+    let cancelled = false
+    listClarifications(eventId)
+      .then((data) => {
+        if (!cancelled) setClarifications(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setClarificationsError(formatApiError(err))
       })
     return () => {
       cancelled = true
@@ -92,6 +115,18 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     event.assigned_coordinator_id === user?.id &&
     !TERMINAL_STATUSES.includes(event.status)
+
+  const clarificationEntries: ClarificationEntry[] | null =
+    clarifications === null
+      ? null
+      : clarifications.map((entry) => ({
+          id: entry.id,
+          kind: entry.kind,
+          authorId: entry.author_id,
+          authorName: entry.author_name,
+          message: entry.message,
+          createdAt: entry.created_at,
+        }))
 
   return (
     <div className="page page-wide event-detail-page">
@@ -296,6 +331,16 @@ export function EventDetailPage() {
             </ul>
           )}
         </section>
+
+        <ClarificationHistory
+          status={event.status}
+          decidedByName={event.decided_by_name}
+          decidedAt={event.decided_at}
+          decisionReason={event.decision_reason}
+          entries={clarificationEntries}
+          error={clarificationsError}
+          currentUserId={user?.id ?? null}
+        />
       </div>
     </div>
   )

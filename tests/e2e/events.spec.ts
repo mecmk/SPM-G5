@@ -56,9 +56,9 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await expect(
     page.getByRole('heading', { name: 'Nimbus Developer Conference', level: 1 }),
   ).toBeVisible()
-  await expect(page.getByText('Approved')).toBeVisible()
+  await expect(page.getByText('Approved').first()).toBeVisible()
   await expect(page.getByText('350')).toBeVisible()
-  await expect(page.getByText('Chloe Coordinator')).toBeVisible()
+  await expect(page.getByText('Chloe Coordinator').first()).toBeVisible()
 
   await expect(page.getByText('Theatre')).toBeVisible()
   await expect(page.getByText('Sound system')).toBeVisible()

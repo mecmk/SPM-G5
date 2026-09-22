@@ -1,4 +1,5 @@
-import { formatDateTime } from '../shared/format'
+import { formatDate, formatDateTime } from '../shared/format'
+import { StatusBadge } from './StatusBadge'
 
 export type ClarificationEntryKind = 'REQUEST' | 'RESPONSE' | 'NOTE'
 
@@ -12,6 +13,10 @@ export interface ClarificationEntry {
 }
 
 export interface ClarificationHistoryProps {
+  status: string
+  decidedByName: string | null
+  decidedAt: string | null
+  decisionReason: string | null
   entries: ClarificationEntry[] | null
   error: string | null
   /** The signed-in viewer's id, so their own messages render as the "self" bubble; null when
@@ -35,17 +40,45 @@ function initialsFor(name: string): string {
 }
 
 /**
- * Story 4.6 AC2 - the clarification conversation on a request, oldest first, each with its
+ * Story 4.6 AC1 - the event's current decision state and any decision reason, as one status
+ * sentence (badge + "Decided by X on Y", with the reason appended when one was given);
+ * `decidedAt === null` means no decision has been made yet, distinct from an approval that
+ * carries no reason. AC2 - the clarification conversation below it, oldest first, each with its
  * author and timestamp, laid out as a two-party chat thread with the viewer's own messages on
  * the right. AC3: entries are historical and cannot be edited or removed - this component
- * renders no button or input, so there is nothing here to change one with.
+ * renders no button or input, so there is nothing here to change one with. Started as two cards
+ * (`EventDecision` and this one); merged into one, since a decision and the clarification thread
+ * behind it are one story, not two.
  */
-export function ClarificationHistory({ entries, error, currentUserId }: ClarificationHistoryProps) {
+export function ClarificationHistory({
+  status,
+  decidedByName,
+  decidedAt,
+  decisionReason,
+  entries,
+  error,
+  currentUserId,
+}: ClarificationHistoryProps) {
   return (
     <section className="card stack" aria-labelledby="event-clarifications-heading">
       <p className="eyebrow" id="event-clarifications-heading">
         Clarifications
       </p>
+      {decidedAt === null ? (
+        <p className="muted">
+          A decision has not been made yet.
+          {status === 'CLARIFICATION_REQUESTED' &&
+            ' The coordinator has asked for clarification - see the messages below.'}
+        </p>
+      ) : (
+        <p>
+          <StatusBadge status={status} />{' '}
+          <span>
+            Decided by {decidedByName ?? 'Not recorded'} on {formatDate(decidedAt)}
+            {decisionReason !== null && ` — "${decisionReason}"`}
+          </span>
+        </p>
+      )}
       {error && (
         <p role="alert" className="error">
           {error}

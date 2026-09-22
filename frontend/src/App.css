@@ -564,37 +564,6 @@ label.checkbox input {
   border-bottom: none;
 }
 
-/* story 4.6: the decision card's outcome / decided-by / decided-on / reason pairs */
-.detail-list {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.detail-list > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  padding: 0.25rem 0;
-  border-bottom: 1px dashed var(--hairline);
-}
-
-.detail-list > div:last-child {
-  border-bottom: none;
-}
-
-.detail-list dt {
-  flex: 0 0 8rem;
-  color: var(--text-muted);
-}
-
-.detail-list dd {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-}
-
 /* story 4.6: the clarification conversation, styled as a two-party chat thread */
 .clarification-list {
   list-style: none;
