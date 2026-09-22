@@ -93,3 +93,8 @@ class Bookings:
 
 class Unavailability:
     MAINTENANCE_SEMINAR_ROOM = uuid.UUID("88888888-0000-0000-0000-000000000001")
+
+
+class Clarifications:
+    REQUEST = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
+    RESPONSE = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")

@@ -416,7 +416,8 @@
  * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
  * so centring within it needs no sidebar-width math - it just has to stop being flush left.
  */
-.event-detail-page {
+.event-detail-page,
+.event-routine-edit-page {
   margin-inline: auto;
 }
 
@@ -629,6 +630,74 @@ label.checkbox input {
 
 .check-list li:last-child {
   border-bottom: none;
+}
+
+/* story 4.6: the clarification conversation, styled as a two-party chat thread */
+.clarification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.clarification-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.clarification-row-self {
+  flex-direction: row-reverse;
+}
+
+.clarification-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.clarification-avatar-self {
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.clarification-bubble-self {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.clarification-bubble-text {
+  margin: 0;
+  overflow-wrap: break-word;
 }
 
 .grow-text {
@@ -1990,11 +2059,11 @@ tbody tr:hover td {
   box-shadow: var(--shadow);
 }
 
-.sidebar.is-collapsed .notification-panel {
+.notification-panel.is-sidebar-collapsed {
   left: 5rem;
 }
 
-.mobile-bar .notification-panel {
+.notification-panel.is-mobile {
   top: 3.5rem;
   right: 0.75rem;
   left: auto;

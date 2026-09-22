@@ -90,7 +90,7 @@ export function AppLayout() {
         onSignOut={handleSignOut}
         isCollapsed={isCollapsed}
         onToggleCollapsed={toggleCollapsed}
-        brandActions={<NotificationBell />}
+        brandActions={<NotificationBell placement="sidebar" isSidebarCollapsed={isCollapsed} />}
       />
 
       <header className="mobile-bar">
@@ -107,7 +107,7 @@ export function AppLayout() {
           Connect<em>Sphere</em>
         </Link>
         <div className="mobile-bar-actions">
-          <NotificationBell />
+          <NotificationBell placement="mobile" />
           <button type="button" className="secondary button-sm" onClick={handleSignOut}>
             Sign out
           </button>

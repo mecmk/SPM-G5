@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { FilterPills } from '../components/FilterPills'
 import { Icon } from '../components/Icon'
 import { useNotifications, type AppNotification } from './notificationContext'
@@ -20,11 +21,18 @@ function toneOf(notification: AppNotification): string {
   return notification.importance === 'important' ? 'is-important' : 'is-routine'
 }
 
+interface NotificationBellProps {
+  /** Which chrome this instance sits in, since the panel portals to `document.body` and can no
+   * longer be positioned by a `.sidebar` / `.mobile-bar` ancestor selector. */
+  placement: 'sidebar' | 'mobile'
+  isSidebarCollapsed?: boolean
+}
+
 /**
  * The notification centre's bell and panel (team decision, 17 Sep 2026): every change the user
  * made this session, with the important ones (failures, deletions) easy to pick out.
  */
-export function NotificationBell() {
+export function NotificationBell({ placement, isSidebarCollapsed = false }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications()
   const [isOpen, setIsOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
@@ -33,6 +41,13 @@ export function NotificationBell() {
     filter === 'all'
       ? notifications
       : notifications.filter((item) => item.importance === 'important')
+  const panelClassName = [
+    'notification-panel',
+    placement === 'mobile' && 'is-mobile',
+    placement === 'sidebar' && isSidebarCollapsed && 'is-sidebar-collapsed',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   function togglePanel() {
     if (isOpen) markAllRead()
@@ -66,51 +81,53 @@ export function NotificationBell() {
         )}
       </button>
 
-      {isOpen && (
-        <>
-          <div className="notification-backdrop" onClick={closePanel} />
-          <section
-            className="notification-panel"
-            aria-label="Notifications"
-            onKeyDown={handlePanelKeyDown}
-          >
-            <header className="notification-panel-header">
-              <h2 className="notification-panel-title">Notifications</h2>
-              <FilterPills
-                options={[
-                  { key: 'all', label: `All (${notifications.length})` },
-                  { key: 'important', label: `Important (${importantCount})` },
-                ]}
-                value={filter}
-                onChange={setFilter}
-              />
-            </header>
-            {shown.length === 0 ? (
-              <p className="notification-empty">
-                {filter === 'all'
-                  ? 'Nothing yet. Changes you save appear here.'
-                  : 'Nothing important right now.'}
-              </p>
-            ) : (
-              <ul className="notification-list">
-                {shown.map((item) => (
-                  <li key={item.id} className={`notification-item ${toneOf(item)}`}>
-                    <span className="notification-dot" aria-hidden="true" />
-                    <div>
-                      <p className="notification-title">
-                        {item.title}
-                        {!item.isRead && <span className="visually-hidden"> (new)</span>}
-                      </p>
-                      <p className="notification-message">{item.message}</p>
-                      <p className="notification-age">{describeAge(item.createdAt)}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
+      {isOpen &&
+        createPortal(
+          <>
+            <div className="notification-backdrop" onClick={closePanel} />
+            <section
+              className={panelClassName}
+              aria-label="Notifications"
+              onKeyDown={handlePanelKeyDown}
+            >
+              <header className="notification-panel-header">
+                <h2 className="notification-panel-title">Notifications</h2>
+                <FilterPills
+                  options={[
+                    { key: 'all', label: `All (${notifications.length})` },
+                    { key: 'important', label: `Important (${importantCount})` },
+                  ]}
+                  value={filter}
+                  onChange={setFilter}
+                />
+              </header>
+              {shown.length === 0 ? (
+                <p className="notification-empty">
+                  {filter === 'all'
+                    ? 'Nothing yet. Changes you save appear here.'
+                    : 'Nothing important right now.'}
+                </p>
+              ) : (
+                <ul className="notification-list">
+                  {shown.map((item) => (
+                    <li key={item.id} className={`notification-item ${toneOf(item)}`}>
+                      <span className="notification-dot" aria-hidden="true" />
+                      <div>
+                        <p className="notification-title">
+                          {item.title}
+                          {!item.isRead && <span className="visually-hidden"> (new)</span>}
+                        </p>
+                        <p className="notification-message">{item.message}</p>
+                        <p className="notification-age">{describeAge(item.createdAt)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>,
+          document.body,
+        )}
     </div>
   )
 }

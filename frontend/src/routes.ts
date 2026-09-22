@@ -55,3 +55,10 @@ export const EVENT_PATH = '/events/:eventId'
 export function eventPath(eventId: string): string {
   return EVENT_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
+
+// Story 7.2: the assigned Event Coordinator edits an event's routine information.
+export const EVENT_EDIT_ROUTINE_PATH = '/events/:eventId/routine-information'
+
+export function eventEditRoutinePath(eventId: string): string {
+  return EVENT_EDIT_ROUTINE_PATH.replace(':eventId', encodeURIComponent(eventId))
+}
