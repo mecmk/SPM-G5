@@ -1,6 +1,7 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and the decision /
-clarification history an organiser sees (story 4.6), and routine information edits (story 7.2)..
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), the decision /
+clarification history an organiser sees (story 4.6), routine information edits (story 7.2), and
+the coordinator's assigned events in any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -259,6 +260,33 @@ def list_my_events(
         .offset(offset)
     )
     total = db.scalar(select(func.count()).select_from(Event).where(is_owned))
+    return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
+
+
+def list_assigned_events(
+    db: Session,
+    *,
+    coordinator: User,
+    limit: int = MY_EVENTS_MAX_LIMIT,
+    offset: int = 0,
+) -> MyEventsListing:
+    """Story 6.1 AC1/AC2: every event assigned to ``coordinator``, in any status - unlike the
+    review queue (story 4.1), which only ever returns the three awaiting-decision statuses. A
+    draft is never assigned to a coordinator, so it can never appear here. AC3: most recently
+    updated first, ties broken by id, paged the same way as the organiser's own list
+    (``list_my_events``) - both lists grow across a person's whole history rather than staying
+    small like the review queue, so the same shape fits. ``assigned_coordinator`` is the caller
+    themselves and needs no name, so only ``organiser`` is left to load eagerly."""
+    is_assigned = Event.assigned_coordinator_id == coordinator.id
+    page = (
+        select(Event)
+        .options(lazyload(Event.assigned_coordinator))
+        .where(is_assigned)
+        .order_by(Event.updated_at.desc(), Event.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    total = db.scalar(select(func.count()).select_from(Event).where(is_assigned))
     return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
 
 
