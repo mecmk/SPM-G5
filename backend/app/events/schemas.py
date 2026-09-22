@@ -446,9 +446,11 @@ class EventRoutineUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     description: str | None = None
-    contact_name: str | None = None
-    contact_email: str | None = None
-    contact_phone: str | None = None
+    # Bounds mirror the form's own maxLength (frontend/src/events/EventRoutineEditPage.tsx),
+    # which is otherwise unenforced server-side.
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
+    contact_phone: str | None = Field(default=None, max_length=50)
     internal_notes: str | None = None
 
     @field_validator(
