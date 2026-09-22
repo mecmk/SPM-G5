@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
-import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
+import {
+  getEvent,
+  listClarifications,
+  type Clarification,
+  type EventDetail,
+  type RequiredFacility,
+} from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
+import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import type { EventCardBackState } from '../components/EventCard'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -54,6 +61,8 @@ export function EventDetailPage() {
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hasImageFailed, setHasImageFailed] = useState(false)
+  const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
+  const [clarificationsError, setClarificationsError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -68,6 +77,24 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId])
+
+  useEffect(() => {
+    if (event === null) return undefined
+    const canViewClarifications =
+      user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+    if (!canViewClarifications) return undefined
+    let cancelled = false
+    listClarifications(eventId)
+      .then((data) => {
+        if (!cancelled) setClarifications(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setClarificationsError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, event, user])
 
   if (error) {
     return (
@@ -92,6 +119,22 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     event.assigned_coordinator_id === user?.id &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
+   *  history, mirroring the backend's `_can_view_clarifications`. */
+  const canViewClarifications =
+    user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+
+  const clarificationEntries: ClarificationEntry[] | null =
+    clarifications === null
+      ? null
+      : clarifications.map((entry) => ({
+          id: entry.id,
+          kind: entry.kind,
+          authorId: entry.author_id,
+          authorName: entry.author_name,
+          message: entry.message,
+          createdAt: entry.created_at,
+        }))
 
   return (
     <div className="page page-wide event-detail-page">
@@ -296,6 +339,18 @@ export function EventDetailPage() {
             </ul>
           )}
         </section>
+
+        {canViewClarifications && (
+          <ClarificationHistory
+            status={event.status}
+            decidedByName={event.decided_by_name}
+            decidedAt={event.decided_at}
+            decisionReason={event.decision_reason}
+            entries={clarificationEntries}
+            error={clarificationsError}
+            currentUserId={user?.id ?? null}
+          />
+        )}
       </div>
     </div>
   )

@@ -186,6 +186,35 @@ class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
     reason: Mapped[str | None] = mapped_column(Text)
 
 
+class ClarificationKind:
+    """Values allowed by ``ck_event_clarifications_kind`` (story 4.6 AC2)."""
+
+    REQUEST = "REQUEST"
+    RESPONSE = "RESPONSE"
+    NOTE = "NOTE"
+
+
+class EventClarification(UUIDPrimaryKeyMixin, Base):
+    """One message in the clarification conversation on a request (stories 4.2, 4.3, 4.6).
+    Append-only: no write endpoint exists beyond creation (story 4.6 AC3)."""
+
+    __tablename__ = "event_clarifications"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    author: Mapped[User] = relationship(lazy="joined")
+
+
 class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "events"
 

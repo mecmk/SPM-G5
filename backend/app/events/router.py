@@ -1,7 +1,7 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
-(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), and story 7.2
-(routine information edits).
-"""
+(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), and story 4.6
+(the decision /clarification history an organiser sees),
+and story 7.2 (routine information edits)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.events import service
 from app.events.schemas import (
+    ClarificationOut,
     EquipmentAvailabilityOut,
     EventCreate,
     EventDetailOut,
@@ -122,6 +123,25 @@ def get_event(
         return EventDetailOut.from_event(event, viewer=viewer)
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+
+
+@router.get(
+    "/{event_id}/clarifications", response_model=list[ClarificationOut], dependencies=[CanRead]
+)
+def list_clarifications(
+    event_id: uuid.UUID,
+    db: DbSession,
+    viewer: CurrentUser,
+) -> list[ClarificationOut]:
+    """Story 4.6 AC2: the clarification conversation, oldest first. AC3: read-only - no route
+    edits or removes an entry."""
+    try:
+        rows = service.list_clarifications(db, event_id, viewer=viewer)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.NotRelatedParty as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    return [ClarificationOut.from_clarification(row) for row in rows]
 
 
 @router.patch("/{event_id}", response_model=EventDetailOut)

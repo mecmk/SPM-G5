@@ -6,6 +6,7 @@
 --   ID prefixes:   1111.. users   2222.. venues   3333.. events
 --                  4444.. venue bookings   5555.. client organisations
 --                  6666.. equipment requests   7777.. equipment types (010)
+--                  bbbb.. event clarifications
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -200,6 +201,16 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-10 08:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-03 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-15 14:00+08')
+ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
+-- Clarification conversation on the CLARIFICATION_REQUESTED event (story 4.6)
+-- ---------------------------------------------------------------------
+INSERT INTO event_clarifications (id, event_id, author_id, kind, message, created_at) VALUES
+    ('bbbbbbbb-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000003', 'REQUEST',
+     'Please add expected headcount by department.', '2026-09-04 10:00+08'),
+    ('bbbbbbbb-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000001', 'RESPONSE',
+     'About 60 from Engineering, 50 from Sales and 40 from Operations.', '2026-09-05 14:30+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
