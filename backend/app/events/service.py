@@ -1,6 +1,6 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and the decision / clarification history an
-organiser sees (story 4.6), and routine information edits (story 7.2)..
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and the decision /
+clarification history an organiser sees (story 4.6), and routine information edits (story 7.2)..
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
