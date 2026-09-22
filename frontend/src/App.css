@@ -1919,11 +1919,11 @@ tbody tr:hover td {
   box-shadow: var(--shadow);
 }
 
-.sidebar.is-collapsed .notification-panel {
+.notification-panel.is-sidebar-collapsed {
   left: 5rem;
 }
 
-.mobile-bar .notification-panel {
+.notification-panel.is-mobile {
   top: 3.5rem;
   right: 0.75rem;
   left: auto;

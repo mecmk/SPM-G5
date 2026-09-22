@@ -21,11 +21,18 @@ function toneOf(notification: AppNotification): string {
   return notification.importance === 'important' ? 'is-important' : 'is-routine'
 }
 
+interface NotificationBellProps {
+  /** Which chrome this instance sits in, since the panel portals to `document.body` and can no
+   * longer be positioned by a `.sidebar` / `.mobile-bar` ancestor selector. */
+  placement: 'sidebar' | 'mobile'
+  isSidebarCollapsed?: boolean
+}
+
 /**
  * The notification centre's bell and panel (team decision, 17 Sep 2026): every change the user
  * made this session, with the important ones (failures, deletions) easy to pick out.
  */
-export function NotificationBell() {
+export function NotificationBell({ placement, isSidebarCollapsed = false }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications()
   const [isOpen, setIsOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
@@ -34,6 +41,13 @@ export function NotificationBell() {
     filter === 'all'
       ? notifications
       : notifications.filter((item) => item.importance === 'important')
+  const panelClassName = [
+    'notification-panel',
+    placement === 'mobile' && 'is-mobile',
+    placement === 'sidebar' && isSidebarCollapsed && 'is-sidebar-collapsed',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   function togglePanel() {
     if (isOpen) markAllRead()
@@ -72,7 +86,7 @@ export function NotificationBell() {
           <>
             <div className="notification-backdrop" onClick={closePanel} />
             <section
-              className="notification-panel"
+              className={panelClassName}
               aria-label="Notifications"
               onKeyDown={handlePanelKeyDown}
             >
