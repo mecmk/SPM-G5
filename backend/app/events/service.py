@@ -202,7 +202,7 @@ class MissingSubmissionDetails(InvalidEventRequest):
         self.missing = missing
 
 
-NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may decide it."
+NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may {verb} it."
 EVENT_NOT_AWAITING_DECISION_MESSAGE = (
     "This request is {status}, so it cannot be approved or rejected."
 )
@@ -829,10 +829,13 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
 
 
 class NotAssignedCoordinator(PermissionError):
-    """Only the coordinator ``events.assigned_coordinator_id`` names may decide the request."""
+    """Only the coordinator ``events.assigned_coordinator_id`` names may act on the request.
+    ``verb`` names the refused action (``"decide"``, ``"edit"``) so 4.4/4.5's decision and 7.2's
+    routine edit do not share one message - backend/STYLE.md: two messages never share one
+    string."""
 
-    def __init__(self) -> None:
-        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
+    def __init__(self, verb: str) -> None:
+        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE.format(verb=verb))
 
 
 class EventNotAwaitingDecision(EventStateConflict):
@@ -858,9 +861,9 @@ class MissingDecisionReason(InvalidEventRequest):
 # --- decisions -----------------------------------------------------------------------------
 
 
-def _assert_assigned_coordinator(event: Event, actor: User) -> None:
+def _assert_assigned_coordinator(event: Event, actor: User, *, verb: str) -> None:
     if event.assigned_coordinator_id != actor.id:
-        raise NotAssignedCoordinator()
+        raise NotAssignedCoordinator(verb)
 
 
 def _assert_awaiting_decision(event: Event) -> None:
@@ -879,7 +882,7 @@ def _decide(
     ``decision_reason`` left by an earlier rejection when a later approval reuses this path
     (relevant once 4.6's clarification round-trip can return a request here more than once).
     """
-    _assert_assigned_coordinator(event, actor)
+    _assert_assigned_coordinator(event, actor, verb="decide")
     _assert_awaiting_decision(event)
 
     from_status = event.status
@@ -950,14 +953,21 @@ def update_routine_information(
 ) -> None:
     """AC1-AC3: the coordinator assigned to ``event`` edits its routine fields directly. Only
     the fields sent change, and only ``_ROUTINE_FIELDS`` may ever be touched - never the
-    important fields story 7.3 owns. The update is conditional on the event not yet being in a
-    closed status, so a routine edit racing another request's status change cannot land on a
-    request AC3 says is frozen - the same shape as ``submit_event``'s and ``_decide``'s guard
-    against a racing status change."""
-    _assert_assigned_coordinator(event, actor)
+    important fields story 7.3 owns. AC3's status gate is checked before the assignment check,
+    so a closed event always refuses with 409 regardless of who is asking, rather than a 403
+    that names the wrong reason. The write itself stays conditional on the event not yet being
+    in a closed status, so a routine edit racing another request's status change still cannot
+    land on a request AC3 says is frozen - the same shape as ``submit_event``'s and ``_decide``'s
+    guard against a racing status change. A body with nothing to change is a no-op: no write, no
+    audit entry, ``updated_at`` untouched."""
+    if event.status in _ROUTINE_EDIT_CLOSED_STATUSES:
+        raise RoutineEditClosed(event.status)
+    _assert_assigned_coordinator(event, actor, verb="edit")
 
     sent = data.model_fields_set
     changed = {field: getattr(data, field) for field in _ROUTINE_FIELDS if field in sent}
+    if not changed:
+        return
     updated = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status.notin_(_ROUTINE_EDIT_CLOSED_STATUSES))
