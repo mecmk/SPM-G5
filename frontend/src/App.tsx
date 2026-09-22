@@ -3,7 +3,9 @@ import { AuthProvider } from './auth/AuthProvider'
 import { LoginPage } from './auth/LoginPage'
 import { PERMISSIONS } from './auth/permissions'
 import { RequireAuth, RequirePermission } from './auth/RequireAuth'
+import { BookingRequestDetailPage } from './bookings/BookingRequestDetailPage'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
+import { BookingRequestsPage } from './bookings/BookingRequestsPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { EventRoutineEditPage } from './events/EventRoutineEditPage'
@@ -16,6 +18,8 @@ import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
+  BOOKING_REQUEST_PATH,
+  BOOKING_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EVENT_EDIT_PATH,
@@ -98,6 +102,11 @@ function App() {
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>
 
+              {/* Story 13.1: the venue staff booking requests queue. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_DECIDE} />}>
+                <Route path={BOOKING_REQUESTS_PATH} element={<BookingRequestsPage />} />
+                <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
+              </Route>
               {/*
                 Story 7.1: full event details. Which event a signed-in user may open is a
                 per-record relationship (own event, or an internal role once submitted), not a

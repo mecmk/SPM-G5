@@ -1,5 +1,6 @@
-"""HTTP endpoints for venue bookings: raising a request (story 12.1), approval (story 13.2)
-and the read endpoint 13.2 AC3 needs to make the outcome visible to the requesting coordinator.
+"""HTTP endpoints for venue bookings: raising a request (story 12.1), the venue staff queue
+(story 13.1), approval (story 13.2) and the read endpoint 13.2 AC3 needs to make the outcome
+visible to the requesting coordinator.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from app.bookings import service
 from app.bookings.schemas import (
     BookableEvent,
     BookingOut,
+    BookingQueueEntry,
     BookingReferenceData,
     BookingRequestIn,
 )
@@ -68,6 +70,12 @@ def create_booking_request(
     except service.VenueNotBookable as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)
+
+
+@router.get("", response_model=list[BookingQueueEntry], dependencies=[CanDecide])
+def list_bookings(db: DbSession) -> list[BookingQueueEntry]:
+    """Story 13.1 AC1-AC3: every pending request, for Venue Staff to decide."""
+    return [BookingQueueEntry.from_booking(b) for b in service.list_booking_requests(db)]
 
 
 @router.get("/{booking_id}", response_model=BookingOut, dependencies=[CanRead])

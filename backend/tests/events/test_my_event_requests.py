@@ -76,6 +76,8 @@ def test_organiser_sees_every_request_they_own(organiser_client):
         str(Events.SUBMITTED),
         str(Events.CLARIFICATION_REQUESTED),
         str(Events.SUBMITTED_2),
+        str(Events.APPROVED_2),
+        str(Events.APPROVED_4),
     }
 
 
@@ -86,6 +88,8 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.APPROVED),
         str(Events.REJECTED),
         str(Events.UNDER_REVIEW),
+        str(Events.APPROVED_3),
+        str(Events.APPROVED_5),
     }
 
 
@@ -224,7 +228,7 @@ def test_limit_caps_the_page_and_total_counts_every_request_i_own(organiser_clie
     page = _page(organiser_client, "?limit=2")
 
     assert len(page["items"]) == 2
-    assert page["total"] == 4  # the four seeded requests Olivia owns
+    assert page["total"] == 6  # the six seeded requests Olivia owns
 
 
 @pytest.mark.story("2.6", ac=9)
@@ -251,7 +255,7 @@ def test_an_offset_past_the_end_is_an_empty_page_not_an_error(organiser_client):
     page = _page(organiser_client, "?offset=100")
 
     assert page["items"] == []
-    assert page["total"] == 4
+    assert page["total"] == 6
 
 
 @pytest.mark.story("2.6", ac=9)

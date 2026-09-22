@@ -27,13 +27,19 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'coordinator',
     email: ACCOUNTS.coordinator,
-    visible: ['Events inbox', 'Change requests', 'Registrations', 'Venue catalogue', 'Equipment requests'],
+    visible: [
+      'Events inbox',
+      'Change requests',
+      'Registrations',
+      'Venue catalogue',
+      'Equipment requests',
+    ],
     hidden: ['Manage venues', 'My events', 'Bookings & schedule', 'Equipment holds'],
   },
   {
     role: 'venue staff',
     email: ACCOUNTS.venueStaff,
-    visible: ['All events', 'Manage venues', 'Bookings & schedule'],
+    visible: ['All events', 'Manage venues', 'Booking Requests', 'Venue Schedule'],
     hidden: ['Venue catalogue', 'Events inbox', 'Equipment requests', 'My events'],
   },
   {
@@ -74,7 +80,7 @@ test('1.2 AC2: the main page lists every section from the sidebar', async ({ pag
   await signIn(page, ACCOUNTS.venueStaff)
   const main = page.getByRole('main')
 
-  for (const name of ['All events', 'Manage venues', 'Bookings & schedule']) {
+  for (const name of ['All events', 'Manage venues', 'Booking Requests', 'Venue Schedule']) {
     await expect(main.getByRole('heading', { name, exact: true })).toBeVisible()
   }
   const sidebarLinks = await mainNav(page).getByRole('link').count()

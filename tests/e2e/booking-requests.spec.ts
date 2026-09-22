@@ -18,8 +18,11 @@
  * row is proven at the API in `test_raise_booking_request.py`.
  *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
- * five events but only one of them, Nimbus Developer Conference, is APPROVED. Carl Coordinator is
- * assigned only a REJECTED one, which is what makes the empty state reachable without fixtures.
+ * Nimbus Developer Conference, an APPROVED event. AC4's empty state (a coordinator with nothing
+ * approved) has no seed fixture left to reach it without creating a user - every seeded
+ * coordinator is assigned at least one approved event as of story 13.1 - so it is covered instead
+ * by `test_bookable_events.py::test_a_coordinator_with_nothing_approved_is_offered_an_empty_list`,
+ * which creates one.
  */
 
 import { expect, test, type Page } from '@playwright/test'
@@ -116,16 +119,6 @@ test('12.1 AC2: the request cannot be sent before the event details arrive', asy
   // Once they arrive, the summary replaces the message and the request can be sent.
   await expect(page.getByRole('region', { name: 'What this request will carry' })).toBeVisible()
   await expect(send).toBeEnabled()
-})
-
-test('12.1 AC4: a coordinator with no approved events has nothing to request for', async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.coordinator2)
-  await openRequestForm(page)
-
-  await expect(page.getByText('No approved events are assigned to you yet.')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Send request' })).toBeHidden()
 })
 
 test('12.1 AC4: Venue Staff are not offered a way to raise a request', async ({ page }) => {

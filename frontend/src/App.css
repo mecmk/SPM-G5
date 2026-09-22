@@ -280,6 +280,13 @@
   gap: 0.75rem;
 }
 
+.item-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .item-card-title {
   font-size: 0.875rem;
   font-weight: 600;
@@ -304,6 +311,67 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* ---------- subtle fact blocks (story 13.1) ---------- */
+
+.subtle-block {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fact-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* ---------- summary stat cards (story 13.1 UI refresh) ---------- */
+
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.stat-card-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.booking-detail-header {
+  margin-bottom: 1.5rem;
+}
+
+.booking-detail-header .cluster {
+  gap: 1rem;
 }
 
 /* ---------- fixed-width filter column + results (story 8.1) ---------- */
@@ -1280,6 +1348,10 @@ td.num {
 .small {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+
+.self-start {
+  align-self: flex-start;
 }
 
 .mono {

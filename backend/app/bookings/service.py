@@ -52,7 +52,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
 from app.bookings.models import BookingStatus, VenueBooking
@@ -157,6 +157,25 @@ class BookingNotPending(ValueError):
     def __init__(self, booking: VenueBooking) -> None:
         super().__init__(BOOKING_NOT_PENDING_MESSAGE.format(status=booking.status))
         self.booking = booking
+
+
+def list_booking_requests(db: Session) -> list[VenueBooking]:
+    """Story 13.1 AC1/AC3: every pending request, soonest first. AC1's "responsible for" is
+    every venue: there is no per-venue staff responsibility table in the schema, and
+    BOOKINGS_DECIDE is a role-wide permission today, same as VENUES_MANAGE."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .options(
+                joinedload(VenueBooking.event),
+                joinedload(VenueBooking.venue),
+                joinedload(VenueBooking.requested_by),
+                joinedload(VenueBooking.required_layout),
+            )
+            .where(VenueBooking.status == BookingStatus.PENDING)
+            .order_by(VenueBooking.starts_at, VenueBooking.id)
+        ).all()
+    )
 
 
 def find_conflicting_booking(db: Session, booking: VenueBooking) -> VenueBooking | None:

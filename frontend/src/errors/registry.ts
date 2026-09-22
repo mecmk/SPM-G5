@@ -50,6 +50,8 @@ export type ErrorCode =
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
   | 'EVENT_QUANTITY_INVALID'
   | 'BOOKING_NOT_ALLOWED'
+  | 'BOOKING_NOT_FOUND'
+  | 'BOOKING_CONFLICT'
 
 export interface ErrorEntry {
   title: string
@@ -230,6 +232,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_NOT_ALLOWED: {
     title: 'Venue cannot be requested',
     message: 'A venue booking can only be requested for an approved event.',
+  },
+
+  // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own
+  // sentence - BOOKING_CONFLICT covers a double-booking and a request already decided alike,
+  // since the backend gives each its own detail message under the same 409 status.
+  BOOKING_NOT_FOUND: {
+    title: 'Booking not found',
+    message: 'This booking request no longer exists.',
+  },
+  BOOKING_CONFLICT: {
+    title: 'Cannot approve this request',
+    message: 'This request cannot be approved in its current state.',
   },
 }
 
