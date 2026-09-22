@@ -6,6 +6,7 @@ import {
   EVENT_NEW_PATH,
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
+  EVENTS_MINE_PATH,
   VENUES_MANAGE_PATH,
 } from '../routes'
 
@@ -52,13 +53,13 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: true,
       },
       {
-        to: '/events/mine',
+        to: EVENTS_MINE_PATH,
         label: 'My events',
         description: 'Your requests, drafts and their progress. Start a new request from here.',
         icon: 'calendar',
         permission: PERMISSIONS.EVENTS_READ_OWN,
         story: '2.6',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: EVENTS_INBOX_PATH,

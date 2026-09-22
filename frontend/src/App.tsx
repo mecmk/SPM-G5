@@ -8,6 +8,7 @@ import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
+import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
@@ -24,6 +25,7 @@ import {
   EVENT_NEW_PATH,
   EVENT_PATH,
   EVENTS_INBOX_PATH,
+  EVENTS_MINE_PATH,
   HOME_PATH,
   LOGIN_PATH,
   VENUE_CATALOGUE_PATH,
@@ -81,6 +83,11 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_CREATE} />}>
                 <Route path={EVENT_NEW_PATH} element={<EventRequestFormPage key="new" />} />
                 <Route path={EVENT_EDIT_PATH} element={<EventRequestFormPage key="edit" />} />
+              </Route>
+
+              {/* Story 2.6: the organiser's own list of requests. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_READ_OWN} />}>
+                <Route path={EVENTS_MINE_PATH} element={<MyEventsPage />} />
               </Route>
 
               {/* Story 4.1: the coordinator review queue. */}

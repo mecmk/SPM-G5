@@ -44,6 +44,11 @@ from tests.support.factories import (
 from tests.support.seed import Events, Users
 
 INT32_MAX = 2_147_483_647
+# An organisation id that belongs to no one. Fixed rather than ``uuid.uuid4()``: a parametrize value
+# is evaluated when tests are collected and becomes part of the pytest node id, so a random one
+# writes a different line into the generated traceability matrix on every run.
+_UNKNOWN_ORGANISATION_ID = "5f1b7c3e-8d24-4a6b-9e10-2c4d6a8b0f13"
+
 NOT_WHOLE_POSITIVE = [
     pytest.param(0, id="zero"),
     pytest.param(-5, id="negative"),
@@ -125,7 +130,7 @@ def test_the_event_name_is_mandatory(organiser_client, name):
     [
         ("status", "APPROVED"),
         ("organiser_id", str(Users.ORGANISER_2.id)),
-        ("organisation_id", str(uuid.uuid4())),
+        ("organisation_id", _UNKNOWN_ORGANISATION_ID),
         ("submitted_at", "2026-01-01T00:00:00+00:00"),
         ("assigned_coordinator_id", str(Users.COORDINATOR.id)),
     ],

@@ -38,6 +38,8 @@ export const VENUE_SCHEDULE_PATH = '/venue-staff/schedule'
 export function bookingRequestPath(bookingId: string): string {
   return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
 }
+// Story 2.6: the organiser's own list of event requests.
+export const EVENTS_MINE_PATH = '/events/mine'
 
 // Story 2.1: raising and editing an event request.
 export const EVENT_NEW_PATH = '/events/new'

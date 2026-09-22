@@ -53,6 +53,14 @@ creates stays until the run ends, and `fullyParallel: true` means specs share th
 concurrently. So give every created record a unique name (`E2E Room ${Date.now()}`, as
 `e2e/venues.spec.ts:9` does). Nothing survives the run, so there is no leftover to clear.
 
+The same sharing applies to lists: other specs create requests as the seeded organisers, so a page
+listing a user's records is asserted **by name**, never by how many rows it has
+(`e2e/my-event-requests.spec.ts`). Submitting a request is safe for the coordinator's queue, since
+a submission has no assigned coordinator and that queue only shows requests assigned to the signed-in
+one. The exact counts still in the suite are `review-queue.spec.ts`'s `Under Review (4)` (two
+places): they hold only while no other spec assigns another awaiting-decision request to the seeded
+coordinator, so a spec that does must first make those counts relative.
+
 Accounts a spec signs in with (`e2e/support.ts`) are rows in `backend/db/seed/020_sample_data.sql`,
 which is also mirrored in `backend/tests/support/seed.py`. A seed change means editing all three.
 
@@ -71,7 +79,13 @@ Traceability here is by **test title**, not by a marker: titles begin with the s
   case.
 - Do not create records with fixed names — parallel specs and reruns will collide.
 - Do not reach into the database or call the API directly to set up a test; drive the UI, or add
-  the coverage as a backend test instead.
+  the coverage as a backend test instead. **Exception:** a page state the seed cannot reach — an
+  empty list, a slow load, a failing request — may stub the one API call with `page.route`, as
+  `e2e/my-event-requests.spec.ts` does. Stub only the `fetch` (`request.resourceType()`), never
+  the page's own navigation, and send the CORS headers, since the app and API are on different
+  ports. Everything else still runs on real seed data. One spec also uses the development-only
+  component gallery at `/dev/components` (`e2e/my-event-requests.spec.ts`); it exists because the
+  runner serves the Vite dev server, so it would need moving if e2e ever ran a production build.
 - Do not add a `webServer` block to `playwright.config.ts` — `scripts/e2e.mjs` starts the stack on
   the throwaway database, and a `webServer` would start it on whatever `DATABASE_URL` says.
 - Do not run, or document running, the specs against the development database, or set
