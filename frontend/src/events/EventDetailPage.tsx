@@ -79,6 +79,10 @@ export function EventDetailPage() {
   }, [eventId])
 
   useEffect(() => {
+    if (event === null) return undefined
+    const canViewClarifications =
+      user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+    if (!canViewClarifications) return undefined
     let cancelled = false
     listClarifications(eventId)
       .then((data) => {
@@ -90,7 +94,7 @@ export function EventDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [eventId])
+  }, [eventId, event, user])
 
   if (error) {
     return (
@@ -115,6 +119,10 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     event.assigned_coordinator_id === user?.id &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
+   *  history, mirroring the backend's `_can_view_clarifications`. */
+  const canViewClarifications =
+    user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
 
   const clarificationEntries: ClarificationEntry[] | null =
     clarifications === null
@@ -332,15 +340,17 @@ export function EventDetailPage() {
           )}
         </section>
 
-        <ClarificationHistory
-          status={event.status}
-          decidedByName={event.decided_by_name}
-          decidedAt={event.decided_at}
-          decisionReason={event.decision_reason}
-          entries={clarificationEntries}
-          error={clarificationsError}
-          currentUserId={user?.id ?? null}
-        />
+        {canViewClarifications && (
+          <ClarificationHistory
+            status={event.status}
+            decidedByName={event.decided_by_name}
+            decidedAt={event.decided_at}
+            decisionReason={event.decision_reason}
+            entries={clarificationEntries}
+            error={clarificationsError}
+            currentUserId={user?.id ?? null}
+          />
+        )}
       </div>
     </div>
   )
