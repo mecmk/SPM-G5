@@ -348,7 +348,8 @@
  * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
  * so centring within it needs no sidebar-width math - it just has to stop being flush left.
  */
-.event-detail-page {
+.event-detail-page,
+.event-routine-edit-page {
   margin-inline: auto;
 }
 
@@ -1918,11 +1919,11 @@ tbody tr:hover td {
   box-shadow: var(--shadow);
 }
 
-.sidebar.is-collapsed .notification-panel {
+.notification-panel.is-sidebar-collapsed {
   left: 5rem;
 }
 
-.mobile-bar .notification-panel {
+.notification-panel.is-mobile {
   top: 3.5rem;
   right: 0.75rem;
   left: auto;

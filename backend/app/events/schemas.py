@@ -19,6 +19,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.auth.models import User
+from app.auth.permissions import Permission, role_has
 from app.events.models import Event, EventEquipmentRequest
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
@@ -343,6 +345,10 @@ class EventDetailOut(BaseModel):
     ``accessibility_none_required`` true means the organiser said none are needed; false with no
     needs and no notes means it has not been specified (AC5). ``venue_none_required`` works the
     same way for the venue requirements (AC4).
+
+    ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
+    without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
+    receives it.
     """
 
     id: uuid.UUID
@@ -350,12 +356,17 @@ class EventDetailOut(BaseModel):
     purpose: str | None
     description: str | None
     cover_image_url: str | None
+    contact_name: str | None
+    contact_email: str | None
+    contact_phone: str | None
+    internal_notes: str | None
     starts_at: datetime | None
     ends_at: datetime | None
     expected_attendance: int | None
     status: str
     organiser_id: uuid.UUID
     organiser_name: str
+    assigned_coordinator_id: uuid.UUID | None
     assigned_coordinator_name: str | None
     submitted_at: datetime | None
     required_layout_code: str | None
@@ -374,21 +385,27 @@ class EventDetailOut(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_event(cls, event: Event) -> EventDetailOut:
+    def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
         layout = event.required_layout
+        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
         return cls(
             id=event.id,
             name=event.name,
             purpose=event.purpose,
             description=event.description,
             cover_image_url=event.cover_image_url,
+            contact_name=event.contact_name,
+            contact_email=event.contact_email,
+            contact_phone=event.contact_phone,
+            internal_notes=event.internal_notes if can_see_internal_notes else None,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             expected_attendance=event.expected_attendance,
             status=event.status,
             organiser_id=event.organiser_id,
             organiser_name=event.organiser.full_name,
+            assigned_coordinator_id=event.assigned_coordinator_id,
             assigned_coordinator_name=coordinator.full_name if coordinator else None,
             submitted_at=event.submitted_at,
             required_layout_code=event.required_layout_code,
@@ -414,6 +431,33 @@ class EventDetailOut(BaseModel):
             created_at=event.created_at,
             updated_at=event.updated_at,
         )
+
+
+# --- routine information edit (story 7.2) --------------------------------------------------
+class EventRoutineUpdate(BaseModel):
+    """AC1: only the routine fields - description, contact details and internal notes. Partial
+    update like ``EventUpdate``: only the fields sent change. Unlike ``EventUpdate``, every field
+    here may be cleared with ``null`` - none of them are load-bearing for submission."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    internal_notes: str | None = None
+
+    @field_validator(
+        "description",
+        "contact_name",
+        "contact_email",
+        "contact_phone",
+        "internal_notes",
+        mode="before",
+    )
+    @classmethod
+    def _normalize(cls, value):
+        return _blank_to_none(value)
 
 
 # --- decision (4.4 approve, 4.5 reject) ---------------------------------------------------

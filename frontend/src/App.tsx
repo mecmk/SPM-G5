@@ -6,6 +6,7 @@ import { RequireAuth, RequirePermission } from './auth/RequireAuth'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
+import { EventRoutineEditPage } from './events/EventRoutineEditPage'
 import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
@@ -18,6 +19,7 @@ import {
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EVENT_EDIT_PATH,
+  EVENT_EDIT_ROUTINE_PATH,
   EVENT_NEW_PATH,
   EVENT_PATH,
   EVENTS_INBOX_PATH,
@@ -103,6 +105,16 @@ function App() {
                 AC2 by answering with a "not found" response either way.
               */}
               <Route path={EVENT_PATH} element={<EventDetailPage />} />
+
+              {/*
+                Story 7.2: the assigned Event Coordinator edits an event's routine information.
+                Sits behind EVENTS_EDIT_ROUTINE (a role check, UX only); the page itself confirms
+                the signed-in coordinator is the one assigned to this specific event, and the
+                backend is the real enforcement of both.
+              */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_EDIT_ROUTINE} />}>
+                <Route path={EVENT_EDIT_ROUTINE_PATH} element={<EventRoutineEditPage />} />
+              </Route>
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (
                 <Route key={item.to} element={<RequirePermission permission={item.permission} />}>

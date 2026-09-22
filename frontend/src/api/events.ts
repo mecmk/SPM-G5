@@ -116,12 +116,18 @@ export interface EventDetail {
   purpose: string | null
   description: string | null
   cover_image_url: string | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  /** Coordinator-only (story 7.2): null for a viewer without events:review. */
+  internal_notes: string | null
   starts_at: string | null
   ends_at: string | null
   expected_attendance: number | null
   status: EventStatus
   organiser_id: string
   organiser_name: string
+  assigned_coordinator_id: string | null
   assigned_coordinator_name: string | null
   submitted_at: string | null
   required_layout_code: string | null
@@ -207,6 +213,36 @@ export function submitEvent(eventId: string, name: string): Promise<EventDetail>
       message: `"${name}" was sent to an Event Coordinator for review.`,
       importance: 'important',
     },
+  })
+}
+
+/**
+ * Mirrors `EventRoutineUpdate` (story 7.2). Only the routine fields: description, contact
+ * details and internal notes. A partial update - only the fields sent change, and `null` clears
+ * an optional one.
+ */
+export interface EventRoutineInput {
+  description: string | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  internal_notes: string | null
+}
+
+/**
+ * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its routine information
+ * directly. Rejected with EVENT_ALREADY_SUBMITTED-shaped 409 once the event is completed,
+ * cancelled or rejected.
+ */
+export function updateEventRoutineInformation(
+  eventId: string,
+  input: EventRoutineInput,
+): Promise<EventDetail> {
+  return api<EventDetail>(`/events/${eventId}/routine-information`, {
+    method: 'PATCH',
+    body: input,
+    errorCodes: { 404: 'EVENT_NOT_FOUND' },
+    notify: { title: 'Event updated', message: 'The routine event information was saved.' },
   })
 }
 

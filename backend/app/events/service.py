@@ -1,5 +1,6 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), and the approve/reject decision (stories 4.4, 4.5).
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), and routine
+information edits (story 7.2).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -41,6 +42,7 @@ from app.events.schemas import (
     EventEquipmentIn,
     EventFacilityIn,
     EventReferenceData,
+    EventRoutineUpdate,
     EventUpdate,
     ReferenceItemOut,
     ReviewQueueSort,
@@ -61,6 +63,9 @@ _MAX_EVENT_DURATION = timedelta(days=14)
 _SINGAPORE = timezone(timedelta(hours=8))
 NOT_EDITABLE_MESSAGE = "This request has been submitted and can no longer be edited."
 ALREADY_SUBMITTED_MESSAGE = "This request has already been submitted."
+ROUTINE_EDIT_CLOSED_MESSAGE = (
+    "This event is {status}, so its routine information can no longer be edited."
+)
 
 # ``event_equipment_requests.status`` once the units are held for the event.
 _LINE_RESERVED = "RESERVED"
@@ -74,6 +79,19 @@ _SORT_COLUMNS = {
     ReviewQueueSort.SUBMITTED_AT: Event.submitted_at,
     ReviewQueueSort.STARTS_AT: Event.starts_at,
 }
+
+# Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
+# never widen this to accept arbitrary Event fields (important fields go through story 7.3).
+_ROUTINE_FIELDS = (
+    "description",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
+    "internal_notes",
+)
+
+# Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
+_ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -125,6 +143,13 @@ class EventNotEditable(EventStateConflict):
 class EventAlreadySubmitted(EventStateConflict):
     def __init__(self):
         super().__init__(ALREADY_SUBMITTED_MESSAGE)
+
+
+class RoutineEditClosed(EventStateConflict):
+    """7.2 AC3: the event has reached a status where routine information is frozen."""
+
+    def __init__(self, status: str):
+        super().__init__(ROUTINE_EDIT_CLOSED_MESSAGE.format(status=status))
 
 
 class InvalidEventRequest(ValueError):
@@ -876,3 +901,35 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
         reason=reason,
         action="EVENT_REJECTED",
     )
+
+
+# --- routine information edit (story 7.2) ---------------------------------------------------
+
+
+def update_routine_information(
+    db: Session, event: Event, data: EventRoutineUpdate, *, actor: User
+) -> None:
+    """AC1-AC3: the coordinator assigned to ``event`` edits its routine fields directly. Only
+    the fields sent change, and only ``_ROUTINE_FIELDS`` may ever be touched - never the
+    important fields story 7.3 owns."""
+    _assert_assigned_coordinator(event, actor)
+    if event.status in _ROUTINE_EDIT_CLOSED_STATUSES:
+        raise RoutineEditClosed(event.status)
+
+    sent = data.model_fields_set
+    changed = {field: getattr(data, field) for field in _ROUTINE_FIELDS if field in sent}
+    for field, value in changed.items():
+        setattr(event, field, value)
+    event.updated_at = datetime.now(UTC)
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_ROUTINE_INFO_UPDATED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"fields": sorted(changed)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
