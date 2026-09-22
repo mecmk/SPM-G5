@@ -139,6 +139,21 @@ def test_internal_notes_are_never_returned_to_the_organiser(coordinator_client, 
     assert response.json()["internal_notes"] is None
 
 
+@pytest.mark.story("7.2", ac=2)
+def test_internal_notes_are_never_returned_to_venue_staff_or_tech_support(
+    coordinator_client, venue_staff_client, tech_client
+):
+    _patch(coordinator_client, Events.SUBMITTED, internal_notes="Coordinator eyes only.")
+
+    venue_response = venue_staff_client.get(f"/events/{Events.SUBMITTED}")
+    tech_response = tech_client.get(f"/events/{Events.SUBMITTED}")
+
+    assert venue_response.status_code == 200
+    assert venue_response.json()["internal_notes"] is None
+    assert tech_response.status_code == 200
+    assert tech_response.json()["internal_notes"] is None
+
+
 # --- AC3: blocked once the event is completed, cancelled or rejected --------------------------
 @pytest.mark.story("7.2", ac=3)
 @pytest.mark.parametrize(

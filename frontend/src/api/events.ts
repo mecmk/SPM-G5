@@ -119,7 +119,7 @@ export interface EventDetail {
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
-  /** Coordinator-only (story 7.2): null for a viewer without events:read_all. */
+  /** Coordinator-only (story 7.2): null for a viewer without events:review. */
   internal_notes: string | null
   starts_at: string | null
   ends_at: string | null

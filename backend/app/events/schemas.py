@@ -347,7 +347,8 @@ class EventDetailOut(BaseModel):
     same way for the venue requirements (AC4).
 
     ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
-    without ``events:read_all``, so an organiser never receives it.
+    without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
+    receives it.
     """
 
     id: uuid.UUID
@@ -387,7 +388,7 @@ class EventDetailOut(BaseModel):
     def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
         layout = event.required_layout
-        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_READ_ALL)
+        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
         return cls(
             id=event.id,
             name=event.name,

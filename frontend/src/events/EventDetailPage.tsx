@@ -87,7 +87,7 @@ export function EventDetailPage() {
   const backState = location.state as EventCardBackState | null
   const backTo = backState?.from ?? HOME_PATH
   const backLabel = backState?.fromLabel ?? 'Home'
-  const canSeeInternalNotes = can(PERMISSIONS.EVENTS_READ_ALL)
+  const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const canEditRoutineInformation =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     event.assigned_coordinator_id === user?.id &&
