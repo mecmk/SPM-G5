@@ -933,6 +933,7 @@ td.num {
 .badge-confirmed,
 .badge-reserved,
 .badge-registered,
+.badge-completed,
 .badge-success {
   color: var(--success);
   background: var(--success-bg);
@@ -946,7 +947,6 @@ td.num {
 }
 
 .badge-under_review,
-.badge-clarification_requested,
 .badge-pending,
 .badge-warning {
   color: var(--warning);
@@ -954,7 +954,8 @@ td.num {
   border-color: var(--warning-border);
 }
 
-.badge-partially_reserved {
+.badge-partially_reserved,
+.badge-event_cancelled {
   color: var(--orange);
   background: var(--orange-bg);
   border-color: var(--orange-border);
@@ -971,6 +972,7 @@ td.num {
 
 .badge-submitted,
 .badge-requested,
+.badge-clarification_requested,
 .badge-info {
   color: var(--info);
   background: var(--info-bg);
@@ -978,7 +980,6 @@ td.num {
 }
 
 .badge-draft,
-.badge-completed,
 .badge-withdrawn,
 .badge-neutral {
   color: var(--neutral);
