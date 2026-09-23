@@ -61,7 +61,7 @@ link simply stops appearing. Grep both sides when changing one.
 | `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                                                               | nothing                                                                                               |
 | `src/routes.ts`          | Route paths used by more than one file                                                                                                                                                                         | nothing                                                                                               |
 | `src/components/`        | Shared presentational pieces: story c3's `Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …, story 1.2's `Icon`, story 8.3's `ConfirmDialog` and story 4.1's `EventCard`. Props only: no API calls, no auth | `../routes`, `../shared/*`                                                                            |
-| `src/shared/`            | Formatting helpers shared by pages, e.g. `format.ts` (story 4.1)                                                                                                                                               | nothing                                                                                               |
+| `src/shared/`            | Formatting helpers shared by pages, e.g. `format.ts` (story 4.1), and `useLoaded.ts`, the load-on-arrival hook (story 2.6)                                                                                     | `../api/client`, for `useLoaded` only                                                                 |
 | `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/` (story 8.3)                                                                                                                                                     | `../api/<feature>`, `../auth/authContext`, `../components/*`, `../layout/LoadingState`, `../shared/*` |
 | `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth` / `RequirePermission`, `LoginPage`, `homeFor`, `permissions.ts`                                                                                                   | `../api/auth`, `../layout/LoadingState`, `../pages/NotPermittedPage`                                  |
 | `src/layout/`            | `AppLayout` (the signed-in frame: collapsible `Sidebar`, phone bar and drawer, notification bell, toasts), `navigation.ts` (every section and the permission it needs), `LoadingState`                         | `../auth/authContext`, `../components/*`, `../notifications/*`                                        |
@@ -75,8 +75,10 @@ Routing is **react-router v7**, imported from the `react-router` package — _no
 are router `Link` / `NavLink`, never a bare `<a href>` to an in-app path.
 
 State is plain React: `useState` + `useEffect`, with a `cancelled` flag in the cleanup so a slow
-response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). The
-shared state is auth, held in `AuthProvider` and read through `useAuth()`, and the notification
+response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). A
+page that only loads data when it opens uses `useLoaded` (`src/shared/useLoaded.ts`), which holds
+that pattern once and returns `{ data, error, isLoading, setData }`; give it a module-level
+function or a `useCallback`, never an inline arrow. The shared state is auth, held in `AuthProvider` and read through `useAuth()`, and the notification
 centre, held in `NotificationProvider` and read through `useNotifications()`.
 There is no Redux, Zustand, TanStack Query or SWR, and adding one is a team decision.
 

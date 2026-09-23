@@ -1,4 +1,7 @@
-"""Business logic for event requests (story 2.1) and event review (story 4.1).
+"""Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
+event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), the decision /
+clarification history an organiser sees (story 4.6), routine information edits (story 7.2), and
+the coordinator's assigned events in any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -9,11 +12,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
@@ -25,6 +29,7 @@ from app.events.models import (
     EquipmentUnavailabilityPeriod,
     Event,
     EventAccessibilityNeed,
+    EventClarification,
     EventEquipmentRequest,
     EventRequiredFacility,
     EventStatus,
@@ -39,6 +44,7 @@ from app.events.schemas import (
     EventEquipmentIn,
     EventFacilityIn,
     EventReferenceData,
+    EventRoutineUpdate,
     EventUpdate,
     ReferenceItemOut,
     ReviewQueueSort,
@@ -59,6 +65,9 @@ _MAX_EVENT_DURATION = timedelta(days=14)
 _SINGAPORE = timezone(timedelta(hours=8))
 NOT_EDITABLE_MESSAGE = "This request has been submitted and can no longer be edited."
 ALREADY_SUBMITTED_MESSAGE = "This request has already been submitted."
+ROUTINE_EDIT_CLOSED_MESSAGE = (
+    "This event is {status}, so its routine information can no longer be edited."
+)
 
 # ``event_equipment_requests.status`` once the units are held for the event.
 _LINE_RESERVED = "RESERVED"
@@ -72,6 +81,24 @@ _SORT_COLUMNS = {
     ReviewQueueSort.SUBMITTED_AT: Event.submitted_at,
     ReviewQueueSort.STARTS_AT: Event.starts_at,
 }
+
+# Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
+# never widen this to accept arbitrary Event fields (important fields go through story 7.3).
+_ROUTINE_FIELDS = (
+    "description",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
+    "internal_notes",
+)
+
+# Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
+_ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
+
+# Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
+# call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
+MY_EVENTS_MAX_LIMIT = 100
+MY_EVENTS_MAX_OFFSET = 2_147_483_647
 
 # Columns copied straight from a request body onto the event (the lists are handled apart).
 _DETAIL_FIELDS = (
@@ -118,6 +145,13 @@ class EventNotEditable(EventStateConflict):
 class EventAlreadySubmitted(EventStateConflict):
     def __init__(self):
         super().__init__(ALREADY_SUBMITTED_MESSAGE)
+
+
+class RoutineEditClosed(EventStateConflict):
+    """7.2 AC3: the event has reached a status where routine information is frozen."""
+
+    def __init__(self, status: str):
+        super().__init__(ROUTINE_EDIT_CLOSED_MESSAGE.format(status=status))
 
 
 class InvalidEventRequest(ValueError):
@@ -169,6 +203,12 @@ class MissingSubmissionDetails(InvalidEventRequest):
         self.missing = missing
 
 
+NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may {verb} it."
+EVENT_NOT_AWAITING_DECISION_MESSAGE = (
+    "This request is {status}, so it cannot be approved or rejected."
+)
+DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
+
 # --- reads -------------------------------------------------------------------------------
 
 
@@ -187,6 +227,67 @@ def list_review_queue(
     if coordinator_id is not None:
         query = query.where(Event.assigned_coordinator_id == coordinator_id)
     return list(db.scalars(query).all())
+
+
+@dataclass(frozen=True)
+class MyEventsListing:
+    """One page of an organiser's requests, and how many they own in all."""
+
+    events: list[Event]
+    total: int
+
+
+def list_my_events(
+    db: Session,
+    *,
+    organiser: User,
+    limit: int = MY_EVENTS_MAX_LIMIT,
+    offset: int = 0,
+) -> MyEventsListing:
+    """AC1/AC3: every request ``organiser`` owns, in any status, and nobody else's - owned by the
+    organiser, not by their organisation. AC4: drafts included. AC6: most recently updated first,
+    ties broken by id so the order is stable, and so are the pages cut from it (AC9).
+    ``organiser`` and ``assigned_coordinator`` are joined eagerly on ``Event`` for the review
+    queue, which shows their names; this list shows neither, so they are left unloaded rather than
+    joining ``users`` twice for every row."""
+    is_owned = Event.organiser_id == organiser.id
+    page = (
+        select(Event)
+        .options(lazyload(Event.organiser), lazyload(Event.assigned_coordinator))
+        .where(is_owned)
+        .order_by(Event.updated_at.desc(), Event.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    total = db.scalar(select(func.count()).select_from(Event).where(is_owned))
+    return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
+
+
+def list_assigned_events(
+    db: Session,
+    *,
+    coordinator: User,
+    limit: int = MY_EVENTS_MAX_LIMIT,
+    offset: int = 0,
+) -> MyEventsListing:
+    """Story 6.1 AC1/AC2: every event assigned to ``coordinator``, in any status - unlike the
+    review queue (story 4.1), which only ever returns the three awaiting-decision statuses. A
+    draft is never assigned to a coordinator, so it can never appear here. AC3: most recently
+    updated first, ties broken by id, paged the same way as the organiser's own list
+    (``list_my_events``) - both lists grow across a person's whole history rather than staying
+    small like the review queue, so the same shape fits. ``assigned_coordinator`` is the caller
+    themselves and needs no name, so only ``organiser`` is left to load eagerly."""
+    is_assigned = Event.assigned_coordinator_id == coordinator.id
+    page = (
+        select(Event)
+        .options(lazyload(Event.assigned_coordinator))
+        .where(is_assigned)
+        .order_by(Event.updated_at.desc(), Event.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    total = db.scalar(select(func.count()).select_from(Event).where(is_assigned))
+    return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
 
 
 def list_reference_data(db: Session) -> EventReferenceData:
@@ -219,12 +320,51 @@ def _can_view(viewer: User, event: Event) -> bool:
 
 
 def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
-    """AC8: the organiser sees their own request; internal roles see every submitted one. A draft
-    is private to its organiser, and anything else the viewer may not see is simply not found."""
+    """AC8 / 4.4 AC1 / 4.5 AC2: the organiser sees their own request; internal roles see every
+    submitted one. A draft is private to its organiser, and anything else the viewer may not
+    see is simply not found."""
     event = db.get(Event, event_id)
     if event is None or not _can_view(viewer, event):
         raise EventNotFound(event_id)
     return event
+
+
+NOT_RELATED_PARTY_MESSAGE = (
+    "Only the organiser and the coordinator assigned to this request may view its clarifications."
+)
+
+
+class NotRelatedParty(PermissionError):
+    """Only the organiser and the event's assigned coordinator may read the clarification
+    conversation - narrower than ``get_event``'s visibility, which any internal role with
+    ``events:read_all`` satisfies."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_RELATED_PARTY_MESSAGE)
+
+
+def _can_view_clarifications(viewer: User, event: Event) -> bool:
+    return event.organiser_id == viewer.id or event.assigned_coordinator_id == viewer.id
+
+
+def list_clarifications(
+    db: Session, event_id: uuid.UUID, *, viewer: User
+) -> list[EventClarification]:
+    """4.6 AC2: the clarification conversation on a request, oldest first - visible only to the
+    organiser and to the coordinator assigned to this event, not to internal roles generally,
+    even though they can read the event record itself via ``get_event``. A viewer who cannot see
+    the event at all gets ``EventNotFound``, same as ``get_event``; one who can see the event but
+    is not organiser or assigned coordinator gets ``NotRelatedParty`` instead."""
+    event = get_event(db, event_id, viewer=viewer)
+    if not _can_view_clarifications(viewer, event):
+        raise NotRelatedParty()
+    return list(
+        db.scalars(
+            select(EventClarification)
+            .where(EventClarification.event_id == event_id)
+            .order_by(EventClarification.created_at, EventClarification.id)
+        ).all()
+    )
 
 
 def _get_own_event(db: Session, event_id: uuid.UUID, actor: User) -> Event:
@@ -646,6 +786,31 @@ def _missing_for_submission(event: Event) -> list[str]:
     return missing
 
 
+def _record_transition(
+    db: Session,
+    event: Event,
+    *,
+    from_status: str,
+    to_status: str,
+    actor: User,
+    at: datetime,
+    reason: str | None,
+) -> None:
+    """Append one row to the append-only ``event_status_history`` log. ``to_status`` is taken
+    as given, never read off ``event``, so this does not depend on being called before or after
+    ``event`` itself is updated."""
+    db.add(
+        EventStatusHistory(
+            event_id=event.id,
+            from_status=from_status,
+            to_status=to_status,
+            changed_by_id=actor.id,
+            changed_at=at,
+            reason=reason,
+        )
+    )
+
+
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in."""
     event = _get_own_event(db, event_id, actor)
@@ -659,22 +824,24 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     )
 
     _hold_equipment(db, event, actor)
+    submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
     submitted = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status == EventStatus.DRAFT)
-        .values(status=EventStatus.SUBMITTED, submitted_at=datetime.now(UTC))
+        .values(status=EventStatus.SUBMITTED, submitted_at=submitted_at)
     )
     if submitted.rowcount == 0:
         db.rollback()
         raise EventAlreadySubmitted()
-    db.add(
-        EventStatusHistory(
-            event_id=event.id,
-            from_status=EventStatus.DRAFT,
-            to_status=EventStatus.SUBMITTED,
-            changed_by_id=actor.id,
-        )
+    _record_transition(
+        db,
+        event,
+        from_status=EventStatus.DRAFT,
+        to_status=EventStatus.SUBMITTED,
+        actor=actor,
+        at=submitted_at,
+        reason=None,
     )
     record_audit(
         db,
@@ -687,3 +854,165 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     db.commit()
     db.refresh(event)
     return event
+
+
+class NotAssignedCoordinator(PermissionError):
+    """Only the coordinator ``events.assigned_coordinator_id`` names may act on the request.
+    ``verb`` names the refused action (``"decide"``, ``"edit"``) so 4.4/4.5's decision and 7.2's
+    routine edit do not share one message - backend/STYLE.md: two messages never share one
+    string."""
+
+    def __init__(self, verb: str) -> None:
+        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE.format(verb=verb))
+
+
+class EventNotAwaitingDecision(EventStateConflict):
+    """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
+    refuses repeat or invalid-state decisions (e.g. a request already decided, or past
+    PLANNING). A draft never reaches this guard: ``get_event`` hides it from the coordinator
+    first, so that case is a 404, not a 409."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status))
+        self.event = event
+
+
+class MissingDecisionReason(InvalidEventRequest):
+    """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
+    with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
+    clarification flow, 6.5's cancellation, a seed script, a test factory)."""
+
+    def __init__(self) -> None:
+        super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
+
+
+# --- decisions -----------------------------------------------------------------------------
+
+
+def _assert_assigned_coordinator(event: Event, actor: User, *, verb: str) -> None:
+    if event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator(verb)
+
+
+def _assert_awaiting_decision(event: Event) -> None:
+    if event.status not in _AWAITING_DECISION_STATUSES:
+        raise EventNotAwaitingDecision(event)
+
+
+def _decide(
+    db: Session, event: Event, *, actor: User, to_status: str, reason: str | None, action: str
+) -> None:
+    """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
+    decide, and only while the request is awaiting decision. The update is conditional on the
+    event still being in an awaiting-decision status, so two concurrent decisions on the same
+    request cannot both succeed - the same shape as ``submit_event``'s guard against a racing
+    double-submit. ``reason`` is written unconditionally, which is what clears a stale
+    ``decision_reason`` left by an earlier rejection when a later approval reuses this path
+    (relevant once 4.6's clarification round-trip can return a request here more than once).
+    """
+    _assert_assigned_coordinator(event, actor, verb="decide")
+    _assert_awaiting_decision(event)
+
+    from_status = event.status
+    decided_at = datetime.now(UTC)
+    decided = db.execute(
+        update(Event)
+        .where(Event.id == event.id, Event.status.in_(_AWAITING_DECISION_STATUSES))
+        .values(
+            status=to_status, decided_by_id=actor.id, decided_at=decided_at, decision_reason=reason
+        )
+    )
+    if decided.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise EventNotAwaitingDecision(event)
+    _record_transition(
+        db,
+        event,
+        from_status=from_status,
+        to_status=to_status,
+        actor=actor,
+        at=decided_at,
+        reason=reason,
+    )
+    details: dict[str, Any] = {"from_status": from_status}
+    if reason is not None:
+        details["reason"] = reason
+    record_audit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type="event",
+        entity_id=event.id,
+        details=details,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
+
+
+def approve_event(db: Session, event: Event, *, actor: User) -> None:
+    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time."""
+    _decide(
+        db, event, actor=actor, to_status=EventStatus.APPROVED, reason=None, action="EVENT_APPROVED"
+    )
+
+
+def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
+    """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
+    time. Same guards as ``approve_event``."""
+    if not reason.strip():
+        raise MissingDecisionReason()
+    _decide(
+        db,
+        event,
+        actor=actor,
+        to_status=EventStatus.REJECTED,
+        reason=reason,
+        action="EVENT_REJECTED",
+    )
+
+
+# --- routine information edit (story 7.2) ---------------------------------------------------
+
+
+def update_routine_information(
+    db: Session, event: Event, data: EventRoutineUpdate, *, actor: User
+) -> None:
+    """AC1-AC3: the coordinator assigned to ``event`` edits its routine fields directly. Only
+    the fields sent change, and only ``_ROUTINE_FIELDS`` may ever be touched - never the
+    important fields story 7.3 owns. AC3's status gate is checked before the assignment check,
+    so a closed event always refuses with 409 regardless of who is asking, rather than a 403
+    that names the wrong reason. The write itself stays conditional on the event not yet being
+    in a closed status, so a routine edit racing another request's status change still cannot
+    land on a request AC3 says is frozen - the same shape as ``submit_event``'s and ``_decide``'s
+    guard against a racing status change. A body with nothing to change is a no-op: no write, no
+    audit entry, ``updated_at`` untouched."""
+    if event.status in _ROUTINE_EDIT_CLOSED_STATUSES:
+        raise RoutineEditClosed(event.status)
+    _assert_assigned_coordinator(event, actor, verb="edit")
+
+    sent = data.model_fields_set
+    changed = {field: getattr(data, field) for field in _ROUTINE_FIELDS if field in sent}
+    if not changed:
+        return
+    updated = db.execute(
+        update(Event)
+        .where(Event.id == event.id, Event.status.notin_(_ROUTINE_EDIT_CLOSED_STATUSES))
+        .values(**changed, updated_at=datetime.now(UTC))
+    )
+    if updated.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise RoutineEditClosed(event.status)
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_ROUTINE_INFO_UPDATED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"fields": sorted(changed)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)

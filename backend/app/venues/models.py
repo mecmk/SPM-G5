@@ -1,12 +1,13 @@
-"""ORM models for the venue catalogue (stories 8.x). Mirrors backend/db/migrations."""
+"""ORM models for the venue catalogue (stories 8.x) and its calendar (story 9.1). Mirrors
+backend/db/migrations."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import time
+from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Integer, Numeric, Text, Time, text
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, Text, Time, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -121,3 +122,33 @@ class VenueAccessibilityFeature(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     feature: Mapped[AccessibilityFeature] = relationship(lazy="joined")
+
+
+class UnavailabilityReason:
+    """Values allowed by ``ck_venue_unavailability_reason``."""
+
+    MAINTENANCE = "MAINTENANCE"
+    RENOVATION = "RENOVATION"
+    SAFETY = "SAFETY"
+    INTERNAL_USE = "INTERNAL_USE"
+    OTHER = "OTHER"
+
+
+class VenueUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A block of time a venue cannot be booked for a reason other than an event booking
+    (maintenance, renovation, safety, internal use). Read by story 9.1's calendar; managed by
+    story 9.3, not yet built. ``ends_at`` is required - every period is bounded, no open-ended
+    case (team decision, 21 Sep 2026)."""
+
+    __tablename__ = "venue_unavailability_periods"
+
+    venue_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("venues.id", ondelete="CASCADE"), nullable=False
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )

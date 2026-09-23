@@ -11,8 +11,8 @@ import {
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
-import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { HOME_PATH, eventEditPath } from '../routes'
@@ -44,6 +44,7 @@ import {
   type FormProblem,
   type NoteDraft,
 } from './eventRequestForm'
+import { readBackState } from './backState'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
@@ -99,6 +100,9 @@ export function EventRequestFormPage() {
   const isEditing = eventId !== undefined
   const navigate = useNavigate()
   const location = useLocation()
+  // Story 2.6: the back link goes to wherever the person came from, and the saves below keep that
+  // across the move from /events/new to the saved request's own address.
+  const backState = readBackState(location.state)
   const [reference, setReference] = useState<EventReferenceData | null>(null)
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [form, setForm] = useState<EventFormState | null>(isEditing ? null : EMPTY_EVENT_FORM)
@@ -379,7 +383,7 @@ export function EventRequestFormPage() {
         setEvent(saved)
         setForm(formFromEvent(saved))
       } else {
-        navigate(eventEditPath(saved.id), { replace: true })
+        navigate(eventEditPath(saved.id), { replace: true, state: backState })
       }
     } catch (err) {
       setSaveError(formatApiError(err))
@@ -406,7 +410,7 @@ export function EventRequestFormPage() {
           setEvent(submitted)
           setForm(formFromEvent(submitted))
         } else {
-          navigate(eventEditPath(saved.id), { replace: true })
+          navigate(eventEditPath(saved.id), { replace: true, state: backState })
         }
       } catch (err) {
         if (isEditing) {
@@ -417,7 +421,7 @@ export function EventRequestFormPage() {
         } else {
           navigate(eventEditPath(saved.id), {
             replace: true,
-            state: { notice: formatApiError(err) },
+            state: { ...backState, notice: formatApiError(err) },
           })
         }
       }
@@ -441,12 +445,12 @@ export function EventRequestFormPage() {
   const subtitle =
     event && isReadOnly ? (
       <>
-        <StatusBadge status={event.status} />{' '}
+        <EventStatusBadge status={event.status} />{' '}
         {event.submitted_at && <span>Submitted on {formatDateTime(event.submitted_at)}</span>}
       </>
     ) : (
       <>
-        {event && <StatusBadge status={event.status} />}{' '}
+        {event && <EventStatusBadge status={event.status} />}{' '}
         <span>
           Fields marked * and an answer to venue requirements and accessibility are needed to
           submit. Only the event name is needed to save a draft.
@@ -456,7 +460,12 @@ export function EventRequestFormPage() {
 
   return (
     <div className="page">
-      <PageHeader backTo={HOME_PATH} backLabel="Main page" title={title} subtitle={subtitle} />
+      <PageHeader
+        backTo={backState?.from ?? HOME_PATH}
+        backLabel={backState?.fromLabel ?? 'Main page'}
+        title={title}
+        subtitle={subtitle}
+      />
 
       {loadError && (
         <p role="alert" className="error">

@@ -165,7 +165,10 @@ class EquipmentUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
-    """Append-only log of every status transition (stories 6.1, 6.4)."""
+    """Append-only log of every event status transition (stories 4.6, 6.1, 6.4). Written by
+    story 4.4/4.5's approve/reject and, later, 6.1/6.4's other transitions - never updated or
+    deleted. No ``created_at``/``updated_at``: ``changed_at`` is the only timestamp.
+    """
 
     __tablename__ = "event_status_history"
 
@@ -181,6 +184,35 @@ class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     reason: Mapped[str | None] = mapped_column(Text)
+
+
+class ClarificationKind:
+    """Values allowed by ``ck_event_clarifications_kind`` (story 4.6 AC2)."""
+
+    REQUEST = "REQUEST"
+    RESPONSE = "RESPONSE"
+    NOTE = "NOTE"
+
+
+class EventClarification(UUIDPrimaryKeyMixin, Base):
+    """One message in the clarification conversation on a request (stories 4.2, 4.3, 4.6).
+    Append-only: no write endpoint exists beyond creation (story 4.6 AC3)."""
+
+    __tablename__ = "event_clarifications"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    author: Mapped[User] = relationship(lazy="joined")
 
 
 class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -257,3 +289,6 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by=(EventEquipmentRequest.created_at, EventEquipmentRequest.id),
     )
+    # Default lazy="select": only EventDetailOut's single-row read needs the decider, unlike
+    # organiser/assigned_coordinator above, which every review-queue row also needs joined.
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id])

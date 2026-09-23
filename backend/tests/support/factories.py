@@ -22,6 +22,7 @@ from app.events.models import (
     EquipmentType,
     EquipmentUnavailabilityPeriod,
     Event,
+    EventClarification,
     EventStatus,
 )
 from app.venues.models import Venue
@@ -70,6 +71,29 @@ def make_event(db: Session, *, status: str = EventStatus.SUBMITTED, **overrides)
     db.add(event)
     db.flush()
     return event
+
+
+def make_clarification(
+    db: Session,
+    *,
+    event_id: uuid.UUID,
+    author_id: uuid.UUID = Users.COORDINATOR.id,
+    kind: str = "NOTE",
+    message: str = "Test clarification message.",
+    created_at: datetime | None = None,
+) -> EventClarification:
+    """A clarification entry (story 4.6). ``created_at=None`` lets the DB default (now()) apply;
+    pass an explicit value to test ordering."""
+    row = EventClarification(
+        event_id=event_id,
+        author_id=author_id,
+        kind=kind,
+        message=message,
+        **({"created_at": created_at} if created_at is not None else {}),
+    )
+    db.add(row)
+    db.flush()
+    return row
 
 
 def make_venue(db: Session, **overrides) -> Venue:

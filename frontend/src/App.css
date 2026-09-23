@@ -192,6 +192,11 @@
   flex-shrink: 0;
 }
 
+/* A page-header with only an action slot (its title lives elsewhere, e.g. a hero banner). */
+.page-header.actions-only {
+  justify-content: flex-end;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 1rem;
@@ -280,6 +285,13 @@
   gap: 0.75rem;
 }
 
+.item-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .item-card-title {
   font-size: 0.875rem;
   font-weight: 600;
@@ -304,6 +316,67 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* ---------- subtle fact blocks (story 13.1) ---------- */
+
+.subtle-block {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fact-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* ---------- summary stat cards (story 13.1 UI refresh) ---------- */
+
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.stat-card-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.booking-detail-header {
+  margin-bottom: 1.5rem;
+}
+
+.booking-detail-header .cluster {
+  gap: 1rem;
 }
 
 /* ---------- fixed-width filter column + results (story 8.1) ---------- */
@@ -342,6 +415,72 @@
   }
 }
 
+/* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
+
+/*
+ * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
+ * so centring within it needs no sidebar-width math - it just has to stop being flush left.
+ */
+.event-detail-page,
+.event-routine-edit-page {
+  margin-inline: auto;
+}
+
+.divider {
+  height: 0;
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--hairline);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.stat .icon {
+  display: block;
+  flex-shrink: 0;
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+}
+
+.stat-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  line-height: 2rem;
+  color: var(--text-h);
+}
+
+.layout-half {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .layout-half {
+    grid-template-columns: 1fr;
+  }
+}
+
 .venue-hero {
   position: relative;
   display: grid;
@@ -372,6 +511,15 @@
   margin-top: 0.25rem;
   font-size: 0.8125rem;
   color: var(--on-brand-panel-muted);
+}
+
+/* Story 7.1: a real photo filling the hero, for pages that have one (venues never do). */
+.venue-hero-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .layout-grid {
@@ -487,6 +635,74 @@ label.checkbox input {
 
 .check-list li:last-child {
   border-bottom: none;
+}
+
+/* story 4.6: the clarification conversation, styled as a two-party chat thread */
+.clarification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.clarification-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.clarification-row-self {
+  flex-direction: row-reverse;
+}
+
+.clarification-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.clarification-avatar-self {
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.clarification-bubble-self {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.clarification-bubble-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.clarification-bubble-text {
+  margin: 0;
+  overflow-wrap: break-word;
 }
 
 .grow-text {
@@ -722,6 +938,7 @@ td.num {
 .badge-confirmed,
 .badge-reserved,
 .badge-registered,
+.badge-completed,
 .badge-success {
   color: var(--success);
   background: var(--success-bg);
@@ -735,7 +952,6 @@ td.num {
 }
 
 .badge-under_review,
-.badge-clarification_requested,
 .badge-pending,
 .badge-warning {
   color: var(--warning);
@@ -743,7 +959,8 @@ td.num {
   border-color: var(--warning-border);
 }
 
-.badge-partially_reserved {
+.badge-partially_reserved,
+.badge-event_cancelled {
   color: var(--orange);
   background: var(--orange-bg);
   border-color: var(--orange-border);
@@ -760,6 +977,7 @@ td.num {
 
 .badge-submitted,
 .badge-requested,
+.badge-clarification_requested,
 .badge-info {
   color: var(--info);
   background: var(--info-bg);
@@ -767,7 +985,6 @@ td.num {
 }
 
 .badge-draft,
-.badge-completed,
 .badge-withdrawn,
 .badge-neutral {
   color: var(--neutral);
@@ -1137,6 +1354,10 @@ td.num {
 .small {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+
+.self-start {
+  align-self: flex-start;
 }
 
 .mono {
@@ -1601,6 +1822,38 @@ td.num {
   color: var(--text-h);
 }
 
+.event-card-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/*
+ * A linked card (story 7.1) opens on a click anywhere on it. That is done in EventCard.tsx, not
+ * here, so nothing covers the card: its text stays selectable and anything interactive inside it
+ * keeps its click. This only says the card is clickable, and rings it when its title has focus.
+ */
+.event-card-linked {
+  cursor: pointer;
+}
+
+.event-card-linked:hover .event-card-title a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.event-card-linked:has(.event-card-title a:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.load-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
 .event-card-details {
   display: grid;
   gap: 0.125rem;
@@ -1812,11 +2065,11 @@ tbody tr:hover td {
   box-shadow: var(--shadow);
 }
 
-.sidebar.is-collapsed .notification-panel {
+.notification-panel.is-sidebar-collapsed {
   left: 5rem;
 }
 
-.mobile-bar .notification-panel {
+.notification-panel.is-mobile {
   top: 3.5rem;
   right: 0.75rem;
   left: auto;

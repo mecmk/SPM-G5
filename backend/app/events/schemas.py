@@ -1,4 +1,7 @@
-"""Request and response shapes for event requests (story 2.1) and the review queue (story 4.1)."""
+"""Request and response shapes for event requests (story 2.1), the organiser's own list of
+them (story 2.6), the review queue (story 4.1), the approve/reject decision (stories 4.4,
+4.5), the decision / clarification history an organiser sees (story 4.6), and the coordinator's
+assigned events in any status (story 6.1)."""
 
 from __future__ import annotations
 
@@ -17,7 +20,9 @@ from pydantic import (
     model_validator,
 )
 
-from app.events.models import Event, EventEquipmentRequest
+from app.auth.models import User
+from app.auth.permissions import Permission, role_has
+from app.events.models import Event, EventClarification, EventEquipmentRequest
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
 # rejects 0 and below; the ceiling is the largest value the INTEGER columns can hold.
@@ -74,6 +79,80 @@ class ReviewQueueEntry(BaseModel):
             status=event.status,
             cover_image_url=event.cover_image_url,
         )
+
+
+# --- my event requests (story 2.6) ---------------------------------------------------------
+class MyEventEntry(BaseModel):
+    """AC1: name, proposed date and current status, plus the optional picture. AC4: a draft can
+    be saved with only a name, so the dates may be null. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime | None
+    ends_at: datetime | None
+    status: str
+    cover_image_url: str | None
+
+    @classmethod
+    def from_event(cls, event: Event) -> MyEventEntry:
+        return cls(
+            id=event.id,
+            name=event.name,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            status=event.status,
+            cover_image_url=event.cover_image_url,
+        )
+
+
+class MyEventList(BaseModel):
+    """AC9: one page of the list, and how many requests the organiser owns in all, so a page can
+    say how many more there are. No defaults (response schema)."""
+
+    items: list[MyEventEntry]
+    total: int
+
+
+# --- events assigned to a coordinator, any status (story 6.1) ------------------------------
+class AssignedEventEntry(BaseModel):
+    """AC1: name, organiser, proposed date and current status, plus the optional picture -
+    every status, not just the review queue's three awaiting-decision ones. No defaults
+    (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    organiser_name: str
+    starts_at: datetime  # non-null for every non-DRAFT row (ck_events_submitted_fields_complete)
+    ends_at: datetime
+    submitted_at: datetime | None  # set once on submission and never cleared afterwards
+    status: str
+    cover_image_url: str | None
+
+    @classmethod
+    def from_event(cls, event: Event) -> AssignedEventEntry:
+        # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status, and a
+        # draft is never assigned to a coordinator.
+        starts_at, ends_at = event.starts_at, event.ends_at
+        assert starts_at is not None
+        assert ends_at is not None
+        return cls(
+            id=event.id,
+            name=event.name,
+            organiser_name=event.organiser.full_name,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            submitted_at=event.submitted_at,
+            status=event.status,
+            cover_image_url=event.cover_image_url,
+        )
+
+
+class AssignedEventList(BaseModel):
+    """AC3: one page of the coordinator's assigned events, and how many they have in all. No
+    defaults (response schema)."""
+
+    items: list[AssignedEventEntry]
+    total: int
 
 
 # --- reference data (story 2.1) ------------------------------------------------------------
@@ -309,18 +388,31 @@ class EventDetailOut(BaseModel):
     ``accessibility_none_required`` true means the organiser said none are needed; false with no
     needs and no notes means it has not been specified (AC5). ``venue_none_required`` works the
     same way for the venue requirements (AC4).
+
+    4.6 AC1: ``decided_by_name``/``decided_at``/``decision_reason`` are all ``None`` until the
+    request has been decided.
+
+    ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
+    without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
+    receives it.
     """
 
     id: uuid.UUID
     name: str
     purpose: str | None
     description: str | None
+    cover_image_url: str | None
+    contact_name: str | None
+    contact_email: str | None
+    contact_phone: str | None
+    internal_notes: str | None
     starts_at: datetime | None
     ends_at: datetime | None
     expected_attendance: int | None
     status: str
     organiser_id: uuid.UUID
     organiser_name: str
+    assigned_coordinator_id: uuid.UUID | None
     assigned_coordinator_name: str | None
     submitted_at: datetime | None
     required_layout_code: str | None
@@ -332,24 +424,34 @@ class EventDetailOut(BaseModel):
     accessibility_needs: list[AccessibilityNeedOut]
     accessibility_notes: str | None
     equipment: list[EquipmentLineOut]
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_reason: str | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_event(cls, event: Event) -> EventDetailOut:
+    def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
         layout = event.required_layout
+        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
         return cls(
             id=event.id,
             name=event.name,
             purpose=event.purpose,
             description=event.description,
+            cover_image_url=event.cover_image_url,
+            contact_name=event.contact_name,
+            contact_email=event.contact_email,
+            contact_phone=event.contact_phone,
+            internal_notes=event.internal_notes if can_see_internal_notes else None,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             expected_attendance=event.expected_attendance,
             status=event.status,
             organiser_id=event.organiser_id,
             organiser_name=event.organiser.full_name,
+            assigned_coordinator_id=event.assigned_coordinator_id,
             assigned_coordinator_name=coordinator.full_name if coordinator else None,
             submitted_at=event.submitted_at,
             required_layout_code=event.required_layout_code,
@@ -369,6 +471,76 @@ class EventDetailOut(BaseModel):
             ],
             accessibility_notes=event.accessibility_notes,
             equipment=[EquipmentLineOut.from_line(line) for line in event.equipment_requests],
+            decided_by_name=event.decided_by.full_name if event.decided_by else None,
+            decided_at=event.decided_at,
+            decision_reason=event.decision_reason,
             created_at=event.created_at,
             updated_at=event.updated_at,
+        )
+
+
+# --- routine information edit (story 7.2) --------------------------------------------------
+class EventRoutineUpdate(BaseModel):
+    """AC1: only the routine fields - description, contact details and internal notes. Partial
+    update like ``EventUpdate``: only the fields sent change. Unlike ``EventUpdate``, every field
+    here may be cleared with ``null`` - none of them are load-bearing for submission."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = None
+    # Bounds mirror the form's own maxLength (frontend/src/events/EventRoutineEditPage.tsx),
+    # which is otherwise unenforced server-side.
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
+    contact_phone: str | None = Field(default=None, max_length=50)
+    internal_notes: str | None = None
+
+    @field_validator(
+        "description",
+        "contact_name",
+        "contact_email",
+        "contact_phone",
+        "internal_notes",
+        mode="before",
+    )
+    @classmethod
+    def _normalize(cls, value):
+        return _blank_to_none(value)
+
+
+# --- decision (4.4 approve, 4.5 reject) ---------------------------------------------------
+class EventRejection(BaseModel):
+    """4.5 AC1: a reason is mandatory - blank or whitespace-only does not count."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
+
+
+# --- clarification history (story 4.6) ------------------------------------------------------
+class ClarificationOut(BaseModel):
+    """AC2: one entry of the clarification conversation, in the order it was written. No
+    defaults (response schema)."""
+
+    id: uuid.UUID
+    kind: str
+    author_id: uuid.UUID
+    author_name: str
+    message: str
+    created_at: datetime
+
+    @classmethod
+    def from_clarification(cls, row: EventClarification) -> ClarificationOut:
+        return cls(
+            id=row.id,
+            kind=row.kind,
+            author_id=row.author_id,
+            author_name=row.author.full_name,
+            message=row.message,
+            created_at=row.created_at,
         )

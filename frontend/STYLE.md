@@ -98,7 +98,7 @@ author's call. Never flatten a `taste` into a "must".
   {error && <p className="error">{error}</p>}
   ```
 
-  _`blocking` · exemplars `src/venues/VenueManagePage.tsx:45`, `src/auth/LoginPage.tsx:81`,
+  _`blocking` · exemplars `src/venues/VenueManagePage.tsx:127`, `src/auth/LoginPage.tsx:81`,
   `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29`_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
@@ -135,8 +135,8 @@ author's call. Never flatten a `taste` into a "must".
   }, [includeWithdrawn])
   ```
 
-  _`expected` · exemplars `src/venues/VenueManagePage.tsx:13-25`, `src/auth/AuthProvider.tsx:10-25`,
-  `src/venues/VenueFormPage.tsx`_
+  _`expected` · exemplars `src/shared/useLoaded.ts` (the pattern, written once for every page that only
+  loads on arrival), `src/auth/AuthProvider.tsx:10-25`, `src/venues/VenueFormPage.tsx`_
 
 - `expected` — **A custom hook returns a named object, never a tuple.** Positional unpacking
   breaks silently when the hook grows a new value: every call site shifts by one and still
@@ -220,7 +220,7 @@ author's call. Never flatten a `taste` into a "must".
   {venues && venues.length === 0 && <p className="muted">No venues recorded yet.</p>}
   ```
 
-  _`taste` · exemplar `src/venues/VenueManagePage.tsx:44-50`_
+  _`taste` · exemplar `src/venues/VenueManagePage.tsx:126-142`_
 
 ## Types
 
@@ -254,7 +254,7 @@ author's call. Never flatten a `taste` into a "must".
   const [isSaving, setIsSaving] = useState(false)
   ```
 
-  _`expected` · exemplars `src/venues/VenueManagePage.tsx:8`, `:10`;
+  _`expected` · exemplars `src/shared/useLoaded.ts:23`, `:24`;
   `src/auth/AuthProvider.tsx:6`; `src/venues/VenueFormPage.tsx:148-150`; 0 counter-sites —
   every nullable state in the tree already annotates, every primitive correctly infers_
 
@@ -293,7 +293,7 @@ author's call. Never flatten a `taste` into a "must".
   can: (permission: string) => boolean
   ```
 
-  _`expected` · exemplars `src/venues/VenueManagePage.tsx:6`, `src/venues/VenueFormPage.tsx:143`,
+  _`expected` · exemplars `src/venues/VenueManagePage.tsx:31`, `src/venues/VenueFormPage.tsx:143`,
   `src/auth/RequireAuth.tsx:14`, `src/auth/homeFor.ts:2`, `src/auth/authContext.ts:11`,
   `src/layout/AppLayout.tsx:7`; 9 sites in `src/`_
 

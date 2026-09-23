@@ -135,3 +135,29 @@ export function deleteVenue(venueId: string, venueName: string): Promise<void> {
     },
   })
 }
+
+/** Sentinel `reason` for an approved booking - distinct from venue_unavailability_periods' own
+ * reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER). Mirrors BOOKING_REASON
+ * in backend/app/venues/schemas.py. */
+export const BOOKING_REASON = 'BOOKED'
+
+/** Mirrors `VenueUnavailableWindowOut` (story 9.1). One blocked period - a flat list, not
+ * pre-expanded per day. */
+export interface VenueUnavailableWindow {
+  starts_at: string
+  ends_at: string
+  reason: string
+  label: string
+}
+
+/** Story 9.1 AC1/AC2. `startsAt`/`endsAt` are ISO datetimes covering the visible range. */
+export function getVenueCalendar(
+  venueId: string,
+  startsAt: string,
+  endsAt: string,
+): Promise<VenueUnavailableWindow[]> {
+  const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  return api<VenueUnavailableWindow[]>(`/venues/${venueId}/calendar?${params}`, {
+    errorCodes: { 404: 'VENUE_NOT_FOUND' },
+  })
+}

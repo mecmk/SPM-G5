@@ -8,10 +8,13 @@ export interface ConfirmDialogProps {
   error: string | null
   onConfirm: () => void
   onCancel: () => void
+  /** Visual weight of the confirm button. Story 13.2 adds `primary` for a non-destructive
+   * decision (approving a booking); `danger` (the default) is for actions that remove data. */
+  tone?: 'danger' | 'primary'
 }
 
 /**
- * Story 8.3 - a modal that asks before a destructive action. Escape or Cancel closes it; focus
+ * Story 8.3 - a modal that asks before a consequential action. Escape or Cancel closes it; focus
  * starts on Cancel, so a stray Enter never confirms.
  */
 export function ConfirmDialog({
@@ -22,6 +25,7 @@ export function ConfirmDialog({
   error,
   onConfirm,
   onCancel,
+  tone = 'danger',
 }: ConfirmDialogProps) {
   const titleId = useId()
   const cancelButton = useRef<HTMLButtonElement>(null)
@@ -65,7 +69,12 @@ export function ConfirmDialog({
           >
             Cancel
           </button>
-          <button type="button" className="danger-solid" disabled={isBusy} onClick={onConfirm}>
+          <button
+            type="button"
+            className={tone === 'primary' ? 'brand' : 'danger-solid'}
+            disabled={isBusy}
+            onClick={onConfirm}
+          >
             {isBusy && <span className="spinner button-spinner" aria-hidden="true" />}
             {confirmLabel}
           </button>

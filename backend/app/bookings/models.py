@@ -13,10 +13,12 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-import app.events.models  # noqa: F401  # registers "events" - this model's event_id FK target
+from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.events.models import Event
+from app.venues.models import RoomLayout, Venue
 
 
 class BookingStatus:
@@ -61,3 +63,13 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decision_reason: Mapped[str | None] = mapped_column(Text)
     alternative_suggestion: Mapped[str | None] = mapped_column(Text)
+
+    # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
+    # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)
+    # would cascade into any query on this relationship, and postgres refuses FOR UPDATE
+    # against the nullable side of an outer join - which get_booking_for_decision needs.
+    # list_booking_requests asks for these explicitly with a joinedload option instead.
+    event: Mapped[Event] = relationship()
+    venue: Mapped[Venue] = relationship()
+    requested_by: Mapped[User] = relationship(foreign_keys=[requested_by_id])
+    required_layout: Mapped[RoomLayout | None] = relationship(foreign_keys=[required_layout_code])
