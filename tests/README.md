@@ -41,6 +41,7 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/booking-requests.spec.ts` | 12.1 raise a venue booking request: only approved events assigned to the coordinator are offered, what the request carries over from the event, the pending outcome, the empty state, and no entry point for Venue Staff |
 | `e2e/events.spec.ts` | 7.1 event details page: core details, venue/accessibility/equipment requirements, back link follows origin, empty states for an incomplete draft, blocked direct URL to another organiser's event |
 | `e2e/decision-history.spec.ts` | 4.6 the decision status sentence (pending, awaiting-clarification hint, approved with no reason, rejected with reason) and the clarification thread (oldest first, author/kind/timestamp) on the event details page |
+| `e2e/event-routine-edit.spec.ts` | 7.2 the assigned coordinator edits an event's routine information from its detail page and the change is there on return; the edit entry point is withheld once the event is rejected (also completed/cancelled) |
 
 `e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueRow` locator. Specs share
 one throwaway database and run in parallel, so use unique names for anything you create.

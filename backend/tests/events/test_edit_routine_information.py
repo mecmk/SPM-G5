@@ -100,10 +100,22 @@ def test_status_cannot_be_changed_through_this_operation(coordinator_client):
 
 
 @pytest.mark.story("7.2", ac=1)
+@pytest.mark.parametrize(
+    ("field", "limit"), [("contact_name", 200), ("contact_email", 254), ("contact_phone", 50)]
+)
+def test_a_contact_field_over_its_length_limit_is_refused(coordinator_client, field, limit):
+    response = _patch(coordinator_client, Events.SUBMITTED, **{field: "a" * (limit + 1)})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.story("7.2", ac=1)
 def test_a_coordinator_not_assigned_to_the_event_cannot_edit_it(login_as):
     response = _patch(login_as(Users.COORDINATOR_2), Events.SUBMITTED, description="Nope.")
 
     assert response.status_code == 403
+    assert "edit" in response.json()["detail"]
+    assert "decide" not in response.json()["detail"]
 
 
 @pytest.mark.story("7.2", ac=1)
@@ -140,6 +152,30 @@ def test_internal_notes_are_never_returned_to_the_organiser(coordinator_client, 
 
 
 @pytest.mark.story("7.2", ac=2)
+def test_a_no_op_edit_does_not_write_audit_or_bump_updated_at(coordinator_client, db: Session):
+    before = db.execute(
+        text("SELECT updated_at FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).one()
+
+    response = _patch(coordinator_client, Events.SUBMITTED)
+
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    after = db.execute(
+        text("SELECT updated_at FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).one()
+    assert after.updated_at == before.updated_at
+    count = db.execute(
+        text(
+            "SELECT count(*) FROM audit_log "
+            "WHERE action = 'EVENT_ROUTINE_INFO_UPDATED' AND entity_id = :id"
+        ),
+        {"id": Events.SUBMITTED},
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.story("7.2", ac=2)
 def test_internal_notes_are_never_returned_to_venue_staff_or_tech_support(
     coordinator_client, venue_staff_client, tech_client
 ):
@@ -171,6 +207,20 @@ def test_routine_editing_is_blocked_for_terminal_statuses(coordinator_client, db
 @pytest.mark.story("7.2", ac=3)
 def test_the_rejected_seed_event_cannot_be_edited(login_as):
     response = _patch(login_as(Users.COORDINATOR_2), Events.REJECTED, description="Too late.")
+
+    assert response.status_code == 409
+
+
+@pytest.mark.story("7.2", ac=3)
+def test_a_closed_event_refuses_with_409_even_for_an_unassigned_coordinator(login_as, db: Session):
+    """AC3's status gate is checked before the assignment check, so an unrelated coordinator
+    learns the event is closed (409), not that they personally may not edit it (403)."""
+    event = make_event(
+        db, status=EventStatus.REJECTED, assigned_coordinator_id=Users.COORDINATOR.id
+    )
+    db.commit()
+
+    response = _patch(login_as(Users.COORDINATOR_2), event.id, description="Too late.")
 
     assert response.status_code == 409
 

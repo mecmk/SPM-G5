@@ -15,6 +15,7 @@ import { ClarificationHistory, type ClarificationEntry } from '../components/Cla
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
+import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH } from '../routes'
 import { formatDate, formatSchedule, formatTime } from '../shared/format'
@@ -22,8 +23,6 @@ import { formatDate, formatSchedule, formatTime } from '../shared/format'
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
-/** Story 7.2 AC3: routine editing (and the internal-notes view below) closes at these statuses. */
-const TERMINAL_STATUSES: readonly string[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
 
 /** One required facility, as its quantity and notes make it distinct. */
 function describeFacility(facility: RequiredFacility): string {
@@ -138,18 +137,18 @@ export function EventDetailPage() {
 
   return (
     <div className="page page-wide event-detail-page">
-      <div className="page-header">
-        <Link to={backTo} className="back-link">
-          ← {backLabel}
-        </Link>
-        {canEditRoutineInformation && (
+      <Link to={backTo} className="back-link">
+        ← {backLabel}
+      </Link>
+      {canEditRoutineInformation && (
+        <div className="page-header actions-only">
           <div className="page-actions">
             <Link to={eventEditRoutinePath(event.id)} className="button">
               Edit routine information
             </Link>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="venue-hero">
         {event.cover_image_url && !hasImageFailed ? (

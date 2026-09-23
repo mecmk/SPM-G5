@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import {
@@ -9,10 +9,10 @@ import {
 } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PageHeader } from '../components/PageHeader'
+import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventPath } from '../routes'
-
-const TERMINAL_STATUSES: readonly string[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
+import { useLoaded } from '../shared/useLoaded'
 
 interface RoutineForm {
   description: string
@@ -32,14 +32,24 @@ function formFromEvent(event: EventDetail): RoutineForm {
   }
 }
 
-function inputFromForm(form: RoutineForm): EventRoutineInput {
-  return {
-    description: form.description.trim() || null,
-    contact_name: form.contact_name.trim() || null,
-    contact_email: form.contact_email.trim() || null,
-    contact_phone: form.contact_phone.trim() || null,
-    internal_notes: form.internal_notes.trim() || null,
+/** Only the fields that differ from `saved`, so the audit trail and concurrent edits both see
+ * just what actually changed rather than a full rewrite of all five fields every time. */
+function dirtyFieldsInput(form: RoutineForm, saved: RoutineForm): EventRoutineInput {
+  const input: EventRoutineInput = {}
+  if (form.description !== saved.description) input.description = form.description.trim() || null
+  if (form.contact_name !== saved.contact_name) {
+    input.contact_name = form.contact_name.trim() || null
   }
+  if (form.contact_email !== saved.contact_email) {
+    input.contact_email = form.contact_email.trim() || null
+  }
+  if (form.contact_phone !== saved.contact_phone) {
+    input.contact_phone = form.contact_phone.trim() || null
+  }
+  if (form.internal_notes !== saved.internal_notes) {
+    input.internal_notes = form.internal_notes.trim() || null
+  }
+  return input
 }
 
 function isUnchanged(form: RoutineForm, saved: RoutineForm): boolean {
@@ -60,29 +70,23 @@ function isUnchanged(form: RoutineForm, saved: RoutineForm): boolean {
 export function EventRoutineEditPage() {
   const { eventId = '' } = useParams()
   const { user } = useAuth()
-  const [event, setEvent] = useState<EventDetail | null>(null)
+  const loadEvent = useCallback(() => getEvent(eventId), [eventId])
+  const { data, error: loadError, setData } = useLoaded(loadEvent)
+  // `data` can still be the previous event while a changed `eventId` is loading (useLoaded keeps
+  // the last good value); gating on `id` hides it instead of letting a stale form save onto the
+  // new event.
+  const event = data && data.id === eventId ? data : null
   const [saved, setSaved] = useState<RoutineForm | null>(null)
   const [form, setForm] = useState<RoutineForm | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
-    getEvent(eventId)
-      .then((data) => {
-        if (cancelled) return
-        setEvent(data)
-        setSaved(formFromEvent(data))
-        setForm(formFromEvent(data))
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setLoadError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [eventId])
+    if (!event) return
+    const next = formFromEvent(event)
+    setSaved(next)
+    setForm(next)
+  }, [event])
 
   function updateField<K extends keyof RoutineForm>(key: K, value: RoutineForm[K]) {
     setForm((current) => current && { ...current, [key]: value })
@@ -95,15 +99,12 @@ export function EventRoutineEditPage() {
 
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
-    if (!form) return
+    if (!form || !saved) return
     setSaveError(null)
     setIsSaving(true)
     try {
-      const updated = await updateEventRoutineInformation(eventId, inputFromForm(form))
-      setEvent(updated)
-      const nextSaved = formFromEvent(updated)
-      setSaved(nextSaved)
-      setForm(nextSaved)
+      const updated = await updateEventRoutineInformation(eventId, dirtyFieldsInput(form, saved))
+      setData(updated)
     } catch (err) {
       setSaveError(formatApiError(err))
     } finally {

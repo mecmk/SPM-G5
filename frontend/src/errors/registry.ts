@@ -36,6 +36,7 @@ export type ErrorCode =
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
   | 'EVENT_NOT_FOUND'
   | 'EVENT_ALREADY_SUBMITTED'
+  | 'EVENT_ROUTINE_EDIT_CLOSED'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -158,6 +159,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_ALREADY_SUBMITTED: {
     title: 'Request already submitted',
     message: 'This request has been submitted and can no longer be changed.',
+  },
+  /** Story 7.2 AC3. */
+  EVENT_ROUTINE_EDIT_CLOSED: {
+    title: 'No longer editable',
+    message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.
