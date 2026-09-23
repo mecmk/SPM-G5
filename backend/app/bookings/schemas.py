@@ -1,5 +1,5 @@
-"""Request / response shapes for venue bookings (story 12.1 raise, 13.2 approve/read; the
-response is reused as-is by story 13.1's queue and 13.4's outcome display once those exist).
+"""Request / response shapes for venue bookings: raising a request (story 12.1), the venue
+staff queue (story 13.1), and approval / read (story 13.2).
 """
 
 from __future__ import annotations
@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
+
+from app.bookings.models import VenueBooking
 
 
 class BookableEvent(BaseModel):
@@ -71,3 +73,42 @@ class BookingOut(BaseModel):
     alternative_suggestion: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class BookingQueueEntry(BaseModel):
+    """AC2: event name, requested venue, period, expected attendance and stated requirements.
+    No defaults (response schema)."""
+
+    id: uuid.UUID
+    event_id: uuid.UUID
+    event_name: str
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    starts_at: datetime
+    ends_at: datetime
+    expected_attendance: int
+    required_layout_code: str | None
+    required_layout_name: str | None
+    requirement_notes: str | None
+    requested_by_name: str
+    status: str
+
+    @classmethod
+    def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
+        return cls(
+            id=booking.id,
+            event_id=booking.event_id,
+            event_name=booking.event.name,
+            venue_id=booking.venue_id,
+            venue_name=booking.venue.name,
+            venue_location=booking.venue.location,
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            expected_attendance=booking.expected_attendance,
+            required_layout_code=booking.required_layout_code,
+            required_layout_name=booking.required_layout.name if booking.required_layout else None,
+            requirement_notes=booking.requirement_notes,
+            requested_by_name=booking.requested_by.full_name,
+            status=booking.status,
+        )

@@ -13,8 +13,8 @@ import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
 import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import type { EventCardBackState } from '../components/EventCard'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
-import { StatusBadge } from '../components/StatusBadge'
 import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH } from '../routes'
@@ -172,7 +172,7 @@ export function EventDetailPage() {
       <div className="stack">
         <div className="stat">
           <p className="eyebrow">Event status</p>
-          <StatusBadge status={event.status} />
+          <EventStatusBadge status={event.status} />
         </div>
 
         <div className="stat-grid">

@@ -1,7 +1,7 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
-(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), and story 4.6
-(the decision /clarification history an organiser sees),
-and story 7.2 (routine information edits)."""
+(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), story 4.6
+(the decision /clarification history an organiser sees), story 7.2 (routine information edits),
+and story 6.1 (the coordinator's assigned events in any status)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.events import service
 from app.events.schemas import (
+    AssignedEventEntry,
+    AssignedEventList,
     ClarificationOut,
     EquipmentAvailabilityOut,
     EventCreate,
@@ -71,6 +73,24 @@ def list_my_events(
     listing = service.list_my_events(db, organiser=actor, limit=limit, offset=offset)
     return MyEventList(
         items=[MyEventEntry.from_event(e) for e in listing.events], total=listing.total
+    )
+
+
+@router.get("/assigned-to-me", response_model=AssignedEventList, dependencies=[CanReview])
+def list_assigned_events(
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanReview],
+    limit: Annotated[
+        int, Query(ge=1, le=service.MY_EVENTS_MAX_LIMIT)
+    ] = service.MY_EVENTS_MAX_LIMIT,
+    offset: Annotated[int, Query(ge=0, le=service.MY_EVENTS_MAX_OFFSET)] = 0,
+) -> AssignedEventList:
+    """Story 6.1 AC1-AC3: every event assigned to the signed-in coordinator, in any status,
+    newest activity first, paged like `/mine`. AC4: events:review only - other roles get 403
+    from the dependency (1.2 AC4)."""
+    listing = service.list_assigned_events(db, coordinator=actor, limit=limit, offset=offset)
+    return AssignedEventList(
+        items=[AssignedEventEntry.from_event(e) for e in listing.events], total=listing.total
     )
 
 

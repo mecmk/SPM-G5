@@ -25,12 +25,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.events.models import EventStatus
-from tests.support.factories import make_event
+from tests.support.factories import make_event, make_user
 from tests.support.seed import Events, Users
 
 PICK_LIST_PATH = "/bookings/reference-data"
 
-# The one seeded event that is both APPROVED and assigned to Users.COORDINATOR.
+# The earliest of the seeded events APPROVED and assigned to Users.COORDINATOR, so it is always
+# first in the pick-list's soonest-first order.
 NIMBUS_NAME = "Nimbus Developer Conference"
 
 
@@ -40,11 +41,20 @@ def event_ids(response) -> list[str]:
 
 # --- AC1 + AC4 as a read: what the form may offer -------------------------------------------
 @pytest.mark.story("12.1", ac=1)
-def test_the_pick_list_offers_the_coordinators_approved_event(coordinator_client):
+def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_client):
+    """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
+    CONFIRMED one (story 6.1's seed data) - "approved or later" includes both. The pick-list
+    offers all five, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
-    assert event_ids(response) == [str(Events.APPROVED)]
+    assert event_ids(response) == [
+        str(Events.APPROVED),
+        str(Events.PLANNING),
+        str(Events.APPROVED_3),
+        str(Events.CONFIRMED),
+        str(Events.APPROVED_4),
+    ]
 
 
 @pytest.mark.story("12.1", ac=2)
@@ -118,10 +128,11 @@ def test_an_unassigned_approved_event_is_not_offered(coordinator_client, db: Ses
 
 
 @pytest.mark.story("12.1", ac=4)
-def test_a_coordinator_with_nothing_approved_is_offered_an_empty_list(client):
-    """Carl is assigned only the REJECTED event, so his form has nothing to offer - the empty
-    state the page has to render rather than an error."""
-    client.login(Users.COORDINATOR_2)
+def test_a_coordinator_with_nothing_approved_is_offered_an_empty_list(client, db: Session):
+    """A freshly created coordinator, assigned to nothing, so their form has nothing to offer -
+    the empty state the page has to render rather than an error."""
+    coordinator = make_user(db, role="EVENT_COORDINATOR")
+    client.login(coordinator.email)
 
     response = client.get(PICK_LIST_PATH)
 

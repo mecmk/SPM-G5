@@ -1,7 +1,7 @@
 """Request and response shapes for event requests (story 2.1), the organiser's own list of
 them (story 2.6), the review queue (story 4.1), the approve/reject decision (stories 4.4,
-4.5), and the decision / clarification history an
-organiser sees (story 4.6)."""
+4.5), the decision / clarification history an organiser sees (story 4.6), and the coordinator's
+assigned events in any status (story 6.1)."""
 
 from __future__ import annotations
 
@@ -110,6 +110,48 @@ class MyEventList(BaseModel):
     say how many more there are. No defaults (response schema)."""
 
     items: list[MyEventEntry]
+    total: int
+
+
+# --- events assigned to a coordinator, any status (story 6.1) ------------------------------
+class AssignedEventEntry(BaseModel):
+    """AC1: name, organiser, proposed date and current status, plus the optional picture -
+    every status, not just the review queue's three awaiting-decision ones. No defaults
+    (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    organiser_name: str
+    starts_at: datetime  # non-null for every non-DRAFT row (ck_events_submitted_fields_complete)
+    ends_at: datetime
+    submitted_at: datetime | None  # set once on submission and never cleared afterwards
+    status: str
+    cover_image_url: str | None
+
+    @classmethod
+    def from_event(cls, event: Event) -> AssignedEventEntry:
+        # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status, and a
+        # draft is never assigned to a coordinator.
+        starts_at, ends_at = event.starts_at, event.ends_at
+        assert starts_at is not None
+        assert ends_at is not None
+        return cls(
+            id=event.id,
+            name=event.name,
+            organiser_name=event.organiser.full_name,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            submitted_at=event.submitted_at,
+            status=event.status,
+            cover_image_url=event.cover_image_url,
+        )
+
+
+class AssignedEventList(BaseModel):
+    """AC3: one page of the coordinator's assigned events, and how many they have in all. No
+    defaults (response schema)."""
+
+    items: list[AssignedEventEntry]
     total: int
 
 
