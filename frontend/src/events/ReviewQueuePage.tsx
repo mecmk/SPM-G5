@@ -1,48 +1,51 @@
 import { useCallback, useMemo, useState } from 'react'
-import { listReviewQueue, type ReviewQueueEntry, type ReviewQueueSort } from '../api/events'
-import { useAuth } from '../auth/authContext'
+import { formatApiError } from '../api/client'
+import { listAssignedEvents, type AssignedEventEntry } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_INBOX_PATH, eventPath } from '../routes'
+import { eventStatusTab, EVENT_STATUS_TABS, type EventStatusTabKey } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 
 const BACK_TO_INBOX = { from: EVENTS_INBOX_PATH, fromLabel: 'Events inbox' }
 
-const SORT_OPTIONS: { key: ReviewQueueSort; label: string }[] = [
+type SortKey = 'submitted_at' | 'starts_at'
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'submitted_at', label: 'Submission date' },
   { key: 'starts_at', label: 'Proposed event date' },
 ]
 
-/**
- * The coordinator dashboard's tab strip (finalised prototype, `App.tsx`'s `CoordinatorDashboard`).
- * Only `review` is wired to real data; the rest are placeholders until a later story adds an
- * events listing that carries a lifecycle stage.
- */
-type InboxTab = 'review' | 'planning' | 'confirmed' | 'completed'
-
-const INBOX_TABS: { key: InboxTab; label: string }[] = [
-  { key: 'review', label: 'Under Review' },
-  { key: 'planning', label: 'Planning' },
-  { key: 'confirmed', label: 'Confirmed' },
-  { key: 'completed', label: 'Completed' },
-]
-
-const UNWIRED_TAB_MESSAGES: Record<Exclude<InboxTab, 'review'>, string> = {
-  planning: 'Events in planning will appear here in a later story.',
-  confirmed: 'Confirmed events will appear here in a later story.',
-  completed: 'Completed events will appear here in a later story.',
+function byField(field: SortKey) {
+  return (a: AssignedEventEntry, b: AssignedEventEntry) =>
+    (a[field] ?? '').localeCompare(b[field] ?? '')
 }
 
-function matchesSearch(entry: ReviewQueueEntry, search: string): boolean {
+function matchesSearch(entry: AssignedEventEntry, search: string): boolean {
   const term = search.trim().toLowerCase()
   if (term === '') return true
   return (
     entry.name.toLowerCase().includes(term) || entry.organiser_name.toLowerCase().includes(term)
   )
+}
+
+function loadFirstPage() {
+  return listAssignedEvents(0)
+}
+
+/** AC9-style: a later page can repeat an entry the list already shows, if one was edited
+ * meanwhile - same pattern as MyEventsPage's "Load more". */
+function withoutRepeats(
+  shown: AssignedEventEntry[],
+  more: AssignedEventEntry[],
+): AssignedEventEntry[] {
+  const shownIds = new Set(shown.map((entry) => entry.id))
+  return [...shown, ...more.filter((entry) => !shownIds.has(entry.id))]
 }
 
 /**
@@ -52,56 +55,75 @@ function matchesSearch(entry: ReviewQueueEntry, search: string): boolean {
  * AC3: the queue can be ordered by submission date or proposed event date.
  * AC4: drafts and already-decided requests never appear — the backend query excludes them.
  *
- * The tab strip mirrors the coordinator dashboard shape from the finalised prototype. Only
- * "Under Review" is wired to real data; "Planning", "Confirmed" and "Completed" are placeholders
- * until a later story adds an events listing that carries a lifecycle stage.
+ * Story 6.1: the tab strip is now the shared All-plus-seven-visible-statuses set, backed by
+ * `/events/assigned-to-me` (every event assigned to this coordinator, any status) rather than
+ * the old review-only `/events/review-queue`. "Load more" mirrors MyEventsPage's pattern - the
+ * backend pages the same way `/mine` does.
  */
 export function ReviewQueuePage() {
-  const { user } = useAuth()
-  const [sort, setSort] = useState<ReviewQueueSort>('submitted_at')
+  const { data: list, error, isLoading, setData: setList } = useLoaded(loadFirstPage)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [sort, setSort] = useState<SortKey>('submitted_at')
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<InboxTab>('review')
+  const [tab, setTab] = useState<EventStatusTabKey>('ALL')
 
-  const coordinatorId = user?.id ?? null
-
-  const load = useCallback(() => listReviewQueue({ sort, coordinatorId }), [sort, coordinatorId])
-  const { data: entries, error } = useLoaded(load)
-
-  const shownEntries = useMemo(
-    () => (entries ?? []).filter((entry) => matchesSearch(entry, search)),
-    [entries, search],
+  const items = useMemo(() => list?.items ?? [], [list])
+  const tabs = useMemo(
+    () =>
+      EVENT_STATUS_TABS.map((item) => ({
+        key: item.key,
+        label: `${item.label} (${item.key === 'ALL' ? items.length : items.filter((entry) => eventStatusTab(entry.status) === item.key).length})`,
+      })),
+    [items],
   )
+  const shownEntries = useMemo(() => {
+    const byTab =
+      tab === 'ALL' ? items : items.filter((entry) => eventStatusTab(entry.status) === tab)
+    return byTab.filter((entry) => matchesSearch(entry, search)).sort(byField(sort))
+  }, [items, tab, search, sort])
+
+  const handleLoadMore = useCallback(async () => {
+    if (list === null) return
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const next = await listAssignedEvents(list.items.length)
+      setList((current) =>
+        current === null
+          ? current
+          : { items: withoutRepeats(current.items, next.items), total: next.total },
+      )
+    } catch (err) {
+      setLoadMoreError(formatApiError(err))
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [list, setList])
 
   function clearSearch() {
     setSearch('')
   }
-
-  if (!user) return null
 
   return (
     <div className="page page-wide">
       <p className="eyebrow">Events</p>
       <PageHeader
         title="Events inbox"
-        subtitle="Requests waiting for your decision. The other tabs fill in as later stories land."
+        subtitle="Every event assigned to you, and where it stands."
       />
 
-      <Tabs
-        tabs={INBOX_TABS.map((item) => ({
-          key: item.key,
-          label:
-            item.key === 'review' && entries !== null
-              ? `${item.label} (${entries.length})`
-              : item.label,
-        }))}
-        activeKey={tab}
-        onChange={setTab}
-      />
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {isLoading && <LoadingState label="Loading your events…" />}
 
-      {tab !== 'review' && <EmptyState>{UNWIRED_TAB_MESSAGES[tab]}</EmptyState>}
-
-      {tab === 'review' && (
+      {list !== null && (
         <div className="stack">
+          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+
           <div className="filter-bar">
             <label className="filter-grow">
               Search requests
@@ -114,7 +136,7 @@ export function ReviewQueuePage() {
             </label>
             <label>
               Order by
-              <select value={sort} onChange={(e) => setSort(e.target.value as ReviewQueueSort)}>
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
                 {SORT_OPTIONS.map((option) => (
                   <option key={option.key} value={option.key}>
                     {option.label}
@@ -124,18 +146,9 @@ export function ReviewQueuePage() {
             </label>
           </div>
 
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          {entries === null && !error && <LoadingState label="Loading the review queue…" />}
+          {items.length === 0 && <EmptyState>No events are assigned to you yet.</EmptyState>}
 
-          {entries !== null && entries.length === 0 && (
-            <EmptyState>Nothing is waiting for your decision.</EmptyState>
-          )}
-
-          {entries !== null && entries.length > 0 && shownEntries.length === 0 && (
+          {items.length > 0 && shownEntries.length === 0 && (
             <EmptyState>
               No requests match your search.{' '}
               <button type="button" className="link" onClick={clearSearch}>
@@ -145,29 +158,46 @@ export function ReviewQueuePage() {
           )}
 
           {shownEntries.length > 0 && (
-            <>
+            <EventCardGrid>
+              {shownEntries.map((entry) => (
+                <EventCard
+                  key={entry.id}
+                  title={entry.name}
+                  imageUrl={entry.cover_image_url}
+                  to={eventPath(entry.id)}
+                  state={BACK_TO_INBOX}
+                  details={[
+                    <EventStatusBadge key="status" status={entry.status} />,
+                    formatSchedule(entry.starts_at, entry.ends_at),
+                    `Requested by ${entry.organiser_name}`,
+                    entry.submitted_at
+                      ? `Submitted ${formatDateTime(entry.submitted_at)}`
+                      : 'Submission date not recorded',
+                  ]}
+                />
+              ))}
+            </EventCardGrid>
+          )}
+
+          {loadMoreError && (
+            <p role="alert" className="error">
+              {loadMoreError}
+            </p>
+          )}
+          {list.items.length < list.total && (
+            <div className="load-more">
               <p className="small muted">
-                Showing {shownEntries.length} of {entries?.length ?? 0} requests
+                Showing {list.items.length} of {list.total} events
               </p>
-              <EventCardGrid>
-                {shownEntries.map((entry) => (
-                  <EventCard
-                    key={entry.id}
-                    title={entry.name}
-                    imageUrl={entry.cover_image_url}
-                    to={eventPath(entry.id)}
-                    state={BACK_TO_INBOX}
-                    details={[
-                      formatSchedule(entry.starts_at, entry.ends_at),
-                      `Requested by ${entry.organiser_name}`,
-                      entry.submitted_at
-                        ? `Submitted ${formatDateTime(entry.submitted_at)}`
-                        : 'Submission date not recorded',
-                    ]}
-                  />
-                ))}
-              </EventCardGrid>
-            </>
+              <button
+                type="button"
+                className="secondary"
+                disabled={isLoadingMore}
+                onClick={handleLoadMore}
+              >
+                Load more
+              </button>
+            </div>
           )}
         </div>
       )}

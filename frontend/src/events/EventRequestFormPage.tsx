@@ -11,8 +11,8 @@ import {
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
-import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { HOME_PATH, eventEditPath } from '../routes'
@@ -445,12 +445,12 @@ export function EventRequestFormPage() {
   const subtitle =
     event && isReadOnly ? (
       <>
-        <StatusBadge status={event.status} />{' '}
+        <EventStatusBadge status={event.status} />{' '}
         {event.submitted_at && <span>Submitted on {formatDateTime(event.submitted_at)}</span>}
       </>
     ) : (
       <>
-        {event && <StatusBadge status={event.status} />}{' '}
+        {event && <EventStatusBadge status={event.status} />}{' '}
         <span>
           Fields marked * and an answer to venue requirements and accessibility are needed to
           submit. Only the event name is needed to save a draft.

@@ -38,11 +38,15 @@ const OLIVIA_REQUESTS = [
   'Data Literacy Workshop',
   'Diversity & Inclusion Forum',
   'Wellness Week Kickoff',
+  'Regional Sales Summit',
+  'New Year Town Hall',
 ]
 const OMAR_REQUESTS = [
   'Nimbus Developer Conference',
   'Rooftop Networking Night',
   'Nimbus Leadership Offsite',
+  'Partner Appreciation Dinner',
+  'Summer Rooftop Mixer',
 ]
 
 function uniqueName(label: string): string {
@@ -100,6 +104,39 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   await expect(requestCard(page, 'Q1 Sales Kick-off (draft)')).toContainText('Draft')
   for (const name of OLIVIA_REQUESTS) await expect(requestCard(page, name)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+})
+
+test('6.1: a status tab shows only requests in that status, grouping a transitory status with the visible stage it leads into', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await openMyEvents(page)
+
+  // Specs share one database and run in parallel, so tab counts are not asserted - only which
+  // named requests appear under which tab.
+  await expect(page.getByRole('tab', { name: 'All', exact: false })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(requestCard(page, 'Data Literacy Workshop')).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Draft/ }).click()
+  await expect(requestCard(page, 'Q1 Sales Kick-off (draft)')).toBeVisible()
+  await expect(requestCard(page, 'Data Literacy Workshop')).toHaveCount(0)
+
+  // SUBMITTED groups with the "Under Review" tab, not its own tab.
+  await page.getByRole('tab', { name: /^Under Review/ }).click()
+  await expect(requestCard(page, 'Data Literacy Workshop')).toContainText('Submitted')
+  await expect(requestCard(page, 'Wellness Week Kickoff')).toContainText('Submitted')
+
+  await page.getByRole('tab', { name: /^Clarification Requested/ }).click()
+  await expect(requestCard(page, 'Diversity & Inclusion Forum')).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Planning/ }).click()
+  await expect(requestCard(page, 'Regional Sales Summit')).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Completed/ }).click()
+  await expect(requestCard(page, 'New Year Town Hall')).toBeVisible()
 })
 
 test('2.6 AC1: a request raised just now is in the list as a draft', async ({ page }) => {
@@ -187,7 +224,10 @@ test('2.6 AC8: the form opened from the main page goes back to the main page, be
 }) => {
   await signIn(page, ACCOUNTS.organiser)
   await page.goto('/')
-  await page.getByRole('main').getByRole('link', { name: /New event request/ }).click()
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: /New event request/ })
+    .click()
   await expect(page).toHaveURL(/\/events\/new$/)
   await expect(backLink(page)).toHaveText('← Main page')
 
@@ -215,7 +255,10 @@ test('2.6 AC2: selecting a submitted request opens its details, read-only, and b
   await expect(page.getByRole('textbox')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0)
 
-  await page.getByRole('main').getByRole('link', { name: /My events/ }).click()
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: /My events/ })
+    .click()
   await expect(page.getByRole('heading', { name: 'My events' })).toBeVisible()
 })
 

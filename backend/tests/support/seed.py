@@ -78,6 +78,10 @@ class Events:
     APPROVED_3 = _e(9)  # organiser 2, coordinator 1, pending booking of Grand Hall
     APPROVED_4 = _e(10)  # organiser 1, coordinator 1, pending booking dedicated to 13.2 e2e
     APPROVED_5 = _e(11)  # organiser 2, coordinator 2, pending booking dedicated to 13.2 e2e
+    PLANNING = _e(12)  # organiser 1, coordinator 1
+    CONFIRMED = _e(13)  # organiser 2, coordinator 1
+    COMPLETED = _e(14)  # organiser 1, coordinator 1, dated in the past
+    CANCELLED = _e(15)  # organiser 2, coordinator 1
 
 
 class Bookings:

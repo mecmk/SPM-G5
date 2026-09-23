@@ -42,14 +42,17 @@ def event_ids(response) -> list[str]:
 # --- AC1 + AC4 as a read: what the form may offer -------------------------------------------
 @pytest.mark.story("12.1", ac=1)
 def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_client):
-    """Chloe (Users.COORDINATOR) is assigned three approved events; the pick-list offers all
-    three, soonest first."""
+    """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
+    CONFIRMED one (story 6.1's seed data) - "approved or later" includes both. The pick-list
+    offers all five, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
     assert event_ids(response) == [
         str(Events.APPROVED),
+        str(Events.PLANNING),
         str(Events.APPROVED_3),
+        str(Events.CONFIRMED),
         str(Events.APPROVED_4),
     ]
 

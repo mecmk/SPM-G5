@@ -57,6 +57,32 @@ export interface MyEventList {
   total: number
 }
 
+/** Mirrors `AssignedEventEntry`: one row of the coordinator's assigned events, any status. */
+export interface AssignedEventEntry {
+  id: string
+  name: string
+  organiser_name: string
+  starts_at: string
+  ends_at: string
+  submitted_at: string | null
+  status: EventStatus
+  cover_image_url: string | null
+}
+
+/** Mirrors `AssignedEventList`: one page of the coordinator's assigned events, and the total. */
+export interface AssignedEventList {
+  items: AssignedEventEntry[]
+  total: number
+}
+
+/**
+ * Story 6.1 AC1-AC3: every event assigned to the signed-in coordinator, in any status - unlike
+ * `listReviewQueue`, which only ever returns the three awaiting-decision statuses.
+ */
+export function listAssignedEvents(offset: number): Promise<AssignedEventList> {
+  return api<AssignedEventList>(`/events/assigned-to-me?offset=${offset}`)
+}
+
 /**
  * Story 2.6 AC1-AC6, AC9: the signed-in organiser's own requests, most recently updated first,
  * from the `offset`th on. The page size is the backend's, so a page is as many as it sends.

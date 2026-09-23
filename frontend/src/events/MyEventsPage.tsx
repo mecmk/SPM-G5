@@ -1,13 +1,15 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { formatApiError } from '../api/client'
 import { listMyEvents, type MyEventEntry } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid, type EventCardBackState } from '../components/EventCard'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
-import { StatusBadge } from '../components/StatusBadge'
+import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENT_NEW_PATH, EVENTS_MINE_PATH, eventEditPath, eventPath } from '../routes'
+import { eventStatusTab, EVENT_STATUS_TABS, type EventStatusTabKey } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 
@@ -57,11 +59,29 @@ function loadFirstPage() {
  * AC6: the backend orders the list, most recently updated first; the page keeps that order.
  * AC8: the header offers "New event request".
  * AC9: the backend sends a page at a time; "Load more" adds the next, and says how many are left.
+ *
+ * Story 6.1: a tab strip (All plus the seven visible statuses) filters the currently-loaded
+ * page client-side; "Load more" still fetches the next page of everything, regardless of tab.
  */
 export function MyEventsPage() {
   const { data: list, error, isLoading, setData: setList } = useLoaded(loadFirstPage)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [tab, setTab] = useState<EventStatusTabKey>('ALL')
+
+  const items = useMemo(() => list?.items ?? [], [list])
+  const shownItems = useMemo(
+    () => (tab === 'ALL' ? items : items.filter((entry) => eventStatusTab(entry.status) === tab)),
+    [items, tab],
+  )
+  const tabs = useMemo(
+    () =>
+      EVENT_STATUS_TABS.map((item) => ({
+        key: item.key,
+        label: `${item.label} (${item.key === 'ALL' ? items.length : items.filter((entry) => eventStatusTab(entry.status) === item.key).length})`,
+      })),
+    [items],
+  )
 
   const handleLoadMore = useCallback(async () => {
     if (list === null) return
@@ -112,21 +132,27 @@ export function MyEventsPage() {
 
       {list !== null && list.items.length > 0 && (
         <>
-          <EventCardGrid>
-            {list.items.map((entry) => (
-              <EventCard
-                key={entry.id}
-                title={entry.name}
-                imageUrl={entry.cover_image_url}
-                to={pathToOpen(entry)}
-                state={BACK_TO_MY_EVENTS}
-                details={[
-                  <StatusBadge key="status" status={entry.status} />,
-                  describeProposedDate(entry),
-                ]}
-              />
-            ))}
-          </EventCardGrid>
+          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+
+          {shownItems.length === 0 && <EmptyState>No requests in this status.</EmptyState>}
+
+          {shownItems.length > 0 && (
+            <EventCardGrid>
+              {shownItems.map((entry) => (
+                <EventCard
+                  key={entry.id}
+                  title={entry.name}
+                  imageUrl={entry.cover_image_url}
+                  to={pathToOpen(entry)}
+                  state={BACK_TO_MY_EVENTS}
+                  details={[
+                    <EventStatusBadge key="status" status={entry.status} />,
+                    describeProposedDate(entry),
+                  ]}
+                />
+              ))}
+            </EventCardGrid>
+          )}
 
           {loadMoreError && (
             <p role="alert" className="error">
