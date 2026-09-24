@@ -6,9 +6,9 @@ AC3 The event's status changes to reflect approval.
 AC4 The outcome is visible to the organiser.
 
 "Currently under review" is read as the whole review queue - the same
-``_AWAITING_DECISION_STATUSES`` set (SUBMITTED, UNDER_REVIEW, CLARIFICATION_REQUESTED) story
-4.1's queue already filters on, not literally the UNDER_REVIEW status alone. See the module
-docstring of ``app/events/service.py``.
+``_AWAITING_DECISION_STATUSES`` set (UNDER_REVIEW, CLARIFICATION_REQUESTED) story 4.1's queue
+already filters on, not literally the UNDER_REVIEW status alone. See the module docstring of
+``app/events/service.py``.
 
 Excluded, with reason:
 * A genuine multi-connection concurrency test (two simultaneous approvals, or an approval
@@ -46,7 +46,7 @@ def test_coordinator_can_approve_a_request_under_review(coordinator_client, db: 
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == EventStatus.APPROVED
+    assert body["status"] == EventStatus.PLANNING
     assert body["decided_by_name"] == Users.COORDINATOR.full_name
     decided_at = datetime.fromisoformat(body["decided_at"])
     assert before <= decided_at <= datetime.now(timezone.utc) + timedelta(seconds=5)
@@ -56,7 +56,7 @@ def test_coordinator_can_approve_a_request_under_review(coordinator_client, db: 
         text("SELECT status, decided_by_id, decided_at FROM events WHERE id = :id"),
         {"id": Events.UNDER_REVIEW},
     ).one()
-    assert row.status == EventStatus.APPROVED
+    assert row.status == EventStatus.PLANNING
     assert row.decided_by_id == Users.COORDINATOR.id
     assert row.decided_at is not None
 
@@ -67,14 +67,13 @@ def test_approving_any_awaiting_decision_status_is_allowed(coordinator_client, e
     response = coordinator_client.post(f"/events/{event_id}/approve")
 
     assert response.status_code == 200
-    assert response.json()["status"] == EventStatus.APPROVED
+    assert response.json()["status"] == EventStatus.PLANNING
 
 
 @pytest.mark.story("4.4", ac=1)
 @pytest.mark.parametrize(
     "status",
     [
-        EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
         EventStatus.COMPLETED,
@@ -155,7 +154,7 @@ def test_approval_is_recorded_in_status_history(coordinator_client, db: Session)
     row = db.execute(
         text(
             "SELECT from_status, to_status, changed_by_id FROM event_status_history "
-            "WHERE event_id = :id AND to_status = 'APPROVED'"
+            "WHERE event_id = :id AND to_status = 'PLANNING'"
         ),
         {"id": Events.UNDER_REVIEW},
     ).one()
@@ -193,7 +192,7 @@ def test_approving_a_request_clears_a_stale_decision_reason(coordinator_client, 
     row = db.execute(
         text("SELECT status, decision_reason FROM events WHERE id = :id"), {"id": event.id}
     ).one()
-    assert row.status == EventStatus.APPROVED
+    assert row.status == EventStatus.PLANNING
     assert row.decision_reason is None
 
 
@@ -206,7 +205,7 @@ def test_owning_organiser_can_read_the_approved_outcome(login_as):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == EventStatus.APPROVED
+    assert body["status"] == EventStatus.PLANNING
     assert body["decided_by_name"] == Users.COORDINATOR.full_name
     assert body["decided_at"] is not None
 
@@ -266,7 +265,7 @@ def test_a_different_coordinator_cannot_approve_the_request(login_as, db: Sessio
 
 @pytest.mark.story("4.4", ac=1)
 def test_an_unassigned_request_cannot_be_approved(coordinator_client, db: Session):
-    event = make_event(db, status=EventStatus.SUBMITTED)  # no assigned_coordinator_id
+    event = make_event(db, status=EventStatus.UNDER_REVIEW)  # no assigned_coordinator_id
 
     response = coordinator_client.post(f"/events/{event.id}/approve")
 
