@@ -2,7 +2,7 @@ import { api } from './client'
 
 /** Mirrors `ReviewQueueSort` in backend/app/events/schemas.py. */
 export type ReviewQueueSort = 'submitted_at' | 'starts_at'
-export type ReviewQueueStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'CLARIFICATION_REQUESTED'
+export type ReviewQueueStatus = 'UNDER_REVIEW' | 'CLARIFICATION_REQUESTED'
 
 /** Mirrors `ReviewQueueEntry`: one row of the coordinator's review queue. */
 export interface ReviewQueueEntry {
@@ -28,13 +28,15 @@ export function listReviewQueue(query: ReviewQueueQuery): Promise<ReviewQueueEnt
   return api<ReviewQueueEntry[]>(`/events/review-queue?${params.toString()}`)
 }
 
-/** Mirrors `EventStatus` in backend/app/events/models.py. */
+/**
+ * Mirrors `EventStatus` in backend/app/events/models.py. SUBMITTED and APPROVED were retired by
+ * migration 002 (bug b6.1.1): submitting a draft now goes straight to UNDER_REVIEW, and approving
+ * a request now goes straight to PLANNING, with no separate in-between status.
+ */
 export type EventStatus =
   | 'DRAFT'
-  | 'SUBMITTED'
   | 'UNDER_REVIEW'
   | 'CLARIFICATION_REQUESTED'
-  | 'APPROVED'
   | 'PLANNING'
   | 'CONFIRMED'
   | 'COMPLETED'
