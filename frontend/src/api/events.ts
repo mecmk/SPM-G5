@@ -267,18 +267,9 @@ export function submitEvent(eventId: string, name: string): Promise<EventDetail>
   })
 }
 
-/**
- * Mirrors `EventRoutineUpdate` (story 7.2). Only the routine fields: description, contact
- * details and internal notes. A partial update - only the fields sent change, and `null` clears
- * an optional one.
- */
-/** Partial update, mirroring `EventRoutineUpdate`: a field is left out entirely to leave it
- * unchanged, present with a value to set it, or present as `null` to clear it. */
+/** Partial update, mirroring `EventRoutineUpdate` (story 7.2). Internal notes are the only
+ * routine field: left out to leave them unchanged, a value to set them, or `null` to clear them. */
 export interface EventRoutineInput {
-  description?: string | null
-  contact_name?: string | null
-  contact_email?: string | null
-  contact_phone?: string | null
   internal_notes?: string | null
 }
 
