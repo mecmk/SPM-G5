@@ -34,3 +34,12 @@ Thumbs.db
 # --- Logs ---
 *.log
 npm-debug.log*
+
+# --- Generated test reports ---
+# Every test run rewrites the traceability matrix, so committing it caused merge conflicts on
+# nearly every story PR. Regenerate it with `npm run test:trace`; Backend CI uploads it as the
+# `traceability-matrix` artifact on every PR.
+docs/testing/TRACEABILITY.md
+
+# --- Project Details ---
+.information

@@ -9,12 +9,15 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.16.6
     hooks:
       - id: ruff
         args: [--fix]
         files: ^backend/
       - id: ruff-format
+        # ruff formats python inside markdown fences too, so .md must be in scope
+        # or CI's `ruff format --check .` catches what this hook missed.
+        types_or: [python, pyi, markdown]
         files: ^backend/
 
   - repo: https://github.com/commitizen-tools/commitizen
@@ -35,5 +38,7 @@ repos:
         name: frontend format (prettier --write)
         entry: npm --prefix frontend run format
         language: system
-        files: ^frontend/.*\.(ts|tsx|js|jsx|css|json|html)$
+        # `prettier --write .` rewrites every supported file under frontend/,
+        # markdown included, so the trigger list has to match or CI diverges.
+        files: ^frontend/.*\.(ts|tsx|js|jsx|css|json|html|md)$
         pass_filenames: false

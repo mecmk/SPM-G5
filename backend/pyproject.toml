@@ -18,12 +18,21 @@ dev = [
     "ruff>=0.7",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "story(id, ac=None): backlog story (and optional acceptance-criterion number) the test verifies",
+]
+filterwarnings = ["ignore::DeprecationWarning:starlette.testclient", "ignore::DeprecationWarning:fastapi.testclient"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+# RET: no `else` after an `if` that exits, no bare variable before a `return`.
+# Passes clean repo-wide as of adoption; see backend/STYLE.md "Automated enforcement".
+select = ["E", "F", "I", "RET"]
 
 [build-system]
 requires = ["hatchling"]

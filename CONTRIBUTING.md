@@ -11,41 +11,40 @@
 ## Branching Strategy
 
 ```text
-main                     ← stable, protected. Only merges at sprint end, from sprint/<N>.
-└── sprint/<N>            ← sprint integration branch (e.g. sprint/1). Protected, PR-only.
-    ├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
-    ├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
-    ├── refactor/<slug>    ← restructuring, no behavior change
-    └── test/<slug>        ← test-only changes
+main                   ← trunk. Stable, protected, PR-only.
+├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
+├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
+├── refactor/<slug>    ← restructuring, no behavior change
+├── test/<slug>        ← test-only changes
+└── docs/<slug>        ← documentation only
 ```
 
-- **`main`** — always stable and deployable. Protected. Only receives merges from a
-  `sprint/<N>` branch at the end of that sprint.
-- **`sprint/<N>`** — the integration branch for the current sprint (e.g. `sprint/1`,
-  `sprint/2`). Protected, PR-only — nobody commits to it directly. All story/fix/refactor/test
-  branches for that sprint branch off of it and merge back into it.
+- **`main`** — the trunk. Always stable and deployable. Protected, PR-only — nobody commits to
+  it directly. Every branch below is cut from `main` and merges straight back into it.
 - **`story/<ID>-<slug>`** — a feature branch implementing one backlog story, e.g.
   `story/A1-login`.
 - **`fix/<ID>-<slug>`** — a bug fix branch, e.g. `fix/B1-draft-not-saving`.
 - **`refactor/<slug>`** — restructuring code with no behavior change.
 - **`test/<slug>`** — test-only changes.
+- **`docs/<slug>`** — documentation only, e.g. `docs/claude-md-split`. No source changes.
 
-**There is no `staging`, `release/*`, or `hotfix/*` branch in this project.** This is a
-sprint-trunk model, not GitFlow — keep it that way.
+**There is no `sprint/*`, `staging`, `release/*`, or `hotfix/*` branch in this project.** This
+is trunk-based development, not GitFlow — keep it that way.
 
 ## Daily Workflow
 
-1. Branch off the current `sprint/<N>` using the appropriate prefix
-   (`story/`, `fix/`, `refactor/`, or `test/`).
+1. Branch off the latest `main` using the appropriate prefix
+   (`story/`, `fix/`, `refactor/`, `test/`, or `docs/`).
 2. Implement the change.
 3. Run tests and lint locally (see [AGENTS.md](AGENTS.md) for exact commands).
 4. Push your branch.
-5. Open a PR **into `sprint/<N>`** (never `main`).
+5. Open a PR **into `main`**.
 6. Get **one approving review**.
 7. **Squash merge** the PR.
 
-At the end of a sprint, a single PR from `sprint/<N>` into `main` is opened and merged with a
-regular merge (not squash), preserving the sprint's squashed story commits.
+Keep branches short-lived: one story or fix per branch, merged as soon as it is reviewed and
+green, then deleted. A branch that lives for weeks drifts from `main` and ends in merge
+conflicts — if `main` moves on while you work, update your branch from it and re-run the tests.
 
 ### Local pre-commit hooks (required)
 
