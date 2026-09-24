@@ -14,7 +14,7 @@ failure cases, so the conventions below exist to make that cheap.
 
 ```powershell
 npm run test:backend   # pytest
-npm run test:trace     # pytest + writes docs/testing/TRACEABILITY.md
+npm run test:trace     # pytest + writes docs/testing/TRACEABILITY.md (git-ignored)
 npm run test:frontend  # lint + type-check/build
 npm run test:e2e       # rebuilds connectsphere_e2e, starts its own API + app, runs Playwright, cleans up
 ```
@@ -63,7 +63,9 @@ def test_capacity_rejects_zero(venue_staff_client): ...
 
 Multiple markers are fine when one test proves several ACs. `npm run test:trace` turns the
 markers into `docs/testing/TRACEABILITY.md` - a story/AC -> test -> result table you can drop
-straight into the Week 12 submission (deliverable 3). CI uploads it as an artifact on every PR.
+straight into the Week 12 submission (deliverable 3). CI uploads it as the `traceability-matrix`
+artifact on every PR. The file is git-ignored: every run rewrites it, so committing it caused
+merge conflicts on nearly every story PR. For the submission, generate it from `main`.
 
 ### Pattern
 

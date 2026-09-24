@@ -24,8 +24,10 @@ uv run pytest --traceability=../docs/testing/TRACEABILITY.md   # regenerate the 
 ```
 
 The root `npm run db:*` scripts wrap these and reach uv through `scripts/uv.mjs`. Regenerating
-the data dictionary, ERD and traceability matrix is **manual and unenforced** — no hook or CI
-step runs it, so a schema or story change leaves them stale until someone re-runs the command.
+the data dictionary and ERD is **manual and unenforced** — no hook or CI step runs it, so a
+schema change leaves them stale until someone re-runs the command. The traceability matrix is
+git-ignored: generate it locally, or download the `traceability-matrix` artifact from a PR's
+Backend CI run.
 
 ## Environment variables
 
@@ -115,7 +117,8 @@ Adding `<feature>` end to end:
 7. `app/<feature>/router.py` — endpoints guarded by `require_permission`
 8. `app/main.py` — `include_router`
 9. `tests/<feature>/test_*.py` — every test marked `@pytest.mark.story("<id>", ac=<n>)`
-10. From the repo root: `npm run db:docs` and `npm run test:trace`
+10. From the repo root: `npm run db:docs` (commit the result) and `npm run test:trace` (check
+    your story's ACs appear; the matrix itself is git-ignored)
 
 Fixtures from `tests/conftest.py`: `db`, `client`, the pre-signed-in `organiser_client`,
 `coordinator_client`, `venue_staff_client`, `tech_client`, `attendee_client`, and

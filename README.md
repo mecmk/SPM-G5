@@ -187,24 +187,21 @@ stack can stay up. Conventions (fixtures, story markers, traceability) are in
 
 ## Branching Model
 
-This project uses a sprint-trunk model, not GitFlow. There is no `staging`, `release/*`, or
-`hotfix/*` branch.
+This project uses trunk-based development, not GitFlow. There is no `sprint/*`, `staging`,
+`release/*`, or `hotfix/*` branch.
 
 ```text
-main                     ← stable, protected. Only merges at sprint end, from sprint/<N>.
-└── sprint/<N>            ← sprint integration branch (e.g. sprint/1). Protected, PR-only.
-    ├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
-    ├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
-    ├── refactor/<slug>    ← restructuring, no behavior change
-    ├── test/<slug>        ← test-only changes
-    └── docs/<slug>        ← documentation only
+main                   ← trunk. Stable, protected, PR-only.
+├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
+├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
+├── refactor/<slug>    ← restructuring, no behavior change
+├── test/<slug>        ← test-only changes
+└── docs/<slug>        ← documentation only
 ```
 
-Branches are created from the current `sprint/<N>` using the appropriate prefix
+Short-lived branches are created from the latest `main` using the appropriate prefix
 (`story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`).
-Pull requests are
-opened against `sprint/<N>`, never `main`, and require one approving review before a squash
-merge. At the end of a sprint, `sprint/<N>` is merged into `main` with a regular merge.
+Pull requests are opened against `main` and require one approving review before a squash merge.
 
 For the full workflow, commit conventions, and review checklist, see
 [CONTRIBUTING.md](CONTRIBUTING.md). For instructions directed at coding agents working in this
