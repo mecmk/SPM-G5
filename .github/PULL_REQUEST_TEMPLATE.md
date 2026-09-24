@@ -41,4 +41,4 @@
       `tests/e2e/`), and pass; lint/format checks are clean
 - [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser
 - [ ] No secrets, API keys, or `.env` values committed
-- [ ] PR opened against `sprint/<N>`, one review obtained, CI green
+- [ ] PR opened against `main`, one review obtained, CI green

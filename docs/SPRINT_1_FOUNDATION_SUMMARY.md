@@ -151,7 +151,7 @@ is story 13.1, which depends on this one.
 
 ### Everyone, before starting a story
 
-1. `git switch sprint/1 && git pull --rebase`, then `npm run setup` (after package changes),
+1. `git switch main && git pull --rebase`, then `npm run setup` (after package changes),
    `npm run db:ready` and `npm run dev` (daily). Use `--rebase`: PRs are squash-merged, so a
    plain `git pull` re-merges the old unsquashed commits and leaves the branch out of step.
 2. Read `docs/database/README.md` (5 min), `docs/testing/README.md` (5 min) and the

@@ -1,8 +1,6 @@
 version: 2
 
-# Dependabot requires a single fixed target branch, but sprint/<N> branches are short-lived, so
-# we point everything at main. If a dependency bump is needed mid-sprint, cherry-pick the PR's
-# commit onto the current sprint branch manually.
+# Every PR targets main (trunk-based development), so Dependabot's do too.
 updates:
   - package-ecosystem: "uv"
     directory: "/backend"

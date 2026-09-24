@@ -128,7 +128,8 @@ also run them, but don't rely on CI to catch what you could catch locally.
   `require_permission(Permission.X)` for role checks. Add new permissions to
   `app/auth/permissions.py`; relationship rules ("only my events") go in the feature service.
 - Tests: one file per story under `backend/tests/<feature>/`, every test tagged
-  `@pytest.mark.story("<id>", ac=<n>)`; `npm run test:trace` produces the traceability matrix.
+  `@pytest.mark.story("<id>", ac=<n>)`; `npm run test:trace` produces the traceability matrix
+  (git-ignored; CI uploads it as an artifact).
 
 ## Repository Structure
 
@@ -154,7 +155,7 @@ scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root np
 docs/
   ARCHITECTURE.md
   database/             # README + generated DATA_DICTIONARY.md and ERD.excalidraw
-  testing/              # README + generated TRACEABILITY.md
+  testing/              # README + generated, git-ignored TRACEABILITY.md
 AGENTS.md
 CONTRIBUTING.md
 README.md
@@ -168,26 +169,24 @@ feature area speculatively; add one only when a real story needs it.
 ## Branching & PR Rules (hard constraints)
 
 ```text
-main                    ← stable, protected. Only merges at sprint end.
-└── sprint/<N>           ← sprint integration branch (e.g. sprint/1)
-    ├── story/<ID>-<slug> ← feature branch, e.g. story/1.1-login
-    ├── fix/<ID>-<slug>   ← bug fix
-    ├── refactor/<slug>   ← restructuring, no behavior change
-    ├── test/<slug>       ← test-only changes
-    └── docs/<slug>       ← documentation only
+main                   ← trunk. Stable, protected, PR-only.
+├── story/<ID>-<slug>  ← feature branch, e.g. story/1.1-login
+├── fix/<ID>-<slug>    ← bug fix
+├── refactor/<slug>    ← restructuring, no behavior change
+├── test/<slug>        ← test-only changes
+└── docs/<slug>        ← documentation only
 ```
 
-- **Never commit directly to `main` or `sprint/<N>`.** Always branch off the current
-  `sprint/<N>` using `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`,
-  or `docs/<slug>`.
+- **Trunk-based: never commit directly to `main`.** Always branch off the latest `main` using
+  `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`.
+  There are no `sprint/<N>` integration branches.
+- Keep branches **short-lived**: one story or fix each, merged once reviewed and green, then
+  deleted. If `main` moves on while you work, update your branch from it and re-run the tests.
 - Run tests locally before pushing.
-- Open the PR against `sprint/<N>` (not `main`). PRs into `main` only happen at sprint end,
-  from `sprint/<N>`.
+- Open the PR against `main`.
 - PRs require **one approving review** before merge.
-- **Squash merge** — no merge commits, no rebase merges — to keep `sprint/<N>` history to one
-  commit per story/fix.
-- If you don't know the current sprint number or don't see a matching `sprint/<N>` branch, ask
-  before creating one.
+- **Squash merge** — no merge commits, no rebase merges — to keep `main` history to one commit
+  per story/fix.
 
 ## Feature Development Workflow (Test-First)
 
@@ -245,7 +244,7 @@ A story isn't done until:
       `tests/e2e/`), and pass; lint/format checks are clean.
 - [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser.
 - [ ] No secrets, API keys, or `.env` values committed.
-- [ ] PR opened against `sprint/<N>`, one review obtained, CI green.
+- [ ] PR opened against `main`, one review obtained, CI green.
 
 ## Things to Avoid
 
