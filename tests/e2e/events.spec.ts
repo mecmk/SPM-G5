@@ -24,7 +24,7 @@ test('7.1 AC1: a coordinator opens an event from the review queue and sees its f
   await expect(
     page.getByRole('heading', { name: 'Data Literacy Workshop', level: 1 }),
   ).toBeVisible()
-  await expect(page.getByText('Submitted')).toBeVisible()
+  await expect(page.getByText('Under review')).toBeVisible()
   await expect(page.getByText('Classroom')).toBeVisible()
   await expect(page.getByText('Projector & screen')).toBeVisible()
   await expect(page.getByText('Wi-Fi')).toBeVisible()
@@ -56,7 +56,7 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await expect(
     page.getByRole('heading', { name: 'Nimbus Developer Conference', level: 1 }),
   ).toBeVisible()
-  await expect(page.getByText('Approved').first()).toBeVisible()
+  await expect(page.getByText('Planning').first()).toBeVisible()
   await expect(page.getByText('350')).toBeVisible()
   await expect(page.getByText('Chloe Coordinator').first()).toBeVisible()
 
