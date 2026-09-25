@@ -324,14 +324,14 @@ test('2.1 AC9/AC11: an organiser submits their draft and it becomes a read-only 
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
+  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByText(/Submitted on /)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Submit request' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0)
   await expect(page.getByLabel('Event name')).toBeDisabled()
 
   await page.reload()
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
+  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Event name')).toHaveValue(name)
 })
 
@@ -347,7 +347,7 @@ test('2.1 AC9/AC11: an organiser can submit straight from the new request page',
   await page.getByRole('button', { name: 'Submit request' }).click()
 
   await expect(page).toHaveURL(EDIT_PATH)
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
+  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByText(/Submitted on /)).toBeVisible()
   await expect(page.getByLabel('Event name')).toHaveValue(name)
   await expect(page.getByLabel('Event name')).toBeDisabled()

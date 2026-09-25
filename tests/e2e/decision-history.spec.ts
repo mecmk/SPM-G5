@@ -50,7 +50,7 @@ test('4.6 AC1: an approved request shows who decided it and when, with no reason
   await page.goto(`/events/${EVENTS.approved}`)
 
   const section = clarificationsSection(page)
-  await expect(section.getByText('Approved', { exact: true })).toBeVisible()
+  await expect(section.getByText('Planning', { exact: true })).toBeVisible()
   await expect(section.getByText('Decided by Chloe Coordinator on Thu, 3 Sept 2026')).toBeVisible()
 })
 

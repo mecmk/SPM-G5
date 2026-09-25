@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-22 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-24 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -323,7 +323,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `starts_at` | `timestamp with time zone` | yes | - | - | Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist. |
 | `ends_at` | `timestamp with time zone` | yes | - | - | Proposed end date-time. Must be after starts_at (story 2.1 AC2). |
 | `expected_attendance` | `integer` | yes | - | - | Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1). |
-| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, SUBMITTED, UNDER_REVIEW, CLARIFICATION_REQUESTED, APPROVED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
+| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. SUBMITTED and APPROVED were retired by migration 002 (bug b6.1.1) - submitting now goes straight to UNDER_REVIEW and approving straight to PLANNING. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Venue requirement: required room layout (story 2.1 AC4). |
@@ -350,7 +350,7 @@ An event request and, once approved, the event itself - one row for the whole li
 
 Allowed values:
 
-- `status`: `DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `APPROVED`, `PLANNING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
+- `status`: `DRAFT`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `PLANNING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
 
 Rules and indexes:
 

@@ -46,10 +46,8 @@ def _ids(client, query: str = "") -> list[str]:
 @pytest.mark.parametrize(
     "status",
     [
-        EventStatus.SUBMITTED,
         EventStatus.UNDER_REVIEW,
         EventStatus.CLARIFICATION_REQUESTED,
-        EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
         EventStatus.COMPLETED,
@@ -101,7 +99,7 @@ def test_entry_shows_name_organiser_dates_and_status(coordinator_client):
     assert set(entry) == ENTRY_FIELDS
     assert entry["name"] == "Nimbus Developer Conference"
     assert entry["organiser_name"] == Users.ORGANISER_2.full_name
-    assert entry["status"] == "APPROVED"
+    assert entry["status"] == "PLANNING"
 
 
 # --- AC3: paging, most recently updated first ------------------------------------------------

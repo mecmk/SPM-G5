@@ -115,13 +115,13 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Q1 Sales Kick-off (draft)', NULL, 'Still gathering requirements.', NULL, NULL, NULL, NULL, 'DRAFT',
      NULL, NULL, NULL, FALSE, FALSE, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-    -- 3333..02: submitted and assigned to Chloe, waiting for her decision
+    -- 3333..02: under review, assigned to Chloe, waiting for her decision
     ('33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'SUBMITTED',
+     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'UNDER_REVIEW',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-08 10:15+08', NULL, NULL, NULL),
-    -- 3333..03: approved and assigned; has an approved venue booking
+    -- 3333..03: in planning and assigned; has an approved venue booking
     ('33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', NULL, '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'APPROVED',
+     'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', NULL, '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..04: rejected with a reason
     ('33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
@@ -135,29 +135,29 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Diversity & Inclusion Forum', 'Community outreach', 'Panel discussion and workshops on workplace inclusion.', NULL, '2026-11-05 09:30+08', '2026-11-05 15:00+08', 150, 'CLARIFICATION_REQUESTED',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-03 09:00+08', NULL, NULL, NULL),
-    -- 3333..07: submitted, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
+    -- 3333..07: under review, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
     ('33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'SUBMITTED',
+     'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'UNDER_REVIEW',
      '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', 'STANDING', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL),
-    -- 3333..08: approved and assigned to Carl; has a pending venue booking (story 13.1 queue data)
+    -- 3333..08: in planning and assigned to Carl; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Annual Wellness Summit', 'Company-wide wellness and mental health awareness day', 'Talks, workshops and screening booths for staff wellbeing.', NULL, '2026-12-03 09:00+08', '2026-12-03 17:00+08', 180, 'APPROVED',
+     'Annual Wellness Summit', 'Company-wide wellness and mental health awareness day', 'Talks, workshops and screening booths for staff wellbeing.', NULL, '2026-12-03 09:00+08', '2026-12-03 17:00+08', 180, 'PLANNING',
      '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
-    -- 3333..09: approved and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
+    -- 3333..09: in planning and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'APPROVED',
+     'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..10: approved and assigned to Chloe; pending venue booking dedicated to the story
+    -- 3333..10: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (queue card) - no other test/assertion reads this row, since the
     -- e2e run's fullyParallel database is shared and approving it would break story 13.1's
     -- queue assertions if it were one of their rows.
     ('33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Founders Day Fireside Chat', 'A conversation with the founders', 'Casual fireside chat and Q&A for all staff.', NULL, '2027-06-01 15:00+08', '2027-06-01 17:00+08', 200, 'APPROVED',
+     'Founders Day Fireside Chat', 'A conversation with the founders', 'Casual fireside chat and Q&A for all staff.', NULL, '2027-06-01 15:00+08', '2027-06-01 17:00+08', 200, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..11: approved and assigned to Carl; pending venue booking dedicated to the story
+    -- 3333..11: in planning and assigned to Carl; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (detail page) - see 3333..10's note.
     ('33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Investor Demo Day', 'Quarterly investor product demo', 'Live product walkthrough for the board and investors.', NULL, '2027-07-01 09:00+08', '2027-07-01 12:00+08', 100, 'APPROVED',
+     'Investor Demo Day', 'Quarterly investor product demo', 'Live product walkthrough for the board and investors.', NULL, '2027-07-01 09:00+08', '2027-07-01 12:00+08', 100, 'PLANNING',
      '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..12-15: one event in each of the four statuses story 6.1 adds to the visible/status
     -- model (PLANNING, CONFIRMED, COMPLETED, CANCELLED) - none were seeded before, so the
