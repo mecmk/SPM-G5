@@ -92,13 +92,7 @@ _SORT_COLUMNS = {
 
 # Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
 # never widen this to accept arbitrary Event fields (important fields go through story 7.3).
-_ROUTINE_FIELDS = (
-    "description",
-    "contact_name",
-    "contact_email",
-    "contact_phone",
-    "internal_notes",
-)
+_ROUTINE_FIELDS = ("internal_notes",)
 
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)

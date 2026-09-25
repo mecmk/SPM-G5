@@ -539,28 +539,15 @@ class EventDetailOut(BaseModel):
 
 # --- routine information edit (story 7.2) --------------------------------------------------
 class EventRoutineUpdate(BaseModel):
-    """AC1: only the routine fields - description, contact details and internal notes. Partial
-    update like ``EventUpdate``: only the fields sent change. Unlike ``EventUpdate``, every field
-    here may be cleared with ``null`` - none of them are load-bearing for submission."""
+    """AC1: the only routine field is internal notes - description and contact details are not
+    editable here. Partial update like ``EventUpdate``: leave the field out to keep it, or send
+    ``null`` to clear it."""
 
     model_config = ConfigDict(extra="forbid")
 
-    description: str | None = None
-    # Bounds mirror the form's own maxLength (frontend/src/events/EventRoutineEditPage.tsx),
-    # which is otherwise unenforced server-side.
-    contact_name: str | None = Field(default=None, max_length=200)
-    contact_email: str | None = Field(default=None, max_length=254)
-    contact_phone: str | None = Field(default=None, max_length=50)
     internal_notes: str | None = None
 
-    @field_validator(
-        "description",
-        "contact_name",
-        "contact_email",
-        "contact_phone",
-        "internal_notes",
-        mode="before",
-    )
+    @field_validator("internal_notes", mode="before")
     @classmethod
     def _normalize(cls, value):
         return _blank_to_none(value)

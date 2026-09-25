@@ -262,9 +262,8 @@ def update_routine_information(
     db: DbSession,
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
-    """Story 7.2 AC1-AC3: the coordinator assigned to this event edits its routine fields
-    (description, contact details, internal notes) directly, while the event is not completed,
-    cancelled or rejected."""
+    """Story 7.2 AC1-AC3: the coordinator assigned to this event edits its internal notes
+    directly, while the event is not completed, cancelled or rejected."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:

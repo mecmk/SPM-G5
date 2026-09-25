@@ -1,7 +1,7 @@
 """Story 7.2 - be: the assigned Event Coordinator edits an event's routine information directly.
 
-AC1 Fields designated as routine (description, internal notes, contact details) can be edited
-    and saved directly, only by the coordinator assigned to the event, and only those fields.
+AC1 The only routine field, internal notes, can be edited and saved directly, only by the
+    coordinator assigned to the event. Description and contact details are not editable here.
 AC2 The change takes effect immediately: persisted, and returned by a subsequent read.
 AC3 Editing is blocked once the event is completed, cancelled or rejected.
 
@@ -30,59 +30,51 @@ def _patch(client, event_id, **body):
 
 # --- AC1: only the assigned coordinator may edit, only routine fields ------------------------
 @pytest.mark.story("7.2", ac=1)
-def test_assigned_coordinator_can_update_each_routine_field(coordinator_client, db: Session):
+def test_assigned_coordinator_can_update_internal_notes(coordinator_client, db: Session):
     response = _patch(
-        coordinator_client,
-        Events.SUBMITTED,
-        description="Updated description for the workshop.",
-        contact_name="New Contact",
-        contact_email="new-contact@acme.example",
-        contact_phone="+65 6123 4567",
-        internal_notes="Caterer confirmed for 60 pax.",
+        coordinator_client, Events.SUBMITTED, internal_notes="Caterer confirmed for 60 pax."
     )
 
     assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["description"] == "Updated description for the workshop."
-    assert body["contact_name"] == "New Contact"
-    assert body["contact_email"] == "new-contact@acme.example"
-    assert body["contact_phone"] == "+65 6123 4567"
-    assert body["internal_notes"] == "Caterer confirmed for 60 pax."
+    assert response.json()["internal_notes"] == "Caterer confirmed for 60 pax."
 
     db.expire_all()
-    row = db.execute(
-        text(
-            "SELECT description, contact_name, contact_email, contact_phone, internal_notes "
-            "FROM events WHERE id = :id"
-        ),
-        {"id": Events.SUBMITTED},
-    ).one()
-    assert row.description == "Updated description for the workshop."
-    assert row.contact_name == "New Contact"
-    assert row.contact_email == "new-contact@acme.example"
-    assert row.contact_phone == "+65 6123 4567"
-    assert row.internal_notes == "Caterer confirmed for 60 pax."
+    stored = db.execute(
+        text("SELECT internal_notes FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).scalar_one()
+    assert stored == "Caterer confirmed for 60 pax."
 
 
 @pytest.mark.story("7.2", ac=1)
-def test_a_partial_edit_leaves_the_other_routine_fields_unchanged(coordinator_client):
+def test_internal_notes_can_be_cleared_with_null(coordinator_client):
+    _patch(coordinator_client, Events.SUBMITTED, internal_notes="Temporary note.")
+
+    response = _patch(coordinator_client, Events.SUBMITTED, internal_notes=None)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["internal_notes"] is None
+
+
+@pytest.mark.story("7.2", ac=1)
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("description", "Updated description."),
+        ("contact_name", "New Contact"),
+        ("contact_email", "new-contact@acme.example"),
+        ("contact_phone", "+65 6123 4567"),
+    ],
+)
+def test_description_and_contact_details_cannot_be_changed_through_this_operation(
+    coordinator_client, field, value
+):
     before = coordinator_client.get(f"/events/{Events.SUBMITTED}").json()
 
-    response = _patch(coordinator_client, Events.SUBMITTED, contact_phone="+65 9000 0000")
+    response = _patch(coordinator_client, Events.SUBMITTED, **{field: value})
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["contact_phone"] == "+65 9000 0000"
-    assert body["description"] == before["description"]
-    assert body["contact_name"] == before["contact_name"]
-
-
-@pytest.mark.story("7.2", ac=1)
-def test_a_routine_field_can_be_cleared_with_null(coordinator_client):
-    response = _patch(coordinator_client, Events.SUBMITTED, contact_name=None)
-
-    assert response.status_code == 200, response.text
-    assert response.json()["contact_name"] is None
+    assert response.status_code == 422
+    after = coordinator_client.get(f"/events/{Events.SUBMITTED}").json()
+    assert after[field] == before[field]
 
 
 @pytest.mark.story("7.2", ac=1)
@@ -100,18 +92,8 @@ def test_status_cannot_be_changed_through_this_operation(coordinator_client):
 
 
 @pytest.mark.story("7.2", ac=1)
-@pytest.mark.parametrize(
-    ("field", "limit"), [("contact_name", 200), ("contact_email", 254), ("contact_phone", 50)]
-)
-def test_a_contact_field_over_its_length_limit_is_refused(coordinator_client, field, limit):
-    response = _patch(coordinator_client, Events.SUBMITTED, **{field: "a" * (limit + 1)})
-
-    assert response.status_code == 422
-
-
-@pytest.mark.story("7.2", ac=1)
 def test_a_coordinator_not_assigned_to_the_event_cannot_edit_it(login_as):
-    response = _patch(login_as(Users.COORDINATOR_2), Events.SUBMITTED, description="Nope.")
+    response = _patch(login_as(Users.COORDINATOR_2), Events.SUBMITTED, internal_notes="Nope.")
 
     assert response.status_code == 403
     assert "edit" in response.json()["detail"]
@@ -125,7 +107,7 @@ def test_a_coordinator_not_assigned_to_the_event_cannot_edit_it(login_as):
 def test_an_unauthorised_role_cannot_edit_routine_information(client_name, request):
     client = request.getfixturevalue(client_name)
 
-    response = _patch(client, Events.SUBMITTED, description="Nope.")
+    response = _patch(client, Events.SUBMITTED, internal_notes="Nope.")
 
     assert response.status_code == 403
 
@@ -133,12 +115,12 @@ def test_an_unauthorised_role_cannot_edit_routine_information(client_name, reque
 # --- AC2: the edit takes effect immediately ---------------------------------------------------
 @pytest.mark.story("7.2", ac=2)
 def test_a_subsequent_read_returns_the_updated_value(coordinator_client):
-    _patch(coordinator_client, Events.SUBMITTED, description="Now with catering.")
+    _patch(coordinator_client, Events.SUBMITTED, internal_notes="Now with catering.")
 
     response = coordinator_client.get(f"/events/{Events.SUBMITTED}")
 
     assert response.status_code == 200
-    assert response.json()["description"] == "Now with catering."
+    assert response.json()["internal_notes"] == "Now with catering."
 
 
 @pytest.mark.story("7.2", ac=2)
@@ -199,14 +181,14 @@ def test_routine_editing_is_blocked_for_terminal_statuses(coordinator_client, db
     event = make_event(db, status=status, assigned_coordinator_id=Users.COORDINATOR.id)
     db.commit()
 
-    response = _patch(coordinator_client, event.id, description="Too late.")
+    response = _patch(coordinator_client, event.id, internal_notes="Too late.")
 
     assert response.status_code == 409
 
 
 @pytest.mark.story("7.2", ac=3)
 def test_the_rejected_seed_event_cannot_be_edited(login_as):
-    response = _patch(login_as(Users.COORDINATOR_2), Events.REJECTED, description="Too late.")
+    response = _patch(login_as(Users.COORDINATOR_2), Events.REJECTED, internal_notes="Too late.")
 
     assert response.status_code == 409
 
@@ -220,7 +202,7 @@ def test_a_closed_event_refuses_with_409_even_for_an_unassigned_coordinator(logi
     )
     db.commit()
 
-    response = _patch(login_as(Users.COORDINATOR_2), event.id, description="Too late.")
+    response = _patch(login_as(Users.COORDINATOR_2), event.id, internal_notes="Too late.")
 
     assert response.status_code == 409
 
@@ -229,7 +211,7 @@ def test_a_closed_event_refuses_with_409_even_for_an_unassigned_coordinator(logi
 @pytest.mark.story("7.2")
 def test_editing_a_missing_event_is_not_found(coordinator_client):
     response = _patch(
-        coordinator_client, "00000000-0000-0000-0000-000000000000", description="Anything."
+        coordinator_client, "00000000-0000-0000-0000-000000000000", internal_notes="Anything."
     )
 
     assert response.status_code == 404
@@ -239,8 +221,10 @@ def test_editing_a_missing_event_is_not_found(coordinator_client):
 def test_a_failed_edit_does_not_change_the_stored_value(login_as):
     before = login_as(Users.COORDINATOR).get(f"/events/{Events.SUBMITTED}").json()
 
-    response = _patch(login_as(Users.COORDINATOR_2), Events.SUBMITTED, description="Rejected edit.")
+    response = _patch(
+        login_as(Users.COORDINATOR_2), Events.SUBMITTED, internal_notes="Rejected edit."
+    )
     assert response.status_code == 403
 
     after = login_as(Users.COORDINATOR).get(f"/events/{Events.SUBMITTED}").json()
-    assert after["description"] == before["description"]
+    assert after["internal_notes"] == before["internal_notes"]
