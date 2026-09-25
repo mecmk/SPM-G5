@@ -44,6 +44,7 @@ setting to its upper-case name.
 | `SESSION_COOKIE_NAME` | `connectsphere_session` | |
 | `SESSION_TTL_HOURS` | `12` | |
 | `SESSION_COOKIE_SECURE` | `False` | Set `True` only when serving over HTTPS |
+| `UPLOAD_DIR` | `backend/uploads` | Where event cover pictures are written (story 2.1 AC14) and served from `/uploads/events/`. Git-ignored; tests and the e2e runner use a temporary folder |
 
 ## Domain
 

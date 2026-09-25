@@ -5,6 +5,7 @@ assigned events in any status (story 6.1)."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from enum import StrEnum
@@ -39,6 +40,19 @@ VENUE_CONTRADICTION_MESSAGE = (
 DUPLICATE_EQUIPMENT_MESSAGE = "Each equipment type can appear only once on a request."
 DUPLICATE_ENTRY_MESSAGE = "Each option can be chosen only once."
 CANNOT_BE_REMOVED_MESSAGE = "This field cannot be removed; send a value or leave it out."
+
+# Story 2.1 AC13: the point of contact. Bounds mirror the form's own maxLength and the checks in
+# frontend/src/events/eventRequestForm.ts - keep the messages and limits in step.
+CONTACT_NAME_MAX_LENGTH = 200
+CONTACT_EMAIL_MAX_LENGTH = 254
+CONTACT_PHONE_MAX_LENGTH = 50
+CONTACT_PHONE_MIN_DIGITS = 8
+CONTACT_PHONE_MAX_DIGITS = 15
+CONTACT_NAME_TOO_LONG_MESSAGE = "The contact name must be 200 characters or fewer."
+CONTACT_EMAIL_INVALID_MESSAGE = "Enter an email address like name@example.com."
+CONTACT_PHONE_INVALID_MESSAGE = "Enter a phone number with 8 to 15 digits."
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PHONE_PATTERN = re.compile(r"^\+?[\d -]+$")
 
 
 # --- review queue (story 4.1) --------------------------------------------------------------
@@ -262,6 +276,44 @@ class _EventRequestRules(BaseModel):
     def _strip_name(cls, value):
         return _strip(value)
 
+    @field_validator(
+        "contact_name", "contact_email", "contact_phone", mode="before", check_fields=False
+    )
+    @classmethod
+    def _normalize_contact(cls, value):
+        return _blank_to_none(value)
+
+    @field_validator("contact_name", check_fields=False)
+    @classmethod
+    def _check_contact_name(cls, value: str | None):
+        if value is not None and len(value) > CONTACT_NAME_MAX_LENGTH:
+            raise ValueError(CONTACT_NAME_TOO_LONG_MESSAGE)
+        return value
+
+    @field_validator("contact_email", check_fields=False)
+    @classmethod
+    def _check_contact_email(cls, value: str | None):
+        if value is not None and (
+            len(value) > CONTACT_EMAIL_MAX_LENGTH or _EMAIL_PATTERN.match(value) is None
+        ):
+            raise ValueError(CONTACT_EMAIL_INVALID_MESSAGE)
+        return value
+
+    @field_validator("contact_phone", check_fields=False)
+    @classmethod
+    def _check_contact_phone(cls, value: str | None):
+        if value is None:
+            return value
+        digits = sum(char.isdigit() for char in value)
+        is_valid = (
+            len(value) <= CONTACT_PHONE_MAX_LENGTH
+            and _PHONE_PATTERN.match(value) is not None
+            and CONTACT_PHONE_MIN_DIGITS <= digits <= CONTACT_PHONE_MAX_DIGITS
+        )
+        if not is_valid:
+            raise ValueError(CONTACT_PHONE_INVALID_MESSAGE)
+        return value
+
     @model_validator(mode="after")
     def _check_lists(self):
         facilities = getattr(self, "required_facilities", None) or []
@@ -289,6 +341,9 @@ class EventCreate(_EventRequestRules):
     starts_at: AwareDatetime | None = None
     ends_at: AwareDatetime | None = None
     expected_attendance: PositiveWholeNumber | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
     required_layout_code: str | None = None
     venue_requirement_notes: str | None = None
     required_facilities: list[EventFacilityIn] = Field(default_factory=list)
@@ -322,6 +377,9 @@ class EventUpdate(_EventRequestRules):
     starts_at: AwareDatetime | None = None
     ends_at: AwareDatetime | None = None
     expected_attendance: PositiveWholeNumber | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
     required_layout_code: str | None = None
     venue_requirement_notes: str | None = None
     required_facilities: list[EventFacilityIn] | None = None
