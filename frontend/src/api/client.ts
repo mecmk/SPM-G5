@@ -20,6 +20,10 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' }
 /** Where the backend serves uploaded pictures from (story 2.1 AC14). */
 const UPLOADS_PATH_PREFIX = '/uploads/'
 const NO_CONTENT_STATUS = 204
+/** Seconds until a refused request may be retried (story 1.1 AC6's locked sign-in sends it). */
+const RETRY_AFTER_HEADER = 'Retry-After'
+/** Retry-After may also be an HTTP date; only the whole-seconds form is read. */
+const WHOLE_SECONDS = /^\d+$/
 const REQUEST_BODY_LOCATION = 'body'
 
 /**
@@ -59,13 +63,21 @@ export class ApiError extends Error {
   readonly status: number | null
   readonly code: ErrorCode
   readonly detail: unknown
+  /** Whole seconds until a retry may succeed, from the Retry-After header; null when absent. */
+  readonly retryAfterSeconds: number | null
 
-  constructor(status: number | null, code: ErrorCode, detail: unknown) {
+  constructor(
+    status: number | null,
+    code: ErrorCode,
+    detail: unknown,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(messageFor(code, detail))
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.detail = detail
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -137,6 +149,11 @@ async function readPayload(response: Response): Promise<unknown> {
   }
 }
 
+function retryAfterSecondsOf(response: Response): number | null {
+  const value = response.headers.get(RETRY_AFTER_HEADER)?.trim()
+  return value && WHOLE_SECONDS.test(value) ? Number(value) : null
+}
+
 function detailOf(payload: unknown): unknown {
   if (payload && typeof payload === 'object' && 'detail' in payload) return payload.detail
   return payload
@@ -168,6 +185,7 @@ async function send<T>(
       response.status,
       errorCodeForStatus(response.status, errorCodes),
       detailOf(payload),
+      retryAfterSecondsOf(response),
     )
   }
   return payload as T

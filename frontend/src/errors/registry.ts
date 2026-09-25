@@ -22,6 +22,7 @@ export type ErrorCode =
   | 'SERVER_ERROR'
   | 'UNEXPECTED'
   | 'INVALID_CREDENTIALS'
+  | 'LOGIN_LOCKED'
   | 'VENUE_NOT_FOUND'
   | 'VENUE_NAME_TAKEN'
   | 'VENUE_IN_USE'
@@ -100,6 +101,10 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   INVALID_CREDENTIALS: {
     title: 'Sign-in failed',
     message: 'Invalid email or password.',
+  },
+  LOGIN_LOCKED: {
+    title: 'Sign-in locked',
+    message: 'Too many failed sign-in attempts. Try again later.',
   },
 
   // Story 8.3: venue records. These API codes usually arrive with the backend's own sentence.
@@ -278,6 +283,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
 }
 
 /** Registry codes an endpoint assigns to specific HTTP statuses, e.g. `{ 409: 'CONFLICT' }`. */
+/**
+ * Story 1.1 AC6: the sign-in page's live lock message. `lead` is followed by the minutes left
+ * (`formatTimeLeft`), counting down; `ended` replaces it once the time is up.
+ */
+export const LOGIN_LOCKED_COUNTDOWN = {
+  lead: 'Too many failed sign-in attempts. Try again in',
+  ended: 'You can try signing in again now.',
+} as const
+
 export type StatusErrorCodes = Partial<Record<number, ErrorCode>>
 
 const STATUS_DEFAULTS: StatusErrorCodes = {
