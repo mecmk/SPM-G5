@@ -845,7 +845,9 @@ button.ghost:hover {
   color: var(--text-h);
 }
 
+.link,
 button.link {
+  display: inline-block;
   padding: 0;
   border: none;
   background: none;
@@ -855,6 +857,7 @@ button.link {
   text-decoration: none;
 }
 
+.link:hover,
 button.link:hover {
   background: none;
   color: var(--brand);

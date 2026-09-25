@@ -38,6 +38,17 @@ export const VENUE_SCHEDULE_PATH = '/venue-staff/schedule'
 export function bookingRequestPath(bookingId: string): string {
   return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
 }
+
+// Story 13.2.1: the same booking detail page, reachable by anyone who can read the booking
+// (BOOKINGS_READ) rather than only Venue Staff who can decide it (BOOKINGS_DECIDE) - the
+// requesting coordinator's route into 13.2.1 AC4, distinct from BOOKING_REQUEST_PATH so the
+// venue staff queue's own permission gate is untouched.
+export const BOOKING_DETAIL_PATH = '/bookings/:bookingId'
+
+export function bookingDetailPath(bookingId: string): string {
+  return BOOKING_DETAIL_PATH.replace(':bookingId', encodeURIComponent(bookingId))
+}
+
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'
 

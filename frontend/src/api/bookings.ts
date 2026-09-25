@@ -108,3 +108,27 @@ export function approveBooking(bookingId: string, eventName: string): Promise<Bo
     },
   })
 }
+
+/** Story 13.2.1 AC1/AC2: reject a pending booking request with a mandatory reason. */
+export function rejectBooking(
+  bookingId: string,
+  eventName: string,
+  decisionReason: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/reject`, {
+    method: 'POST',
+    body: { decision_reason: decisionReason },
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_NOT_PENDING' },
+    notify: {
+      title: 'Booking rejected',
+      message: `${eventName}'s venue booking was rejected.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 13.2.1 AC4: the event's most recent venue booking, if any - lets a coordinator
+ * navigate from the event to its booking outcome. */
+export function getBookingForEvent(eventId: string): Promise<Booking | null> {
+  return api<Booking | null>(`/bookings/for-event/${eventId}`)
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
+import { getBookingForEvent, type Booking } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
 import {
   getEvent,
@@ -15,9 +16,10 @@ import { ClarificationHistory, type ClarificationEntry } from '../components/Cla
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
+import { StatusBadge } from '../components/StatusBadge'
 import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
-import { eventEditRoutinePath, HOME_PATH } from '../routes'
+import { bookingDetailPath, eventEditRoutinePath, HOME_PATH } from '../routes'
 import { formatDate, formatSchedule, formatTime } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
@@ -52,6 +54,10 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
  * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
  * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
+ *
+ * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
+ * Venue Staff, Technical Support - not the organiser, who never held that permission), showing
+ * the booking's status and, once rejected, its reason, with a link to its own detail page.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -62,6 +68,9 @@ export function EventDetailPage() {
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
+  const [booking, setBooking] = useState<Booking | null>(null)
+  const [bookingError, setBookingError] = useState<string | null>(null)
+  const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
 
   useEffect(() => {
     let cancelled = false
@@ -94,6 +103,21 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, event, user])
+
+  useEffect(() => {
+    if (!canReadBooking) return undefined
+    let cancelled = false
+    getBookingForEvent(eventId)
+      .then((data) => {
+        if (!cancelled) setBooking(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setBookingError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, canReadBooking])
 
   if (error) {
     return (
@@ -314,6 +338,34 @@ export function EventDetailPage() {
             )}
           </section>
         </div>
+
+        {canReadBooking && (booking !== null || bookingError !== null) && (
+          <section className="card stack" aria-labelledby="venue-booking-heading">
+            <h2 id="venue-booking-heading">Venue booking</h2>
+            {bookingError && (
+              <p role="alert" className="error">
+                {bookingError}
+              </p>
+            )}
+            {booking && (
+              <>
+                <div className="cluster">
+                  <StatusBadge status={booking.status} />
+                  <Link to={bookingDetailPath(booking.id)} className="link">
+                    View booking details →
+                  </Link>
+                </div>
+                {booking.decision_reason !== null && (
+                  <p>
+                    <span className="fact-label">Reason</span>
+                    <br />
+                    {booking.decision_reason}
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        )}
 
         <section className="card stack" aria-labelledby="equipment-heading">
           <h2 id="equipment-heading">Equipment requirements</h2>

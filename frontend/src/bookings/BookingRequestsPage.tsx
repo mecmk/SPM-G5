@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { approveBooking, listBookingRequests, type BookingQueueEntry } from '../api/bookings'
+import {
+  approveBooking,
+  listBookingRequests,
+  rejectBooking,
+  type BookingQueueEntry,
+} from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
@@ -24,15 +29,22 @@ function requirementsText(notes: string | null): string {
  * AC3: decided requests never appear - the backend query excludes them.
  *
  * Story 13.2 AC1: an Approve action on each card, so a request that needs no closer look can be
- * decided without opening its detail page. Reject (story 13.3) is a teammate's story and is not
- * built here.
+ * decided without opening its detail page.
+ *
+ * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  */
+const EMPTY_REASON_MESSAGE = 'Enter a reason for rejecting this request.'
+
 export function BookingRequestsPage() {
   const [entries, setEntries] = useState<BookingQueueEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [pendingReject, setPendingReject] = useState<BookingQueueEntry | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isRejecting, setIsRejecting] = useState(false)
+  const [rejectError, setRejectError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +82,37 @@ export function BookingRequestsPage() {
       setApproveError(formatApiError(err))
     } finally {
       setIsApproving(false)
+    }
+  }
+
+  function askToReject(entry: BookingQueueEntry) {
+    setRejectError(null)
+    setRejectReason('')
+    setPendingReject(entry)
+  }
+
+  function cancelReject() {
+    setPendingReject(null)
+  }
+
+  async function confirmReject() {
+    if (!pendingReject) return
+    const reason = rejectReason.trim()
+    if (reason === '') {
+      setRejectError(EMPTY_REASON_MESSAGE)
+      return
+    }
+    const { id, event_name: eventName } = pendingReject
+    setIsRejecting(true)
+    setRejectError(null)
+    try {
+      await rejectBooking(id, eventName, reason)
+      setEntries((current) => current && current.filter((entry) => entry.id !== id))
+      setPendingReject(null)
+    } catch (err) {
+      setRejectError(formatApiError(err))
+    } finally {
+      setIsRejecting(false)
     }
   }
 
@@ -115,7 +158,9 @@ export function BookingRequestsPage() {
                   </div>
 
                   <div>
-                    <h3>{entry.event_name}</h3>
+                    <h3>
+                      <Link to={bookingRequestPath(entry.id)}>{entry.event_name}</Link>
+                    </h3>
                     <p className="muted">
                       {entry.venue_name} · {entry.venue_location}
                     </p>
@@ -142,15 +187,24 @@ export function BookingRequestsPage() {
                   </div>
 
                   <div className="item-card-footer">
-                    <button
-                      type="button"
-                      className="brand button-sm"
-                      onClick={() => askToApprove(entry)}
-                    >
-                      Approve
-                    </button>
-                    <Link to={bookingRequestPath(entry.id)} className="button secondary button-sm">
-                      View details
+                    <div className="cluster">
+                      <button
+                        type="button"
+                        className="brand button-sm"
+                        onClick={() => askToApprove(entry)}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-solid button-sm"
+                        onClick={() => askToReject(entry)}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                    <Link to={bookingRequestPath(entry.id)} className="link">
+                      View details →
                     </Link>
                   </div>
                 </li>
@@ -175,6 +229,30 @@ export function BookingRequestsPage() {
             {formatDate(pendingApprove.starts_at)}, {formatTime(pendingApprove.starts_at)}–
             {formatTime(pendingApprove.ends_at)}.
           </p>
+        </ConfirmDialog>
+      )}
+
+      {pendingReject && (
+        <ConfirmDialog
+          title="Reject this booking?"
+          confirmLabel="Reject"
+          isBusy={isRejecting}
+          error={rejectError}
+          onConfirm={confirmReject}
+          onCancel={cancelReject}
+        >
+          <p>
+            {pendingReject.event_name}'s request for {pendingReject.venue_name} will be rejected.
+          </p>
+          <label>
+            Reason for rejecting
+            <textarea
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              rows={3}
+              disabled={isRejecting}
+            />
+          </label>
         </ConfirmDialog>
       )}
     </div>
