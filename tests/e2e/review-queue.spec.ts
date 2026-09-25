@@ -51,7 +51,14 @@ test('4.1 AC3: the "Under Review" tab can be ordered by submission date or propo
   await page.goto('/events/inbox')
   await page.getByRole('tab', { name: /^Under Review/ }).click()
 
-  const titles = () => page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents()
+  // Story 5.1 auto-assigns a coordinator round robin on submission, so another spec's request
+  // can land in this same "Under Review" tab too; filter to these three seeded ones and check
+  // their relative order, rather than asserting the tab holds only them (tests/CLAUDE.md).
+  const seeded = ['Data Literacy Workshop', 'Nimbus Leadership Offsite', 'Wellness Week Kickoff']
+  const titles = async () => {
+    const all = await page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents()
+    return all.filter((title) => seeded.includes(title))
+  }
 
   // Default: submission date, earliest first.
   await expect
