@@ -10,6 +10,7 @@ revealed to people it is not theirs to see.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -53,6 +54,8 @@ from app.events.schemas import (
     ReviewQueueSort,
 )
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
+
+_log = logging.getLogger(__name__)
 
 END_NOT_AFTER_START_MESSAGE = (
     "The proposed end date and time must be after the start date and time."
@@ -915,9 +918,17 @@ def cover_image_path(filename: str) -> Path:
 
 
 def _delete_cover_image_file(url: str | None) -> None:
-    """Remove the file behind ``url`` when it is one of ours; an absent file is not an error."""
-    if url is not None and url.startswith(COVER_IMAGE_URL_PREFIX):
-        cover_image_path(url.removeprefix(COVER_IMAGE_URL_PREFIX)).unlink(missing_ok=True)
+    """Remove the file behind ``url`` when it is one of ours. An absent file is not an error, and
+    neither is one that cannot be removed (locked on Windows, say): this runs after the change was
+    committed, so failing here would report a save that worked as a failure. It is logged, and the
+    file is left behind."""
+    if url is None or not url.startswith(COVER_IMAGE_URL_PREFIX):
+        return
+    path = cover_image_path(url.removeprefix(COVER_IMAGE_URL_PREFIX))
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        _log.warning("Could not delete the replaced cover picture %s", path, exc_info=True)
 
 
 def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: User) -> Event:

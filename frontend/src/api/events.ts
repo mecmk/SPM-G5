@@ -283,24 +283,39 @@ const COVER_IMAGE_ERROR_CODES = {
   413: 'EVENT_PICTURE_TOO_LARGE',
 } as const
 
-/** Story 2.1 AC14: give a draft a cover picture, replacing any it has. */
-export function uploadCoverImage(eventId: string, file: File): Promise<EventDetail> {
+/**
+ * Story 2.1 AC14: give a draft a cover picture, replacing any it has. Story 2.1 AC15: submitting
+ * saves the picture first and must say only that the request was submitted, so it passes
+ * `shouldNotify: false`.
+ */
+export function uploadCoverImage(
+  eventId: string,
+  file: File,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
   const body = new FormData()
   body.append('file', file)
   return api<EventDetail>(`/events/${eventId}/cover-image`, {
     method: 'PUT',
     body,
     errorCodes: COVER_IMAGE_ERROR_CODES,
-    notify: { title: 'Picture saved', message: 'The cover picture was saved.' },
+    notify: shouldNotify
+      ? { title: 'Picture saved', message: 'The cover picture was saved.' }
+      : false,
   })
 }
 
-/** Story 2.1 AC14: take the cover picture off a draft. */
-export function removeCoverImage(eventId: string): Promise<EventDetail> {
+/** Story 2.1 AC14: take the cover picture off a draft. AC15: silent when submitting, as above. */
+export function removeCoverImage(
+  eventId: string,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/cover-image`, {
     method: 'DELETE',
     errorCodes: EVENT_ERROR_CODES,
-    notify: { title: 'Picture removed', message: 'The cover picture was removed.' },
+    notify: shouldNotify
+      ? { title: 'Picture removed', message: 'The cover picture was removed.' }
+      : false,
   })
 }
 

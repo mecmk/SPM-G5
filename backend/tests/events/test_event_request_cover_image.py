@@ -379,3 +379,27 @@ def test_a_seeded_picture_is_left_alone_by_the_upload_rules(organiser_client):
     assert detail["cover_image_url"] is None or not detail["cover_image_url"].startswith(
         "/uploads/"
     )
+
+
+@pytest.mark.story("2.1", ac=14)
+def test_a_file_that_cannot_be_deleted_does_not_fail_a_save_that_worked(
+    organiser_client, db: Session, monkeypatch
+):
+    """The row is committed before the old file is deleted, so a delete that fails (a file locked
+    on Windows, say) must not turn a saved change into an error."""
+    created = create_event_request(organiser_client)
+    first = _upload(organiser_client, created["id"]).json()["cover_image_url"]
+
+    def refuse_to_delete(self, missing_ok=False):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(Path, "unlink", refuse_to_delete)
+
+    replaced = _upload(organiser_client, created["id"], _JPEG, "b.jpg", "image/jpeg")
+    removed = _remove(organiser_client, created["id"])
+
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["cover_image_url"] != first
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["cover_image_url"] is None
+    assert _stored_url(db, created["id"]) is None

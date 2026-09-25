@@ -205,7 +205,9 @@ def set_cover_image(
     actor: Annotated[CurrentUser, CanCreate],
 ) -> EventDetailOut:
     """Story 2.1 AC14: an organiser gives their own draft a cover picture, replacing any it had."""
-    # One byte past the limit is enough to know it is too large, without reading a huge file.
+    # The upload has already been received and spooled by the time this runs, so this bounds what
+    # is read into memory, not what is transferred. One byte past the limit is enough to know the
+    # file is too large.
     content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
     if not content:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, EMPTY_PICTURE_MESSAGE)

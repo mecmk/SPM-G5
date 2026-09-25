@@ -427,9 +427,11 @@ export function EventRequestFormPage() {
   }
 
   /** Upload the chosen picture, or remove the one the person took off. */
-  async function applyPicture(saved: EventDetail): Promise<EventDetail> {
-    if (picture) return uploadCoverImage(saved.id, picture.file)
-    if (isPictureRemoved && saved.cover_image_url !== null) return removeCoverImage(saved.id)
+  async function applyPicture(saved: EventDetail, shouldNotify: boolean): Promise<EventDetail> {
+    if (picture) return uploadCoverImage(saved.id, picture.file, { shouldNotify })
+    if (isPictureRemoved && saved.cover_image_url !== null) {
+      return removeCoverImage(saved.id, { shouldNotify })
+    }
     return saved
   }
 
@@ -456,7 +458,7 @@ export function EventRequestFormPage() {
       ? await updateEvent(eventId, input, { shouldNotify })
       : await createEvent(input, { shouldNotify })
     try {
-      const withPicture = await applyPicture(saved)
+      const withPicture = await applyPicture(saved, shouldNotify)
       setPicture(null)
       setIsPictureRemoved(false)
       return { event: withPicture, pictureProblem: null }

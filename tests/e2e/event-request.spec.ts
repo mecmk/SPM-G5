@@ -112,6 +112,18 @@ async function saveEdits(page: Page) {
   ])
 }
 
+/**
+ * Story 2.1 AC15: everything the notification toasts say once "Request submitted" is showing. Read
+ * once, not polled: a toast lasts about as long as an assertion waits, so "expect none" on a locator
+ * would just wait for the toast to expire and pass. The submit toast is the last to arrive, so any
+ * toast raised on the way is still on screen when this reads.
+ */
+async function toastsOnceSubmitted(page: Page): Promise<string> {
+  const toasts = page.getByRole('status')
+  await expect(toasts.filter({ hasText: 'Request submitted' })).toBeVisible()
+  return (await toasts.allInnerTexts()).join(' | ')
+}
+
 /** Answer the two sections a request cannot be submitted without: "none" is an answer. */
 async function answerVenueAndAccessibility(page: Page) {
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
@@ -1133,10 +1145,9 @@ test('2.1 AC15: submitting says "Request submitted" and never "saved as a draft"
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  const toasts = page.getByRole('status')
-  await expect(toasts.filter({ hasText: 'Request submitted' })).toBeVisible()
-  await expect(toasts.filter({ hasText: 'Draft saved' })).toHaveCount(0)
-  await expect(toasts.filter({ hasText: 'saved as a draft' })).toHaveCount(0)
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('saved as a draft')
 })
 
 test('2.1 AC15: submitting straight from the new request page never says "saved as a draft"', async ({
@@ -1150,8 +1161,46 @@ test('2.1 AC15: submitting straight from the new request page never says "saved 
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  const toasts = page.getByRole('status')
-  await expect(toasts.filter({ hasText: 'Request submitted' })).toBeVisible()
-  await expect(toasts.filter({ hasText: 'Draft saved' })).toHaveCount(0)
-  await expect(toasts.filter({ hasText: 'saved as a draft' })).toHaveCount(0)
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('saved as a draft')
+})
+
+test('2.1 AC15: submitting with a newly chosen picture says only "Request submitted"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('PictureToast'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await choosePicture(page)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('Picture saved')
+})
+
+test('2.1 AC15: submitting after removing the picture says only "Request submitted"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('RemoveToast'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await choosePicture(page)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  // Let the toasts from saving go, so only what submitting says is left to read.
+  await expect(page.getByRole('status')).toHaveCount(0, { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Remove picture' }).click()
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('Picture removed')
 })
