@@ -162,7 +162,7 @@ def test_no_coordinators_leaves_the_event_unassigned(organiser_client, db: Sessi
 
     body = _submit(organiser_client, draft)
 
-    assert body["status"] == EventStatus.SUBMITTED
+    assert body["status"] == EventStatus.UNDER_REVIEW
     assert body["assigned_coordinator_id"] is None
     assert _open_assignment_row(db, draft["id"]) is None
 
@@ -219,7 +219,7 @@ def test_editing_a_draft_never_assigns_a_coordinator(organiser_client, db: Sessi
 def test_resubmission_after_clarification_keeps_the_current_coordinator(db: Session):
     """There is no resubmit endpoint yet - stories 4.2/4.3's clarification round-trip only
     records the conversation so far (see app/events/service.py:list_clarifications) and never
-    moves a CLARIFICATION_REQUESTED event back to SUBMITTED. Until that exists, this proves the
+    moves a CLARIFICATION_REQUESTED event back to UNDER_REVIEW. Until that exists, this proves the
     guarantee a future resubmit would rely on directly at the service layer: auto-assign never
     touches an event that already has a coordinator (the same rule AC9 states)."""
     event = make_event(db, status=EventStatus.CLARIFICATION_REQUESTED)
@@ -239,7 +239,7 @@ def test_resubmission_after_clarification_keeps_the_current_coordinator(db: Sess
 def test_event_with_a_coordinator_is_never_overridden(db: Session):
     event = db.get(Event, Events.SUBMITTED)
     before = event.assigned_coordinator_id
-    assert before is not None, "seed fixture: Events.SUBMITTED already has a coordinator"
+    assert before is not None, "seed: Events.SUBMITTED (UNDER_REVIEW) already has a coordinator"
 
     result = coordination_service.auto_assign_next_coordinator(db, event)
 
