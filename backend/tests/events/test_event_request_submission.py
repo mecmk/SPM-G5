@@ -219,11 +219,11 @@ def test_submission_sets_the_status_and_records_when(organiser_client, db: Sessi
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["status"] == "SUBMITTED"
+    assert body["status"] == "UNDER_REVIEW"
     submitted_at = datetime.fromisoformat(body["submitted_at"])
     assert submitted_at.tzinfo is not None
     assert before - timedelta(seconds=5) <= submitted_at <= datetime.now(UTC) + timedelta(seconds=5)
-    assert _state(db, created["id"]) == ("SUBMITTED", submitted_at)
+    assert _state(db, created["id"]) == ("UNDER_REVIEW", submitted_at)
     assert organiser_client.get(f"/events/{created['id']}").json() == body
 
 
@@ -240,7 +240,7 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
 
     assert submitted == {
         **created,
-        "status": "SUBMITTED",
+        "status": "UNDER_REVIEW",
         "submitted_at": submitted["submitted_at"],
         "updated_at": submitted["updated_at"],
         # the equipment is now held for the event (test_event_request_equipment.py)
@@ -267,7 +267,7 @@ def test_submission_is_written_to_the_status_history_and_audit_log(organiser_cli
     ).all()
     assert {tuple(row) for row in history} == {
         (None, "DRAFT", Users.ORGANISER.id),
-        ("DRAFT", "SUBMITTED", Users.ORGANISER.id),
+        ("DRAFT", "UNDER_REVIEW", Users.ORGANISER.id),
     }
     actions = db.scalars(
         select(AuditLog.action).where(AuditLog.entity_id == uuid.UUID(created["id"]))

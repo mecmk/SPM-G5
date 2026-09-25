@@ -55,13 +55,13 @@ from app.events.models import Event, EventStatus
 
 # AC1 says a *submitted* event gets a coordinator: a DRAFT has not been handed over yet, and a
 # closed event (rejected / cancelled / completed) no longer needs an owner. Everything between
-# those two ends is assignable, which is also what story 5.2 (reassignment) needs.
+# those two ends is assignable, which is also what story 5.2 (reassignment) needs. Bug b6.1.1:
+# SUBMITTED and APPROVED were retired (migration 002) - UNDER_REVIEW and PLANNING already cover
+# the ground they used to.
 ASSIGNABLE_STATUSES = frozenset(
     {
-        EventStatus.SUBMITTED,
         EventStatus.UNDER_REVIEW,
         EventStatus.CLARIFICATION_REQUESTED,
-        EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
     }

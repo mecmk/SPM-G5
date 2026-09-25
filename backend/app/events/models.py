@@ -25,13 +25,16 @@ from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
 
 class EventStatus:
-    """Values allowed by ``ck_events_status`` (story 6.1: exactly one current status)."""
+    """Values allowed by ``ck_events_status`` (story 6.1: exactly one current status).
+
+    SUBMITTED and APPROVED were retired by migration 002 (bug b6.1.1): submitting a draft now
+    goes straight to UNDER_REVIEW, and approving a request now goes straight to PLANNING, with
+    no separate in-between status.
+    """
 
     DRAFT = "DRAFT"
-    SUBMITTED = "SUBMITTED"
     UNDER_REVIEW = "UNDER_REVIEW"
     CLARIFICATION_REQUESTED = "CLARIFICATION_REQUESTED"
-    APPROVED = "APPROVED"
     PLANNING = "PLANNING"
     CONFIRMED = "CONFIRMED"
     COMPLETED = "COMPLETED"

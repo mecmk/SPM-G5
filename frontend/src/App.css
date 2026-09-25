@@ -935,7 +935,6 @@ td.num {
 
 .badge-active,
 .badge-approved,
-.badge-confirmed,
 .badge-reserved,
 .badge-registered,
 .badge-completed,
@@ -975,7 +974,6 @@ td.num {
   border-color: var(--danger-border);
 }
 
-.badge-submitted,
 .badge-requested,
 .badge-clarification_requested,
 .badge-info {
@@ -992,6 +990,7 @@ td.num {
   border-color: var(--neutral-border);
 }
 
+.badge-confirmed,
 .badge-highlight {
   color: var(--highlight);
   background: var(--highlight-bg);
