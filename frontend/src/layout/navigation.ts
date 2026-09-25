@@ -3,7 +3,6 @@ import type { IconName } from '../components/Icon'
 import {
   BOOKING_REQUEST_NEW_PATH,
   BOOKING_REQUESTS_PATH,
-  EVENT_NEW_PATH,
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
@@ -42,16 +41,6 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Events',
     items: [
-      {
-        to: EVENT_NEW_PATH,
-        label: 'New event request',
-        description:
-          'Tell us about your event, the venue and accessibility it needs, and the equipment you want.',
-        icon: 'plus',
-        permission: PERMISSIONS.EVENTS_CREATE,
-        story: '2.1',
-        isAvailable: true,
-      },
       {
         to: EVENTS_MINE_PATH,
         label: 'My events',
