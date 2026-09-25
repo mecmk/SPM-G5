@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-24 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-25 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -318,7 +318,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `organisation_id` | `uuid` | yes | - | FK → `client_organisations.id` | FK -> client_organisations.id. Client organisation on whose behalf the event is held (copied from the organiser at creation). |
 | `name` | `text` | no | - | - | Event name. The only field required even for a draft. |
 | `purpose` | `text` | yes | - | - | Why the event is held (story 2.1 AC1). Mandatory once submitted. |
-| `description` | `text` | yes | - | - | Longer description / general programme (story 2.1 AC1). Routine field (story 7.2). |
+| `description` | `text` | yes | - | - | Longer description / general programme (story 2.1 AC1). |
 | `cover_image_url` | `text` | yes | - | - | Root-relative path of the event picture, served by the frontend from frontend/public (e.g. /images/events/<file>); NULL shows the placeholder. Team decision, 17 Sep 2026: events have a thumbnail. Routine field. |
 | `starts_at` | `timestamp with time zone` | yes | - | - | Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist. |
 | `ends_at` | `timestamp with time zone` | yes | - | - | Proposed end date-time. Must be after starts_at (story 2.1 AC2). |
@@ -335,9 +335,9 @@ An event request and, once approved, the event itself - one row for the whole li
 | `registration_capacity` | `integer` | yes | - | - | Maximum active registrations; NULL = no cap, only the closing date applies (story 18.5 AC4). |
 | `registration_opens_at` | `timestamp with time zone` | yes | - | - | When attendees may start registering (story 18.1). |
 | `registration_closes_at` | `timestamp with time zone` | yes | - | - | Registration deadline. Must not be after the event start (story 2.4 AC4). |
-| `contact_name` | `text` | yes | - | - | On-the-day contact person. Routine field (story 7.2). |
-| `contact_email` | `citext` | yes | - | - | Contact e-mail. Routine field. |
-| `contact_phone` | `text` | yes | - | - | Contact phone. Routine field. |
+| `contact_name` | `text` | yes | - | - | On-the-day contact person. |
+| `contact_email` | `citext` | yes | - | - | Contact e-mail. |
+| `contact_phone` | `text` | yes | - | - | Contact phone. |
 | `internal_notes` | `text` | yes | - | - | Coordinator-only notes; never shown to organisers or attendees. Routine field. |
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the organiser submitted the request (NULL while DRAFT). |
 | `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) or cancellation was recorded (story 4.4 AC2, 4.5). |
