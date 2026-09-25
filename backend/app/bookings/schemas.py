@@ -1,5 +1,5 @@
 """Request / response shapes for venue bookings: raising a request (story 12.1), the venue
-staff queue (story 13.1), and approval / read (story 13.2).
+staff queue (story 13.1), and approval / rejection / read (stories 13.2, 13.2.1).
 """
 
 from __future__ import annotations
@@ -7,9 +7,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.bookings.models import VenueBooking
+
+
+def _strip(value: str | None) -> str | None:
+    return value.strip() if isinstance(value, str) else value
 
 
 class BookableEvent(BaseModel):
@@ -45,6 +49,20 @@ class BookingRequestIn(BaseModel):
 
     event_id: uuid.UUID
     venue_id: uuid.UUID
+
+
+class BookingRejection(BaseModel):
+    """13.2.1 AC2: a reason is mandatory - blank or whitespace-only does not count. Mirrors
+    events.schemas.EventRejection (story 4.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision_reason: str = Field(min_length=1)
+
+    @field_validator("decision_reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
 
 
 class BookingOut(BaseModel):

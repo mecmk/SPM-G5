@@ -68,7 +68,7 @@ BOOKING_CONFLICT_MESSAGE = (
     "{held_from} to {held_until}."
 )
 
-BOOKING_NOT_PENDING_MESSAGE = "This request is already {status}, so it cannot be approved."
+BOOKING_NOT_PENDING_MESSAGE = "This request is already {status}, so it cannot be {action}."
 
 EVENT_NOT_BOOKABLE_MESSAGE = (
     "A venue booking can only be requested for an approved event. This event is {status}."
@@ -151,11 +151,13 @@ class BookingConflict(ValueError):
 
 
 class BookingNotPending(ValueError):
-    """13.2 AC1: only a PENDING request may be approved - refuses repeat or invalid-state
-    approval (e.g. a request that was already decided, or since withdrawn/cancelled)."""
+    """13.2 AC1 / 13.2.1 AC5: only a PENDING request may be approved or rejected - refuses
+    repeat or invalid-state decisions (e.g. a request that was already decided, or since
+    withdrawn/cancelled). ``action`` names the refused verb ("approved"/"rejected") so the
+    message stays accurate for whichever one was attempted."""
 
-    def __init__(self, booking: VenueBooking) -> None:
-        super().__init__(BOOKING_NOT_PENDING_MESSAGE.format(status=booking.status))
+    def __init__(self, booking: VenueBooking, *, action: str) -> None:
+        super().__init__(BOOKING_NOT_PENDING_MESSAGE.format(status=booking.status, action=action))
         self.booking = booking
 
 
@@ -207,6 +209,17 @@ def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     return booking
 
 
+def get_latest_booking_for_event(db: Session, event_id: uuid.UUID) -> VenueBooking | None:
+    """13.2.1 AC4: the event's most recent venue booking, if any - lets a coordinator navigate
+    from the event to its booking outcome without knowing the booking's id up front."""
+    return db.scalar(
+        select(VenueBooking)
+        .where(VenueBooking.event_id == event_id)
+        .order_by(VenueBooking.created_at.desc())
+        .limit(1)
+    )
+
+
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """Row-locked read for an approve/reject action - see the module docstring's concurrency
     note. Two simultaneous decisions on the same booking serialize on this lock instead of
@@ -239,7 +252,7 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
     concurrency note.
     """
     if booking.status != BookingStatus.PENDING:
-        raise BookingNotPending(booking)
+        raise BookingNotPending(booking, action="approved")
 
     booking.status = BookingStatus.APPROVED
     booking.decided_by_id = actor_id
@@ -259,6 +272,39 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
         db,
         actor=db.get(User, actor_id),
         action="BOOKING_APPROVED",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(booking)
+
+
+def reject_booking(
+    db: Session, booking: VenueBooking, *, actor_id: uuid.UUID, decision_reason: str
+) -> None:
+    """13.2.1 AC1: reject ``booking``, recording the rejecter, time and reason. Refuses a
+    request that is not PENDING (``BookingNotPending``).
+
+    AC6: unlike ``approve_booking``, this never touches the exclusion constraint - only
+    APPROVED occupies the venue, so a rejection cannot double-book anything and there is no
+    conflict to translate. Callers must fetch ``booking`` via ``get_booking_for_decision`` -
+    see the module docstring's concurrency note.
+    """
+    if booking.status != BookingStatus.PENDING:
+        raise BookingNotPending(booking, action="rejected")
+
+    booking.status = BookingStatus.REJECTED
+    booking.decided_by_id = actor_id
+    booking.decided_at = datetime.now(UTC)
+    booking.decision_reason = decision_reason
+    db.flush()
+
+    record_audit(
+        db,
+        actor=db.get(User, actor_id),
+        action="BOOKING_REJECTED",
         entity_type="venue_booking",
         entity_id=booking.id,
         details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
