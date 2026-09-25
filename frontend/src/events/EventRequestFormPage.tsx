@@ -1,23 +1,30 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import {
   createEvent,
   fetchEquipmentAvailability,
   fetchEventReferenceData,
   getEvent,
+  removeCoverImage,
   submitEvent,
   updateEvent,
+  uploadCoverImage,
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
 import { EventStatusBadge } from '../components/EventStatusBadge'
+import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { HOME_PATH, eventEditPath } from '../routes'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
+  CONTACT_EMAIL_MAX_LENGTH,
+  CONTACT_NAME_MAX_LENGTH,
+  CONTACT_PHONE_MAX_LENGTH,
+  COVER_IMAGE_TYPES,
   EMPTY_EVENT_FORM,
   EMPTY_FACILITY,
   EMPTY_NOTE,
@@ -36,6 +43,7 @@ import {
   isEquipmentTypeTaken,
   newEquipmentDraft,
   toggleEntry,
+  validateCoverImage,
   validateDates,
   validateEventForm,
   type EquipmentDraft,
@@ -48,6 +56,19 @@ import { readBackState } from './backState'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
+
+/** Story 2.1 AC14: a picture the organiser has chosen and that is not uploaded yet. */
+interface ChosenPicture {
+  file: File
+  /** An object URL for the preview, revoked when the picture is replaced or the page closes. */
+  previewUrl: string
+}
+
+/** What saving a draft leaves: the draft as saved, and why its picture was not (if it was not). */
+interface SavedDraft {
+  event: EventDetail
+  pictureProblem: string | null
+}
 
 /**
  * A date field the person started typing but did not finish (say, no AM or PM). The browser then
@@ -109,6 +130,11 @@ export function EventRequestFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(noticeFrom(location.state))
   const [isSaving, setIsSaving] = useState(false)
+  // Story 2.1 AC14: the picture is uploaded along with the details, when they are saved.
+  const [picture, setPicture] = useState<ChosenPicture | null>(null)
+  const [isPictureRemoved, setIsPictureRemoved] = useState(false)
+  const [pictureProblem, setPictureProblem] = useState<ErrorCode | null>(null)
+  const [isDraggingPicture, setIsDraggingPicture] = useState(false)
   // The name is only called empty once the person has been in the field and left it.
   const [isNameTouched, setIsNameTouched] = useState(false)
   // How many of each equipment type are free for the dates in the form, tagged with the dates it
@@ -145,7 +171,15 @@ export function EventRequestFormPage() {
     }
   }, [eventId])
 
+  useEffect(() => {
+    return () => {
+      if (picture) URL.revokeObjectURL(picture.previewUrl)
+    }
+  }, [picture])
+
   const isReadOnly = event !== null && event.status !== 'DRAFT'
+  const savedPictureUrl = isPictureRemoved ? null : mediaUrl(event?.cover_image_url ?? null)
+  const shownPictureUrl = picture ? picture.previewUrl : savedPictureUrl
 
   /** The problem with the dates as they stand now, said under them without waiting for a save. */
   const dateProblem: FormProblem | null = incompleteDateId
@@ -355,8 +389,56 @@ export function EventRequestFormPage() {
     )
   }
 
-  /** Validate, then create the draft or save the edits. Null when nothing was saved. */
-  async function saveDraft(): Promise<EventDetail | null> {
+  /** Take a file the person chose or dropped, unless it is certain to be refused. */
+  function choosePicture(file: File | undefined) {
+    if (file === undefined || isReadOnly) return
+    const problem = validateCoverImage(file)
+    setPictureProblem(problem)
+    if (problem !== null) return
+    setPicture({ file, previewUrl: URL.createObjectURL(file) })
+    setIsPictureRemoved(false)
+  }
+
+  function handlePictureInput(change: ChangeEvent<HTMLInputElement>) {
+    choosePicture(change.target.files?.[0])
+    // So choosing the same file again still counts as a change.
+    change.target.value = ''
+  }
+
+  function handlePictureDragOver(drag: DragEvent<HTMLDivElement>) {
+    drag.preventDefault()
+    if (!isReadOnly) setIsDraggingPicture(true)
+  }
+
+  function handlePictureDragLeave() {
+    setIsDraggingPicture(false)
+  }
+
+  function handlePictureDrop(drag: DragEvent<HTMLDivElement>) {
+    drag.preventDefault()
+    setIsDraggingPicture(false)
+    choosePicture(drag.dataTransfer.files[0])
+  }
+
+  function removePicture() {
+    setPicture(null)
+    setPictureProblem(null)
+    setIsPictureRemoved(true)
+  }
+
+  /** Upload the chosen picture, or remove the one the person took off. */
+  async function applyPicture(saved: EventDetail): Promise<EventDetail> {
+    if (picture) return uploadCoverImage(saved.id, picture.file)
+    if (isPictureRemoved && saved.cover_image_url !== null) return removeCoverImage(saved.id)
+    return saved
+  }
+
+  /**
+   * Validate, then create the draft or save the edits, then its picture. Null when nothing was
+   * saved. A picture that fails leaves the draft saved, and says so, rather than losing the draft.
+   * `shouldNotify` is false when submitting, which says only that the request was submitted.
+   */
+  async function saveDraft(shouldNotify: boolean): Promise<SavedDraft | null> {
     if (!form) return null
     const incompleteFieldId = findIncompleteDateField()
     const problem: FormProblem | null = incompleteFieldId
@@ -370,21 +452,40 @@ export function EventRequestFormPage() {
     }
     setSaveError(null)
     const input = eventInputFrom(form)
-    return eventId ? updateEvent(eventId, input) : createEvent(input)
+    const saved = eventId
+      ? await updateEvent(eventId, input, { shouldNotify })
+      : await createEvent(input, { shouldNotify })
+    try {
+      const withPicture = await applyPicture(saved)
+      setPicture(null)
+      setIsPictureRemoved(false)
+      return { event: withPicture, pictureProblem: null }
+    } catch (err) {
+      return { event: saved, pictureProblem: formatApiError(err) }
+    }
+  }
+
+  /** Show a draft that has just been saved: in place when editing, else on its own address. */
+  function showSavedDraft(saved: EventDetail, problem: string | null) {
+    if (isEditing) {
+      setEvent(saved)
+      setForm(formFromEvent(saved))
+      setSaveError(problem)
+      return
+    }
+    navigate(eventEditPath(saved.id), {
+      replace: true,
+      state: problem === null ? backState : { ...backState, notice: problem },
+    })
   }
 
   async function handleSaveDraft(submission: FormEvent<HTMLFormElement>) {
     submission.preventDefault()
     setIsSaving(true)
     try {
-      const saved = await saveDraft()
-      if (!saved) return
-      if (isEditing) {
-        setEvent(saved)
-        setForm(formFromEvent(saved))
-      } else {
-        navigate(eventEditPath(saved.id), { replace: true, state: backState })
-      }
+      const result = await saveDraft(true)
+      if (!result) return
+      showSavedDraft(result.event, result.pictureProblem)
     } catch (err) {
       setSaveError(formatApiError(err))
       // The stock may be why it failed, so ask again how many are free.
@@ -402,8 +503,14 @@ export function EventRequestFormPage() {
   async function handleSubmitRequest() {
     setIsSaving(true)
     try {
-      const saved = await saveDraft()
-      if (!saved) return
+      const result = await saveDraft(false)
+      if (!result) return
+      const saved = result.event
+      if (result.pictureProblem !== null) {
+        // The picture was wanted, so the request is not sent without it.
+        showSavedDraft(saved, result.pictureProblem)
+        return
+      }
       try {
         const submitted = await submitEvent(saved.id, saved.name)
         if (isEditing) {
@@ -551,6 +658,100 @@ export function EventRequestFormPage() {
               All times are Singapore time. An event can start up to {MAX_LEAD_YEARS} years from now
               and run for up to {MAX_EVENT_DAYS} days.
             </p>
+          </fieldset>
+
+          <fieldset className="card" disabled={isReadOnly}>
+            <legend>
+              Point of contact <RequiredMark />
+            </legend>
+            <p className="form-hint">Who ConnectSphere should reach about this event.</p>
+            <div className="form-grid">
+              <label className="span-2">
+                Contact name <RequiredMark />
+                <input
+                  autoComplete="name"
+                  maxLength={CONTACT_NAME_MAX_LENGTH}
+                  {...fieldProps(FIELD_ID.contactName)}
+                  value={form.contactName}
+                  onChange={(e) => updateField('contactName', e.target.value)}
+                />
+              </label>
+              <label>
+                Contact phone number <RequiredMark />
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  maxLength={CONTACT_PHONE_MAX_LENGTH}
+                  {...fieldProps(FIELD_ID.contactPhone)}
+                  value={form.contactPhone}
+                  onChange={(e) => updateField('contactPhone', e.target.value)}
+                />
+                {renderProblem(FIELD_ID.contactPhone)}
+              </label>
+              <label className="span-all">
+                Contact email <RequiredMark />
+                <input
+                  type="email"
+                  autoComplete="email"
+                  maxLength={CONTACT_EMAIL_MAX_LENGTH}
+                  {...fieldProps(FIELD_ID.contactEmail)}
+                  value={form.contactEmail}
+                  onChange={(e) => updateField('contactEmail', e.target.value)}
+                />
+                {renderProblem(FIELD_ID.contactEmail)}
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="card" disabled={isReadOnly}>
+            <legend>Cover picture</legend>
+            <p className="form-hint">
+              Optional. JPEG, PNG or WebP, up to 5 MB. It shows on the event's card.
+            </p>
+            <div
+              role="group"
+              aria-label="Cover picture drop area"
+              className={isDraggingPicture ? 'picture-drop is-dragging' : 'picture-drop'}
+              onDragEnter={handlePictureDragOver}
+              onDragOver={handlePictureDragOver}
+              onDragLeave={handlePictureDragLeave}
+              onDrop={handlePictureDrop}
+            >
+              {shownPictureUrl ? (
+                <img
+                  className="picture-drop-preview"
+                  src={shownPictureUrl}
+                  alt="Cover picture preview"
+                />
+              ) : (
+                <span className="picture-drop-icon" aria-hidden="true">
+                  <Icon name="image" size={32} />
+                </span>
+              )}
+              <p className="picture-drop-hint">
+                {isDraggingPicture ? 'Drop the picture here' : 'Drag a picture here, or'}
+              </p>
+              <div className="picture-drop-actions">
+                <label className="button secondary">
+                  {shownPictureUrl ? 'Replace picture' : 'Choose picture'}
+                  <input
+                    type="file"
+                    className="visually-hidden"
+                    accept={COVER_IMAGE_TYPES.join(',')}
+                    aria-label="Choose cover picture"
+                    onChange={handlePictureInput}
+                  />
+                </label>
+                {shownPictureUrl && !isReadOnly && (
+                  <button type="button" className="secondary" onClick={removePicture}>
+                    Remove picture
+                  </button>
+                )}
+              </div>
+            </div>
+            {pictureProblem && (
+              <span className="field-error">{ERROR_REGISTRY[pictureProblem].message}</span>
+            )}
           </fieldset>
 
           <fieldset className="card" disabled={isReadOnly}>

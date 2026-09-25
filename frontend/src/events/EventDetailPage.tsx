@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import {
   getEvent,
   listClarifications,
@@ -154,7 +154,7 @@ export function EventDetailPage() {
         {event.cover_image_url && !hasImageFailed ? (
           <img
             className="venue-hero-picture"
-            src={event.cover_image_url}
+            src={mediaUrl(event.cover_image_url) ?? undefined}
             alt=""
             onError={markImageFailed}
           />

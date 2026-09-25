@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +20,10 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     # Set to True when serving over HTTPS. Left False for local HTTP development.
     session_cookie_secure: bool = False
+
+    # --- uploaded event pictures (story 2.1 AC14) ---
+    # Where cover pictures are written. Git-ignored; tests point it at a temporary folder.
+    upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
 
     @property
     def resolved_test_database_url(self) -> str:
