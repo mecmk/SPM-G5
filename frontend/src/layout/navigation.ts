@@ -26,8 +26,8 @@ export interface NavItem {
   icon: IconName
   /** Shown only to roles holding this permission. */
   permission: Permission
-  /** Hidden from roles that also hold this permission, because another item covers it. */
-  hiddenWith?: Permission
+  /** Hidden from roles that also hold any of these permissions, because another item covers it. */
+  hiddenWith?: Permission[]
   /** Backlog story that delivers the page. */
   story: string
   isAvailable: boolean
@@ -76,7 +76,10 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Every event on record, to plan venues and equipment around.',
         icon: 'calendar',
         permission: PERMISSIONS.EVENTS_READ_ALL,
-        hiddenWith: PERMISSIONS.EVENTS_REVIEW,
+        // Hidden from Event Coordinator (covered by "Events inbox") and from Venue Staff (1.2.2:
+        // their view of an event is scoped to the bookings they decide, via BOOKINGS_DECIDE, not
+        // a browse-everything list).
+        hiddenWith: [PERMISSIONS.EVENTS_REVIEW, PERMISSIONS.BOOKINGS_DECIDE],
         story: '7.1',
         isAvailable: false,
       },
@@ -118,7 +121,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Browse venues and compare capacity, layouts and availability.',
         icon: 'building',
         permission: PERMISSIONS.VENUES_READ,
-        hiddenWith: PERMISSIONS.VENUES_MANAGE,
+        hiddenWith: [PERMISSIONS.VENUES_MANAGE],
         story: '8.1',
         isAvailable: true,
       },
@@ -224,7 +227,7 @@ export function visibleNavSections(can: (permission: Permission) => boolean): Na
   return NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => can(item.permission) && !(item.hiddenWith && can(item.hiddenWith)),
+      (item) => can(item.permission) && !item.hiddenWith?.some((permission) => can(permission)),
     ),
   })).filter((section) => section.items.length > 0)
 }
