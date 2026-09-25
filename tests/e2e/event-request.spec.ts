@@ -29,6 +29,8 @@
  *     replaces or removes it before submitting; a wrong type or a file over 5 MB is refused in the
  *     browser. It shows on the My events card and is locked once submitted.
  * AC15 saving a draft says "Draft saved"; submitting says only "Request submitted".
+ * AC16 after a successful submission the organiser is taken to My events, where the request shows
+ *     as under review; a refused submission stays on the request's edit page.
  * Rule detail, refusals (401/403/404/409/422) and what the coordinator sees (AC8, AC12) are
  * backend cases: backend/tests/events/test_event_request_*.py.
  */
@@ -36,6 +38,7 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import { ACCOUNTS, signIn } from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
+const MY_EVENTS_PATH = /\/events\/mine$/
 const PAST_START = '2020-01-01T09:00'
 const CONTACT = { name: 'Priya Nair', email: 'priya.nair@example.com', phone: '+65 9123 4567' }
 const MAX_PICTURE_BYTES = 5 * 1024 * 1024
@@ -122,6 +125,11 @@ async function toastsOnceSubmitted(page: Page): Promise<string> {
   const toasts = page.getByRole('status')
   await expect(toasts.filter({ hasText: 'Request submitted' })).toBeVisible()
   return (await toasts.allInnerTexts()).join(' | ')
+}
+
+/** The card for a request on My events, found by its name. */
+function myEventsCard(page: Page, name: string): Locator {
+  return page.getByRole('listitem').filter({ hasText: name })
 }
 
 /** Answer the two sections a request cannot be submitted without: "none" is an answer. */
@@ -360,18 +368,32 @@ test('2.1 AC9/AC11: an organiser submits their draft and it becomes a read-only 
   const name = uniqueName('Submit')
   await signIn(page, ACCOUNTS.organiser)
   await createSubmittableDraft(page, name)
+  const editUrl = page.url()
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await page.goto(editUrl)
   await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByText(/Submitted on /)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Submit request' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0)
   await expect(page.getByLabel('Event name')).toBeDisabled()
-
-  await page.reload()
-  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Event name')).toHaveValue(name)
+})
+
+test('2.1 AC16: submitting a saved draft takes the organiser to My events, showing it under review', async ({
+  page,
+}) => {
+  const name = uniqueName('Redirect')
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, name)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(page.getByRole('heading', { name: 'My events' })).toBeVisible()
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC9/AC11: an organiser can submit straight from the new request page', async ({
@@ -386,11 +408,8 @@ test('2.1 AC9/AC11: an organiser can submit straight from the new request page',
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  await expect(page).toHaveURL(EDIT_PATH)
-  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Submitted on /)).toBeVisible()
-  await expect(page.getByLabel('Event name')).toHaveValue(name)
-  await expect(page.getByLabel('Event name')).toBeDisabled()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC10: submitting with anything missing keeps the details as a draft and shows the reason', async ({
@@ -405,8 +424,9 @@ test('2.1 AC10: submitting with anything missing keeps the details as a draft an
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  // The details were recorded as a draft and the refusal is shown. What is named as missing is a
-  // backend rule (test_event_request_submission.py).
+  // The details were recorded as a draft and the refusal is shown, on the request's edit page (AC16:
+  // only a successful submission leaves it). What is named as missing is a backend rule
+  // (test_event_request_submission.py).
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(page.getByLabel('Event name')).toHaveValue(name)
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
@@ -773,7 +793,7 @@ test('2.1 AC11: a refused submission stays a draft and the form shows the new co
   await answerVenueAndAccessibility(other)
   await addEquipment(other, 1, 'Presentation laptop', '4')
   await other.getByRole('button', { name: 'Submit request' }).click()
-  await expect(other.getByText(/Submitted on /)).toBeVisible()
+  await expect(other).toHaveURL(MY_EVENTS_PATH)
   await other.context().close()
 
   await page.getByRole('button', { name: 'Submit request' }).click()
@@ -990,8 +1010,11 @@ test('2.1 AC13: a submitted request shows its point of contact and cannot change
 }) => {
   await signIn(page, ACCOUNTS.organiser)
   await createSubmittableDraft(page, uniqueName('ContactLocked'))
+  const editUrl = page.url()
   await page.getByRole('button', { name: 'Submit request' }).click()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
 
+  await page.goto(editUrl)
   await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Contact name')).toHaveValue(CONTACT.name)
   await expect(page.getByLabel('Contact name')).toBeDisabled()
@@ -1058,7 +1081,15 @@ test('2.1 AC14: a picture can be replaced and removed while the request is a dra
   await expect.poll(() => preview.getAttribute('src')).not.toBe(firstSource)
 
   await page.getByRole('button', { name: 'Remove picture' }).click()
-  await saveEdits(page)
+  // The preview goes as soon as the picture is taken off, but it is only removed on save, and the
+  // removal is a request of its own after the details are saved: wait for it before reloading.
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' && response.url().includes('/cover-image'),
+    ),
+    page.getByRole('button', { name: 'Save draft' }).click(),
+  ])
   await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
   await page.reload()
   await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
@@ -1092,11 +1123,13 @@ test('2.1 AC14: a file over 5 MB is refused in the browser', async ({ page }) =>
 
 test('2.1 AC14: a picture is not needed to submit', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
-  await createSubmittableDraft(page, uniqueName('NoPicture'))
+  const name = uniqueName('NoPicture')
+  await createSubmittableDraft(page, name)
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC14: the picture shows on the My events card and is locked once submitted', async ({
@@ -1111,15 +1144,17 @@ test('2.1 AC14: the picture shows on the My events card and is locked once submi
   await choosePicture(page)
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
+  const editUrl = page.url()
   await page.getByRole('button', { name: 'Submit request' }).click()
-  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
 
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(
+    myEventsCard(page, name).getByRole('presentation', { includeHidden: true }),
+  ).toBeVisible()
+
+  await page.goto(editUrl)
   await expect(page.getByLabel('Choose cover picture')).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Remove picture' })).toHaveCount(0)
-
-  await page.goto('/events/mine')
-  const card = page.getByRole('listitem').filter({ hasText: name })
-  await expect(card.getByRole('presentation', { includeHidden: true })).toBeVisible()
 })
 
 // --- AC15: notifications -------------------------------------------------------------------------

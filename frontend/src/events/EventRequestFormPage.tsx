@@ -18,7 +18,7 @@ import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { HOME_PATH, eventEditPath } from '../routes'
+import { EVENTS_MINE_PATH, HOME_PATH, eventEditPath } from '../routes'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
@@ -112,6 +112,7 @@ function noticeFrom(state: unknown): string | null {
  * choices in its section, so a request never says both. Left untouched, a draft is "not yet
  * specified".
  * AC6/AC7: any number of equipment items, each added, edited or removed until submission.
+ * AC16: after a successful submission the organiser lands on My events.
  * AC9-AC11: a request is submitted from this page, new or saved; the details are saved first, so
  * a refused submission never loses them. Once submitted the request is read-only.
  * Serves /events/new (creates a draft) and /events/:eventId/edit (edits it).
@@ -514,13 +515,10 @@ export function EventRequestFormPage() {
         return
       }
       try {
-        const submitted = await submitEvent(saved.id, saved.name)
-        if (isEditing) {
-          setEvent(submitted)
-          setForm(formFromEvent(submitted))
-        } else {
-          navigate(eventEditPath(saved.id), { replace: true, state: backState })
-        }
+        await submitEvent(saved.id, saved.name)
+        // Story 2.1 AC16: a submitted request is finished with here, so go to the list it now
+        // shows in, under review.
+        navigate(EVENTS_MINE_PATH, { replace: true })
       } catch (err) {
         if (isEditing) {
           setEvent(saved)
