@@ -1115,6 +1115,9 @@ def _full_request(client) -> dict:
     return create_event_request(
         client,
         name="Nimbus Summit",
+        contact_name="Priya Nair",
+        contact_email="priya.nair@example.com",
+        contact_phone="+65 9123 4567",
         required_layout_code="THEATRE",
         venue_requirement_notes="Near the loading bay",
         required_facilities=[

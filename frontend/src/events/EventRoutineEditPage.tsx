@@ -15,37 +15,17 @@ import { eventPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 
 interface RoutineForm {
-  description: string
-  contact_name: string
-  contact_email: string
-  contact_phone: string
   internal_notes: string
 }
 
 function formFromEvent(event: EventDetail): RoutineForm {
-  return {
-    description: event.description ?? '',
-    contact_name: event.contact_name ?? '',
-    contact_email: event.contact_email ?? '',
-    contact_phone: event.contact_phone ?? '',
-    internal_notes: event.internal_notes ?? '',
-  }
+  return { internal_notes: event.internal_notes ?? '' }
 }
 
-/** Only the fields that differ from `saved`, so the audit trail and concurrent edits both see
- * just what actually changed rather than a full rewrite of all five fields every time. */
+/** Only the fields that differ from `saved`, so a save with nothing changed sends an empty body
+ * and the backend skips the write and the audit entry. */
 function dirtyFieldsInput(form: RoutineForm, saved: RoutineForm): EventRoutineInput {
   const input: EventRoutineInput = {}
-  if (form.description !== saved.description) input.description = form.description.trim() || null
-  if (form.contact_name !== saved.contact_name) {
-    input.contact_name = form.contact_name.trim() || null
-  }
-  if (form.contact_email !== saved.contact_email) {
-    input.contact_email = form.contact_email.trim() || null
-  }
-  if (form.contact_phone !== saved.contact_phone) {
-    input.contact_phone = form.contact_phone.trim() || null
-  }
   if (form.internal_notes !== saved.internal_notes) {
     input.internal_notes = form.internal_notes.trim() || null
   }
@@ -53,19 +33,13 @@ function dirtyFieldsInput(form: RoutineForm, saved: RoutineForm): EventRoutineIn
 }
 
 function isUnchanged(form: RoutineForm, saved: RoutineForm): boolean {
-  return (
-    form.description === saved.description &&
-    form.contact_name === saved.contact_name &&
-    form.contact_email === saved.contact_email &&
-    form.contact_phone === saved.contact_phone &&
-    form.internal_notes === saved.internal_notes
-  )
+  return form.internal_notes === saved.internal_notes
 }
 
 /**
- * Story 7.2 AC1-AC3: the Event Coordinator assigned to this event edits its routine information
- * (description, contact details, internal notes) directly. Reached from 7.1's event details page;
- * every field that is not routine lives there only, read-only, never here.
+ * Story 7.2 AC1-AC3: the Event Coordinator assigned to this event edits its internal notes, the
+ * only routine field, directly. Reached from 7.1's event details page; every other field,
+ * including the description and contact details, lives there only, read-only, never here.
  */
 export function EventRoutineEditPage() {
   const { eventId = '' } = useParams()
@@ -154,51 +128,12 @@ export function EventRoutineEditPage() {
           <legend>Event information</legend>
           <div className="form-grid">
             <label className="span-all">
-              Description
-              <textarea
-                rows={4}
-                value={form.description}
-                onChange={(e) => updateField('description', e.target.value)}
-              />
-            </label>
-            <label className="span-all">
               Internal notes
               <textarea
                 rows={3}
                 placeholder="Coordinator-only; never shown to the organiser."
                 value={form.internal_notes}
                 onChange={(e) => updateField('internal_notes', e.target.value)}
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset className="card">
-          <legend>Contact details</legend>
-          <div className="form-grid">
-            <label>
-              Contact name
-              <input
-                maxLength={200}
-                value={form.contact_name}
-                onChange={(e) => updateField('contact_name', e.target.value)}
-              />
-            </label>
-            <label>
-              Contact email
-              <input
-                type="email"
-                maxLength={254}
-                value={form.contact_email}
-                onChange={(e) => updateField('contact_email', e.target.value)}
-              />
-            </label>
-            <label>
-              Contact phone
-              <input
-                maxLength={50}
-                value={form.contact_phone}
-                onChange={(e) => updateField('contact_phone', e.target.value)}
               />
             </label>
           </div>

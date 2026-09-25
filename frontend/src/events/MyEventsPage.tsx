@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import { listMyEvents, type MyEventEntry } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid, type EventCardBackState } from '../components/EventCard'
@@ -142,7 +142,7 @@ export function MyEventsPage() {
                 <EventCard
                   key={entry.id}
                   title={entry.name}
-                  imageUrl={entry.cover_image_url}
+                  imageUrl={mediaUrl(entry.cover_image_url)}
                   to={pathToOpen(entry)}
                   state={BACK_TO_MY_EVENTS}
                   details={[

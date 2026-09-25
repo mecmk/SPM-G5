@@ -1,14 +1,17 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
 (coordinator review queue), stories 4.4/4.5 (approve / reject an event request), story 4.6
 (the decision /clarification history an organiser sees), story 7.2 (routine information edits),
-and story 6.1 (the coordinator's assigned events in any status)."""
+story 6.1 (the coordinator's assigned events in any status), and story 2.1 AC14 (the cover
+picture)."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
@@ -34,6 +37,9 @@ from app.events.schemas import (
 )
 
 router = APIRouter(prefix="/events", tags=["events"])
+# Story 2.1 AC14: uploaded cover pictures are served from here. Public, like the seeded pictures:
+# a picture is only ever reached by its generated name.
+uploads_router = APIRouter(prefix="/uploads/events", tags=["uploads"])
 
 CanReview = Depends(require_permission(Permission.EVENTS_REVIEW))
 CanCreate = Depends(require_permission(Permission.EVENTS_CREATE))
@@ -43,6 +49,14 @@ CanRead = Depends(require_any_permission(Permission.EVENTS_READ_OWN, Permission.
 DbSession = Annotated[Session, Depends(get_db)]
 
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
+PICTURE_NOT_FOUND_MESSAGE = "Picture not found."
+EMPTY_PICTURE_MESSAGE = "Choose a picture to upload."
+# A name the server generated: a UUID and one of the accepted extensions, nothing else.
+_STORED_PICTURE_NAME = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp)$"
+)
+# The name never changes what it points at, so a browser may keep a picture indefinitely.
+_PICTURE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 @router.get("/review-queue", response_model=list[ReviewQueueEntry], dependencies=[CanReview])
@@ -183,6 +197,64 @@ def update_event(
     return EventDetailOut.from_event(event, viewer=actor)
 
 
+@router.put("/{event_id}/cover-image", response_model=EventDetailOut)
+def set_cover_image(
+    event_id: uuid.UUID,
+    file: UploadFile,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanCreate],
+) -> EventDetailOut:
+    """Story 2.1 AC14: an organiser gives their own draft a cover picture, replacing any it had."""
+    # The upload has already been received and spooled by the time this runs, so this bounds what
+    # is read into memory, not what is transferred. One byte past the limit is enough to know the
+    # file is too large.
+    content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, EMPTY_PICTURE_MESSAGE)
+    try:
+        event = service.set_cover_image(db, event_id, content, actor=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.CoverImageTooLarge as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from None
+    except service.UnsupportedCoverImage as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.delete("/{event_id}/cover-image", response_model=EventDetailOut)
+def remove_cover_image(
+    event_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanCreate],
+) -> EventDetailOut:
+    """Story 2.1 AC14: an organiser takes the cover picture off their own draft."""
+    try:
+        event = service.remove_cover_image(db, event_id, actor=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@uploads_router.get("/{filename}")
+def get_cover_image(filename: str) -> FileResponse:
+    """Story 2.1 AC14: the stored picture called ``filename``."""
+    if _STORED_PICTURE_NAME.match(filename) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE)
+    path = service.cover_image_path(filename)
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE)
+    return FileResponse(
+        path,
+        media_type=service.COVER_IMAGE_MEDIA_TYPES[path.suffix],
+        headers={"Cache-Control": _PICTURE_CACHE_CONTROL},
+    )
+
+
 @router.patch("/{event_id}/routine-information", response_model=EventDetailOut)
 def update_routine_information(
     event_id: uuid.UUID,
@@ -190,9 +262,8 @@ def update_routine_information(
     db: DbSession,
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
-    """Story 7.2 AC1-AC3: the coordinator assigned to this event edits its routine fields
-    (description, contact details, internal notes) directly, while the event is not completed,
-    cancelled or rejected."""
+    """Story 7.2 AC1-AC3: the coordinator assigned to this event edits its internal notes
+    directly, while the event is not completed, cancelled or rejected."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:
