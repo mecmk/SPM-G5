@@ -114,7 +114,7 @@ def test_an_event_that_cannot_raise_a_booking_is_not_offered(
 @pytest.mark.story("12.1", ac=4)
 def test_another_coordinators_approved_event_is_not_offered(coordinator_client, db: Session):
     event = make_event(
-        db, status=EventStatus.APPROVED, assigned_coordinator_id=Users.COORDINATOR_2.id
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR_2.id
     )
 
     assert str(event.id) not in event_ids(coordinator_client.get(PICK_LIST_PATH))
@@ -122,7 +122,7 @@ def test_another_coordinators_approved_event_is_not_offered(coordinator_client, 
 
 @pytest.mark.story("12.1", ac=4)
 def test_an_unassigned_approved_event_is_not_offered(coordinator_client, db: Session):
-    event = make_event(db, status=EventStatus.APPROVED, assigned_coordinator_id=None)
+    event = make_event(db, status=EventStatus.PLANNING, assigned_coordinator_id=None)
 
     assert str(event.id) not in event_ids(coordinator_client.get(PICK_LIST_PATH))
 
@@ -145,14 +145,14 @@ def test_the_list_is_ordered_by_when_the_event_starts(coordinator_client, db: Se
     """Soonest first: the event most in need of a venue is the one at the top of the form."""
     later = make_event(
         db,
-        status=EventStatus.APPROVED,
+        status=EventStatus.PLANNING,
         assigned_coordinator_id=Users.COORDINATOR.id,
         starts_at=datetime(2027, 6, 1, 9, 0, tzinfo=timezone.utc),
         ends_at=datetime(2027, 6, 1, 17, 0, tzinfo=timezone.utc),
     )
     earlier = make_event(
         db,
-        status=EventStatus.APPROVED,
+        status=EventStatus.PLANNING,
         assigned_coordinator_id=Users.COORDINATOR.id,
         starts_at=datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc),
         ends_at=datetime(2026, 10, 1, 17, 0, tzinfo=timezone.utc),

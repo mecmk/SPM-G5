@@ -33,9 +33,7 @@ const CALENDAR_LEGEND: CalendarLegendItem[] = [
 
 const SAMPLE_STATUSES = [
   'DRAFT',
-  'SUBMITTED',
   'UNDER_REVIEW',
-  'APPROVED',
   'PLANNING',
   'CONFIRMED',
   'COMPLETED',

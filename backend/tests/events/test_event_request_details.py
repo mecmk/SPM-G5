@@ -128,7 +128,7 @@ def test_the_event_name_is_mandatory(organiser_client, name):
 @pytest.mark.parametrize(
     "field, value",
     [
-        ("status", "APPROVED"),
+        ("status", "PLANNING"),
         ("organiser_id", str(Users.ORGANISER_2.id)),
         ("organisation_id", _UNKNOWN_ORGANISATION_ID),
         ("submitted_at", "2026-01-01T00:00:00+00:00"),
@@ -1057,7 +1057,7 @@ def test_a_list_left_out_of_an_edit_is_untouched(organiser_client):
 def test_the_client_cannot_change_server_controlled_fields_on_edit(organiser_client):
     created = create_event_request(organiser_client)
 
-    for field, value in (("status", "APPROVED"), ("organiser_id", str(Users.ORGANISER_2.id))):
+    for field, value in (("status", "PLANNING"), ("organiser_id", str(Users.ORGANISER_2.id))):
         response = organiser_client.patch(f"/events/{created['id']}", json={field: value})
         assert response.status_code == 422, field
 
@@ -1144,7 +1144,7 @@ def test_the_coordinator_sees_every_detail_requirement_and_equipment_item(login_
         assert body[field] == created[field], field
     assert datetime.fromisoformat(body["starts_at"]) == datetime.fromisoformat(created["starts_at"])
     assert datetime.fromisoformat(body["ends_at"]) == datetime.fromisoformat(created["ends_at"])
-    assert body["status"] == "SUBMITTED"
+    assert body["status"] == "UNDER_REVIEW"
     assert body["organiser_name"] == Users.ORGANISER.full_name
     assert body["required_layout_name"] == "Theatre"
     assert body["venue_requirement_notes"] == "Near the loading bay"

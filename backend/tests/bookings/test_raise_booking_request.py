@@ -132,7 +132,6 @@ def test_an_event_past_approval_can_still_raise_a_request(coordinator_client, db
     "status",
     [
         EventStatus.DRAFT,
-        EventStatus.SUBMITTED,
         EventStatus.UNDER_REVIEW,
         EventStatus.CLARIFICATION_REQUESTED,
         EventStatus.REJECTED,
@@ -212,7 +211,7 @@ def test_a_bookable_event_always_has_a_schedule_to_copy(db: Session):
     with pytest.raises(IntegrityError, match="ck_events_submitted_fields_complete"):
         make_event(
             db,
-            status=EventStatus.APPROVED,
+            status=EventStatus.PLANNING,
             assigned_coordinator_id=Users.COORDINATOR.id,
             starts_at=None,
             ends_at=None,
@@ -269,7 +268,7 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     ``event_required_facilities``.
     """
     event = make_event(
-        db, status=EventStatus.APPROVED, assigned_coordinator_id=Users.COORDINATOR.id
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
     _require_facility(db, event.id, "BREAKOUT_ROOMS", quantity=3, notes="HDMI input needed")
     _require_facility(db, event.id, "PROJECTOR")
@@ -286,7 +285,7 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
 def test_the_events_own_venue_requirement_notes_are_carried_too(coordinator_client, db: Session):
     event = make_event(
         db,
-        status=EventStatus.APPROVED,
+        status=EventStatus.PLANNING,
         assigned_coordinator_id=Users.COORDINATOR.id,
         venue_requirement_notes="Must be step-free from the drop-off point.",
     )
@@ -302,7 +301,7 @@ def test_an_event_with_no_layout_or_facilities_recorded_carries_neither(
 ):
     event = make_event(
         db,
-        status=EventStatus.APPROVED,
+        status=EventStatus.PLANNING,
         assigned_coordinator_id=Users.COORDINATOR.id,
         required_layout_code=None,
     )
@@ -447,7 +446,7 @@ def test_an_event_with_no_coordinator_assigned_cannot_raise_a_request(
 ):
     """Story 5.1 assigns the coordinator. Until an event has one, nobody is "the assigned
     coordinator", so there is no one who may raise its booking."""
-    event = make_event(db, status=EventStatus.APPROVED, assigned_coordinator_id=None)
+    event = make_event(db, status=EventStatus.PLANNING, assigned_coordinator_id=None)
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
 

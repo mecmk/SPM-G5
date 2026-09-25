@@ -51,7 +51,7 @@ def test_rejection_with_a_whitespace_only_reason_is_refused(coordinator_client, 
         text("SELECT status, decision_reason FROM events WHERE id = :id"),
         {"id": Events.SUBMITTED},
     ).one()
-    assert row.status == EventStatus.SUBMITTED
+    assert row.status == EventStatus.UNDER_REVIEW
     assert row.decision_reason is None
 
 
@@ -61,7 +61,7 @@ def test_rejection_with_an_unknown_field_is_refused(coordinator_client):
     # rather than silently drop a key like "status" that looks like it might do something.
     response = coordinator_client.post(
         f"/events/{Events.SUBMITTED}/reject",
-        json={"reason": "Budget cut.", "status": "APPROVED"},
+        json={"reason": "Budget cut.", "status": "PLANNING"},
     )
     assert response.status_code == 422
 
@@ -73,7 +73,7 @@ def test_reject_event_refuses_a_blank_reason_even_bypassing_the_schema(db: Sessi
     # (a future 4.6 clarification flow, 6.5 cancellation, a seed script) cannot persist a
     # REJECTED request with no reason.
     event = make_event(
-        db, status=EventStatus.SUBMITTED, assigned_coordinator_id=Users.COORDINATOR.id
+        db, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=Users.COORDINATOR.id
     )
     coordinator = db.get(User, Users.COORDINATOR.id)
 
@@ -108,12 +108,9 @@ def test_rejecting_a_missing_event_is_404(coordinator_client):
 
 # --- AC2: status changes to REJECTED and leaves the review queue ------------------------------
 @pytest.mark.story("4.5", ac=2)
-@pytest.mark.parametrize(
-    "event_id", [Events.SUBMITTED, Events.UNDER_REVIEW, Events.CLARIFICATION_REQUESTED]
-)
-def test_rejecting_any_awaiting_decision_status_is_allowed(coordinator_client, event_id):
+def test_rejecting_from_under_review_is_allowed(coordinator_client):
     response = coordinator_client.post(
-        f"/events/{event_id}/reject", json={"reason": "Does not fit the venue calendar."}
+        f"/events/{Events.UNDER_REVIEW}/reject", json={"reason": "Does not fit the venue calendar."}
     )
 
     assert response.status_code == 200
@@ -121,10 +118,30 @@ def test_rejecting_any_awaiting_decision_status_is_allowed(coordinator_client, e
 
 
 @pytest.mark.story("4.5", ac=2)
+def test_rejecting_from_clarification_requested_is_refused(coordinator_client, db: Session):
+    """Bug b6.1.1: rejection narrows to UNDER_REVIEW only - a request sent back for
+    clarification must be answered, not rejected outright. It is still approvable
+    (test_approve_event.py proves that side)."""
+    response = coordinator_client.post(
+        f"/events/{Events.CLARIFICATION_REQUESTED}/reject",
+        json={"reason": "Should not be allowed."},
+    )
+
+    assert response.status_code == 409
+    db.expire_all()
+    row = db.execute(
+        text("SELECT status, decided_by_id, decision_reason FROM events WHERE id = :id"),
+        {"id": Events.CLARIFICATION_REQUESTED},
+    ).one()
+    assert row.status == EventStatus.CLARIFICATION_REQUESTED
+    assert row.decided_by_id is None
+    assert row.decision_reason is None
+
+
+@pytest.mark.story("4.5", ac=2)
 @pytest.mark.parametrize(
     "status",
     [
-        EventStatus.APPROVED,
         EventStatus.PLANNING,
         EventStatus.CONFIRMED,
         EventStatus.COMPLETED,
@@ -197,12 +214,14 @@ def test_rejection_is_recorded_in_status_history(coordinator_client, db: Session
 # --- AC3: the reason and the deciding coordinator are visible to the organiser ----------------
 @pytest.mark.story("4.5", ac=3)
 def test_owning_organiser_can_read_the_rejection_reason(login_as):
+    # Events.SUBMITTED is UNDER_REVIEW (migration 002) - CLARIFICATION_REQUESTED can no longer
+    # be rejected (bug b6.1.1), so this needs a rejectable event owned by the same organiser.
     login_as(Users.COORDINATOR).post(
-        f"/events/{Events.CLARIFICATION_REQUESTED}/reject",
+        f"/events/{Events.SUBMITTED}/reject",
         json={"reason": "Accessibility requirements cannot be met at any available venue."},
     )
 
-    response = login_as(Users.ORGANISER).get(f"/events/{Events.CLARIFICATION_REQUESTED}")
+    response = login_as(Users.ORGANISER).get(f"/events/{Events.SUBMITTED}")
 
     assert response.status_code == 200
     body = response.json()
@@ -296,7 +315,7 @@ def test_a_different_coordinator_cannot_reject_the_request(login_as, db: Session
 
 @pytest.mark.story("4.5", ac=1)
 def test_an_unassigned_request_cannot_be_rejected(coordinator_client, db: Session):
-    event = make_event(db, status=EventStatus.SUBMITTED)  # no assigned_coordinator_id
+    event = make_event(db, status=EventStatus.UNDER_REVIEW)  # no assigned_coordinator_id
 
     response = coordinator_client.post(
         f"/events/{event.id}/reject", json={"reason": "No coordinator is assigned yet."}
