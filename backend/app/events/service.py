@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, lazyload
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.audit import record_audit
+from app.coordination import service as coordination_service
 from app.events.models import (
     EquipmentHoldStatus,
     EquipmentReservation,
@@ -812,7 +813,9 @@ def _record_transition(
 
 
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
-    """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in."""
+    """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in.
+    Story 5.1 AC1: submitting also auto-assigns the next coordinator in round robin, in this
+    same transaction - see ``coordination.service.auto_assign_next_coordinator``."""
     event = _get_own_event(db, event_id, actor)
     if event.status != EventStatus.DRAFT:
         raise EventAlreadySubmitted()
@@ -843,6 +846,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         at=submitted_at,
         reason=None,
     )
+    coordination_service.auto_assign_next_coordinator(db, event)
     record_audit(
         db,
         actor=actor,

@@ -245,6 +245,10 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
         "updated_at": submitted["updated_at"],
         # the equipment is now held for the event (test_event_request_equipment.py)
         "equipment": [{**line, "status": "RESERVED"} for line in created["equipment"]],
+        # a coordinator is auto-assigned on submission (story 5.1 AC1) - not a "recorded detail"
+        # the organiser supplied, so this test only excepts it rather than asserting on it
+        "assigned_coordinator_id": submitted["assigned_coordinator_id"],
+        "assigned_coordinator_name": submitted["assigned_coordinator_name"],
     }
 
 
@@ -268,7 +272,8 @@ def test_submission_is_written_to_the_status_history_and_audit_log(organiser_cli
     actions = db.scalars(
         select(AuditLog.action).where(AuditLog.entity_id == uuid.UUID(created["id"]))
     ).all()
-    assert sorted(actions) == ["EVENT_CREATED", "EVENT_SUBMITTED"]
+    # EVENT_COORDINATOR_ASSIGNED: submission auto-assigns a coordinator (story 5.1 AC1, AC3).
+    assert sorted(actions) == ["EVENT_COORDINATOR_ASSIGNED", "EVENT_CREATED", "EVENT_SUBMITTED"]
 
 
 # --- AC12: not someone else's, not twice ---------------------------------------------------------
