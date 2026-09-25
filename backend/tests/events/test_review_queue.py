@@ -146,7 +146,7 @@ def test_coordinator_filter_narrows_the_queue(coordinator_client, db: Session):
 @pytest.mark.story("4.1", ac=4)
 def test_coordinator_filter_still_hides_decided_events(coordinator_client, db: Session):
     event = make_event(
-        db, status=EventStatus.APPROVED, assigned_coordinator_id=Users.COORDINATOR.id
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
 
     response = coordinator_client.get(f"/events/review-queue?coordinator_id={Users.COORDINATOR.id}")

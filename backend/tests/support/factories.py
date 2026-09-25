@@ -53,7 +53,7 @@ def make_user(
     return user
 
 
-def make_event(db: Session, *, status: str = EventStatus.SUBMITTED, **overrides) -> Event:
+def make_event(db: Session, *, status: str = EventStatus.UNDER_REVIEW, **overrides) -> Event:
     """A persisted event that satisfies ck_events_submitted_fields_complete for any non-DRAFT
     status. Pass e.g. ``assigned_coordinator_id=`` or ``submitted_at=`` to override."""
     n = next(_counter)

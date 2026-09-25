@@ -127,12 +127,15 @@ def test_seed_constants_match_database(db: Session):
         assert db.execute(text("SELECT 1 FROM venues WHERE id = :id"), {"id": venue_id}).scalar()
     for event_id, status in (
         (Events.DRAFT, "DRAFT"),
-        (Events.SUBMITTED, "SUBMITTED"),
-        (Events.APPROVED, "APPROVED"),
+        # Events.SUBMITTED/APPROVED* keep their names as stable fixture identifiers, but the
+        # statuses those names name were retired by migration 002 (bug b6.1.1): submitting now
+        # goes straight to UNDER_REVIEW, approving straight to PLANNING.
+        (Events.SUBMITTED, "UNDER_REVIEW"),
+        (Events.APPROVED, "PLANNING"),
         (Events.REJECTED, "REJECTED"),
         (Events.UNDER_REVIEW, "UNDER_REVIEW"),
         (Events.CLARIFICATION_REQUESTED, "CLARIFICATION_REQUESTED"),
-        (Events.SUBMITTED_2, "SUBMITTED"),
+        (Events.SUBMITTED_2, "UNDER_REVIEW"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -213,7 +216,7 @@ def test_only_drafts_may_omit_mandatory_event_fields(db: Session):
         conn.execute(
             text(
                 "INSERT INTO events (organiser_id, name, status)"
-                " VALUES (:u, 'Incomplete', 'SUBMITTED')"
+                " VALUES (:u, 'Incomplete', 'UNDER_REVIEW')"
             ),
             {"u": Users.ORGANISER.id},
         )
