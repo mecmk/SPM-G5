@@ -231,6 +231,9 @@ def test_submission_sets_the_status_and_records_when(organiser_client, db: Sessi
 def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
     created = create_event_request(
         organiser_client,
+        contact_name="Priya Nair",
+        contact_email="priya.nair@example.com",
+        contact_phone="+65 9123 4567",
         required_facilities=[{"code": "BREAKOUT_ROOMS", "quantity": 3}],
         accessibility_needs=[{"code": "LIFT_ACCESS"}],
         equipment=[{"equipment_type_code": "LAPTOP", "quantity": 2}],

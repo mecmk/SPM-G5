@@ -20,7 +20,8 @@
  * Both servers use 127.0.0.1 so the SameSite=Lax session cookie stays same-site, as in CI.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { createWriteStream, mkdirSync } from 'node:fs'
+import { createWriteStream, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
 import { IS_WINDOWS, ROOT, log, requireUv, run } from './lib/tools.mjs'
@@ -29,6 +30,8 @@ const DEFAULT_DATABASE_URL =
   'postgresql+psycopg://connectsphere:connectsphere@localhost:5433/connectsphere_e2e'
 const REQUIRED_DATABASE_SUFFIX = '_e2e'
 const HOST = '127.0.0.1'
+// Where the API writes uploaded pictures (story 2.1 AC14): a throwaway folder, never backend/uploads.
+const uploadDir = mkdtempSync(path.join(os.tmpdir(), 'connectsphere-e2e-uploads-'))
 const READY_TIMEOUT_MS = 120_000
 const READY_POLL_MS = 500
 const LOG_LINES_KEPT = 40
@@ -171,7 +174,11 @@ async function main() {
       '--port',
       String(backendPort),
     ],
-    { DATABASE_URL: databaseUrl, CORS_ORIGINS: JSON.stringify([frontendUrl]) },
+    {
+      DATABASE_URL: databaseUrl,
+      CORS_ORIGINS: JSON.stringify([frontendUrl]),
+      UPLOAD_DIR: uploadDir,
+    },
   )
   const frontend = startServer(
     'frontend',
@@ -224,6 +231,7 @@ try {
   log.error(error.message)
 } finally {
   cleanUp()
+  rmSync(uploadDir, { recursive: true, force: true })
   const name = databaseName(databaseUrl)
   if (name.endsWith(REQUIRED_DATABASE_SUFFIX)) dbtool('drop')
 }

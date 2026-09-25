@@ -17,8 +17,20 @@ import {
 export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
+/** Where the backend serves uploaded pictures from (story 2.1 AC14). */
+const UPLOADS_PATH_PREFIX = '/uploads/'
 const NO_CONTENT_STATUS = 204
 const REQUEST_BODY_LOCATION = 'body'
+
+/**
+ * The address to load a stored picture from. An uploaded picture is served by the backend, so its
+ * root-relative path needs the API's origin; a seeded one lives under the frontend and is used as
+ * it is.
+ */
+export function mediaUrl(path: string | null): string | null {
+  if (path === null) return null
+  return path.startsWith(UPLOADS_PATH_PREFIX) ? `${API_BASE_URL}${path}` : path
+}
 
 /** A FastAPI validation issue: `{ loc: ['body', 'capacity'], msg: '...' }`. */
 interface ValidationIssue {
@@ -138,11 +150,13 @@ async function send<T>(
 ): Promise<T> {
   let response: Response
   try {
+    // A file goes as multipart, and the browser sets that content type (with its boundary).
+    const isFile = body instanceof FormData
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       credentials: 'include',
-      headers: body === undefined ? undefined : JSON_HEADERS,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || isFile ? undefined : JSON_HEADERS,
+      body: body === undefined || isFile ? (body as FormData | undefined) : JSON.stringify(body),
     })
   } catch {
     throw new ApiError(null, 'NETWORK_UNAVAILABLE', null)

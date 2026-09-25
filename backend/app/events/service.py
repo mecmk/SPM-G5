@@ -10,10 +10,12 @@ revealed to people it is not theirs to see.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
@@ -22,6 +24,7 @@ from sqlalchemy.orm import Session, lazyload
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.audit import record_audit
+from app.config import settings
 from app.coordination import service as coordination_service
 from app.events.models import (
     EquipmentHoldStatus,
@@ -51,6 +54,8 @@ from app.events.schemas import (
     ReviewQueueSort,
 )
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
+
+_log = logging.getLogger(__name__)
 
 END_NOT_AFTER_START_MESSAGE = (
     "The proposed end date and time must be after the start date and time."
@@ -111,6 +116,9 @@ _DETAIL_FIELDS = (
     "starts_at",
     "ends_at",
     "expected_attendance",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
     "required_layout_code",
     "venue_requirement_notes",
     "venue_none_required",
@@ -127,6 +135,10 @@ _REQUIRED_DETAILS_FOR_SUBMISSION = (
     ("starts_at", "proposed start date and time"),
     ("ends_at", "proposed end date and time"),
     ("expected_attendance", "expected attendance"),
+    # Story 2.1 AC13: all three parts of the point of contact.
+    ("contact_name", "point of contact name"),
+    ("contact_email", "point of contact email"),
+    ("contact_phone", "point of contact phone number"),
 )
 _VENUE_ANSWER_LABEL = "venue requirements (choose some, or mark none)"
 _ACCESSIBILITY_ANSWER_LABEL = "accessibility needs (choose some, or mark none)"
@@ -764,8 +776,9 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
 
 
 def _missing_for_submission(event: Event) -> list[str]:
-    """AC10: every event detail must be filled in, and venue requirements and accessibility
-    needs each answered - something chosen or written, or marked "none required"."""
+    """AC10/AC13: every event detail and the point of contact must be filled in, and venue
+    requirements and accessibility needs each answered - something chosen or written, or marked
+    "none required"."""
     missing = [
         label for field, label in _REQUIRED_DETAILS_FOR_SUBMISSION if getattr(event, field) is None
     ]
@@ -858,6 +871,124 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         commit=False,
     )
     db.commit()
+    db.refresh(event)
+    return event
+
+
+# --- cover picture (story 2.1 AC14) ---------------------------------------------------------
+COVER_IMAGE_TOO_LARGE_MESSAGE = "The picture must be 5 MB or smaller."
+COVER_IMAGE_UNSUPPORTED_MESSAGE = "Choose a JPEG, PNG or WebP picture."
+# The most a cover picture may weigh. Keep in step with the frontend's MAX_COVER_IMAGE_BYTES.
+MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
+# Where uploads are served from: ``/uploads/events/<file>``, under ``settings.upload_dir``. A
+# picture at any other address (a seeded one under the frontend) is not ours to delete.
+COVER_IMAGE_URL_PREFIX = "/uploads/events/"
+_COVER_IMAGE_FOLDER = "events"
+# What each accepted format starts with, and the extension and content type it is stored as.
+# The bytes decide the type: a file's name and declared type are the client's word only.
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_JPEG_SIGNATURE = b"\xff\xd8\xff"
+COVER_IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
+
+
+class CoverImageTooLarge(ValueError):
+    def __init__(self):
+        super().__init__(COVER_IMAGE_TOO_LARGE_MESSAGE)
+
+
+class UnsupportedCoverImage(InvalidEventRequest):
+    def __init__(self):
+        super().__init__(COVER_IMAGE_UNSUPPORTED_MESSAGE)
+
+
+def _cover_image_extension(content: bytes) -> str | None:
+    if content.startswith(_PNG_SIGNATURE):
+        return ".png"
+    if content.startswith(_JPEG_SIGNATURE):
+        return ".jpg"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def cover_image_path(filename: str) -> Path:
+    """Where the stored picture called ``filename`` lives. The caller has already checked the
+    name is one the server generated, so it cannot climb out of the folder."""
+    return settings.upload_dir / _COVER_IMAGE_FOLDER / filename
+
+
+def _delete_cover_image_file(url: str | None) -> None:
+    """Remove the file behind ``url`` when it is one of ours. An absent file is not an error, and
+    neither is one that cannot be removed (locked on Windows, say): this runs after the change was
+    committed, so failing here would report a save that worked as a failure. It is logged, and the
+    file is left behind."""
+    if url is None or not url.startswith(COVER_IMAGE_URL_PREFIX):
+        return
+    path = cover_image_path(url.removeprefix(COVER_IMAGE_URL_PREFIX))
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        _log.warning("Could not delete the replaced cover picture %s", path, exc_info=True)
+
+
+def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: User) -> Event:
+    """AC14: give ``actor``'s own draft a cover picture, replacing any it had. The file is written
+    first and the old one deleted only once the new address is stored, so a failure never leaves
+    the request pointing at a file that is gone."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+    if len(content) > MAX_COVER_IMAGE_BYTES:
+        raise CoverImageTooLarge()
+    extension = _cover_image_extension(content)
+    if extension is None:
+        raise UnsupportedCoverImage()
+
+    filename = f"{uuid.uuid4()}{extension}"
+    path = cover_image_path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    previous_url = event.cover_image_url
+    try:
+        event.cover_image_url = f"{COVER_IMAGE_URL_PREFIX}{filename}"
+        event.updated_at = datetime.now(UTC)
+        record_audit(
+            db,
+            actor=actor,
+            action="EVENT_COVER_IMAGE_SET",
+            entity_type="event",
+            entity_id=event.id,
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    _delete_cover_image_file(previous_url)
+    db.refresh(event)
+    return event
+
+
+def remove_cover_image(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """AC14: take the cover picture off ``actor``'s own draft, and delete its file."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+    previous_url = event.cover_image_url
+    if previous_url is None:
+        return event
+    event.cover_image_url = None
+    event.updated_at = datetime.now(UTC)
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_COVER_IMAGE_REMOVED",
+        entity_type="event",
+        entity_id=event.id,
+        commit=False,
+    )
+    db.commit()
+    _delete_cover_image_file(previous_url)
     db.refresh(event)
     return event
 

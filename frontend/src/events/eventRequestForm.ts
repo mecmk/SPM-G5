@@ -34,6 +34,10 @@ export interface EventFormState {
   startsAt: string
   endsAt: string
   attendance: string
+  /** Story 2.1 AC13: the point of contact, all three needed to submit. */
+  contactName: string
+  contactEmail: string
+  contactPhone: string
   /** Story 2.1 AC4: true is "no venue requirements"; false with nothing chosen is "not specified". */
   hasNoVenueRequirements: boolean
   layoutCode: string
@@ -49,6 +53,17 @@ export interface EventFormState {
 export const EMPTY_NOTE: NoteDraft = { notes: '' }
 export const EMPTY_FACILITY: FacilityDraft = { quantity: '', notes: '' }
 const WHOLE_NUMBER = /^\d+$/
+// Story 2.1 AC13: mirrored from the backend's schemas.
+const EMAIL_ADDRESS = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const PHONE_NUMBER = /^\+?[\d -]+$/
+export const CONTACT_NAME_MAX_LENGTH = 200
+export const CONTACT_EMAIL_MAX_LENGTH = 254
+export const CONTACT_PHONE_MAX_LENGTH = 50
+const CONTACT_PHONE_MIN_DIGITS = 8
+const CONTACT_PHONE_MAX_DIGITS = 15
+/** Story 2.1 AC14: what a cover picture may be, mirrored from the backend's service. */
+export const MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
+export const COVER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
 // The largest value the backend's INTEGER columns hold.
@@ -69,6 +84,9 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   startsAt: '',
   endsAt: '',
   attendance: '',
+  contactName: '',
+  contactEmail: '',
+  contactPhone: '',
   hasNoVenueRequirements: false,
   layoutCode: '',
   facilities: {},
@@ -88,6 +106,9 @@ export interface FormProblem {
 export const FIELD_ID = {
   name: 'event-name',
   attendance: 'event-attendance',
+  contactName: 'event-contact-name',
+  contactEmail: 'event-contact-email',
+  contactPhone: 'event-contact-phone',
   startsAt: 'event-starts-at',
   endsAt: 'event-ends-at',
 } as const
@@ -155,6 +176,9 @@ export function formFromEvent(event: EventDetail): EventFormState {
     startsAt: event.starts_at ? instantToInput(event.starts_at) : '',
     endsAt: event.ends_at ? instantToInput(event.ends_at) : '',
     attendance: event.expected_attendance === null ? '' : String(event.expected_attendance),
+    contactName: textOf(event.contact_name),
+    contactEmail: textOf(event.contact_email),
+    contactPhone: textOf(event.contact_phone),
     hasNoVenueRequirements: event.venue_none_required,
     layoutCode: textOf(event.required_layout_code),
     facilities: Object.fromEntries(
@@ -193,6 +217,37 @@ function isPositiveWholeNumber(value: string): boolean {
 
 function isBlankOrPositiveWholeNumber(value: string): boolean {
   return value.trim() === '' || isPositiveWholeNumber(value)
+}
+
+/** Story 2.1 AC13: blank is fine on a draft; anything typed must look like an email address. */
+function isBlankOrEmailAddress(value: string): boolean {
+  const trimmed = value.trim()
+  return (
+    trimmed === '' || (trimmed.length <= CONTACT_EMAIL_MAX_LENGTH && EMAIL_ADDRESS.test(trimmed))
+  )
+}
+
+/** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. */
+function isBlankOrPhoneNumber(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed === '') return true
+  const digitCount = trimmed.replace(/\D/g, '').length
+  return (
+    trimmed.length <= CONTACT_PHONE_MAX_LENGTH &&
+    PHONE_NUMBER.test(trimmed) &&
+    digitCount >= CONTACT_PHONE_MIN_DIGITS &&
+    digitCount <= CONTACT_PHONE_MAX_DIGITS
+  )
+}
+
+/**
+ * Story 2.1 AC14: what is wrong with a chosen picture, or null. The backend checks the bytes
+ * again; this only saves uploading a file that is certain to be refused.
+ */
+export function validateCoverImage(file: File): ErrorCode | null {
+  if (!COVER_IMAGE_TYPES.includes(file.type)) return 'EVENT_PICTURE_TYPE_INVALID'
+  if (file.size > MAX_COVER_IMAGE_BYTES) return 'EVENT_PICTURE_TOO_LARGE'
+  return null
 }
 
 function isInThePast(inputValue: string): boolean {
@@ -245,6 +300,12 @@ export function validateEventForm(
   }
   const dateProblem = validateDates(form, saved)
   if (dateProblem) return dateProblem
+  if (!isBlankOrEmailAddress(form.contactEmail)) {
+    return { code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail }
+  }
+  if (!isBlankOrPhoneNumber(form.contactPhone)) {
+    return { code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone }
+  }
   return validateRequirements(form, availability)
 }
 
@@ -292,6 +353,12 @@ export function getLiveProblems(
   if (!isBlankOrPositiveWholeNumber(form.attendance)) {
     problems[FIELD_ID.attendance] = 'EVENT_ATTENDANCE_INVALID'
   }
+  if (!isBlankOrEmailAddress(form.contactEmail)) {
+    problems[FIELD_ID.contactEmail] = 'EVENT_CONTACT_EMAIL_INVALID'
+  }
+  if (!isBlankOrPhoneNumber(form.contactPhone)) {
+    problems[FIELD_ID.contactPhone] = 'EVENT_CONTACT_PHONE_INVALID'
+  }
   for (const [code, facility] of Object.entries(form.facilities)) {
     if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
       problems[getFacilityQuantityId(code)] = 'EVENT_FACILITY_QUANTITY_INVALID'
@@ -319,6 +386,9 @@ export function getMissingForSubmission(form: EventFormState): string[] {
   if (!form.startsAt) missing.push('proposed start date and time')
   if (!form.endsAt) missing.push('proposed end date and time')
   if (!isPositiveWholeNumber(form.attendance)) missing.push('expected attendance')
+  if (!form.contactName.trim()) missing.push('point of contact name')
+  if (!form.contactEmail.trim()) missing.push('point of contact email')
+  if (!form.contactPhone.trim()) missing.push('point of contact phone number')
   const hasVenueAnswer =
     form.hasNoVenueRequirements ||
     form.layoutCode !== '' ||
@@ -387,6 +457,9 @@ export function eventInputFrom(form: EventFormState): EventInput {
     starts_at: form.startsAt ? inputToInstant(form.startsAt) : null,
     ends_at: form.endsAt ? inputToInstant(form.endsAt) : null,
     expected_attendance: form.attendance.trim() === '' ? null : Number(form.attendance),
+    contact_name: textOrNull(form.contactName),
+    contact_email: textOrNull(form.contactEmail),
+    contact_phone: textOrNull(form.contactPhone),
     required_layout_code: hasNoVenueNeeds ? null : textOrNull(form.layoutCode),
     venue_requirement_notes: hasNoVenueNeeds ? null : textOrNull(form.venueNotes),
     required_facilities: hasNoVenueNeeds

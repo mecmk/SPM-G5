@@ -50,6 +50,10 @@ export type ErrorCode =
   | 'EVENT_EQUIPMENT_DUPLICATE'
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
   | 'EVENT_QUANTITY_INVALID'
+  | 'EVENT_CONTACT_EMAIL_INVALID'
+  | 'EVENT_CONTACT_PHONE_INVALID'
+  | 'EVENT_PICTURE_TYPE_INVALID'
+  | 'EVENT_PICTURE_TOO_LARGE'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
@@ -229,6 +233,26 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'Equipment quantity must be a positive whole number.',
+  },
+  /** Story 2.1 AC13: worded as the backend words it. */
+  EVENT_CONTACT_EMAIL_INVALID: {
+    title: 'Check the contact email',
+    message: 'Enter an email address like name@example.com.',
+  },
+  /** Story 2.1 AC13. */
+  EVENT_CONTACT_PHONE_INVALID: {
+    title: 'Check the contact phone number',
+    message: 'Enter a phone number with 8 to 15 digits.',
+  },
+  /** Story 2.1 AC14. */
+  EVENT_PICTURE_TYPE_INVALID: {
+    title: 'Check the picture',
+    message: 'Choose a JPEG, PNG or WebP picture.',
+  },
+  /** Story 2.1 AC14: the backend answers 413 to the same limit. */
+  EVENT_PICTURE_TOO_LARGE: {
+    title: 'Check the picture',
+    message: 'The picture must be 5 MB or smaller.',
   },
 
   /**

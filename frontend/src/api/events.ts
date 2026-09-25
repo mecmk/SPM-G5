@@ -195,6 +195,9 @@ export interface EventInput {
   starts_at: string | null
   ends_at: string | null
   expected_attendance: number | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
   required_layout_code: string | null
   venue_requirement_notes: string | null
   required_facilities: { code: string; quantity: number | null; notes: string | null }[]
@@ -237,22 +240,82 @@ export function listClarifications(eventId: string): Promise<Clarification[]> {
   })
 }
 
+/**
+ * Story 2.1 AC15: whether saving the draft says so in the notification centre. Submitting saves the
+ * details first, and must say only that the request was submitted, not that a draft was saved.
+ */
+export interface SaveOptions {
+  shouldNotify: boolean
+}
+
+const SAVE_AND_NOTIFY: SaveOptions = { shouldNotify: true }
+
 /** Story 2.1 AC1-AC6: record a new request. It starts as a draft. */
-export function createEvent(input: EventInput): Promise<EventDetail> {
+export function createEvent(
+  input: EventInput,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
   return api<EventDetail>('/events', {
     method: 'POST',
     body: input,
-    notify: { title: 'Draft saved', message: `"${input.name}" was saved as a draft.` },
+    notify: shouldNotify
+      ? { title: 'Draft saved', message: `"${input.name}" was saved as a draft.` }
+      : false,
   })
 }
 
 /** Story 2.1 AC7: change a draft. Only a draft can be changed. */
-export function updateEvent(eventId: string, input: EventInput): Promise<EventDetail> {
+export function updateEvent(
+  eventId: string,
+  input: EventInput,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}`, {
     method: 'PATCH',
     body: input,
     errorCodes: EVENT_ERROR_CODES,
-    notify: { title: 'Draft saved', message: `"${input.name}" was saved.` },
+    notify: shouldNotify ? { title: 'Draft saved', message: `"${input.name}" was saved.` } : false,
+  })
+}
+
+const COVER_IMAGE_ERROR_CODES = {
+  ...EVENT_ERROR_CODES,
+  413: 'EVENT_PICTURE_TOO_LARGE',
+} as const
+
+/**
+ * Story 2.1 AC14: give a draft a cover picture, replacing any it has. Story 2.1 AC15: submitting
+ * saves the picture first and must say only that the request was submitted, so it passes
+ * `shouldNotify: false`.
+ */
+export function uploadCoverImage(
+  eventId: string,
+  file: File,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
+  const body = new FormData()
+  body.append('file', file)
+  return api<EventDetail>(`/events/${eventId}/cover-image`, {
+    method: 'PUT',
+    body,
+    errorCodes: COVER_IMAGE_ERROR_CODES,
+    notify: shouldNotify
+      ? { title: 'Picture saved', message: 'The cover picture was saved.' }
+      : false,
+  })
+}
+
+/** Story 2.1 AC14: take the cover picture off a draft. AC15: silent when submitting, as above. */
+export function removeCoverImage(
+  eventId: string,
+  { shouldNotify }: SaveOptions = SAVE_AND_NOTIFY,
+): Promise<EventDetail> {
+  return api<EventDetail>(`/events/${eventId}/cover-image`, {
+    method: 'DELETE',
+    errorCodes: EVENT_ERROR_CODES,
+    notify: shouldNotify
+      ? { title: 'Picture removed', message: 'The cover picture was removed.' }
+      : false,
   })
 }
 
