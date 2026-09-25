@@ -23,6 +23,14 @@
  *     missing);
  *     the form
  *     also lists what is still needed as it is filled in, so it is no surprise at submit.
+ * AC13 the organiser records a point of contact (name, email, phone); all three are needed to
+ *     submit, and a bad email or phone is said next to the field as it is typed.
+ * AC14 the organiser adds a cover picture by choosing a file or dragging it on, sees a preview,
+ *     replaces or removes it before submitting; a wrong type or a file over 5 MB is refused in the
+ *     browser. It shows on the My events card and is locked once submitted.
+ * AC15 saving a draft says "Draft saved"; submitting says only "Request submitted".
+ * AC16 after a successful submission the organiser is taken to My events, where the request shows
+ *     as under review; a refused submission stays on the request's edit page.
  * Rule detail, refusals (401/403/404/409/422) and what the coordinator sees (AC8, AC12) are
  * backend cases: backend/tests/events/test_event_request_*.py.
  */
@@ -30,7 +38,15 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import { ACCOUNTS, signIn } from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
+const MY_EVENTS_PATH = /\/events\/mine$/
 const PAST_START = '2020-01-01T09:00'
+const CONTACT = { name: 'Priya Nair', email: 'priya.nair@example.com', phone: '+65 9123 4567' }
+const MAX_PICTURE_BYTES = 5 * 1024 * 1024
+/** The smallest valid PNG: one transparent pixel. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 /** A `datetime-local` value (Singapore time) `days` from today, safely in the future. */
 function inFuture(days: number, hour = 9): string {
@@ -69,6 +85,19 @@ async function fillEssentials(page: Page, name: string) {
   await page.getByLabel('Expected attendance').fill('60')
 }
 
+async function fillContact(page: Page) {
+  await page.getByLabel('Contact name').fill(CONTACT.name)
+  await page.getByLabel('Contact email').fill(CONTACT.email)
+  await page.getByLabel('Contact phone number').fill(CONTACT.phone)
+}
+
+/** Choose a picture the way the file picker does. */
+async function choosePicture(page: Page, name = 'cover.png', buffer: Buffer = PNG_BYTES) {
+  await page
+    .getByLabel('Choose cover picture')
+    .setInputFiles({ name, mimeType: 'image/png', buffer })
+}
+
 async function addEquipment(page: Page, position: number, type: string, quantity: string) {
   await page.getByRole('button', { name: 'Add equipment' }).click()
   const item = equipmentItem(page, position)
@@ -86,6 +115,23 @@ async function saveEdits(page: Page) {
   ])
 }
 
+/**
+ * Story 2.1 AC15: everything the notification toasts say once "Request submitted" is showing. Read
+ * once, not polled: a toast lasts about as long as an assertion waits, so "expect none" on a locator
+ * would just wait for the toast to expire and pass. The submit toast is the last to arrive, so any
+ * toast raised on the way is still on screen when this reads.
+ */
+async function toastsOnceSubmitted(page: Page): Promise<string> {
+  const toasts = page.getByRole('status')
+  await expect(toasts.filter({ hasText: 'Request submitted' })).toBeVisible()
+  return (await toasts.allInnerTexts()).join(' | ')
+}
+
+/** The card for a request on My events, found by its name. */
+function myEventsCard(page: Page, name: string): Locator {
+  return page.getByRole('listitem').filter({ hasText: name })
+}
+
 /** Answer the two sections a request cannot be submitted without: "none" is an answer. */
 async function answerVenueAndAccessibility(page: Page) {
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
@@ -96,6 +142,7 @@ async function answerVenueAndAccessibility(page: Page) {
 async function createSubmittableDraft(page: Page, name: string) {
   await startNewRequest(page)
   await fillEssentials(page, name)
+  await fillContact(page)
   await answerVenueAndAccessibility(page)
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
@@ -321,18 +368,32 @@ test('2.1 AC9/AC11: an organiser submits their draft and it becomes a read-only 
   const name = uniqueName('Submit')
   await signIn(page, ACCOUNTS.organiser)
   await createSubmittableDraft(page, name)
+  const editUrl = page.url()
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await page.goto(editUrl)
+  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
   await expect(page.getByText(/Submitted on /)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Submit request' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0)
   await expect(page.getByLabel('Event name')).toBeDisabled()
-
-  await page.reload()
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Event name')).toHaveValue(name)
+})
+
+test('2.1 AC16: submitting a saved draft takes the organiser to My events, showing it under review', async ({
+  page,
+}) => {
+  const name = uniqueName('Redirect')
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, name)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(page.getByRole('heading', { name: 'My events' })).toBeVisible()
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC9/AC11: an organiser can submit straight from the new request page', async ({
@@ -342,15 +403,13 @@ test('2.1 AC9/AC11: an organiser can submit straight from the new request page',
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   await fillEssentials(page, name)
+  await fillContact(page)
   await answerVenueAndAccessibility(page)
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  await expect(page).toHaveURL(EDIT_PATH)
-  await expect(page.getByText('Submitted', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Submitted on /)).toBeVisible()
-  await expect(page.getByLabel('Event name')).toHaveValue(name)
-  await expect(page.getByLabel('Event name')).toBeDisabled()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC10: submitting with anything missing keeps the details as a draft and shows the reason', async ({
@@ -365,8 +424,9 @@ test('2.1 AC10: submitting with anything missing keeps the details as a draft an
 
   await page.getByRole('button', { name: 'Submit request' }).click()
 
-  // The details were recorded as a draft and the refusal is shown. What is named as missing is a
-  // backend rule (test_event_request_submission.py).
+  // The details were recorded as a draft and the refusal is shown, on the request's edit page (AC16:
+  // only a successful submission leaves it). What is named as missing is a backend rule
+  // (test_event_request_submission.py).
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(page.getByLabel('Event name')).toHaveValue(name)
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
@@ -718,6 +778,7 @@ test('2.1 AC11: a refused submission stays a draft and the form shows the new co
   await startNewRequest(page)
   await fillEssentials(page, uniqueName('Late'))
   await setDates(page, 360)
+  await fillContact(page)
   await answerVenueAndAccessibility(page)
   await addEquipment(page, 1, 'Presentation laptop', '6')
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -728,10 +789,11 @@ test('2.1 AC11: a refused submission stays a draft and the form shows the new co
   await startNewRequest(other)
   await fillEssentials(other, uniqueName('First'))
   await setDates(other, 360)
+  await fillContact(other)
   await answerVenueAndAccessibility(other)
   await addEquipment(other, 1, 'Presentation laptop', '4')
   await other.getByRole('button', { name: 'Submit request' }).click()
-  await expect(other.getByText(/Submitted on /)).toBeVisible()
+  await expect(other).toHaveURL(MY_EVENTS_PATH)
   await other.context().close()
 
   await page.getByRole('button', { name: 'Submit request' }).click()
@@ -808,6 +870,9 @@ test('2.1 AC10: what is still needed to submit is listed as you fill the form in
   await expect(needed).toContainText('expected attendance')
   await expect(needed).toContainText('venue requirements')
   await expect(needed).toContainText('accessibility needs')
+  await expect(needed).toContainText('point of contact name')
+  await expect(needed).toContainText('point of contact email')
+  await expect(needed).toContainText('point of contact phone number')
 
   await page.getByLabel('Purpose').fill('Staff training')
   await expect(needed).not.toContainText('purpose')
@@ -820,6 +885,10 @@ test('2.1 AC10: what is still needed to submit is listed as you fill the form in
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
   await expect(needed).not.toContainText('venue requirements')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
+  await page.getByLabel('Contact name').fill(CONTACT.name)
+  await expect(needed).not.toContainText('point of contact name')
+  await page.getByLabel('Contact email').fill(CONTACT.email)
+  await page.getByLabel('Contact phone number').fill(CONTACT.phone)
 
   await expect(needed).toHaveCount(0)
 })
@@ -849,4 +918,324 @@ test('2.1 AC2: a date that does not exist, like 29 February in a non-leap year, 
   await expect(page.getByText(/29 February is only valid in a leap year/)).toBeVisible()
   await expect(page.getByText(/no 31st in April, June, September or November/)).toBeVisible()
   await expect(start).toHaveAttribute('aria-invalid', 'true')
+})
+
+// --- AC13: point of contact ----------------------------------------------------------------------
+test('2.1 AC13: the point of contact is recorded with the request and kept after a reload', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('Contact'))
+  await fillContact(page)
+
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page).toHaveURL(EDIT_PATH)
+  await page.reload()
+  await expect(page.getByLabel('Contact name')).toHaveValue(CONTACT.name)
+  await expect(page.getByLabel('Contact email')).toHaveValue(CONTACT.email)
+  await expect(page.getByLabel('Contact phone number')).toHaveValue(CONTACT.phone)
+})
+
+test('2.1 AC13: a draft saves without a point of contact', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('NoContact'))
+
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page).toHaveURL(EDIT_PATH)
+})
+
+test('2.1 AC13: a bad email or phone number is said next to the field as it is typed', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const email = page.getByLabel('Contact email')
+  const phone = page.getByLabel('Contact phone number')
+  const emailProblem = page.getByText('Enter an email address like name@example.com.')
+  const phoneProblem = page.getByText('Enter a phone number with 8 to 15 digits.')
+
+  await email.fill('not-an-email')
+  await expect(emailProblem).toBeVisible()
+  await email.fill(CONTACT.email)
+  await expect(emailProblem).toHaveCount(0)
+
+  await phone.fill('12345')
+  await expect(phoneProblem).toBeVisible()
+  await phone.fill('9123abcd')
+  await expect(phoneProblem).toBeVisible()
+  await phone.fill(CONTACT.phone)
+  await expect(phoneProblem).toHaveCount(0)
+})
+
+test('2.1 AC13: a bad email is refused before anything is sent, and the field is focused', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await page.getByLabel('Event name').fill(uniqueName('BadEmail'))
+  await page.getByLabel('Contact email').fill('nope')
+
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('email')
+  await expect(page.getByLabel('Contact email')).toBeFocused()
+  expect(createCalls).toBe(0)
+})
+
+test('2.1 AC13: submitting with the point of contact missing keeps a draft and names it', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('MissingContact'))
+  await answerVenueAndAccessibility(page)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  await expect(page).toHaveURL(EDIT_PATH)
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('point of contact')
+})
+
+test('2.1 AC13: a submitted request shows its point of contact and cannot change it', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, uniqueName('ContactLocked'))
+  const editUrl = page.url()
+  await page.getByRole('button', { name: 'Submit request' }).click()
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+
+  await page.goto(editUrl)
+  await expect(page.getByText('Under review', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Contact name')).toHaveValue(CONTACT.name)
+  await expect(page.getByLabel('Contact name')).toBeDisabled()
+  await expect(page.getByLabel('Contact email')).toBeDisabled()
+  await expect(page.getByLabel('Contact phone number')).toBeDisabled()
+})
+
+// --- AC14: cover picture -------------------------------------------------------------------------
+test('2.1 AC14: a chosen picture is previewed, saved with the draft and shown after a reload', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('Picture'))
+
+  await choosePicture(page)
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toBeVisible()
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page).toHaveURL(EDIT_PATH)
+  await page.reload()
+  const preview = page.getByRole('img', { name: 'Cover picture preview' })
+  await expect(preview).toBeVisible()
+  await expect
+    .poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0)
+})
+
+test('2.1 AC14: a picture can be dragged onto the form', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const zone = page.getByRole('group', { name: 'Cover picture drop area' })
+
+  const transfer = await page.evaluateHandle((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+    const data = new DataTransfer()
+    data.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
+    return data
+  }, PNG_BYTES.toString('base64'))
+  await zone.dispatchEvent('dragenter', { dataTransfer: transfer })
+  await expect(page.getByText('Drop the picture here')).toBeVisible()
+  await zone.dispatchEvent('drop', { dataTransfer: transfer })
+
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toBeVisible()
+  await expect(page.getByText('Drop the picture here')).toHaveCount(0)
+})
+
+test('2.1 AC14: a picture can be replaced and removed while the request is a draft', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('Swap'))
+  await choosePicture(page, 'first.png')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  const preview = page.getByRole('img', { name: 'Cover picture preview' })
+  await expect(preview).toBeVisible()
+  const firstSource = await preview.getAttribute('src')
+
+  await choosePicture(page, 'second.png')
+  await saveEdits(page)
+  await expect(preview).toBeVisible()
+  await expect.poll(() => preview.getAttribute('src')).not.toBe(firstSource)
+
+  await page.getByRole('button', { name: 'Remove picture' }).click()
+  // The preview goes as soon as the picture is taken off, but it is only removed on save, and the
+  // removal is a request of its own after the details are saved: wait for it before reloading.
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' && response.url().includes('/cover-image'),
+    ),
+    page.getByRole('button', { name: 'Save draft' }).click(),
+  ])
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
+})
+
+test('2.1 AC14: a file that is not a JPEG, PNG or WebP is refused in the browser', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+
+  await page.getByLabel('Choose cover picture').setInputFiles({
+    name: 'brief.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4'),
+  })
+
+  await expect(page.getByText('Choose a JPEG, PNG or WebP picture.')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
+})
+
+test('2.1 AC14: a file over 5 MB is refused in the browser', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+
+  await choosePicture(page, 'huge.png', Buffer.alloc(MAX_PICTURE_BYTES + 1))
+
+  await expect(page.getByText('The picture must be 5 MB or smaller.')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
+})
+
+test('2.1 AC14: a picture is not needed to submit', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  const name = uniqueName('NoPicture')
+  await createSubmittableDraft(page, name)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(myEventsCard(page, name).getByText('Under review', { exact: true })).toBeVisible()
+})
+
+test('2.1 AC14: the picture shows on the My events card and is locked once submitted', async ({
+  page,
+}) => {
+  const name = uniqueName('CardPicture')
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, name)
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await choosePicture(page)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  const editUrl = page.url()
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  await expect(page).toHaveURL(MY_EVENTS_PATH)
+  await expect(
+    myEventsCard(page, name).getByRole('presentation', { includeHidden: true }),
+  ).toBeVisible()
+
+  await page.goto(editUrl)
+  await expect(page.getByLabel('Choose cover picture')).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remove picture' })).toHaveCount(0)
+})
+
+// --- AC15: notifications -------------------------------------------------------------------------
+test('2.1 AC15: saving a draft says "Draft saved"', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('Toast'))
+
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: 'Draft saved' })).toBeVisible()
+})
+
+test('2.1 AC15: submitting says "Request submitted" and never "saved as a draft"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, uniqueName('SubmitToast'))
+  // Let the toast from saving the draft go, so only what submitting says is left to read.
+  await expect(page.getByRole('status').filter({ hasText: 'Draft saved' })).toHaveCount(0, {
+    timeout: 10_000,
+  })
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('saved as a draft')
+})
+
+test('2.1 AC15: submitting straight from the new request page never says "saved as a draft"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('DirectToast'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('saved as a draft')
+})
+
+test('2.1 AC15: submitting with a newly chosen picture says only "Request submitted"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('PictureToast'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await choosePicture(page)
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('Picture saved')
+})
+
+test('2.1 AC15: submitting after removing the picture says only "Request submitted"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('RemoveToast'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await choosePicture(page)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  // Let the toasts from saving go, so only what submitting says is left to read.
+  await expect(page.getByRole('status')).toHaveCount(0, { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Remove picture' }).click()
+
+  await page.getByRole('button', { name: 'Submit request' }).click()
+
+  const shown = await toastsOnceSubmitted(page)
+  expect(shown).not.toContain('Draft saved')
+  expect(shown).not.toContain('Picture removed')
 })

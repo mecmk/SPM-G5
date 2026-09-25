@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import { listAssignedEvents, type AssignedEventEntry } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
@@ -163,7 +163,7 @@ export function ReviewQueuePage() {
                 <EventCard
                   key={entry.id}
                   title={entry.name}
-                  imageUrl={entry.cover_image_url}
+                  imageUrl={mediaUrl(entry.cover_image_url)}
                   to={eventPath(entry.id)}
                   state={BACK_TO_INBOX}
                   details={[

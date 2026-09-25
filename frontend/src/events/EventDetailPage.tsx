@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import {
   getEvent,
   listClarifications,
@@ -49,8 +49,8 @@ function formatHeroMeta(event: EventDetail): string {
  * AC3: this page only ever renders fields, it never edits them, so every field the viewer's role
  * cannot change is simply shown, never hidden.
  *
- * Story 7.2: also renders the routine fields (contact details, internal notes) and, for the
- * assigned Event Coordinator on a non-terminal event, an "Edit routine information" action.
+ * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
+ * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
  * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
  */
 export function EventDetailPage() {
@@ -154,7 +154,7 @@ export function EventDetailPage() {
         {event.cover_image_url && !hasImageFailed ? (
           <img
             className="venue-hero-picture"
-            src={event.cover_image_url}
+            src={mediaUrl(event.cover_image_url) ?? undefined}
             alt=""
             onError={markImageFailed}
           />

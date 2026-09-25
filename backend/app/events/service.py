@@ -10,10 +10,12 @@ revealed to people it is not theirs to see.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
@@ -22,6 +24,8 @@ from sqlalchemy.orm import Session, lazyload
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.audit import record_audit
+from app.config import settings
+from app.coordination import service as coordination_service
 from app.events.models import (
     EquipmentHoldStatus,
     EquipmentReservation,
@@ -51,6 +55,8 @@ from app.events.schemas import (
 )
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
+_log = logging.getLogger(__name__)
+
 END_NOT_AFTER_START_MESSAGE = (
     "The proposed end date and time must be after the start date and time."
 )
@@ -73,10 +79,12 @@ ROUTINE_EDIT_CLOSED_MESSAGE = (
 _LINE_RESERVED = "RESERVED"
 
 _AWAITING_DECISION_STATUSES = (
-    EventStatus.SUBMITTED,
     EventStatus.UNDER_REVIEW,
     EventStatus.CLARIFICATION_REQUESTED,
 )
+# Bug b6.1.1: rejection narrows to UNDER_REVIEW only - a request sent back for clarification
+# must be answered, not rejected outright. Approval keeps the wider set above.
+_REJECTABLE_STATUSES = (EventStatus.UNDER_REVIEW,)
 _SORT_COLUMNS = {
     ReviewQueueSort.SUBMITTED_AT: Event.submitted_at,
     ReviewQueueSort.STARTS_AT: Event.starts_at,
@@ -84,13 +92,7 @@ _SORT_COLUMNS = {
 
 # Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
 # never widen this to accept arbitrary Event fields (important fields go through story 7.3).
-_ROUTINE_FIELDS = (
-    "description",
-    "contact_name",
-    "contact_email",
-    "contact_phone",
-    "internal_notes",
-)
+_ROUTINE_FIELDS = ("internal_notes",)
 
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
@@ -108,6 +110,9 @@ _DETAIL_FIELDS = (
     "starts_at",
     "ends_at",
     "expected_attendance",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
     "required_layout_code",
     "venue_requirement_notes",
     "venue_none_required",
@@ -124,6 +129,10 @@ _REQUIRED_DETAILS_FOR_SUBMISSION = (
     ("starts_at", "proposed start date and time"),
     ("ends_at", "proposed end date and time"),
     ("expected_attendance", "expected attendance"),
+    # Story 2.1 AC13: all three parts of the point of contact.
+    ("contact_name", "point of contact name"),
+    ("contact_email", "point of contact email"),
+    ("contact_phone", "point of contact phone number"),
 )
 _VENUE_ANSWER_LABEL = "venue requirements (choose some, or mark none)"
 _ACCESSIBILITY_ANSWER_LABEL = "accessibility needs (choose some, or mark none)"
@@ -204,9 +213,7 @@ class MissingSubmissionDetails(InvalidEventRequest):
 
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may {verb} it."
-EVENT_NOT_AWAITING_DECISION_MESSAGE = (
-    "This request is {status}, so it cannot be approved or rejected."
-)
+EVENT_NOT_AWAITING_DECISION_MESSAGE = "This request is {status}, so it cannot be {verb}."
 DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
 
 # --- reads -------------------------------------------------------------------------------
@@ -763,8 +770,9 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
 
 
 def _missing_for_submission(event: Event) -> list[str]:
-    """AC10: every event detail must be filled in, and venue requirements and accessibility
-    needs each answered - something chosen or written, or marked "none required"."""
+    """AC10/AC13: every event detail and the point of contact must be filled in, and venue
+    requirements and accessibility needs each answered - something chosen or written, or marked
+    "none required"."""
     missing = [
         label for field, label in _REQUIRED_DETAILS_FOR_SUBMISSION if getattr(event, field) is None
     ]
@@ -812,7 +820,9 @@ def _record_transition(
 
 
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
-    """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in."""
+    """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in.
+    Story 5.1 AC1: submitting also auto-assigns the next coordinator in round robin, in this
+    same transaction - see ``coordination.service.auto_assign_next_coordinator``."""
     event = _get_own_event(db, event_id, actor)
     if event.status != EventStatus.DRAFT:
         raise EventAlreadySubmitted()
@@ -826,10 +836,12 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     _hold_equipment(db, event, actor)
     submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
+    # Goes straight to UNDER_REVIEW (migration 002, bug b6.1.1) - SUBMITTED is no longer a
+    # status an event can sit in.
     submitted = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status == EventStatus.DRAFT)
-        .values(status=EventStatus.SUBMITTED, submitted_at=submitted_at)
+        .values(status=EventStatus.UNDER_REVIEW, submitted_at=submitted_at)
     )
     if submitted.rowcount == 0:
         db.rollback()
@@ -838,11 +850,12 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         db,
         event,
         from_status=EventStatus.DRAFT,
-        to_status=EventStatus.SUBMITTED,
+        to_status=EventStatus.UNDER_REVIEW,
         actor=actor,
         at=submitted_at,
         reason=None,
     )
+    coordination_service.auto_assign_next_coordinator(db, event)
     record_audit(
         db,
         actor=actor,
@@ -852,6 +865,124 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         commit=False,
     )
     db.commit()
+    db.refresh(event)
+    return event
+
+
+# --- cover picture (story 2.1 AC14) ---------------------------------------------------------
+COVER_IMAGE_TOO_LARGE_MESSAGE = "The picture must be 5 MB or smaller."
+COVER_IMAGE_UNSUPPORTED_MESSAGE = "Choose a JPEG, PNG or WebP picture."
+# The most a cover picture may weigh. Keep in step with the frontend's MAX_COVER_IMAGE_BYTES.
+MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
+# Where uploads are served from: ``/uploads/events/<file>``, under ``settings.upload_dir``. A
+# picture at any other address (a seeded one under the frontend) is not ours to delete.
+COVER_IMAGE_URL_PREFIX = "/uploads/events/"
+_COVER_IMAGE_FOLDER = "events"
+# What each accepted format starts with, and the extension and content type it is stored as.
+# The bytes decide the type: a file's name and declared type are the client's word only.
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_JPEG_SIGNATURE = b"\xff\xd8\xff"
+COVER_IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
+
+
+class CoverImageTooLarge(ValueError):
+    def __init__(self):
+        super().__init__(COVER_IMAGE_TOO_LARGE_MESSAGE)
+
+
+class UnsupportedCoverImage(InvalidEventRequest):
+    def __init__(self):
+        super().__init__(COVER_IMAGE_UNSUPPORTED_MESSAGE)
+
+
+def _cover_image_extension(content: bytes) -> str | None:
+    if content.startswith(_PNG_SIGNATURE):
+        return ".png"
+    if content.startswith(_JPEG_SIGNATURE):
+        return ".jpg"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def cover_image_path(filename: str) -> Path:
+    """Where the stored picture called ``filename`` lives. The caller has already checked the
+    name is one the server generated, so it cannot climb out of the folder."""
+    return settings.upload_dir / _COVER_IMAGE_FOLDER / filename
+
+
+def _delete_cover_image_file(url: str | None) -> None:
+    """Remove the file behind ``url`` when it is one of ours. An absent file is not an error, and
+    neither is one that cannot be removed (locked on Windows, say): this runs after the change was
+    committed, so failing here would report a save that worked as a failure. It is logged, and the
+    file is left behind."""
+    if url is None or not url.startswith(COVER_IMAGE_URL_PREFIX):
+        return
+    path = cover_image_path(url.removeprefix(COVER_IMAGE_URL_PREFIX))
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        _log.warning("Could not delete the replaced cover picture %s", path, exc_info=True)
+
+
+def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: User) -> Event:
+    """AC14: give ``actor``'s own draft a cover picture, replacing any it had. The file is written
+    first and the old one deleted only once the new address is stored, so a failure never leaves
+    the request pointing at a file that is gone."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+    if len(content) > MAX_COVER_IMAGE_BYTES:
+        raise CoverImageTooLarge()
+    extension = _cover_image_extension(content)
+    if extension is None:
+        raise UnsupportedCoverImage()
+
+    filename = f"{uuid.uuid4()}{extension}"
+    path = cover_image_path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    previous_url = event.cover_image_url
+    try:
+        event.cover_image_url = f"{COVER_IMAGE_URL_PREFIX}{filename}"
+        event.updated_at = datetime.now(UTC)
+        record_audit(
+            db,
+            actor=actor,
+            action="EVENT_COVER_IMAGE_SET",
+            entity_type="event",
+            entity_id=event.id,
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    _delete_cover_image_file(previous_url)
+    db.refresh(event)
+    return event
+
+
+def remove_cover_image(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """AC14: take the cover picture off ``actor``'s own draft, and delete its file."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+    previous_url = event.cover_image_url
+    if previous_url is None:
+        return event
+    event.cover_image_url = None
+    event.updated_at = datetime.now(UTC)
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_COVER_IMAGE_REMOVED",
+        entity_type="event",
+        entity_id=event.id,
+        commit=False,
+    )
+    db.commit()
+    _delete_cover_image_file(previous_url)
     db.refresh(event)
     return event
 
@@ -867,13 +998,15 @@ class NotAssignedCoordinator(PermissionError):
 
 
 class EventNotAwaitingDecision(EventStateConflict):
-    """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
+    """4.4 AC1 / 4.5 AC2: only a request in the action's own allowed-status set may be decided -
     refuses repeat or invalid-state decisions (e.g. a request already decided, or past
-    PLANNING). A draft never reaches this guard: ``get_event`` hides it from the coordinator
-    first, so that case is a 404, not a 409."""
+    PLANNING). ``verb`` names the refused action (bug b6.1.1: approve and reject no longer share
+    exactly the same allowed statuses, so the message must name which one was refused - two
+    messages never share one string). A draft never reaches this guard: ``get_event`` hides it
+    from the coordinator first, so that case is a 404, not a 409."""
 
-    def __init__(self, event: Event) -> None:
-        super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status))
+    def __init__(self, event: Event, *, verb: str) -> None:
+        super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status, verb=verb))
         self.event = event
 
 
@@ -894,30 +1027,42 @@ def _assert_assigned_coordinator(event: Event, actor: User, *, verb: str) -> Non
         raise NotAssignedCoordinator(verb)
 
 
-def _assert_awaiting_decision(event: Event) -> None:
-    if event.status not in _AWAITING_DECISION_STATUSES:
-        raise EventNotAwaitingDecision(event)
+def _assert_awaiting_decision(
+    event: Event, allowed_statuses: tuple[str, ...], *, verb: str
+) -> None:
+    if event.status not in allowed_statuses:
+        raise EventNotAwaitingDecision(event, verb=verb)
 
 
 def _decide(
-    db: Session, event: Event, *, actor: User, to_status: str, reason: str | None, action: str
+    db: Session,
+    event: Event,
+    *,
+    actor: User,
+    to_status: str,
+    reason: str | None,
+    action: str,
+    allowed_statuses: tuple[str, ...],
+    verb: str,
 ) -> None:
     """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
-    decide, and only while the request is awaiting decision. The update is conditional on the
-    event still being in an awaiting-decision status, so two concurrent decisions on the same
-    request cannot both succeed - the same shape as ``submit_event``'s guard against a racing
-    double-submit. ``reason`` is written unconditionally, which is what clears a stale
+    decide, and only while the request is in one of ``allowed_statuses`` - approve and reject
+    pass their own set rather than sharing one, since bug b6.1.1 narrowed rejection to
+    UNDER_REVIEW alone while approval still allows CLARIFICATION_REQUESTED too. The update is
+    conditional on the event still being in an allowed status, so two concurrent decisions on the
+    same request cannot both succeed - the same shape as ``submit_event``'s guard against a
+    racing double-submit. ``reason`` is written unconditionally, which is what clears a stale
     ``decision_reason`` left by an earlier rejection when a later approval reuses this path
     (relevant once 4.6's clarification round-trip can return a request here more than once).
     """
     _assert_assigned_coordinator(event, actor, verb="decide")
-    _assert_awaiting_decision(event)
+    _assert_awaiting_decision(event, allowed_statuses, verb=verb)
 
     from_status = event.status
     decided_at = datetime.now(UTC)
     decided = db.execute(
         update(Event)
-        .where(Event.id == event.id, Event.status.in_(_AWAITING_DECISION_STATUSES))
+        .where(Event.id == event.id, Event.status.in_(allowed_statuses))
         .values(
             status=to_status, decided_by_id=actor.id, decided_at=decided_at, decision_reason=reason
         )
@@ -925,7 +1070,7 @@ def _decide(
     if decided.rowcount == 0:
         db.rollback()
         db.refresh(event)
-        raise EventNotAwaitingDecision(event)
+        raise EventNotAwaitingDecision(event, verb=verb)
     _record_transition(
         db,
         event,
@@ -952,15 +1097,25 @@ def _decide(
 
 
 def approve_event(db: Session, event: Event, *, actor: User) -> None:
-    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time."""
+    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time. Goes straight
+    to PLANNING (migration 002, bug b6.1.1) - APPROVED is no longer a status an event can sit
+    in."""
     _decide(
-        db, event, actor=actor, to_status=EventStatus.APPROVED, reason=None, action="EVENT_APPROVED"
+        db,
+        event,
+        actor=actor,
+        to_status=EventStatus.PLANNING,
+        reason=None,
+        action="EVENT_APPROVED",
+        allowed_statuses=_AWAITING_DECISION_STATUSES,
+        verb="approved",
     )
 
 
 def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
     """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
-    time. Same guards as ``approve_event``."""
+    time. Bug b6.1.1: only rejectable from UNDER_REVIEW - a request sent back for clarification
+    must be answered, not rejected outright."""
     if not reason.strip():
         raise MissingDecisionReason()
     _decide(
@@ -968,6 +1123,8 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
         event,
         actor=actor,
         to_status=EventStatus.REJECTED,
+        allowed_statuses=_REJECTABLE_STATUSES,
+        verb="rejected",
         reason=reason,
         action="EVENT_REJECTED",
     )

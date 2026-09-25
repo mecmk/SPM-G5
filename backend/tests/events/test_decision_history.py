@@ -47,7 +47,7 @@ def test_an_approved_requests_decision_is_shown_without_a_reason(login_as):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "APPROVED"
+    assert body["status"] == "PLANNING"
     assert body["decision_reason"] is None
     assert body["decided_by_name"] == Users.COORDINATOR.full_name
     assert body["decided_at"].startswith("2026-09-03")

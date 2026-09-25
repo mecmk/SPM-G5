@@ -7,7 +7,7 @@
  * Ordering across several rows, the coordinator filter, malformed input, and 401/403/422
  * refusals are backend cases: backend/tests/events/test_review_queue.py.
  *
- * Story 6.1 replaced the old four-tab, review-only page with the shared All-plus-seven tab set
+ * Story 6.1 replaced the old four-tab, review-only page with the shared All-plus-eight tab set
  * (tests/e2e/my-event-requests.spec.ts's sibling for the coordinator side), backed by
  * `/events/assigned-to-me`. AC1-AC4 above still hold true within the "Under Review" tab, which
  * carries the same awaiting-decision rows the old page's single view showed.
@@ -51,7 +51,14 @@ test('4.1 AC3: the "Under Review" tab can be ordered by submission date or propo
   await page.goto('/events/inbox')
   await page.getByRole('tab', { name: /^Under Review/ }).click()
 
-  const titles = () => page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents()
+  // Story 5.1 auto-assigns a coordinator round robin on submission, so another spec's request
+  // can land in this same "Under Review" tab too; filter to these three seeded ones and check
+  // their relative order, rather than asserting the tab holds only them (tests/CLAUDE.md).
+  const seeded = ['Data Literacy Workshop', 'Nimbus Leadership Offsite', 'Wellness Week Kickoff']
+  const titles = async () => {
+    const all = await page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents()
+    return all.filter((title) => seeded.includes(title))
+  }
 
   // Default: submission date, earliest first.
   await expect
@@ -104,11 +111,13 @@ test("6.1: every tab shows the coordinator's events in that status, and each car
     'aria-selected',
     'true',
   )
-  await expect(queueCard(page, 'Data Literacy Workshop')).toContainText('Submitted')
+  await expect(queueCard(page, 'Data Literacy Workshop')).toContainText('Under review')
 
   await page.getByRole('tab', { name: /^Planning/ }).click()
-  await expect(queueCard(page, 'Nimbus Developer Conference')).toContainText('Approved')
+  await expect(queueCard(page, 'Nimbus Developer Conference')).toContainText('Planning')
   await expect(queueCard(page, 'Regional Sales Summit')).toContainText('Planning')
+
+  await page.getByRole('tab', { name: /^Confirmed/ }).click()
   await expect(queueCard(page, 'Partner Appreciation Dinner')).toContainText('Confirmed')
 
   await page.getByRole('tab', { name: /^Completed/ }).click()

@@ -88,12 +88,12 @@ REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
 FACILITY_QUANTITY_SUFFIX = " ×{quantity}"
 FACILITY_NOTES_SUFFIX = " ({notes})"
 
-# AC1 is worded "an approved event"; the schema's rule is APPROVED *or later* (see the
+# AC1 is worded "an approved event"; the schema's rule is approved *or later* (see the
 # venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
-# planning or confirmed may still need a further venue booked.
-_BOOKABLE_EVENT_STATUSES = frozenset(
-    {EventStatus.APPROVED, EventStatus.PLANNING, EventStatus.CONFIRMED}
-)
+# planning or confirmed may still need a further venue booked. Bug b6.1.1: APPROVED itself was
+# retired (migration 002) - approving now goes straight to PLANNING, so that status alone covers
+# what used to be "APPROVED or PLANNING".
+_BOOKABLE_EVENT_STATUSES = frozenset({EventStatus.PLANNING, EventStatus.CONFIRMED})
 
 
 class BookingNotFound(LookupError):

@@ -112,7 +112,7 @@ def test_a_request_just_raised_is_listed_and_follows_its_status(organiser_client
 
     assert organiser_client.post(f"/events/{created['id']}/submit").status_code == 200
 
-    assert _entry(organiser_client, created["id"])["status"] == "SUBMITTED"
+    assert _entry(organiser_client, created["id"])["status"] == "UNDER_REVIEW"
 
 
 @pytest.mark.story("2.6", ac=1)
@@ -123,7 +123,7 @@ def test_entry_shows_name_proposed_date_and_status_and_nothing_more(organiser_cl
     assert entry["name"] == "Data Literacy Workshop"
     assert entry["starts_at"].startswith("2026-11-18")
     assert entry["ends_at"].startswith("2026-11-18")
-    assert entry["status"] == "SUBMITTED"
+    assert entry["status"] == "UNDER_REVIEW"
 
 
 @pytest.mark.story("2.6", ac=1)

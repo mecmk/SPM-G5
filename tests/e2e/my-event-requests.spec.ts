@@ -93,10 +93,10 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   await signIn(page, ACCOUNTS.organiser)
   await openMyEventsFromMenu(page)
 
-  const submitted = requestCard(page, 'Data Literacy Workshop')
-  await expect(submitted).toContainText('Proposed date:')
-  await expect(submitted).toContainText('18 Nov 2026 · 09:00–17:00')
-  await expect(submitted).toContainText('Submitted')
+  const underReview = requestCard(page, 'Data Literacy Workshop')
+  await expect(underReview).toContainText('Proposed date:')
+  await expect(underReview).toContainText('18 Nov 2026 · 09:00–17:00')
+  await expect(underReview).toContainText('Under review')
 
   await expect(requestCard(page, 'Diversity & Inclusion Forum')).toContainText(
     'Clarification requested',
@@ -106,9 +106,7 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
 })
 
-test('6.1: a status tab shows only requests in that status, grouping a transitory status with the visible stage it leads into', async ({
-  page,
-}) => {
+test('6.1: a status tab shows only requests in that status', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await openMyEvents(page)
 
@@ -124,10 +122,9 @@ test('6.1: a status tab shows only requests in that status, grouping a transitor
   await expect(requestCard(page, 'Q1 Sales Kick-off (draft)')).toBeVisible()
   await expect(requestCard(page, 'Data Literacy Workshop')).toHaveCount(0)
 
-  // SUBMITTED groups with the "Under Review" tab, not its own tab.
   await page.getByRole('tab', { name: /^Under Review/ }).click()
-  await expect(requestCard(page, 'Data Literacy Workshop')).toContainText('Submitted')
-  await expect(requestCard(page, 'Wellness Week Kickoff')).toContainText('Submitted')
+  await expect(requestCard(page, 'Data Literacy Workshop')).toContainText('Under review')
+  await expect(requestCard(page, 'Wellness Week Kickoff')).toContainText('Under review')
 
   await page.getByRole('tab', { name: /^Clarification Requested/ }).click()
   await expect(requestCard(page, 'Diversity & Inclusion Forum')).toBeVisible()
@@ -283,7 +280,7 @@ test('2.6 AC2: a request that is not a draft opens the event details page, whate
   await signIn(page, ACCOUNTS.organiser2)
 
   for (const [name, status] of [
-    ['Nimbus Developer Conference', 'Approved'],
+    ['Nimbus Developer Conference', 'Planning'],
     ['Rooftop Networking Night', 'Rejected'],
     ['Nimbus Leadership Offsite', 'Under review'],
   ] as const) {
@@ -325,7 +322,7 @@ test('2.6 AC3: the other organiser sees theirs, and none of the first organiser�
   await signIn(page, ACCOUNTS.organiser2)
   await openMyEvents(page)
 
-  await expect(requestCard(page, 'Nimbus Developer Conference')).toContainText('Approved')
+  await expect(requestCard(page, 'Nimbus Developer Conference')).toContainText('Planning')
   await expect(requestCard(page, 'Rooftop Networking Night')).toContainText('Rejected')
   await expect(requestCard(page, 'Nimbus Leadership Offsite')).toContainText('Under review')
   for (const name of OLIVIA_REQUESTS) await expect(requestCard(page, name)).toHaveCount(0)
@@ -375,7 +372,7 @@ function stubbedEntry(number: number, name: string) {
     name,
     starts_at: '2026-12-01T01:00:00Z',
     ends_at: '2026-12-01T09:00:00Z',
-    status: 'SUBMITTED',
+    status: 'UNDER_REVIEW',
     cover_image_url: null,
   }
 }

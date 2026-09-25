@@ -53,7 +53,7 @@ def make_user(
     return user
 
 
-def make_event(db: Session, *, status: str = EventStatus.SUBMITTED, **overrides) -> Event:
+def make_event(db: Session, *, status: str = EventStatus.UNDER_REVIEW, **overrides) -> Event:
     """A persisted event that satisfies ck_events_submitted_fields_complete for any non-DRAFT
     status. Pass e.g. ``assigned_coordinator_id=`` or ``submitted_at=`` to override."""
     n = next(_counter)
@@ -169,9 +169,16 @@ def event_request_payload(**overrides) -> dict:
 
 def submittable_event_request_payload(**overrides) -> dict:
     """A request that can be submitted: every event detail filled in, and both venue requirements
-    and accessibility answered with "none required" (story 2.1 AC10). Override a flag to False
+    and accessibility answered with "none required" and a full point of contact (story 2.1
+    AC10, AC13). Override a flag to False
     when the test supplies real requirements instead."""
-    answers = {"venue_none_required": True, "accessibility_none_required": True}
+    answers = {
+        "venue_none_required": True,
+        "accessibility_none_required": True,
+        "contact_name": "Priya Nair",
+        "contact_email": "priya.nair@example.com",
+        "contact_phone": "+65 9123 4567",
+    }
     return event_request_payload(**{**answers, **overrides})
 
 
