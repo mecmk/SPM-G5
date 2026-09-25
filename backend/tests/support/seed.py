@@ -82,6 +82,8 @@ class Events:
     CONFIRMED = _e(13)  # organiser 2, coordinator 1
     COMPLETED = _e(14)  # organiser 1, coordinator 1, dated in the past
     CANCELLED = _e(15)  # organiser 2, coordinator 1
+    APPROVED_6 = _e(16)  # organiser 1, coordinator 1, pending booking dedicated to 13.2.1 e2e
+    APPROVED_7 = _e(17)  # organiser 2, coordinator 2, pending booking dedicated to 13.2.1 e2e
 
 
 class Bookings:
@@ -93,6 +95,10 @@ class Bookings:
     # reference these from any other test; approving them would make them unusable there.
     PENDING_APPROVE_E2E_CARD = uuid.UUID("44444444-0000-0000-0000-000000000005")
     PENDING_APPROVE_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000006")
+    # Reserved for the story 13.2.1 reject e2e test - see 020_sample_data.sql's note. Do not
+    # reference these from any other test; rejecting them would make them unusable there.
+    PENDING_REJECT_E2E_CARD = uuid.UUID("44444444-0000-0000-0000-000000000007")
+    PENDING_REJECT_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000008")
 
 
 class Unavailability:

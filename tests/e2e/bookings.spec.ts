@@ -14,6 +14,18 @@
  * prove the button correctly drives that endpoint and the page reflects the result. Each uses
  * its own dedicated seeded booking (see backend/db/seed/020_sample_data.sql's note) so
  * approving it cannot affect story 13.1's own assertions in a fullyParallel run.
+ *
+ * Story 13.2.1 - fe: a Reject action, mirroring Approve, plus the reason it requires and the
+ * requesting coordinator's read access to the outcome.
+ * AC2 an empty/whitespace-only reason blocks submission client-side (no request fires).
+ * AC3 the reject dialog names the booking, can be cancelled, prevents duplicate submission,
+ *     preserves a typed reason on failure, and removing the card / showing the outcome mirrors
+ *     Approve.
+ * AC4 the requesting coordinator reaches the outcome through normal navigation (Events inbox ->
+ *     event -> its venue booking) and the same page hides decide actions from them.
+ * The reject validation matrix, permission refusals, 409s and audit behaviour are backend cases:
+ * backend/tests/bookings/test_reject_booking.py. Each mutating test here uses its own dedicated
+ * seeded booking, same reasoning as 13.2's.
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
@@ -136,4 +148,125 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   await expect(dialog).not.toBeVisible()
   await expect(page.getByText('Approved', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+})
+
+test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting removes the card from the queue', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Winter Charity Gala' })
+  await card.getByRole('button', { name: 'Reject' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  await expect(dialog).toContainText('Winter Charity Gala')
+
+  // AC2: an empty reason blocks submission client-side - no request fires, dialog stays open.
+  await dialog.getByRole('button', { name: 'Reject' }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('Enter a reason for rejecting this request.')
+  await expect(dialog).toBeVisible()
+
+  // AC3: Cancel makes no change - the card is still there, still pending.
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).not.toBeVisible()
+  await expect(card).toBeVisible()
+
+  await card.getByRole('button', { name: 'Reject' }).click()
+  await page
+    .getByRole('dialog', { name: 'Reject this booking?' })
+    .getByLabel('Reason for rejecting')
+    .fill('Budget was reallocated to another event.')
+  await page
+    .getByRole('dialog', { name: 'Reject this booking?' })
+    .getByRole('button', { name: 'Reject' })
+    .click()
+
+  await expect(page.getByRole('dialog', { name: 'Reject this booking?' })).not.toBeVisible()
+  await expect(card).toHaveCount(0)
+})
+
+test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  await page.route(
+    (url) => /\/bookings\/[^/]+\/reject$/.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: 'This request is already APPROVED, so it cannot be rejected.',
+        }),
+        headers: {
+          'access-control-allow-origin': request.headers()['origin'] ?? '*',
+          'access-control-allow-credentials': 'true',
+        },
+      })
+    },
+  )
+
+  const card = pendingCard(page, '00000002')
+  await card.getByRole('button', { name: 'Reject' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  const reason = 'Double booked in error.'
+  await dialog.getByLabel('Reason for rejecting').fill(reason)
+  await dialog.getByRole('button', { name: 'Reject' }).click()
+
+  await expect(dialog.getByRole('alert')).toContainText('cannot be rejected')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel('Reason for rejecting')).toHaveValue(reason)
+})
+
+test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue staff and the requesting coordinator', async ({
+  page,
+}) => {
+  // Three full sign-in cycles (coordinator, venue staff, coordinator again) genuinely take
+  // longer than the default per-test budget.
+  test.setTimeout(60_000)
+
+  // Before any decision: the requesting coordinator can already reach the booking through
+  // normal navigation, and sees it read-only - no decide actions are offered.
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto('/events/inbox')
+  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
+  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
+
+  await page.getByRole('link', { name: 'View booking details' }).click()
+  await expect(page.getByText('Pending', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
+
+  // Venue staff rejects it from the detail page.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  const card = page.getByRole('listitem').filter({ hasText: 'Alumni Homecoming Weekend' })
+  await card.getByRole('link', { name: 'View details' }).click()
+
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
+  await page.getByRole('button', { name: 'Reject' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  await dialog.getByLabel('Reason for rejecting').fill('The venue is unavailable that weekend.')
+  await dialog.getByRole('button', { name: 'Reject' }).click()
+
+  await expect(dialog).not.toBeVisible()
+  await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
+  await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+
+  // The requesting coordinator revisits and reads the persisted outcome.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto('/events/inbox')
+  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
+  await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
+  await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
 })
