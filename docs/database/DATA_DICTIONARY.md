@@ -23,6 +23,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Identity & access | [`roles`](#roles) | 1.2 | The user roles named in the customer briefing |
 | Identity & access | [`users`](#users) | 1.1, 1.2 | Every person who can sign in - internal staff and external organisers/attendees |
 | Identity & access | [`user_sessions`](#user_sessions) | 1.1 | Server-side login sessions |
+| Identity & access | [`login_attempts`](#login_attempts) | 1.1 (AC6) | Failed sign-in counter per e-mail address, used to lock sign-in for a while after repeated failures |
 | Identity & access | [`client_organisations`](#client_organisations) | 2.x, 7.1 (organiser context) | External client organisations that Event Organisers belong to |
 | Reference lists | [`facilities`](#facilities) | 8.2, 8.3, 10.3, 11.1 | Facilities a venue can offer and an event can require (projector, sound system, video conferencing, ...) |
 | Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
@@ -109,6 +110,24 @@ Rules and indexes:
 
 - unique `user_sessions_token_hash_key`: `UNIQUE (token_hash)`
 - index `ix_user_sessions_user_id`: `btree (user_id)`
+
+### login_attempts
+
+**Stories:** 1.1 (AC6)
+
+Failed sign-in counter per e-mail address, used to lock sign-in for a while after repeated failures. Keyed by the e-mail as typed, with no FK to users on purpose: unknown e-mails are tracked and locked exactly like real ones, so a lock never reveals whether an account exists (story 1.1 AC2). A successful sign-in deletes the row.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `email` | `citext` | no | - | PK | E-mail address typed at sign-in, trimmed. Case-insensitive; may not belong to any account. |
+| `failure_count` | `integer` | no | `0` | - | Failed sign-ins in the current window. Reset to 0 when a lock starts. |
+| `window_started_at` | `timestamp with time zone` | no | - | - | Time of the first failure in the current counting window. |
+| `locked_until` | `timestamp with time zone` | yes | - | - | Sign-in for this e-mail is refused until this instant. NULL when no lock has been applied. |
+| `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+
+Rules and indexes:
+
+- check `ck_login_attempts_count_non_negative`: `CHECK ((failure_count >= 0))`
 
 ### client_organisations
 

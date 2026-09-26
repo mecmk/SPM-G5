@@ -14,12 +14,15 @@ export interface CurrentUser {
   permissions: string[]
 }
 
-/** Story 1.1 AC1/AC2: start a session. A 401 is the registry's INVALID_CREDENTIALS. */
+/**
+ * Story 1.1 AC1/AC2: start a session. A 401 is the registry's INVALID_CREDENTIALS; a 429 is
+ * LOGIN_LOCKED (AC6), whose `retryAfterSeconds` is the time left before sign-in reopens.
+ */
 export function login(email: string, password: string): Promise<CurrentUser> {
   return api<CurrentUser>('/auth/login', {
     method: 'POST',
     body: { email, password },
-    errorCodes: { 401: 'INVALID_CREDENTIALS' },
+    errorCodes: { 401: 'INVALID_CREDENTIALS', 429: 'LOGIN_LOCKED' },
     notify: false,
   })
 }

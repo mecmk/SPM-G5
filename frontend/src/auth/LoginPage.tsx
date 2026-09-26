@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import { getHealth } from '../api/health'
 import { LoadingState } from '../layout/LoadingState'
 import { useAuth } from './authContext'
 import { homeFor } from './homeFor'
+import { SignInLockedAlert, type SignInLock } from './SignInLockedAlert'
 
 const SAMPLE_PASSWORD = 'Password123!'
 
@@ -37,6 +38,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [lock, setLock] = useState<SignInLock | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [backendStatus, setBackendStatus] = useState('checking…')
 
@@ -67,11 +69,25 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setLock(null)
     setIsSubmitting(true)
     try {
       await signIn(email.trim(), password)
     } catch (err) {
-      setError(formatApiError(err))
+      // Story 1.1 AC6: a locked sign-in counts down its time left instead of a fixed message.
+      if (
+        err instanceof ApiError &&
+        err.code === 'LOGIN_LOCKED' &&
+        err.retryAfterSeconds !== null
+      ) {
+        setLock({
+          retryAfterSeconds: err.retryAfterSeconds,
+          receivedAtMs: Date.now(),
+          receivedAtMonotonicMs: performance.now(),
+        })
+      } else {
+        setError(formatApiError(err))
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -137,6 +153,7 @@ export function LoginPage() {
                 {error}
               </p>
             )}
+            {lock && <SignInLockedAlert lock={lock} />}
             <button type="submit" className="button-block login-submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>
