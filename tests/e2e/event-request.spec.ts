@@ -69,10 +69,10 @@ async function startNewRequest(page: Page) {
   await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
 }
 
-/** Reach the form the way a person does, through the menu. One test uses this. */
-async function startNewRequestFromMenu(page: Page) {
-  await page.goto('/')
-  await page.getByRole('link', { name: 'New event request' }).first().click()
+/** Reach the form the way a person does, from My events. One test uses this. */
+async function startNewRequestFromMyEvents(page: Page) {
+  await page.goto('/events/mine')
+  await page.getByRole('link', { name: 'New event request' }).click()
   await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
 }
 
@@ -153,7 +153,7 @@ test('2.1 AC1: an organiser records the event details and they are still there a
 }) => {
   const name = uniqueName('Details')
   await signIn(page, ACCOUNTS.organiser)
-  await startNewRequestFromMenu(page)
+  await startNewRequestFromMyEvents(page)
 
   await fillEssentials(page, name)
   await page.getByRole('button', { name: 'Save draft' }).click()
