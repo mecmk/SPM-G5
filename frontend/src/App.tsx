@@ -18,7 +18,6 @@ import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import {
-  BOOKING_DETAIL_PATH,
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
@@ -109,15 +108,6 @@ function App() {
                 <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
               </Route>
 
-              {/*
-                Story 13.2.1 AC4: the same detail page, reachable by anyone who can read the
-                booking (e.g. the requesting coordinator), not only Venue Staff. The page itself
-                hides the Approve/Reject actions unless the signed-in user also holds
-                BOOKINGS_DECIDE.
-              */}
-              <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_READ} />}>
-                <Route path={BOOKING_DETAIL_PATH} element={<BookingRequestDetailPage />} />
-              </Route>
               {/*
                 Story 7.1: full event details. Which event a signed-in user may open is a
                 per-record relationship (own event, or an internal role once submitted), not a
