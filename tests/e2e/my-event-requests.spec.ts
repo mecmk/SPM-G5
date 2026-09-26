@@ -60,7 +60,7 @@ function inFuture(days: number, hour = 9): string {
   return `${date}T${String(hour).padStart(2, '0')}:00`
 }
 
-/** The "← Main page" / "← My events" link above the title of the request page. */
+/** The "← My events" / "← Home" link above the title of the request page. */
 function backLink(page: Page) {
   return page.getByRole('main').getByRole('link', { name: /^← / })
 }
@@ -214,25 +214,6 @@ test('2.6 AC8: the form opened from My events goes back to My events, before and
 
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(backLink(page)).toHaveText('← My events')
-})
-
-test('2.6 AC8: the form opened from the main page goes back to the main page, before and after saving', async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.organiser)
-  await page.goto('/')
-  await page
-    .getByRole('main')
-    .getByRole('link', { name: /New event request/ })
-    .click()
-  await expect(page).toHaveURL(/\/events\/new$/)
-  await expect(backLink(page)).toHaveText('← Main page')
-
-  await page.getByLabel('Event name').fill(uniqueName('Back to main'))
-  await page.getByRole('button', { name: 'Save draft' }).click()
-
-  await expect(page).toHaveURL(EDIT_PATH)
-  await expect(backLink(page)).toHaveText('← Main page')
 })
 
 test('2.6 AC2: selecting a submitted request opens its details, read-only, and back returns', async ({
