@@ -118,7 +118,7 @@ export function rejectBooking(
   return api<Booking>(`/bookings/${bookingId}/reject`, {
     method: 'POST',
     body: { decision_reason: decisionReason },
-    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_NOT_PENDING' },
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_REJECT_REFUSED' },
     notify: {
       title: 'Booking rejected',
       message: `${eventName}'s venue booking was rejected.`,
