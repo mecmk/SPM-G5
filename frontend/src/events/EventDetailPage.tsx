@@ -39,13 +39,13 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     label: 'Approved',
     tone: 'success',
     icon: 'check-circle',
-    message: 'Your venue booking has been approved and the venue is confirmed for this event.',
+    message: 'This venue booking has been approved and the venue is confirmed for this event.',
   },
   PENDING: {
     label: 'Pending',
     tone: 'warning',
     icon: 'clock',
-    message: 'Awaiting review by Venue Staff. You will be notified once a decision is made.',
+    message: 'Awaiting review by Venue Staff.',
   },
   REJECTED: {
     label: 'Rejected',
