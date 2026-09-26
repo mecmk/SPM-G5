@@ -127,8 +127,26 @@ export function rejectBooking(
   })
 }
 
-/** Story 13.2.1 AC4: the event's most recent venue booking, if any - lets a coordinator
- * navigate from the event to its booking outcome. */
-export function getBookingForEvent(eventId: string): Promise<Booking | null> {
-  return api<Booking | null>(`/bookings/for-event/${eventId}`)
+/** Mirrors `BookingOutcome`: one booking's outcome as the event page shows it - venue name and
+ * location rather than a raw id, since this is a read-only summary, not the full record. */
+export interface BookingOutcome {
+  id: string
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  starts_at: string
+  ends_at: string
+  setup_minutes: number
+  teardown_minutes: number
+  status: BookingStatus
+  decided_at: string | null
+  decision_reason: string | null
+}
+
+/** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
+ * coordinator read the full history directly on the event page. An event may accumulate more
+ * than one row over time (a rejected request followed by a fresh one), so this is a history, not
+ * a single outcome; deciding a booking updates that same row in place, it never adds another. */
+export function listBookingsForEvent(eventId: string): Promise<BookingOutcome[]> {
+  return api<BookingOutcome[]>(`/bookings/for-event/${eventId}`)
 }
