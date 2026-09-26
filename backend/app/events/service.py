@@ -82,9 +82,6 @@ _AWAITING_DECISION_STATUSES = (
     EventStatus.UNDER_REVIEW,
     EventStatus.CLARIFICATION_REQUESTED,
 )
-# Bug b6.1.1: rejection narrows to UNDER_REVIEW only - a request sent back for clarification
-# must be answered, not rejected outright. Approval keeps the wider set above.
-_REJECTABLE_STATUSES = (EventStatus.UNDER_REVIEW,)
 _SORT_COLUMNS = {
     ReviewQueueSort.SUBMITTED_AT: Event.submitted_at,
     ReviewQueueSort.STARTS_AT: Event.starts_at,
@@ -998,12 +995,12 @@ class NotAssignedCoordinator(PermissionError):
 
 
 class EventNotAwaitingDecision(EventStateConflict):
-    """4.4 AC1 / 4.5 AC2: only a request in the action's own allowed-status set may be decided -
+    """4.4 AC1 / 4.5 AC2: only a request in ``_AWAITING_DECISION_STATUSES`` may be decided -
     refuses repeat or invalid-state decisions (e.g. a request already decided, or past
-    PLANNING). ``verb`` names the refused action (bug b6.1.1: approve and reject no longer share
-    exactly the same allowed statuses, so the message must name which one was refused - two
-    messages never share one string). A draft never reaches this guard: ``get_event`` hides it
-    from the coordinator first, so that case is a 404, not a 409."""
+    PLANNING). ``verb`` names the refused action purely so the sentence reads naturally for
+    whichever decision was attempted (two messages never share one string - backend/STYLE.md), not
+    because approve and reject differ in which statuses they allow. A draft never reaches this
+    guard: ``get_event`` hides it from the coordinator first, so that case is a 404, not a 409."""
 
     def __init__(self, event: Event, *, verb: str) -> None:
         super().__init__(EVENT_NOT_AWAITING_DECISION_MESSAGE.format(status=event.status, verb=verb))
@@ -1046,10 +1043,10 @@ def _decide(
     verb: str,
 ) -> None:
     """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
-    decide, and only while the request is in one of ``allowed_statuses`` - approve and reject
-    pass their own set rather than sharing one, since bug b6.1.1 narrowed rejection to
-    UNDER_REVIEW alone while approval still allows CLARIFICATION_REQUESTED too. The update is
-    conditional on the event still being in an allowed status, so two concurrent decisions on the
+    decide, and only while the request is in one of ``allowed_statuses`` - both callers pass
+    ``_AWAITING_DECISION_STATUSES``, so a request sent back for clarification may be decided
+    either way. The update is conditional on the event still being in an allowed status, so two
+    concurrent decisions on the
     same request cannot both succeed - the same shape as ``submit_event``'s guard against a
     racing double-submit. ``reason`` is written unconditionally, which is what clears a stale
     ``decision_reason`` left by an earlier rejection when a later approval reuses this path
@@ -1114,8 +1111,9 @@ def approve_event(db: Session, event: Event, *, actor: User) -> None:
 
 def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
     """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
-    time. Bug b6.1.1: only rejectable from UNDER_REVIEW - a request sent back for clarification
-    must be answered, not rejected outright."""
+    time. Rejecting is now allowed from the same statuses as approving (bug b6.1.1's narrower
+    reject rule has been reversed): a request sent back for clarification may be rejected
+    outright, the same as approving it."""
     if not reason.strip():
         raise MissingDecisionReason()
     _decide(
@@ -1123,7 +1121,7 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
         event,
         actor=actor,
         to_status=EventStatus.REJECTED,
-        allowed_statuses=_REJECTABLE_STATUSES,
+        allowed_statuses=_AWAITING_DECISION_STATUSES,
         verb="rejected",
         reason=reason,
         action="EVENT_REJECTED",

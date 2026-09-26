@@ -118,24 +118,15 @@ def test_rejecting_from_under_review_is_allowed(coordinator_client):
 
 
 @pytest.mark.story("4.5", ac=2)
-def test_rejecting_from_clarification_requested_is_refused(coordinator_client, db: Session):
-    """Bug b6.1.1: rejection narrows to UNDER_REVIEW only - a request sent back for
-    clarification must be answered, not rejected outright. It is still approvable
-    (test_approve_event.py proves that side)."""
+def test_rejecting_from_clarification_requested_is_allowed(coordinator_client):
+    # Rejecting is allowed from the same statuses as approving (service.reject_event).
     response = coordinator_client.post(
         f"/events/{Events.CLARIFICATION_REQUESTED}/reject",
-        json={"reason": "Should not be allowed."},
+        json={"reason": "Clarification did not resolve the clash."},
     )
 
-    assert response.status_code == 409
-    db.expire_all()
-    row = db.execute(
-        text("SELECT status, decided_by_id, decision_reason FROM events WHERE id = :id"),
-        {"id": Events.CLARIFICATION_REQUESTED},
-    ).one()
-    assert row.status == EventStatus.CLARIFICATION_REQUESTED
-    assert row.decided_by_id is None
-    assert row.decision_reason is None
+    assert response.status_code == 200
+    assert response.json()["status"] == EventStatus.REJECTED
 
 
 @pytest.mark.story("4.5", ac=2)
@@ -214,8 +205,7 @@ def test_rejection_is_recorded_in_status_history(coordinator_client, db: Session
 # --- AC3: the reason and the deciding coordinator are visible to the organiser ----------------
 @pytest.mark.story("4.5", ac=3)
 def test_owning_organiser_can_read_the_rejection_reason(login_as):
-    # Events.SUBMITTED is UNDER_REVIEW (migration 002) - CLARIFICATION_REQUESTED can no longer
-    # be rejected (bug b6.1.1), so this needs a rejectable event owned by the same organiser.
+    # Events.SUBMITTED is an UNDER_REVIEW event (migration 002) owned by this organiser.
     login_as(Users.COORDINATOR).post(
         f"/events/{Events.SUBMITTED}/reject",
         json={"reason": "Accessibility requirements cannot be met at any available venue."},
