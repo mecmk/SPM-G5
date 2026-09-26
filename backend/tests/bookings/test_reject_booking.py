@@ -119,7 +119,7 @@ def test_rejecting_a_booking_does_not_change_its_event_or_other_bookings(
     assert other_booking_after == other_booking_before
 
 
-@pytest.mark.story("13.2.1", ac=1)
+@pytest.mark.story("13.2.1", ac=5)
 def test_signed_out_visitors_cannot_reject_a_booking(client):
     response = client.post(
         f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/reject",
