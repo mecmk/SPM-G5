@@ -65,10 +65,14 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Every event on record, to plan venues and equipment around.',
         icon: 'calendar',
         permission: PERMISSIONS.EVENTS_READ_ALL,
-        // Hidden from Event Coordinator (covered by "Events inbox") and from Venue Staff (1.2.2:
+        // Hidden from Event Coordinator (covered by "Events inbox"), from Venue Staff (1.2.2:
         // their view of an event is scoped to the bookings they decide, via BOOKINGS_DECIDE, not
-        // a browse-everything list).
-        hiddenWith: [PERMISSIONS.EVENTS_REVIEW, PERMISSIONS.BOOKINGS_DECIDE],
+        // a browse-everything list) and from Technical Support Staff (1.2.3, via EQUIPMENT_MANAGE).
+        hiddenWith: [
+          PERMISSIONS.EVENTS_REVIEW,
+          PERMISSIONS.BOOKINGS_DECIDE,
+          PERMISSIONS.EQUIPMENT_MANAGE,
+        ],
         story: '7.1',
         isAvailable: false,
       },

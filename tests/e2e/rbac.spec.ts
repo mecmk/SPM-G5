@@ -45,8 +45,8 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
-    visible: ['All events', 'Venue catalogue', 'Equipment holds', 'Catalogue & availability'],
-    hidden: ['Manage venues', 'Equipment requests', 'Bookings & schedule'],
+    visible: ['Venue catalogue', 'Equipment holds', 'Catalogue & availability'],
+    hidden: ['All events', 'Manage venues', 'Equipment requests', 'Bookings & schedule'],
   },
   {
     role: 'attendee',
