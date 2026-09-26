@@ -332,6 +332,41 @@ export function submitEvent(eventId: string, name: string): Promise<EventDetail>
   })
 }
 
+const EVENT_DECISION_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_NOT_AWAITING_DECISION',
+} as const
+
+/** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves
+ *  straight to PLANNING - there is no separate APPROVED status (bug b6.1.1, migration 002). */
+export function approveEvent(eventId: string, name: string): Promise<EventDetail> {
+  return api<EventDetail>(`/events/${eventId}/approve`, {
+    method: 'POST',
+    errorCodes: EVENT_DECISION_ERROR_CODES,
+    notify: {
+      title: 'Request approved',
+      message: `"${name}" was approved and moved to planning.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 4.5 AC1-AC3: reject a request with a mandatory reason. Offered from the same statuses
+ *  as approving (see `AWAITING_DECISION_STATUSES` in `../events/eventStatus`) - bug b6.1.1's
+ *  narrower reject rule has been reversed. */
+export function rejectEvent(eventId: string, reason: string, name: string): Promise<EventDetail> {
+  return api<EventDetail>(`/events/${eventId}/reject`, {
+    method: 'POST',
+    body: { reason },
+    errorCodes: EVENT_DECISION_ERROR_CODES,
+    notify: {
+      title: 'Request rejected',
+      message: `"${name}" was rejected.`,
+      importance: 'important',
+    },
+  })
+}
+
 /** Partial update, mirroring `EventRoutineUpdate` (story 7.2). Internal notes are the only
  * routine field: left out to leave them unchanged, a value to set them, or `null` to clear them. */
 export interface EventRoutineInput {

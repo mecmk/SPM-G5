@@ -3,8 +3,10 @@ import { Link, useLocation, useParams } from 'react-router'
 import { listBookingsForEvent, type BookingOutcome, type BookingStatus } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
 import {
+  approveEvent,
   getEvent,
   listClarifications,
+  rejectEvent,
   type Clarification,
   type EventDetail,
   type RequiredFacility,
@@ -13,10 +15,12 @@ import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
 import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
-import { TERMINAL_STATUSES } from './eventStatus'
+import { ERROR_REGISTRY } from '../errors/registry'
+import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH } from '../routes'
 import { formatDate, formatSchedule, formatTime } from '../shared/format'
@@ -111,6 +115,11 @@ function formatHeroMeta(event: EventDetail): string {
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
  * every venue booking ever raised for the event, most recent first, each with its status and,
  * once rejected, its reason.
+ *
+ * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
+ * while the request awaits a decision. Approving moves it straight to PLANNING; rejecting
+ * requires a reason and moves it to REJECTED - both are offered from the same set of statuses
+ * (bug b6.1.1's narrower reject rule has been reversed).
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -124,6 +133,13 @@ export function EventDetailPage() {
   const [bookings, setBookings] = useState<BookingOutcome[] | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
+  const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
+  const [isApproving, setIsApproving] = useState(false)
+  const [approveError, setApproveError] = useState<string | null>(null)
+  const [isConfirmingReject, setIsConfirmingReject] = useState(false)
+  const [isRejecting, setIsRejecting] = useState(false)
+  const [rejectError, setRejectError] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -187,14 +203,78 @@ export function EventDetailPage() {
     setHasImageFailed(true)
   }
 
+  function askToApprove() {
+    setApproveError(null)
+    setIsConfirmingApprove(true)
+  }
+
+  function cancelApprove() {
+    setIsConfirmingApprove(false)
+  }
+
+  async function confirmApprove() {
+    if (!event) return
+    setIsApproving(true)
+    setApproveError(null)
+    try {
+      const updated = await approveEvent(event.id, event.name)
+      setEvent(updated)
+      setIsConfirmingApprove(false)
+    } catch (err) {
+      setApproveError(formatApiError(err))
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  function askToReject() {
+    setRejectError(null)
+    setRejectReason('')
+    setIsConfirmingReject(true)
+  }
+
+  function cancelReject() {
+    setIsConfirmingReject(false)
+  }
+
+  async function confirmReject() {
+    if (!event) return
+    if (!rejectReason.trim()) {
+      setRejectError(ERROR_REGISTRY.EVENT_REJECTION_REASON_REQUIRED.message)
+      return
+    }
+    setIsRejecting(true)
+    setRejectError(null)
+    try {
+      const updated = await rejectEvent(event.id, rejectReason, event.name)
+      setEvent(updated)
+      setIsConfirmingReject(false)
+    } catch (err) {
+      setRejectError(formatApiError(err))
+    } finally {
+      setIsRejecting(false)
+    }
+  }
+
   const backState = location.state as EventCardBackState | null
   const backTo = backState?.from ?? HOME_PATH
   const backLabel = backState?.fromLabel ?? 'Home'
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
+  const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
   const canEditRoutineInformation =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
-    event.assigned_coordinator_id === user?.id &&
+    isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 4.4/4.5: only the assigned coordinator, holding events:review, may decide a request
+   *  that is still awaiting one - mirroring the backend's own record-level and status checks. */
+  const canApprove =
+    can(PERMISSIONS.EVENTS_REVIEW) &&
+    isAssignedCoordinator &&
+    AWAITING_DECISION_STATUSES.includes(event.status)
+  const canReject =
+    can(PERMISSIONS.EVENTS_REVIEW) &&
+    isAssignedCoordinator &&
+    AWAITING_DECISION_STATUSES.includes(event.status)
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
@@ -217,12 +297,24 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {canEditRoutineInformation && (
+      {(canEditRoutineInformation || canApprove || canReject) && (
         <div className="page-header actions-only">
           <div className="page-actions">
-            <Link to={eventEditRoutinePath(event.id)} className="button">
-              Edit routine information
-            </Link>
+            {canEditRoutineInformation && (
+              <Link to={eventEditRoutinePath(event.id)} className="button">
+                Edit routine information
+              </Link>
+            )}
+            {canApprove && (
+              <button type="button" className="brand" onClick={askToApprove}>
+                Approve
+              </button>
+            )}
+            {canReject && (
+              <button type="button" className="danger" onClick={askToReject}>
+                Reject
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -501,6 +593,41 @@ export function EventDetailPage() {
           />
         )}
       </div>
+
+      {isConfirmingApprove && (
+        <ConfirmDialog
+          title="Approve this request?"
+          confirmLabel="Approve"
+          tone="primary"
+          isBusy={isApproving}
+          error={approveError}
+          onConfirm={confirmApprove}
+          onCancel={cancelApprove}
+        >
+          <p>{event.name} will move into planning.</p>
+        </ConfirmDialog>
+      )}
+      {isConfirmingReject && (
+        <ConfirmDialog
+          title="Reject this request?"
+          confirmLabel="Reject"
+          isBusy={isRejecting}
+          error={rejectError}
+          onConfirm={confirmReject}
+          onCancel={cancelReject}
+        >
+          <p>{event.name} will be rejected. This cannot be undone.</p>
+          <label>
+            Reason for rejection
+            <textarea
+              rows={3}
+              placeholder="Shown to the organiser."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </label>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

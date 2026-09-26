@@ -38,6 +38,8 @@ export type ErrorCode =
   | 'EVENT_NOT_FOUND'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
+  | 'EVENT_NOT_AWAITING_DECISION'
+  | 'EVENT_REJECTION_REASON_REQUIRED'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -179,6 +181,26 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_ROUTINE_EDIT_CLOSED: {
     title: 'No longer editable',
     message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
+  },
+  /**
+   * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is
+   * still a draft. One code for both actions, same precedent as BOOKING_CONFLICT: the backend
+   * gives each its own detail sentence naming which verb was refused and the request's current
+   * status.
+   */
+  EVENT_NOT_AWAITING_DECISION: {
+    title: 'Cannot decide this request',
+    message: 'This request cannot be approved or rejected in its current state.',
+  },
+  /**
+   * Story 4.5 AC1: the reject dialog's own pre-check before calling the API. Never wired into an
+   * `errorCodes` map, same as `EVENT_NAME_REQUIRED` below - a blank/whitespace reason that did
+   * reach the backend would be refused by `EventRejection`'s plain field validation before
+   * `reject_event` runs, coming back as a raw validation 422 rather than a sentence.
+   */
+  EVENT_REJECTION_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for rejecting this request.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.
