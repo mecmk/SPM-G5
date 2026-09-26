@@ -1,14 +1,16 @@
 /**
  * Story 13.1 - fe/be: display the venue staff booking requests queue.
- * AC1 the queue lists all pending requests for venues the staff member is responsible for.
+ * AC1 the queue lists all requests for venues the staff member is responsible for.
  * AC2 each entry shows event name, requested venue, period, expected attendance and stated
  *     requirements.
- * AC3 decided requests do not appear in the pending queue.
+ * AC3 decided requests appear too, with their decision reason, filterable through the
+ *     All / Pending / Approved / Rejected tabs (the same tab pattern as the coordinator's
+ *     Events inbox, story 6.1).
  * Entry shape across several rows, malformed input and 401/403 refusals are backend cases:
  * backend/tests/bookings/test_list_bookings.py.
  *
  * Story 13.2 - fe: an Approve action on the queue card and the detail page.
- * AC1 approving sets the request to Approved and it stops appearing as pending.
+ * AC1 approving sets the request to Approved and moves it to the Approved tab.
  * The approve/conflict rules themselves (already-decided, double-booking) are backend cases,
  * proven end to end in backend/tests/bookings/test_approve_booking.py; these two tests only
  * prove the button correctly drives that endpoint and the page reflects the result. Each uses
@@ -19,8 +21,9 @@
  * requesting coordinator's read access to the outcome.
  * AC2 an empty/whitespace-only reason blocks submission client-side (no request fires).
  * AC3 the reject dialog names the booking, can be cancelled, prevents duplicate submission,
- *     preserves a typed reason on failure, and removing the card / showing the outcome mirrors
- *     Approve.
+ *     preserves a typed reason on failure, and marking it rejected / showing the outcome
+ *     mirrors Approve - the card stays in the queue (now under the Rejected tab) with its
+ *     reason shown, rather than disappearing.
  * AC4 the requesting coordinator reaches the outcome through normal navigation (Events inbox ->
  *     event -> its venue booking) and the same page hides decide actions from them; the booking
  *     card there reads as a history (every booking ever raised, most recent first), not just the
@@ -96,17 +99,24 @@ test('13.1 AC1: the queue shows requests across different events, venues and dat
   ).toBeVisible()
 })
 
-test('13.1 AC3: an approved booking does not appear in the pending queue', async ({ page }) => {
+test('13.1 AC3: the Approved tab shows a decided booking; the Rejected tab does not', async ({
+  page,
+}) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
   await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
-  // The APPROVED Nimbus/Grand Hall booking must not appear, even though a different, PENDING
-  // request (Product Roadmap Townhall) also books Grand Hall.
+  // The APPROVED Nimbus/Grand Hall booking, even though a different, PENDING request
+  // (Product Roadmap Townhall) also books Grand Hall.
   const decidedCard = page
     .getByRole('listitem')
     .filter({ hasText: 'Nimbus Developer Conference' })
     .filter({ hasText: 'Grand Hall' })
+
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  await expect(decidedCard).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Rejected/ }).click()
   await expect(decidedCard).toHaveCount(0)
 })
 
@@ -117,7 +127,7 @@ test('13.1: a coordinator cannot open the booking requests queue', async ({ page
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
 })
 
-test('13.2 AC1: approving from the queue card removes it from the pending list', async ({
+test('13.2 AC1: approving from the queue card marks it approved and hides its decide buttons', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -130,7 +140,9 @@ test('13.2 AC1: approving from the queue card removes it from the pending list',
   await dialog.getByRole('button', { name: 'Approve' }).click()
 
   await expect(dialog).not.toBeVisible()
-  await expect(card).toHaveCount(0)
+  await expect(card.getByText('Approved', { exact: true })).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
 })
 
 test('13.2 AC1: approving from the detail page shows the request as approved', async ({ page }) => {
@@ -154,7 +166,7 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
 })
 
-test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting removes the card from the queue', async ({
+test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting marks the card rejected with its reason', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -197,7 +209,10 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
   await expect(confirmButton).toBeDisabled()
 
   await expect(reopenedDialog).not.toBeVisible()
-  await expect(card).toHaveCount(0)
+  await expect(card.getByText('Rejected', { exact: true })).toBeVisible()
+  await expect(card).toContainText('Budget was reallocated to another event.')
+  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
+  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
 })
 
 test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page }) => {
