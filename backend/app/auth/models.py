@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -63,3 +63,17 @@ class UserSession(UUIDPrimaryKeyMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped[User] = relationship(lazy="joined")
+
+
+class LoginAttempt(Base):
+    """Failed sign-in counter per typed e-mail (story 1.1 AC6). No FK to users, on purpose."""
+
+    __tablename__ = "login_attempts"
+
+    email: Mapped[str] = mapped_column(CITEXT, primary_key=True)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

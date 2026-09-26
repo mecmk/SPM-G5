@@ -29,7 +29,11 @@ ERD_PATH = DOCS_DIR / "ERD.excalidraw"
 
 # (group title, header colour, [tables in display order])
 GROUPS: list[tuple[str, str, list[str]]] = [
-    ("Identity & access", "#a5d8ff", ["roles", "users", "user_sessions", "client_organisations"]),
+    (
+        "Identity & access",
+        "#a5d8ff",
+        ["roles", "users", "user_sessions", "login_attempts", "client_organisations"],
+    ),
     (
         "Reference lists",
         "#e9ecef",
