@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # Set to True when serving over HTTPS. Left False for local HTTP development.
     session_cookie_secure: bool = False
 
+    # --- sign-in lockout (story 1.1 AC6, bug f1.1.2) ---
+    # This many failures for one e-mail within the window lock sign-in for that e-mail.
+    login_max_failures: int = 5
+    login_failure_window_minutes: int = 15
+    login_lock_minutes: int = 15
+
     # --- uploaded event pictures (story 2.1 AC14) ---
     # Where cover pictures are written. Git-ignored; tests point it at a temporary folder.
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"

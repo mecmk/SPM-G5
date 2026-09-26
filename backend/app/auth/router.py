@@ -17,6 +17,10 @@ from app.db import get_db
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password."
+# The time left travels in the Retry-After header as seconds, never as a clock time, so the
+# sign-in page can count it down without any time zone or calendar being involved (AC6).
+LOGIN_LOCKED_MESSAGE = "Too many failed sign-in attempts. Try again later."
+RETRY_AFTER_HEADER = "Retry-After"
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -42,8 +46,18 @@ def login(
     response: Response,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
-    """AC1: valid credentials start a session. AC2: any failure returns the same generic 401."""
-    user = service.authenticate(db, payload.email, payload.password)
+    """AC1: valid credentials start a session. AC2: any failure returns the same generic 401.
+
+    AC6: an e-mail locked after repeated failures gets 429, with the seconds left in Retry-After.
+    """
+    try:
+        user = service.authenticate(db, payload.email, payload.password)
+    except service.LoginLocked as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=LOGIN_LOCKED_MESSAGE,
+            headers={RETRY_AFTER_HEADER: str(exc.seconds_left)},
+        ) from None
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_CREDENTIALS_MESSAGE

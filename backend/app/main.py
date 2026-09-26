@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.router import RETRY_AFTER_HEADER
 from app.auth.router import router as auth_router
 from app.bookings.router import router as bookings_router
 from app.config import settings
@@ -17,6 +18,8 @@ app.add_middleware(
     allow_credentials=True,  # the session cookie must travel with cross-origin requests
     allow_methods=["*"],
     allow_headers=["*"],
+    # Story 1.1 AC6: the sign-in page reads the seconds left from a locked sign-in's Retry-After.
+    expose_headers=[RETRY_AFTER_HEADER],
 )
 
 # One router per feature area (see AGENTS.md "Repository Structure").

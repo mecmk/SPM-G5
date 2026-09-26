@@ -59,3 +59,21 @@ export function instantToInput(stamp: string): string {
     .replace(' ', 'T')
     .slice(0, DATE_TIME_INPUT_LENGTH)
 }
+
+const SECONDS_PER_MINUTE = 60
+const MINUTES_PER_HOUR = 60
+
+/**
+ * Story 1.1 AC6: a duration in whole seconds as whole minutes, rounded up, so the last minute
+ * reads "1 min" rather than "0 min": "15 min", "1 h 5 min", "2 h". A length of time, not a
+ * moment, so no time zone applies.
+ */
+export function formatTimeLeft(totalSeconds: number): string {
+  const totalMinutes = Math.ceil(totalSeconds / SECONDS_PER_MINUTE)
+  const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR)
+  const minutes = totalMinutes % MINUTES_PER_HOUR
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} h`)
+  if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
+  return parts.join(' ')
+}
