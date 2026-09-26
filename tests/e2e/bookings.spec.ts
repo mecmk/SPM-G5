@@ -22,9 +22,11 @@
  *     preserves a typed reason on failure, and removing the card / showing the outcome mirrors
  *     Approve.
  * AC4 the requesting coordinator reaches the outcome through normal navigation (Events inbox ->
- *     event -> its venue booking) and the same page hides decide actions from them.
- * AC5 the event page shows every booking ever raised for the event, most recent first, not just
- *     the current one - a rejected request stays visible once a fresh one is raised.
+ *     event -> its venue booking) and the same page hides decide actions from them; the booking
+ *     card there reads as a history (every booking ever raised, most recent first), not just the
+ *     current one - a rejected request stays visible once a fresh one is raised. (Not a numbered
+ *     backlog AC of its own - it is how AC4's "reaches the outcome" is satisfied once an event can
+ *     carry more than one booking - see backend/tests/bookings/test_booking_for_event.py.)
  * The reject validation matrix, permission refusals, 409s and audit behaviour are backend cases:
  * backend/tests/bookings/test_reject_booking.py. Each mutating test here uses its own dedicated
  * seeded booking, same reasoning as 13.2's.
@@ -175,16 +177,26 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
   await expect(card).toBeVisible()
 
   await card.getByRole('button', { name: 'Reject' }).click()
-  await page
-    .getByRole('dialog', { name: 'Reject this booking?' })
+  const reopenedDialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  await reopenedDialog
     .getByLabel('Reason for rejecting')
     .fill('Budget was reallocated to another event.')
-  await page
-    .getByRole('dialog', { name: 'Reject this booking?' })
-    .getByRole('button', { name: 'Reject' })
-    .click()
 
-  await expect(page.getByRole('dialog', { name: 'Reject this booking?' })).not.toBeVisible()
+  // AC3: duplicate submission is prevented - hold the request in flight (same trick as
+  // booking-requests.spec.ts's b1.1.1 case) and confirm the button disables rather than
+  // accepting a second click.
+  await page.route(
+    (url) => /\/bookings\/[^/]+\/reject$/.test(url.pathname),
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await route.continue()
+    },
+  )
+  const confirmButton = reopenedDialog.getByRole('button', { name: 'Reject' })
+  await confirmButton.click()
+  await expect(confirmButton).toBeDisabled()
+
+  await expect(reopenedDialog).not.toBeVisible()
   await expect(card).toHaveCount(0)
 })
 
@@ -269,8 +281,8 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
 
-  // AC5: raising a fresh request for the same event does not replace the rejected one - both
-  // show up on the event page, the new request first.
+  // AC4 continued: raising a fresh request for the same event does not replace the rejected one
+  // - both show up on the event page's history, the new request first.
   await page.goto('/bookings/new')
   await page.getByLabel('Event').selectOption({ label: 'Alumni Homecoming Weekend' })
   await page.getByLabel('Venue').selectOption({ label: 'Boardroom 3.4' })
