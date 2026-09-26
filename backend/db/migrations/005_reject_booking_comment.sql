@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 004 - correct the decision_reason column comment for story 13.2.1.
+-- Migration 005 - correct the decision_reason column comment for story 13.2.1.
 --
 -- Story 13.2.1: rejecting a venue booking with a mandatory reason is now implemented (it was
 -- described as future story 13.3 AC1 when 001_initial_schema.sql was written). Update the
