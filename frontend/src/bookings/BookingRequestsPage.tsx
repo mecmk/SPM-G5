@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { bookingRequestPath } from '../routes'
 import { formatDate, formatTime } from '../shared/format'
@@ -33,8 +34,6 @@ function requirementsText(notes: string | null): string {
  *
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  */
-const EMPTY_REASON_MESSAGE = 'Enter a reason for rejecting this request.'
-
 export function BookingRequestsPage() {
   const [entries, setEntries] = useState<BookingQueueEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -99,7 +98,7 @@ export function BookingRequestsPage() {
     if (!pendingReject) return
     const reason = rejectReason.trim()
     if (reason === '') {
-      setRejectError(EMPTY_REASON_MESSAGE)
+      setRejectError(ERROR_REGISTRY.BOOKING_REASON_REQUIRED.message)
       return
     }
     const { id, event_name: eventName } = pendingReject
@@ -158,7 +157,7 @@ export function BookingRequestsPage() {
                   </div>
 
                   <div>
-                    <h3>
+                    <h3 className="queue-card-title">
                       <Link to={bookingRequestPath(entry.id)}>{entry.event_name}</Link>
                     </h3>
                     <p className="muted">

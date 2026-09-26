@@ -58,6 +58,7 @@ export type ErrorCode =
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
+  | 'BOOKING_REASON_REQUIRED'
 
 export interface ErrorEntry {
   title: string
@@ -284,6 +285,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_REJECT_REFUSED: {
     title: 'Cannot reject this request',
     message: 'This request cannot be rejected in its current state.',
+  },
+
+  // Story 13.2.1: checks the reject dialog makes before anything is sent.
+  BOOKING_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for rejecting this request.',
   },
 }
 

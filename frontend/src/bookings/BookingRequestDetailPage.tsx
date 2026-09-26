@@ -4,19 +4,17 @@ import { approveBooking, getBooking, rejectBooking, type Booking } from '../api/
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail } from '../api/events'
 import { getVenue, type Venue } from '../api/venues'
-import { useAuth } from '../auth/authContext'
-import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { BOOKING_REQUESTS_PATH, eventPath } from '../routes'
+import { BOOKING_REQUESTS_PATH } from '../routes'
 import { formatDate, formatTime } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
 const PENDING_STATUS = 'PENDING'
-const EMPTY_REASON_MESSAGE = 'Enter a reason for rejecting this request.'
 
 function layoutName(venue: Venue, layoutCode: string | null): string {
   if (layoutCode === null) return 'Any'
@@ -35,15 +33,10 @@ function layoutName(venue: Venue, layoutCode: string | null): string {
  * Story 13.2 AC1: an Approve action next to the status badge, shown only while the request is
  * still PENDING.
  *
- * Story 13.2.1: a Reject action alongside it, requiring a reason. AC4: this page is also
- * reachable by anyone who can read the booking (not only Venue Staff, who can decide it) - see
- * BOOKING_DETAIL_PATH in App.tsx - so the decide actions are hidden here, inline, for a viewer
- * without BOOKINGS_DECIDE.
+ * Story 13.2.1: a Reject action alongside it, requiring a reason.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
-  const { can } = useAuth()
-  const canDecide = can(PERMISSIONS.BOOKINGS_DECIDE)
   const [booking, setBooking] = useState<Booking | null>(null)
   const [venue, setVenue] = useState<Venue | null>(null)
   const [event, setEvent] = useState<EventDetail | null>(null)
@@ -115,7 +108,7 @@ export function BookingRequestDetailPage() {
     if (!booking || !event) return
     const reason = rejectReason.trim()
     if (reason === '') {
-      setRejectError(EMPTY_REASON_MESSAGE)
+      setRejectError(ERROR_REGISTRY.BOOKING_REASON_REQUIRED.message)
       return
     }
     setIsRejecting(true)
@@ -144,22 +137,16 @@ export function BookingRequestDetailPage() {
 
   return (
     <div className="page page-wide">
-      {canDecide ? (
-        <Link to={BOOKING_REQUESTS_PATH} className="back-link">
-          ← Back to Booking Requests
-        </Link>
-      ) : (
-        <Link to={eventPath(event.id)} className="back-link">
-          ← Back to {event.name}
-        </Link>
-      )}
+      <Link to={BOOKING_REQUESTS_PATH} className="back-link">
+        ← Back to Booking Requests
+      </Link>
 
       <div className="item-card-header booking-detail-header">
         <div className="cluster">
           <h1>{event.name}</h1>
           <StatusBadge status={booking.status} />
         </div>
-        {canDecide && booking.status === PENDING_STATUS && (
+        {booking.status === PENDING_STATUS && (
           <div className="cluster">
             <button type="button" className="brand button-sm" onClick={askToApprove}>
               Approve
