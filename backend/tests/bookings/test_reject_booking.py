@@ -89,11 +89,13 @@ def test_rejection_is_recorded_in_the_audit_log(venue_staff_client, db: Session)
 
     row = db.execute(
         text(
-            "SELECT actor_id FROM audit_log WHERE action = 'BOOKING_REJECTED' AND entity_id = :id"
+            "SELECT actor_id, details FROM audit_log "
+            "WHERE action = 'BOOKING_REJECTED' AND entity_id = :id"
         ),
         {"id": Bookings.PENDING_EXHIBITION_FOYER},
     ).one()
     assert row.actor_id == Users.VENUE_STAFF.id
+    assert row.details["reason"] == "The venue is under maintenance that week."
 
 
 @pytest.mark.story("13.2.1", ac=1)

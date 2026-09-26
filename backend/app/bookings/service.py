@@ -314,7 +314,11 @@ def reject_booking(
         action="BOOKING_REJECTED",
         entity_type="venue_booking",
         entity_id=booking.id,
-        details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
+        details={
+            "venue_id": str(booking.venue_id),
+            "event_id": str(booking.event_id),
+            "reason": decision_reason,
+        },
         commit=False,
     )
     db.commit()
