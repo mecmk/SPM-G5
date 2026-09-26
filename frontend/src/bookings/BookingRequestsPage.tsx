@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import {
   approveBooking,
@@ -11,12 +11,19 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { Tabs } from '../components/Tabs'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { bookingRequestPath } from '../routes'
+import {
+  bookingStatusTab,
+  BOOKING_STATUS_TABS,
+  type BookingStatusTabKey,
+} from '../shared/bookingStatus'
 import { formatDate, formatTime } from '../shared/format'
 
 const SHORT_ID_LENGTH = 8
+const PENDING_STATUS = 'PENDING'
 
 function requirementsText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No requirements stated.'
@@ -24,13 +31,15 @@ function requirementsText(notes: string | null): string {
 
 /**
  * Story 13.1 - the venue staff booking requests queue.
- * AC1: every pending request, for the signed-in Venue Staff member to decide.
+ * AC1: every request, for the signed-in Venue Staff member to decide or review.
  * AC2: each entry shows the event name, requested venue, period, expected attendance and
  * stated requirements.
- * AC3: decided requests never appear - the backend query excludes them.
+ * AC3: decided requests are filterable through the All / Pending / Approved / Rejected tabs,
+ * matching the coordinator's Events inbox tab pattern (story 6.1), and carry the reason they
+ * were decided.
  *
- * Story 13.2 AC1: an Approve action on each card, so a request that needs no closer look can be
- * decided without opening its detail page.
+ * Story 13.2 AC1: an Approve action on each pending card, so a request that needs no closer
+ * look can be decided without opening its detail page.
  *
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  */
@@ -44,6 +53,7 @@ export function BookingRequestsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
+  const [tab, setTab] = useState<BookingStatusTabKey>('ALL')
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +68,23 @@ export function BookingRequestsPage() {
       cancelled = true
     }
   }, [])
+
+  const tabs = useMemo(
+    () =>
+      BOOKING_STATUS_TABS.map((item) => ({
+        key: item.key,
+        label: `${item.label} (${
+          item.key === 'ALL'
+            ? (entries?.length ?? 0)
+            : (entries ?? []).filter((entry) => bookingStatusTab(entry.status) === item.key).length
+        })`,
+      })),
+    [entries],
+  )
+  const shownEntries = useMemo(() => {
+    const items = entries ?? []
+    return tab === 'ALL' ? items : items.filter((entry) => bookingStatusTab(entry.status) === tab)
+  }, [entries, tab])
 
   function askToApprove(entry: BookingQueueEntry) {
     setApproveError(null)
@@ -75,7 +102,11 @@ export function BookingRequestsPage() {
     setApproveError(null)
     try {
       await approveBooking(id, eventName)
-      setEntries((current) => current && current.filter((entry) => entry.id !== id))
+      setEntries(
+        (current) =>
+          current &&
+          current.map((entry) => (entry.id === id ? { ...entry, status: 'APPROVED' } : entry)),
+      )
       setPendingApprove(null)
     } catch (err) {
       setApproveError(formatApiError(err))
@@ -106,7 +137,13 @@ export function BookingRequestsPage() {
     setRejectError(null)
     try {
       await rejectBooking(id, eventName, reason)
-      setEntries((current) => current && current.filter((entry) => entry.id !== id))
+      setEntries(
+        (current) =>
+          current &&
+          current.map((entry) =>
+            entry.id === id ? { ...entry, status: 'REJECTED', decision_reason: reason } : entry,
+          ),
+      )
       setPendingReject(null)
     } catch (err) {
       setRejectError(formatApiError(err))
@@ -131,15 +168,19 @@ export function BookingRequestsPage() {
 
       {entries !== null && (
         <div className="stack">
-          <p className="eyebrow">Pending ({entries.length})</p>
+          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
 
           {entries.length === 0 && (
             <EmptyState>No requests waiting. You are up to date.</EmptyState>
           )}
 
-          {entries.length > 0 && (
+          {entries.length > 0 && shownEntries.length === 0 && (
+            <EmptyState>No requests in this tab.</EmptyState>
+          )}
+
+          {shownEntries.length > 0 && (
             <ul className="stack">
-              {entries.map((entry) => (
+              {shownEntries.map((entry) => (
                 <li key={entry.id} className="card stack">
                   <div className="item-card-header">
                     <div className="cluster">
@@ -185,23 +226,32 @@ export function BookingRequestsPage() {
                     <p>{requirementsText(entry.requirement_notes)}</p>
                   </div>
 
-                  <div className="item-card-footer">
-                    <div className="cluster">
-                      <button
-                        type="button"
-                        className="brand button-sm"
-                        onClick={() => askToApprove(entry)}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="danger-solid button-sm"
-                        onClick={() => askToReject(entry)}
-                      >
-                        Reject
-                      </button>
+                  {entry.decision_reason !== null && (
+                    <div className="subtle-block">
+                      <p className="fact-label">Reason</p>
+                      <p>{entry.decision_reason}</p>
                     </div>
+                  )}
+
+                  <div className="item-card-footer">
+                    {entry.status === PENDING_STATUS && (
+                      <div className="cluster">
+                        <button
+                          type="button"
+                          className="brand button-sm"
+                          onClick={() => askToApprove(entry)}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-solid button-sm"
+                          onClick={() => askToReject(entry)}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
                     <Link to={bookingRequestPath(entry.id)} className="link">
                       View details →
                     </Link>

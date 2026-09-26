@@ -83,10 +83,12 @@ export interface BookingQueueEntry {
   required_layout_name: string | null
   requirement_notes: string | null
   requested_by_name: string
-  status: string
+  status: BookingStatus
+  decision_reason: string | null
 }
 
-/** Story 13.1 AC1-AC3: every pending booking request, for Venue Staff to decide. */
+/** Story 13.1 AC1-AC3: every booking request regardless of status, for Venue Staff to decide
+ * or review through the All / Pending / Approved / Rejected tabs. */
 export function listBookingRequests(): Promise<BookingQueueEntry[]> {
   return api<BookingQueueEntry[]>('/bookings')
 }
