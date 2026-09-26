@@ -162,9 +162,11 @@ class BookingNotPending(ValueError):
 
 
 def list_booking_requests(db: Session) -> list[VenueBooking]:
-    """Story 13.1 AC1/AC3: every pending request, soonest first. AC1's "responsible for" is
-    every venue: there is no per-venue staff responsibility table in the schema, and
-    BOOKINGS_DECIDE is a role-wide permission today, same as VENUES_MANAGE."""
+    """Story 13.1 AC1/AC3: every request regardless of status, soonest first, so the queue's
+    All / Pending / Approved / Rejected tabs can filter client-side the same way story 6.1's
+    event tabs do. AC1's "responsible for" is every venue: there is no per-venue staff
+    responsibility table in the schema, and BOOKINGS_DECIDE is a role-wide permission today,
+    same as VENUES_MANAGE."""
     return list(
         db.scalars(
             select(VenueBooking)
@@ -174,7 +176,6 @@ def list_booking_requests(db: Session) -> list[VenueBooking]:
                 joinedload(VenueBooking.requested_by),
                 joinedload(VenueBooking.required_layout),
             )
-            .where(VenueBooking.status == BookingStatus.PENDING)
             .order_by(VenueBooking.starts_at, VenueBooking.id)
         ).all()
     )

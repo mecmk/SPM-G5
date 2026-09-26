@@ -76,7 +76,8 @@ def create_booking_request(
 
 @router.get("", response_model=list[BookingQueueEntry], dependencies=[CanDecide])
 def list_bookings(db: DbSession) -> list[BookingQueueEntry]:
-    """Story 13.1 AC1-AC3: every pending request, for Venue Staff to decide."""
+    """Story 13.1 AC1-AC3: every request regardless of status, for Venue Staff to decide and to
+    review past decisions against the All / Pending / Approved / Rejected tabs."""
     return [BookingQueueEntry.from_booking(b) for b in service.list_booking_requests(db)]
 
 

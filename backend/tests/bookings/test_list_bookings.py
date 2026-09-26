@@ -1,9 +1,12 @@
 """Story 13.1 - be: display the venue staff booking queue.
 
-AC1 The queue lists all pending requests for venues the staff member is responsible for.
+AC1 The queue lists all requests for venues the staff member is responsible for.
 AC2 Each entry shows event name, requested venue, period, expected attendance and stated
     requirements.
-AC3 Decided requests do not appear in the pending queue.
+AC3 Decided requests also appear in the queue, with their decision reason, so Venue Staff can
+    review past decisions through the All / Pending / Approved / Rejected tabs - broadened the
+    same way story 6.1 widened the coordinator's queue from a review-only endpoint to every
+    assigned event.
 
 Excluded, with reason:
 * "Venue Staff outside the venue's responsibility scope" - same reason as
@@ -57,11 +60,11 @@ def test_entry_shows_event_venue_period_attendance_and_requirements(venue_staff_
     assert entry["requirement_notes"] == "Breakout track B."
 
 
-# --- AC3: decided requests are excluded -----------------------------------------------------
+# --- AC3: decided requests are included, with their reason, for the tabs -------------------
 @pytest.mark.story("13.1", ac=3)
-def test_a_decided_booking_is_not_listed(venue_staff_client):
+def test_a_decided_booking_is_listed(venue_staff_client):
     ids = [row["id"] for row in venue_staff_client.get("/bookings").json()]
-    assert str(Bookings.APPROVED_GRAND_HALL) not in ids
+    assert str(Bookings.APPROVED_GRAND_HALL) in ids
 
 
 @pytest.mark.story("13.1", ac=3)
@@ -74,7 +77,7 @@ def test_a_decided_booking_is_not_listed(venue_staff_client):
         BookingStatus.CANCELLED,
     ],
 )
-def test_a_booking_in_any_decided_state_is_not_listed(venue_staff_client, db, status):
+def test_a_booking_in_any_decided_state_is_listed(venue_staff_client, db, status):
     booking = make_booking(
         db,
         venue_id=Venues.BOARDROOM,
@@ -85,7 +88,24 @@ def test_a_booking_in_any_decided_state_is_not_listed(venue_staff_client, db, st
 
     ids = [row["id"] for row in venue_staff_client.get("/bookings").json()]
 
-    assert str(booking.id) not in ids
+    assert str(booking.id) in ids
+
+
+@pytest.mark.story("13.1", ac=3)
+def test_a_rejected_booking_carries_its_decision_reason(venue_staff_client, db):
+    booking = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        status=BookingStatus.REJECTED,
+        decision_reason="The venue is under maintenance that week.",
+        starts_at=datetime(2027, 2, 3, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2027, 2, 3, 11, 0, tzinfo=timezone.utc),
+    )
+
+    body = venue_staff_client.get("/bookings").json()
+    entry = next(row for row in body if row["id"] == str(booking.id))
+
+    assert entry["decision_reason"] == "The venue is under maintenance that week."
 
 
 # --- access control --------------------------------------------------------------------------

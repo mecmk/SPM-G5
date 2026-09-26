@@ -95,7 +95,9 @@ class BookingOut(BaseModel):
 
 class BookingQueueEntry(BaseModel):
     """AC2: event name, requested venue, period, expected attendance and stated requirements.
-    No defaults (response schema)."""
+    AC3: also carries ``decision_reason``, so a decided entry's All / Pending / Approved /
+    Rejected tabs can show why it was rejected without a second request. No defaults (response
+    schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -111,6 +113,7 @@ class BookingQueueEntry(BaseModel):
     requirement_notes: str | None
     requested_by_name: str
     status: str
+    decision_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -129,6 +132,7 @@ class BookingQueueEntry(BaseModel):
             requirement_notes=booking.requirement_notes,
             requested_by_name=booking.requested_by.full_name,
             status=booking.status,
+            decision_reason=booking.decision_reason,
         )
 
 
