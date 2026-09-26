@@ -244,6 +244,127 @@
   padding: 1rem;
 }
 
+/* ---------- venue booking card (story 13.2.1 AC4) ---------- */
+.booking-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.booking-status-pill-success {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.booking-status-pill-warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.booking-status-pill-danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.booking-status-pill-neutral {
+  color: var(--neutral);
+  background: var(--neutral-bg);
+  border-color: var(--neutral-border);
+}
+
+.booking-outcome-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.booking-outcome-main {
+  display: flex;
+  gap: 1rem;
+}
+
+.booking-outcome-card-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.booking-outcome-card-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.booking-outcome-card-danger {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.booking-outcome-card-neutral {
+  border-color: var(--neutral-border);
+  background: var(--neutral-bg);
+}
+
+.booking-outcome-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.booking-outcome-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.booking-outcome-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.booking-outcome-schedule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.booking-outcome-schedule-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.booking-outcome-message {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--hairline);
+}
+
 .item-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
