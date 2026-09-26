@@ -185,6 +185,12 @@ h3 {
   letter-spacing: 0;
 }
 
+h1 a,
+h2 a,
+h3 a {
+  color: inherit;
+}
+
 h1 {
   font-size: 1.875rem;
   line-height: 2.25rem;
