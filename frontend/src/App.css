@@ -300,21 +300,25 @@
 .booking-outcome-card-success {
   border-color: var(--success-border);
   background: var(--success-bg);
+  --booking-divider: var(--success-border);
 }
 
 .booking-outcome-card-warning {
   border-color: var(--warning-border);
   background: var(--warning-bg);
+  --booking-divider: var(--warning-border);
 }
 
 .booking-outcome-card-danger {
   border-color: var(--danger-border);
   background: var(--danger-bg);
+  --booking-divider: var(--danger-border);
 }
 
 .booking-outcome-card-neutral {
   border-color: var(--neutral-border);
   background: var(--neutral-bg);
+  --booking-divider: var(--neutral-border);
 }
 
 .booking-outcome-thumb {
@@ -362,7 +366,7 @@
   gap: 0.5rem;
   align-items: flex-start;
   padding-top: 0.875rem;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--booking-divider);
 }
 
 .item-grid {
