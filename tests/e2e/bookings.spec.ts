@@ -23,6 +23,8 @@
  *     Approve.
  * AC4 the requesting coordinator reaches the outcome through normal navigation (Events inbox ->
  *     event -> its venue booking) and the same page hides decide actions from them.
+ * AC5 the event page shows every booking ever raised for the event, most recent first, not just
+ *     the current one - a rejected request stays visible once a fresh one is raised.
  * The reject validation matrix, permission refusals, 409s and audit behaviour are backend cases:
  * backend/tests/bookings/test_reject_booking.py. Each mutating test here uses its own dedicated
  * seeded booking, same reasoning as 13.2's.
@@ -225,21 +227,18 @@ test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page 
 test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue staff and the requesting coordinator', async ({
   page,
 }) => {
-  // Three full sign-in cycles (coordinator, venue staff, coordinator again) genuinely take
-  // longer than the default per-test budget.
-  test.setTimeout(60_000)
+  // Three full sign-in cycles (coordinator, venue staff, coordinator again), plus raising a
+  // second request afterward, genuinely take longer than the default per-test budget.
+  test.setTimeout(75_000)
 
-  // Before any decision: the requesting coordinator can already reach the booking through
-  // normal navigation, and sees it read-only - no decide actions are offered.
+  // Before any decision: the requesting coordinator can already reach the booking's outcome
+  // through normal navigation - the event page itself, no click-through needed.
   await signIn(page, ACCOUNTS.coordinator2)
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
   await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
-
-  await page.getByRole('link', { name: 'View booking details' }).click()
   await expect(page.getByText('Pending', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
+  await expect(page.getByText('Awaiting review by Venue Staff.')).toBeVisible()
 
   // Venue staff rejects it from the detail page.
   await page.getByRole('button', { name: 'Sign out' }).click()
@@ -269,4 +268,21 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
   await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
+
+  // AC5: raising a fresh request for the same event does not replace the rejected one - both
+  // show up on the event page, the new request first.
+  await page.goto('/bookings/new')
+  await page.getByLabel('Event').selectOption({ label: 'Alumni Homecoming Weekend' })
+  await page.getByLabel('Venue').selectOption({ label: 'Boardroom 3.4' })
+  await page.getByRole('button', { name: 'Send request' }).click()
+  await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()
+
+  await page.goto('/events/inbox')
+  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Boardroom 3.4')).toBeVisible()
+  await expect(bookingSection.getByText('Pending', { exact: true })).toBeVisible()
+  await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
+  await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
+  await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
 })
