@@ -81,14 +81,19 @@ def test_rejection_reason_is_trimmed_before_storage(venue_staff_client):
 
 
 @pytest.mark.story("13.2.1", ac=1)
-def test_rejection_is_recorded_in_the_audit_log(venue_staff_client):
+def test_rejection_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
     venue_staff_client.post(
         f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/reject",
         json={"decision_reason": "The venue is under maintenance that week."},
     )
 
-    response = venue_staff_client.get(f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}")
-    assert response.json()["status"] == BookingStatus.REJECTED
+    row = db.execute(
+        text(
+            "SELECT actor_id FROM audit_log WHERE action = 'BOOKING_REJECTED' AND entity_id = :id"
+        ),
+        {"id": Bookings.PENDING_EXHIBITION_FOYER},
+    ).one()
+    assert row.actor_id == Users.VENUE_STAFF.id
 
 
 @pytest.mark.story("13.2.1", ac=1)
