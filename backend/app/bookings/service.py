@@ -209,14 +209,21 @@ def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     return booking
 
 
-def get_latest_booking_for_event(db: Session, event_id: uuid.UUID) -> VenueBooking | None:
-    """13.2.1 AC4: the event's most recent venue booking, if any - lets a coordinator navigate
-    from the event to its booking outcome without knowing the booking's id up front."""
-    return db.scalar(
-        select(VenueBooking)
-        .where(VenueBooking.event_id == event_id)
-        .order_by(VenueBooking.created_at.desc())
-        .limit(1)
+def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
+    """13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
+    coordinator read the full history directly on the event page without knowing any booking's
+    id up front. An event may accumulate more than one row over time (a rejected request
+    followed by a fresh one, possibly for a different venue), so this is a history, not a single
+    outcome; deciding a booking updates that same row in place, it never creates a new one.
+    ``id`` breaks a tie on ``created_at`` - seed rows inserted by the same statement share one
+    transaction timestamp, so ``created_at`` alone leaves their relative order undefined."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(VenueBooking.event_id == event_id)
+            .options(joinedload(VenueBooking.venue))
+            .order_by(VenueBooking.created_at.desc(), VenueBooking.id.desc())
+        ).all()
     )
 
 

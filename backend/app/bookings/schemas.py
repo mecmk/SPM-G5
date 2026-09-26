@@ -130,3 +130,37 @@ class BookingQueueEntry(BaseModel):
             requested_by_name=booking.requested_by.full_name,
             status=booking.status,
         )
+
+
+class BookingOutcome(BaseModel):
+    """13.2.1 AC4: one venue booking's outcome as the event page shows it - venue name/location
+    rather than a raw id, since this is a read-only summary for that page, not the full record
+    (``BookingOut``, which the decide/read endpoints already return)."""
+
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    starts_at: datetime
+    ends_at: datetime
+    setup_minutes: int
+    teardown_minutes: int
+    status: str
+    decided_at: datetime | None
+    decision_reason: str | None
+
+    @classmethod
+    def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
+        return cls(
+            id=booking.id,
+            venue_id=booking.venue_id,
+            venue_name=booking.venue.name,
+            venue_location=booking.venue.location,
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            status=booking.status,
+            decided_at=booking.decided_at,
+            decision_reason=booking.decision_reason,
+        )

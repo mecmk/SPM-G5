@@ -17,6 +17,7 @@ from app.bookings import service
 from app.bookings.schemas import (
     BookableEvent,
     BookingOut,
+    BookingOutcome,
     BookingQueueEntry,
     BookingReferenceData,
     BookingRejection,
@@ -79,14 +80,13 @@ def list_bookings(db: DbSession) -> list[BookingQueueEntry]:
     return [BookingQueueEntry.from_booking(b) for b in service.list_booking_requests(db)]
 
 
-@router.get("/for-event/{event_id}", response_model=BookingOut | None, dependencies=[CanRead])
-def get_booking_for_event(event_id: uuid.UUID, db: DbSession) -> BookingOut | None:
-    """13.2.1 AC4: the event's most recent venue booking, if any - lets a coordinator navigate
-    from an event they can already read to its booking outcome, without knowing the booking's
+@router.get("/for-event/{event_id}", response_model=list[BookingOutcome], dependencies=[CanRead])
+def list_bookings_for_event(event_id: uuid.UUID, db: DbSession) -> list[BookingOutcome]:
+    """13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
+    coordinator read the full history directly on the event page, without knowing any booking's
     id up front. Declared above ``/{booking_id}`` so the literal path is not read as a booking
     id, same as ``/reference-data`` above."""
-    booking = service.get_latest_booking_for_event(db, event_id)
-    return BookingOut.model_validate(booking) if booking is not None else None
+    return [BookingOutcome.from_booking(b) for b in service.list_bookings_for_event(db, event_id)]
 
 
 @router.get("/{booking_id}", response_model=BookingOut, dependencies=[CanRead])
