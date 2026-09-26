@@ -39,7 +39,7 @@ def seconds_until(moment: datetime, *, now: datetime) -> int:
 class LoginLocked(Exception):
     """Sign-in for this e-mail is refused for ``seconds_left`` more seconds (story 1.1 AC6)."""
 
-    def __init__(self, locked_until: datetime, *, seconds_left: int) -> None:
+    def __init__(self, locked_until: datetime, *, seconds_left: int):
         super().__init__(f"sign-in locked until {locked_until.isoformat()}")
         self.locked_until = locked_until
         self.seconds_left = seconds_left

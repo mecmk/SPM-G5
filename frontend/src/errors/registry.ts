@@ -102,6 +102,10 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Sign-in failed',
     message: 'Invalid email or password.',
   },
+  /**
+   * Story 1.1 AC6: keep in step with `LOGIN_LOCKED_MESSAGE` in backend/app/auth/router.py. Shown
+   * only for a 429 carrying neither that sentence nor a Retry-After for `SignInLockedAlert`.
+   */
   LOGIN_LOCKED: {
     title: 'Sign-in locked',
     message: 'Too many failed sign-in attempts. Try again later.',
