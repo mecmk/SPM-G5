@@ -124,6 +124,12 @@ def test_signed_out_visitors_cannot_read_it(client):
 
 
 @pytest.mark.story("13.2.1", ac=4)
-def test_a_role_without_bookings_read_cannot_read_it(client):
-    client.login(Users.ORGANISER)
+@pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE], ids=lambda u: u.role)
+def test_a_role_without_bookings_read_cannot_read_it(client, user):
+    client.login(user)
     assert client.get(f"/bookings/for-event/{Events.APPROVED}").status_code == 403
+
+
+@pytest.mark.story("13.2.1", ac=4)
+def test_a_malformed_event_id_is_422(venue_staff_client):
+    assert venue_staff_client.get("/bookings/for-event/not-a-uuid").status_code == 422
