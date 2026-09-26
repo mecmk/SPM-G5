@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { approveBooking, getBooking, type Booking } from '../api/bookings'
+import { approveBooking, getBooking, rejectBooking, type Booking } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail } from '../api/events'
 import { getVenue, type Venue } from '../api/venues'
@@ -8,6 +8,7 @@ import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
 import { formatDate, formatTime } from '../shared/format'
@@ -30,7 +31,9 @@ function layoutName(venue: Venue, layoutCode: string | null): string {
  * EVENTS_READ_ALL, so nothing new is needed on the backend for this view.
  *
  * Story 13.2 AC1: an Approve action next to the status badge, shown only while the request is
- * still PENDING. Reject (story 13.3) is a teammate's story and is not built here.
+ * still PENDING.
+ *
+ * Story 13.2.1: a Reject action alongside it, requiring a reason.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -41,6 +44,10 @@ export function BookingRequestDetailPage() {
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [isConfirmingReject, setIsConfirmingReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isRejecting, setIsRejecting] = useState(false)
+  const [rejectError, setRejectError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +94,36 @@ export function BookingRequestDetailPage() {
     }
   }
 
+  function askToReject() {
+    setRejectError(null)
+    setRejectReason('')
+    setIsConfirmingReject(true)
+  }
+
+  function cancelReject() {
+    setIsConfirmingReject(false)
+  }
+
+  async function confirmReject() {
+    if (!booking || !event) return
+    const reason = rejectReason.trim()
+    if (reason === '') {
+      setRejectError(ERROR_REGISTRY.BOOKING_REASON_REQUIRED.message)
+      return
+    }
+    setIsRejecting(true)
+    setRejectError(null)
+    try {
+      const updated = await rejectBooking(booking.id, event.name, reason)
+      setBooking(updated)
+      setIsConfirmingReject(false)
+    } catch (err) {
+      setRejectError(formatApiError(err))
+    } finally {
+      setIsRejecting(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="page">
@@ -110,11 +147,24 @@ export function BookingRequestDetailPage() {
           <StatusBadge status={booking.status} />
         </div>
         {booking.status === PENDING_STATUS && (
-          <button type="button" className="brand button-sm" onClick={askToApprove}>
-            Approve
-          </button>
+          <div className="cluster">
+            <button type="button" className="brand button-sm" onClick={askToApprove}>
+              Approve
+            </button>
+            <button type="button" className="danger-solid button-sm" onClick={askToReject}>
+              Reject
+            </button>
+          </div>
         )}
       </div>
+
+      {booking.decision_reason !== null && (
+        <p className="subtle-block">
+          <span className="fact-label">Reason</span>
+          <br />
+          {booking.decision_reason}
+        </p>
+      )}
 
       <div className="stack">
         <section className="stat-card-grid" aria-labelledby="booking-summary-heading">
@@ -218,6 +268,30 @@ export function BookingRequestDetailPage() {
             {venue.name} will be booked for {event.name} from {formatDate(booking.starts_at)},{' '}
             {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}.
           </p>
+        </ConfirmDialog>
+      )}
+
+      {isConfirmingReject && (
+        <ConfirmDialog
+          title="Reject this booking?"
+          confirmLabel="Reject"
+          isBusy={isRejecting}
+          error={rejectError}
+          onConfirm={confirmReject}
+          onCancel={cancelReject}
+        >
+          <p>
+            {event.name}'s request for {venue.name} will be rejected.
+          </p>
+          <label>
+            Reason for rejecting
+            <textarea
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              rows={3}
+              disabled={isRejecting}
+            />
+          </label>
         </ConfirmDialog>
       )}
     </div>

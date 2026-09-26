@@ -107,6 +107,7 @@ function App() {
                 <Route path={BOOKING_REQUESTS_PATH} element={<BookingRequestsPage />} />
                 <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
               </Route>
+
               {/*
                 Story 7.1: full event details. Which event a signed-in user may open is a
                 per-record relationship (own event, or an internal role once submitted), not a

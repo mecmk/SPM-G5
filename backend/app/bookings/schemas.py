@@ -1,5 +1,5 @@
 """Request / response shapes for venue bookings: raising a request (story 12.1), the venue
-staff queue (story 13.1), and approval / read (story 13.2).
+staff queue (story 13.1), and approval / rejection / read (stories 13.2, 13.2.1).
 """
 
 from __future__ import annotations
@@ -7,9 +7,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.bookings.models import VenueBooking
+
+
+def _strip(value: str | None) -> str | None:
+    return value.strip() if isinstance(value, str) else value
 
 
 class BookableEvent(BaseModel):
@@ -45,6 +49,20 @@ class BookingRequestIn(BaseModel):
 
     event_id: uuid.UUID
     venue_id: uuid.UUID
+
+
+class BookingRejection(BaseModel):
+    """13.2.1 AC2: a reason is mandatory - blank or whitespace-only does not count. Mirrors
+    events.schemas.EventRejection (story 4.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision_reason: str = Field(min_length=1)
+
+    @field_validator("decision_reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
 
 
 class BookingOut(BaseModel):
@@ -111,4 +129,38 @@ class BookingQueueEntry(BaseModel):
             requirement_notes=booking.requirement_notes,
             requested_by_name=booking.requested_by.full_name,
             status=booking.status,
+        )
+
+
+class BookingOutcome(BaseModel):
+    """13.2.1 AC4: one venue booking's outcome as the event page shows it - venue name/location
+    rather than a raw id, since this is a read-only summary for that page, not the full record
+    (``BookingOut``, which the decide/read endpoints already return)."""
+
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    starts_at: datetime
+    ends_at: datetime
+    setup_minutes: int
+    teardown_minutes: int
+    status: str
+    decided_at: datetime | None
+    decision_reason: str | None
+
+    @classmethod
+    def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
+        return cls(
+            id=booking.id,
+            venue_id=booking.venue_id,
+            venue_name=booking.venue.name,
+            venue_location=booking.venue.location,
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            status=booking.status,
+            decided_at=booking.decided_at,
+            decision_reason=booking.decision_reason,
         )

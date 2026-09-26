@@ -108,3 +108,45 @@ export function approveBooking(bookingId: string, eventName: string): Promise<Bo
     },
   })
 }
+
+/** Story 13.2.1 AC1/AC2: reject a pending booking request with a mandatory reason. */
+export function rejectBooking(
+  bookingId: string,
+  eventName: string,
+  decisionReason: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/reject`, {
+    method: 'POST',
+    body: { decision_reason: decisionReason },
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_REJECT_REFUSED' },
+    notify: {
+      title: 'Booking rejected',
+      message: `${eventName}'s venue booking was rejected.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Mirrors `BookingOutcome`: one booking's outcome as the event page shows it - venue name and
+ * location rather than a raw id, since this is a read-only summary, not the full record. */
+export interface BookingOutcome {
+  id: string
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  starts_at: string
+  ends_at: string
+  setup_minutes: number
+  teardown_minutes: number
+  status: BookingStatus
+  decided_at: string | null
+  decision_reason: string | null
+}
+
+/** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
+ * coordinator read the full history directly on the event page. An event may accumulate more
+ * than one row over time (a rejected request followed by a fresh one), so this is a history, not
+ * a single outcome; deciding a booking updates that same row in place, it never adds another. */
+export function listBookingsForEvent(eventId: string): Promise<BookingOutcome[]> {
+  return api<BookingOutcome[]>(`/bookings/for-event/${eventId}`)
+}

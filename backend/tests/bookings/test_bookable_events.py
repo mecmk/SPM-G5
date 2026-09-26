@@ -43,8 +43,9 @@ def event_ids(response) -> list[str]:
 @pytest.mark.story("12.1", ac=1)
 def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_client):
     """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
-    CONFIRMED one (story 6.1's seed data) - "approved or later" includes both. The pick-list
-    offers all five, soonest first."""
+    CONFIRMED one (story 6.1's seed data) and a PLANNING one dedicated to the story 13.2.1
+    reject e2e test - "approved or later" includes both. The pick-list offers all six, soonest
+    first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -54,6 +55,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.APPROVED_3),
         str(Events.CONFIRMED),
         str(Events.APPROVED_4),
+        str(Events.APPROVED_6),
     ]
 
 

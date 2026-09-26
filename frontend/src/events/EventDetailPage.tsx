@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
+import { listBookingsForEvent, type BookingOutcome, type BookingStatus } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
 import {
   getEvent,
@@ -14,7 +15,7 @@ import { Chip } from '../components/Chip'
 import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH } from '../routes'
@@ -24,11 +25,64 @@ const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
 
+/** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
+ * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
+interface BookingOutcomePresentation {
+  label: string
+  tone: 'success' | 'warning' | 'danger' | 'neutral'
+  icon: IconName
+  message: string
+}
+
+const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
+  APPROVED: {
+    label: 'Approved',
+    tone: 'success',
+    icon: 'check-circle',
+    message: 'This venue booking has been approved and the venue is confirmed for this event.',
+  },
+  PENDING: {
+    label: 'Pending',
+    tone: 'warning',
+    icon: 'clock',
+    message: 'Awaiting review by Venue Staff.',
+  },
+  REJECTED: {
+    label: 'Rejected',
+    tone: 'danger',
+    icon: 'x-circle',
+    message: 'This booking request was rejected.',
+  },
+  WITHDRAWN: {
+    label: 'Withdrawn',
+    tone: 'neutral',
+    icon: 'x-circle',
+    message: 'This booking request was withdrawn.',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    tone: 'neutral',
+    icon: 'x-circle',
+    message: 'This booking was cancelled.',
+  },
+}
+
 /** One required facility, as its quantity and notes make it distinct. */
 function describeFacility(facility: RequiredFacility): string {
   const quantity = facility.quantity === null ? '' : ` ×${facility.quantity}`
   const notes = facility.notes === null ? '' : ` (${facility.notes})`
   return `${facility.name}${quantity}${notes}`
+}
+
+/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
+function formatMinutesDuration(minutes: number): string {
+  if (minutes === 0) return 'None'
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`)
+  if (remainder > 0) parts.push(`${remainder} min`)
+  return parts.join(' ')
 }
 
 function formatHeroMeta(event: EventDetail): string {
@@ -52,6 +106,11 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
  * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
  * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
+ *
+ * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
+ * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
+ * every venue booking ever raised for the event, most recent first, each with its status and,
+ * once rejected, its reason.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -62,6 +121,9 @@ export function EventDetailPage() {
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
+  const [bookings, setBookings] = useState<BookingOutcome[] | null>(null)
+  const [bookingError, setBookingError] = useState<string | null>(null)
+  const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
 
   useEffect(() => {
     let cancelled = false
@@ -94,6 +156,21 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, event, user])
+
+  useEffect(() => {
+    if (!canReadBooking) return undefined
+    let cancelled = false
+    listBookingsForEvent(eventId)
+      .then((data) => {
+        if (!cancelled) setBookings(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setBookingError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, canReadBooking])
 
   if (error) {
     return (
@@ -314,6 +391,79 @@ export function EventDetailPage() {
             )}
           </section>
         </div>
+
+        {canReadBooking && bookingError && (
+          <p role="alert" className="error">
+            {bookingError}
+          </p>
+        )}
+
+        {canReadBooking && bookings && bookings.length > 0 && (
+          <section className="card stack" aria-labelledby="venue-booking-heading">
+            <h2 id="venue-booking-heading" className="cluster">
+              <Icon name="building" size={20} />
+              Venue booking
+            </h2>
+
+            {bookings.map((booking) => {
+              const bookingOutcome = BOOKING_OUTCOME[booking.status]
+              return (
+                <div
+                  key={booking.id}
+                  className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
+                >
+                  <div className="booking-outcome-main">
+                    <div className="booking-outcome-thumb" aria-hidden="true">
+                      <Icon name="image" size={28} />
+                    </div>
+
+                    <div className="booking-outcome-body">
+                      <div className="booking-outcome-heading-row">
+                        <p className="stat-card-value">{booking.venue_name}</p>
+                        <span
+                          className={`booking-status-pill booking-status-pill-${bookingOutcome.tone}`}
+                        >
+                          <Icon name={bookingOutcome.icon} size={14} />
+                          {bookingOutcome.label}
+                        </span>
+                      </div>
+                      <p className="muted">{booking.venue_location}</p>
+                      <div className="booking-outcome-schedule small muted">
+                        <span className="booking-outcome-schedule-item">
+                          <Icon name="calendar" size={14} />
+                          {formatDate(booking.starts_at)}
+                        </span>
+                        <span className="booking-outcome-schedule-item">
+                          <Icon name="calendar-check" size={14} />
+                          {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
+                        </span>
+                      </div>
+                      <p className="small muted">
+                        Setup: {formatMinutesDuration(booking.setup_minutes)} · Event:{' '}
+                        {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)} · Teardown:{' '}
+                        {formatMinutesDuration(booking.teardown_minutes)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="booking-outcome-message">
+                    <Icon name={bookingOutcome.icon} size={18} />
+                    <div>
+                      <p>{bookingOutcome.message}</p>
+                      {booking.decision_reason !== null && (
+                        <p>
+                          <span className="fact-label">Reason</span>
+                          <br />
+                          {booking.decision_reason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </section>
+        )}
 
         <section className="card stack" aria-labelledby="equipment-heading">
           <h2 id="equipment-heading">Equipment requirements</h2>

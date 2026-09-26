@@ -58,6 +58,8 @@ export type ErrorCode =
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
+  | 'BOOKING_REJECT_REFUSED'
+  | 'BOOKING_REASON_REQUIRED'
 
 export interface ErrorEntry {
   title: string
@@ -283,6 +285,21 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_CONFLICT: {
     title: 'Cannot approve this request',
     message: 'This request cannot be approved in its current state.',
+  },
+
+  // Story 13.2.1: rejecting a venue booking request. Rejection never runs the venue-conflict
+  // check (only an approval can double-book), so its only 409 cause is "not pending" - named
+  // for the reject endpoint specifically (rather than a generic BOOKING_NOT_PENDING) so its
+  // reject-only wording can't end up on approve's toast if that 409 is ever mapped here too.
+  BOOKING_REJECT_REFUSED: {
+    title: 'Cannot reject this request',
+    message: 'This request cannot be rejected in its current state.',
+  },
+
+  // Story 13.2.1: checks the reject dialog makes before anything is sent.
+  BOOKING_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for rejecting this request.',
   },
 }
 
