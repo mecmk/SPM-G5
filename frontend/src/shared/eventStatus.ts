@@ -17,6 +17,14 @@ export const VISIBLE_EVENT_STATUSES = [
   'REJECTED',
 ] as const satisfies readonly EventStatus[]
 
+/**
+ * Story 12.1 AC1: the statuses a venue booking can be requested from, mirroring
+ * `_BOOKABLE_EVENT_STATUSES` in backend/app/bookings/service.py. f12.1.1 offers Find a venue,
+ * Request this venue and the request step only on these (`canRequestVenueFor` in
+ * `./venueRequest.ts`), so no page offers what `POST /bookings` would refuse.
+ */
+export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
+
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   DRAFT: 'Draft',
   UNDER_REVIEW: 'Under review',

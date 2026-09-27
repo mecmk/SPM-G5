@@ -22,8 +22,15 @@ import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
-import { eventEditRoutinePath, HOME_PATH } from '../routes'
-import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
+import { eventEditRoutinePath, HOME_PATH, venueSearchPath, type VenueSearch } from '../routes'
+import {
+  formatDate,
+  formatDateTime,
+  formatSchedule,
+  formatTime,
+  instantToInput,
+} from '../shared/format'
+import { canRequestVenueFor } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -87,6 +94,25 @@ function formatMinutesDuration(minutes: number): string {
   if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`)
   if (remainder > 0) parts.push(`${remainder} min`)
   return parts.join(' ')
+}
+
+/**
+ * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens - the event's dates, its
+ * expected attendance as the minimum capacity, and its layout, facilities and accessibility
+ * needs, holding only what the event recorded. "No venue requirements" has already cleared the
+ * layout and facilities (story 2.1 AC4), so such an event searches by its dates, capacity and
+ * accessibility needs.
+ */
+function venueSearchFor(event: EventDetail): VenueSearch {
+  return {
+    eventId: event.id,
+    capacity: event.expected_attendance ?? undefined,
+    from: event.starts_at ? instantToInput(event.starts_at) : undefined,
+    to: event.ends_at ? instantToInput(event.ends_at) : undefined,
+    layout: event.required_layout_code ?? undefined,
+    facilities: event.required_facilities.map((facility) => facility.code),
+    accessibilityFeatures: event.accessibility_needs.map((need) => need.code),
+  }
 }
 
 function formatHeroMeta(event: EventDetail): string {
@@ -275,6 +301,9 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
+  /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
+   *  its assigned coordinator, while it can take a booking. */
+  const canFindVenue = canRequestVenueFor(event, user, can)
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
@@ -470,7 +499,14 @@ export function EventDetailPage() {
 
         <div className="layout-half">
           <section className="card stack" aria-labelledby="venue-requirements-heading">
-            <h2 id="venue-requirements-heading">Venue requirements</h2>
+            <div className="card-heading">
+              <h2 id="venue-requirements-heading">Venue requirements</h2>
+              {canFindVenue && (
+                <Link to={venueSearchPath(venueSearchFor(event))} className="button button-sm">
+                  Find a venue
+                </Link>
+              )}
+            </div>
             {event.venue_none_required ? (
               <p className="muted">No venue is required for this event.</p>
             ) : (

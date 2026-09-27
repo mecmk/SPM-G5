@@ -65,6 +65,7 @@ export type ErrorCode =
   | 'EVENT_REGISTRATION_OPENS_AFTER_START'
   | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
+  | 'BOOKING_NOT_REQUESTABLE'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
@@ -338,6 +339,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_NOT_ALLOWED: {
     title: 'Venue cannot be requested',
     message: 'A venue booking can only be requested for an approved event.',
+  },
+  /**
+   * f12.1.1 (story 12.1 AC15): the request step's address was opened by someone who may not
+   * request a venue for that event, so the page says so instead of offering a request the backend
+   * would refuse (review of PR #67). The statuses are `BOOKABLE_EVENT_STATUSES`'.
+   */
+  BOOKING_NOT_REQUESTABLE: {
+    title: 'Venue cannot be requested',
+    message:
+      "Only the event's assigned coordinator can request a venue for it, while the event is in " +
+      'Planning or Confirmed.',
   },
 
   // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own

@@ -26,6 +26,7 @@ export const EVENTS = {
   rejected: '33333333-0000-0000-0000-000000000004', // organiser: organiser2, rejected by coordinator2
   clarificationRequested: '33333333-0000-0000-0000-000000000006', // organiser: organiser
   draft: '33333333-0000-0000-0000-000000000001',
+  planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
@@ -46,6 +47,11 @@ export async function expectSignedIn(page: Page) {
 /** A row in a venue table (Manage venues), matched by name. */
 export function venueRow(page: Page, name: string) {
   return page.getByRole('row', { name: new RegExp(name) })
+}
+
+/** A venue card in the venue catalogue, matched by the venue's name. */
+export function venueCard(page: Page, name: string) {
+  return page.getByRole('article').filter({ has: page.getByRole('heading', { name }) })
 }
 
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */

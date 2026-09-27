@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
 import { Calendar, type CalendarEntry, type CalendarLegendItem } from '../components/Calendar'
@@ -8,9 +8,10 @@ import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
-import { VENUE_CATALOGUE_PATH } from '../routes'
+import { VENUE_CATALOGUE_PATH, venueRequestPath } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { useRequestingEvent } from './useRequestingEvent'
 
 const CALENDAR_LEGEND: CalendarLegendItem[] = [{ tone: 'danger', label: 'Unavailable' }]
 
@@ -38,11 +39,16 @@ const NOT_RECORDED = 'Not recorded'
  *
  * The hero's location line is `venue.location` alone: the schema has one combined location
  * string, not separate building/floor fields to build a longer breadcrumb from.
+ *
+ * f12.1.1 (story 12.1 AC15): opened from the catalogue for an event, the event's assigned
+ * coordinator can request the venue from here too, and the back link returns to that same search.
  */
 export function VenueDetailPage() {
   const { venueId = '' } = useParams()
+  const location = useLocation()
   const loadVenue = useCallback(() => getVenue(venueId), [venueId])
   const { data: venue, error } = useLoaded(loadVenue)
+  const { requestingEvent, error: eventError } = useRequestingEvent()
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   // Not reset when venueId changes - nothing links from one venue's page straight to another's
   // today, so this can't be observed yet. If that ever becomes possible, this needs to go back
@@ -115,9 +121,26 @@ export function VenueDetailPage() {
 
   return (
     <div className="page page-wide">
-      <Link to={VENUE_CATALOGUE_PATH} className="back-link">
+      <Link to={`${VENUE_CATALOGUE_PATH}${location.search}`} className="back-link">
         ← Venue catalogue
       </Link>
+      {eventError && (
+        <p role="alert" className="error">
+          {eventError}
+        </p>
+      )}
+      {requestingEvent && (
+        <div className="page-header actions-only">
+          <div className="page-actions">
+            <Link
+              to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
+              className="button brand"
+            >
+              Request this venue
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="venue-hero">
         <span aria-hidden="true">

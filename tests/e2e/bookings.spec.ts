@@ -32,7 +32,7 @@
  * seeded booking, same reasoning as 13.2's.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn } from './support'
+import { ACCOUNTS, corsHeaders, signIn, venueCard } from './support'
 
 /**
  * A pending request's card, by the short id shown on it (the seeded row's last 8 hex characters,
@@ -279,10 +279,10 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
-  // - both show up on the event page's history, the new request first.
-  await page.goto('/bookings/new')
-  await page.getByLabel('Event').selectOption({ label: 'Alumni Homecoming Weekend' })
-  await page.getByLabel('Venue').selectOption({ label: 'Boardroom 3.4' })
+  // - both show up on the event page's history, the new request first. Since f12.1.1 a request
+  // starts from the event: Find a venue, then Request this venue in the catalogue.
+  await page.getByRole('link', { name: 'Find a venue' }).click()
+  await venueCard(page, 'Boardroom 3.4').getByRole('link', { name: 'Request this venue' }).click()
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()
 
