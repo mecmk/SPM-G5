@@ -1,23 +1,17 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
-import {
-  createBookingRequest,
-  fetchBookingReferenceData,
-  type BookableEvent,
-  type Booking,
-} from '../api/bookings'
+import { useCallback, useState, type FormEvent } from 'react'
+import { Link, useLocation, useParams } from 'react-router'
+import { createBookingRequest, type Booking } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
-import { listVenues, type VenueSummary } from '../api/venues'
-import { EmptyState } from '../components/EmptyState'
+import { getVenue, type Venue } from '../api/venues'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
+import { eventPath, VENUE_CATALOGUE_PATH, venueSearchPath } from '../routes'
 import { formatSchedule } from '../shared/format'
+import { useLoaded } from '../shared/useLoaded'
 
 const NOT_RECORDED = 'Not recorded'
-const NO_BOOKABLE_EVENTS = 'No approved events are assigned to you yet.'
-const NO_VENUES = 'No venues are in service, so there is nothing to request yet.'
-const LOADING_REQUIREMENTS = "Loading the event's requirements…"
 
 /**
  * One required facility as the request will state it - the same shape
@@ -30,231 +24,154 @@ function describeFacility(facility: RequiredFacility): string {
   return `${facility.name}${quantity}${notes}`
 }
 
-/**
- * What was sent, captured at submission rather than looked up afterwards: the confirmation has to
- * render from this alone, so a name that is no longer in the loaded lists cannot silently hide it.
- */
-interface SentRequest {
-  booking: Booking
-  venueName: string
-  eventName: string
+/** The event and the venue a request is for. The step can say nothing until it has both. */
+interface RequestSubject {
+  event: EventDetail
+  venue: Venue
 }
 
 /**
- * Story 12.1 - the Event Coordinator raises a venue booking request.
+ * Story 12.1 - the Event Coordinator raises a venue booking request, and f12.1.1 (AC15) - for the
+ * event and venue in the address, reached with Request this venue from the catalogue in that
+ * event's context.
  *
- * AC1: the event picker offers only events a booking may be raised from, and the venue field
- * takes one choice, so one request is one venue. AC2: the period, attendance, layout and
- * required facilities are the event's - shown here, never entered, and copied by the backend.
- * AC4: the picker is the coordinator's own assigned events, and the backend refuses anyone else.
+ * AC1: the address fixes one event and one venue, so one request is one venue; the backend refuses
+ * an event that cannot take a booking. AC2: the period, attendance, layout and required facilities
+ * are the event's - shown here, never entered, and copied by the backend. AC3: the outcome shows
+ * the request pending. AC4: the backend refuses anyone but the event's assigned coordinator.
+ * Nothing can be sent before both records have arrived (review of PR #42).
  *
- * The event pick-list is `GET /bookings/reference-data`; the chosen event's full record comes
- * from story 2.1's `GET /events/{id}`, which is what makes the "will carry" summary possible
- * without widening the pick-list.
+ * The address also carries the catalogue's own query, so the back link returns to the same search.
  */
 export function BookingRequestFormPage() {
-  const [events, setEvents] = useState<BookableEvent[] | null>(null)
-  const [venues, setVenues] = useState<VenueSummary[]>([])
-  const [eventId, setEventId] = useState('')
-  const [venueId, setVenueId] = useState('')
-  const [chosenEvent, setChosenEvent] = useState<EventDetail | null>(null)
-  const [sent, setSent] = useState<SentRequest | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const { eventId = '', venueId = '' } = useParams()
+  const location = useLocation()
+  const loadSubject = useCallback(
+    () =>
+      Promise.all([getEvent(eventId), getVenue(venueId)]).then(
+        ([event, venue]): RequestSubject => ({ event, venue }),
+      ),
+    [eventId, venueId],
+  )
+  const { data: subject, error } = useLoaded(loadSubject)
+  const [sent, setSent] = useState<Booking | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
-  const [isLoadingEvent, setIsLoadingEvent] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([fetchBookingReferenceData(), listVenues(false)])
-      .then(([reference, venueList]) => {
-        if (cancelled) return
-        setEvents(reference.events)
-        setVenues(venueList)
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setEvents([])
-          setLoadError(formatApiError(error))
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (eventId === '') return
-    let cancelled = false
-    getEvent(eventId)
-      .then((detail) => {
-        if (cancelled) return
-        setChosenEvent(detail)
-        setIsLoadingEvent(false)
-        // Clear a previous failure, or a transient one would sit on the page for good.
-        setLoadError(null)
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setIsLoadingEvent(false)
-        setLoadError(formatApiError(error))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [eventId])
-
-  function chooseEvent(change: ChangeEvent<HTMLSelectElement>) {
-    setEventId(change.target.value)
-    setChosenEvent(null)
-    setIsLoadingEvent(change.target.value !== '')
+  if (error) {
+    return (
+      <div className="page">
+        <p role="alert" className="error">
+          {error}
+        </p>
+      </div>
+    )
   }
+  if (!subject) return <LoadingState label="Loading the request…" />
 
-  function chooseVenue(change: ChangeEvent<HTMLSelectElement>) {
-    setVenueId(change.target.value)
-  }
+  const { event, venue } = subject
+  const backTo = location.search
+    ? `${VENUE_CATALOGUE_PATH}${location.search}`
+    : venueSearchPath({ eventId: event.id })
 
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
-    const venue = venues.find((candidate) => candidate.id === venueId)
-    if (!venue || !chosenEvent) return
     setSendError(null)
     setIsSending(true)
     try {
-      const booking = await createBookingRequest(
-        { event_id: eventId, venue_id: venueId },
-        venue.name,
-      )
-      setSent({ booking, venueName: venue.name, eventName: chosenEvent.name })
-    } catch (error: unknown) {
-      setSendError(formatApiError(error))
+      setSent(await createBookingRequest({ event_id: event.id, venue_id: venue.id }, venue.name))
+    } catch (err: unknown) {
+      setSendError(formatApiError(err))
     } finally {
       setIsSending(false)
     }
   }
 
-  function requestAnother() {
-    setSent(null)
-    setVenueId('')
-  }
-
-  if (events === null) return <LoadingState label="Loading your approved events…" />
-
-  const hasNothingToRequest = events.length === 0 || venues.length === 0
-
   return (
-    <div className="stack">
+    <div className="page stack">
+      <Link to={backTo} className="back-link">
+        ← Venue catalogue
+      </Link>
       <PageHeader
-        title="Request a venue"
-        subtitle="One approved event, one venue. Venue Staff decide whether to hold it."
+        title={`Request ${venue.name}`}
+        subtitle={`For ${event.name}. Venue Staff decide whether to hold it.`}
       />
 
-      {loadError && (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
-      )}
-
-      {hasNothingToRequest && (
-        <EmptyState>
-          {events.length === 0
-            ? `${NO_BOOKABLE_EVENTS} A venue can only be requested once an event request has been approved and assigned to you.`
-            : NO_VENUES}
-        </EmptyState>
-      )}
-
-      {!hasNothingToRequest && sent && (
+      {sent ? (
         <section className="card stack" aria-labelledby="booking-sent-heading">
           <h2 id="booking-sent-heading">Request sent</h2>
           <p>
-            {sent.venueName} was requested for {sent.eventName}. The request is with Venue Staff for
-            review.
+            {venue.name} was requested for {event.name}. The request is with Venue Staff for review.
           </p>
           <ul className="check-list">
             <li>
               <span className="grow-text">Status</span>
-              <StatusBadge status={sent.booking.status} />
+              <StatusBadge status={sent.status} />
             </li>
             <li>
               <span className="grow-text">Requested period</span>
-              <span>{formatSchedule(sent.booking.held_from, sent.booking.held_until)}</span>
+              <span>{formatSchedule(sent.held_from, sent.held_until)}</span>
             </li>
             <li>
               <span className="grow-text">Expected attendance</span>
-              <span className="mono">{sent.booking.expected_attendance}</span>
+              <span className="mono">{sent.expected_attendance}</span>
             </li>
           </ul>
           <div className="form-actions">
-            <button type="button" className="secondary" onClick={requestAnother}>
-              Request another venue
-            </button>
+            <Link to={eventPath(event.id)} className="button secondary">
+              Back to the event
+            </Link>
           </div>
         </section>
-      )}
-
-      {!hasNothingToRequest && !sent && (
+      ) : (
         <form className="card stack" onSubmit={handleSubmit}>
-          <label>
-            Event
-            <select value={eventId} onChange={chooseEvent} required>
-              <option value="">Choose an approved event</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <section aria-labelledby="booking-venue-heading" className="stack">
+            <h2 id="booking-venue-heading">Venue</h2>
+            <ul className="check-list">
+              <li>
+                <span className="grow-text">Location</span>
+                <span>{venue.location}</span>
+              </li>
+              <li>
+                <span className="grow-text">Capacity</span>
+                <span className="mono">{venue.capacity}</span>
+              </li>
+            </ul>
+          </section>
 
-          <label>
-            Venue
-            <select value={venueId} onChange={chooseVenue} required>
-              <option value="">Choose one venue</option>
-              {venues.map((venue) => (
-                <option key={venue.id} value={venue.id}>
-                  {venue.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {isLoadingEvent && <p className="muted">{LOADING_REQUIREMENTS}</p>}
-
-          {chosenEvent && (
-            <section aria-labelledby="booking-carries-heading" className="stack">
-              <h2 id="booking-carries-heading">What this request will carry</h2>
-              <p className="muted">
-                Taken from the event, so Venue Staff assess the same requirements it was approved
-                with.
-              </p>
-              <ul className="check-list">
-                <li>
-                  <span className="grow-text">Date and time</span>
-                  <span>
-                    {chosenEvent.starts_at && chosenEvent.ends_at
-                      ? formatSchedule(chosenEvent.starts_at, chosenEvent.ends_at)
-                      : NOT_RECORDED}
-                  </span>
-                </li>
-                <li>
-                  <span className="grow-text">Expected attendance</span>
-                  <span className="mono">{chosenEvent.expected_attendance ?? NOT_RECORDED}</span>
-                </li>
-                <li>
-                  <span className="grow-text">Room layout</span>
-                  <span>{chosenEvent.required_layout_name ?? NOT_RECORDED}</span>
-                </li>
-                <li>
-                  <span className="grow-text">Required facilities</span>
-                  <span>
-                    {chosenEvent.required_facilities.length === 0
-                      ? NOT_RECORDED
-                      : chosenEvent.required_facilities.map(describeFacility).join(', ')}
-                  </span>
-                </li>
-              </ul>
-            </section>
-          )}
+          <section aria-labelledby="booking-carries-heading" className="stack">
+            <h2 id="booking-carries-heading">What this request will carry</h2>
+            <p className="muted">
+              Taken from the event, so Venue Staff assess the same requirements it was approved
+              with.
+            </p>
+            <ul className="check-list">
+              <li>
+                <span className="grow-text">Date and time</span>
+                <span>
+                  {event.starts_at && event.ends_at
+                    ? formatSchedule(event.starts_at, event.ends_at)
+                    : NOT_RECORDED}
+                </span>
+              </li>
+              <li>
+                <span className="grow-text">Expected attendance</span>
+                <span className="mono">{event.expected_attendance ?? NOT_RECORDED}</span>
+              </li>
+              <li>
+                <span className="grow-text">Room layout</span>
+                <span>{event.required_layout_name ?? NOT_RECORDED}</span>
+              </li>
+              <li>
+                <span className="grow-text">Required facilities</span>
+                <span>
+                  {event.required_facilities.length === 0
+                    ? NOT_RECORDED
+                    : event.required_facilities.map(describeFacility).join(', ')}
+                </span>
+              </li>
+            </ul>
+          </section>
 
           <div className="form-actions">
             {sendError && (
@@ -262,12 +179,7 @@ export function BookingRequestFormPage() {
                 {sendError}
               </p>
             )}
-            {/* Disabled until the event's details are in hand: the request is built from them,
-                so a click before then could not send anything. */}
-            <button
-              type="submit"
-              disabled={isSending || isLoadingEvent || chosenEvent === null || venueId === ''}
-            >
+            <button type="submit" disabled={isSending}>
               {isSending ? 'Sending…' : 'Send request'}
             </button>
           </div>

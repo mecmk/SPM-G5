@@ -34,7 +34,13 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
       'Venue catalogue',
       'Equipment requests',
     ],
-    hidden: ['Manage venues', 'My events', 'Bookings & schedule', 'Equipment holds'],
+    hidden: [
+      'Manage venues',
+      'My events',
+      'Bookings & schedule',
+      'Equipment holds',
+      'Request a venue',
+    ],
   },
   {
     role: 'venue staff',

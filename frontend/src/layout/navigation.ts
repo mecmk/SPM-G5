@@ -1,7 +1,6 @@
 import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
 import {
-  BOOKING_REQUEST_NEW_PATH,
   BOOKING_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
@@ -127,15 +126,8 @@ export const NAV_SECTIONS: NavSection[] = [
         story: '8.3',
         isAvailable: true,
       },
-      {
-        to: BOOKING_REQUEST_NEW_PATH,
-        label: 'Request a venue',
-        description: 'Ask Venue Staff to hold a venue for one of your approved events.',
-        icon: 'calendar-check',
-        permission: PERMISSIONS.BOOKINGS_REQUEST,
-        story: '12.1',
-        isAvailable: true,
-      },
+      // f12.1.1: no "Request a venue" section. A venue is requested from its event: Find a venue
+      // on the event's page, then Request this venue in the catalogue (12.1 AC15).
       {
         to: BOOKING_REQUESTS_PATH,
         label: 'Booking Requests',

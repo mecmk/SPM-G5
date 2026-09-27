@@ -2462,3 +2462,20 @@ label select[aria-invalid='true'],
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+
+/* ---------- finding a venue for an event (f12.1.1) ---------- */
+
+/* A card's heading with an action beside it: Venue requirements with Find a venue, and the
+   catalogue's "Finding a venue for" banner with its way back to the event. */
+.card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+/* The catalogue's "Finding a venue for" banner, set apart from the filters and results below. */
+.requesting-event {
+  margin-bottom: 1.5rem;
+}
