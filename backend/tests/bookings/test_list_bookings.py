@@ -1,12 +1,12 @@
 """Story 13.1 - be: display the venue staff booking queue.
 
 AC1 The queue lists all requests for venues the staff member is responsible for.
-AC2 Each entry shows event name, requested venue, period, expected attendance and stated
-    requirements.
-AC3 Decided requests also appear in the queue, with their decision reason, so Venue Staff can
-    review past decisions through the All / Pending / Approved / Rejected tabs - broadened the
-    same way story 6.1 widened the coordinator's queue from a review-only endpoint to every
-    assigned event.
+AC2 Each entry shows event name, requested venue, period, expected attendance, stated
+    requirements and when the coordinator raised the request.
+AC3 Decided requests also appear in the queue, with when and why they were decided, so Venue
+    Staff can review past decisions through the All / Pending / Approved / Rejected tabs -
+    broadened the same way story 6.1 widened the coordinator's queue from a review-only endpoint
+    to every assigned event.
 
 Excluded, with reason:
 * "Venue Staff outside the venue's responsibility scope" - same reason as
@@ -60,6 +60,21 @@ def test_entry_shows_event_venue_period_attendance_and_requirements(venue_staff_
     assert entry["requirement_notes"] == "Breakout track B."
 
 
+@pytest.mark.story("13.1", ac=2)
+def test_entry_shows_when_the_request_was_raised(venue_staff_client, db):
+    booking = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        starts_at=datetime(2027, 2, 4, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2027, 2, 4, 11, 0, tzinfo=timezone.utc),
+    )
+
+    body = venue_staff_client.get("/bookings").json()
+    entry = next(row for row in body if row["id"] == str(booking.id))
+
+    assert datetime.fromisoformat(entry["created_at"]) == booking.created_at
+
+
 # --- AC3: decided requests are included, with their reason, for the tabs -------------------
 @pytest.mark.story("13.1", ac=3)
 def test_a_decided_booking_is_listed(venue_staff_client):
@@ -106,6 +121,33 @@ def test_a_rejected_booking_carries_its_decision_reason(venue_staff_client, db):
     entry = next(row for row in body if row["id"] == str(booking.id))
 
     assert entry["decision_reason"] == "The venue is under maintenance that week."
+
+
+@pytest.mark.story("13.1", ac=3)
+def test_a_decided_booking_carries_when_it_was_decided(venue_staff_client, db):
+    decided_at = datetime(2026, 9, 25, 8, 30, tzinfo=timezone.utc)
+    booking = make_booking(
+        db,
+        venue_id=Venues.BOARDROOM,
+        status=BookingStatus.APPROVED,
+        decided_by_id=Users.VENUE_STAFF.id,
+        decided_at=decided_at,
+        starts_at=datetime(2027, 2, 5, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2027, 2, 5, 11, 0, tzinfo=timezone.utc),
+    )
+
+    body = venue_staff_client.get("/bookings").json()
+    entry = next(row for row in body if row["id"] == str(booking.id))
+
+    assert datetime.fromisoformat(entry["decided_at"]) == decided_at
+
+
+@pytest.mark.story("13.1", ac=2)
+def test_a_pending_booking_has_no_decided_at(venue_staff_client):
+    body = venue_staff_client.get("/bookings").json()
+    entry = next(row for row in body if row["id"] == str(Bookings.PENDING_SEMINAR_ROOM))
+
+    assert entry["decided_at"] is None
 
 
 # --- access control --------------------------------------------------------------------------

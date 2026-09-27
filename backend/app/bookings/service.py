@@ -258,8 +258,9 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     id up front. An event may accumulate more than one row over time (a rejected request
     followed by a fresh one, possibly for a different venue), so this is a history, not a single
     outcome; deciding a booking updates that same row in place, it never creates a new one.
-    ``id`` breaks a tie on ``created_at`` - seed rows inserted by the same statement share one
-    transaction timestamp, so ``created_at`` alone leaves their relative order undefined."""
+    ``id`` breaks a tie on ``created_at`` - two bookings inserted in the same statement or
+    transaction (seed data, or two rapid test factory calls) can share one timestamp, which
+    would otherwise leave their relative order undefined."""
     return list(
         db.scalars(
             select(VenueBooking)
