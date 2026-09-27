@@ -60,8 +60,13 @@ function loadFirstPage() {
  * AC8: the header offers "New event request".
  * AC9: the backend sends a page at a time; "Load more" adds the next, and says how many are left.
  *
- * Story 6.1: a tab strip (All plus the seven visible statuses) filters the currently-loaded
- * page client-side; "Load more" still fetches the next page of everything, regardless of tab.
+ * AC10: the status badge (shared with the draft editor and the event details page) is the same
+ * component and colour mapping wherever it renders, so the status can never disagree with itself.
+ * AC11: a tab strip (All plus the seven visible statuses) filters the currently-loaded page
+ * client-side; "Load more" still fetches the next page of everything, regardless of tab.
+ *
+ * AC10/AC11 are the organiser-facing half of this same status/tab display; the coordinator's own
+ * list (ReviewQueuePage's tab strip, backed by GET /events/assigned-to-me) is story 6.1.
  */
 export function MyEventsPage() {
   const { data: list, error, isLoading, setData: setList } = useLoaded(loadFirstPage)

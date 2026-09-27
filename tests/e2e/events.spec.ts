@@ -78,9 +78,7 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await expect(page.getByRole('checkbox')).toHaveCount(0)
 })
 
-test('7.1 AC1: a draft with no dates, attendance or coordinator shows clear empty states', async ({
-  page,
-}) => {
+test('7.1 AC1: a draft with no dates or attendance shows clear empty states', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.draft}`)
 
@@ -88,7 +86,10 @@ test('7.1 AC1: a draft with no dates, attendance or coordinator shows clear empt
     page.getByRole('heading', { name: 'Q1 Sales Kick-off (draft)', level: 1 }),
   ).toBeVisible()
   await expect(page.getByText('Not yet scheduled · Organised by Olivia Organiser')).toBeVisible()
-  await expect(page.getByText('Not yet assigned')).toBeVisible()
+  // Story 2.6 AC13: a draft has no coordinator to show yet, so the stat is left out entirely -
+  // "Not yet assigned" is reserved for a submitted request nobody has assigned yet.
+  await expect(page.getByText('Assigned coordinator')).toHaveCount(0)
+  await expect(page.getByText('Not yet assigned')).toHaveCount(0)
   // AC1: no recorded image falls back to the placeholder rather than a broken or empty image.
   await expect(page.locator('img')).toHaveCount(0)
 })

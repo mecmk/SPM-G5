@@ -15,6 +15,11 @@ AC7 Only an organiser (``events:read_own``) may read it: other roles get 403, si
 AC8 The "New event request" action on the page is a UI case: tests/e2e/my-event-requests.spec.ts.
 AC9 The list is paged: at most 100 requests a call, with the total, and the rest a page away.
 
+ACs 10-16 (status agreeing with the details endpoint, tab filtering, and the assigned
+coordinator's name/email on a request's own details page - added per product owner decision) are
+in test_event_status_and_coordinator_visibility.py, since they exercise ``GET /events/{id}``
+rather than this file's ``GET /events/mine``.
+
 Ordering tests set ``updated_at`` explicitly. Every test runs in one transaction, and PostgreSQL's
 ``now()`` is fixed for the whole of it, so rows created in a test would otherwise all tie.
 """
