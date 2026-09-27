@@ -44,23 +44,29 @@ export function VenueDetailPage() {
   const loadVenue = useCallback(() => getVenue(venueId), [venueId])
   const { data: venue, error } = useLoaded(loadVenue)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
-  const [windows, setWindows] = useState<VenueUnavailableWindow[] | null>(null)
+  const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [isCalendarLoading, setIsCalendarLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    setWindows(null)
+    setIsCalendarLoading(true)
     const rangeStart = monthBoundary(month)
     const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
     getVenueCalendar(venueId, rangeStart, rangeEnd)
       .then((data) => {
-        if (!cancelled) {
-          setWindows(data)
-          setCalendarError(null)
-        }
+        if (cancelled) return
+        setWindows(data)
+        setCalendarError(null)
+        setIsCalendarLoading(false)
       })
       .catch((err) => {
-        if (!cancelled) setCalendarError(formatApiError(err))
+        if (cancelled) return
+        // Falls back to "everything available" rather than leaving stale data on screen or
+        // hiding the calendar - a deliberate choice, not a neutral default (see f9.1.1 PR notes).
+        setWindows([])
+        setCalendarError(formatApiError(err))
+        setIsCalendarLoading(false)
       })
     return () => {
       cancelled = true
@@ -69,7 +75,7 @@ export function VenueDetailPage() {
 
   const calendarEntries: CalendarEntry[] = useMemo(
     () =>
-      (windows ?? []).flatMap((window) =>
+      windows.flatMap((window) =>
         eachDate(window.starts_at, window.ends_at).map((date) => ({
           id: `${window.starts_at}-${date}`,
           date,
@@ -204,15 +210,15 @@ export function VenueDetailPage() {
                 {calendarError}
               </p>
             )}
-            {windows === null && !calendarError && <LoadingState label="Loading availability…" />}
-            {windows !== null && (
-              <Calendar
-                month={month}
-                onMonthChange={setMonth}
-                entries={calendarEntries}
-                legend={CALENDAR_LEGEND}
-              />
+            {isCalendarLoading && !calendarError && (
+              <p className="muted">Loading availability…</p>
             )}
+            <Calendar
+              month={month}
+              onMonthChange={setMonth}
+              entries={calendarEntries}
+              legend={CALENDAR_LEGEND}
+            />
           </section>
         </div>
 
