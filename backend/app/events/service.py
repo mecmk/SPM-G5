@@ -751,6 +751,18 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
     return event
 
 
+def _resent_unchanged(value: datetime | None, stored: datetime | None) -> datetime | None:
+    """``None`` when ``value`` is exactly what is already stored - the edit form always resends
+    every field (frontend/CLAUDE.md: "the form always sends every field"), so ``field in sent``
+    alone cannot tell "the organiser just typed this" apart from "this rode along unchanged".
+    Without this, a date that was fine when saved but has since drifted into the past blocks
+    saving anything else on the request, forever, since every edit resends it. A value the
+    organiser did genuinely change to match what is already stored is indistinguishable from one
+    that merely rode along - and is correctly not re-judged either way, the same as any other
+    no-op edit."""
+    return None if value == stored else value
+
+
 def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: User) -> Event:
     """AC7: edit or remove any recorded detail, requirement or equipment item while a draft.
     Only the fields sent change; a list sent replaces that list."""
@@ -766,8 +778,8 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
         _check_schedule(
             starts_at,
             ends_at,
-            supplied_start=details.get("starts_at"),
-            supplied_end=details.get("ends_at"),
+            supplied_start=_resent_unchanged(details.get("starts_at"), event.starts_at),
+            supplied_end=_resent_unchanged(details.get("ends_at"), event.ends_at),
         )
     # AC18: re-checked whenever the start moves too, not just when a registration date itself is
     # edited - a saved date that a start change would put after it is refused here, unlike AC2's
@@ -783,8 +795,12 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
             opens_at=details.get("registration_opens_at", event.registration_opens_at),
             closes_at=details.get("registration_closes_at", event.registration_closes_at),
             starts_at=starts_at,
-            supplied_opens_at=details.get("registration_opens_at"),
-            supplied_closes_at=details.get("registration_closes_at"),
+            supplied_opens_at=_resent_unchanged(
+                details.get("registration_opens_at"), event.registration_opens_at
+            ),
+            supplied_closes_at=_resent_unchanged(
+                details.get("registration_closes_at"), event.registration_closes_at
+            ),
         )
     _check_venue_requirements(
         is_none_required=details.get("venue_none_required", event.venue_none_required),

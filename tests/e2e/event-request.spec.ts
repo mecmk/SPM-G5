@@ -31,9 +31,9 @@
  * AC15 saving a draft says "Draft saved"; submitting says only "Request submitted".
  * AC16 after a successful submission the organiser is taken to My events, where the request shows
  *     as under review; a refused submission stays on the request's edit page.
- * AC17 Registration required (Yes/No, merged in from a former standalone story 2.2) reveals a
- *     registration opening/closing date pair when Yes; a bad date is said under the fields as it
- *     is typed, the same as AC2. Turning it off after entering dates asks for confirmation first.
+ * AC17 Registration required (Yes/No) reveals a registration opening/closing date pair when
+ *     Yes; a bad date is said under the fields as it is typed, the same as AC2. Turning it off
+ *     after entering dates asks for confirmation first.
  * AC18 Rule detail for moving the proposed start against a saved registration date is a backend
  *     case (test_event_request_registration.py).
  * AC19 the organiser marks the event Public or Private; defaults to Private. Shown on the

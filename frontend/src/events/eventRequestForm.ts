@@ -52,7 +52,7 @@ export interface EventFormState {
   isRegistrationRequired: boolean
   registrationOpensAt: string
   registrationClosesAt: string
-  /** Story 2.1 AC17: defaults to Private. */
+  /** Story 2.1 AC19: defaults to Private. */
   isPublic: boolean
 }
 

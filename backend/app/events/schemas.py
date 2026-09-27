@@ -37,9 +37,9 @@ VENUE_CONTRADICTION_MESSAGE = (
     "Venue requirements cannot be marked none required while a layout, facilities or notes are "
     "recorded."
 )
-# Story 2.1 AC17: a registration closing date cannot be recorded unless registration is required.
+# Story 2.1 AC17: neither registration date can be recorded unless registration is required.
 REGISTRATION_CONTRADICTION_MESSAGE = (
-    "A registration closing date cannot be recorded while registration is not required."
+    "Registration dates cannot be recorded while registration is not required."
 )
 DUPLICATE_EQUIPMENT_MESSAGE = "Each equipment type can appear only once on a request."
 DUPLICATE_ENTRY_MESSAGE = "Each option can be chosen only once."

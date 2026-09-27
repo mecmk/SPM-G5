@@ -1,13 +1,12 @@
-"""Story 2.1 - the registration requirement on an event request (AC17, AC18; merged in from a
-former standalone story 2.2 after product review).
+"""Story 2.1 - the registration requirement on an event request (AC17, AC18).
 
 AC17 The organiser can mark Registration required: Yes or No. Choosing Yes reveals a
      registration opening date/time and a registration closing date/time; choosing No hides both
      and stores nothing for them - defaults to not set and is not required to save a draft. The
      opening date is optional: left blank, registration opens immediately once the event is
-     approved. When given, it must be in the future, no later than the closing date, and no later
-     than the proposed start. The closing date must be in the future, no later than the proposed
-     start, and not before the opening date (when given) - equal to the start is accepted for
+     approved. When given, it must be in the future, strictly before the closing date, and no
+     later than the proposed start. The closing date must be in the future, no later than the
+     proposed start, and after the opening date (when given) - equal to the start is accepted for
      either, one minute after is refused. Registration capacity is not a separate field: it is
      always the event's expected attendance (AC3).
 
@@ -515,6 +514,45 @@ def test_editing_unrelated_fields_does_not_re_check_a_stale_closing_date(
     db.expire_all()
 
     response = organiser_client.patch(f"/events/{created['id']}", json={"purpose": "Updated"})
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("2.1", ac=18)
+def test_a_full_edit_that_resends_a_stale_closing_date_still_saves(organiser_client, db: Session):
+    """The frontend always resends every field on an edit (frontend/CLAUDE.md: "the form always
+    sends every field"), not just the one that changed - a closing date that has since drifted
+    into the past by time alone must not block saving just because it rode along unchanged in a
+    full-object PATCH, the same as the sparse-payload case above."""
+    starts_at = future_datetime(days=30)
+    created = create_event_request(
+        organiser_client,
+        starts_at=starts_at.isoformat(),
+        ends_at=(starts_at + timedelta(hours=8)).isoformat(),
+        registration_required=True,
+        registration_closes_at=starts_at.isoformat(),
+    )
+    db.execute(
+        text("UPDATE events SET registration_closes_at = now() - interval '2 days' WHERE id = :id"),
+        {"id": created["id"]},
+    )
+    db.expire_all()
+    loaded = organiser_client.get(f"/events/{created['id']}").json()
+
+    response = organiser_client.patch(
+        f"/events/{created['id']}",
+        json={
+            "name": loaded["name"],
+            "purpose": "Updated purpose",
+            "description": loaded["description"],
+            "starts_at": loaded["starts_at"],
+            "ends_at": loaded["ends_at"],
+            "expected_attendance": loaded["expected_attendance"],
+            "registration_required": loaded["registration_required"],
+            "registration_opens_at": loaded["registration_opens_at"],
+            "registration_closes_at": loaded["registration_closes_at"],
+        },
+    )
 
     assert response.status_code == 200, response.text
 
