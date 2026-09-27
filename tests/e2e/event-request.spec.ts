@@ -36,13 +36,15 @@
  *     is typed, the same as AC2. Turning it off after entering dates asks for confirmation first.
  * AC18 Rule detail for moving the proposed start against a saved registration date is a backend
  *     case (test_event_request_registration.py).
- * AC19 the organiser marks the event Public or Private; defaults to Private.
+ * AC19 the organiser marks the event Public or Private; defaults to Private. Shown on the
+ *     request's own details page once submitted, to the organiser and the reviewing coordinator
+ *     alike - the registration choice/dates get the same treatment, covered in events.spec.ts.
  * AC20 saving a request with the same name and dates as one of the organiser's own other live
  *     requests is refused, naming the conflict. No frontend logic of its own - the backend's
  *     sentence surfaces through the form's existing save-error handling. Rule detail (scoping,
  *     boundaries, dead statuses) is a backend case: test_event_request_duplicate.py.
- * Rule detail, refusals (401/403/404/409/422) and what the coordinator sees (AC8, AC12) are
- * backend cases: backend/tests/events/test_event_request_*.py.
+ * Rule detail, refusals (401/403/404/409/422) and the rest of what the coordinator sees
+ * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
@@ -1396,6 +1398,30 @@ test('2.1 AC19: event visibility defaults to Private and can be switched to Publ
   await page.reload()
 
   await expect(page.getByRole('radio', { name: 'Public' })).toBeChecked()
+})
+
+test('2.1 AC8/AC19: a submitted request’s visibility choice is shown on its details page, to the organiser and the coordinator', async ({
+  page,
+}) => {
+  const name = uniqueName('Public visibility')
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, name)
+
+  await page.getByRole('radio', { name: 'Public' }).check()
+  await saveEdits(page)
+  await page.getByRole('button', { name: 'Submit request' }).click()
+  await toastsOnceSubmitted(page)
+
+  await myEventsCard(page, name).getByRole('link', { name }).click()
+  await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/)
+  await expect(page.getByText('Public', { exact: true })).toBeVisible()
+  const eventUrl = page.url()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(eventUrl)
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  await expect(page.getByText('Public', { exact: true })).toBeVisible()
 })
 
 test('2.1 AC20: a request with the same name and dates as another live request is refused', async ({
