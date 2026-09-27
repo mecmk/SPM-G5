@@ -45,8 +45,8 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'venue staff',
     email: ACCOUNTS.venueStaff,
-    visible: ['Manage venues', 'Booking Requests', 'Venue Schedule'],
-    hidden: ['Venue catalogue', 'Events inbox', 'Equipment requests', 'My events', 'All events'],
+    visible: ['Venue catalogue', 'Booking Requests', 'Venue Schedule'],
+    hidden: ['Manage venues', 'Events inbox', 'Equipment requests', 'My events', 'All events'],
   },
   {
     role: 'technical support',
@@ -86,7 +86,7 @@ test('1.2 AC2: the main page lists every section from the sidebar', async ({ pag
   await signIn(page, ACCOUNTS.venueStaff)
   const main = page.getByRole('main')
 
-  for (const name of ['Manage venues', 'Booking Requests', 'Venue Schedule']) {
+  for (const name of ['Venue catalogue', 'Booking Requests', 'Venue Schedule']) {
     await expect(main.getByRole('heading', { name, exact: true })).toBeVisible()
   }
   const sidebarLinks = await mainNav(page).getByRole('link').count()
@@ -97,10 +97,10 @@ test('1.2 AC2: the main page lists every section from the sidebar', async ({ pag
 test('1.2 AC3: a page inside the role opens normally', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
 
-  await mainNav(page).getByRole('link', { name: 'Manage venues', exact: true }).click()
+  await mainNav(page).getByRole('link', { name: 'Venue catalogue', exact: true }).click()
 
-  await expect(page).toHaveURL(/\/venues\/manage$/)
-  await expect(page.getByRole('heading', { name: 'Manage venues', level: 1 })).toBeVisible()
+  await expect(page).toHaveURL(/\/venues$/)
+  await expect(page.getByRole('heading', { name: 'Venue catalogue', level: 1 })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toHaveCount(0)
 })
 
@@ -111,19 +111,19 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await page.goto('/venues/manage')
 
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Manage venues' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
 
 test('1.2: the sidebar collapses to icons and remembers the choice', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   const nav = mainNav(page)
-  await expect(nav.getByText('Manage venues', { exact: true })).toBeVisible()
+  await expect(nav.getByText('Venue catalogue', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Collapse sidebar' }).click()
 
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
-  await expect(nav.getByText('Manage venues', { exact: true })).toBeHidden()
-  await expect(nav.getByRole('link', { name: 'Manage venues', exact: true })).toBeVisible()
+  await expect(nav.getByText('Venue catalogue', { exact: true })).toBeHidden()
+  await expect(nav.getByRole('link', { name: 'Venue catalogue', exact: true })).toBeVisible()
 
   await page.reload()
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
@@ -138,8 +138,8 @@ test('1.2: on a phone the sidebar opens as a drawer and closes after choosing', 
   await expect(mainNav(page)).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Open menu' }).click()
-  await mainNav(page).getByRole('link', { name: 'Manage venues', exact: true }).click()
+  await mainNav(page).getByRole('link', { name: 'Venue catalogue', exact: true }).click()
 
-  await expect(page).toHaveURL(/\/venues\/manage$/)
+  await expect(page).toHaveURL(/\/venues$/)
   await expect(mainNav(page)).toHaveCount(0)
 })
