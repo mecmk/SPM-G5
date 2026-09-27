@@ -38,7 +38,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, signIn, venueCard } from './support'
+import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 
 const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
@@ -326,10 +326,7 @@ test('12.1 AC15: a refused request shows why and is not marked sent', async ({ p
       status: 409,
       contentType: 'application/json',
       body: JSON.stringify({ detail: WITHDRAWN_VENUE_MESSAGE }),
-      headers: {
-        'access-control-allow-origin': request.headers()['origin'] ?? '*',
-        'access-control-allow-credentials': 'true',
-      },
+      headers: corsHeaders(request),
     })
   })
   await page.getByRole('button', { name: 'Send request' }).click()
