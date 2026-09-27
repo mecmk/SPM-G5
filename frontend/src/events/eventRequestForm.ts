@@ -48,6 +48,12 @@ export interface EventFormState {
   accessibility: Record<string, NoteDraft>
   accessibilityNotes: string
   equipment: EquipmentDraft[]
+  /** Story 2.1 AC17: Yes/No. Dates below are only meaningful, and only sent, when this is true. */
+  isRegistrationRequired: boolean
+  registrationOpensAt: string
+  registrationClosesAt: string
+  /** Story 2.1 AC17: defaults to Private. */
+  isPublic: boolean
 }
 
 export const EMPTY_NOTE: NoteDraft = { notes: '' }
@@ -95,6 +101,10 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   accessibility: {},
   accessibilityNotes: '',
   equipment: [],
+  isRegistrationRequired: false,
+  registrationOpensAt: '',
+  registrationClosesAt: '',
+  isPublic: false,
 }
 
 /** The field a problem belongs to, so the page can mark it and move focus there. */
@@ -111,7 +121,16 @@ export const FIELD_ID = {
   contactPhone: 'event-contact-phone',
   startsAt: 'event-starts-at',
   endsAt: 'event-ends-at',
+  registrationOpensAt: 'event-registration-opens-at',
+  registrationClosesAt: 'event-registration-closes-at',
 } as const
+
+/** Story 2.1 AC17/AC18: the two registration date fields, so a shared helper can tell them apart
+ * from the proposed start/end when a date is left half-typed. */
+export const REGISTRATION_DATE_FIELD_IDS: readonly string[] = [
+  FIELD_ID.registrationOpensAt,
+  FIELD_ID.registrationClosesAt,
+]
 
 export function getFacilityQuantityId(code: string): string {
   return `facility-${code}-quantity`
@@ -207,6 +226,14 @@ export function formFromEvent(event: EventDetail): EventFormState {
         notes: textOf(line.technical_notes),
       }
     }),
+    isRegistrationRequired: event.registration_required,
+    registrationOpensAt: event.registration_opens_at
+      ? instantToInput(event.registration_opens_at)
+      : '',
+    registrationClosesAt: event.registration_closes_at
+      ? instantToInput(event.registration_closes_at)
+      : '',
+    isPublic: event.is_public,
   }
 }
 
@@ -300,6 +327,8 @@ export function validateEventForm(
   }
   const dateProblem = validateDates(form, saved)
   if (dateProblem) return dateProblem
+  const registrationDateProblem = validateRegistrationDates(form, saved)
+  if (registrationDateProblem) return registrationDateProblem
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     return { code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail }
   }
@@ -337,6 +366,70 @@ export function validateDates(form: EventFormState, saved: EventDetail | null): 
   // Last: a start in the year 1 is "in the past", and fixing it fixes the length too.
   if (form.startsAt && form.endsAt && form.endsAt > getLatestEndInput(form.startsAt)) {
     return { code: 'EVENT_TOO_LONG', fieldId: FIELD_ID.endsAt }
+  }
+  return null
+}
+
+/**
+ * Story 2.1 AC17/AC18: the first problem with the registration opening/closing dates, or null.
+ * Nothing to check when registration is not required - the dates are hidden and cleared then.
+ * Mirrors the backend's `_check_registration`: a date already saved is not judged again unless
+ * it was the one just changed (same "not re-rejected" principle as `validateDates`), but both
+ * are re-checked against the proposed start whenever the start itself changes (AC18) - that
+ * effect falls out of comparing against `form.startsAt` directly rather than only a "supplied"
+ * start, the same way `_check_registration` does server-side.
+ */
+export function validateRegistrationDates(
+  form: EventFormState,
+  saved: EventDetail | null,
+): FormProblem | null {
+  if (!form.isRegistrationRequired) return null
+  if (form.registrationOpensAt && !isReadableDateTime(form.registrationOpensAt)) {
+    return { code: 'EVENT_REGISTRATION_DATE_INVALID', fieldId: FIELD_ID.registrationOpensAt }
+  }
+  if (form.registrationClosesAt && !isReadableDateTime(form.registrationClosesAt)) {
+    return { code: 'EVENT_REGISTRATION_DATE_INVALID', fieldId: FIELD_ID.registrationClosesAt }
+  }
+  const savedOpensAt = saved?.registration_opens_at
+    ? instantToInput(saved.registration_opens_at)
+    : ''
+  const savedClosesAt = saved?.registration_closes_at
+    ? instantToInput(saved.registration_closes_at)
+    : ''
+  if (
+    form.registrationOpensAt !== '' &&
+    form.registrationOpensAt !== savedOpensAt &&
+    isInThePast(form.registrationOpensAt)
+  ) {
+    return { code: 'EVENT_REGISTRATION_OPENS_IN_PAST', fieldId: FIELD_ID.registrationOpensAt }
+  }
+  if (
+    form.registrationClosesAt !== '' &&
+    form.registrationClosesAt !== savedClosesAt &&
+    isInThePast(form.registrationClosesAt)
+  ) {
+    return { code: 'EVENT_REGISTRATION_CLOSES_IN_PAST', fieldId: FIELD_ID.registrationClosesAt }
+  }
+  // A registration window needs positive width - equal is refused, matching the backend's own
+  // ck_events_registration_window constraint.
+  if (
+    form.registrationOpensAt &&
+    form.registrationClosesAt &&
+    form.registrationOpensAt >= form.registrationClosesAt
+  ) {
+    return {
+      code: 'EVENT_REGISTRATION_OPENS_AFTER_CLOSES',
+      fieldId: FIELD_ID.registrationOpensAt,
+    }
+  }
+  if (form.registrationOpensAt && form.startsAt && form.registrationOpensAt > form.startsAt) {
+    return { code: 'EVENT_REGISTRATION_OPENS_AFTER_START', fieldId: FIELD_ID.registrationOpensAt }
+  }
+  if (form.registrationClosesAt && form.startsAt && form.registrationClosesAt > form.startsAt) {
+    return {
+      code: 'EVENT_REGISTRATION_CLOSES_AFTER_START',
+      fieldId: FIELD_ID.registrationClosesAt,
+    }
   }
   return null
 }
@@ -400,6 +493,9 @@ export function getMissingForSubmission(form: EventFormState): string[] {
     Object.keys(form.accessibility).length > 0 ||
     form.accessibilityNotes.trim() !== ''
   if (!hasAccessibilityAnswer) missing.push('accessibility needs (choose some, or mark none)')
+  if (form.isRegistrationRequired && !form.registrationClosesAt) {
+    missing.push('registration closing date')
+  }
   return missing
 }
 
@@ -484,6 +580,16 @@ export function eventInputFrom(form: EventFormState): EventInput {
       quantity: Number(line.quantity),
       technical_notes: textOrNull(line.notes),
     })),
+    registration_required: form.isRegistrationRequired,
+    registration_opens_at:
+      form.isRegistrationRequired && form.registrationOpensAt
+        ? inputToInstant(form.registrationOpensAt)
+        : null,
+    registration_closes_at:
+      form.isRegistrationRequired && form.registrationClosesAt
+        ? inputToInstant(form.registrationClosesAt)
+        : null,
+    is_public: form.isPublic,
   }
 }
 

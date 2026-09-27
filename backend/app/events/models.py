@@ -253,13 +253,17 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     accessibility_notes: Mapped[str | None] = mapped_column(Text)
 
-    # registration (stories 2.4, 18.x)
+    # registration (story 2.1 AC17/AC18; capacity remains reserved for a future story - AC17
+    # always uses expected_attendance instead)
     registration_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
     registration_capacity: Mapped[int | None] = mapped_column(Integer)
     registration_opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     registration_closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # visibility (story 2.1 AC19)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     # routine / contact fields (story 7.2)
     contact_name: Mapped[str | None] = mapped_column(Text)

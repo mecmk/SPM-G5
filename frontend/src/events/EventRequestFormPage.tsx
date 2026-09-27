@@ -13,6 +13,7 @@ import {
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
@@ -31,6 +32,7 @@ import {
   FIELD_ID,
   MAX_EVENT_DAYS,
   MAX_LEAD_YEARS,
+  REGISTRATION_DATE_FIELD_IDS,
   eventInputFrom,
   formFromEvent,
   getEquipmentQuantityId,
@@ -46,6 +48,7 @@ import {
   validateCoverImage,
   validateDates,
   validateEventForm,
+  validateRegistrationDates,
   type EquipmentDraft,
   type EventFormState,
   type FacilityDraft,
@@ -75,7 +78,7 @@ interface SavedDraft {
  * reports an empty value, which the form would otherwise read as "no date".
  */
 function findIncompleteDateField(): string | null {
-  for (const id of [FIELD_ID.startsAt, FIELD_ID.endsAt]) {
+  for (const id of [FIELD_ID.startsAt, FIELD_ID.endsAt, ...REGISTRATION_DATE_FIELD_IDS]) {
     const input = document.getElementById(id)
     if (input instanceof HTMLInputElement && input.validity.badInput) return id
   }
@@ -151,6 +154,9 @@ export function EventRequestFormPage() {
   const [invalidField, setInvalidField] = useState<{ id: string; form: EventFormState } | null>(
     null,
   )
+  // Story 2.1 AC17: confirms clearing saved registration dates when switching Registration
+  // required off.
+  const [isConfirmingClearRegistration, setIsConfirmingClearRegistration] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -182,18 +188,38 @@ export function EventRequestFormPage() {
   const savedPictureUrl = isPictureRemoved ? null : mediaUrl(event?.cover_image_url ?? null)
   const shownPictureUrl = picture ? picture.previewUrl : savedPictureUrl
 
+  const isIncompleteRegistrationDate =
+    incompleteDateId !== null && REGISTRATION_DATE_FIELD_IDS.includes(incompleteDateId)
+
   /** The problem with the dates as they stand now, said under them without waiting for a save. */
-  const dateProblem: FormProblem | null = incompleteDateId
-    ? { code: 'EVENT_DATE_INCOMPLETE', fieldId: incompleteDateId }
-    : form
-      ? validateDates(form, event)
-      : null
+  const dateProblem: FormProblem | null =
+    incompleteDateId && !isIncompleteRegistrationDate
+      ? { code: 'EVENT_DATE_INCOMPLETE', fieldId: incompleteDateId }
+      : form
+        ? validateDates(form, event)
+        : null
+
+  /** Story 2.1 AC17/AC18: same idea as `dateProblem`, for the registration dates. */
+  const registrationDateProblem: FormProblem | null =
+    incompleteDateId && isIncompleteRegistrationDate
+      ? { code: 'EVENT_REGISTRATION_DATE_INCOMPLETE', fieldId: incompleteDateId }
+      : form
+        ? validateRegistrationDates(form, event)
+        : null
 
   function noteIncompleteDate() {
     setIncompleteDateId(findIncompleteDateField())
   }
 
   function updateDate(key: 'startsAt' | 'endsAt', value: string) {
+    updateField(key, value)
+    noteIncompleteDate()
+  }
+
+  function updateRegistrationDate(
+    key: 'registrationOpensAt' | 'registrationClosesAt',
+    value: string,
+  ) {
     updateField(key, value)
     noteIncompleteDate()
   }
@@ -250,6 +276,7 @@ export function EventRequestFormPage() {
     const isInvalid =
       (invalidField !== null && invalidField.form === form && invalidField.id === id) ||
       dateProblem?.fieldId === id ||
+      registrationDateProblem?.fieldId === id ||
       id in liveProblems
     return { id, 'aria-invalid': isInvalid ? true : undefined }
   }
@@ -364,6 +391,40 @@ export function EventRequestFormPage() {
     )
   }
 
+  /** Story 2.1 AC17: choosing "No" clears any saved registration dates, after a confirmation if
+   * there is something to lose. Turning it on, or off with nothing entered yet, needs no dialog. */
+  function toggleRegistrationRequired(isChecked: boolean) {
+    if (
+      !isChecked &&
+      form &&
+      (form.registrationOpensAt !== '' || form.registrationClosesAt !== '')
+    ) {
+      setIsConfirmingClearRegistration(true)
+      return
+    }
+    updateField('isRegistrationRequired', isChecked)
+  }
+
+  function confirmClearRegistration() {
+    setForm(
+      (current) =>
+        current && {
+          ...current,
+          isRegistrationRequired: false,
+          registrationOpensAt: '',
+          registrationClosesAt: '',
+        },
+    )
+    setIncompleteDateId((current) =>
+      current !== null && REGISTRATION_DATE_FIELD_IDS.includes(current) ? null : current,
+    )
+    setIsConfirmingClearRegistration(false)
+  }
+
+  function cancelClearRegistration() {
+    setIsConfirmingClearRegistration(false)
+  }
+
   function addEquipment() {
     setForm(
       (current) =>
@@ -445,7 +506,12 @@ export function EventRequestFormPage() {
     if (!form) return null
     const incompleteFieldId = findIncompleteDateField()
     const problem: FormProblem | null = incompleteFieldId
-      ? { code: 'EVENT_DATE_INCOMPLETE', fieldId: incompleteFieldId }
+      ? {
+          code: REGISTRATION_DATE_FIELD_IDS.includes(incompleteFieldId)
+            ? 'EVENT_REGISTRATION_DATE_INCOMPLETE'
+            : 'EVENT_DATE_INCOMPLETE',
+          fieldId: incompleteFieldId,
+        }
       : validateEventForm(form, event, availabilityByType)
     if (problem) {
       setSaveError(ERROR_REGISTRY[problem.code].message)
@@ -887,6 +953,93 @@ export function EventRequestFormPage() {
           </fieldset>
 
           <fieldset className="card" disabled={isReadOnly}>
+            <legend>Registration</legend>
+            <p className="form-hint">
+              If attendees must register, set a closing date. The capacity is always the expected
+              attendance above - there is no separate number to enter.
+            </p>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={form.isRegistrationRequired}
+                onChange={(e) => toggleRegistrationRequired(e.target.checked)}
+              />
+              Registration required
+            </label>
+            {form.isRegistrationRequired && (
+              <>
+                <div className="form-grid">
+                  <label className="span-2">
+                    Registration opens
+                    <input
+                      type="datetime-local"
+                      min={nowAsInput()}
+                      max={form.registrationClosesAt || form.startsAt || undefined}
+                      {...fieldProps(FIELD_ID.registrationOpensAt)}
+                      value={form.registrationOpensAt}
+                      onChange={(e) =>
+                        updateRegistrationDate('registrationOpensAt', e.target.value)
+                      }
+                      onBlur={noteIncompleteDate}
+                    />
+                  </label>
+                  <label>
+                    Registration closes <RequiredMark />
+                    <input
+                      type="datetime-local"
+                      min={form.registrationOpensAt || nowAsInput()}
+                      max={form.startsAt || undefined}
+                      {...fieldProps(FIELD_ID.registrationClosesAt)}
+                      value={form.registrationClosesAt}
+                      onChange={(e) =>
+                        updateRegistrationDate('registrationClosesAt', e.target.value)
+                      }
+                      onBlur={noteIncompleteDate}
+                    />
+                  </label>
+                </div>
+                {registrationDateProblem && (
+                  <p className="field-error">
+                    {ERROR_REGISTRY[registrationDateProblem.code].message}
+                  </p>
+                )}
+                <p className="form-hint">
+                  Leave the opening date blank to open registration as soon as the event is
+                  approved.
+                </p>
+              </>
+            )}
+          </fieldset>
+
+          <fieldset className="card" disabled={isReadOnly}>
+            <legend>Visibility</legend>
+            <p className="form-hint">
+              Public events appear on ConnectSphere&rsquo;s public event listing. Private events are
+              reachable only by a link you share.
+            </p>
+            <div role="radiogroup" aria-label="Event visibility">
+              <label className="checkbox">
+                <input
+                  type="radio"
+                  name="event-visibility"
+                  checked={!form.isPublic}
+                  onChange={() => updateField('isPublic', false)}
+                />
+                Private
+              </label>
+              <label className="checkbox">
+                <input
+                  type="radio"
+                  name="event-visibility"
+                  checked={form.isPublic}
+                  onChange={() => updateField('isPublic', true)}
+                />
+                Public
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="card" disabled={isReadOnly}>
             <legend>Equipment</legend>
             {form.equipment.length === 0 && (
               <p className="form-hint">No equipment requested. Add each item you need.</p>
@@ -996,6 +1149,19 @@ export function EventRequestFormPage() {
             </div>
           )}
         </form>
+      )}
+
+      {isConfirmingClearRegistration && (
+        <ConfirmDialog
+          title="Turn off registration?"
+          confirmLabel="Turn off"
+          isBusy={false}
+          error={null}
+          onConfirm={confirmClearRegistration}
+          onCancel={cancelClearRegistration}
+        >
+          <p>The registration dates you entered will be cleared.</p>
+        </ConfirmDialog>
       )}
     </div>
   )
