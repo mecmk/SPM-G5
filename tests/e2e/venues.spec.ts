@@ -212,7 +212,9 @@ test('8.1 AC13: withdrawn venues can be shown, marked', async ({ page }) => {
 
   await showWithdrawn.check()
 
-  await expect(venueCard(page, 'Old Annex Room').getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(
+    venueCard(page, 'Old Annex Room').getByText('Withdrawn', { exact: true }),
+  ).toBeVisible()
   await expect(venueCard(page, 'Grand Hall').getByText('Withdrawn', { exact: true })).toHaveCount(0)
 
   await showWithdrawn.uncheck()
