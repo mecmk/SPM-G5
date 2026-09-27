@@ -34,7 +34,7 @@
  * organisers, so the list is asserted by request name, never by how many there are.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn } from './support'
+import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 const MY_EVENTS_PATH = '/events/mine'
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
@@ -358,10 +358,7 @@ async function stubMyEventsCall(
         status,
         contentType: 'application/json',
         body: JSON.stringify(body),
-        headers: {
-          'access-control-allow-origin': request.headers()['origin'] ?? '*',
-          'access-control-allow-credentials': 'true',
-        },
+        headers: corsHeaders(request),
       })
     },
   )

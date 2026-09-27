@@ -32,7 +32,7 @@
  * seeded booking, same reasoning as 13.2's.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn } from './support'
+import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 /**
  * A pending request's card, by the short id shown on it (the seeded row's last 8 hex characters,
@@ -215,10 +215,7 @@ test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page 
         body: JSON.stringify({
           detail: 'This request is already APPROVED, so it cannot be rejected.',
         }),
-        headers: {
-          'access-control-allow-origin': request.headers()['origin'] ?? '*',
-          'access-control-allow-credentials': 'true',
-        },
+        headers: corsHeaders(request),
       })
     },
   )
