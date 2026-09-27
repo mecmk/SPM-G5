@@ -1311,6 +1311,19 @@ td.num {
   overflow: hidden;
 }
 
+/* f9.1.1: the grid stays mounted and navigable while its entries may not reflect true
+   availability - dimmed rather than replaced, so Prev/Next never disappear. */
+.calendar-loading,
+.calendar-unknown {
+  opacity: 0.55;
+}
+
+/* f9.1.1: always rendered so the status text changing never shifts the calendar below it -
+   only the text inside changes. */
+.calendar-status-line {
+  min-height: 1.5em;
+}
+
 .calendar-head {
   padding: 0.375rem;
   background: var(--bg);

@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Page, type Request } from '@playwright/test'
 
 /**
  * Seed accounts from backend/db/seed/020_sample_data.sql (mirrored in
@@ -52,4 +52,12 @@ export function venueRow(page: Page, name: string) {
 /** A venue card in the venue catalogue, matched by the venue's name. */
 export function venueCard(page: Page, name: string) {
   return page.getByRole('article').filter({ has: page.getByRole('heading', { name }) })
+}
+
+/** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */
+export function corsHeaders(request: Request) {
+  return {
+    'access-control-allow-origin': request.headers()['origin'] ?? '*',
+    'access-control-allow-credentials': 'true',
+  }
 }
