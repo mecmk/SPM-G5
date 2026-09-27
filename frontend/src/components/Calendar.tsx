@@ -23,6 +23,12 @@ export interface CalendarProps {
   /** Called with a day's `YYYY-MM-DD` when a day with no entries is clicked. Omit for read-only. */
   onSelectDay?: (date: string) => void
   legend?: CalendarLegendItem[]
+  /**
+   * f9.1.1: `entries` may not reflect true availability - a fetch is still in flight, or the last
+   * one failed. Dims the day grid and marks it accordingly for assistive tech, without touching
+   * Prev/Next: the month is still navigable while its own data is unknown.
+   */
+  gridStatus?: 'loading' | 'unknown'
 }
 
 const TONE_RANK: Record<CalendarEntryTone, number> = {
@@ -44,7 +50,14 @@ function strongestTone(entries: CalendarEntry[]): CalendarEntryTone | null {
  * Story c3 - a month calendar for showing venue and equipment availability. Presentational and
  * controlled: the parent owns which month is open and what happens when a free day is clicked.
  */
-export function Calendar({ month, onMonthChange, entries, onSelectDay, legend }: CalendarProps) {
+export function Calendar({
+  month,
+  onMonthChange,
+  entries,
+  onSelectDay,
+  legend,
+  gridStatus,
+}: CalendarProps) {
   const year = month.getFullYear()
   const monthIndex = month.getMonth()
   const cells = monthGrid(year, monthIndex)
@@ -78,7 +91,11 @@ export function Calendar({ month, onMonthChange, entries, onSelectDay, legend }:
         </button>
       </div>
 
-      <div className="calendar" aria-label={`Calendar for ${formatMonthYear(month)}`}>
+      <div
+        className={`calendar${gridStatus ? ` calendar-${gridStatus}` : ''}`}
+        aria-label={`Calendar for ${formatMonthYear(month)}`}
+        aria-busy={gridStatus === 'loading' ? true : undefined}
+      >
         {weekdayLabels().map((label) => (
           <div key={label} className="calendar-head">
             {label}

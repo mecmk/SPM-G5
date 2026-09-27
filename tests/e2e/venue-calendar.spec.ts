@@ -6,9 +6,12 @@
  * backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles.
  * The calendar opens on the current month (September 2026), so these navigate forward to
  * November 2026, where the seed data's booking and maintenance period live.
+ *
+ * Bug f9.1.1: two regression tests below stub the calendar fetch (tests/CLAUDE.md's slow/failing
+ * request exception) to cover the Previous/Next transition itself, not just the end state.
  */
-import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn } from './support'
+import { expect, test, type Page, type Route } from '@playwright/test'
+import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 /** The "Availability" card - a region via its `aria-labelledby`, same pattern as
  *  venue-detail.spec.ts's cardSection(). */
@@ -22,6 +25,9 @@ async function goToNovember2026(page: Page) {
     await section.getByRole('button', { name: 'Next →' }).click()
   }
   await expect(page.getByText('November 2026')).toBeVisible()
+  // The title updates before the real fetch resolves (f9.1.1) - wait for it to finish, or the
+  // checks below for what November holds would run against whatever month was there before.
+  await expect(page.getByText('Loading availability…')).toHaveCount(0)
 }
 
 test('9.1 AC1/AC2: an approved booking shows as unavailable, with the event as the label', async ({
@@ -68,4 +74,109 @@ test('9.1 AC1: navigating back a month leaves the current month', async ({ page 
   await expect(page.getByText('September 2026')).toBeVisible()
   await section.getByRole('button', { name: '← Prev' }).click()
   await expect(page.getByText('August 2026')).toBeVisible()
+})
+
+/**
+ * Intercepts exactly the next matching `/calendar` fetch (falling back to the real network for
+ * every other request, including ones before and after it), so a test can control one month's
+ * response without disturbing the rest of the page. CORS headers are required since the app and
+ * API are on different ports (tests/CLAUDE.md).
+ */
+async function interceptNextCalendarFetch(page: Page, fulfill: (route: Route) => Promise<void>) {
+  let handled = false
+  await page.route(
+    (url) => /\/venues\/[^/]+\/calendar$/.test(url.pathname),
+    async (route) => {
+      if (handled || route.request().resourceType() !== 'fetch') return route.fallback()
+      handled = true
+      await fulfill(route)
+    },
+  )
+}
+
+/**
+ * Regression test for bug f9.1.1: clicking Next/Previous used to unmount the whole calendar
+ * (including its own Prev/Next buttons) the instant the new range's fetch started, replacing it
+ * with a bare loading message until the fetch resolved - and never brought it back at all if the
+ * fetch failed, stranding the user with no way to navigate elsewhere. The regression guard is
+ * that the calendar's own controls stay on screen throughout, not just that the data is right.
+ *
+ * The stub holds its response behind a promise the test resolves itself, rather than a fixed
+ * delay: a hard-coded timeout races the test's own assertions on a slow CI runner, where enough
+ * of them together could eat the delay before the loading check even runs.
+ */
+test('9.1 AC1: the calendar and its controls stay visible while the next range is slow to load', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+
+  const section = availabilitySection(page)
+  await expect(page.getByText('September 2026')).toBeVisible()
+
+  let resolveFetch: () => void = () => {}
+  const fetchGate = new Promise<void>((resolve) => {
+    resolveFetch = resolve
+  })
+  await interceptNextCalendarFetch(page, async (route) => {
+    await fetchGate
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '[]',
+      headers: corsHeaders(route.request()),
+    })
+  })
+
+  await section.getByRole('button', { name: 'Next →' }).click()
+
+  // Checked first, and before the gate is released, so this can never pass by the stub simply
+  // having resolved before the assertion ran.
+  await expect(page.getByText('Loading availability…')).toBeVisible()
+  await expect(page.getByText('October 2026')).toBeVisible()
+  await expect(section.getByRole('button', { name: '← Prev' })).toBeVisible()
+  await expect(section.getByRole('button', { name: 'Next →' })).toBeVisible()
+
+  resolveFetch()
+  await expect(page.getByText('Loading availability…')).toHaveCount(0)
+})
+
+/**
+ * Regression test for bug f9.1.1 AC2: an empty grid alone cannot say whether a month is loading,
+ * genuinely free, or unknown because its fetch failed - so a failed re-fetch must render as
+ * visibly unknown, not as a normal fully-available month, while still leaving Prev/Next usable.
+ */
+test('9.1 AC2: a failed re-fetch shows availability as unknown, not a dead end', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+
+  const section = availabilitySection(page)
+  await expect(page.getByText('September 2026')).toBeVisible()
+
+  await interceptNextCalendarFetch(page, async (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: null }),
+      headers: corsHeaders(route.request()),
+    }),
+  )
+
+  await section.getByRole('button', { name: 'Next →' }).click()
+
+  await expect(page.getByText('October 2026')).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('The server hit a problem')
+  // AC2: shown as unknown, not silently rendered as if the month were confirmed available.
+  await expect(page.getByRole('status')).toHaveText(/Availability unknown/)
+  await expect(section.getByRole('button', { name: '← Prev' })).toBeVisible()
+
+  // Recovers on the next navigation (unstubbed, real network) instead of staying stuck.
+  await section.getByRole('button', { name: '← Prev' }).click()
+  await expect(page.getByText('September 2026')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveText('')
 })
