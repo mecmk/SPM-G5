@@ -162,6 +162,8 @@ test('8.1 AC13: Venue Staff add and edit venues from the catalogue', async ({ pa
   await expect(page).toHaveURL(CATALOGUE_PATH)
 
   await card.getByRole('link', { name: 'Edit', exact: true }).click()
+  // Wait for the form: until it opens, "Location" also matches the catalogue's search box.
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
   await page.getByLabel('Location').fill('Tower F, Level 5')
   await page.getByRole('button', { name: 'Save changes' }).click()
 
