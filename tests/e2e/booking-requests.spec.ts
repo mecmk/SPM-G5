@@ -22,17 +22,26 @@
  *
  * AC15's address is the contract with story 8.1's filter panel, which reads what Find a venue
  * writes (`VENUE_SEARCH_PARAMS` in frontend/src/routes.ts). These cases pin its names and values;
- * that the panel fills itself in from them is 8.1 AC3's to prove. The flows here open Grand Hall
- * (400 seats), the room that fits Nimbus's 350, but send nothing for Nimbus: Grand Hall is already
- * booked for Nimbus that day, and story 13.1's queue tests find the seeded Nimbus request by its
- * event name. The one request really sent is Regional Sales Summit's, to Grand Hall, which is free
- * on 15-16 Dec. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at
- * the pending outcome shown here.
+ * that the panel fills itself in from them is 8.1 AC3's to prove (`venue-catalogue.spec.ts`).
+ *
+ * Since 8.1's search leaves out venues that are not free, Nimbus's catalogue lists nothing: Grand
+ * Hall, the one room that fits its 350, is already booked for Nimbus that day. So Nimbus's cases
+ * pin the address only, or open the request step by its address, and send nothing - story 13.1's
+ * queue tests also find the seeded Nimbus request by its event name. The flows through the
+ * catalogue use Regional Sales Summit, whose results show Grand Hall, and send nothing either, so
+ * Grand Hall stays free for them. The one request really sent is Quarterly Partner Briefing's, to
+ * Seminar Room 2.1: an event no other test uses, so its hold hides nothing another test looks
+ * for. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at the pending
+ * outcome shown here.
+ *
+ * 8.1 AC12 is here too, beside the request step's other cases: a venue that stopped being
+ * available since the search is refused, and the step leads back to the same results.
  *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
- * 15-16 Dec 2026) and Data Literacy Workshop (Under Review, so it cannot take a booking yet).
+ * 15-16 Dec 2026), Quarterly Partner Briefing (Planning: Classroom, a projector, 60 people, 10 Mar
+ * 2027 09:00-12:00) and Data Literacy Workshop (Under Review, so it cannot take a booking yet).
  * Carl is the other coordinator, and Omar organises Nimbus. No seeded event records "No venue
  * requirements", so that case sets the flag on Nimbus's real response with `page.route`.
  */
@@ -43,12 +52,15 @@ import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
 const WORKSHOP = { id: EVENTS.submitted, name: 'Data Literacy Workshop' }
+const BRIEFING = { id: EVENTS.partnerBriefing, name: 'Quarterly Partner Briefing' }
 const VENUE = 'Grand Hall'
 const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the seed
+const BRIEFING_VENUE = 'Seminar Room 2.1'
 const FIND_A_VENUE = 'Find a venue'
 const REQUEST_THIS_VENUE = 'Request this venue'
-const WITHDRAWN_VENUE_MESSAGE =
-  'This venue has been withdrawn from the catalogue and can no longer be booked.'
+// As the backend words a venue closed since the search (8.1 AC12).
+const CLOSED_VENUE_MESSAGE =
+  'Grand Hall is closed for maintenance from Tue 15 Dec 2026, 00:00 to Thu 17 Dec 2026, 00:00.'
 const NOT_REQUESTABLE_MESSAGE =
   "Only the event's assigned coordinator can request a venue for it, while the event is in " +
   'Planning or Confirmed.'
@@ -113,9 +125,9 @@ async function findVenueFor(page: Page, event: { id: string; name: string }) {
   await expect(catalogueBanner(page, event.name)).toBeVisible()
 }
 
-/** From the catalogue for Nimbus to the request step for one venue. */
+/** From the catalogue for Regional Sales Summit to the request step for Grand Hall. */
 async function openRequestStep(page: Page) {
-  await findVenueFor(page, NIMBUS)
+  await findVenueFor(page, SUMMIT)
   await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
 }
@@ -146,16 +158,22 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
     `/events/${NIMBUS.id}`,
   )
 
+  // Nimbus's results are empty (Grand Hall is booked for it), so the venue is requested from
+  // Summit's, which list Grand Hall.
+  await findVenueFor(page, SUMMIT)
   await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
 
-  await expect(page).toHaveURL(new RegExp(`/events/${NIMBUS.id}/request-venue/[^/]+$`))
+  await expect(page).toHaveURL(new RegExp(`/events/${SUMMIT.id}/request-venue/[^/]+$`))
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
-  await expect(page.getByText(`For ${NIMBUS.name}`)).toBeVisible()
+  await expect(page.getByText(`For ${SUMMIT.name}`)).toBeVisible()
 })
 
 test('12.1 AC2: the request step shows what it carries over from the event', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await openRequestStep(page)
+  // Nimbus records the most to carry over. Its catalogue lists nothing, so the step is opened by
+  // its address; nothing is sent.
+  await page.goto(`/events/${NIMBUS.id}/request-venue/${VENUE_ID}`)
+  await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
 
   // The step states what it will carry over from the event, so the coordinator can see the
   // period, attendance, layout and facilities are the event's and not theirs to choose.
@@ -169,29 +187,32 @@ test('12.1 AC1/AC3: a coordinator raises a venue booking request for their appro
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await findVenueFor(page, SUMMIT)
+  await findVenueFor(page, BRIEFING)
 
-  // The one request really sent is Summit's, to Grand Hall, which is free on 15-16 Dec. Not
-  // Nimbus's: story 13.1's queue tests find the seeded Nimbus request by its event name, and a
-  // second Nimbus request in the queue would sit right beside it.
-  await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
-  await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
+  // The one request really sent is Quarterly Partner Briefing's, to Seminar Room 2.1, which fits
+  // everything it records. No other test uses that event, so the hold the request leaves on the
+  // room hides nothing another test looks for; and not Nimbus's, whose seeded request story
+  // 13.1's queue tests find by its event name.
+  await venueCard(page, BRIEFING_VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(
+    page.getByRole('heading', { name: `Request ${BRIEFING_VENUE}`, level: 1 }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Send request' }).click()
 
   // AC3: the outcome names the venue and shows the request waiting for Venue Staff.
   const outcome = page.getByRole('region', { name: 'Request sent' })
   await expect(outcome).toBeVisible()
-  await expect(outcome).toContainText(VENUE)
+  await expect(outcome).toContainText(BRIEFING_VENUE)
   await expect(outcome).toContainText('Pending')
 
   // AC15: the outcome leads back to the event the request was raised for.
   await outcome.getByRole('link', { name: 'Back to the event' }).click()
-  await expect(page.getByRole('heading', { name: SUMMIT.name, level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: BRIEFING.name, level: 1 })).toBeVisible()
 })
 
 test('12.1 AC15: a venue can be requested from its record in event context', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await findVenueFor(page, NIMBUS)
+  await findVenueFor(page, SUMMIT)
 
   await venueCard(page, VENUE).getByRole('link', { name: VENUE }).click()
   await expect(page.getByRole('heading', { name: VENUE, level: 1 })).toBeVisible()
@@ -199,13 +220,13 @@ test('12.1 AC15: a venue can be requested from its record in event context', asy
   // Back to the list and in again: the event is still in context. The page's own back link, not
   // the sidebar's "Venue catalogue", which opens the catalogue afresh.
   await page.getByRole('link', { name: '← Venue catalogue' }).click()
-  await expect(catalogueBanner(page, NIMBUS.name)).toBeVisible()
+  await expect(catalogueBanner(page, SUMMIT.name)).toBeVisible()
   await venueCard(page, VENUE).getByRole('link', { name: VENUE }).click()
   await expect(page.getByRole('heading', { name: VENUE, level: 1 })).toBeVisible()
 
   await page.getByRole('link', { name: REQUEST_THIS_VENUE }).click()
 
-  await expect(page).toHaveURL(new RegExp(`/events/${NIMBUS.id}/request-venue/[^/]+$`))
+  await expect(page).toHaveURL(new RegExp(`/events/${SUMMIT.id}/request-venue/[^/]+$`))
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
 })
 
@@ -293,7 +314,7 @@ test('12.1 AC15: the old request a venue address opens the events inbox', async 
 
 test('12.1 AC2: the request cannot be sent before the event details arrive', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await findVenueFor(page, NIMBUS)
+  await findVenueFor(page, SUMMIT)
 
   // Hold the request step's own event lookup in flight so the state before it answers can be
   // asserted at all - the same trick auth.spec.ts uses for b1.1.1. Review of PR #42: the button
@@ -314,26 +335,36 @@ test('12.1 AC2: the request cannot be sent before the event details arrive', asy
   await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
 })
 
-test('12.1 AC15: a refused request shows why and is not marked sent', async ({ page }) => {
+test('8.1 AC12: a venue that stopped being available is refused, and the step leads back to the results', async ({
+  page,
+}) => {
   await signIn(page, ACCOUNTS.coordinator)
   await openRequestStep(page)
+  const results = page.url().replace(/\/events\/.*\?/, '/venues?')
 
-  // As if the venue were withdrawn after the catalogue loaded: the backend refuses with 409.
+  // As if Grand Hall were closed for maintenance after the catalogue loaded: the backend re-checks
+  // and refuses with 409. Stubbed, since the seed cannot close a venue between two page loads.
   await page.route('**/bookings', async (route) => {
     const request = route.request()
     if (request.resourceType() !== 'fetch' || request.method() !== 'POST') return route.fallback()
     return route.fulfill({
       status: 409,
       contentType: 'application/json',
-      body: JSON.stringify({ detail: WITHDRAWN_VENUE_MESSAGE }),
+      body: JSON.stringify({ detail: CLOSED_VENUE_MESSAGE }),
       headers: corsHeaders(request),
     })
   })
   await page.getByRole('button', { name: 'Send request' }).click()
 
-  await expect(page.getByRole('alert')).toHaveText(WITHDRAWN_VENUE_MESSAGE)
+  await expect(page.getByRole('alert')).toHaveText(CLOSED_VENUE_MESSAGE)
   await expect(page.getByRole('region', { name: 'Request sent' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
+
+  // Back to the same search, which runs again - the results refresh.
+  await page.getByRole('link', { name: 'Back to the results' }).click()
+  expect(page.url()).toBe(results)
+  await expect(catalogueBanner(page, SUMMIT.name)).toBeVisible()
+  await expect(venueCard(page, VENUE)).toBeVisible()
 })
 
 /** Who must not be offered Find a venue, and on which event (AC15 permission). */

@@ -27,6 +27,7 @@ export const EVENTS = {
   clarificationRequested: '33333333-0000-0000-0000-000000000006', // organiser: organiser
   draft: '33333333-0000-0000-0000-000000000001',
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
+  partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; 12.1's request is sent for it
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
