@@ -57,6 +57,13 @@ export type ErrorCode =
   | 'EVENT_CONTACT_PHONE_INVALID'
   | 'EVENT_PICTURE_TYPE_INVALID'
   | 'EVENT_PICTURE_TOO_LARGE'
+  | 'EVENT_REGISTRATION_DATE_INCOMPLETE'
+  | 'EVENT_REGISTRATION_DATE_INVALID'
+  | 'EVENT_REGISTRATION_OPENS_IN_PAST'
+  | 'EVENT_REGISTRATION_CLOSES_IN_PAST'
+  | 'EVENT_REGISTRATION_OPENS_AFTER_CLOSES'
+  | 'EVENT_REGISTRATION_OPENS_AFTER_START'
+  | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
@@ -286,6 +293,42 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_PICTURE_TOO_LARGE: {
     title: 'Check the picture',
     message: 'The picture must be 5 MB or smaller.',
+  },
+  /** Story 2.1 AC17/AC18: registration opening/closing dates. Shared between both fields, same
+   * precedent as EVENT_DATE_INCOMPLETE/EVENT_DATE_INVALID above. */
+  EVENT_REGISTRATION_DATE_INCOMPLETE: {
+    title: 'Check the registration dates',
+    message:
+      'Finish entering the date and time, including AM or PM. If every part is filled in, ' +
+      'check the day exists in that month: 29 February is only valid in a leap year, and ' +
+      'there is no 31st in April, June, September or November.',
+  },
+  EVENT_REGISTRATION_DATE_INVALID: {
+    title: 'Check the registration dates',
+    message: 'Enter a valid date and time, with a four-digit year.',
+  },
+  /** Story 2.1 AC17: worded as the backend words it. */
+  EVENT_REGISTRATION_OPENS_IN_PAST: {
+    title: 'Check the registration dates',
+    message: 'The registration opening date cannot be in the past.',
+  },
+  EVENT_REGISTRATION_CLOSES_IN_PAST: {
+    title: 'Check the registration dates',
+    message: 'The registration closing date cannot be in the past.',
+  },
+  EVENT_REGISTRATION_OPENS_AFTER_CLOSES: {
+    title: 'Check the registration dates',
+    message: 'Registration must open before it closes.',
+  },
+  /** Story 2.1 AC18: also shown when moving the proposed start would put it before a saved
+   * registration date. */
+  EVENT_REGISTRATION_OPENS_AFTER_START: {
+    title: 'Check the registration dates',
+    message: 'Registration must open no later than the proposed start.',
+  },
+  EVENT_REGISTRATION_CLOSES_AFTER_START: {
+    title: 'Check the registration dates',
+    message: 'Registration must close no later than the proposed start.',
   },
 
   /**

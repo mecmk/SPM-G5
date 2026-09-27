@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload
 
 from app.auth.models import User
@@ -41,6 +42,7 @@ from app.events.models import (
 )
 from app.events.schemas import (
     ACCESSIBILITY_CONTRADICTION_MESSAGE,
+    REGISTRATION_CONTRADICTION_MESSAGE,
     VENUE_CONTRADICTION_MESSAGE,
     EquipmentAvailabilityOut,
     EventAccessibilityNeedIn,
@@ -69,6 +71,13 @@ _MAX_LEAD_YEARS = 2
 _MAX_EVENT_DURATION = timedelta(days=14)
 # Events run on Singapore time, which has no daylight saving.
 _SINGAPORE = timezone(timedelta(hours=8))
+REGISTRATION_OPENS_IN_PAST_MESSAGE = "The registration opening date cannot be in the past."
+REGISTRATION_CLOSES_IN_PAST_MESSAGE = "The registration closing date cannot be in the past."
+REGISTRATION_OPENS_AFTER_START_MESSAGE = "Registration must open no later than the proposed start."
+REGISTRATION_CLOSES_AFTER_START_MESSAGE = (
+    "Registration must close no later than the proposed start."
+)
+REGISTRATION_OPENS_AFTER_CLOSES_MESSAGE = "Registration must open before it closes."
 NOT_EDITABLE_MESSAGE = "This request has been submitted and can no longer be edited."
 ALREADY_SUBMITTED_MESSAGE = "This request has already been submitted."
 ROUTINE_EDIT_CLOSED_MESSAGE = (
@@ -77,6 +86,9 @@ ROUTINE_EDIT_CLOSED_MESSAGE = (
 
 # ``event_equipment_requests.status`` once the units are held for the event.
 _LINE_RESERVED = "RESERVED"
+
+# AC20: the partial unique index a duplicate name+dates violates (db/migrations/008_*.sql).
+DUPLICATE_REQUEST_INDEX = "uq_events_organiser_name_dates"
 
 _AWAITING_DECISION_STATUSES = (
     EventStatus.UNDER_REVIEW,
@@ -115,6 +127,10 @@ _DETAIL_FIELDS = (
     "venue_none_required",
     "accessibility_none_required",
     "accessibility_notes",
+    "registration_required",
+    "registration_opens_at",
+    "registration_closes_at",
+    "is_public",
 )
 
 # AC10: the event details that must be filled in before a request can be submitted, and how to
@@ -201,6 +217,19 @@ class ContradictoryAccessibility(InvalidEventRequest):
 class ContradictoryVenueRequirements(InvalidEventRequest):
     def __init__(self):
         super().__init__(VENUE_CONTRADICTION_MESSAGE)
+
+
+class ContradictoryRegistration(InvalidEventRequest):
+    def __init__(self):
+        super().__init__(REGISTRATION_CONTRADICTION_MESSAGE)
+
+
+class DuplicateEventRequest(InvalidEventRequest):
+    """AC20: another of this organiser's own live requests already has this name and these
+    dates."""
+
+    def __init__(self, name: str):
+        super().__init__(f'You already have a request named "{name}" for these dates.')
 
 
 class MissingSubmissionDetails(InvalidEventRequest):
@@ -429,6 +458,42 @@ def _check_venue_requirements(
         raise ContradictoryVenueRequirements()
 
 
+def _check_registration(
+    *,
+    required: bool,
+    opens_at: datetime | None,
+    closes_at: datetime | None,
+    starts_at: datetime | None,
+    supplied_opens_at: datetime | None,
+    supplied_closes_at: datetime | None,
+) -> None:
+    """AC17: neither date can be recorded unless registration is required. Each must be no later
+    than the proposed start (equal is fine), and - only when it is the value this call is
+    actually setting, not one merely carried over - each must not be in the past. The opening
+    date, when given alongside a closing date, must be strictly before it: the schema's own
+    ``ck_events_registration_window`` requires a registration window of positive width, since a
+    window open and closed at the same instant could never be used, so equal is refused here
+    too rather than left for the database to reject. Checking both dates against the effective
+    ``starts_at`` rather than only a freshly supplied one is what makes AC18 work: moving the
+    start earlier than an already-saved date is refused through this same check, the same way
+    ``_check_schedule`` already checks ``ends_at`` against a freshly supplied ``starts_at``."""
+    if not required:
+        if opens_at is not None or closes_at is not None:
+            raise ContradictoryRegistration()
+        return
+    if supplied_opens_at is not None and supplied_opens_at < datetime.now(UTC):
+        raise InvalidSchedule(REGISTRATION_OPENS_IN_PAST_MESSAGE)
+    if supplied_closes_at is not None and supplied_closes_at < datetime.now(UTC):
+        raise InvalidSchedule(REGISTRATION_CLOSES_IN_PAST_MESSAGE)
+    if opens_at is not None and closes_at is not None and opens_at >= closes_at:
+        raise InvalidSchedule(REGISTRATION_OPENS_AFTER_CLOSES_MESSAGE)
+    if starts_at is not None:
+        if opens_at is not None and opens_at > starts_at:
+            raise InvalidSchedule(REGISTRATION_OPENS_AFTER_START_MESSAGE)
+        if closes_at is not None and closes_at > starts_at:
+            raise InvalidSchedule(REGISTRATION_CLOSES_AFTER_START_MESSAGE)
+
+
 def _check_equipment_lines(
     items: list[EventEquipmentIn], *, owned_line_ids: set[uuid.UUID]
 ) -> None:
@@ -618,6 +683,14 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
     _check_schedule(
         data.starts_at, data.ends_at, supplied_start=data.starts_at, supplied_end=data.ends_at
     )
+    _check_registration(
+        required=data.registration_required,
+        opens_at=data.registration_opens_at,
+        closes_at=data.registration_closes_at,
+        starts_at=data.starts_at,
+        supplied_opens_at=data.registration_opens_at,
+        supplied_closes_at=data.registration_closes_at,
+    )
     if data.required_layout_code is not None:
         _known(db, RoomLayout, [data.required_layout_code], label="room layout")
     _known(db, Facility, [f.code for f in data.required_facilities], label="facility")
@@ -652,7 +725,13 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
     _replace_accessibility_needs(event, data.accessibility_needs)
     _replace_equipment(event, data.equipment, types, actor=actor)
     db.add(event)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if DUPLICATE_REQUEST_INDEX in str(exc.orig):
+            raise DuplicateEventRequest(data.name) from exc
+        raise
     db.add(
         EventStatusHistory(
             event_id=event.id, from_status=None, to_status=EventStatus.DRAFT, changed_by_id=actor.id
@@ -672,6 +751,18 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
     return event
 
 
+def _resent_unchanged(value: datetime | None, stored: datetime | None) -> datetime | None:
+    """``None`` when ``value`` is exactly what is already stored - the edit form always resends
+    every field (frontend/CLAUDE.md: "the form always sends every field"), so ``field in sent``
+    alone cannot tell "the organiser just typed this" apart from "this rode along unchanged".
+    Without this, a date that was fine when saved but has since drifted into the past blocks
+    saving anything else on the request, forever, since every edit resends it. A value the
+    organiser did genuinely change to match what is already stored is indistinguishable from one
+    that merely rode along - and is correctly not re-judged either way, the same as any other
+    no-op edit."""
+    return None if value == stored else value
+
+
 def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: User) -> Event:
     """AC7: edit or remove any recorded detail, requirement or equipment item while a draft.
     Only the fields sent change; a list sent replaces that list."""
@@ -687,8 +778,29 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
         _check_schedule(
             starts_at,
             ends_at,
-            supplied_start=details.get("starts_at"),
-            supplied_end=details.get("ends_at"),
+            supplied_start=_resent_unchanged(details.get("starts_at"), event.starts_at),
+            supplied_end=_resent_unchanged(details.get("ends_at"), event.ends_at),
+        )
+    # AC18: re-checked whenever the start moves too, not just when a registration date itself is
+    # edited - a saved date that a start change would put after it is refused here, unlike AC2's
+    # own dates, which are not re-judged when something else is edited.
+    if sent & {
+        "starts_at",
+        "registration_required",
+        "registration_opens_at",
+        "registration_closes_at",
+    }:
+        _check_registration(
+            required=details.get("registration_required", event.registration_required),
+            opens_at=details.get("registration_opens_at", event.registration_opens_at),
+            closes_at=details.get("registration_closes_at", event.registration_closes_at),
+            starts_at=starts_at,
+            supplied_opens_at=_resent_unchanged(
+                details.get("registration_opens_at"), event.registration_opens_at
+            ),
+            supplied_closes_at=_resent_unchanged(
+                details.get("registration_closes_at"), event.registration_closes_at
+            ),
         )
     _check_venue_requirements(
         is_none_required=details.get("venue_none_required", event.venue_none_required),
@@ -751,7 +863,16 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
     # A change to a list alone would not touch the events row; stamping it makes updated_at the
     # draft's last-modified time whatever was edited (the trigger sets the real value).
     event.updated_at = datetime.now(UTC)
-    db.flush()
+    # Read before the flush: a rollback below expires this object, so event.name read afterwards
+    # would re-fetch the pre-update value instead of the one the failed write attempted.
+    attempted_name = event.name
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if DUPLICATE_REQUEST_INDEX in str(exc.orig):
+            raise DuplicateEventRequest(attempted_name) from exc
+        raise
     record_audit(
         db,
         actor=actor,
@@ -767,12 +888,16 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
 
 
 def _missing_for_submission(event: Event) -> list[str]:
-    """AC10/AC13: every event detail and the point of contact must be filled in, and venue
+    """AC10/AC13/AC17: every event detail and the point of contact must be filled in, venue
     requirements and accessibility needs each answered - something chosen or written, or marked
-    "none required"."""
+    "none required" - and, only when Registration required is Yes, a registration closing date.
+    Registration capacity needs no check of its own: it is always expected attendance, already
+    covered by the event-detail check above."""
     missing = [
         label for field, label in _REQUIRED_DETAILS_FOR_SUBMISSION if getattr(event, field) is None
     ]
+    if event.registration_required and event.registration_closes_at is None:
+        missing.append("registration closing date")
     has_venue_answer = (
         event.venue_none_required
         or event.required_layout_code is not None
@@ -828,6 +953,17 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         raise MissingSubmissionDetails(missing)
     _check_schedule(
         event.starts_at, event.ends_at, supplied_start=event.starts_at, supplied_end=None
+    )
+    # AC17: a registration date that was fine when saved but has since passed also blocks
+    # submission, the same way AC2 treats the start - forced by treating the stored values as
+    # supplied.
+    _check_registration(
+        required=event.registration_required,
+        opens_at=event.registration_opens_at,
+        closes_at=event.registration_closes_at,
+        starts_at=event.starts_at,
+        supplied_opens_at=event.registration_opens_at,
+        supplied_closes_at=event.registration_closes_at,
     )
 
     _hold_equipment(db, event, actor)

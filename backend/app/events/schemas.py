@@ -37,6 +37,10 @@ VENUE_CONTRADICTION_MESSAGE = (
     "Venue requirements cannot be marked none required while a layout, facilities or notes are "
     "recorded."
 )
+# Story 2.1 AC17: neither registration date can be recorded unless registration is required.
+REGISTRATION_CONTRADICTION_MESSAGE = (
+    "Registration dates cannot be recorded while registration is not required."
+)
 DUPLICATE_EQUIPMENT_MESSAGE = "Each equipment type can appear only once on a request."
 DUPLICATE_ENTRY_MESSAGE = "Each option can be chosen only once."
 CANNOT_BE_REMOVED_MESSAGE = "This field cannot be removed; send a value or leave it out."
@@ -352,6 +356,10 @@ class EventCreate(_EventRequestRules):
     accessibility_needs: list[EventAccessibilityNeedIn] = Field(default_factory=list)
     accessibility_notes: str | None = None
     equipment: list[EventEquipmentIn] = Field(default_factory=list)
+    registration_required: bool = False
+    registration_opens_at: AwareDatetime | None = None
+    registration_closes_at: AwareDatetime | None = None
+    is_public: bool = False
 
     @model_validator(mode="after")
     def _check_none_required(self):
@@ -363,6 +371,10 @@ class EventCreate(_EventRequestRules):
             self.accessibility_needs or self.accessibility_notes
         ):
             raise ValueError(ACCESSIBILITY_CONTRADICTION_MESSAGE)
+        if not self.registration_required and (
+            self.registration_opens_at is not None or self.registration_closes_at is not None
+        ):
+            raise ValueError(REGISTRATION_CONTRADICTION_MESSAGE)
         return self
 
 
@@ -388,6 +400,10 @@ class EventUpdate(_EventRequestRules):
     accessibility_needs: list[EventAccessibilityNeedIn] | None = None
     accessibility_notes: str | None = None
     equipment: list[EventEquipmentIn] | None = None
+    registration_required: bool | None = None
+    registration_opens_at: AwareDatetime | None = None
+    registration_closes_at: AwareDatetime | None = None
+    is_public: bool | None = None
 
     @field_validator(
         "name",
@@ -396,6 +412,8 @@ class EventUpdate(_EventRequestRules):
         "accessibility_none_required",
         "accessibility_needs",
         "equipment",
+        "registration_required",
+        "is_public",
         mode="before",
     )
     @classmethod
@@ -453,6 +471,10 @@ class EventDetailOut(BaseModel):
     ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
     without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
     receives it.
+
+    2.6 AC12: ``assigned_coordinator_email`` rides alongside ``assigned_coordinator_name`` -
+    this endpoint is already restricted to the owning organiser and internal roles (2.1 AC8's
+    ``get_event``), which is exactly who AC15 wants to see it, so no extra check is needed.
     """
 
     id: uuid.UUID
@@ -472,6 +494,7 @@ class EventDetailOut(BaseModel):
     organiser_name: str
     assigned_coordinator_id: uuid.UUID | None
     assigned_coordinator_name: str | None
+    assigned_coordinator_email: str | None
     submitted_at: datetime | None
     required_layout_code: str | None
     required_layout_name: str | None
@@ -482,6 +505,10 @@ class EventDetailOut(BaseModel):
     accessibility_needs: list[AccessibilityNeedOut]
     accessibility_notes: str | None
     equipment: list[EquipmentLineOut]
+    registration_required: bool
+    registration_opens_at: datetime | None
+    registration_closes_at: datetime | None
+    is_public: bool
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -511,6 +538,7 @@ class EventDetailOut(BaseModel):
             organiser_name=event.organiser.full_name,
             assigned_coordinator_id=event.assigned_coordinator_id,
             assigned_coordinator_name=coordinator.full_name if coordinator else None,
+            assigned_coordinator_email=coordinator.email if coordinator else None,
             submitted_at=event.submitted_at,
             required_layout_code=event.required_layout_code,
             required_layout_name=layout.name if layout else None,
@@ -529,6 +557,10 @@ class EventDetailOut(BaseModel):
             ],
             accessibility_notes=event.accessibility_notes,
             equipment=[EquipmentLineOut.from_line(line) for line in event.equipment_requests],
+            registration_required=event.registration_required,
+            registration_opens_at=event.registration_opens_at,
+            registration_closes_at=event.registration_closes_at,
+            is_public=event.is_public,
             decided_by_name=event.decided_by.full_name if event.decided_by else None,
             decided_at=event.decided_at,
             decision_reason=event.decision_reason,

@@ -34,7 +34,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_layouts`](#venue_layouts) | 8.2, 8.3, 10.3, 11.1 | Which room layouts each venue supports (many-to-many) |
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
-| Events | [`events`](#events) | 2.1, 2.4, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
+| Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
 | Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.x, 16.4, 17.3 | One line per equipment type an event asks for, with quantity and technical notes |
@@ -326,7 +326,7 @@ Rules and indexes:
 
 ### events
 
-**Stories:** 2.1, 2.4, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x
+**Stories:** 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x
 
 An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables. Status drives what each role may do (story 6.1: exactly one current status). Only DRAFT rows may leave mandatory fields empty.
 
@@ -350,10 +350,10 @@ An event request and, once approved, the event itself - one row for the whole li
 | `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no venue requirements (no layout, facilities or notes). FALSE with none of those recorded = not yet specified (story 2.1 AC4). A request cannot be submitted until one or the other is given (story 2.1 AC10). |
 | `accessibility_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable). |
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
-| `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.4 AC1). |
-| `registration_capacity` | `integer` | yes | - | - | Maximum active registrations; NULL = no cap, only the closing date applies (story 18.5 AC4). |
-| `registration_opens_at` | `timestamp with time zone` | yes | - | - | When attendees may start registering (story 18.1). |
-| `registration_closes_at` | `timestamp with time zone` | yes | - | - | Registration deadline. Must not be after the event start (story 2.4 AC4). |
+| `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.1 AC17). |
+| `registration_capacity` | `integer` | yes | - | - | Not set by story 2.1: registration capacity is always expected_attendance (AC17), not a     separate value. Reserved for a future story that lets it diverge (originally story 18.5). |
+| `registration_opens_at` | `timestamp with time zone` | yes | - | - | When attendees may start registering. Optional (story 2.1 AC17): left blank, registration     opens immediately once the event is approved. Must be no later than registration_closes_at     and the proposed start, and is re-checked if the start is moved earlier than an already-saved     value (AC18). |
+| `registration_closes_at` | `timestamp with time zone` | yes | - | - | Registration deadline. Must not be after the proposed start (story 2.1 AC17), and is     re-checked if the start is moved earlier than an already-saved deadline (AC18). |
 | `contact_name` | `text` | yes | - | - | On-the-day contact person. |
 | `contact_email` | `citext` | yes | - | - | Contact e-mail. |
 | `contact_phone` | `text` | yes | - | - | Contact phone. |
@@ -366,6 +366,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `completed_at` | `timestamp with time zone` | yes | - | - | When the event was marked COMPLETED. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). Also serves as the draft last-modified time (story 3.3 AC3). |
+| `is_public` | `boolean` | no | `false` | - | Whether the event is publicly listed (TRUE) or reachable only by a shared link (FALSE),     story 2.1 AC19. Defaults to private. No public listing page or link-sharing mechanism exists     yet - this only captures and displays the organiser's choice. |
 
 Allowed values:
 
@@ -379,6 +380,7 @@ Rules and indexes:
 - check `ck_events_registration_closes_before_start`: `CHECK (((registration_closes_at IS NULL) OR (starts_at IS NULL) OR (registration_closes_at <= starts_at)))`
 - check `ck_events_registration_window`: `CHECK (((registration_opens_at IS NULL) OR (registration_closes_at IS NULL) OR (registration_closes_at > registration_opens_at)))`
 - check `ck_events_submitted_fields_complete`: `CHECK (((status = 'DRAFT'::text) OR ((purpose IS NOT NULL) AND (starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (expected_attendance IS NOT NULL))))`
+- unique index `uq_events_organiser_name_dates`: `btree (organiser_id, lower(TRIM(BOTH FROM name)), starts_at, ends_at) WHERE (status <> ALL (ARRAY['REJECTED'::text, 'CANCELLED'::text, 'COMPLETED'::text]))`
 - index `ix_events_coordinator`: `btree (assigned_coordinator_id)`
 - index `ix_events_organiser`: `btree (organiser_id)`
 - index `ix_events_starts_at`: `btree (starts_at)`

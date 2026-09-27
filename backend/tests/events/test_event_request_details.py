@@ -298,6 +298,38 @@ def test_an_unrelated_edit_is_not_rejected_because_the_saved_start_has_since_pas
 
 
 @pytest.mark.story("2.1", ac=2)
+def test_a_full_edit_that_resends_a_stale_start_still_saves(organiser_client, db: Session):
+    """The frontend always resends every field on an edit (frontend/CLAUDE.md: "the form always
+    sends every field"), not just the one that changed - a start that has since drifted into the
+    past by time alone must not block saving just because it rode along unchanged in a
+    full-object PATCH, the same as the sparse-payload case above."""
+    created = create_event_request(organiser_client)
+    db.execute(
+        text(
+            "UPDATE events SET starts_at = now() - interval '2 days',"
+            " ends_at = now() - interval '1 day' WHERE id = :id"
+        ),
+        {"id": created["id"]},
+    )
+    db.expire_all()
+    loaded = organiser_client.get(f"/events/{created['id']}").json()
+
+    response = organiser_client.patch(
+        f"/events/{created['id']}",
+        json={
+            "name": "Renamed",
+            "purpose": loaded["purpose"],
+            "description": loaded["description"],
+            "starts_at": loaded["starts_at"],
+            "ends_at": loaded["ends_at"],
+            "expected_attendance": loaded["expected_attendance"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("2.1", ac=2)
 def test_an_event_can_run_for_exactly_the_longest_allowed_time(organiser_client):
     start = future_datetime(days=10)
     payload = event_request_payload(
