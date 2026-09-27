@@ -31,8 +31,20 @@
  * AC15 saving a draft says "Draft saved"; submitting says only "Request submitted".
  * AC16 after a successful submission the organiser is taken to My events, where the request shows
  *     as under review; a refused submission stays on the request's edit page.
- * Rule detail, refusals (401/403/404/409/422) and what the coordinator sees (AC8, AC12) are
- * backend cases: backend/tests/events/test_event_request_*.py.
+ * AC17 Registration required (Yes/No) reveals a registration opening/closing date pair when
+ *     Yes; a bad date is said under the fields as it is typed, the same as AC2. Turning it off
+ *     after entering dates asks for confirmation first.
+ * AC18 Rule detail for moving the proposed start against a saved registration date is a backend
+ *     case (test_event_request_registration.py).
+ * AC19 the organiser marks the event Public or Private; defaults to Private. Shown on the
+ *     request's own details page once submitted, to the organiser and the reviewing coordinator
+ *     alike - the registration choice/dates get the same treatment, covered in events.spec.ts.
+ * AC20 saving a request with the same name and dates as one of the organiser's own other live
+ *     requests is refused, naming the conflict. No frontend logic of its own - the backend's
+ *     sentence surfaces through the form's existing save-error handling. Rule detail (scoping,
+ *     boundaries, dead statuses) is a backend case: test_event_request_duplicate.py.
+ * Rule detail, refusals (401/403/404/409/422) and the rest of what the coordinator sees
+ * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
@@ -1238,4 +1250,193 @@ test('2.1 AC15: submitting after removing the picture says only "Request submitt
   const shown = await toastsOnceSubmitted(page)
   expect(shown).not.toContain('Draft saved')
   expect(shown).not.toContain('Picture removed')
+})
+
+test('2.1 AC17: Registration required reveals the registration dates, hidden by default', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+
+  await expect(page.getByLabel('Registration opens')).toHaveCount(0)
+  await expect(page.getByLabel('Registration closes')).toHaveCount(0)
+
+  await page.getByRole('checkbox', { name: 'Registration required' }).check()
+
+  await expect(page.getByLabel('Registration opens')).toBeVisible()
+  await expect(page.getByLabel('Registration closes')).toBeVisible()
+})
+
+test('2.1 AC17: a registration date problem is said under the fields as soon as it is typed', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('RegDates'))
+  await page.getByRole('checkbox', { name: 'Registration required' }).check()
+  const closes = page.getByLabel('Registration closes')
+  const opens = page.getByLabel('Registration opens')
+
+  // Closing after the proposed start.
+  await closes.fill(inFuture(31, 9))
+  await expect(
+    page.getByText('Registration must close no later than the proposed start.'),
+  ).toBeVisible()
+  await expect(closes).toHaveAttribute('aria-invalid', 'true')
+
+  // Fixed, then the opening date after the closing date.
+  await closes.fill(inFuture(30, 9))
+  await opens.fill(inFuture(30, 10))
+  await expect(page.getByText('Registration must open before it closes.')).toBeVisible()
+  await expect(opens).toHaveAttribute('aria-invalid', 'true')
+
+  // A closing date in the past.
+  await opens.fill('')
+  await closes.fill(PAST_START)
+  await expect(
+    page.getByText('The registration closing date cannot be in the past.'),
+  ).toBeVisible()
+
+  // And it goes away once both dates are right.
+  await opens.fill(inFuture(1, 9))
+  await closes.fill(inFuture(30, 9))
+  await expect(
+    page.getByText('Registration must close no later than the proposed start.'),
+  ).toHaveCount(0)
+  await expect(page.getByText('Registration must open before it closes.')).toHaveCount(0)
+})
+
+test('2.1 AC17: turning registration off after entering dates asks for confirmation', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('RegConfirm'))
+  const checkbox = page.getByRole('checkbox', { name: 'Registration required' })
+  await checkbox.check()
+  await page.getByLabel('Registration closes').fill(inFuture(30, 9))
+
+  // Cancelling the dialog leaves it checked, with the date intact - a plain click, since the
+  // checkbox deliberately does not uncheck until the dialog is confirmed.
+  await checkbox.click()
+  await expect(page.getByRole('dialog', { name: 'Turn off registration?' })).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(checkbox).toBeChecked()
+  await expect(page.getByLabel('Registration closes')).toHaveValue(inFuture(30, 9))
+
+  // Confirming clears the dates and hides them.
+  await checkbox.click()
+  await page.getByRole('button', { name: 'Turn off' }).click()
+  await expect(checkbox).not.toBeChecked()
+  await expect(page.getByLabel('Registration closes')).toHaveCount(0)
+})
+
+test('2.1 AC17: switching registration off with nothing entered needs no confirmation', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const checkbox = page.getByRole('checkbox', { name: 'Registration required' })
+
+  await checkbox.check()
+  await checkbox.uncheck()
+
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(checkbox).not.toBeChecked()
+})
+
+test('2.1 AC10/AC17: a registration closing date is listed as still needed once required', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('RegMissing'))
+  await fillContact(page)
+  await answerVenueAndAccessibility(page)
+  await expect(page.getByText('registration closing date')).toHaveCount(0)
+
+  await page.getByRole('checkbox', { name: 'Registration required' }).check()
+
+  await expect(page.getByText('To submit, still needed: registration closing date.')).toBeVisible()
+
+  await page.getByLabel('Registration closes').fill(inFuture(30, 9))
+  await expect(page.getByText('registration closing date')).toHaveCount(0)
+})
+
+test('2.1 AC17: registration dates are saved and shown again after a reload', async ({ page }) => {
+  const name = uniqueName('RegSaved')
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, name)
+  await page.getByRole('checkbox', { name: 'Registration required' }).check()
+  await page.getByLabel('Registration opens').fill(inFuture(1, 9))
+  await page.getByLabel('Registration closes').fill(inFuture(30, 9))
+
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  await page.reload()
+
+  await expect(page.getByRole('checkbox', { name: 'Registration required' })).toBeChecked()
+  await expect(page.getByLabel('Registration opens')).toHaveValue(inFuture(1, 9))
+  await expect(page.getByLabel('Registration closes')).toHaveValue(inFuture(30, 9))
+})
+
+test('2.1 AC19: event visibility defaults to Private and can be switched to Public', async ({
+  page,
+}) => {
+  const name = uniqueName('Visibility')
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, name)
+
+  await expect(page.getByRole('radio', { name: 'Private' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'Public' })).not.toBeChecked()
+
+  await page.getByRole('radio', { name: 'Public' }).check()
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  await page.reload()
+
+  await expect(page.getByRole('radio', { name: 'Public' })).toBeChecked()
+})
+
+test('2.1 AC8/AC19: a submitted request’s visibility choice is shown on its details page, to the organiser and the coordinator', async ({
+  page,
+}) => {
+  const name = uniqueName('Public visibility')
+  await signIn(page, ACCOUNTS.organiser)
+  await createSubmittableDraft(page, name)
+
+  await page.getByRole('radio', { name: 'Public' }).check()
+  await saveEdits(page)
+  await page.getByRole('button', { name: 'Submit request' }).click()
+  await toastsOnceSubmitted(page)
+
+  await myEventsCard(page, name).getByRole('link', { name }).click()
+  await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/)
+  await expect(page.getByText('Public', { exact: true })).toBeVisible()
+  const eventUrl = page.url()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(eventUrl)
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  await expect(page.getByText('Public', { exact: true })).toBeVisible()
+})
+
+test('2.1 AC20: a request with the same name and dates as another live request is refused', async ({
+  page,
+}) => {
+  const name = uniqueName('Duplicate')
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, name)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+
+  await startNewRequest(page)
+  await fillEssentials(page, name)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('already have a request')
 })

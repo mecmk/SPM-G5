@@ -9,6 +9,10 @@
  * relies on (an attendee, another organiser's request, a draft that is not the viewer's own).
  * This spec covers the flows a user actually clicks through, plus the one refusal that is purely
  * a frontend rendering concern: what a blocked direct URL shows.
+ *
+ * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
+ * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
+ * test_event_request_visibility.py), also render on this page.
  */
 import { expect, test } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn } from './support'
@@ -92,6 +96,36 @@ test('7.1 AC1: a draft with no dates or attendance shows clear empty states', as
   await expect(page.getByText('Not yet assigned')).toHaveCount(0)
   // AC1: no recorded image falls back to the placeholder rather than a broken or empty image.
   await expect(page.locator('img')).toHaveCount(0)
+})
+
+test('2.1 AC8/AC19: the coordinator sees the registration choice, closing date and visibility of a submitted request', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // Nimbus Developer Conference: registration_required = TRUE, registration_closes_at =
+  // 2026-11-20 18:00+08, registration_opens_at left unset, is_public left at its default (false).
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  await expect(page.getByRole('heading', { name: 'Registration' })).toBeVisible()
+  await expect(page.getByText('Required', { exact: true })).toBeVisible()
+  await expect(page.getByText('Yes', { exact: true })).toBeVisible()
+  await expect(page.getByText('Immediately once approved')).toBeVisible()
+  await expect(page.getByText('20 Nov 2026, 18:00')).toBeVisible()
+  await expect(page.getByText('Visibility', { exact: true })).toBeVisible()
+  await expect(page.getByText('Private', { exact: true })).toBeVisible()
+})
+
+test('2.1 AC8: the coordinator sees a request with no registration requirement as such', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // Data Literacy Workshop: registration_required = FALSE (the seeded default).
+  await page.goto(`/events/${EVENTS.submitted}`)
+
+  await expect(page.getByRole('heading', { name: 'Registration' })).toBeVisible()
+  await expect(page.getByText('No', { exact: true })).toBeVisible()
+  await expect(page.getByText('Opens', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Closes', { exact: true })).toHaveCount(0)
 })
 
 test("7.1 AC2: an organiser cannot open another organiser's event by direct URL", async ({

@@ -171,6 +171,12 @@ export interface EventDetail {
   accessibility_needs: AccessibilityNeed[]
   accessibility_notes: string | null
   equipment: EquipmentLine[]
+  /** Story 2.1 AC17: dates are `null` whenever this is false. */
+  registration_required: boolean
+  registration_opens_at: string | null
+  registration_closes_at: string | null
+  /** Story 2.1 AC19: defaults to false (Private). */
+  is_public: boolean
   decided_by_name: string | null
   decided_at: string | null
   decision_reason: string | null
@@ -208,6 +214,10 @@ export interface EventInput {
   accessibility_needs: { code: string; notes: string | null }[]
   accessibility_notes: string | null
   equipment: EquipmentInput[]
+  registration_required: boolean
+  registration_opens_at: string | null
+  registration_closes_at: string | null
+  is_public: boolean
 }
 
 const EVENT_ERROR_CODES = { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_ALREADY_SUBMITTED' } as const
