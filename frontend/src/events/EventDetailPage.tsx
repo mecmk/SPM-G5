@@ -23,7 +23,6 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH, venueSearchPath, type VenueSearch } from '../routes'
-import { BOOKABLE_EVENT_STATUSES } from '../shared/eventStatus'
 import {
   formatDate,
   formatDateTime,
@@ -31,6 +30,7 @@ import {
   formatTime,
   instantToInput,
 } from '../shared/format'
+import { canRequestVenueFor } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -301,12 +301,9 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
-  /** f12.1.1 (story 12.1 AC15): only the assigned coordinator finds a venue for the event, and
-   *  only while it can take a booking - the same two rules `POST /bookings` enforces. */
-  const canFindVenue =
-    can(PERMISSIONS.BOOKINGS_REQUEST) &&
-    isAssignedCoordinator &&
-    BOOKABLE_EVENT_STATUSES.includes(event.status)
+  /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
+   *  its assigned coordinator, while it can take a booking. */
+  const canFindVenue = canRequestVenueFor(event, user, can)
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =

@@ -44,10 +44,14 @@ const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
 const WORKSHOP = { id: EVENTS.submitted, name: 'Data Literacy Workshop' }
 const VENUE = 'Grand Hall'
+const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the seed
 const FIND_A_VENUE = 'Find a venue'
 const REQUEST_THIS_VENUE = 'Request this venue'
 const WITHDRAWN_VENUE_MESSAGE =
   'This venue has been withdrawn from the catalogue and can no longer be booked.'
+const NOT_REQUESTABLE_MESSAGE =
+  "Only the event's assigned coordinator can request a venue for it, while the event is in " +
+  'Planning or Confirmed.'
 
 /** The address Find a venue writes for Nimbus, as 8.1's panel reads it (AC15). */
 const NIMBUS_SEARCH = {
@@ -378,6 +382,36 @@ for (const viewer of NOT_REQUESTING) {
 
     await expect(catalogueBanner(page, NIMBUS.name)).toHaveCount(0)
     await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
+  })
+}
+
+/** Who can open the request step's address (an old link, an edited one) but must not be offered
+ * a request there, and for which event (AC15 permission, review of PR #67). */
+const NOT_SENDING = [
+  { who: 'a coordinator not assigned to the event', email: ACCOUNTS.coordinator2, event: NIMBUS },
+  {
+    who: 'the coordinator of an event still under review',
+    email: ACCOUNTS.coordinator,
+    event: WORKSHOP,
+  },
+]
+
+for (const viewer of NOT_SENDING) {
+  test(`12.1 AC15: the request step's address offers no request to ${viewer.who}`, async ({
+    page,
+  }) => {
+    await signIn(page, viewer.email)
+    await page.goto(`/events/${viewer.event.id}/request-venue/${VENUE_ID}`)
+
+    // The page says why on arrival, rather than after Send request is refused.
+    await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveText(NOT_REQUESTABLE_MESSAGE)
+    await expect(page.getByRole('region', { name: 'What this request will carry' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Send request' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: `← ${viewer.event.name}` })).toHaveAttribute(
+      'href',
+      `/events/${viewer.event.id}`,
+    )
   })
 }
 

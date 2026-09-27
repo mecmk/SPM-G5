@@ -2,10 +2,9 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router'
 import { getEvent, type EventDetail } from '../api/events'
 import { useAuth } from '../auth/authContext'
-import { PERMISSIONS } from '../auth/permissions'
 import { VENUE_SEARCH_PARAMS } from '../routes'
-import { BOOKABLE_EVENT_STATUSES } from '../shared/eventStatus'
 import { useLoaded } from '../shared/useLoaded'
+import { canRequestVenueFor } from '../shared/venueRequest'
 
 /** What a venue page knows about the event named in its address. */
 export interface RequestingEventState {
@@ -33,10 +32,6 @@ export function useRequestingEvent(): RequestingEventState {
 
   // `useLoaded` keeps the last event while a changed address loads, so check it is this one.
   const isRequestable =
-    event !== null &&
-    event.id === eventId &&
-    can(PERMISSIONS.BOOKINGS_REQUEST) &&
-    event.assigned_coordinator_id === user?.id &&
-    BOOKABLE_EVENT_STATUSES.includes(event.status)
+    event !== null && event.id === eventId && canRequestVenueFor(event, user, can)
   return { requestingEvent: isRequestable ? event : null, error }
 }

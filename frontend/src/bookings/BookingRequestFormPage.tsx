@@ -4,12 +4,15 @@ import { createBookingRequest, type Booking } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
 import { getVenue, type Venue } from '../api/venues'
+import { useAuth } from '../auth/authContext'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { eventPath, VENUE_CATALOGUE_PATH, venueSearchPath } from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { canRequestVenueFor } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -41,11 +44,16 @@ interface RequestSubject {
  * the request pending. AC4: the backend refuses anyone but the event's assigned coordinator.
  * Nothing can be sent before both records have arrived (review of PR #42).
  *
+ * The address can be reached without Request this venue (an old link, an edited one), so the
+ * page checks it with the same rule as Find a venue and, for anyone that rule turns away, says why
+ * instead of offering a request the backend would refuse (review of PR #67).
+ *
  * The address also carries the catalogue's own query, so the back link returns to the same search.
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
   const location = useLocation()
+  const { user, can } = useAuth()
   const loadSubject = useCallback(
     () =>
       Promise.all([getEvent(eventId), getVenue(venueId)]).then(
@@ -70,6 +78,20 @@ export function BookingRequestFormPage() {
   if (!subject) return <LoadingState label="Loading the request…" />
 
   const { event, venue } = subject
+  if (!canRequestVenueFor(event, user, can)) {
+    return (
+      <div className="page stack">
+        <Link to={eventPath(event.id)} className="back-link">
+          ← {event.name}
+        </Link>
+        <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
+        <p role="alert" className="error">
+          {ERROR_REGISTRY.BOOKING_NOT_REQUESTABLE.message}
+        </p>
+      </div>
+    )
+  }
+
   const backTo = location.search
     ? `${VENUE_CATALOGUE_PATH}${location.search}`
     : venueSearchPath({ eventId: event.id })

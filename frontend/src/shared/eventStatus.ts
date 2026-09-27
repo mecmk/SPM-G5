@@ -19,8 +19,9 @@ export const VISIBLE_EVENT_STATUSES = [
 
 /**
  * Story 12.1 AC1: the statuses a venue booking can be requested from, mirroring
- * `_BOOKABLE_EVENT_STATUSES` in backend/app/bookings/service.py. f12.1.1 offers Find a venue and
- * Request this venue only on these, so the page never offers what `POST /bookings` would refuse.
+ * `_BOOKABLE_EVENT_STATUSES` in backend/app/bookings/service.py. f12.1.1 offers Find a venue,
+ * Request this venue and the request step only on these (`canRequestVenueFor` in
+ * `./venueRequest.ts`), so no page offers what `POST /bookings` would refuse.
  */
 export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
 
