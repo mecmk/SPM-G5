@@ -44,6 +44,10 @@ export function VenueDetailPage() {
   const loadVenue = useCallback(() => getVenue(venueId), [venueId])
   const { data: venue, error } = useLoaded(loadVenue)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
+  // Not reset when venueId changes - nothing links from one venue's page straight to another's
+  // today, so this can't be observed yet. If that ever becomes possible, this needs to go back
+  // to clearing windows (or keying the calendar on venueId) so a new venue never shows a moment
+  // of the previous one's availability.
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [calendarError, setCalendarError] = useState<string | null>(null)
   const [isCalendarLoading, setIsCalendarLoading] = useState(true)
@@ -51,6 +55,9 @@ export function VenueDetailPage() {
   useEffect(() => {
     let cancelled = false
     setIsCalendarLoading(true)
+    // Clears a previous month's failure immediately, so it cannot sit on screen describing a
+    // month that is no longer the one being loaded.
+    setCalendarError(null)
     const rangeStart = monthBoundary(month)
     const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
     getVenueCalendar(venueId, rangeStart, rangeEnd)
@@ -72,6 +79,15 @@ export function VenueDetailPage() {
       cancelled = true
     }
   }, [venueId, month])
+
+  /** f9.1.1 AC2: an empty grid can mean loading, genuinely free, or failed - `entries` alone
+   *  cannot tell those apart, so this drives a visibly distinct treatment for the two that are
+   *  not "genuinely free" instead of rendering all three identically. */
+  const calendarStatus: 'loading' | 'unknown' | 'ready' = isCalendarLoading
+    ? 'loading'
+    : calendarError
+      ? 'unknown'
+      : 'ready'
 
   const calendarEntries: CalendarEntry[] = useMemo(
     () =>
@@ -210,12 +226,20 @@ export function VenueDetailPage() {
                 {calendarError}
               </p>
             )}
-            {isCalendarLoading && !calendarError && <p className="muted">Loading availability…</p>}
+            {/* Always rendered - only the text inside changes - so this can never itself cause
+                the calendar below it to shift (f9.1.1). role="status" announces the change to
+                assistive tech the way the LoadingState it replaced did. */}
+            <p className="muted calendar-status-line" role="status">
+              {calendarStatus === 'loading' && 'Loading availability…'}
+              {calendarStatus === 'unknown' &&
+                'Availability unknown - showing every day as available may not be accurate.'}
+            </p>
             <Calendar
               month={month}
               onMonthChange={setMonth}
               entries={calendarEntries}
               legend={CALENDAR_LEGEND}
+              gridStatus={calendarStatus === 'ready' ? undefined : calendarStatus}
             />
           </section>
         </div>
