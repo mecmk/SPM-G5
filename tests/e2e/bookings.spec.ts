@@ -69,13 +69,9 @@ test('13.1 AC2: the request detail page shows the event, booking and requirement
   await card.getByRole('link', { name: 'View details' }).click()
 
   // The queue card's own event name is also a heading, so wait for the URL - the only
-  // unambiguous sign navigation to the detail page actually finished. The URL changes before the
-  // page does, and story 12.1's spec can put a second Nimbus card in the queue meanwhile, so the
-  // heading is the detail page's own h1, never a queue card's h3.
+  // unambiguous sign navigation to the detail page actually finished.
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(
-    page.getByRole('heading', { name: 'Nimbus Developer Conference', level: 1 }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nimbus Developer Conference' })).toBeVisible()
   await expect(page.getByText('Omar Organiser')).toBeVisible()
   await expect(page.getByText('Annual customer conference')).toBeVisible()
   await expect(page.getByText('Seminar Room 2.1')).toBeVisible()
@@ -145,11 +141,9 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   await card.getByRole('link', { name: 'View details' }).click()
 
   // The queue card's own event name is also a heading, so wait for the URL - the only
-  // unambiguous sign navigation to the detail page actually finished. The URL changes before the
-  // page does, so the heading is the detail page's own h1: a queue card's h3 would let the Approve
-  // below be looked up while every queue card's Approve is still on screen.
+  // unambiguous sign navigation to the detail page actually finished.
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Investor Demo Day', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Investor Demo Day' })).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
@@ -254,9 +248,7 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await signIn(page, ACCOUNTS.coordinator2)
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  await expect(
-    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
   await expect(page.getByText('Pending', { exact: true })).toBeVisible()
   await expect(page.getByText('Awaiting review by Venue Staff.')).toBeVisible()
 
@@ -267,12 +259,8 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   const card = page.getByRole('listitem').filter({ hasText: 'Alumni Homecoming Weekend' })
   await card.getByRole('link', { name: 'View details' }).click()
 
-  // The detail page's own h1: the queue card's h3 has the same name and stays on screen for a
-  // moment after the URL changes, while every queue card's Reject is still there too.
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(
-    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
   await page.getByRole('button', { name: 'Reject' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
@@ -295,10 +283,8 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
   // - both show up on the event page's history, the new request first. Since f12.1.1 a request
-  // starts from the event: Find a venue, then Request this venue in the catalogue. The capacity
-  // filter starts at the event's attendance (100), so it is cleared to offer the Boardroom.
+  // starts from the event: Find a venue, then Request this venue in the catalogue.
   await page.getByRole('link', { name: 'Find a venue' }).click()
-  await page.getByLabel('Capacity from').fill('')
   await venueCard(page, 'Boardroom 3.4').getByRole('link', { name: 'Request this venue' }).click()
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()

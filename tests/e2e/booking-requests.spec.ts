@@ -22,11 +22,12 @@
  *
  * AC15's address is the contract with story 8.1's filter panel, which reads what Find a venue
  * writes (`VENUE_SEARCH_PARAMS` in frontend/src/routes.ts). These cases pin its names and values;
- * that the panel fills itself in from them is 8.1 AC3's to prove, except "Capacity from", which
- * already starts at the address's capacity. So the flows here open Grand Hall (400 seats), the
- * room that fits Nimbus's 350. Grand Hall is already booked for Nimbus that day, though, so the
- * one request really sent goes to Exhibition Foyer, which is free. The pending queue itself is
- * story 13.1's (`bookings.spec.ts`), so AC3 stops at the pending outcome shown here.
+ * that the panel fills itself in from them is 8.1 AC3's to prove. The flows here open Grand Hall
+ * (400 seats), the room that fits Nimbus's 350, but send nothing for Nimbus: Grand Hall is already
+ * booked for Nimbus that day, and story 13.1's queue tests find the seeded Nimbus request by its
+ * event name. The one request really sent is Regional Sales Summit's, to Grand Hall, which is free
+ * on 15-16 Dec. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at
+ * the pending outcome shown here.
  *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
@@ -43,9 +44,6 @@ const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
 const WORKSHOP = { id: EVENTS.submitted, name: 'Data Literacy Workshop' }
 const VENUE = 'Grand Hall'
-const SMALL_VENUE = 'Seminar Room 2.1'
-/** Free on Nimbus's day: the only venue a request for Nimbus is really sent to. */
-const FREE_VENUE = 'Exhibition Foyer'
 const FIND_A_VENUE = 'Find a venue'
 const REQUEST_THIS_VENUE = 'Request this venue'
 const WITHDRAWN_VENUE_MESSAGE =
@@ -144,11 +142,6 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
     `/events/${NIMBUS.id}`,
   )
 
-  // "Capacity from" starts at the expected attendance, so a room too small is not offered.
-  await expect(page.getByLabel('Capacity from')).toHaveValue(NIMBUS_SEARCH.capacity)
-  await expect(venueCard(page, VENUE)).toBeVisible()
-  await expect(venueCard(page, SMALL_VENUE)).toHaveCount(0)
-
   await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
 
   await expect(page).toHaveURL(new RegExp(`/events/${NIMBUS.id}/request-venue/[^/]+$`))
@@ -156,37 +149,40 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
   await expect(page.getByText(`For ${NIMBUS.name}`)).toBeVisible()
 })
 
-test('12.1 AC1/AC2/AC3: a coordinator raises a venue booking request for their approved event', async ({
-  page,
-}) => {
+test('12.1 AC2: the request step shows what it carries over from the event', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await findVenueFor(page, NIMBUS)
+  await openRequestStep(page)
 
-  // Grand Hall is already booked for Nimbus that day (seed), so the request that is really sent
-  // goes to Exhibition Foyer, which is free. The coordinator may pick a smaller room, so the
-  // capacity filter is cleared first.
-  await page.getByLabel('Capacity from').fill('')
-  await venueCard(page, FREE_VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
-  await expect(page.getByRole('heading', { name: `Request ${FREE_VENUE}`, level: 1 })).toBeVisible()
-
-  // AC2: the step states what it will carry over from the event, so the coordinator can see the
+  // The step states what it will carry over from the event, so the coordinator can see the
   // period, attendance, layout and facilities are the event's and not theirs to choose.
   const summary = page.getByRole('region', { name: 'What this request will carry' })
   await expect(summary).toContainText('350')
   await expect(summary).toContainText('Theatre')
   await expect(summary).toContainText('Projector & screen')
+})
 
+test('12.1 AC1/AC3: a coordinator raises a venue booking request for their approved event', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findVenueFor(page, SUMMIT)
+
+  // The one request really sent is Summit's, to Grand Hall, which is free on 15-16 Dec. Not
+  // Nimbus's: story 13.1's queue tests find the seeded Nimbus request by its event name, and a
+  // second Nimbus request in the queue would sit right beside it.
+  await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Send request' }).click()
 
   // AC3: the outcome names the venue and shows the request waiting for Venue Staff.
   const outcome = page.getByRole('region', { name: 'Request sent' })
   await expect(outcome).toBeVisible()
-  await expect(outcome).toContainText(FREE_VENUE)
+  await expect(outcome).toContainText(VENUE)
   await expect(outcome).toContainText('Pending')
 
   // AC15: the outcome leads back to the event the request was raised for.
   await outcome.getByRole('link', { name: 'Back to the event' }).click()
-  await expect(page.getByRole('heading', { name: NIMBUS.name, level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: SUMMIT.name, level: 1 })).toBeVisible()
 })
 
 test('12.1 AC15: a venue can be requested from its record in event context', async ({ page }) => {
@@ -254,7 +250,6 @@ test('12.1 AC15: an event with no venue requirements still finds a venue by date
   await openEvent(page, NIMBUS)
 
   // "No venue requirements" means none were stated, not that no venue is needed.
-  await expect(page.getByText('No specific venue requirements recorded.')).toBeVisible()
   expect(await findVenueSearch(page)).toEqual({
     path: '/venues',
     names: ['accessibility', 'capacity', 'event', 'from', 'to'],

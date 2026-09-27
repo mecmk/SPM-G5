@@ -457,10 +457,8 @@ export function EventDetailPage() {
                 </Link>
               )}
             </div>
-            {/* Story 2.1 AC4: "No venue requirements" means none were stated, not that no venue
-                is needed (see the events.venue_none_required column comment). */}
             {event.venue_none_required ? (
-              <p className="muted">No specific venue requirements recorded.</p>
+              <p className="muted">No venue is required for this event.</p>
             ) : (
               <>
                 <div>

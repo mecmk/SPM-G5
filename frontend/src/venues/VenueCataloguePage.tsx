@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { listVenues, type VenueSummary } from '../api/venues'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
-import { VENUE_SEARCH_PARAMS, venuePath, venueRequestPath } from '../routes'
+import { venuePath, venueRequestPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
@@ -21,13 +21,6 @@ function matchesCapacity(venue: VenueSummary, minCapacity: string, maxCapacity: 
   return (min === null || venue.capacity >= min) && (max === null || venue.capacity <= max)
 }
 
-/** The address's minimum capacity, when it is a number: the event's expected attendance when the
- *  catalogue is opened from Find a venue (f12.1.1). */
-function capacityFromAddress(searchParams: URLSearchParams): string {
-  const capacity = searchParams.get(VENUE_SEARCH_PARAMS.capacity) ?? ''
-  return numberOrNull(capacity) === null ? '' : capacity
-}
-
 function loadVenuesInService() {
   return listVenues(false)
 }
@@ -39,17 +32,15 @@ function loadVenuesInService() {
  * 8.3's Venue Staff list filters by capacity.
  *
  * f12.1.1 (story 12.1 AC15): opened from an event's Find a venue, the page names that event and
- * each venue offers Request this venue, for the event's assigned coordinator only. "Capacity
- * from" starts at the address's `capacity`, the event's expected attendance, so only venues big
- * enough are shown (story 8.1 AC3's minimum capacity). A venue's link keeps the address's query,
- * so its record knows the event too.
+ * each venue offers Request this venue, for the event's assigned coordinator only. A venue's link
+ * keeps the address's query, so its record knows the event too. Filling the filters in from the
+ * address is story 8.1 AC3's.
  */
 export function VenueCataloguePage() {
   const { data: venues, error } = useLoaded(loadVenuesInService)
   const location = useLocation()
-  const [searchParams] = useSearchParams()
   const { requestingEvent, error: eventError } = useRequestingEvent()
-  const [minCapacity, setMinCapacity] = useState(() => capacityFromAddress(searchParams))
+  const [minCapacity, setMinCapacity] = useState('')
   const [maxCapacity, setMaxCapacity] = useState('')
 
   const shownVenues = useMemo(
