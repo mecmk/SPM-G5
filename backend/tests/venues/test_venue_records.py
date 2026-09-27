@@ -349,7 +349,7 @@ def test_delete_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
 
 # --- read side, used by stories 8.1 / 8.2 ---------------------------------------------------
 @pytest.mark.story("8.3")
-@pytest.mark.story("8.1", ac=3)
+@pytest.mark.story("8.1", ac=1)
 def test_list_hides_withdrawn_venues_unless_asked(coordinator_client):
     names = [v["name"] for v in coordinator_client.get("/venues").json()]
     assert "Old Annex Room" not in names and "Grand Hall" in names
