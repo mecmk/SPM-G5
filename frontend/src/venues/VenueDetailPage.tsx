@@ -210,9 +210,7 @@ export function VenueDetailPage() {
                 {calendarError}
               </p>
             )}
-            {isCalendarLoading && !calendarError && (
-              <p className="muted">Loading availability…</p>
-            )}
+            {isCalendarLoading && !calendarError && <p className="muted">Loading availability…</p>}
             <Calendar
               month={month}
               onMonthChange={setMonth}
