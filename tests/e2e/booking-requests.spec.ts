@@ -30,7 +30,9 @@ import { ACCOUNTS, signIn } from './support'
 
 const REQUEST_PATH = '/bookings/new'
 const APPROVED_EVENT = 'Nimbus Developer Conference'
-const VENUE = 'Seminar Room 2.1'
+// Free on Nimbus's day. Seminar Room 2.1 is not: the seeded breakout request holds it, and
+// since s12.1 a pending request holds its venue.
+const VENUE = 'Exhibition Foyer'
 
 /** The sidebar. Its links share their names with the home page's tiles, which are built from
  * the same list, so nav assertions scope to it - as `rbac.spec.ts` does. */
