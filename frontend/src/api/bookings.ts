@@ -66,6 +66,8 @@ export interface BookingQueueEntry {
   requested_by_name: string
   status: BookingStatus
   decision_reason: string | null
+  created_at: string
+  decided_at: string | null
 }
 
 /** Story 13.1 AC1-AC3: every booking request regardless of status, for Venue Staff to decide

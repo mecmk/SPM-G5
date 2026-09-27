@@ -20,7 +20,7 @@ import {
   BOOKING_STATUS_TABS,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
-import { formatDate, formatTime } from '../shared/format'
+import { formatDate, formatDateTime, formatTime } from '../shared/format'
 
 const SHORT_ID_LENGTH = 8
 const PENDING_STATUS = 'PENDING'
@@ -32,10 +32,10 @@ function requirementsText(notes: string | null): string {
 /**
  * Story 13.1 - the venue staff booking requests queue.
  * AC1: every request, for the signed-in Venue Staff member to decide or review.
- * AC2: each entry shows the event name, requested venue, period, expected attendance and
- * stated requirements.
+ * AC2: each entry shows the event name, requested venue, period, expected attendance, stated
+ * requirements and when the coordinator raised the request.
  * AC3: decided requests are filterable through the All / Pending / Approved / Rejected tabs,
- * matching the coordinator's Events inbox tab pattern (story 6.1), and carry the reason they
+ * matching the coordinator's Events inbox tab pattern (story 6.1), and carry when and why they
  * were decided.
  *
  * Story 13.2 AC1: an Approve action on each pending card, so a request that needs no closer
@@ -101,11 +101,15 @@ export function BookingRequestsPage() {
     setIsApproving(true)
     setApproveError(null)
     try {
-      await approveBooking(id, eventName)
+      const updated = await approveBooking(id, eventName)
       setEntries(
         (current) =>
           current &&
-          current.map((entry) => (entry.id === id ? { ...entry, status: 'APPROVED' } : entry)),
+          current.map((entry) =>
+            entry.id === id
+              ? { ...entry, status: updated.status, decided_at: updated.decided_at }
+              : entry,
+          ),
       )
       setPendingApprove(null)
     } catch (err) {
@@ -136,12 +140,19 @@ export function BookingRequestsPage() {
     setIsRejecting(true)
     setRejectError(null)
     try {
-      await rejectBooking(id, eventName, reason)
+      const updated = await rejectBooking(id, eventName, reason)
       setEntries(
         (current) =>
           current &&
           current.map((entry) =>
-            entry.id === id ? { ...entry, status: 'REJECTED', decision_reason: reason } : entry,
+            entry.id === id
+              ? {
+                  ...entry,
+                  status: updated.status,
+                  decision_reason: updated.decision_reason,
+                  decided_at: updated.decided_at,
+                }
+              : entry,
           ),
       )
       setPendingReject(null)
@@ -219,12 +230,23 @@ export function BookingRequestsPage() {
                       <p className="fact-label">Submitted by</p>
                       <p className="fact-value">{entry.requested_by_name}</p>
                     </div>
+                    <div className="subtle-block">
+                      <p className="fact-label">Requested</p>
+                      <p className="fact-value">{formatDateTime(entry.created_at)}</p>
+                    </div>
                   </div>
 
                   <div className="subtle-block">
                     <p className="fact-label">Special requirements</p>
                     <p>{requirementsText(entry.requirement_notes)}</p>
                   </div>
+
+                  {entry.decided_at !== null && (
+                    <div className="subtle-block">
+                      <p className="fact-label">Decided at</p>
+                      <p>{formatDateTime(entry.decided_at)}</p>
+                    </div>
+                  )}
 
                   {entry.decision_reason !== null && (
                     <div className="subtle-block">
