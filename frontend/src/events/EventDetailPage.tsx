@@ -372,13 +372,20 @@ export function EventDetailPage() {
               <p className="eyebrow">Expected attendance</p>
             </div>
           </div>
-          <div className="stat">
-            <Icon name="person" />
-            <div className="stat-body">
-              <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
-              <p className="eyebrow">Assigned coordinator</p>
+          {/* Story 2.6 AC12/AC13: a draft has no coordinator to show yet, so the stat is left
+              out entirely rather than reading "Not yet assigned" like a submitted request would. */}
+          {event.status !== 'DRAFT' && (
+            <div className="stat">
+              <Icon name="person" />
+              <div className="stat-body">
+                <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
+                {event.assigned_coordinator_email && (
+                  <p className="small muted wrap-anywhere">{event.assigned_coordinator_email}</p>
+                )}
+                <p className="eyebrow">Assigned coordinator</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <section className="card stack" aria-labelledby="event-info-heading">
