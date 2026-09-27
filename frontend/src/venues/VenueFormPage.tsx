@@ -12,7 +12,7 @@ import {
 import { PageHeader } from '../components/PageHeader'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { VENUES_MANAGE_PATH } from '../routes'
+import { VENUE_CATALOGUE_PATH } from '../routes'
 import {
   EMPTY_ACCESSIBILITY,
   EMPTY_FACILITY,
@@ -138,7 +138,7 @@ export function VenueFormPage() {
       const input = venueInputFrom(form, isEditing)
       if (venueId) await updateVenue(venueId, input)
       else await createVenue(input)
-      navigate(VENUES_MANAGE_PATH)
+      navigate(VENUE_CATALOGUE_PATH)
     } catch (err) {
       setSaveError(formatApiError(err))
       setIsSaving(false)
@@ -150,8 +150,8 @@ export function VenueFormPage() {
   return (
     <div className="page">
       <PageHeader
-        backTo={VENUES_MANAGE_PATH}
-        backLabel="All venues"
+        backTo={VENUE_CATALOGUE_PATH}
+        backLabel="Venue catalogue"
         title={title}
         subtitle="Name, location and capacity are required. Anything left empty shows as not recorded."
       />
@@ -413,7 +413,7 @@ export function VenueFormPage() {
                 {saveError}
               </p>
             )}
-            <Link to={VENUES_MANAGE_PATH} className="button secondary">
+            <Link to={VENUE_CATALOGUE_PATH} className="button secondary">
               Cancel
             </Link>
             <button type="submit" disabled={isSaving}>
