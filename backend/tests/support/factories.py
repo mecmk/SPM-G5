@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import itertools
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -25,7 +25,13 @@ from app.events.models import (
     EventClarification,
     EventStatus,
 )
-from app.venues.models import Venue
+from app.venues.models import (
+    Venue,
+    VenueAccessibilityFeature,
+    VenueFacility,
+    VenueLayout,
+    VenueUnavailabilityPeriod,
+)
 from tests.support.seed import Events, Users
 
 _counter = itertools.count(1)
@@ -96,17 +102,56 @@ def make_clarification(
     return row
 
 
-def make_venue(db: Session, **overrides) -> Venue:
+def make_venue(
+    db: Session,
+    *,
+    facilities: tuple[str, ...] = (),
+    layouts: dict[str, int | None] | None = None,
+    accessibility: tuple[str, ...] = (),
+    hours: tuple[time, time] | None = None,
+    **overrides,
+) -> Venue:
+    """A venue, with its characteristics as reference codes: ``layouts`` maps a layout code to its
+    own capacity (None: the venue's), ``hours`` is the daily (opening, closing) window."""
     n = next(_counter)
+    opening, closing = hours if hours is not None else (None, None)
     venue = Venue(
         name=overrides.pop("name", f"Test Venue {n}"),
         location=overrides.pop("location", "Test Tower"),
         capacity=overrides.pop("capacity", 50),
+        operating_hours_start=opening,
+        operating_hours_end=closing,
+        facilities=[VenueFacility(facility_code=code) for code in facilities],
+        layouts=[
+            VenueLayout(layout_code=code, layout_capacity=capacity)
+            for code, capacity in (layouts or {}).items()
+        ],
+        accessibility_features=[
+            VenueAccessibilityFeature(feature_code=code) for code in accessibility
+        ],
         **overrides,
     )
     db.add(venue)
     db.flush()
     return venue
+
+
+def make_unavailability(
+    db: Session,
+    *,
+    venue_id: uuid.UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+    reason: str = "MAINTENANCE",
+    notes: str | None = None,
+) -> VenueUnavailabilityPeriod:
+    """A period a venue is closed (story 9.1's calendar, 8.1's availability filter)."""
+    period = VenueUnavailabilityPeriod(
+        venue_id=venue_id, starts_at=starts_at, ends_at=ends_at, reason=reason, notes=notes
+    )
+    db.add(period)
+    db.flush()
+    return period
 
 
 def make_booking(
