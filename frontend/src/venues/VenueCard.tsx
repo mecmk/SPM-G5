@@ -9,6 +9,9 @@ export interface VenueCardProps {
   /** The venue's record. The catalogue passes its own query along, so the record keeps the event
    *  a venue is being found for (f12.1.1). */
   recordPath: string
+  /** Lines below the heading: story 8.1 AC2's "Opening hours not recorded" when a period is
+   *  searched, and room for 11.1's suitability note. */
+  notes?: ReactNode
   /** The foot of the card: Request this venue (f12.1.1), or Venue Staff's Edit and Delete
    *  (story 8.1 AC13). */
   actions?: ReactNode
@@ -19,7 +22,7 @@ export interface VenueCardProps {
  * full record. A withdrawn venue is listed only when Venue Staff ask for it (AC13), and is badged
  * so it cannot pass for one in service (AC1: "excluded or clearly marked").
  */
-export function VenueCard({ venue, recordPath, actions }: VenueCardProps) {
+export function VenueCard({ venue, recordPath, notes, actions }: VenueCardProps) {
   return (
     <article className="item-card">
       <div className="item-card-picture" aria-hidden="true">
@@ -38,6 +41,7 @@ export function VenueCard({ venue, recordPath, actions }: VenueCardProps) {
             <div className="item-card-capacity-label">capacity</div>
           </div>
         </div>
+        {notes}
         {venue.status === 'WITHDRAWN' && (
           <div className="cluster">
             <StatusBadge status={venue.status} label="Withdrawn" />
