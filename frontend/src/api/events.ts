@@ -159,6 +159,8 @@ export interface EventDetail {
   organiser_name: string
   assigned_coordinator_id: string | null
   assigned_coordinator_name: string | null
+  /** Story 2.6 AC12/AC15: rides alongside the name, restricted the same way. */
+  assigned_coordinator_email: string | null
   submitted_at: string | null
   required_layout_code: string | null
   required_layout_name: string | null

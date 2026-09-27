@@ -471,6 +471,10 @@ class EventDetailOut(BaseModel):
     ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
     without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
     receives it.
+
+    2.6 AC12: ``assigned_coordinator_email`` rides alongside ``assigned_coordinator_name`` -
+    this endpoint is already restricted to the owning organiser and internal roles (2.1 AC8's
+    ``get_event``), which is exactly who AC15 wants to see it, so no extra check is needed.
     """
 
     id: uuid.UUID
@@ -490,6 +494,7 @@ class EventDetailOut(BaseModel):
     organiser_name: str
     assigned_coordinator_id: uuid.UUID | None
     assigned_coordinator_name: str | None
+    assigned_coordinator_email: str | None
     submitted_at: datetime | None
     required_layout_code: str | None
     required_layout_name: str | None
@@ -533,6 +538,7 @@ class EventDetailOut(BaseModel):
             organiser_name=event.organiser.full_name,
             assigned_coordinator_id=event.assigned_coordinator_id,
             assigned_coordinator_name=coordinator.full_name if coordinator else None,
+            assigned_coordinator_email=coordinator.email if coordinator else None,
             submitted_at=event.submitted_at,
             required_layout_code=event.required_layout_code,
             required_layout_name=layout.name if layout else None,

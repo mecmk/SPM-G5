@@ -593,6 +593,7 @@
   flex: 1;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
 }
 
 .stat-value {
@@ -1489,6 +1490,13 @@ td.num {
 .small {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+
+/** A long unbroken string (an email, a URL) breaks at any character once it no longer fits,
+ * instead of overflowing its container - `.grow-text`'s flex sibling does the same for a
+ * different layout. */
+.wrap-anywhere {
+  overflow-wrap: anywhere;
 }
 
 .self-start {
