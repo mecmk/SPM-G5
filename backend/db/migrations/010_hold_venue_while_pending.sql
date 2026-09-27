@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 006 - a pending venue booking request holds its venue.
+-- Migration 010 - a pending venue booking request holds its venue.
 --
 -- Story 12.1 (Sprint 2) AC3, AC12 and AC14, built as s12.1. Until now only an APPROVED
 -- booking blocked a venue, so a coordinator could request a venue already booked or requested
@@ -58,7 +58,7 @@ BEGIN
                 jsonb_build_object(
                     'event_id', pending.event_id,
                     'venue_id', pending.venue_id,
-                    'reason', 'migration 006: overlapped a booking or earlier request of the same venue'
+                    'reason', 'migration 010: overlapped a booking or earlier request of the same venue'
                 )
             );
         END IF;

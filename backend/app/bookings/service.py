@@ -17,7 +17,7 @@ the event period: recording them is the rest of Sprint 2's 12.1.
 The venue hold - Sprint 2's 12.1 AC3/AC12/AC14, built as s12.1: a PENDING request holds
 its venue for its held period, as an APPROVED booking does. ``create_booking_request`` refuses a
 period that overlaps a pending or approved booking of the same venue (``VenueHeld``, naming it in
-Singapore time), and since migration 006 the exclusion constraint covers PENDING rows too, so two
+Singapore time), and since migration 010 the exclusion constraint covers PENDING rows too, so two
 requests racing for one slot cannot both land - the loser's write is translated into the same
 ``VenueHeld``. A pending request can therefore never clash when it is approved.
 
@@ -295,7 +295,7 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
     is not PENDING (``BookingNotPending``) or whose period would double-book its venue
     (``BookingConflict``, AC4 / 14.2 AC1-AC2).
 
-    Since the venue hold (migration 006) a pending request already holds its slot, so no other
+    Since the venue hold (migration 010) a pending request already holds its slot, so no other
     pending or approved booking can overlap it and the conflict branch below is a safety net
     that should never fire. Callers must fetch ``booking`` via ``get_booking_for_decision`` -
     see the module docstring's concurrency note.

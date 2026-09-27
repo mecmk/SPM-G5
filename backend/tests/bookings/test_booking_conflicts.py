@@ -12,7 +12,7 @@ AC2 The refusal identifies the conflicting booking.
 AC3 Where two pending requests overlap, approving one causes the other's approval to be
     refused.
 
-Since migration 006 (Sprint 2's 12.1 hold, s12.1) a pending request holds its venue, so
+Since migration 010 (Sprint 2's 12.1 hold, s12.1) a pending request holds its venue, so
 a pending request that overlaps a pending or approved one can no longer be stored. The overlap
 cases below therefore give the approval-time check an unsaved probe booking instead of a saved
 row, and AC3's outcome - the two are never both approved - is now enforced when the second

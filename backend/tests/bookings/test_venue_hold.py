@@ -45,11 +45,11 @@ from tests.support.factories import make_booking, make_event, make_venue
 from tests.support.seed import Events, Users, Venues
 
 SGT = timezone(timedelta(hours=8))
-MIGRATION_006 = (
-    Path(__file__).resolve().parents[2] / "db" / "migrations" / "006_hold_venue_while_pending.sql"
+MIGRATION_010 = (
+    Path(__file__).resolve().parents[2] / "db" / "migrations" / "010_hold_venue_while_pending.sql"
 )
-# The constraint as it stood before migration 006: only APPROVED rows blocked a venue.
-PRE_006_CONSTRAINT = (
+# The constraint as it stood before migration 010: only APPROVED rows blocked a venue.
+PRE_010_CONSTRAINT = (
     "ALTER TABLE venue_bookings ADD CONSTRAINT ex_venue_bookings_no_double_booking"
     " EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)') WITH &&)"
     " WHERE (status = 'APPROVED')"
@@ -291,16 +291,16 @@ def test_the_database_refuses_an_overlapping_hold(db):
 
 
 @pytest.mark.story("12.1", ac=14)
-def test_migration_006_cancels_requests_that_could_never_be_approved(db):
-    """Migration 006 runs on databases that already hold clashing pending requests (anyone who
+def test_migration_010_cancels_requests_that_could_never_be_approved(db):
+    """Migration 010 runs on databases that already hold clashing pending requests (anyone who
     tried the old form twice). It cancels, oldest first, each pending request that overlaps an
     approved booking or an earlier pending request it keeps, and only then adds the widened
-    constraint. Run here on pre-006 data inside the test's transaction, which is rolled back."""
+    constraint. Run here on pre-010 data inside the test's transaction, which is rolled back."""
     conn = db.connection()
     conn.exec_driver_sql(
         "ALTER TABLE venue_bookings DROP CONSTRAINT ex_venue_bookings_no_double_booking"
     )
-    conn.exec_driver_sql(PRE_006_CONSTRAINT)
+    conn.exec_driver_sql(PRE_010_CONSTRAINT)
     venue, elsewhere = make_venue(db), make_venue(db)
 
     def booking(start, end, *, created: int, status=BookingStatus.PENDING, venue_id=venue.id):
@@ -320,7 +320,7 @@ def test_migration_006_cancels_requests_that_could_never_be_approved(db):
     second_of_two = booking(_at(7, 16), _at(7, 18), created=4)
     other_venue = booking(_at(7, 11), _at(7, 13), created=5, venue_id=elsewhere.id)
 
-    conn.exec_driver_sql(MIGRATION_006.read_text(encoding="utf-8"))
+    conn.exec_driver_sql(MIGRATION_010.read_text(encoding="utf-8"))
     db.expire_all()
 
     def status_of(row: VenueBooking) -> str:
