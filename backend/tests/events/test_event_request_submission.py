@@ -252,6 +252,7 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
         # the organiser supplied, so this test only excepts it rather than asserting on it
         "assigned_coordinator_id": submitted["assigned_coordinator_id"],
         "assigned_coordinator_name": submitted["assigned_coordinator_name"],
+        "assigned_coordinator_email": submitted["assigned_coordinator_email"],
     }
 
 

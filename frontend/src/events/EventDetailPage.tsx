@@ -23,7 +23,7 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventEditRoutinePath, HOME_PATH } from '../routes'
-import { formatDate, formatSchedule, formatTime } from '../shared/format'
+import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -372,13 +372,20 @@ export function EventDetailPage() {
               <p className="eyebrow">Expected attendance</p>
             </div>
           </div>
-          <div className="stat">
-            <Icon name="person" />
-            <div className="stat-body">
-              <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
-              <p className="eyebrow">Assigned coordinator</p>
+          {/* Story 2.6 AC12/AC13: a draft has no coordinator to show yet, so the stat is left
+              out entirely rather than reading "Not yet assigned" like a submitted request would. */}
+          {event.status !== 'DRAFT' && (
+            <div className="stat">
+              <Icon name="person" />
+              <div className="stat-body">
+                <p className="stat-value">{event.assigned_coordinator_name ?? NOT_YET_ASSIGNED}</p>
+                {event.assigned_coordinator_email && (
+                  <p className="small muted wrap-anywhere">{event.assigned_coordinator_email}</p>
+                )}
+                <p className="eyebrow">Assigned coordinator</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <section className="card stack" aria-labelledby="event-info-heading">
@@ -415,9 +422,49 @@ export function EventDetailPage() {
             </div>
           )}
           <hr className="divider" />
-          <div>
-            <p className="eyebrow">Organiser</p>
-            <p>{event.organiser_name}</p>
+          <div className="row">
+            <div>
+              <p className="eyebrow">Visibility</p>
+              <p>{event.is_public ? 'Public' : 'Private'}</p>
+            </div>
+            <div>
+              <p className="eyebrow">Organiser</p>
+              <p>{event.organiser_name}</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Story 2.1 AC8/AC19: the registration choice, and its dates once required, shown to
+            whoever can already reach this page - the owning organiser and internal roles, same
+            as everything else here. Opens/closes are left out entirely when not required, since
+            the backend never stores them in that case (schemas.py's REGISTRATION_CONTRADICTION). */}
+        <section className="card stack" aria-labelledby="registration-heading">
+          <h2 id="registration-heading">Registration</h2>
+          <div className="row">
+            <div>
+              <p className="eyebrow">Required</p>
+              <p>{event.registration_required ? 'Yes' : 'No'}</p>
+            </div>
+            {event.registration_required && (
+              <>
+                <div>
+                  <p className="eyebrow">Opens</p>
+                  <p>
+                    {event.registration_opens_at
+                      ? formatDateTime(event.registration_opens_at)
+                      : 'Immediately once approved'}
+                  </p>
+                </div>
+                <div>
+                  <p className="eyebrow">Closes</p>
+                  <p>
+                    {event.registration_closes_at
+                      ? formatDateTime(event.registration_closes_at)
+                      : NOT_RECORDED}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </section>
 

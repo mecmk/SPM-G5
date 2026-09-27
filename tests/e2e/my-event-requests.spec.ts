@@ -12,9 +12,17 @@
  * AC8 the list offers a "New event request" action.
  * AC9 a long list loads a page at a time: it says how much is left, "Load more" adds the next
  *     page, a page that fails keeps what is shown, and nothing appears twice.
+ * AC10 the status badge is the same wherever it renders (this list, the draft editor, the event
+ *      details page) - see the status text asserted below and in EventRequestFormPage's own spec.
+ * AC11 a status tab (All plus each visible status) filters the list; each tab shows a live count.
  * Ordering, the empty list as the API returns it, every status, the 401/403 refusals and
  * other-organiser leaks (the same organisation, a query parameter) are backend cases:
- * backend/tests/events/test_my_event_requests.py.
+ * backend/tests/events/test_my_event_requests.py. AC10/12-16's backend cases (status agreeing
+ * with the details endpoint, and the assigned coordinator shown on that page) are in
+ * backend/tests/events/test_event_status_and_coordinator_visibility.py.
+ *
+ * AC10/AC11 are the organiser-facing half of this status/tab display; the coordinator's own list
+ * (ReviewQueuePage's tab strip) is story 6.1 - see tests/e2e/review-queue.spec.ts.
  *
  * No seeded organiser has zero requests or a hundred, and a loading or failing list cannot be had
  * from real data, so those states are reached by stubbing the list call with `page.route` (the
@@ -106,7 +114,7 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
 })
 
-test('6.1: a status tab shows only requests in that status', async ({ page }) => {
+test('2.6 AC11: a status tab shows only requests in that status', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await openMyEvents(page)
 
@@ -238,6 +246,21 @@ test('2.6 AC2: selecting a submitted request opens its details, read-only, and b
     .getByRole('link', { name: /My events/ })
     .click()
   await expect(page.getByRole('heading', { name: 'My events' })).toBeVisible()
+})
+
+test('2.6 AC12: a submitted request’s details show the assigned coordinator’s name and email', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await openMyEvents(page)
+
+  await requestCard(page, 'Data Literacy Workshop')
+    .getByRole('link', { name: 'Data Literacy Workshop' })
+    .click()
+
+  await expect(page).toHaveURL(DETAILS_PATH)
+  await expect(page.getByText('Chloe Coordinator')).toBeVisible()
+  await expect(page.getByText('coordinator@connectsphere.example')).toBeVisible()
 })
 
 test('2.6 AC2: clicking anywhere on the card opens the request, not just its title', async ({
