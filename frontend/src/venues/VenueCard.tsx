@@ -10,14 +10,14 @@ export interface VenueCardProps {
    *  a venue is being found for (f12.1.1). */
   recordPath: string
   /** The foot of the card: Request this venue (f12.1.1), or Venue Staff's Edit and Delete
-   *  (story 8.1 AC13). */
+   *  (story 8.1 AC12). */
   actions?: ReactNode
 }
 
 /**
  * Story 8.1: one venue in the catalogue. AC1 name, location and capacity, and the name opens the
- * full record. A withdrawn venue is listed only when Venue Staff ask for it (AC13), and is badged
- * so it cannot pass for one in service (AC1: "excluded or clearly marked").
+ * full record. A withdrawn venue is listed only when Venue Staff ask for it (AC12), and is badged
+ * so it cannot pass for one in service (AC2: "excluded or clearly marked").
  */
 export function VenueCard({ venue, recordPath, actions }: VenueCardProps) {
   return (

@@ -56,7 +56,7 @@ export function venueSearchPath(search: VenueSearch): string {
   return query === '' ? VENUE_CATALOGUE_PATH : `${VENUE_CATALOGUE_PATH}?${query}`
 }
 
-// Story 8.3: venue records. f8.1.1 (8.1 AC13) removed the Manage venues page - Venue Staff manage
+// Story 8.3: venue records. f8.1.1 (8.1 AC12) removed the Manage venues page - Venue Staff manage
 // venues from the catalogue - so this address is kept only to redirect old links there.
 export const VENUES_MANAGE_PATH = '/venues/manage'
 export const VENUE_NEW_PATH = '/venues/new'
