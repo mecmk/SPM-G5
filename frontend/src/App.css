@@ -1720,6 +1720,131 @@ td.num {
   border-color: var(--success-border);
 }
 
+/* Story 9.1 AC5: a day with entries is a button that opens that day's list. A button centres
+   its content, so it is laid out as a column from the top like the other cells; the open and
+   focused states are outlines, not borders, so pressing a day never moves the grid. */
+.calendar-cell-openable {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0; /* keep the seven columns equal, whatever a long label says */
+  cursor: pointer;
+}
+
+/* The base `button:hover` paints a button in the accent colour, which would hide the day. A
+   pressed-looking cell keeps its own background, so each tone repeats it on hover. */
+.calendar-cell-openable:hover {
+  background: var(--surface);
+  outline: 1px solid var(--text-faint);
+  outline-offset: -1px;
+}
+
+.calendar-cell-openable.calendar-cell-weekend:hover {
+  background: var(--surface-inset);
+}
+
+.calendar-cell-openable.calendar-cell-danger:hover {
+  background: var(--danger-bg);
+}
+
+.calendar-cell-openable.calendar-cell-warning:hover {
+  background: var(--warning-bg);
+}
+
+.calendar-cell-openable.calendar-cell-info:hover {
+  background: var(--info-bg);
+}
+
+.calendar-cell-openable.calendar-cell-success:hover {
+  background: var(--success-bg);
+}
+
+.calendar-cell-openable:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: -2px;
+}
+
+.calendar-cell-open,
+.calendar-cell-open:hover {
+  outline: 2px solid var(--text-h);
+  outline-offset: -2px;
+}
+
+/* The list an open day shows, under the grid and legend. */
+.calendar-day-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+
+.calendar-day-panel-title {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.calendar-day-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-day-item {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  grid-template-areas:
+    'time name kind'
+    '. note note';
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* On a phone the time gets a line of its own, so every row has the same shape. */
+@media (max-width: 640px) {
+  .calendar-day-item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'time time'
+      'name kind'
+      'note note';
+  }
+}
+
+.calendar-day-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.calendar-day-time {
+  grid-area: time;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-h);
+}
+
+.calendar-day-name {
+  grid-area: name;
+  font-weight: 500;
+}
+
+.calendar-day-kind {
+  grid-area: kind;
+}
+
+.calendar-day-note {
+  grid-area: note;
+}
+
+/* "+3 more" on a day that opens: dark and underlined, so it reads as something to press. */
+.calendar-cell-openable .calendar-more {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
 /* ---------- utilities ---------- */
 
 .muted {

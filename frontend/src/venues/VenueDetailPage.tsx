@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { formatApiError } from '../api/client'
 import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
-import { Calendar, type CalendarEntry, type CalendarLegendItem } from '../components/Calendar'
-import { eachDate, isoDate } from '../components/calendarGrid'
+import { Calendar, type CalendarLegendItem } from '../components/Calendar'
+import { isoDate } from '../components/calendarGrid'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -12,8 +12,21 @@ import { VENUE_CATALOGUE_PATH, venueRequestPath } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { useRequestingEvent } from './useRequestingEvent'
+import {
+  buildDayItems,
+  groupDayItemsByDate,
+  HELD_LABEL,
+  toCalendarEntry,
+} from './venueCalendarDays'
+import { VenueDayPanel } from './VenueDayPanel'
 
-const CALENDAR_LEGEND: CalendarLegendItem[] = [{ tone: 'danger', label: 'Unavailable' }]
+// Story 9.1 AC2: a pending request that holds the venue has a style of its own.
+const CALENDAR_LEGEND: CalendarLegendItem[] = [
+  { tone: 'danger', label: 'Unavailable' },
+  { tone: 'warning', label: HELD_LABEL },
+]
+
+const DAY_PANEL_ID = 'venue-calendar-day-panel'
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -57,6 +70,8 @@ export function VenueDetailPage() {
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [calendarError, setCalendarError] = useState<string | null>(null)
   const [isCalendarLoading, setIsCalendarLoading] = useState(true)
+  /** Story 9.1 AC5: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
+  const [openDay, setOpenDay] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -64,6 +79,8 @@ export function VenueDetailPage() {
     // Clears a previous month's failure immediately, so it cannot sit on screen describing a
     // month that is no longer the one being loaded.
     setCalendarError(null)
+    // An open day belongs to the month it was opened in, so previous / next close it.
+    setOpenDay(null)
     const rangeStart = monthBoundary(month)
     const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
     getVenueCalendar(venueId, rangeStart, rangeEnd)
@@ -95,18 +112,17 @@ export function VenueDetailPage() {
       ? 'unknown'
       : 'ready'
 
-  const calendarEntries: CalendarEntry[] = useMemo(
-    () =>
-      windows.flatMap((window) =>
-        eachDate(window.starts_at, window.ends_at).map((date) => ({
-          id: `${window.starts_at}-${date}`,
-          date,
-          label: window.label,
-          tone: 'danger' as const,
-        })),
-      ),
-    [windows],
-  )
+  /** Story 9.1 AC5/AC9: each window split into the part on every day it covers. */
+  const dayItems = useMemo(() => buildDayItems(windows), [windows])
+  const itemsByDate = useMemo(() => groupDayItemsByDate(dayItems), [dayItems])
+  const calendarEntries = useMemo(() => dayItems.map(toCalendarEntry), [dayItems])
+  // A day stays open only while it has items, so one whose booking is gone closes.
+  const openDayItems = openDay === null ? [] : (itemsByDate.get(openDay) ?? [])
+  const isDayOpen = openDay !== null && openDayItems.length > 0
+
+  function handleOpenDay(date: string) {
+    setOpenDay((current) => (current === date ? null : date))
+  }
 
   if (error) {
     return (
@@ -263,7 +279,11 @@ export function VenueDetailPage() {
               entries={calendarEntries}
               legend={CALENDAR_LEGEND}
               gridStatus={calendarStatus === 'ready' ? undefined : calendarStatus}
+              onOpenDay={handleOpenDay}
+              openDay={isDayOpen ? openDay : null}
+              openDayPanelId={DAY_PANEL_ID}
             />
+            {isDayOpen && <VenueDayPanel id={DAY_PANEL_ID} date={openDay} items={openDayItems} />}
           </section>
         </div>
 

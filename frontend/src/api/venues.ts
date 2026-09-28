@@ -193,16 +193,22 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
   return api<VenueSearchResult>(`/venues/search?${params}`)
 }
 
-/** Sentinel `reason` for an approved booking - distinct from venue_unavailability_periods' own
- * reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER). Mirrors BOOKING_REASON
- * in backend/app/venues/schemas.py. */
+/** Sentinel `reason` values for a booking on the calendar: an approved booking (BOOKED) and a
+ * pending request that holds the venue (HELD, story 9.1 AC2). Neither is one of
+ * venue_unavailability_periods' own reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
+ * OTHER). Mirror BOOKING_REASON and HELD_REASON in backend/app/venues/schemas.py. */
 export const BOOKING_REASON = 'BOOKED'
+export const HELD_REASON = 'HELD'
 
 /** Mirrors `VenueUnavailableWindowOut` (story 9.1). One blocked period - a flat list, not
- * pre-expanded per day. */
+ * pre-expanded per day. `starts_at` / `ends_at` are the period the venue is blocked: for a
+ * booking, its held period, setup and teardown included. `event_starts_at` / `event_ends_at`
+ * (AC5) are the event's own period inside it, null for a closure. */
 export interface VenueUnavailableWindow {
   starts_at: string
   ends_at: string
+  event_starts_at: string | null
+  event_ends_at: string | null
   reason: string
   label: string
 }
