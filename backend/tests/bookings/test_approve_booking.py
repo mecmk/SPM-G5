@@ -205,14 +205,12 @@ def test_a_request_conflicting_with_a_confirmed_booking_never_reaches_approval(
     )
     assert raised.status_code == 409
 
-    queue = login_as(Users.VENUE_STAFF).get("/bookings")
+    queue = login_as(Users.VENUE_STAFF).get(f"/bookings?status={BookingStatus.PENDING}")
     assert queue.status_code == 200
     assert not [
         entry
-        for entry in queue.json()
-        if entry["event_id"] == str(Events.APPROVED)
-        and entry["venue_id"] == str(Venues.GRAND_HALL)
-        and entry["status"] == BookingStatus.PENDING
+        for entry in queue.json()["items"]
+        if entry["event_id"] == str(Events.APPROVED) and entry["venue_id"] == str(Venues.GRAND_HALL)
     ]
 
 
