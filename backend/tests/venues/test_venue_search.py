@@ -1,21 +1,22 @@
 """Story 8.1 (Sprint 2, built as s8.1) - search and filter the venue catalogue: GET /venues/search.
 
-AC1  Every venue in service is listed with its name, location and capacity; withdrawn ones only
-     when asked for, and marked.
-AC2  One filter panel: capacity, a period, name or location, facilities, accessibility features
+AC1  Every venue in service is listed with its name, location and capacity.
+AC2  Withdrawn venues only when asked for, and marked.
+AC3  One filter panel: capacity, a period, name or location, facilities, accessibility features
      and room layout. Only venues matching every criterion and free for the whole period are
      listed - not booked or held (a pending or approved booking, the hold's rule from s12.1), not
-     blocked (an unavailability period) and not closed at those hours (its opening hours).
-AC5  Capacity equal to the minimum is included; one seat below is not. With a layout chosen, the
+     blocked (an unavailability period) and not closed at those hours (its opening hours). A venue
+     that stops being available between two searches is gone from the second.
+AC4  The search runs on the server: Coordinators, Venue Staff and Technical Support may search;
+     nobody else.
+AC6  Capacity equal to the minimum is included; one seat below is not. With a layout chosen, the
      capacity compared is that layout's.
-AC6  A booking or closure ending exactly when the period starts does not exclude a venue; other
+AC7  A booking or closure ending exactly when the period starts does not exclude a venue; other
      bookings that day do not either.
-AC7  A period may cover several days; both ends or neither; the end after the start; never in
+AC8  A period may cover several days; both ends or neither; the end after the start; never in
      the past.
-AC8  No results: the filters whose removal alone would give results, with how many, largest first.
-AC9  Several facilities, or several accessibility features: all are required.
-AC11 Coordinators, Venue Staff and Technical Support may search; nobody else.
-AC12 A venue that stops being available between two searches is gone from the second.
+AC9  No results: the filters whose removal alone would give results, with how many, largest first.
+AC10 Several facilities, or several accessibility features: all are required.
 
 Every test makes its own venues under one unique tag and searches for that tag, so the seed
 venues never interfere - except the unfiltered listing, which is the seed itself.
@@ -62,8 +63,9 @@ def _names(result: dict) -> list[str]:
     return [hit["name"] for hit in result["venues"]]
 
 
-# --- AC1 ------------------------------------------------------------------------------------
+# --- AC1/AC2 ---------------------------------------------------------------------------------
 @pytest.mark.story("8.1", ac=1)
+@pytest.mark.story("8.1", ac=2)
 def test_no_filters_lists_every_venue_in_service(coordinator_client):
     result = _search(coordinator_client)
 
@@ -94,7 +96,7 @@ def test_no_filters_lists_every_venue_in_service(coordinator_client):
     assert with_withdrawn["venues"][3]["status"] == "WITHDRAWN"
 
 
-# --- AC2: each filter ----------------------------------------------------------------------
+# --- AC3: each filter ----------------------------------------------------------------------
 # (params given the tag, venues expected). Alpha fits every narrowing below; Beta fits none.
 NARROWING_CASES = {
     "capacity": (lambda tag: {"search": tag, "capacity": 50}, ["Alpha"]),
@@ -107,7 +109,7 @@ NARROWING_CASES = {
 }
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 @pytest.mark.parametrize("case", NARROWING_CASES, ids=list(NARROWING_CASES))
 def test_each_filter_narrows_the_results(coordinator_client, db, case):
     tag = _tag()
@@ -134,7 +136,7 @@ def test_each_filter_narrows_the_results(coordinator_client, db, case):
     assert _names(result) == [f"{tag} {name}" for name in expected]
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 def test_every_filter_must_match(coordinator_client, db):
     tag = _tag()
     fits = {
@@ -166,8 +168,8 @@ def test_every_filter_must_match(coordinator_client, db):
     assert _names(result) == [f"{tag} Match"]
 
 
-# --- AC2: availability ----------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=2)
+# --- AC3: availability ----------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=3)
 @pytest.mark.parametrize("status", [BookingStatus.APPROVED, BookingStatus.PENDING])
 def test_a_booked_or_held_venue_is_left_out(coordinator_client, db, status):
     tag = _tag()
@@ -180,7 +182,7 @@ def test_a_booked_or_held_venue_is_left_out(coordinator_client, db, status):
     assert _names(result) == [f"{tag} Free"]
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 @pytest.mark.parametrize(
     "status", [BookingStatus.REJECTED, BookingStatus.WITHDRAWN, BookingStatus.CANCELLED]
 )
@@ -194,7 +196,7 @@ def test_released_bookings_do_not_hide_a_venue(coordinator_client, db, status):
     assert _names(result) == [f"{tag} Released"]
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 def test_a_blocked_venue_is_left_out(coordinator_client, db):
     tag = _tag()
     blocked = make_venue(db, name=f"{tag} Blocked")
@@ -206,7 +208,7 @@ def test_a_blocked_venue_is_left_out(coordinator_client, db):
     assert _names(result) == [f"{tag} Open"]
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 def test_a_venue_closed_at_those_hours_is_left_out(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Closes at six", hours=OPEN_8_TO_6)
@@ -217,7 +219,7 @@ def test_a_venue_closed_at_those_hours_is_left_out(coordinator_client, db):
     assert _names(result) == [f"{tag} Open late"]
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 def test_a_venue_without_recorded_hours_is_kept(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Hours unknown")
@@ -230,8 +232,8 @@ def test_a_venue_without_recorded_hours_is_kept(coordinator_client, db):
     assert hit["operating_hours_end"] is None
 
 
-# --- AC5: capacity --------------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=5)
+# --- AC6: capacity --------------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=6)
 def test_capacity_limits_are_inclusive(coordinator_client, db):
     tag = _tag()
     for capacity in (49, 50, 51):
@@ -246,7 +248,7 @@ def test_capacity_limits_are_inclusive(coordinator_client, db):
     assert _names(exactly) == [f"{tag} Seats 50"]
 
 
-@pytest.mark.story("8.1", ac=5)
+@pytest.mark.story("8.1", ac=6)
 def test_capacity_uses_the_chosen_layouts_capacity(coordinator_client, db):
     # Like Grand Hall: 400 as a theatre (no capacity of its own), 240 at banquet.
     tag = _tag()
@@ -264,8 +266,8 @@ def test_capacity_uses_the_chosen_layouts_capacity(coordinator_client, db):
     assert not found(layout="CLASSROOM")
 
 
-# --- AC6: touching periods ------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=6)
+# --- AC7: touching periods ------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=7)
 def test_touching_bookings_do_not_hide_a_venue(coordinator_client, db):
     tag = _tag()
     before = make_venue(db, name=f"{tag} Booked before")
@@ -278,7 +280,7 @@ def test_touching_bookings_do_not_hide_a_venue(coordinator_client, db):
     assert _names(result) == [f"{tag} Booked after", f"{tag} Booked before"]
 
 
-@pytest.mark.story("8.1", ac=6)
+@pytest.mark.story("8.1", ac=7)
 def test_one_minute_of_overlap_hides_it(coordinator_client, db):
     tag = _tag()
     before = make_venue(db, name=f"{tag} Runs over")
@@ -291,7 +293,7 @@ def test_one_minute_of_overlap_hides_it(coordinator_client, db):
     assert _names(result) == []
 
 
-@pytest.mark.story("8.1", ac=6)
+@pytest.mark.story("8.1", ac=7)
 def test_other_bookings_that_day_do_not_hide_it(coordinator_client, db):
     tag = _tag()
     venue = make_venue(db, name=f"{tag} Busy day")
@@ -303,7 +305,7 @@ def test_other_bookings_that_day_do_not_hide_it(coordinator_client, db):
     assert _names(result) == [f"{tag} Busy day"]
 
 
-@pytest.mark.story("8.1", ac=6)
+@pytest.mark.story("8.1", ac=7)
 def test_touching_unavailability_does_not_hide_a_venue(coordinator_client, db):
     tag = _tag()
     venue = make_venue(db, name=f"{tag} Serviced around it")
@@ -315,7 +317,7 @@ def test_touching_unavailability_does_not_hide_a_venue(coordinator_client, db):
     assert _names(result) == [f"{tag} Serviced around it"]
 
 
-# --- AC2: opening hours ---------------------------------------------------------------------
+# --- AC3: opening hours ---------------------------------------------------------------------
 HOURS_CASES = {
     # A period from opening to closing fits; a minute outside either end does not.
     "opening to closing": (OPEN_8_TO_6, _at(1, 8), _at(1, 18), True),
@@ -329,7 +331,7 @@ HOURS_CASES = {
 }
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 @pytest.mark.parametrize("case", HOURS_CASES, ids=list(HOURS_CASES))
 def test_opening_hours_boundaries(coordinator_client, db, case):
     hours, starts_at, ends_at, is_open = HOURS_CASES[case]
@@ -341,8 +343,8 @@ def test_opening_hours_boundaries(coordinator_client, db, case):
     assert _names(result) == ([f"{tag} Hours"] if is_open else [])
 
 
-# --- AC7: the period ------------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=7)
+# --- AC8: the period ------------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=8)
 def test_a_search_can_cover_several_days(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Free all week")
@@ -373,7 +375,7 @@ INVALID_SEARCHES = {
 }
 
 
-@pytest.mark.story("8.1", ac=7)
+@pytest.mark.story("8.1", ac=8)
 @pytest.mark.parametrize("case", INVALID_SEARCHES, ids=list(INVALID_SEARCHES))
 def test_invalid_searches_are_refused(coordinator_client, case):
     params, message = INVALID_SEARCHES[case]
@@ -384,8 +386,8 @@ def test_invalid_searches_are_refused(coordinator_client, case):
     assert response.json()["detail"] == message
 
 
-# --- AC8: nothing matches -------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=8)
+# --- AC9: nothing matches -------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=9)
 def test_no_results_suggests_which_filter_to_relax(coordinator_client, db):
     tag = _tag()
     # The only theatre is booked; two banquet halls are free. No seed venue seats 450.
@@ -420,7 +422,7 @@ def test_no_results_suggests_which_filter_to_relax(coordinator_client, db):
     ]
 
 
-@pytest.mark.story("8.1", ac=8)
+@pytest.mark.story("8.1", ac=9)
 def test_no_suggestions_without_filters_or_with_results(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Room", capacity=20)
@@ -429,8 +431,8 @@ def test_no_suggestions_without_filters_or_with_results(coordinator_client, db):
     assert _search(coordinator_client, search=tag, capacity=10)["relax"] == []
 
 
-# --- AC9: several of a kind -----------------------------------------------------------------
-@pytest.mark.story("8.1", ac=9)
+# --- AC10: several of a kind ----------------------------------------------------------------
+@pytest.mark.story("8.1", ac=10)
 def test_several_facilities_are_all_required(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Both", facilities=("PROJECTOR", "WIFI"))
@@ -441,7 +443,7 @@ def test_several_facilities_are_all_required(coordinator_client, db):
     assert _names(result) == [f"{tag} Both"]
 
 
-@pytest.mark.story("8.1", ac=9)
+@pytest.mark.story("8.1", ac=10)
 def test_several_accessibility_features_are_all_required(coordinator_client, db):
     tag = _tag()
     make_venue(db, name=f"{tag} Both", accessibility=("WHEELCHAIR_ACCESS", "HEARING_LOOP"))
@@ -454,8 +456,8 @@ def test_several_accessibility_features_are_all_required(coordinator_client, db)
     assert _names(result) == [f"{tag} Both"]
 
 
-# --- AC2: what the filters accept -----------------------------------------------------------
-@pytest.mark.story("8.1", ac=2)
+# --- AC3: what the filters accept -----------------------------------------------------------
+@pytest.mark.story("8.1", ac=3)
 def test_unknown_codes_are_refused(coordinator_client):
     refusals = {
         "Unknown layout code(s): HOLODECK": {"layout": "HOLODECK"},
@@ -469,7 +471,7 @@ def test_unknown_codes_are_refused(coordinator_client):
         assert response.json()["detail"] == message
 
 
-@pytest.mark.story("8.1", ac=2)
+@pytest.mark.story("8.1", ac=3)
 def test_search_text_is_literal_and_case_insensitive(coordinator_client, db):
     tag = _tag()
     for name in ("100% Room", "1000 Room", "A_B Room", "AXB Room"):
@@ -482,8 +484,8 @@ def test_search_text_is_literal_and_case_insensitive(coordinator_client, db):
     assert _names(underscore) == [f"{tag} A_B Room"]
 
 
-# --- AC11: who may search -------------------------------------------------------------------
-@pytest.mark.story("8.1", ac=11)
+# --- AC4: who may search --------------------------------------------------------------------
+@pytest.mark.story("8.1", ac=4)
 @pytest.mark.parametrize("user", [Users.COORDINATOR, Users.VENUE_STAFF, Users.TECH_SUPPORT])
 def test_internal_roles_can_search(login_as, user):
     client = login_as(user)
@@ -491,19 +493,19 @@ def test_internal_roles_can_search(login_as, user):
     assert "Grand Hall" in _names(_search(client, capacity=300))
 
 
-@pytest.mark.story("8.1", ac=11)
+@pytest.mark.story("8.1", ac=4)
 @pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE])
 def test_other_roles_cannot_search(login_as, user):
     assert login_as(user).get("/venues/search").status_code == 403
 
 
-@pytest.mark.story("8.1", ac=11)
+@pytest.mark.story("8.1", ac=4)
 def test_signed_out_visitors_cannot_search(client):
     assert client.get("/venues/search").status_code == 401
 
 
-# --- AC12: availability changes between searches --------------------------------------------
-@pytest.mark.story("8.1", ac=12)
+# --- AC3: availability changes between searches ---------------------------------------------
+@pytest.mark.story("8.1", ac=3)
 def test_a_venue_held_after_a_search_is_gone_from_the_next(coordinator_client, db):
     tag = _tag()
     venue = make_venue(db, name=f"{tag} In demand")

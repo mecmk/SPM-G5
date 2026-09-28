@@ -7,7 +7,7 @@
  * The team meeting of 17 Sep 2026 added delete (full CRUD), search and a capacity filter, and
  * asked for every save to appear in the notification centre.
  *
- * Story 8.1 AC13 (f8.1.1, Sprint 1 review): Venue Staff manage venues from the venue catalogue,
+ * Story 8.1 AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
  * venues, for venues:manage holders only. The separate Manage venues page is gone and its old
  * address opens the catalogue. The manage page's name search and capacity filter live on in the
@@ -129,7 +129,7 @@ test('8.3: a link to the new-venue form survives signing in', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'New venue' })).toBeVisible()
 })
 
-test('8.1 AC13: Venue Staff add and edit venues from the catalogue', async ({ page }) => {
+test('8.1 AC12: Venue Staff add and edit venues from the catalogue', async ({ page }) => {
   const name = `E2E Catalogue ${Date.now()}`
   await signIn(page, ACCOUNTS.venueStaff)
 
@@ -171,7 +171,7 @@ test('8.1 AC13: Venue Staff add and edit venues from the catalogue', async ({ pa
   await expect(card).toContainText('Tower F, Level 5')
 })
 
-test('8.1 AC13: Venue Staff delete a venue from the catalogue', async ({ page }) => {
+test('8.1 AC12: Venue Staff delete a venue from the catalogue', async ({ page }) => {
   const name = `E2E Delete ${Date.now()}`
   await signIn(page, ACCOUNTS.venueStaff)
   await createVenue(page, name)
@@ -186,7 +186,7 @@ test('8.1 AC13: Venue Staff delete a venue from the catalogue', async ({ page })
   await expect(page).toHaveURL(CATALOGUE_PATH)
 })
 
-test('8.1 AC13: a venue with bookings is not deleted, and the dialog says why', async ({
+test('8.1 AC12: a venue with bookings is not deleted, and the dialog says why', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -202,7 +202,7 @@ test('8.1 AC13: a venue with bookings is not deleted, and the dialog says why', 
   await expect(venueCard(page, 'Grand Hall')).toBeVisible()
 })
 
-test('8.1 AC13: withdrawn venues can be shown, marked', async ({ page }) => {
+test('8.1 AC12: withdrawn venues can be shown, marked', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venues')
   const showWithdrawn = page.getByRole('checkbox', { name: 'Show withdrawn venues' })
@@ -223,7 +223,7 @@ test('8.1 AC13: withdrawn venues can be shown, marked', async ({ page }) => {
   await expect(venueCard(page, 'Grand Hall')).toBeVisible()
 })
 
-test('8.1 AC13: the catalogue keeps the manage page’s name search and capacity range', async ({
+test('8.1 AC12: the catalogue keeps the manage page’s name search and capacity range', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -249,7 +249,7 @@ test('8.1 AC13: the catalogue keeps the manage page’s name search and capacity
   await expect(venueCard(page, 'Boardroom 3.4')).toHaveCount(0)
 })
 
-test('8.1 AC13: the old Manage venues address opens the catalogue', async ({ page }) => {
+test('8.1 AC12: the old Manage venues address opens the catalogue', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
 
   await page.goto('/venues/manage')
@@ -259,7 +259,7 @@ test('8.1 AC13: the old Manage venues address opens the catalogue', async ({ pag
   await expect(page.getByRole('link', { name: 'New venue' })).toBeVisible()
 })
 
-test('8.1 AC13: a venue deleted elsewhere cannot be deleted again, and the list reloads', async ({
+test('8.1 AC12: a venue deleted elsewhere cannot be deleted again, and the list reloads', async ({
   page,
 }) => {
   const name = `E2E Gone ${Date.now()}`
@@ -289,7 +289,7 @@ for (const { role, email } of [
   { role: 'a coordinator', email: ACCOUNTS.coordinator },
   { role: 'Technical Support', email: ACCOUNTS.techSupport },
 ]) {
-  test(`8.1 AC13: ${role} browses the catalogue without the manage controls`, async ({ page }) => {
+  test(`8.1 AC12: ${role} browses the catalogue without the manage controls`, async ({ page }) => {
     await signIn(page, email)
     await page.goto('/venues')
     const grandHall = venueCard(page, 'Grand Hall')

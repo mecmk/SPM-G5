@@ -2,24 +2,25 @@
  * Story 8.1: browse the venue catalogue - with 10.1 merged in for Sprint 2 (built as s8.1): the
  * filter panel, the search on the server, and the filters kept in the page address.
  *
- * AC1  All venues in service are listed with name, location and capacity; withdrawn ones are
- *      not; selecting one opens its full record.
- * AC2  One filter panel: capacity, start and end, name or location, facilities, accessibility
+ * AC1  All venues in service are listed with name, location and capacity; selecting one opens
+ *      its full record.
+ * AC2  Withdrawn venues are not listed.
+ * AC3  One filter panel: capacity, start and end, name or location, facilities, accessibility
  *      features and room layout. Only venues matching every criterion and free for the period
  *      are listed: not booked or held, not closed for maintenance, not closed at those hours.
  *      Raising Capacity from or From past the other end takes that end along.
- * AC3  Opened from an event's Find a venue (f12.1.1), the panel is filled in from the event and
+ * AC4  The filters live in the page address, so a search can be bookmarked and reloaded. Opened
+ *      from an event's Find a venue (f12.1.1), the panel is filled in from that address and
  *      matching venues show straight away.
- * AC4  The filters live in the page address, so a search can be bookmarked and reloaded.
- * AC7  A search that cannot be run (a start in the past, an end before the start) says why beside
+ * AC5  Only the event's assigned coordinator is offered Request this venue; Venue Staff and
+ *      Technical Support browse and filter too.
+ * AC8  A search that cannot be run (a start in the past, an end before the start) says why beside
  *      the panel and leaves the results as they were.
- * AC8  Nothing matches: the page names the filter whose removal would give results; Clear filters
+ * AC9  Nothing matches: the page names the filter whose removal would give results; Clear filters
  *      resets the panel.
- * AC10 The filters stay set while a venue is opened, its calendar moved, and the list returned to.
- * AC11 Venue Staff and Technical Support browse and filter too; only the event's assigned
- *      coordinator is offered Request this venue.
- * AC13 (f8.1.1) Venue Staff manage venues from this catalogue: tests/e2e/venues.spec.ts.
- * AC12 (a request refused because the venue stopped being available) is in
+ * AC11 The filters stay set while a venue is opened, its calendar moved, and the list returned to.
+ * AC12 (f8.1.1) Venue Staff manage venues from this catalogue: tests/e2e/venues.spec.ts.
+ * A request refused because the venue stopped being available (12.1 AC14) is in
  * booking-requests.spec.ts, beside the request step's other cases.
  *
  * The rules themselves - every filter's boundaries, the availability rules, what each refusal
@@ -67,7 +68,7 @@ async function expectListed(page: Page, listed: string[], notListed: string[]) {
   for (const name of notListed) await expect(venueCard(page, name)).toHaveCount(0)
 }
 
-test('8.1 AC1: the catalogue lists in-service venues with name, location and capacity, excluding withdrawn ones', async ({
+test('8.1 AC1/AC2: the catalogue lists in-service venues with name, location and capacity, excluding withdrawn ones', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -93,7 +94,7 @@ test('8.1 AC1: selecting a venue opens its full record', async ({ page }) => {
   await expect(page.getByText('Quick facts')).toBeVisible()
 })
 
-test('8.1 AC2: the catalogue can be filtered by a capacity range', async ({ page }) => {
+test('8.1 AC3: the catalogue can be filtered by a capacity range', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
 
@@ -103,7 +104,7 @@ test('8.1 AC2: the catalogue can be filtered by a capacity range', async ({ page
   await expectListed(page, ['Exhibition Foyer'], ['Grand Hall', 'Boardroom 3.4'])
 })
 
-test('8.1 AC2: raising Capacity from past Capacity to takes Capacity to up with it', async ({
+test('8.1 AC3: raising Capacity from past Capacity to takes Capacity to up with it', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -121,7 +122,7 @@ test('8.1 AC2: raising Capacity from past Capacity to takes Capacity to up with 
   await expect(filters.getByRole('alert')).toHaveCount(0)
 })
 
-test('8.1 AC2: moving From past To moves To with it, keeping the period as long', async ({
+test('8.1 AC3: moving From past To moves To with it, keeping the period as long', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -138,7 +139,7 @@ test('8.1 AC2: moving From past To moves To with it, keeping the period as long'
   await expect(filters.getByRole('alert')).toHaveCount(0)
 })
 
-test('8.1 AC2: each filter narrows the catalogue', async ({ page }) => {
+test('8.1 AC3: each filter narrows the catalogue', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await expectListed(page, IN_SERVICE, [])
@@ -172,7 +173,7 @@ test('8.1 AC2: each filter narrows the catalogue', async ({ page }) => {
   )
 })
 
-test('8.1 AC2: a venue closed for maintenance is hidden for those dates', async ({ page }) => {
+test('8.1 AC3: a venue closed for maintenance is hidden for those dates', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   const filters = panel(page)
@@ -190,7 +191,7 @@ test('8.1 AC2: a venue closed for maintenance is hidden for those dates', async 
   await expectListed(page, ['Seminar Room 2.1', 'Grand Hall'], [])
 })
 
-test('8.1 AC3: opened from an event, the panel is filled in and matching venues show', async ({
+test('8.1 AC4: opened from an event, the panel is filled in and matching venues show', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -212,7 +213,7 @@ test('8.1 AC3: opened from an event, the panel is filled in and matching venues 
 test.describe('with the browser in New York', () => {
   test.use({ timezoneId: 'America/New_York' })
 
-  test("8.1 AC3: the panel's dates are Singapore time wherever the browser is", async ({
+  test("8.1 AC4: the panel's dates are Singapore time wherever the browser is", async ({
     page,
   }) => {
     await signIn(page, ACCOUNTS.coordinator)
@@ -243,7 +244,7 @@ test('8.1 AC4: the filters live in the page address', async ({ page }) => {
   await expectListed(page, ['Grand Hall'], ['Seminar Room 2.1', 'Exhibition Foyer'])
 })
 
-test('8.1 AC7: a search that cannot be run says why and keeps the results', async ({ page }) => {
+test('8.1 AC8: a search that cannot be run says why and keeps the results', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await expectListed(page, IN_SERVICE, [])
@@ -262,7 +263,7 @@ test('8.1 AC7: a search that cannot be run says why and keeps the results', asyn
   await expectListed(page, IN_SERVICE, [])
 })
 
-test('8.1 AC8: when nothing matches, the page says which filter to remove', async ({ page }) => {
+test('8.1 AC9: when nothing matches, the page says which filter to remove', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   // Only Grand Hall fits Nimbus, and it is booked for Nimbus itself that day.
   await findVenueFor(page, NIMBUS)
@@ -284,7 +285,7 @@ test('8.1 AC8: when nothing matches, the page says which filter to remove', asyn
   await expect(page).toHaveURL(new RegExp(`[?&]event=${NIMBUS.id}(&|$)`))
 })
 
-test('8.1 AC10: the filters stay set while a venue is opened and its calendar moved', async ({
+test('8.1 AC11: the filters stay set while a venue is opened and its calendar moved', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -306,7 +307,7 @@ for (const viewer of [
   { who: 'Venue Staff', email: ACCOUNTS.venueStaff },
   { who: 'Technical Support', email: ACCOUNTS.techSupport },
 ]) {
-  test(`8.1 AC11: ${viewer.who} filter the catalogue but are offered no request`, async ({
+  test(`8.1 AC5: ${viewer.who} filter the catalogue but are offered no request`, async ({
     page,
   }) => {
     await signIn(page, viewer.email)

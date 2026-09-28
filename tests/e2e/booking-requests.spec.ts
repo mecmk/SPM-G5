@@ -22,7 +22,7 @@
  *
  * AC15's address is the contract with story 8.1's filter panel, which reads what Find a venue
  * writes (`VENUE_SEARCH_PARAMS` in frontend/src/routes.ts). These cases pin its names and values;
- * that the panel fills itself in from them is 8.1 AC3's to prove (`venue-catalogue.spec.ts`).
+ * that the panel fills itself in from them is 8.1 AC4's to prove (`venue-catalogue.spec.ts`).
  *
  * Since 8.1's search leaves out venues that are not free, Nimbus's catalogue lists nothing: Grand
  * Hall, the one room that fits its 350, is already booked for Nimbus that day. So Nimbus's cases
@@ -34,8 +34,8 @@
  * for. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at the pending
  * outcome shown here.
  *
- * 8.1 AC12 is here too, beside the request step's other cases: a venue that stopped being
- * available since the search is refused, and the step leads back to the same results.
+ * AC14 (built with s8.1): a venue that stopped being available since the search is refused, and
+ * the step leads back to the same results.
  *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
@@ -58,7 +58,7 @@ const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the see
 const BRIEFING_VENUE = 'Seminar Room 2.1'
 const FIND_A_VENUE = 'Find a venue'
 const REQUEST_THIS_VENUE = 'Request this venue'
-// As the backend words a venue closed since the search (8.1 AC12).
+// As the backend words a venue closed since the search (AC14).
 const CLOSED_VENUE_MESSAGE =
   'Grand Hall is closed for maintenance from Tue 15 Dec 2026, 00:00 to Thu 17 Dec 2026, 00:00.'
 const NOT_REQUESTABLE_MESSAGE =
@@ -335,7 +335,7 @@ test('12.1 AC2: the request cannot be sent before the event details arrive', asy
   await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
 })
 
-test('8.1 AC12: a venue that stopped being available is refused, and the step leads back to the results', async ({
+test('12.1 AC14: a venue that stopped being available is refused, and the step leads back to the results', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)

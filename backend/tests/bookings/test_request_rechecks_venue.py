@@ -1,4 +1,4 @@
-"""Story 8.1 AC12 (Sprint 2, built as s8.1) - the request step re-checks the venue.
+"""Story 12.1 AC14 (built as s8.1) - the request step re-checks the venue.
 
 A venue can stop being available between the catalogue search and Send request, so
 ``POST /bookings`` applies the search's availability rules again and refuses, naming why:
@@ -50,7 +50,7 @@ def _bookings_for(db: Session, event_id: uuid.UUID) -> int:
     )
 
 
-@pytest.mark.story("8.1", ac=12)
+@pytest.mark.story("12.1", ac=14)
 def test_a_blocked_venue_cannot_be_requested(coordinator_client, db):
     # Seminar Room 2.1 is closed for air-con servicing from 2 Nov 00:00 to 4 Nov 00:00 (seed).
     event = _event(
@@ -67,7 +67,7 @@ def test_a_blocked_venue_cannot_be_requested(coordinator_client, db):
     assert _bookings_for(db, event.id) == 0
 
 
-@pytest.mark.story("8.1", ac=12)
+@pytest.mark.story("12.1", ac=14)
 def test_a_venue_closed_at_those_hours_cannot_be_requested(coordinator_client, db):
     # Boardroom 3.4 opens 08:00 to 18:00 (seed) and has no bookings.
     event = _event(
@@ -83,7 +83,7 @@ def test_a_venue_closed_at_those_hours_cannot_be_requested(coordinator_client, d
     assert _bookings_for(db, event.id) == 0
 
 
-@pytest.mark.story("8.1", ac=12)
+@pytest.mark.story("12.1", ac=14)
 def test_a_venue_without_recorded_hours_can_be_requested(coordinator_client, db):
     # Exhibition Foyer's hours are not recorded (seed), and it is free on 10 Dec 2026.
     event = _event(
@@ -96,7 +96,7 @@ def test_a_venue_without_recorded_hours_can_be_requested(coordinator_client, db)
     assert _bookings_for(db, event.id) == 1
 
 
-@pytest.mark.story("8.1", ac=6)
+@pytest.mark.story("12.1", ac=6)
 def test_touching_unavailability_does_not_block_a_request(coordinator_client, db):
     starts_at = datetime(2027, 3, 5, 10, 0, tzinfo=SGT)
     ends_at = datetime(2027, 3, 5, 12, 0, tzinfo=SGT)
