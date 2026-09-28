@@ -1,19 +1,5 @@
 import { api } from './client'
 
-/** Mirrors `BookableEvent` in backend/app/bookings/schemas.py: one choice in the event picker. */
-export interface BookableEvent {
-  id: string
-  name: string
-  starts_at: string
-  ends_at: string
-  expected_attendance: number
-}
-
-/** Mirrors `BookingReferenceData`: the booking form's pick-lists. Venues come from `listVenues`. */
-export interface BookingReferenceData {
-  events: BookableEvent[]
-}
-
 export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED'
 
 /** Mirrors `BookingOut`: a venue booking request and, once decided, its outcome. */
@@ -45,11 +31,6 @@ export interface Booking {
 export interface BookingRequestInput {
   event_id: string
   venue_id: string
-}
-
-/** Story 12.1 AC1/AC4: the events this coordinator may raise a booking for. */
-export function fetchBookingReferenceData(): Promise<BookingReferenceData> {
-  return api<BookingReferenceData>('/bookings/reference-data')
 }
 
 /** Story 12.1 AC1-AC4. */

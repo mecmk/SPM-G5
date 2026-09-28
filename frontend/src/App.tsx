@@ -34,6 +34,7 @@ import {
   VENUE_EDIT_PATH,
   VENUE_NEW_PATH,
   VENUE_PATH,
+  VENUE_REQUEST_PATH,
   VENUES_MANAGE_PATH,
 } from './routes'
 import { VenueCataloguePage } from './venues/VenueCataloguePage'
@@ -93,9 +94,18 @@ function App() {
               </Route>
 
               {/* Story 4.1: the coordinator review queue. */}
-              {/* Story 12.1: the Event Coordinator raises a venue booking request. */}
+              {/*
+                Story 12.1: the Event Coordinator raises a venue booking request. f12.1.1: for the
+                event and venue in the address, reached from the catalogue in that event's
+                context. The old Request a venue page's address opens the Events inbox, where a
+                request now starts.
+              */}
               <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_REQUEST} />}>
-                <Route path={BOOKING_REQUEST_NEW_PATH} element={<BookingRequestFormPage />} />
+                <Route path={VENUE_REQUEST_PATH} element={<BookingRequestFormPage />} />
+                <Route
+                  path={BOOKING_REQUEST_NEW_PATH}
+                  element={<Navigate to={EVENTS_INBOX_PATH} replace />}
+                />
               </Route>
 
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_REVIEW} />}>

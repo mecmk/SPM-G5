@@ -13,6 +13,49 @@ export function venuePath(venueId: string): string {
   return VENUE_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
 
+// f12.1.1 (story 12.1 AC15) and story 8.1 AC3/AC4: the venue catalogue's filters in the page
+// address. The event page's Find a venue writes them and 8.1's filter panel reads them, so both
+// use these names. `event` names the event a venue is being found for.
+export const VENUE_SEARCH_PARAMS = {
+  event: 'event',
+  capacity: 'capacity',
+  from: 'from',
+  to: 'to',
+  layout: 'layout',
+  facility: 'facility',
+  accessibility: 'accessibility',
+} as const
+
+/** A catalogue search. `from` / `to` are Singapore `datetime-local` values; codes are the shared
+ *  reference codes (room layouts, facilities, accessibility features). */
+export interface VenueSearch {
+  eventId?: string
+  capacity?: number
+  from?: string
+  to?: string
+  layout?: string
+  facilities?: readonly string[]
+  accessibilityFeatures?: readonly string[]
+}
+
+/** The catalogue's address for `search`, holding only the filters it sets. */
+export function venueSearchPath(search: VenueSearch): string {
+  const params = new URLSearchParams()
+  if (search.eventId) params.set(VENUE_SEARCH_PARAMS.event, search.eventId)
+  if (search.capacity !== undefined) {
+    params.set(VENUE_SEARCH_PARAMS.capacity, String(search.capacity))
+  }
+  if (search.from) params.set(VENUE_SEARCH_PARAMS.from, search.from)
+  if (search.to) params.set(VENUE_SEARCH_PARAMS.to, search.to)
+  if (search.layout) params.set(VENUE_SEARCH_PARAMS.layout, search.layout)
+  for (const code of search.facilities ?? []) params.append(VENUE_SEARCH_PARAMS.facility, code)
+  for (const code of search.accessibilityFeatures ?? []) {
+    params.append(VENUE_SEARCH_PARAMS.accessibility, code)
+  }
+  const query = params.toString()
+  return query === '' ? VENUE_CATALOGUE_PATH : `${VENUE_CATALOGUE_PATH}?${query}`
+}
+
 // Story 8.3: venue records.
 export const VENUES_MANAGE_PATH = '/venues/manage'
 export const VENUE_NEW_PATH = '/venues/new'
@@ -25,8 +68,22 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
-// Story 12.1: raise a venue booking request.
+// Story 12.1: the old Request a venue page. f12.1.1 moved the request into the event's context,
+// so this address is kept only to redirect old links to the Events inbox.
 export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'
+
+// f12.1.1 (story 12.1 AC15): the request step for one event and one venue, reached with Request
+// this venue from the catalogue in that event's context. `search` is the catalogue's own query,
+// carried along so the step's back link returns to the same search.
+export const VENUE_REQUEST_PATH = '/events/:eventId/request-venue/:venueId'
+
+export function venueRequestPath(eventId: string, venueId: string, search = ''): string {
+  const path = VENUE_REQUEST_PATH.replace(':eventId', encodeURIComponent(eventId)).replace(
+    ':venueId',
+    encodeURIComponent(venueId),
+  )
+  return `${path}${search}`
+}
 
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section, structured
 // as separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues
