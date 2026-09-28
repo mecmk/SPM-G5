@@ -27,6 +27,7 @@ export const EVENTS = {
   clarificationRequested: '33333333-0000-0000-0000-000000000006', // organiser: organiser
   draft: '33333333-0000-0000-0000-000000000001',
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
+  partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; 12.1's request is sent for it
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
@@ -42,11 +43,6 @@ export async function signIn(page: Page, email: string, password: string = PASSW
 
 export async function expectSignedIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
-}
-
-/** A row in a venue table (Manage venues), matched by name. */
-export function venueRow(page: Page, name: string) {
-  return page.getByRole('row', { name: new RegExp(name) })
 }
 
 /** A venue card in the venue catalogue, matched by the venue's name. */

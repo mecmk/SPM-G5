@@ -14,7 +14,6 @@ const SAMPLE_NAV_ITEMS: SidebarNavItem[] = [
   { label: 'Components', to: COMPONENT_GALLERY_PATH },
   { label: 'My Events', to: EVENTS_MINE_PATH, group: 'Events' },
   { label: 'Venue Catalogue', to: '/venues', group: 'Venues' },
-  { label: 'Manage Venues', to: '/venues/manage', group: 'Venues' },
 ]
 
 const SAMPLE_CALENDAR_ENTRIES: CalendarEntry[] = [

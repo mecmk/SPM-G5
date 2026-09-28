@@ -1,65 +1,179 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { listVenues, type VenueSummary } from '../api/venues'
+import {
+  searchVenues,
+  type RelaxHint,
+  type VenueSearchHit,
+  type VenueSearchQuery,
+  type VenueSummary,
+} from '../api/venues'
+import { useAuth } from '../auth/authContext'
+import { PERMISSIONS } from '../auth/permissions'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
-import { venuePath, venueRequestPath } from '../routes'
+import {
+  VENUE_NEW_PATH,
+  venueEditPath,
+  venuePath,
+  venueRequestPath,
+  type VenueSearch,
+} from '../routes'
+import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { DeleteVenueDialog } from './DeleteVenueDialog'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
+import { VenueCard } from './VenueCard'
+import { VenueFilterPanel } from './VenueFilterPanel'
+import { hasFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
 
-function numberOrNull(value: string): number | null {
-  const parsed = Number(value)
-  return value.trim() === '' || !Number.isFinite(parsed) ? null : parsed
+/**
+ * Story 8.1 AC3/AC8: the server query for the address's search. The period goes only once both
+ * ends are filled in, as Singapore instants.
+ */
+function searchQueryFor(search: VenueSearch): VenueSearchQuery {
+  const hasPeriod = Boolean(search.from && search.to)
+  return {
+    search: search.search,
+    capacity: search.capacity,
+    capacity_max: search.capacityMax,
+    starts_at: hasPeriod && search.from ? inputToInstant(search.from) : undefined,
+    ends_at: hasPeriod && search.to ? inputToInstant(search.to) : undefined,
+    layout: search.layout,
+    facility: search.facilities,
+    accessibility: search.accessibilityFeatures,
+    include_withdrawn: search.includeWithdrawn,
+  }
 }
 
-function matchesCapacity(venue: VenueSummary, minCapacity: string, maxCapacity: string): boolean {
-  const min = numberOrNull(minCapacity)
-  const max = numberOrNull(maxCapacity)
-  return (min === null || venue.capacity >= min) && (max === null || venue.capacity <= max)
+/** What the list is loaded with. A fresh object, even for the same search, loads it again. */
+interface VenueListRequest {
+  query: VenueSearchQuery
 }
 
-function loadVenuesInService() {
-  return listVenues(false)
+/** Story 8.1 AC9: one suggested filter to remove, as its button reads. */
+function describeRelaxHint(hint: RelaxHint): string {
+  return `${hint.label} (${hint.count} ${hint.count === 1 ? 'venue' : 'venues'})`
 }
 
 /**
- * Story 8.1: an Event Coordinator browses venues in service. AC1 name/location/capacity, AC2 a
- * link to the full record, AC3 withdrawn venues excluded. The capacity range filter (team
- * decision, 17 Sep 2026, frontend design prototype) is applied client-side, the same way story
- * 8.3's Venue Staff list filters by capacity.
+ * Story 8.1: browse the venues in service - AC1 name, location and capacity, a link to the full
+ * record; AC2 withdrawn venues excluded. Sprint 2 (10.1 merged in, built as s8.1): the filter
+ * panel (AC3), a search run on the server with the booking rules (AC4), and the filters kept in
+ * the page address (AC4, AC11). A search that cannot be run says why beside the panel and keeps
+ * the last results (AC8); when nothing matches, the page offers to remove the filters that would
+ * give results, or all of them (AC9). A venue with no recorded opening hours says so when a period
+ * is searched, since it is kept rather than refused (AC3).
  *
  * f12.1.1 (story 12.1 AC15): opened from an event's Find a venue, the page names that event and
- * each venue offers Request this venue, for the event's assigned coordinator only. A venue's link
- * keeps the address's query, so its record knows the event too. Filling the filters in from the
- * address is story 8.1 AC3's.
+ * each venue offers Request this venue, for the event's assigned coordinator only (AC5). A
+ * venue's link keeps the address's query, so its record knows the event and the search too.
+ *
+ * AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from this same page, not a separate
+ * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
+ * card; the backend still refuses those writes to anyone else.
  */
 export function VenueCataloguePage() {
-  const { data: venues, error } = useLoaded(loadVenuesInService)
   const location = useLocation()
+  const { can } = useAuth()
+  const canManageVenues = can(PERMISSIONS.VENUES_MANAGE)
   const { requestingEvent, error: eventError } = useRequestingEvent()
-  const [minCapacity, setMinCapacity] = useState('')
-  const [maxCapacity, setMaxCapacity] = useState('')
+  const { search, updateSearch, clearFilters } = useVenueSearch()
+  const query = useMemo(() => searchQueryFor(search), [search])
+  const [listRequest, setListRequest] = useState<VenueListRequest>({ query })
+  if (listRequest.query !== query) setListRequest({ query })
+  const [pendingDelete, setPendingDelete] = useState<VenueSummary | null>(null)
 
-  const shownVenues = useMemo(
-    () => (venues ?? []).filter((venue) => matchesCapacity(venue, minCapacity, maxCapacity)),
-    [venues, minCapacity, maxCapacity],
-  )
+  const loadVenues = useCallback(() => searchVenues(listRequest.query), [listRequest])
+  const { data: result, error, setData: setResult } = useLoaded(loadVenues)
+  const isPeriodSearched = query.starts_at !== undefined
 
-  const isFiltered = minCapacity !== '' || maxCapacity !== ''
+  function askToDelete(venue: VenueSummary) {
+    setPendingDelete(venue)
+  }
 
-  function clearFilters() {
-    setMinCapacity('')
-    setMaxCapacity('')
+  function cancelDelete() {
+    setPendingDelete(null)
+  }
+
+  function removeDeletedVenue() {
+    const deletedId = pendingDelete?.id
+    setResult(
+      (current) =>
+        current && {
+          ...current,
+          venues: current.venues.filter((venue) => venue.id !== deletedId),
+          total: current.total - 1,
+        },
+    )
+    setPendingDelete(null)
+  }
+
+  /** The list is out of date: a venue it shows was deleted elsewhere. */
+  function reloadVenues() {
+    setListRequest((current) => ({ ...current }))
+  }
+
+  function removeFilter(hint: RelaxHint) {
+    updateSearch(RELAX_CHANGES[hint.filter])
+  }
+
+  function venueNotes(venue: VenueSearchHit) {
+    if (!isPeriodSearched || venue.operating_hours_start !== null) return undefined
+    return <p className="small muted">Opening hours not recorded</p>
+  }
+
+  function venueActions(venue: VenueSummary) {
+    if (canManageVenues) {
+      return (
+        <div className="row-actions">
+          <Link
+            to={venueEditPath(venue.id)}
+            className="button secondary button-sm button-with-icon"
+          >
+            <Icon name="pencil" size={14} /> Edit
+          </Link>
+          <button
+            type="button"
+            className="danger button-sm button-with-icon"
+            onClick={() => askToDelete(venue)}
+          >
+            <Icon name="trash" size={14} /> Delete
+          </button>
+        </div>
+      )
+    }
+    if (requestingEvent) {
+      return (
+        <Link
+          to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
+          className="button brand button-sm"
+        >
+          Request this venue
+        </Link>
+      )
+    }
+    return undefined
   }
 
   return (
     <div className="page page-wide">
       <PageHeader
         title="Venue catalogue"
-        subtitle="Venues currently in service. Select one to see its full record."
+        subtitle={
+          canManageVenues
+            ? 'Keep the venue records accurate. Coordinators plan every event against them.'
+            : 'Venues currently in service. Select one to see its full record.'
+        }
+        action={
+          canManageVenues ? (
+            <Link to={VENUE_NEW_PATH} className="button button-with-icon">
+              <Icon name="plus" size={16} /> New venue
+            </Link>
+          ) : undefined
+        }
       />
 
       {eventError && (
@@ -70,98 +184,85 @@ export function VenueCataloguePage() {
       {requestingEvent && <RequestingEventBanner event={requestingEvent} />}
 
       <div className="catalogue-layout">
-        <aside className="filter-column">
-          <label>
-            Capacity from
-            <input
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              placeholder="Any"
-              value={minCapacity}
-              onChange={(e) => setMinCapacity(e.target.value)}
-            />
-          </label>
-          <label>
-            Capacity to
-            <input
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              placeholder="Any"
-              value={maxCapacity}
-              onChange={(e) => setMaxCapacity(e.target.value)}
-            />
-          </label>
-          {isFiltered && (
-            <button type="button" className="link" onClick={clearFilters}>
-              Clear all filters
-            </button>
-          )}
-        </aside>
+        <VenueFilterPanel
+          search={search}
+          onChange={updateSearch}
+          onClear={clearFilters}
+          canShowWithdrawn={canManageVenues}
+          error={error}
+        />
 
         <div className="stack">
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          {venues === null && !error && <LoadingState label="Loading venues…" />}
+          {result === null && !error && <LoadingState label="Loading venues…" />}
 
-          {venues !== null && venues.length === 0 && (
-            <EmptyState>No venues are currently in service.</EmptyState>
+          {result !== null && result.venues.length === 0 && !hasFilters(search) && (
+            <EmptyState>
+              {search.includeWithdrawn
+                ? 'No venues recorded yet.'
+                : 'No venues are currently in service.'}
+              {canManageVenues && (
+                <>
+                  {' '}
+                  <Link to={VENUE_NEW_PATH}>Add the first venue</Link> so coordinators can plan with
+                  it.
+                </>
+              )}
+            </EmptyState>
           )}
 
-          {venues !== null && venues.length > 0 && shownVenues.length === 0 && (
-            <EmptyState>No venues match these filters.</EmptyState>
+          {result !== null && result.venues.length === 0 && hasFilters(search) && (
+            <EmptyState>
+              No venues match these filters.{' '}
+              {result.relax.length > 0 && (
+                <>
+                  Try removing:{' '}
+                  {result.relax.map((hint, index) => (
+                    <Fragment key={hint.filter}>
+                      {index > 0 && ', '}
+                      <button type="button" className="link" onClick={() => removeFilter(hint)}>
+                        {describeRelaxHint(hint)}
+                      </button>
+                    </Fragment>
+                  ))}
+                  , or{' '}
+                </>
+              )}
+              <button type="button" className="link" onClick={clearFilters}>
+                Clear filters
+              </button>
+              .
+            </EmptyState>
           )}
 
-          {shownVenues.length > 0 && (
+          {result !== null && result.venues.length > 0 && (
             <>
               <p className="small muted">
-                Showing {shownVenues.length} of {venues?.length ?? 0} venues
+                Showing {result.venues.length} of {result.total} venues
               </p>
               <div className="item-grid item-grid-2">
-                {shownVenues.map((venue) => (
-                  <article key={venue.id} className="item-card">
-                    <div className="item-card-picture" aria-hidden="true">
-                      <Icon name="building" size={28} />
-                    </div>
-                    <div className="item-card-body">
-                      <div className="item-card-header">
-                        <div>
-                          <h3 className="item-card-title">
-                            <Link to={`${venuePath(venue.id)}${location.search}`}>
-                              {venue.name}
-                            </Link>
-                          </h3>
-                          <p className="small muted">{venue.location}</p>
-                        </div>
-                        <div className="item-card-capacity">
-                          <div className="item-card-capacity-value">{venue.capacity}</div>
-                          <div className="item-card-capacity-label">capacity</div>
-                        </div>
-                      </div>
-                      {requestingEvent && (
-                        <div className="item-card-footer">
-                          <Link
-                            to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
-                            className="button brand button-sm"
-                          >
-                            Request this venue
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  </article>
+                {result.venues.map((venue) => (
+                  <VenueCard
+                    key={venue.id}
+                    venue={venue}
+                    recordPath={`${venuePath(venue.id)}${location.search}`}
+                    notes={venueNotes(venue)}
+                    actions={venueActions(venue)}
+                  />
                 ))}
               </div>
             </>
           )}
         </div>
       </div>
+
+      {pendingDelete && (
+        <DeleteVenueDialog
+          venue={pendingDelete}
+          onDeleted={removeDeletedVenue}
+          onCancel={cancelDelete}
+          onAlreadyGone={reloadVenues}
+        />
+      )}
     </div>
   )
 }

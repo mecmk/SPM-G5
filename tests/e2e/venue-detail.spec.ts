@@ -9,12 +9,11 @@
  * than a venues-specific one (see permissions.py).
  * AC3's permission boundary (Attendee/Organiser refused) is a backend case:
  * backend/tests/auth/test_rbac.py::test_venue_actions_are_allowed_only_for_permitted_roles.
- * Venue Staff has no link to this page from their own UI today (they have a separate
- * manage/edit view); AC3 only requires it be readable, so this checks direct navigation to
- * /venues, which they can reach because they hold VENUES_READ even without a nav link.
+ * Venue Staff reach this page from the venue catalogue, the same way coordinators do (f8.1.1,
+ * 8.1 AC12).
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn, venueRow } from './support'
+import { ACCOUNTS, signIn, venueCard } from './support'
 
 /** The region whose heading matches exactly - relies on the card's `aria-labelledby`, so this
  *  also doubles as an a11y check the way every other spec's role-based selectors do. */
@@ -98,14 +97,9 @@ test('8.2 AC2: a venue with nothing recorded shows "Not recorded" for every fiel
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venues/manage')
+  await page.goto('/venues')
   await page.getByRole('checkbox', { name: 'Show withdrawn venues' }).check()
-  await venueRow(page, 'Old Annex Room').getByRole('link', { name: 'Edit' }).click()
-  await page.waitForURL(/\/venues\/[^/]+\/edit$/)
-  const venueId = page.url().match(/\/venues\/([^/]+)\/edit/)?.[1]
-  expect(venueId).toBeTruthy()
-
-  await page.goto(`/venues/${venueId}`)
+  await venueCard(page, 'Old Annex Room').getByRole('link', { name: 'Old Annex Room' }).click()
 
   await expect(page.getByRole('heading', { name: 'Old Annex Room' })).toBeVisible()
   await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible()
