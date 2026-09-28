@@ -23,18 +23,24 @@ export const RELAX_CHANGES: Record<RelaxFilter, Partial<VenueSearch>> = {
   accessibility: { accessibilityFeatures: [] },
 }
 
-/** Whether `search` narrows the catalogue at all. Showing withdrawn venues widens it instead. */
+/**
+ * How many filters `search` holds, as the filter panel counts them: one each for name or
+ * location, the capacity range, the dates and the layout, and one per ticked facility or
+ * accessibility feature. Showing withdrawn venues widens the catalogue instead, so it is not one.
+ */
+export function countFilters(search: VenueSearch): number {
+  const groupCount = [
+    search.search,
+    search.capacity !== undefined || search.capacityMax !== undefined,
+    search.from || search.to,
+    search.layout,
+  ].filter(Boolean).length
+  return groupCount + (search.facilities?.length ?? 0) + (search.accessibilityFeatures?.length ?? 0)
+}
+
+/** Whether `search` narrows the catalogue at all. */
 export function hasFilters(search: VenueSearch): boolean {
-  return Boolean(
-    search.search ||
-    search.capacity !== undefined ||
-    search.capacityMax !== undefined ||
-    search.from ||
-    search.to ||
-    search.layout ||
-    search.facilities?.length ||
-    search.accessibilityFeatures?.length,
-  )
+  return countFilters(search) > 0
 }
 
 /**
