@@ -99,7 +99,7 @@ test('13.1 AC1: the queue shows requests across different events, venues and dat
   ).toBeVisible()
 })
 
-test('13.1 AC3: the Approved tab shows a decided booking; the Rejected tab does not', async ({
+test('13.1 AC3: a decided booking stays out of the Pending tab and shows under Approved', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -112,6 +112,11 @@ test('13.1 AC3: the Approved tab shows a decided booking; the Rejected tab does 
     .getByRole('listitem')
     .filter({ hasText: 'Nimbus Developer Conference' })
     .filter({ hasText: 'Grand Hall' })
+  const pendingCard = page.getByRole('listitem').filter({ hasText: 'Product Roadmap Townhall' })
+
+  await page.getByRole('tab', { name: /^Pending/ }).click()
+  await expect(pendingCard).toBeVisible()
+  await expect(decidedCard).toHaveCount(0)
 
   await page.getByRole('tab', { name: /^Approved/ }).click()
   await expect(decidedCard).toBeVisible()
