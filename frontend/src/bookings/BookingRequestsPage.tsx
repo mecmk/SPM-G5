@@ -231,7 +231,7 @@ export function BookingRequestsPage() {
                       <p className="fact-value">{entry.requested_by_name}</p>
                     </div>
                     <div className="subtle-block">
-                      <p className="fact-label">Requested</p>
+                      <p className="fact-label">Requested at</p>
                       <p className="fact-value">{formatDateTime(entry.created_at)}</p>
                     </div>
                   </div>
