@@ -104,6 +104,26 @@ test('8.1 AC3: the catalogue can be filtered by a capacity range', async ({ page
   await expectListed(page, ['Exhibition Foyer'], ['Grand Hall', 'Boardroom 3.4'])
 })
 
+test('8.1 AC6: a capacity of 0 or below is no limit, typed or in the address', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues?capacity=0&capacity_max=-5')
+  const filters = panel(page)
+  await expectListed(page, IN_SERVICE, [])
+  await expect(filters.getByRole('alert')).toHaveCount(0)
+
+  await filters.getByLabel('Capacity from').fill('300')
+  await expectListed(page, ['Grand Hall'], ['Seminar Room 2.1'])
+  await filters.getByLabel('Capacity from').fill('0')
+  await expectListed(page, IN_SERVICE, [])
+
+  await filters.getByLabel('Capacity to').fill('20')
+  await expectListed(page, ['Boardroom 3.4'], ['Grand Hall'])
+  await filters.getByLabel('Capacity to').fill('-5')
+  await expectListed(page, IN_SERVICE, [])
+  await expect(page).not.toHaveURL(/capacity(_max)?=/)
+  await expect(filters.getByRole('alert')).toHaveCount(0)
+})
+
 test('8.1 AC3: raising Capacity from past Capacity to takes Capacity to up with it', async ({
   page,
 }) => {
