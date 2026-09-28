@@ -7,6 +7,7 @@
  * AC2  One filter panel: capacity, start and end, name or location, facilities, accessibility
  *      features and room layout. Only venues matching every criterion and free for the period
  *      are listed: not booked or held, not closed for maintenance, not closed at those hours.
+ *      Raising Capacity from or From past the other end takes that end along.
  * AC3  Opened from an event's Find a venue (f12.1.1), the panel is filled in from the event and
  *      matching venues show straight away.
  * AC4  The filters live in the page address, so a search can be bookmarked and reloaded.
@@ -100,6 +101,41 @@ test('8.1 AC2: the catalogue can be filtered by a capacity range', async ({ page
   await page.getByLabel('Capacity to').fill('300')
 
   await expectListed(page, ['Exhibition Foyer'], ['Grand Hall', 'Boardroom 3.4'])
+})
+
+test('8.1 AC2: raising Capacity from past Capacity to takes Capacity to up with it', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  const filters = panel(page)
+  await filters.getByLabel('Capacity from').fill('50')
+  await filters.getByLabel('Capacity to').fill('60')
+  await expect(page).toHaveURL(/capacity_max=60/)
+
+  await filters.getByLabel('Capacity from').fill('80')
+
+  await expect(filters.getByLabel('Capacity to')).toHaveValue('80')
+  await expect(page).toHaveURL(/capacity=80&capacity_max=80/)
+  await expectListed(page, ['Seminar Room 2.1'], ['Grand Hall', 'Exhibition Foyer'])
+  await expect(filters.getByRole('alert')).toHaveCount(0)
+})
+
+test('8.1 AC2: moving From past To moves To with it, keeping the period as long', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  const filters = panel(page)
+  await filters.getByLabel('From', { exact: true }).fill('2027-03-01T09:00')
+  await filters.getByLabel('To', { exact: true }).fill('2027-03-01T12:00')
+
+  await filters.getByLabel('From', { exact: true }).fill('2027-03-02T10:00')
+
+  await expect(filters.getByLabel('To', { exact: true })).toHaveValue('2027-03-02T13:00')
+  await expect(page).toHaveURL(/from=2027-03-02T10%3A00&to=2027-03-02T13%3A00/)
+  await expectListed(page, IN_SERVICE, [])
+  await expect(filters.getByRole('alert')).toHaveCount(0)
 })
 
 test('8.1 AC2: each filter narrows the catalogue', async ({ page }) => {
