@@ -10,7 +10,7 @@
  * AC3's permission boundary (Attendee/Organiser refused) is a backend case:
  * backend/tests/auth/test_rbac.py::test_venue_actions_are_allowed_only_for_permitted_roles.
  * Venue Staff reach this page from the venue catalogue, the same way coordinators do (f8.1.1,
- * 8.1 AC13).
+ * 8.1 AC12).
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn, venueCard } from './support'

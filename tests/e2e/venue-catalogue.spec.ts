@@ -5,7 +5,7 @@
  * AC3 venues withdrawn from service are excluded.
  * Team decision, 17 Sep 2026 (frontend design prototype): coordinators can also filter the list
  * by a capacity range ("Capacity from" / "Capacity to"), applied client-side.
- * AC13 (f8.1.1) Venue Staff manage venues from this catalogue too: tests/e2e/venues.spec.ts.
+ * AC12 (f8.1.1) Venue Staff manage venues from this catalogue too: tests/e2e/venues.spec.ts.
  * Permission refusal (403) and the underlying data shape are backend cases:
  * backend/tests/venues/test_venue_records.py.
  */
