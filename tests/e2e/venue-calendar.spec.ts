@@ -13,8 +13,9 @@
  * reach); backend/tests/venues/test_venue_calendar.py covers the data itself.
  * AC10 previous / next keep the venue and the calendar, whatever is loading or has failed.
  * AC12 a venue with nothing booked shows no unavailable days.
- * AC13 (restricted to Event Coordinator, Venue Staff and Technical Support) is a backend case:
- * backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles.
+ * AC13 (restricted to Event Coordinator, Venue Staff and Technical Support): the refusals are a
+ * backend case, backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles;
+ * here Venue Staff and Technical Support open a venue from the catalogue and see its calendar.
  * The calendar opens on the current month, and the real-seed tests reach November 2026 (where the
  * seed data's bookings and maintenance period live) by pressing Next twice from September. Left
  * to the real clock that only works during September 2026 - from 1 October every "November 2026"
@@ -202,8 +203,9 @@ test('9.1 AC10: a failed re-fetch shows availability as unknown, not a dead end'
 })
 
 /** Story 9.1 AC5: the button that opens a day's list - a day cell with entries. Its name is the
- *  date and how many items it holds, so it can be found without the grid's own text. */
-function dayButton(page: Page, name: RegExp = /, \d+ items?$/) {
+ *  date, how many items it holds and what the cell shows of them, so it can be found by any of
+ *  those without the grid's own text. */
+function dayButton(page: Page, name: RegExp = /, \d+ items?/) {
   return availabilitySection(page).getByRole('button', { name })
 }
 
@@ -459,6 +461,8 @@ test('9.1 AC9: a multi-day booking is listed on every day it covers, with that d
   await dayButton(page, /^9 /).click()
   await expect(list).toContainText('20:00–24:00')
   await expect(list).toContainText('Setup and teardown only')
+  // The event is not on this day, so the row does not call it booked.
+  await expect(list).not.toContainText('Booked')
   await dayButton(page, /^10 /).click()
   await expect(list).toContainText('20:00–24:00')
   await dayButton(page, /^11 /).click()
@@ -468,4 +472,89 @@ test('9.1 AC9: a multi-day booking is listed on every day it covers, with that d
   await dayButton(page, /^13 /).click()
   await expect(list).toContainText('00:00–10:00')
   await expect(list).toContainText('Setup and teardown only')
+  await expect(list).not.toContainText('Booked')
+})
+
+test('9.1 AC9: a held request on a day only its setup reaches says held, not booked', async ({
+  page,
+}) => {
+  // Held from the 11th 20:00; the event itself is on the 12th, 10:00-11:00.
+  await stubCalendar(page, (month) => [
+    {
+      starts_at: at(month, 11, '20:00'),
+      ends_at: at(month, 12, '11:00'),
+      event_starts_at: at(month, 12, '10:00'),
+      event_ends_at: at(month, 12, '11:00'),
+      reason: 'HELD',
+      label: 'Stub Held Workshop',
+    },
+  ])
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+
+  const list = dayList(page, /\d+ \w+ \d{4}/)
+  await dayButton(page, /^11 /).click()
+  await expect(list).toContainText('Held – pending, setup and teardown only')
+  await expect(list).not.toContainText('Booked')
+  await dayButton(page, /^12 /).click()
+  await expect(list).toContainText('10:00–11:00')
+  await expect(list).toContainText('Held – pending')
+})
+
+// D1: Venue Staff have no other route to a calendar than the shared catalogue (f8.1.1), and
+// Technical Support keeps calendar access, so both are shown reaching it the way they would.
+for (const viewer of [
+  { who: 'Venue Staff', email: ACCOUNTS.venueStaff },
+  { who: 'Technical Support', email: ACCOUNTS.techSupport },
+]) {
+  test(`9.1 AC13: ${viewer.who} open a venue from the catalogue and see its calendar`, async ({
+    page,
+  }) => {
+    await signIn(page, viewer.email)
+    await page.goto('/venues')
+    await page.getByRole('link', { name: 'Grand Hall' }).click()
+
+    await goToNovember2026(page)
+
+    await expect(availabilitySection(page)).toBeVisible()
+    await expect(page.getByText('Nimbus Developer Conference')).toBeVisible()
+  })
+}
+
+// D3: the button's name carries what its cell shows, not just how many items there are.
+test('9.1 AC5: a day’s button is named with its date and what the cell shows, overflow included', async ({
+  page,
+}) => {
+  await stubCalendar(page, (month) => [
+    plainWindow(month, 10, ['09:00', '12:00'], { reason: 'BOOKED', label: 'Stub Morning Workshop' }),
+    plainWindow(month, 10, ['12:00', '14:00'], { reason: 'HELD', label: 'Stub Midday Briefing' }),
+    plainWindow(month, 10, ['16:00', '18:00'], { reason: 'BOOKED', label: 'Stub Evening Reception' }),
+  ])
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+
+  // The cell shows the first two entries and "+1 more"; the name says the same.
+  await expect(dayButton(page)).toHaveAccessibleName(
+    /^10 \w+ \d{4}, 3 items: Stub Morning Workshop; Held – Stub Midday Briefing; \+1 more$/,
+  )
+})
+
+// D2: the list opens under the grid and legend, which on a short screen is below the fold.
+test('9.1 AC5: opening a day brings its list into view and leaves focus on the day', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 400 })
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+  await goToNovember2026(page)
+
+  const button = dayButton(page, /25 November 2026/)
+  await button.click()
+
+  await expect(dayList(page, /25 Nov 2026/)).toBeInViewport({ ratio: 1 })
+  // Focus stays on the button, so pressing it again still closes the list.
+  await expect(button).toBeFocused()
 })

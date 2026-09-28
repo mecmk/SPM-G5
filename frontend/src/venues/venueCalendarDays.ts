@@ -11,7 +11,10 @@ export const HELD_LABEL = 'Held – pending'
 const CLOSED_PREFIX = 'Closed'
 const HELD_ENTRY_PREFIX = 'Held'
 const TURNAROUND_INCLUDED = 'Setup and teardown included'
-const TURNAROUND_ONLY = 'Setup and teardown only'
+// On a day the event itself does not reach, only its setup or teardown, the row says so instead of
+// calling it booked; a pending request keeps its "Held – pending".
+const TURNAROUND_ONLY_LABEL = 'Setup and teardown only'
+const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
 
 /** Mirrors `UnavailabilityReason` in backend/app/venues/models.py: a closure's `reason`. */
 const CLOSURE_REASON_NAMES: Record<string, string> = {
@@ -45,15 +48,16 @@ export interface DayItem {
   date: string
   /** The event's name, or a closure's notes. */
   label: string
-  /** "Booked", "Held – pending" or "Closed – Maintenance". */
+  /** "Booked", "Held – pending" or "Closed – Maintenance"; on a day only a booking's setup or
+   *  teardown reaches, "Setup and teardown only" or "Held – pending, setup and teardown only". */
   kindLabel: string
   tone: CalendarEntryTone
   /** The event's part of the day, "09:00–18:00"; a closure's, or a day the event does not reach
    *  (only its setup or teardown does), the blocked part. "24:00" is the end of the day. */
   timeRange: string
-  /** A second line when the venue is blocked for longer than the event: "Setup and teardown
-   *  included: 08:00–19:00", or "Setup and teardown only" on a day the event itself does not
-   *  reach. Null when the two are the same, and for a closure. */
+  /** A second line when the venue is blocked for longer than the event on a day the event is on:
+   *  "Setup and teardown included: 08:00–19:00". Null when the two are the same, for a closure,
+   *  and on a day the event does not reach, where `kindLabel` already says so. */
   turnaround: string | null
   /** Where the item sorts within its day. */
   sortStart: number
@@ -93,6 +97,11 @@ function closureKindLabel(reason: string): string {
   return `${CLOSED_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
 
+function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
+  if (isTurnaroundOnly) return isHeld ? HELD_TURNAROUND_ONLY_LABEL : TURNAROUND_ONLY_LABEL
+  return isHeld ? HELD_LABEL : BOOKED_LABEL
+}
+
 function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
   return eachDate(window.starts_at, window.ends_at).flatMap((date) => {
     const dayStart = startOfDay(date)
@@ -105,9 +114,9 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
 
     const isBooking = window.reason === BOOKING_REASON || window.reason === HELD_REASON
     const isHeld = window.reason === HELD_REASON
+    const isTurnaroundOnly = isBooking && event === null
     let turnaround: string | null = null
-    if (isBooking && event === null) turnaround = TURNAROUND_ONLY
-    else if (isBooking && event !== null && !isSameSlice(event, blocked)) {
+    if (isBooking && event !== null && !isSameSlice(event, blocked)) {
       turnaround = `${TURNAROUND_INCLUDED}: ${formatSlice(blocked, dayStart)}`
     }
 
@@ -116,7 +125,9 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
         id: `${index}-${date}`,
         date,
         label: window.label,
-        kindLabel: isHeld ? HELD_LABEL : isBooking ? BOOKED_LABEL : closureKindLabel(window.reason),
+        kindLabel: isBooking
+          ? bookingKindLabel(isHeld, isTurnaroundOnly)
+          : closureKindLabel(window.reason),
         tone: isHeld ? 'warning' : 'danger',
         timeRange: formatSlice(event ?? blocked, dayStart),
         turnaround,

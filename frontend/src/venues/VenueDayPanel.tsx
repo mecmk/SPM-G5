@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Chip } from '../components/Chip'
 import { formatDate, inputToInstant } from '../shared/format'
 import type { DayItem } from './venueCalendarDays'
@@ -17,11 +18,19 @@ export interface VenueDayPanelProps {
  * by colour alone, then, when the venue is blocked for longer than the event runs, the whole
  * blocked stretch. AC7/AC8: rows are separate, so several events on one day, or two that meet at
  * 12:00, are each listed. AC9: a multi-day booking's row holds only the part on this day.
+ *
+ * The list sits below the grid and legend, which on a phone is below the fold, so opening (or
+ * switching to) a day scrolls it into view - only as far as needed. Focus is left on the day's
+ * button, so pressing it again still closes the list.
  */
 export function VenueDayPanel({ id, date, items }: VenueDayPanelProps) {
   const headingId = `${id}-heading`
+  const panelRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [date])
   return (
-    <section id={id} className="calendar-day-panel" aria-labelledby={headingId}>
+    <section ref={panelRef} id={id} className="calendar-day-panel" aria-labelledby={headingId}>
       <h3 id={headingId} className="calendar-day-panel-title">
         {formatDate(inputToInstant(`${date}T00:00`))}
       </h3>

@@ -47,6 +47,22 @@ export interface CalendarProps {
   gridStatus?: 'loading' | 'unknown'
 }
 
+// How many of a day's entries its cell shows; the rest are "+N more".
+const MAX_ENTRIES_SHOWN = 2
+
+/**
+ * Story 9.1 AC5: an openable day's name for assistive tech - the date, how many items, and the
+ * entries its cell shows, "+N more" included, so the name contains the visible text (WCAG 2.5.3)
+ * and not only a count.
+ */
+function openableDayName(dayLabel: string, dayEntries: CalendarEntry[]): string {
+  const count = `${dayEntries.length} ${dayEntries.length === 1 ? 'item' : 'items'}`
+  const shown = dayEntries.slice(0, MAX_ENTRIES_SHOWN).map((entry) => entry.label)
+  const hiddenCount = dayEntries.length - shown.length
+  const summary = hiddenCount > 0 ? [...shown, `+${hiddenCount} more`] : shown
+  return `${dayLabel}, ${count}: ${summary.join('; ')}`
+}
+
 const TONE_RANK: Record<CalendarEntryTone, number> = {
   success: 0,
   info: 1,
@@ -156,7 +172,7 @@ export function Calendar({
           const cellContent = (
             <>
               <Part className="calendar-day">{day}</Part>
-              {dayEntries.slice(0, 2).map((entry) => (
+              {dayEntries.slice(0, MAX_ENTRIES_SHOWN).map((entry) => (
                 <Part
                   key={entry.id}
                   className={`calendar-entry calendar-entry-${entry.tone}`}
@@ -165,8 +181,8 @@ export function Calendar({
                   {entry.label}
                 </Part>
               ))}
-              {dayEntries.length > 2 && (
-                <Part className="calendar-more">+{dayEntries.length - 2} more</Part>
+              {dayEntries.length > MAX_ENTRIES_SHOWN && (
+                <Part className="calendar-more">+{dayEntries.length - MAX_ENTRIES_SHOWN} more</Part>
               )}
               {isSelectable && !isWeekend && <Part className="calendar-hint">Available</Part>}
             </>
@@ -180,9 +196,7 @@ export function Calendar({
                 className={cellClassName}
                 aria-expanded={isOpen}
                 aria-controls={isOpen ? openDayPanelId : undefined}
-                aria-label={`${formatDayLabel(year, monthIndex, day)}, ${dayEntries.length} ${
-                  dayEntries.length === 1 ? 'item' : 'items'
-                }`}
+                aria-label={openableDayName(formatDayLabel(year, monthIndex, day), dayEntries)}
                 onClick={() => handleOpenDay(date)}
               >
                 {cellContent}
