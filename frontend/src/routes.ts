@@ -75,8 +75,8 @@ export function readVenueSearch(params: URLSearchParams): VenueSearch {
   return {
     eventId: params.get(VENUE_SEARCH_PARAMS.event) ?? undefined,
     search: params.get(VENUE_SEARCH_PARAMS.search) ?? undefined,
-    capacity: wholeNumberOrUndefined(params.get(VENUE_SEARCH_PARAMS.capacity)),
-    capacityMax: wholeNumberOrUndefined(params.get(VENUE_SEARCH_PARAMS.capacityMax)),
+    capacity: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacity)),
+    capacityMax: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacityMax)),
     from: params.get(VENUE_SEARCH_PARAMS.from) ?? undefined,
     to: params.get(VENUE_SEARCH_PARAMS.to) ?? undefined,
     layout: params.get(VENUE_SEARCH_PARAMS.layout) ?? undefined,
@@ -86,9 +86,16 @@ export function readVenueSearch(params: URLSearchParams): VenueSearch {
   }
 }
 
-function wholeNumberOrUndefined(value: string | null): number | undefined {
+/**
+ * Story 8.1 AC6: a capacity limit, typed or in the address - a whole number above 0. Anything else
+ * (blank, 0, a negative or a fraction) is no limit, so it is left out of the search rather than
+ * refused by the server.
+ */
+export function capacityLimit(value: string | null): number | undefined {
   const parsed = Number(value)
-  return value === null || value.trim() === '' || !Number.isInteger(parsed) ? undefined : parsed
+  return value === null || value.trim() === '' || !Number.isInteger(parsed) || parsed < 1
+    ? undefined
+    : parsed
 }
 
 /** The catalogue's address for `search`, holding only the filters it sets. */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { fetchVenueReferenceData, type ReferenceItem } from '../api/venues'
 import { Icon } from '../components/Icon'
-import type { VenueSearch } from '../routes'
+import { capacityLimit, type VenueSearch } from '../routes'
 import { inputToInstant, instantToInput } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { countFilters } from './useVenueSearch'
@@ -49,11 +49,6 @@ function textOrUndefined(value: string): string | undefined {
   return value === '' ? undefined : value
 }
 
-function wholeNumberOrUndefined(value: string): number | undefined {
-  const parsed = Number(value)
-  return value.trim() === '' || !Number.isInteger(parsed) ? undefined : parsed
-}
-
 /** A capacity range as the panel shows it: what is typed in each box. */
 interface CapacityRange {
   min: string
@@ -75,8 +70,8 @@ const DEFAULT_PERIOD_MS = 60 * 60 * 1000
  * typed through "2" - so AC8's refusal stays as the failsafe for a Capacity to typed below it.
  */
 function withCapacityFrom(range: CapacityRange, min: string): CapacityRange {
-  const newMin = wholeNumberOrUndefined(min)
-  const max = wholeNumberOrUndefined(range.max)
+  const newMin = capacityLimit(min)
+  const max = capacityLimit(range.max)
   const isPastMax = newMin !== undefined && max !== undefined && newMin > max
   return { min, max: isPastMax ? min : range.max }
 }
@@ -215,8 +210,8 @@ export function VenueFilterPanel({
     useCallback(
       (range: CapacityRange) =>
         onChange({
-          capacity: wholeNumberOrUndefined(range.min),
-          capacityMax: wholeNumberOrUndefined(range.max),
+          capacity: capacityLimit(range.min),
+          capacityMax: capacityLimit(range.max),
         }),
       [onChange],
     ),
