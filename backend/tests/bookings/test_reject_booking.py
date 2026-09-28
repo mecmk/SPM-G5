@@ -7,7 +7,8 @@ AC2 A reason is mandatory: missing, null, empty, whitespace-only or wrongly-type
 AC5 Permission and invalid-state refusals: 401/403/404, rejecting a booking that is not PENDING,
     repeat rejection, and approve/reject crossing each other.
 AC6 Rejection never runs the venue-conflict check - an overlapping APPROVED booking does not
-    block rejecting a PENDING one.
+    block rejecting a PENDING one. Since s12.1 a pending request holds its venue and so can no
+    longer overlap one; AC6 is shown instead as rejection releasing that hold.
 
 AC3 and AC4 are UI/navigation acceptance criteria proven at e2e (tests/e2e/bookings.spec.ts),
 not repeated here.
@@ -303,21 +304,20 @@ def test_a_failed_rejection_does_not_create_an_audit_entry(venue_staff_client, d
 
 # --- AC6: rejection never runs the venue-conflict check ----------------------------------------
 @pytest.mark.story("13.2.1", ac=6)
-def test_rejecting_an_overlapping_pending_request_still_succeeds(venue_staff_client, db: Session):
-    """Same-venue overlap with the seeded APPROVED Grand Hall booking - unlike approve, reject
-    must succeed anyway, because a rejected request never reserves the venue (14.2's exclusion
-    constraint only fires for APPROVED)."""
-    overlapping = make_booking(
-        db,
-        venue_id=Venues.GRAND_HALL,
-        starts_at=datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc),
-        ends_at=datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc),
+def test_rejecting_a_held_request_releases_the_venue(client, login_as, db: Session):
+    """Rejection never runs the venue-conflict check: it only releases the hold. Since s12.1
+    a pending request holds its venue, so it can no longer overlap an approved booking, and AC6
+    is shown the other way round: rejecting the seeded breakout request frees Seminar Room for
+    Nimbus's day at once, and a new request for it is accepted."""
+    rejected = login_as(Users.VENUE_STAFF).post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/reject",
+        json={"decision_reason": "No longer needed."},
     )
-    db.commit()
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == BookingStatus.REJECTED
 
-    response = venue_staff_client.post(
-        f"/bookings/{overlapping.id}/reject", json={"decision_reason": "No longer needed."}
+    raised = login_as(Users.COORDINATOR).post(
+        "/bookings",
+        json={"event_id": str(Events.APPROVED), "venue_id": str(Venues.SEMINAR_ROOM)},
     )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == BookingStatus.REJECTED
+    assert raised.status_code == 201

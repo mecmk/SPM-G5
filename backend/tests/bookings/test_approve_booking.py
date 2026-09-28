@@ -17,6 +17,10 @@ venues, etc.) is story 14.2's ``tests/bookings/test_booking_conflicts.py`` and i
 here - this file only proves the approve endpoint reaches that same, already-proven mechanism
 and translates its refusal into an HTTP response.
 
+Since s12.1 (Sprint 2's 12.1 hold) a pending request holds its venue, so an overlapping
+request is refused when it is raised and never reaches approval. The AC2 and AC4 tests below
+show the guarantee from that side.
+
 Excluded, with reason:
 * "Venue Staff outside the venue's responsibility scope" - there is no per-venue staff
   responsibility table in the schema (checked backend/db/migrations/001_initial_schema.sql);
@@ -39,7 +43,7 @@ from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
 from tests.support.factories import make_booking
-from tests.support.seed import Bookings, Users, Venues
+from tests.support.seed import Bookings, Events, Users, Venues
 
 
 # --- AC1: approval confirms the booking and records approver + time -------------------------
@@ -132,23 +136,24 @@ def test_approving_the_same_request_twice_is_refused_the_second_time(venue_staff
 def test_a_newly_approved_booking_blocks_a_later_overlapping_request(
     venue_staff_client, db: Session
 ):
-    """Proves the approve endpoint reaches the same held-period mechanism 14.2 already tests -
-    the newly-approved booking now blocks a later request the same way the seeded one does."""
-    later = make_booking(
-        db,
-        venue_id=Venues.SEMINAR_ROOM,
-        # PENDING_SEMINAR_ROOM is held 04:30-10:15 UTC (13:00-18:00+08, +/-30/15 min setup/
-        # teardown) - this overlaps that once it's approved.
-        starts_at=datetime(2026, 11, 25, 9, 0, tzinfo=timezone.utc),
-        ends_at=datetime(2026, 11, 25, 11, 0, tzinfo=timezone.utc),
-    )
-
+    """Proves the approve endpoint reaches the same held-period mechanism - the newly-approved
+    booking now blocks a later request the same way the seeded one does. PENDING_SEMINAR_ROOM is
+    held 12:30-18:15 on 25 Nov (13:00-18:00+08 with 30/15 min setup/teardown). Since s12.1 a
+    pending request already holds its room, so a later overlapping request is refused when it is
+    raised: as "held" before this approval, and as "booked" after it."""
     approved = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
     assert approved.status_code == 200
 
-    refused = venue_staff_client.post(f"/bookings/{later.id}/approve")
+    venue_staff_client.login(Users.COORDINATOR)
+    refused = venue_staff_client.post(
+        "/bookings",
+        json={"event_id": str(Events.APPROVED), "venue_id": str(Venues.SEMINAR_ROOM)},
+    )
     assert refused.status_code == 409
-    assert str(Bookings.PENDING_SEMINAR_ROOM) in refused.json()["detail"]
+    assert refused.json()["detail"] == (
+        "Seminar Room 2.1 is already booked for Nimbus Developer Conference on Wed 25 Nov 2026"
+        " from 12:30 to 18:15, including setup and teardown."
+    )
 
 
 # --- AC3: the outcome is visible to the requesting coordinator -------------------------------
@@ -187,32 +192,26 @@ def test_signed_out_visitors_cannot_read_a_booking(client):
 
 # --- AC4: refused where the period conflicts with a confirmed booking ------------------------
 @pytest.mark.story("13.2", ac=4)
-def test_approval_is_refused_when_the_period_conflicts_with_a_confirmed_booking(
-    venue_staff_client, db: Session
+def test_a_request_conflicting_with_a_confirmed_booking_never_reaches_approval(
+    client, login_as, db: Session
 ):
-    """Same-venue overlap with the seeded APPROVED Grand Hall booking. The overlap matrix
-    itself (boundaries, different venues, non-approved statuses) is 14.2's coverage; this just
-    proves the endpoint is wired to it."""
-    conflicting = make_booking(
-        db,
-        venue_id=Venues.GRAND_HALL,
-        starts_at=datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc),
-        ends_at=datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc),
+    """AC4's guarantee - approval never double-books - is enforced earlier since s12.1: a
+    request that overlaps the seeded APPROVED Grand Hall booking is refused when it is raised,
+    so Venue Staff never see it to approve. The approval-time check stays as a safety net (14.2's
+    tests); the overlap matrix is tests/bookings/test_venue_hold.py."""
+    raised = login_as(Users.COORDINATOR).post(
+        "/bookings",
+        json={"event_id": str(Events.APPROVED), "venue_id": str(Venues.GRAND_HALL)},
     )
-    db.commit()  # this request already exists as committed data before the approve request
+    assert raised.status_code == 409
 
-    response = venue_staff_client.post(f"/bookings/{conflicting.id}/approve")
-
-    assert response.status_code == 409
-    assert str(Bookings.APPROVED_GRAND_HALL) in response.json()["detail"]
-
-    db.expire_all()
-    row = db.execute(
-        text("SELECT status, decided_by_id FROM venue_bookings WHERE id = :id"),
-        {"id": conflicting.id},
-    ).one()
-    assert row.status == BookingStatus.PENDING
-    assert row.decided_by_id is None
+    queue = login_as(Users.VENUE_STAFF).get("/bookings")
+    assert queue.status_code == 200
+    assert not [
+        entry
+        for entry in queue.json()
+        if entry["event_id"] == str(Events.APPROVED) and entry["venue_id"] == str(Venues.GRAND_HALL)
+    ]
 
 
 # --- Permissions -------------------------------------------------------------------------
