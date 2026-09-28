@@ -286,7 +286,7 @@ author's call. Never flatten a `taste` into a "must".
   the frontend is the one layer a reviewer cannot trace.
 
   ```tsx
-  /** Story 8.1 AC13: Venue Staff also get New venue, Edit and Delete in the catalogue. */
+  /** Story 8.1 AC12: Venue Staff also get New venue, Edit and Delete in the catalogue. */
   export function VenueCataloguePage() { ... }
 
   /** Story 1.2 AC2: hide navigation / actions the role may not perform. */

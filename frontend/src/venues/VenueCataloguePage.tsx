@@ -30,7 +30,7 @@ import { VenueFilterPanel } from './VenueFilterPanel'
 import { hasFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
 
 /**
- * Story 8.1 AC2/AC7: the server query for the address's search. The period goes only once both
+ * Story 8.1 AC3/AC8: the server query for the address's search. The period goes only once both
  * ends are filled in, as Singapore instants.
  */
 function searchQueryFor(search: VenueSearch): VenueSearchQuery {
@@ -53,25 +53,25 @@ interface VenueListRequest {
   query: VenueSearchQuery
 }
 
-/** Story 8.1 AC8: one suggested filter to remove, as its button reads. */
+/** Story 8.1 AC9: one suggested filter to remove, as its button reads. */
 function describeRelaxHint(hint: RelaxHint): string {
   return `${hint.label} (${hint.count} ${hint.count === 1 ? 'venue' : 'venues'})`
 }
 
 /**
  * Story 8.1: browse the venues in service - AC1 name, location and capacity, a link to the full
- * record, withdrawn venues excluded. Sprint 2 (10.1 merged in, built as s8.1): the filter panel
- * (AC2), a search run on the server with the booking rules (AC4), and the filters kept in the page
- * address (AC4, AC10). A search that cannot be run says why beside the panel and keeps the last
- * results (AC7); when nothing matches, the page offers to remove the filters that would give
- * results, or all of them (AC8). A venue with no recorded opening hours says so when a period is
- * searched, since it is kept rather than refused (AC2).
+ * record; AC2 withdrawn venues excluded. Sprint 2 (10.1 merged in, built as s8.1): the filter
+ * panel (AC3), a search run on the server with the booking rules (AC4), and the filters kept in
+ * the page address (AC4, AC11). A search that cannot be run says why beside the panel and keeps
+ * the last results (AC8); when nothing matches, the page offers to remove the filters that would
+ * give results, or all of them (AC9). A venue with no recorded opening hours says so when a period
+ * is searched, since it is kept rather than refused (AC3).
  *
  * f12.1.1 (story 12.1 AC15): opened from an event's Find a venue, the page names that event and
- * each venue offers Request this venue, for the event's assigned coordinator only (AC11). A
+ * each venue offers Request this venue, for the event's assigned coordinator only (AC5). A
  * venue's link keeps the address's query, so its record knows the event and the search too.
  *
- * AC13 (f8.1.1, Sprint 1 review): Venue Staff manage venues from this same page, not a separate
+ * AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
  */

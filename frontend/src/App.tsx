@@ -75,7 +75,7 @@ function App() {
               </Route>
 
               {/*
-                Story 8.3: venue records, Venue Staff only. f8.1.1 (8.1 AC13): they manage venues
+                Story 8.3: venue records, Venue Staff only. f8.1.1 (8.1 AC12): they manage venues
                 from the catalogue, and the old Manage venues address opens it.
               */}
               <Route element={<RequirePermission permission={PERMISSIONS.VENUES_MANAGE} />}>

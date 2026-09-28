@@ -110,7 +110,7 @@ _HOLDING_STATUSES = tuple(VENUE_HELD_STATES)
 # Every event runs on Singapore time, which has no daylight saving (as in app/events/service.py).
 _SINGAPORE = timezone(timedelta(hours=8))
 
-# 8.1 AC12: why a request is refused when its venue stopped being available after the catalogue
+# 12.1 AC14: why a request is refused when its venue stopped being available after the catalogue
 # search - closed for a recorded period, e.g. "Seminar Room 2.1 is closed for maintenance from Mon
 # 2 Nov 2026, 00:00 to Wed 4 Nov 2026, 00:00.", or at those hours.
 VENUE_BLOCKED_MESSAGE = "{venue} is closed{reason} {period}."
@@ -201,8 +201,8 @@ class VenueHeld(ValueError):
 
 
 class VenueBlocked(ValueError):
-    """8.1 AC12: an unavailability period (maintenance, renovation, ...) closes the venue for part
-    of the requested period. Carries that period."""
+    """12.1 AC14: an unavailability period (maintenance, renovation, ...) closes the venue for
+    part of the requested period. Carries that period."""
 
     def __init__(self, venue: Venue, closure: VenueUnavailabilityPeriod) -> None:
         super().__init__(
@@ -216,7 +216,7 @@ class VenueBlocked(ValueError):
 
 
 class VenueClosed(ValueError):
-    """8.1 AC12: the requested period's daily window falls outside the venue's opening hours."""
+    """12.1 AC14: the requested period's daily window falls outside the venue's opening hours."""
 
     def __init__(self, venue: Venue, *, starts_at: datetime, ends_at: datetime) -> None:
         super().__init__(
@@ -564,7 +564,7 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     can both pass the check above; the exclusion constraint then makes the second write wait for
     the first and fail, and that failure becomes the same ``VenueHeld``.
 
-    Story 8.1 AC12: the venue may have stopped being available since the catalogue search, so
+    Story 12.1 AC14: the venue may have stopped being available since the catalogue search, so
     the search's other two rules are checked again after the hold - a closure overlapping the
     period (``VenueBlocked``) and opening hours that leave part of it out (``VenueClosed``).
     """

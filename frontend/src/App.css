@@ -521,7 +521,7 @@
   align-items: start;
 }
 
-/* Story 8.1 AC2: the catalogue's filter panel. Hairlines split it into one section per filter,
+/* Story 8.1 AC3: the catalogue's filter panel. Hairlines split it into one section per filter,
    so a range (capacity, dates) reads as one filter rather than two. */
 .filter-panel {
   border: 1px solid var(--border);
@@ -664,7 +664,7 @@ label .input-with-icon input {
   margin-top: 0;
 }
 
-/* Story 8.1 AC9: facilities and accessibility features as chips. Each chip is a real checkbox,
+/* Story 8.1 AC10: facilities and accessibility features as chips. Each chip is a real checkbox,
    stretched invisibly over the whole chip so the chip is what is clicked and focused. A ticked
    chip takes the selected look of .pill[aria-pressed='true'] and gains a tick. */
 .choice-chips {

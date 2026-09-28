@@ -72,17 +72,17 @@ class InvalidDateRange(ValueError):
 
 END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 
-# Story 8.1 AC7: why a search is refused.
+# Story 8.1 AC8: why a search is refused.
 SEARCH_NEEDS_BOTH_ENDS_MESSAGE = "Choose both a start and an end, or neither."
 SEARCH_IN_THE_PAST_MESSAGE = "Searches cannot start in the past."
 CAPACITY_RANGE_BACKWARDS_MESSAGE = "Capacity to must not be below capacity from."
 
 
 class InvalidVenueSearch(ValueError):
-    """Story 8.1 AC7: the filters cannot be searched as they stand; the message says why."""
+    """Story 8.1 AC8: the filters cannot be searched as they stand; the message says why."""
 
 
-# Story 8.1 AC8: the filter groups a search can relax, and their names on the panel, in the
+# Story 8.1 AC9: the filter groups a search can relax, and their names on the panel, in the
 # order the panel shows them - which is also the order of equal suggestions.
 SEARCH_GROUP_LABELS = {
     "search": "Name or location",
@@ -93,12 +93,12 @@ SEARCH_GROUP_LABELS = {
     "accessibility": "Accessibility",
 }
 
-# Story 8.1 AC2: the bookings that take a venue out of a search - the hold's rule (s12.1), the
+# Story 8.1 AC3: the bookings that take a venue out of a search - the hold's rule (s12.1), the
 # same list as ex_venue_bookings_no_double_booking's WHERE since migration 010.
 _HOLDING_STATUSES = (BookingStatus.PENDING, BookingStatus.APPROVED)
 # Every event runs on Singapore time, which has no daylight saving (as in app/events/service.py).
 _SINGAPORE = timezone(timedelta(hours=8))
-# The escape character that makes a LIKE wildcard in the search text literal (story 8.1 AC2).
+# The escape character that makes a LIKE wildcard in the search text literal (story 8.1 AC3).
 _LIKE_ESCAPE = "\\"
 
 
@@ -202,12 +202,12 @@ def get_venue_calendar(
 
 # --- search (story 8.1, Sprint 2) --------------------------------------------------------
 def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
-    """Story 8.1 AC1/AC2: the venues matching every filter, by name - in service only, unless
-    ``include_withdrawn`` (AC13's Show withdrawn venues). With a period, only venues free for all
-    of it: not booked or held, not blocked, and not closed at those hours (AC2, AC6).
+    """Story 8.1 AC1/AC3: the venues matching every filter, by name - in service only, unless
+    ``include_withdrawn`` (AC12's Show withdrawn venues). With a period, only venues free for all
+    of it: not booked or held, not blocked, and not closed at those hours (AC3, AC7).
 
-    AC7 refuses a search that cannot be run (``InvalidVenueSearch``, ``UnknownReferenceCode``).
-    AC8: when nothing matches, ``relax`` names each filter group whose removal alone would give
+    AC8 refuses a search that cannot be run (``InvalidVenueSearch``, ``UnknownReferenceCode``).
+    AC9: when nothing matches, ``relax`` names each filter group whose removal alone would give
     results, with the count, largest first.
     """
     period = _search_period(query)
@@ -234,9 +234,9 @@ def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
 def find_blocking_unavailability(
     db: Session, venue_id: uuid.UUID, *, starts_at: datetime, ends_at: datetime
 ) -> VenueUnavailabilityPeriod | None:
-    """Story 8.1 AC2/AC12: the earliest unavailability period (if any) blocking ``venue_id`` during
-    part of ``starts_at``..``ends_at``. Half-open, as bookings are: a closure that only touches the
-    period does not block it (AC6)."""
+    """Story 8.1 AC3 and 12.1 AC14: the earliest unavailability period (if any) blocking
+    ``venue_id`` during part of ``starts_at``..``ends_at``. Half-open, as bookings are: a closure
+    that only touches the period does not block it (8.1 AC7, 12.1 AC6)."""
     return db.scalars(
         select(VenueUnavailabilityPeriod)
         .where(VenueUnavailabilityPeriod.venue_id == venue_id, _blocks_venue(starts_at, ends_at))
@@ -246,8 +246,9 @@ def find_blocking_unavailability(
 
 
 def closed_for(venue: Venue, *, starts_at: datetime, ends_at: datetime) -> bool:
-    """Story 8.1 AC2/AC12: whether ``venue``'s recorded opening hours leave out part of the
-    period's daily window. A venue with no recorded hours is never closed: no rule can apply."""
+    """Story 8.1 AC3 and 12.1 AC14: whether ``venue``'s recorded opening hours leave out part
+    of the period's daily window. A venue with no recorded hours is never closed: no rule can
+    apply."""
     if venue.operating_hours_start is None or venue.operating_hours_end is None:
         return False
     window = daily_window(starts_at, ends_at)
@@ -259,7 +260,7 @@ def closed_for(venue: Venue, *, starts_at: datetime, ends_at: datetime) -> bool:
 
 
 def daily_window(starts_at: datetime, ends_at: datetime) -> tuple[time, time] | None:
-    """Story 8.1 AC2: a period read as daily sessions, from its start time to its end time in
+    """Story 8.1 AC3: a period read as daily sessions, from its start time to its end time in
     Singapore time - the schema stores one continuous period, and reading a two-day event as
     continuous would close every venue overnight. None when the end time is not after the start
     time: the period passes midnight, which no daily opening hours can cover."""
@@ -268,7 +269,7 @@ def daily_window(starts_at: datetime, ends_at: datetime) -> tuple[time, time] | 
 
 
 def _search_period(query: VenueSearchQuery) -> tuple[datetime, datetime] | None:
-    """AC7: both ends or neither, the end after the start, and the start not in the past."""
+    """AC8: both ends or neither, the end after the start, and the start not in the past."""
     if query.starts_at is None and query.ends_at is None:
         return None
     if query.starts_at is None or query.ends_at is None:
@@ -298,9 +299,9 @@ def _search_groups(
     *,
     without: str | None = None,
 ) -> dict[str, list[ColumnElement[bool]]]:
-    """The SQL conditions of each filter group the query sets, leaving out ``without`` (AC8).
+    """The SQL conditions of each filter group the query sets, leaving out ``without`` (AC9).
 
-    AC5: with a layout, capacity is that layout's (``venue_layouts.layout_capacity``, or the
+    AC6: with a layout, capacity is that layout's (``venue_layouts.layout_capacity``, or the
     venue's own where it is NULL). Relaxing the layout compares the venue's capacity instead.
     """
     groups: dict[str, list[ColumnElement[bool]]] = {}
@@ -338,7 +339,7 @@ def _relax_hints(
     *,
     active: dict[str, list[ColumnElement[bool]]],
 ) -> list[RelaxHint]:
-    """AC8: for each filter group set, how many venues the search would find without it - one
+    """AC9: for each filter group set, how many venues the search would find without it - one
     count per group, six at most. Groups that would still find nothing are left out; the rest
     come largest first."""
     hints = []
@@ -359,7 +360,7 @@ def _count_venues(db: Session, conditions: Iterable[ColumnElement[bool]]) -> int
 def _capacity_fits(
     minimum: int | None, maximum: int | None, layout: str | None
 ) -> ColumnElement[bool]:
-    """AC5: the capacity range, both ends included, in ``layout`` when one is chosen."""
+    """AC6: the capacity range, both ends included, in ``layout`` when one is chosen."""
 
     def within(capacity: ColumnElement[int]) -> list[ColumnElement[bool]]:
         limits = []
@@ -384,7 +385,7 @@ def _capacity_fits(
 
 
 def _free_for(starts_at: datetime, ends_at: datetime) -> list[ColumnElement[bool]]:
-    """AC2: free for the whole period - not booked or held, not blocked, and not closed at those
+    """AC3: free for the whole period - not booked or held, not blocked, and not closed at those
     hours (``daily_window``). A venue with no recorded hours is kept."""
     held = (
         select(VenueBooking.id)
@@ -447,7 +448,7 @@ def _has_accessibility_feature(code: str) -> ColumnElement[bool]:
 
 
 def _escape_like(text: str) -> str:
-    """AC2: ``%`` and ``_`` in the search text match themselves, not any characters."""
+    """AC3: ``%`` and ``_`` in the search text match themselves, not any characters."""
     escape = _LIKE_ESCAPE
     return text.replace(escape, escape * 2).replace("%", f"{escape}%").replace("_", f"{escape}_")
 

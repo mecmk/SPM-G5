@@ -66,8 +66,8 @@ def list_venues(
 
 @router.get("/search", response_model=VenueSearchResult, dependencies=[CanRead])
 def search_venues(db: DbSession, query: Annotated[VenueSearchQuery, Query()]) -> VenueSearchResult:
-    """Story 8.1 AC2/AC4: the catalogue's filters, run on the server (AC11: any role that reads
-    venues). AC7: a search that cannot be run is refused with a sentence saying why. Declared
+    """Story 8.1 AC3/AC4: the catalogue's filters, run on the server for any role that reads
+    venues. AC8: a search that cannot be run is refused with a sentence saying why. Declared
     above ``/{venue_id}`` so the literal path is not read as a venue id."""
     try:
         return service.search_venues(db, query)

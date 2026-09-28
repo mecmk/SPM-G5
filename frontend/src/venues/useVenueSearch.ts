@@ -13,7 +13,7 @@ export interface VenueSearchState {
   clearFilters: () => void
 }
 
-/** Story 8.1 AC8: what removing each filter group the search suggests clears. */
+/** Story 8.1 AC9: what removing each filter group the search suggests clears. */
 export const RELAX_CHANGES: Record<RelaxFilter, Partial<VenueSearch>> = {
   search: { search: undefined },
   capacity: { capacity: undefined, capacityMax: undefined },
@@ -53,7 +53,7 @@ function currentVenueSearch(): VenueSearch {
 }
 
 /**
- * Story 8.1 AC4/AC10: the catalogue's filters live in the page address, so a search can be
+ * Story 8.1 AC4/AC11: the catalogue's filters live in the page address, so a search can be
  * bookmarked, survives a reload, and comes back with the Back button or a venue record's back
  * link. The page loads from the address; the filter panel writes to it.
  */

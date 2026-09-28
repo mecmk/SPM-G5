@@ -241,8 +241,8 @@ class VenueOut(VenueSummary):
 
 # --- search (story 8.1, Sprint 2) --------------------------------------------------------
 class VenueSearchQuery(BaseModel):
-    """Story 8.1 AC2/AC4: the catalogue's filters, as ``GET /venues/search`` reads them from the
-    query string. Every field is optional; the service checks how they combine (AC7)."""
+    """Story 8.1 AC3/AC4: the catalogue's filters, as ``GET /venues/search`` reads them from the
+    query string. Every field is optional; the service checks how they combine (AC8)."""
 
     search: str | None = None
     # Plain int, not PositiveWholeNumber: a query string only carries text, so "50" must convert.
@@ -257,7 +257,7 @@ class VenueSearchQuery(BaseModel):
 
 
 class VenueSearchHit(VenueSummary):
-    """Story 8.1 AC1/AC2: one venue a search found. Its opening hours let the catalogue say they
+    """Story 8.1 AC1/AC3: one venue a search found. Its opening hours let the catalogue say they
     are not recorded when a period is searched, since such a venue is kept rather than refused."""
 
     operating_hours_start: time | None
@@ -265,7 +265,7 @@ class VenueSearchHit(VenueSummary):
 
 
 class RelaxHint(BaseModel):
-    """Story 8.1 AC8: a filter group whose removal alone would give results, and how many."""
+    """Story 8.1 AC9: a filter group whose removal alone would give results, and how many."""
 
     filter: str
     label: str
@@ -275,7 +275,7 @@ class RelaxHint(BaseModel):
 class VenueSearchResult(BaseModel):
     """Story 8.1: what ``GET /venues/search`` answers. ``total`` counts every venue the search
     looked through (those in service, and withdrawn ones when asked for), for "Showing N of M
-    venues"; ``relax`` is filled only when nothing matched (AC8)."""
+    venues"; ``relax`` is filled only when nothing matched (AC9)."""
 
     venues: list[VenueSearchHit]
     total: int

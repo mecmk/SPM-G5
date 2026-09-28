@@ -32,7 +32,7 @@ const STATUS_LABELS: Record<Venue['status'], string> = {
 const NOT_RECORDED = 'Not recorded'
 
 /**
- * Story 8.1 AC2: a venue's full record, opened from the catalogue. Story 8.2 covers the display
+ * Story 8.1 AC1: a venue's full record, opened from the catalogue. Story 8.2 covers the display
  * rules for these characteristics in more depth (unknown vs. absent, readable by Event
  * Coordinators and Venue Staff) - the fields already come back from `getVenue`, so this page
  * shows them all now rather than in two passes.

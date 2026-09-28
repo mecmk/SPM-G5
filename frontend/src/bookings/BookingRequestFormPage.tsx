@@ -50,7 +50,7 @@ interface RequestSubject {
  *
  * The address also carries the catalogue's own query, so the back link returns to the same search.
  *
- * Story 8.1 AC12: the venue may have stopped being available since the search. The backend
+ * Story 12.1 AC14: the venue may have stopped being available since the search. The backend
  * re-checks and refuses with its reason, and the step then offers Back to the results: the same
  * search, which runs again, so the venue has gone from it.
  */

@@ -75,10 +75,10 @@ def create_booking_request(
         # 12.1 AC3/AC12/AC14: the venue is already booked or held for part of the period.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueBlocked as exc:
-        # 8.1 AC12: a recorded closure covers part of the period.
+        # 12.1 AC14: a recorded closure covers part of the period.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
-        # 8.1 AC12: the venue is not open at those hours.
+        # 12.1 AC14: the venue is not open at those hours.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)
 

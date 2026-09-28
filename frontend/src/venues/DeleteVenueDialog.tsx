@@ -13,7 +13,7 @@ export interface DeleteVenueDialogProps {
 }
 
 /**
- * Story 8.1 AC13 (f8.1.1): Venue Staff delete a venue from its catalogue card, after confirming
+ * Story 8.1 AC12 (f8.1.1): Venue Staff delete a venue from its catalogue card, after confirming
  * (delete itself: team decision, 17 Sep 2026). A refusal, such as a venue with bookings or one
  * already deleted, is shown in the dialog with the backend's reason, and nothing is removed.
  */

@@ -13,7 +13,7 @@ export function venuePath(venueId: string): string {
   return VENUE_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
 
-// f12.1.1 (story 12.1 AC15) and story 8.1 AC3/AC4: the venue catalogue's filters in the page
+// f12.1.1 (story 12.1 AC15) and story 8.1 AC4: the venue catalogue's filters in the page
 // address. The event page's Find a venue writes them and 8.1's filter panel reads and writes them,
 // so both use these names. `event` names the event a venue is being found for. `search`,
 // `capacity_max` and `withdrawn` are the panel's own (s8.1); Find a venue never sets them.
@@ -43,7 +43,7 @@ export interface VenueSearch {
   layout?: string
   facilities?: readonly string[]
   accessibilityFeatures?: readonly string[]
-  /** Story 8.1 AC13: withdrawn venues listed too, for Venue Staff. */
+  /** Story 8.1 AC12: withdrawn venues listed too, for Venue Staff. */
   includeWithdrawn?: boolean
 }
 
@@ -97,7 +97,7 @@ export function venueSearchPath(search: VenueSearch): string {
   return query === '' ? VENUE_CATALOGUE_PATH : `${VENUE_CATALOGUE_PATH}?${query}`
 }
 
-// Story 8.3: venue records. f8.1.1 (8.1 AC13) removed the Manage venues page - Venue Staff manage
+// Story 8.3: venue records. f8.1.1 (8.1 AC12) removed the Manage venues page - Venue Staff manage
 // venues from the catalogue - so this address is kept only to redirect old links there.
 export const VENUES_MANAGE_PATH = '/venues/manage'
 export const VENUE_NEW_PATH = '/venues/new'

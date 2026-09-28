@@ -151,13 +151,13 @@ export interface VenueSearchQuery {
 }
 
 /** Mirrors `VenueSearchHit`: a venue the search found. Its hours are "HH:MM:SS", or null when
- * not recorded - such a venue is kept when a period is searched (story 8.1 AC2). */
+ * not recorded - such a venue is kept when a period is searched (story 8.1 AC3). */
 export interface VenueSearchHit extends VenueSummary {
   operating_hours_start: string | null
   operating_hours_end: string | null
 }
 
-/** The filter groups a search can relax (story 8.1 AC8); `SEARCH_GROUP_LABELS` in
+/** The filter groups a search can relax (story 8.1 AC9); `SEARCH_GROUP_LABELS` in
  * backend/app/venues/service.py. */
 export type RelaxFilter =
   'search' | 'capacity' | 'dates' | 'layout' | 'facilities' | 'accessibility'
@@ -177,8 +177,8 @@ export interface VenueSearchResult {
   relax: RelaxHint[]
 }
 
-/** Story 8.1 AC2/AC4: the catalogue's search, run on the server. A search that cannot be run
- * (AC7) is refused with a 422 whose sentence says why. */
+/** Story 8.1 AC3/AC4: the catalogue's search, run on the server. A search that cannot be run
+ * (AC8) is refused with a 422 whose sentence says why. */
 export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult> {
   const params = new URLSearchParams()
   if (query.search) params.set('search', query.search)

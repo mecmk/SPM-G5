@@ -107,7 +107,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Venues',
     items: [
-      // f8.1.1 (8.1 AC13): one catalogue for every role that reads venues. Venue Staff also
+      // f8.1.1 (8.1 AC12): one catalogue for every role that reads venues. Venue Staff also
       // create, update and remove venues there, so there is no separate "Manage venues" section.
       {
         to: VENUE_CATALOGUE_PATH,

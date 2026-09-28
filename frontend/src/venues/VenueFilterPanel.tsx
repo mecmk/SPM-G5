@@ -70,9 +70,9 @@ interface Period {
 const DEFAULT_PERIOD_MS = 60 * 60 * 1000
 
 /**
- * Story 8.1 AC2: a new Capacity from. Raised past Capacity to, it takes Capacity to up to match,
+ * Story 8.1 AC3: a new Capacity from. Raised past Capacity to, it takes Capacity to up to match,
  * so the range does not run backwards. Lowering Capacity to never moves Capacity from - "200" is
- * typed through "2" - so AC7's refusal stays as the failsafe for a Capacity to typed below it.
+ * typed through "2" - so AC8's refusal stays as the failsafe for a Capacity to typed below it.
  */
 function withCapacityFrom(range: CapacityRange, min: string): CapacityRange {
   const newMin = wholeNumberOrUndefined(min)
@@ -87,9 +87,9 @@ function inputToMs(inputValue: string): number | undefined {
 }
 
 /**
- * Story 8.1 AC2: a new From. Moved to or past To, it takes To along and the period keeps its
+ * Story 8.1 AC3: a new From. Moved to or past To, it takes To along and the period keeps its
  * length - an hour if it had none - the way a calendar moves an event's end with its start. Moving
- * To never moves From, so AC7's refusal stays as the failsafe for a To set before From.
+ * To never moves From, so AC8's refusal stays as the failsafe for a To set before From.
  */
 function withFrom(period: Period, from: string): Period {
   const start = inputToMs(from)
@@ -119,7 +119,7 @@ interface FilterSectionProps {
 
 /**
  * One titled group of the panel, named by its title for assistive technology. The titles are the
- * group names the empty state's "Try removing" suggestions use (AC8), so the two can be matched.
+ * group names the empty state's "Try removing" suggestions use (AC9), so the two can be matched.
  */
 function FilterSection({ title, tickedCount = 0, children }: FilterSectionProps) {
   const titleId = useId()
@@ -146,7 +146,7 @@ interface FilterChipsProps {
 }
 
 /**
- * Story 8.1 AC9: ticks shown as chips, every ticked one required. A group packs into a few lines
+ * Story 8.1 AC10: ticks shown as chips, every ticked one required. A group packs into a few lines
  * rather than one line per choice, and each chip is a real checkbox, so it still works from the
  * keyboard.
  */
@@ -173,21 +173,21 @@ export interface VenueFilterPanelProps {
   search: VenueSearch
   onChange: (change: Partial<VenueSearch>) => void
   onClear: () => void
-  /** Story 8.1 AC13: Venue Staff may list withdrawn venues too. */
+  /** Story 8.1 AC12: Venue Staff may list withdrawn venues too. */
   canShowWithdrawn: boolean
-  /** Why the latest search could not be run (AC7), shown beside the panel. */
+  /** Why the latest search could not be run (AC8), shown beside the panel. */
   error: string | null
 }
 
 /**
- * Story 8.1 AC2 (10.1 merged in, built as s8.1): the catalogue's one filter panel - name or
+ * Story 8.1 AC3 (10.1 merged in, built as s8.1): the catalogue's one filter panel - name or
  * location, a capacity range, a period, a layout, facilities and accessibility features, every
- * ticked one required (AC9). It shows the search the page address holds and writes changes back
+ * ticked one required (AC10). It shows the search the page address holds and writes changes back
  * to it (AC4): typed values once typing pauses, choices at once. Opened from an event's Find a
- * venue, it therefore starts filled in from the event (AC3).
+ * venue, it therefore starts filled in from the event (AC4).
  *
  * The dates go into the search only once both are filled in; a search the server cannot run says
- * why here and leaves the results as they were (AC7).
+ * why here and leaves the results as they were (AC8).
  *
  * Each range - capacity from and to, the dates from and to - sits together as one filter and goes
  * into the address as one change, so raising its lower end past the upper one, which takes the
