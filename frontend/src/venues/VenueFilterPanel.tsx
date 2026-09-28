@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { fetchVenueReferenceData, type ReferenceItem } from '../api/venues'
 import { Icon } from '../components/Icon'
 import type { VenueSearch } from '../routes'
+import { inputToInstant, instantToInput } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { countFilters } from './useVenueSearch'
 
@@ -51,6 +52,53 @@ function textOrUndefined(value: string): string | undefined {
 function wholeNumberOrUndefined(value: string): number | undefined {
   const parsed = Number(value)
   return value.trim() === '' || !Number.isInteger(parsed) ? undefined : parsed
+}
+
+/** A capacity range as the panel shows it: what is typed in each box. */
+interface CapacityRange {
+  min: string
+  max: string
+}
+
+/** A period as the panel shows it: each end a Singapore `datetime-local` value, or ''. */
+interface Period {
+  from: string
+  to: string
+}
+
+/** How long a period moved by its start lasts when it had no length of its own to keep. */
+const DEFAULT_PERIOD_MS = 60 * 60 * 1000
+
+/**
+ * Story 8.1 AC2: a new Capacity from. Raised past Capacity to, it takes Capacity to up to match,
+ * so the range does not run backwards. Lowering Capacity to never moves Capacity from - "200" is
+ * typed through "2" - so AC7's refusal stays as the failsafe for a Capacity to typed below it.
+ */
+function withCapacityFrom(range: CapacityRange, min: string): CapacityRange {
+  const newMin = wholeNumberOrUndefined(min)
+  const max = wholeNumberOrUndefined(range.max)
+  const isPastMax = newMin !== undefined && max !== undefined && newMin > max
+  return { min, max: isPastMax ? min : range.max }
+}
+
+function inputToMs(inputValue: string): number | undefined {
+  const ms = Date.parse(inputToInstant(inputValue))
+  return Number.isNaN(ms) ? undefined : ms
+}
+
+/**
+ * Story 8.1 AC2: a new From. Moved to or past To, it takes To along and the period keeps its
+ * length - an hour if it had none - the way a calendar moves an event's end with its start. Moving
+ * To never moves From, so AC7's refusal stays as the failsafe for a To set before From.
+ */
+function withFrom(period: Period, from: string): Period {
+  const start = inputToMs(from)
+  const end = inputToMs(period.to)
+  if (start === undefined || end === undefined || end > start) return { from, to: period.to }
+  const earlierStart = inputToMs(period.from)
+  const length =
+    earlierStart !== undefined && end > earlierStart ? end - earlierStart : DEFAULT_PERIOD_MS
+  return { from, to: instantToInput(new Date(start + length).toISOString()) }
 }
 
 function toggled(codes: readonly string[], code: string, isOn: boolean): string[] {
@@ -141,8 +189,9 @@ export interface VenueFilterPanelProps {
  * The dates go into the search only once both are filled in; a search the server cannot run says
  * why here and leaves the results as they were (AC7).
  *
- * Each range - capacity from and to, the dates from and to - sits together as one filter, and the
- * header counts the filters in use. On a phone the panel starts folded under that header, so the
+ * Each range - capacity from and to, the dates from and to - sits together as one filter and goes
+ * into the address as one change, so raising its lower end past the upper one, which takes the
+ * upper one along, never sends a backwards search. The header counts the filters in use. On a phone the panel starts folded under that header, so the
  * venues come first.
  */
 export function VenueFilterPanel({
@@ -161,30 +210,25 @@ export function VenueFilterPanel({
     useCallback((value: string) => onChange({ search: textOrUndefined(value) }), [onChange]),
     TYPING_PAUSE_MS,
   )
-  const capacity = useFilterValue(
-    search.capacity?.toString() ?? '',
+  const capacity = useFilterValue<CapacityRange>(
+    { min: search.capacity?.toString() ?? '', max: search.capacityMax?.toString() ?? '' },
     useCallback(
-      (value: string) => onChange({ capacity: wholeNumberOrUndefined(value) }),
+      (range: CapacityRange) =>
+        onChange({
+          capacity: wholeNumberOrUndefined(range.min),
+          capacityMax: wholeNumberOrUndefined(range.max),
+        }),
       [onChange],
     ),
     TYPING_PAUSE_MS,
   )
-  const capacityMax = useFilterValue(
-    search.capacityMax?.toString() ?? '',
+  const period = useFilterValue<Period>(
+    { from: search.from ?? '', to: search.to ?? '' },
     useCallback(
-      (value: string) => onChange({ capacityMax: wholeNumberOrUndefined(value) }),
+      (dates: Period) =>
+        onChange({ from: textOrUndefined(dates.from), to: textOrUndefined(dates.to) }),
       [onChange],
     ),
-    TYPING_PAUSE_MS,
-  )
-  const from = useFilterValue(
-    search.from ?? '',
-    useCallback((value: string) => onChange({ from: textOrUndefined(value) }), [onChange]),
-    TYPING_PAUSE_MS,
-  )
-  const to = useFilterValue(
-    search.to ?? '',
-    useCallback((value: string) => onChange({ to: textOrUndefined(value) }), [onChange]),
     TYPING_PAUSE_MS,
   )
   const layout = useFilterValue(
@@ -276,8 +320,10 @@ export function VenueFilterPanel({
                 step={1}
                 inputMode="numeric"
                 placeholder="Min"
-                value={capacity.value}
-                onChange={(e) => capacity.setValue(e.target.value)}
+                value={capacity.value.min}
+                onChange={(e) =>
+                  capacity.setValue(withCapacityFrom(capacity.value, e.target.value))
+                }
               />
             </label>
             <span className="range-fields-dash" aria-hidden="true">
@@ -291,8 +337,8 @@ export function VenueFilterPanel({
                 step={1}
                 inputMode="numeric"
                 placeholder="Max"
-                value={capacityMax.value}
-                onChange={(e) => capacityMax.setValue(e.target.value)}
+                value={capacity.value.max}
+                onChange={(e) => capacity.setValue({ ...capacity.value, max: e.target.value })}
               />
             </label>
           </div>
@@ -303,16 +349,16 @@ export function VenueFilterPanel({
               From
               <input
                 type="datetime-local"
-                value={from.value}
-                onChange={(e) => from.setValue(e.target.value)}
+                value={period.value.from}
+                onChange={(e) => period.setValue(withFrom(period.value, e.target.value))}
               />
             </label>
             <label>
               To
               <input
                 type="datetime-local"
-                value={to.value}
-                onChange={(e) => to.setValue(e.target.value)}
+                value={period.value.to}
+                onChange={(e) => period.setValue({ ...period.value, to: e.target.value })}
               />
             </label>
           </div>
