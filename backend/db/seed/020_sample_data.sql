@@ -146,7 +146,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..09: in planning and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-14 09:00+08', '2026-09-16 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..10: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (queue card) - no other test/assertion reads this row, since the
     -- e2e run's fullyParallel database is shared and approving it would break story 13.1's
@@ -279,7 +279,8 @@ ON CONFLICT (id) DO NOTHING;
 -- again dedicated to the story 13.2.1 reject e2e test (see their own notes below). Never
 -- Boardroom 3.4 - test_venue_records.py::test_deleting_a_venue_removes_its_characteristics
 -- deletes it on the assumption that it carries no bookings. ``created_at`` is given an explicit,
--- staggered value per row (each before its own ``starts_at``) rather than left to the column's
+-- staggered value per row (each after its event was approved, as story 12.1 AC1 requires, and
+-- before its own ``starts_at``) rather than left to the column's
 -- ``now()`` default, so the queue's "Requested" timestamp (story 13.1 AC2) doesn't show every
 -- seed row landing in the same instant a bulk insert would otherwise give them.
 -- ---------------------------------------------------------------------
@@ -287,13 +288,13 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at) VALUES
     ('44444444-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 09:00+08', '2026-11-25 18:00+08', 60, 60,
-     350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08', NULL, '2026-08-15 09:12+08'),
+     350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08', NULL, '2026-09-03 16:00+08'),
     ('44444444-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 13:00+08', '2026-11-25 18:00+08', 30, 15,
-     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL, '2026-09-02 14:47+08'),
+     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL, '2026-09-03 16:47+08'),
     ('44444444-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2026-12-03 09:00+08', '2026-12-03 17:00+08', 45, 45,
-     180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL, '2026-09-10 11:03+08'),
+     180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL, '2026-09-12 11:03+08'),
     ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
      300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL, NULL, '2026-09-18 16:30+08'),
