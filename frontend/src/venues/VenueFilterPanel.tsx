@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { fetchVenueReferenceData, type ReferenceItem } from '../api/venues'
 import { Icon } from '../components/Icon'
-import { capacityLimit, type VenueSearch } from '../routes'
+import { capacityLimit, searchText, type VenueSearch } from '../routes'
 import { inputToInstant, instantToInput } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { countFilters } from './useVenueSearch'
@@ -202,7 +202,7 @@ export function VenueFilterPanel({
 
   const name = useFilterValue(
     search.search ?? '',
-    useCallback((value: string) => onChange({ search: textOrUndefined(value) }), [onChange]),
+    useCallback((value: string) => onChange({ search: searchText(value) }), [onChange]),
     TYPING_PAUSE_MS,
   )
   const capacity = useFilterValue<CapacityRange>(

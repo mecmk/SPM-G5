@@ -74,7 +74,7 @@ export function venueSearchParams(search: VenueSearch): URLSearchParams {
 export function readVenueSearch(params: URLSearchParams): VenueSearch {
   return {
     eventId: params.get(VENUE_SEARCH_PARAMS.event) ?? undefined,
-    search: params.get(VENUE_SEARCH_PARAMS.search) ?? undefined,
+    search: searchText(params.get(VENUE_SEARCH_PARAMS.search)),
     capacity: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacity)),
     capacityMax: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacityMax)),
     from: params.get(VENUE_SEARCH_PARAMS.from) ?? undefined,
@@ -84,6 +84,15 @@ export function readVenueSearch(params: URLSearchParams): VenueSearch {
     accessibilityFeatures: params.getAll(VENUE_SEARCH_PARAMS.accessibility),
     includeWithdrawn: params.get(VENUE_SEARCH_PARAMS.withdrawn) === 'true',
   }
+}
+
+/**
+ * Story 8.1 AC3: name or location text, typed or in the address. Only spaces is no filter: the
+ * server ignores it, so the panel must not count it as one either. Other text is kept as typed,
+ * so a pause after "tower " does not lose the space before "b".
+ */
+export function searchText(value: string | null): string | undefined {
+  return value === null || value.trim() === '' ? undefined : value
 }
 
 /**
