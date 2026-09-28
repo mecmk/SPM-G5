@@ -35,6 +35,7 @@ from app.venues.models import (
 )
 from app.venues.schemas import (
     BOOKING_REASON,
+    HELD_REASON,
     RelaxHint,
     VenueCreate,
     VenueSearchHit,
@@ -101,6 +102,15 @@ _SINGAPORE = timezone(timedelta(hours=8))
 # The escape character that makes a LIKE wildcard in the search text literal (story 8.1 AC3).
 _LIKE_ESCAPE = "\\"
 
+# Story 9.1 AC2: how each of those same statuses (``_HOLDING_STATUSES``, which the calendar reads
+# too, so it and the search cannot disagree about what occupies a venue) is shown on the
+# calendar: an approved booking is confirmed, a pending request soft-locks the venue (12.1 AC3),
+# so it is held. A status added to ``_HOLDING_STATUSES`` must be added here - the lookup fails
+# loudly rather than show it as the wrong thing.
+_CALENDAR_BOOKING_REASONS = {
+    BookingStatus.APPROVED: BOOKING_REASON,
+    BookingStatus.PENDING: HELD_REASON,
+}
 
 # Name PostgreSQL gives the only foreign key that blocks deleting a venue.
 _BOOKINGS_VENUE_FOREIGN_KEY = "venue_bookings_venue_id_fkey"
@@ -151,32 +161,45 @@ def get_venue(db: Session, venue_id: uuid.UUID) -> Venue:
 def get_venue_calendar(
     db: Session, venue_id: uuid.UUID, *, starts_at: datetime, ends_at: datetime
 ) -> list[VenueUnavailableWindowOut]:
-    """Story 9.1 AC1/AC2: every approved booking and unavailability period overlapping the
-    range, as a flat list of periods (not pre-expanded per day). Overlap mirrors the database's
-    own half-open exclusion constraint on venue_bookings
+    """Story 9.1 AC1/AC2: every approved booking, pending request (held) and unavailability
+    period overlapping the range, as a flat list of periods (not pre-expanded per day). AC3: each
+    booking carries its event's name; AC5: and the event's own period beside the held one.
+    Overlap mirrors the database's own half-open exclusion constraint on venue_bookings
     (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not a
     conflict. venue_unavailability_periods has no such DB constraint, but is checked the same
-    way for consistency.
+    way for consistency. AC11: a booking that no longer holds the venue is not read.
     """
     get_venue(db, venue_id)
     if ends_at <= starts_at:
         raise InvalidDateRange(END_NOT_AFTER_START_MESSAGE)
 
     bookings = db.execute(
-        select(VenueBooking.held_from, VenueBooking.held_until, Event.name)
+        select(
+            VenueBooking.held_from,
+            VenueBooking.held_until,
+            VenueBooking.starts_at,
+            VenueBooking.ends_at,
+            VenueBooking.status,
+            Event.name.label("event_name"),
+        )
         .join(Event, Event.id == VenueBooking.event_id)
         .where(
             VenueBooking.venue_id == venue_id,
-            VenueBooking.status == BookingStatus.APPROVED,
+            VenueBooking.status.in_(_HOLDING_STATUSES),
             VenueBooking.held_from < ends_at,
             VenueBooking.held_until > starts_at,
         )
     ).all()
     windows = [
         VenueUnavailableWindowOut(
-            starts_at=held_from, ends_at=held_until, reason=BOOKING_REASON, label=event_name
+            starts_at=booking.held_from,
+            ends_at=booking.held_until,
+            event_starts_at=booking.starts_at,
+            event_ends_at=booking.ends_at,
+            reason=_CALENDAR_BOOKING_REASONS[booking.status],
+            label=booking.event_name,
         )
-        for held_from, held_until, event_name in bookings
+        for booking in bookings
     ]
 
     closures = db.scalars(
@@ -190,6 +213,8 @@ def get_venue_calendar(
         VenueUnavailableWindowOut(
             starts_at=period.starts_at,
             ends_at=period.ends_at,
+            event_starts_at=None,
+            event_ends_at=None,
             reason=period.reason,
             label=period.notes or period.reason,
         )
