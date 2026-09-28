@@ -11,7 +11,9 @@
  * AC1 the queue opens on Pending, and All / Approved / Rejected tabs show the rest, each with
  *     how many requests it holds (the same tab pattern as the coordinator's Events inbox, story
  *     6.1). Which statuses each tab returns, and the counts, are backend cases.
- * AC2/AC3 (when a request was raised and decided) are backend cases.
+ * AC2/AC3 (when a request was raised and decided) are backend cases, except how a card labels
+ *     a request nobody on staff decided (CANCELLED / WITHDRAWN): "Closed at" and "Note" rather
+ *     than "Decided at" and "Reason".
  * AC4 the queue shows ten requests a page, with Previous / numbered pages / Next. The seed holds
  *     fewer than ten per tab, so the paging test fakes a longer queue; the limit/offset rules
  *     themselves are backend cases.
@@ -173,6 +175,58 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await expect(pendingCard(page, '00000002')).toBeVisible()
   // Fewer than ten requests: one page, so no page controls.
   await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
+})
+
+test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
+  page,
+}) => {
+  // Migration 010 cancelled some pending requests itself, stamping decided_at and a system note.
+  // The seed holds no cancelled booking, so fake one next to a staff-approved one.
+  const approved = {
+    ...fakeQueueEntry(0),
+    event_name: 'Staff Approved Request',
+    status: 'APPROVED',
+    decided_at: '2026-09-21T02:00:00Z',
+  }
+  const cancelled = {
+    ...fakeQueueEntry(1),
+    event_name: 'System Cancelled Request',
+    status: 'CANCELLED',
+    decided_at: '2026-09-22T02:00:00Z',
+    decision_reason: 'Cancelled when pending requests began to hold their venue.',
+  }
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [approved, cancelled],
+          total: 2,
+          counts: { pending: 0, approved: 1, rejected: 0, withdrawn: 0, cancelled: 1 },
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await page.getByRole('tab', { name: /^All/ }).click()
+
+  const approvedCard = page.getByRole('listitem').filter({ hasText: 'Staff Approved Request' })
+  await expect(approvedCard.getByText('Decided at', { exact: true })).toBeVisible()
+
+  const cancelledCard = page.getByRole('listitem').filter({ hasText: 'System Cancelled Request' })
+  await expect(cancelledCard.getByText('Closed at', { exact: true })).toBeVisible()
+  await expect(cancelledCard.getByText('Note', { exact: true })).toBeVisible()
+  await expect(cancelledCard.getByText('Decided at', { exact: true })).toHaveCount(0)
+  await expect(cancelledCard.getByText('Reason', { exact: true })).toHaveCount(0)
 })
 
 test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', async ({ page }) => {

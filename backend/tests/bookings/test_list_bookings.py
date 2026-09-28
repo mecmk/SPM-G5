@@ -166,16 +166,20 @@ def test_counts_cover_every_status_whatever_tab_or_page_is_asked_for(venue_staff
 # --- 13.1.2 AC2: when the request was raised ---------------------------------------------------
 @pytest.mark.story("13.1.2", ac=2)
 def test_entry_shows_when_the_request_was_raised(venue_staff_client, db):
+    """An explicit ``created_at``: left to its ``now()`` default it would equal ``updated_at``
+    (same transaction), and this test could not tell the two columns apart."""
+    raised_at = datetime(2026, 9, 1, 3, 15, tzinfo=timezone.utc)
     booking = make_booking(
         db,
         venue_id=Venues.BOARDROOM,
+        created_at=raised_at,
         starts_at=datetime(2027, 2, 4, 9, 0, tzinfo=timezone.utc),
         ends_at=datetime(2027, 2, 4, 11, 0, tzinfo=timezone.utc),
     )
 
     entry = _entry(venue_staff_client, BOOKINGS_PATH, booking.id)
 
-    assert datetime.fromisoformat(entry["created_at"]) == booking.created_at
+    assert datetime.fromisoformat(entry["created_at"]) == raised_at
 
 
 # --- 13.1.2 AC3: when and why a request was decided --------------------------------------------
