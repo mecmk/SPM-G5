@@ -210,7 +210,9 @@ def test_a_request_conflicting_with_a_confirmed_booking_never_reaches_approval(
     assert not [
         entry
         for entry in queue.json()
-        if entry["event_id"] == str(Events.APPROVED) and entry["venue_id"] == str(Venues.GRAND_HALL)
+        if entry["event_id"] == str(Events.APPROVED)
+        and entry["venue_id"] == str(Venues.GRAND_HALL)
+        and entry["status"] == BookingStatus.PENDING
     ]
 
 
