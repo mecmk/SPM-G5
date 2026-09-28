@@ -1,42 +1,78 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import {
   approveBooking,
   listBookingRequests,
   rejectBooking,
+  type Booking,
+  type BookingQueue,
   type BookingQueueEntry,
 } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { Pagination } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { bookingRequestPath } from '../routes'
 import {
-  bookingStatusTab,
+  bookingTabCount,
+  bookingTabStatus,
   BOOKING_STATUS_TABS,
+  withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
 import { formatDate, formatDateTime, formatTime } from '../shared/format'
+import { useLoaded } from '../shared/useLoaded'
 
 const SHORT_ID_LENGTH = 8
 const PENDING_STATUS = 'PENDING'
+/** Story 13.1.2 AC4: requests per numbered page. */
+const QUEUE_PAGE_SIZE = 5
 
 function requirementsText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No requirements stated.'
 }
 
+/** Load the `page`th page (1-based) of a tab. */
+function loadQueuePage(tab: BookingStatusTabKey, page: number): Promise<BookingQueue> {
+  return listBookingRequests(bookingTabStatus(tab), (page - 1) * QUEUE_PAGE_SIZE, QUEUE_PAGE_SIZE)
+}
+
+/** Under All, `queue` once `decided` - the request it names - was decided on this page: the
+ * entry stays where it is, showing the outcome, and the counts move it to its new status. */
+function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueue {
+  return {
+    items: queue.items.map((entry) =>
+      entry.id === decided.id
+        ? {
+            ...entry,
+            status: decided.status,
+            decision_reason: decided.decision_reason,
+            decided_at: decided.decided_at,
+          }
+        : entry,
+    ),
+    total: queue.total,
+    counts: withBookingMoved(queue.counts, PENDING_STATUS, decided.status),
+  }
+}
+
 /**
  * Story 13.1 - the venue staff booking requests queue.
- * AC1: every request, for the signed-in Venue Staff member to decide or review.
- * AC2: each entry shows the event name, requested venue, period, expected attendance, stated
- * requirements and when the coordinator raised the request.
- * AC3: decided requests are filterable through the All / Pending / Approved / Rejected tabs,
- * matching the coordinator's Events inbox tab pattern (story 6.1), and carry when and why they
- * were decided.
+ * AC1: every pending request, for the signed-in Venue Staff member to decide.
+ * AC2: each entry shows the event name, requested venue, period, expected attendance and stated
+ * requirements.
+ * AC3: decided requests do not appear in the pending queue.
+ *
+ * Story 13.1.2 AC1: the page opens on the Pending tab, so it reads as a queue; All / Approved /
+ * Rejected show the rest, matching the coordinator's Events inbox tab pattern (story 6.1). Each
+ * tab asks the backend for its own status, and every tab label carries the backend's count.
+ * AC2: when the coordinator raised the request. AC3: when and why a decided one was decided.
+ * AC4: ten requests a page, with Previous / numbered pages / Next.
  *
  * Story 13.2 AC1: an Approve action on each pending card, so a request that needs no closer
  * look can be decided without opening its detail page.
@@ -44,8 +80,11 @@ function requirementsText(notes: string | null): string {
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  */
 export function BookingRequestsPage() {
-  const [entries, setEntries] = useState<BookingQueueEntry[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<BookingStatusTabKey>('PENDING')
+  const [page, setPage] = useState(1)
+  const loadPage = useCallback(() => loadQueuePage(tab, page), [tab, page])
+  const { data: queue, error, isLoading, setData: setQueue } = useLoaded(loadPage)
+  const [reloadError, setReloadError] = useState<string | null>(null)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -53,38 +92,50 @@ export function BookingRequestsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
-  const [tab, setTab] = useState<BookingStatusTabKey>('ALL')
-
-  useEffect(() => {
-    let cancelled = false
-    listBookingRequests()
-      .then((data) => {
-        if (!cancelled) setEntries(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const tabs = useMemo(
     () =>
       BOOKING_STATUS_TABS.map((item) => ({
         key: item.key,
-        label: `${item.label} (${
-          item.key === 'ALL'
-            ? (entries?.length ?? 0)
-            : (entries ?? []).filter((entry) => bookingStatusTab(entry.status) === item.key).length
-        })`,
+        label: `${item.label} (${queue ? bookingTabCount(item.key, queue.counts) : 0})`,
       })),
-    [entries],
+    [queue],
   )
-  const shownEntries = useMemo(() => {
-    const items = entries ?? []
-    return tab === 'ALL' ? items : items.filter((entry) => bookingStatusTab(entry.status) === tab)
-  }, [entries, tab])
+
+  const pageCount = queue ? Math.ceil(queue.total / QUEUE_PAGE_SIZE) : 0
+  const firstShown = (page - 1) * QUEUE_PAGE_SIZE + 1
+
+  function changeTab(next: BookingStatusTabKey) {
+    setReloadError(null)
+    setTab(next)
+    setPage(1)
+  }
+
+  function changePage(next: number) {
+    setReloadError(null)
+    setPage(next)
+  }
+
+  /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
+   * belongs, so the page is fetched again and the next request moves up - or, if it was the
+   * only one on the last page, the page before is shown instead. */
+  async function recordDecision(decided: Booking) {
+    if (tab === 'ALL') {
+      setQueue((current) => current && withDecisionInPlace(current, decided))
+      return
+    }
+    setQueue(
+      (current) =>
+        current && { ...current, items: current.items.filter((entry) => entry.id !== decided.id) },
+    )
+    try {
+      const reloaded = await loadQueuePage(tab, page)
+      if (reloaded.items.length === 0 && page > 1) setPage(page - 1)
+      else setQueue(reloaded)
+    } catch (err) {
+      setReloadError(formatApiError(err))
+    }
+  }
 
   function askToApprove(entry: BookingQueueEntry) {
     setApproveError(null)
@@ -101,17 +152,9 @@ export function BookingRequestsPage() {
     setIsApproving(true)
     setApproveError(null)
     try {
-      const updated = await approveBooking(id, eventName)
-      setEntries(
-        (current) =>
-          current &&
-          current.map((entry) =>
-            entry.id === id
-              ? { ...entry, status: updated.status, decided_at: updated.decided_at }
-              : entry,
-          ),
-      )
+      const decided = await approveBooking(id, eventName)
       setPendingApprove(null)
+      await recordDecision(decided)
     } catch (err) {
       setApproveError(formatApiError(err))
     } finally {
@@ -140,22 +183,9 @@ export function BookingRequestsPage() {
     setIsRejecting(true)
     setRejectError(null)
     try {
-      const updated = await rejectBooking(id, eventName, reason)
-      setEntries(
-        (current) =>
-          current &&
-          current.map((entry) =>
-            entry.id === id
-              ? {
-                  ...entry,
-                  status: updated.status,
-                  decision_reason: updated.decision_reason,
-                  decided_at: updated.decided_at,
-                }
-              : entry,
-          ),
-      )
+      const decided = await rejectBooking(id, eventName, reason)
       setPendingReject(null)
+      await recordDecision(decided)
     } catch (err) {
       setRejectError(formatApiError(err))
     } finally {
@@ -167,7 +197,7 @@ export function BookingRequestsPage() {
     <div className="page page-wide">
       <PageHeader
         title="Booking Requests"
-        subtitle="Incoming venue booking requests awaiting your review."
+        subtitle="Venue booking requests to decide, and the decisions already made."
       />
 
       {error && (
@@ -175,23 +205,23 @@ export function BookingRequestsPage() {
           {error}
         </p>
       )}
-      {entries === null && !error && <LoadingState label="Loading booking requests…" />}
+      {isLoading && <LoadingState label="Loading booking requests…" />}
 
-      {entries !== null && (
+      {queue !== null && (
         <div className="stack">
-          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+          <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
 
-          {entries.length === 0 && (
-            <EmptyState>No requests waiting. You are up to date.</EmptyState>
+          {queue.items.length === 0 && (
+            <EmptyState>
+              {tab === PENDING_STATUS
+                ? 'No requests waiting. You are up to date.'
+                : 'No requests in this tab.'}
+            </EmptyState>
           )}
 
-          {entries.length > 0 && shownEntries.length === 0 && (
-            <EmptyState>No requests in this tab.</EmptyState>
-          )}
-
-          {shownEntries.length > 0 && (
+          {queue.items.length > 0 && (
             <ul className="stack">
-              {shownEntries.map((entry) => (
+              {queue.items.map((entry) => (
                 <li key={entry.id} className="card stack">
                   <div className="item-card-header">
                     <div className="cluster">
@@ -281,6 +311,20 @@ export function BookingRequestsPage() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {reloadError && (
+            <p role="alert" className="error">
+              {reloadError}
+            </p>
+          )}
+          {pageCount > 1 && (
+            <div className="pager-bar">
+              <p className="small muted">
+                Showing {firstShown}–{firstShown + queue.items.length - 1} of {queue.total} requests
+              </p>
+              <Pagination page={page} pageCount={pageCount} onChange={changePage} />
+            </div>
           )}
         </div>
       )}

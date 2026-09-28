@@ -131,7 +131,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         to: BOOKING_REQUESTS_PATH,
         label: 'Booking Requests',
-        description: 'Incoming venue booking requests awaiting your review.',
+        description: 'Venue booking requests to decide, and the decisions already made.',
         icon: 'calendar-check',
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
