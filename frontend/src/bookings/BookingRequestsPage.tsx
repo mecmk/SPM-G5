@@ -19,9 +19,11 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { bookingRequestPath } from '../routes'
 import {
+  bookingOutcomeLabels,
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  PENDING_BOOKING_STATUS,
   withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
@@ -29,9 +31,8 @@ import { formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 
 const SHORT_ID_LENGTH = 8
-const PENDING_STATUS = 'PENDING'
 /** Story 13.1.2 AC4: requests per numbered page. */
-const QUEUE_PAGE_SIZE = 5
+const QUEUE_PAGE_SIZE = 10
 
 function requirementsText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No requirements stated.'
@@ -57,7 +58,7 @@ function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueu
         : entry,
     ),
     total: queue.total,
-    counts: withBookingMoved(queue.counts, PENDING_STATUS, decided.status),
+    counts: withBookingMoved(queue.counts, PENDING_BOOKING_STATUS, decided.status),
   }
 }
 
@@ -213,7 +214,7 @@ export function BookingRequestsPage() {
 
           {queue.items.length === 0 && (
             <EmptyState>
-              {tab === PENDING_STATUS
+              {tab === PENDING_BOOKING_STATUS
                 ? 'No requests waiting. You are up to date.'
                 : 'No requests in this tab.'}
             </EmptyState>
@@ -273,20 +274,20 @@ export function BookingRequestsPage() {
 
                   {entry.decided_at !== null && (
                     <div className="subtle-block">
-                      <p className="fact-label">Decided at</p>
+                      <p className="fact-label">{bookingOutcomeLabels(entry.status).when}</p>
                       <p>{formatDateTime(entry.decided_at)}</p>
                     </div>
                   )}
 
                   {entry.decision_reason !== null && (
                     <div className="subtle-block">
-                      <p className="fact-label">Reason</p>
+                      <p className="fact-label">{bookingOutcomeLabels(entry.status).why}</p>
                       <p>{entry.decision_reason}</p>
                     </div>
                   )}
 
                   <div className="item-card-footer">
-                    {entry.status === PENDING_STATUS && (
+                    {entry.status === PENDING_BOOKING_STATUS && (
                       <div className="cluster">
                         <button
                           type="button"

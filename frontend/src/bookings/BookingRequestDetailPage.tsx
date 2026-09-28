@@ -11,10 +11,10 @@ import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import { formatDate, formatTime } from '../shared/format'
 
 const NOT_RECORDED = 'Not recorded'
-const PENDING_STATUS = 'PENDING'
 
 function layoutName(venue: Venue, layoutCode: string | null): string {
   if (layoutCode === null) return 'Any'
@@ -146,7 +146,7 @@ export function BookingRequestDetailPage() {
           <h1>{event.name}</h1>
           <StatusBadge status={booking.status} />
         </div>
-        {booking.status === PENDING_STATUS && (
+        {booking.status === PENDING_BOOKING_STATUS && (
           <div className="cluster">
             <button type="button" className="brand button-sm" onClick={askToApprove}>
               Approve
@@ -160,7 +160,7 @@ export function BookingRequestDetailPage() {
 
       {booking.decision_reason !== null && (
         <p className="subtle-block">
-          <span className="fact-label">Reason</span>
+          <span className="fact-label">{bookingOutcomeLabels(booking.status).why}</span>
           <br />
           {booking.decision_reason}
         </p>

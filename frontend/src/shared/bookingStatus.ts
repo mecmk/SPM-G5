@@ -2,6 +2,29 @@ import type { BookingStatus, BookingStatusCounts } from '../api/bookings'
 
 export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
+/** The one status Venue Staff can still decide: the queue card and detail page offer Approve /
+ * Reject only for it. */
+export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
+
+/** Statuses nobody on staff decided: the coordinator withdrew the request, or the system
+ * cancelled it (migration 010 cancelled overlapping pending requests, stamping `decided_at` and a
+ * note of its own). */
+const CLOSED_WITHOUT_DECISION: readonly BookingStatus[] = ['WITHDRAWN', 'CANCELLED']
+
+/** How to label a finished request's `decided_at` and `decision_reason`. */
+export interface BookingOutcomeLabels {
+  when: string
+  why: string
+}
+
+/** Story 13.1.2 AC3: "Decided at" / "Reason" for a staff decision; "Closed at" / "Note" for a
+ * request that was withdrawn or cancelled, so it does not read as if staff decided it. */
+export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabels {
+  return CLOSED_WITHOUT_DECISION.includes(status)
+    ? { when: 'Closed at', why: 'Note' }
+    : { when: 'Decided at', why: 'Reason' }
+}
+
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN and CANCELLED have no tab of their own and
  * only show up under "All". */
