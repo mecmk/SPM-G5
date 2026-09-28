@@ -544,7 +544,7 @@ Rules and indexes:
 
 **Stories:** 12.x, 13.x, 14.x, 9.2
 
-A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff; APPROVED = confirmed booking that blocks the venue; REJECTED / WITHDRAWN / CANCELLED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
+A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, holding the venue (story 12.1 AC3); APPROVED = confirmed booking. No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -562,7 +562,7 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. Only APPROVED bookings occupy the venue calendar. |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3). Only APPROVED bookings appear on the venue calendar (story 9.1). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1). |
 | `decided_at` | `timestamp with time zone` | yes | - | - | Decision time. |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). |
@@ -576,7 +576,7 @@ Allowed values:
 
 Rules and indexes:
 
-- exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = 'APPROVED'::text))`
+- exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`

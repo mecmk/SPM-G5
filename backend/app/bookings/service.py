@@ -12,10 +12,14 @@ that Venue Staff can assess and confirm it":
 * AC4 refused unless the actor is the event's ``assigned_coordinator_id``.
 
 Setup and teardown minutes are left at the column default of 0, so the held period equals
-the event period: recording them is story 12.2. Nothing here checks the requested period
-against existing bookings either - warning the coordinator at submission time is story
-14.1, and an overlapping PENDING row is harmless because the exclusion constraint and
-``approve_booking`` below only treat APPROVED rows as occupying the venue.
+the event period: recording them is the rest of Sprint 2's 12.1.
+
+The venue hold - Sprint 2's 12.1 AC3/AC12/AC14, built as s12.1: a PENDING request holds
+its venue for its held period, as an APPROVED booking does. ``create_booking_request`` refuses a
+period that overlaps a pending or approved booking of the same venue (``VenueHeld``, naming it in
+Singapore time), and since migration 010 the exclusion constraint covers PENDING rows too, so two
+requests racing for one slot cannot both land - the loser's write is translated into the same
+``VenueHeld``. A pending request can therefore never clash when it is approved.
 
 Story 14.2 - "As a Venue Staff member, I want the system to block approval of a conflicting
 request so that a venue cannot be double-booked":
@@ -30,7 +34,9 @@ request so that a venue cannot be double-booked":
 
 Race safety: ``find_conflicting_booking`` / ``assert_no_conflict`` are a fast, friendly
 pre-check only - they do not by themselves close the race between two concurrent approvals
-(two overlapping requests could both pass the check before either commits). The database's
+(two overlapping requests could both pass the check before either commits). Since the hold,
+such a pair can no longer both be pending, so this approval-time check is a safety net. The
+database's
 ``ex_venue_bookings_no_double_booking`` exclusion constraint is the actual last word, so
 ``approve_booking`` attempts the write directly and translates that constraint's
 ``IntegrityError`` into ``BookingConflict``, mirroring ``app/venues/service.py::create_venue``'s
@@ -48,7 +54,7 @@ Story 13.2 ("approve venue booking request") is what calls ``approve_booking`` a
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -81,6 +87,21 @@ VENUE_NOT_BOOKABLE_MESSAGE = (
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can request a venue booking for it."
 )
+
+# 12.1 AC3/AC12: why a request is refused when its venue is held, in words a coordinator can act
+# on - the venue, whether it is booked or only requested, the event, and the held period in
+# Singapore time, e.g. "Grand Hall is already booked for Nimbus Developer Conference on Wed 25
+# Nov 2026 from 08:00 to 19:00, including setup and teardown."
+VENUE_HELD_MESSAGE = "{venue} is already {state} for {event} {period}{turnaround}."
+VENUE_HELD_STATES = {
+    BookingStatus.APPROVED: "booked",
+    BookingStatus.PENDING: "held by a pending request",
+}
+VENUE_HELD_TURNAROUND = ", including setup and teardown"
+# The statuses that hold a venue - the same list as ex_venue_bookings_no_double_booking's WHERE.
+_HOLDING_STATUSES = tuple(VENUE_HELD_STATES)
+# Every event runs on Singapore time, which has no daylight saving (as in app/events/service.py).
+_SINGAPORE = timezone(timedelta(hours=8))
 
 REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
 # A facility may be needed in a quantity, with a note of its own ("3 breakout rooms, HDMI
@@ -133,6 +154,27 @@ class NotAssignedCoordinator(PermissionError):
 
     def __init__(self) -> None:
         super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
+
+
+class VenueHeld(ValueError):
+    """12.1 AC3/AC12/AC14: the requested held period overlaps a pending or approved booking of
+    the same venue, which holds it. Carries that booking; its venue and event must be loaded."""
+
+    def __init__(self, holding_booking: VenueBooking) -> None:
+        super().__init__(
+            VENUE_HELD_MESSAGE.format(
+                venue=holding_booking.venue.name,
+                state=VENUE_HELD_STATES[holding_booking.status],
+                event=holding_booking.event.name,
+                period=_describe_held_period(holding_booking.held_from, holding_booking.held_until),
+                turnaround=(
+                    VENUE_HELD_TURNAROUND
+                    if holding_booking.setup_minutes or holding_booking.teardown_minutes
+                    else ""
+                ),
+            )
+        )
+        self.holding_booking = holding_booking
 
 
 class BookingConflict(ValueError):
@@ -253,10 +295,10 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
     is not PENDING (``BookingNotPending``) or whose period would double-book its venue
     (``BookingConflict``, AC4 / 14.2 AC1-AC2).
 
-    14.2 AC3 falls out of this for free: whichever of two overlapping PENDING requests is
-    approved first wins; approving the second one then hits the conflict check below. Callers
-    must fetch ``booking`` via ``get_booking_for_decision`` - see the module docstring's
-    concurrency note.
+    Since the venue hold (migration 010) a pending request already holds its slot, so no other
+    pending or approved booking can overlap it and the conflict branch below is a safety net
+    that should never fire. Callers must fetch ``booking`` via ``get_booking_for_decision`` -
+    see the module docstring's concurrency note.
     """
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="approved")
@@ -294,10 +336,10 @@ def reject_booking(
     """13.2.1 AC1: reject ``booking``, recording the rejecter, time and reason. Refuses a
     request that is not PENDING (``BookingNotPending``).
 
-    AC6: unlike ``approve_booking``, this never touches the exclusion constraint - only
-    APPROVED occupies the venue, so a rejection cannot double-book anything and there is no
-    conflict to translate. Callers must fetch ``booking`` via ``get_booking_for_decision`` -
-    see the module docstring's concurrency note.
+    AC6: unlike ``approve_booking``, this can never trip the exclusion constraint - rejecting
+    only takes a request out of the venue hold (12.1 AC4), so it cannot double-book anything and
+    there is no conflict to translate. Callers must fetch ``booking`` via
+    ``get_booking_for_decision`` - see the module docstring's concurrency note.
     """
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="rejected")
@@ -421,11 +463,52 @@ def _requirement_notes(db: Session, event: Event) -> str | None:
     return "\n".join(sentences)
 
 
+def _describe_held_period(held_from: datetime, held_until: datetime) -> str:
+    """A held period in Singapore time, as a sentence ending: "on Wed 25 Nov 2026 from 08:00 to
+    19:00", or with both dates when it runs over midnight."""
+    start, end = held_from.astimezone(_SINGAPORE), held_until.astimezone(_SINGAPORE)
+    if start.date() == end.date():
+        return f"on {_describe_day(start)} from {start:%H:%M} to {end:%H:%M}"
+    return f"from {_describe_day(start)}, {start:%H:%M} to {_describe_day(end)}, {end:%H:%M}"
+
+
+def _describe_day(moment: datetime) -> str:
+    """The day as Wed 25 Nov 2026: the day of the month unpadded, which strftime cannot do
+    portably."""
+    return f"{moment:%a} {moment.day} {moment:%b %Y}"
+
+
+def find_holding_booking(
+    db: Session, venue_id: uuid.UUID, held_from: datetime, held_until: datetime
+) -> VenueBooking | None:
+    """12.1 AC3: the pending or approved booking (if any) holding ``venue_id`` during part of
+    ``held_from``..``held_until``. Half-open periods, as in the exclusion constraint: touching at
+    a boundary is not an overlap (AC6); any partial overlap is (AC8)."""
+    return db.scalars(
+        select(VenueBooking)
+        .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.event))
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status.in_(_HOLDING_STATUSES),
+            VenueBooking.held_from < held_until,
+            VenueBooking.held_until > held_from,
+        )
+        .order_by(VenueBooking.held_from, VenueBooking.id)
+        .limit(1)
+    ).first()
+
+
 def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) -> VenueBooking:
     """12.1 AC1: raises one request, for one venue, from an approved event. AC2: the period,
     attendance, layout and required facilities are copied from the event. AC3: the row is
-    PENDING and undecided, ready for Venue Staff. AC4: refused unless ``actor`` is the event's
-    assigned coordinator.
+    PENDING and undecided, ready for Venue Staff, and holds the venue: a period overlapping a
+    pending or approved booking of the same venue is refused (``VenueHeld``). AC4: refused unless
+    ``actor`` is the event's assigned coordinator - checked first, so nobody else learns whether
+    a slot is held.
+
+    AC12/AC14: the hold check runs again inside the database. Two requests racing for one slot
+    can both pass the check above; the exclusion constraint then makes the second write wait for
+    the first and fail, and that failure becomes the same ``VenueHeld``.
     """
     event = _bookable_event(db, data.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
@@ -441,8 +524,25 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         requirement_notes=_requirement_notes(db, event),
         status=BookingStatus.PENDING,
     )
+    # The held period as the database trigger will compute it (setup and teardown default to 0).
+    held_from = booking.starts_at - timedelta(minutes=booking.setup_minutes or 0)
+    held_until = booking.ends_at + timedelta(minutes=booking.teardown_minutes or 0)
+    holding = find_holding_booking(db, venue.id, held_from, held_until)
+    if holding is not None:
+        raise VenueHeld(holding)
+
+    venue_id = venue.id
     db.add(booking)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if _CONFLICT_CONSTRAINT not in str(exc.orig):
+            raise
+        holding = find_holding_booking(db, venue_id, held_from, held_until)
+        if holding is None:
+            raise
+        raise VenueHeld(holding) from exc
     record_audit(
         db,
         actor=actor,

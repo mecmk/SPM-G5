@@ -71,6 +71,9 @@ def create_booking_request(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueNotBookable as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueHeld as exc:
+        # 12.1 AC3/AC12/AC14: the venue is already booked or held for part of the period.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)
 
 

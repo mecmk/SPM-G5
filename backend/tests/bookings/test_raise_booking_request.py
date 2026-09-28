@@ -21,18 +21,15 @@ Excluded, with reason:
   the request") owns them. This story leaves both at the column default of 0, so the held period
   equals the event period; ``test_the_held_period_is_the_event_period_until_story_12_2`` pins
   that so 12.2 has a test to change rather than a silent assumption to discover.
-* A conflict check at submission time - story 14.1 ("warn of booking conflicts before
-  submission"). An overlapping PENDING row is legitimately allowed today: the database's
-  ``ex_venue_bookings_no_double_booking`` constraint only guards APPROVED rows, and stories
-  13.2 / 14.2 already refuse the overlap at approval time.
-  ``test_an_overlapping_pending_request_is_allowed_until_story_14_1`` records that deliberate
-  gap.
+* The venue hold - Sprint 2's 12.1 AC3/AC6-AC8/AC12-AC14, built as s12.1: a pending
+  request holds its venue, so a request overlapping a pending or approved booking of the same
+  venue is refused, in the service and by the database. Its cases are
+  ``tests/bookings/test_venue_hold.py``. Here it only means the default venue below is one that
+  is free on Nimbus's day, and that an identical second request is refused
+  (``test_the_same_venue_cannot_be_requested_twice_for_the_same_period``).
 * Refusing a venue that is too small or lacks a required facility - stories 11.2 / 11.3. 11.3
   AC1 wants a warning the coordinator can override, not a block, so refusing it here would
   pre-empt a decision that story reverses.
-* Refusing a second, identical request for the same event and venue - no AC asks for it; the
-  behaviour is pinned by ``test_the_same_venue_can_be_requested_twice_for_one_event`` and
-  raised in the pull request instead of decided here.
 * The flow a coordinator clicks through - that is ``tests/e2e/booking-requests.spec.ts``. Every
   case here is a rule, boundary, permission or conflict case, which AGENTS.md assigns to
   ``backend/tests/``, and neither layer repeats the other.
@@ -59,11 +56,14 @@ EVENT_STARTS_AT = datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc)
 EVENT_ENDS_AT = datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc)
 EVENT_ATTENDANCE = 350
 EVENT_LAYOUT = "THEATRE"
+# Free on that day. Grand Hall is not: Bookings.APPROVED_GRAND_HALL already holds it for this
+# event, and a held venue cannot be requested (test_venue_hold.py).
+REQUESTED_VENUE = Venues.EXHIBITION_FOYER
 
 
 def request_body(**overrides) -> dict:
     """A valid POST /bookings body: the assigned coordinator's event, plus one venue."""
-    body = {"event_id": str(Events.APPROVED), "venue_id": str(Venues.GRAND_HALL)}
+    body = {"event_id": str(Events.APPROVED), "venue_id": str(REQUESTED_VENUE)}
     body.update(overrides)
     return body
 
@@ -100,14 +100,14 @@ def test_assigned_coordinator_can_raise_a_request_for_an_approved_event(
     assert response.status_code == 201
     body = response.json()
     assert body["event_id"] == str(Events.APPROVED)
-    assert body["venue_id"] == str(Venues.GRAND_HALL)
+    assert body["venue_id"] == str(REQUESTED_VENUE)
 
     row = db.execute(
         text("SELECT event_id, venue_id, status FROM venue_bookings WHERE id = :id"),
         {"id": body["id"]},
     ).one()
     assert row.event_id == Events.APPROVED
-    assert row.venue_id == Venues.GRAND_HALL
+    assert row.venue_id == REQUESTED_VENUE
     assert row.status == BookingStatus.PENDING
 
 
@@ -394,31 +394,18 @@ def test_a_raised_request_can_then_be_approved_by_venue_staff(client, login_as, 
     assert approved.json()["status"] == BookingStatus.APPROVED
 
 
-@pytest.mark.story("12.1", ac=3)
-def test_the_same_venue_can_be_requested_twice_for_one_event(coordinator_client, db: Session):
-    """No AC forbids it and no constraint stops it, so it is recorded here rather than left to be
-    discovered. The two rows are identical apart from their ids, because AC2 copies the period
-    from the event, so Venue Staff would see the request twice in story 13.1's queue; approving
-    one then makes the other conflict, and 13.2 / 14.2 refuse it. Worth a product decision (refuse
-    the duplicate, or let 12.4's withdraw clean it up) rather than a rule invented here.
-    """
+@pytest.mark.story("12.1", ac=13)
+def test_the_same_venue_cannot_be_requested_twice_for_the_same_period(
+    coordinator_client, db: Session
+):
+    """Sprint 2's AC13: a double submit creates one request. AC2 copies the period from the
+    event, so a second request for the same venue is for the same period, and the first one
+    already holds the venue (s12.1). It used to be accepted and then fail at approval."""
     first = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
     second = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
 
-    assert (first.status_code, second.status_code) == (201, 201)
-    assert first.json()["id"] != second.json()["id"]
-    assert _booking_count(db, Events.APPROVED) == 4  # the two seeded rows plus these two
-
-
-@pytest.mark.story("12.1", ac=3)
-def test_an_overlapping_pending_request_is_allowed_until_story_14_1(coordinator_client):
-    """The seeded APPROVED booking holds the Grand Hall for this exact period. Story 14.1 is
-    what warns about that at submission time; today the request is accepted and story 13.2 /
-    14.2 refuse it at approval. Recorded as a test so the gap is deliberate and visible."""
-    response = coordinator_client.post("/bookings", json=request_body())
-
-    assert response.status_code == 201
-    assert response.json()["status"] == BookingStatus.PENDING
+    assert (first.status_code, second.status_code) == (201, 409)
+    assert _booking_count(db, Events.APPROVED) == 3  # the two seeded rows plus the first
 
 
 # --- AC4: only the assigned coordinator ------------------------------------------------------
@@ -515,7 +502,7 @@ def test_raising_a_request_is_recorded_in_the_audit_log(coordinator_client, db: 
     ).one()
     assert row.actor_id == Users.COORDINATOR.id
     assert row.details["event_id"] == str(Events.APPROVED)
-    assert row.details["venue_id"] == str(Venues.GRAND_HALL)
+    assert row.details["venue_id"] == str(REQUESTED_VENUE)
 
 
 @pytest.mark.story("12.1", ac=3)
