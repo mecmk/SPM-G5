@@ -56,7 +56,8 @@ export function venueSearchPath(search: VenueSearch): string {
   return query === '' ? VENUE_CATALOGUE_PATH : `${VENUE_CATALOGUE_PATH}?${query}`
 }
 
-// Story 8.3: venue records.
+// Story 8.3: venue records. f8.1.1 (8.1 AC12) removed the Manage venues page - Venue Staff manage
+// venues from the catalogue - so this address is kept only to redirect old links there.
 export const VENUES_MANAGE_PATH = '/venues/manage'
 export const VENUE_NEW_PATH = '/venues/new'
 export const VENUE_EDIT_PATH = '/venues/:venueId/edit'
@@ -87,7 +88,7 @@ export function venueRequestPath(eventId: string, venueId: string, search = ''):
 
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section, structured
 // as separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues
-// (which reuses the existing catalogue/manage routes above rather than a duplicate).
+// (which reuses the venue catalogue above rather than a duplicate).
 export const BOOKING_REQUESTS_PATH = '/venue-staff/booking-requests'
 export const BOOKING_REQUEST_PATH = '/venue-staff/booking-requests/:bookingId'
 export const VENUE_SCHEDULE_PATH = '/venue-staff/schedule'

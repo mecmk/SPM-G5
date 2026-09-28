@@ -4,8 +4,8 @@
  * AC2 selecting a venue opens its full record.
  * AC3 venues withdrawn from service are excluded.
  * Team decision, 17 Sep 2026 (frontend design prototype): coordinators can also filter the list
- * by a capacity range ("Capacity from" / "Capacity to"), applied client-side like story 8.3's
- * Venue Staff list.
+ * by a capacity range ("Capacity from" / "Capacity to"), applied client-side.
+ * AC12 (f8.1.1) Venue Staff manage venues from this catalogue too: tests/e2e/venues.spec.ts.
  * Permission refusal (403) and the underlying data shape are backend cases:
  * backend/tests/venues/test_venue_records.py.
  */
@@ -48,10 +48,4 @@ test('8.1: the catalogue can be filtered by a capacity range', async ({ page }) 
   await expect(page.locator('.item-card', { hasText: 'Exhibition Foyer' })).toBeVisible()
   await expect(page.locator('.item-card', { hasText: 'Grand Hall' })).toHaveCount(0)
   await expect(page.locator('.item-card', { hasText: 'Boardroom 3.4' })).toHaveCount(0)
-})
-
-test('8.1: a venue staff member does not see the coordinator catalogue link', async ({ page }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-
-  await expect(page.getByRole('link', { name: 'Venue catalogue' })).toHaveCount(0)
 })

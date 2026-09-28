@@ -5,7 +5,7 @@ import {
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
-  VENUES_MANAGE_PATH,
+  VENUE_CATALOGUE_PATH,
 } from '../routes'
 
 /**
@@ -107,23 +107,15 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Venues',
     items: [
+      // f8.1.1 (8.1 AC12): one catalogue for every role that reads venues. Venue Staff also
+      // create, update and remove venues there, so there is no separate "Manage venues" section.
       {
-        to: '/venues',
+        to: VENUE_CATALOGUE_PATH,
         label: 'Venue catalogue',
         description: 'Browse venues and compare capacity, layouts and availability.',
         icon: 'building',
         permission: PERMISSIONS.VENUES_READ,
-        hiddenWith: [PERMISSIONS.VENUES_MANAGE],
         story: '8.1',
-        isAvailable: true,
-      },
-      {
-        to: VENUES_MANAGE_PATH,
-        label: 'Manage venues',
-        description: 'Create, update and remove the venue records everyone plans with.',
-        icon: 'building',
-        permission: PERMISSIONS.VENUES_MANAGE,
-        story: '8.3',
         isAvailable: true,
       },
       // f12.1.1: no "Request a venue" section. A venue is requested from its event: Find a venue

@@ -33,7 +33,7 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/rbac.spec.ts` | 1.2 role-specific sidebar and main page, blocked direct URLs, collapse and phone drawer |
 | `e2e/venue-catalogue.spec.ts` | 8.1 browse venues, capacity filter, withdrawn venues excluded |
 | `e2e/venue-detail.spec.ts` | 8.2 venue characteristics, "Not recorded" for unset fields, Venue Staff read access |
-| `e2e/venues.spec.ts` | 8.3 create, edit, delete, search and filter venues; capacity check; notifications |
+| `e2e/venues.spec.ts` | 8.3 create and edit venues; capacity check; notifications; f8.1.1 (8.1 AC12) Venue Staff manage venues from the catalogue: New venue, Edit and Delete on each card (a venue with bookings or already deleted is refused with the reason), Show withdrawn venues, the name-or-location search and capacity range, the old Manage venues address opens the catalogue, and no manage controls for coordinators or Technical Support |
 | `e2e/venue-calendar.spec.ts` | 9.1 venue availability calendar: bookings and maintenance periods shown as unavailable, month navigation |
 | `e2e/event-request.spec.ts` | 2.1 raise an event request: details, dates (2-year and 14-day limits) and numbers checked live in the browser, what is still needed to submit, equipment availability and the hold made on submit, venue requirements with facility quantities, "No venue requirements" and "No accessibility needs" (vs left empty), equipment, edit/remove, submit from the new page or a draft and read-only, what is missing named, organiser-only |
 | `e2e/review-queue.spec.ts` | 4.1 coordinator review queue: own vs all requests, ordering, hidden drafts/decided, search, not permitted; 6.1 the shared All-plus-seven-visible-statuses tab strip, backed by every event assigned to the coordinator in any status |
@@ -44,5 +44,5 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/decision-history.spec.ts` | 4.6 the decision status sentence (pending, awaiting-clarification hint, approved with no reason, rejected with reason) and the clarification thread (oldest first, author/kind/timestamp) on the event details page |
 | `e2e/event-routine-edit.spec.ts` | 7.2 the assigned coordinator edits an event's routine information from its detail page and the change is there on return; the edit entry point is withheld once the event is rejected (also completed/cancelled) |
 
-`e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueRow` locator. Specs share
+`e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueCard` locator. Specs share
 one throwaway database and run in parallel, so use unique names for anything you create.
