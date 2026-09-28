@@ -280,16 +280,21 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
   // - both show up on the event page's history, the new request first. Since f12.1.1 a request
-  // starts from the event: Find a venue, then Request this venue in the catalogue.
+  // starts from the event: Find a venue, then Request this venue in the catalogue. Since s8.1 the
+  // catalogue lists only venues that fit the event and are free, so the fresh request goes to
+  // Exhibition Foyer, which the rejection above has just freed.
   await page.getByRole('link', { name: 'Find a venue' }).click()
-  await venueCard(page, 'Boardroom 3.4').getByRole('link', { name: 'Request this venue' }).click()
+  await venueCard(page, 'Exhibition Foyer')
+    .getByRole('link', { name: 'Request this venue' })
+    .click()
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()
 
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
   const bookingSection = page.getByRole('region', { name: 'Venue booking' })
-  await expect(bookingSection.getByText('Boardroom 3.4')).toBeVisible()
+  // The rejected request and the fresh one are both for Exhibition Foyer.
+  await expect(bookingSection.getByText('Exhibition Foyer', { exact: true })).toHaveCount(2)
   await expect(bookingSection.getByText('Pending', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()

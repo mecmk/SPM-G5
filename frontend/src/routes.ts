@@ -13,37 +13,50 @@ export function venuePath(venueId: string): string {
   return VENUE_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
 
-// f12.1.1 (story 12.1 AC15) and story 8.1 AC3/AC4: the venue catalogue's filters in the page
-// address. The event page's Find a venue writes them and 8.1's filter panel reads them, so both
-// use these names. `event` names the event a venue is being found for.
+// f12.1.1 (story 12.1 AC15) and story 8.1 AC4: the venue catalogue's filters in the page
+// address. The event page's Find a venue writes them and 8.1's filter panel reads and writes them,
+// so both use these names. `event` names the event a venue is being found for. `search`,
+// `capacity_max` and `withdrawn` are the panel's own (s8.1); Find a venue never sets them.
 export const VENUE_SEARCH_PARAMS = {
   event: 'event',
+  search: 'search',
   capacity: 'capacity',
+  capacityMax: 'capacity_max',
   from: 'from',
   to: 'to',
   layout: 'layout',
   facility: 'facility',
   accessibility: 'accessibility',
+  withdrawn: 'withdrawn',
 } as const
 
 /** A catalogue search. `from` / `to` are Singapore `datetime-local` values; codes are the shared
  *  reference codes (room layouts, facilities, accessibility features). */
 export interface VenueSearch {
   eventId?: string
+  /** Name or location contains this text. */
+  search?: string
   capacity?: number
+  capacityMax?: number
   from?: string
   to?: string
   layout?: string
   facilities?: readonly string[]
   accessibilityFeatures?: readonly string[]
+  /** Story 8.1 AC12: withdrawn venues listed too, for Venue Staff. */
+  includeWithdrawn?: boolean
 }
 
-/** The catalogue's address for `search`, holding only the filters it sets. */
-export function venueSearchPath(search: VenueSearch): string {
+/** The address query for `search`, holding only the filters it sets. */
+export function venueSearchParams(search: VenueSearch): URLSearchParams {
   const params = new URLSearchParams()
   if (search.eventId) params.set(VENUE_SEARCH_PARAMS.event, search.eventId)
+  if (search.search) params.set(VENUE_SEARCH_PARAMS.search, search.search)
   if (search.capacity !== undefined) {
     params.set(VENUE_SEARCH_PARAMS.capacity, String(search.capacity))
+  }
+  if (search.capacityMax !== undefined) {
+    params.set(VENUE_SEARCH_PARAMS.capacityMax, String(search.capacityMax))
   }
   if (search.from) params.set(VENUE_SEARCH_PARAMS.from, search.from)
   if (search.to) params.set(VENUE_SEARCH_PARAMS.to, search.to)
@@ -52,7 +65,51 @@ export function venueSearchPath(search: VenueSearch): string {
   for (const code of search.accessibilityFeatures ?? []) {
     params.append(VENUE_SEARCH_PARAMS.accessibility, code)
   }
-  const query = params.toString()
+  if (search.includeWithdrawn) params.set(VENUE_SEARCH_PARAMS.withdrawn, 'true')
+  return params
+}
+
+/** Story 8.1 AC4: the search a catalogue address holds - the reverse of `venueSearchParams`. A
+ *  capacity that is not a whole number is ignored rather than sent. */
+export function readVenueSearch(params: URLSearchParams): VenueSearch {
+  return {
+    eventId: params.get(VENUE_SEARCH_PARAMS.event) ?? undefined,
+    search: searchText(params.get(VENUE_SEARCH_PARAMS.search)),
+    capacity: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacity)),
+    capacityMax: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacityMax)),
+    from: params.get(VENUE_SEARCH_PARAMS.from) ?? undefined,
+    to: params.get(VENUE_SEARCH_PARAMS.to) ?? undefined,
+    layout: params.get(VENUE_SEARCH_PARAMS.layout) ?? undefined,
+    facilities: params.getAll(VENUE_SEARCH_PARAMS.facility),
+    accessibilityFeatures: params.getAll(VENUE_SEARCH_PARAMS.accessibility),
+    includeWithdrawn: params.get(VENUE_SEARCH_PARAMS.withdrawn) === 'true',
+  }
+}
+
+/**
+ * Story 8.1 AC3: name or location text, typed or in the address. Only spaces is no filter: the
+ * server ignores it, so the panel must not count it as one either. Other text is kept as typed,
+ * so a pause after "tower " does not lose the space before "b".
+ */
+export function searchText(value: string | null): string | undefined {
+  return value === null || value.trim() === '' ? undefined : value
+}
+
+/**
+ * Story 8.1 AC6: a capacity limit, typed or in the address - a whole number above 0. Anything else
+ * (blank, 0, a negative or a fraction) is no limit, so it is left out of the search rather than
+ * refused by the server.
+ */
+export function capacityLimit(value: string | null): number | undefined {
+  const parsed = Number(value)
+  return value === null || value.trim() === '' || !Number.isInteger(parsed) || parsed < 1
+    ? undefined
+    : parsed
+}
+
+/** The catalogue's address for `search`, holding only the filters it sets. */
+export function venueSearchPath(search: VenueSearch): string {
+  const query = venueSearchParams(search).toString()
   return query === '' ? VENUE_CATALOGUE_PATH : `${VENUE_CATALOGUE_PATH}?${query}`
 }
 

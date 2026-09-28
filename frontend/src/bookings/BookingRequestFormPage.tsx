@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { createBookingRequest, type Booking } from '../api/bookings'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
 import { getVenue, type Venue } from '../api/venues'
 import { useAuth } from '../auth/authContext'
@@ -49,6 +49,10 @@ interface RequestSubject {
  * instead of offering a request the backend would refuse (review of PR #67).
  *
  * The address also carries the catalogue's own query, so the back link returns to the same search.
+ *
+ * Story 12.1 AC14: the venue may have stopped being available since the search. The backend
+ * re-checks and refuses with its reason, and the step then offers Back to the results: the same
+ * search, which runs again, so the venue has gone from it.
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -64,6 +68,7 @@ export function BookingRequestFormPage() {
   const { data: subject, error } = useLoaded(loadSubject)
   const [sent, setSent] = useState<Booking | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
   if (error) {
@@ -99,11 +104,13 @@ export function BookingRequestFormPage() {
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
     setSendError(null)
+    setCanReturnToResults(false)
     setIsSending(true)
     try {
       setSent(await createBookingRequest({ event_id: event.id, venue_id: venue.id }, venue.name))
     } catch (err: unknown) {
       setSendError(formatApiError(err))
+      setCanReturnToResults(err instanceof ApiError && err.code === 'BOOKING_NOT_ALLOWED')
     } finally {
       setIsSending(false)
     }
@@ -200,6 +207,11 @@ export function BookingRequestFormPage() {
               <p role="alert" className="error">
                 {sendError}
               </p>
+            )}
+            {canReturnToResults && (
+              <Link to={backTo} className="button secondary">
+                Back to the results
+              </Link>
             )}
             <button type="submit" disabled={isSending}>
               {isSending ? 'Sending…' : 'Send request'}

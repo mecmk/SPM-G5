@@ -84,6 +84,7 @@ class Events:
     CANCELLED = _e(15)  # organiser 2, coordinator 1
     APPROVED_6 = _e(16)  # organiser 1, coordinator 1, pending booking dedicated to 13.2.1 e2e
     APPROVED_7 = _e(17)  # organiser 2, coordinator 2, pending booking dedicated to 13.2.1 e2e
+    PARTNER_BRIEFING = _e(18)  # organiser 2, coordinator 1, dedicated to 12.1's e2e request
 
 
 class Bookings:
