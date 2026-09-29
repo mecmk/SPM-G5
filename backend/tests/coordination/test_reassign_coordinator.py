@@ -28,8 +28,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.coordination import service as coordination_service
 from app.coordination.schemas import AssignCoordinatorIn
-from app.events.models import EventStatus
-from tests.support.factories import make_clarification, make_event, make_user
+from tests.support.factories import make_clarification, make_user
 from tests.support.seed import Events, Users
 
 
@@ -315,10 +314,14 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     the reassignment-in-progress reads "who is current" via ``current_assignment``, a second,
     already-authorised reassignment (Chloe -> Carl) is made and committed first, simulating the
     other request winning the race.
+
+    Uses the seeded Events.APPROVED rather than a hand-built event: ``make_event`` sets
+    ``assigned_coordinator_id`` on the event row directly but does not create a matching open
+    ``event_coordinator_assignments`` row, which ``current_assignment`` reads - the mismatch
+    would make the interloper's own (legitimate) reassignment spuriously fail this guard, since
+    there would be no history row to match against.
     """
-    event = make_event(
-        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
-    )
+    event_id = Events.APPROVED
     chloe = db.get(User, Users.COORDINATOR.id)
     dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator")
 
@@ -342,19 +345,19 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
 
     with pytest.raises(coordination_service.AssignmentChanged):
         coordination_service.assign_coordinator(
-            db, event.id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
+            db, event_id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
         )
 
     monkeypatch.undo()
-    winner = coordination_service.current_assignment(db, event.id)
+    winner = coordination_service.current_assignment(db, event_id)
     assert winner.coordinator_id == Users.COORDINATOR_2.id
 
 
 @pytest.mark.story("5.2", ac=7)
 def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session, monkeypatch):
-    event = make_event(
-        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
-    )
+    """See the previous test's docstring for why Events.APPROVED (a fully-seeded event, with a
+    real open assignment row) is used rather than a hand-built one."""
+    event_id = Events.APPROVED
     chloe = db.get(User, Users.COORDINATOR.id)
     dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator 2")
 
@@ -375,15 +378,15 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
         return result
 
     monkeypatch.setattr(coordination_service, "current_assignment", _interloper_wins_first)
-    before = _history_row_count(db, event.id)
+    before = _history_row_count(db, event_id)
 
     with pytest.raises(coordination_service.AssignmentChanged):
         coordination_service.assign_coordinator(
-            db, event.id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
+            db, event_id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
         )
 
     monkeypatch.undo()
     # exactly one new row from the interloper's own (legitimate) reassignment - none from the
     # refused attempt
-    assert _history_row_count(db, event.id) == before + 1
-    assert _open_assignment_row(db, event.id).coordinator_id == Users.COORDINATOR_2.id
+    assert _history_row_count(db, event_id) == before + 1
+    assert _open_assignment_row(db, event_id).coordinator_id == Users.COORDINATOR_2.id
