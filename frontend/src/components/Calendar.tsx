@@ -166,9 +166,9 @@ export function Calendar({
             .filter(Boolean)
             .join(' ')
 
-          // A button may only hold phrasing content, so an openable day's parts are spans; every
-          // other day keeps the divs it has always had.
-          const Part = isOpenable ? 'span' : 'div'
+          // A button may only hold phrasing content, so an openable or selectable day's parts
+          // are spans; a plain (unclickable) day keeps the divs it has always had.
+          const Part = isOpenable || isSelectable ? 'span' : 'div'
           const cellContent = (
             <>
               <Part className="calendar-day">{day}</Part>

@@ -79,8 +79,6 @@ export function VenueDetailPage() {
     // Clears a previous month's failure immediately, so it cannot sit on screen describing a
     // month that is no longer the one being loaded.
     setCalendarError(null)
-    // An open day belongs to the month it was opened in, so previous / next close it.
-    setOpenDay(null)
     const rangeStart = monthBoundary(month)
     const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
     getVenueCalendar(venueId, rangeStart, rangeEnd)
@@ -122,6 +120,13 @@ export function VenueDetailPage() {
 
   function handleOpenDay(date: string) {
     setOpenDay((current) => (current === date ? null : date))
+  }
+
+  // An open day belongs to the month it was opened in, so changing month closes it - done here
+  // rather than in the fetch effect, so it is not tied to every refetch (e.g. venueId changing).
+  function handleMonthChange(nextMonth: Date) {
+    setOpenDay(null)
+    setMonth(nextMonth)
   }
 
   if (error) {
@@ -275,7 +280,7 @@ export function VenueDetailPage() {
             </p>
             <Calendar
               month={month}
-              onMonthChange={setMonth}
+              onMonthChange={handleMonthChange}
               entries={calendarEntries}
               legend={CALENDAR_LEGEND}
               gridStatus={calendarStatus === 'ready' ? undefined : calendarStatus}

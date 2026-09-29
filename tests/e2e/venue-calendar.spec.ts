@@ -271,7 +271,7 @@ test('9.1 AC5: a closure in the day list shows its reason', async ({ page }) => 
   await page.getByRole('link', { name: 'Seminar Room 2.1' }).click()
   await goToNovember2026(page)
 
-  await dayButton(page, /2 November 2026/).click()
+  await dayButton(page, /^2 November 2026/).click()
 
   const list = dayList(page, /2 Nov 2026/)
   await expect(list).toContainText('Annual air-con servicing')
@@ -352,8 +352,8 @@ test('9.1 AC10: previous and next close an open day and keep the calendar workin
 interface StubWindow {
   starts_at: string
   ends_at: string
-  event_starts_at: string | null
-  event_ends_at: string | null
+  booking_starts_at: string | null
+  booking_ends_at: string | null
   reason: string
   label: string
 }
@@ -384,7 +384,7 @@ function at(month: string, day: number, time: string) {
   return `${month}-${String(day).padStart(2, '0')}T${time}:00+08:00`
 }
 
-/** A window with no setup or teardown: the event's own period is the whole of it. */
+/** A window with no setup or teardown: the booking's own period is the whole of it. */
 function plainWindow(
   month: string,
   day: number,
@@ -394,8 +394,8 @@ function plainWindow(
   return {
     starts_at: at(month, day, from),
     ends_at: at(month, day, to),
-    event_starts_at: at(month, day, from),
-    event_ends_at: at(month, day, to),
+    booking_starts_at: at(month, day, from),
+    booking_ends_at: at(month, day, to),
     ...fields,
   }
 }
@@ -432,7 +432,7 @@ test('9.1 AC7/AC8: several events on one day are all listed in time order, back-
   await expect(items).toHaveText([
     /09:00–12:00.*Stub Morning Workshop.*Booked/s,
     /12:00–14:00.*Stub Midday Briefing.*Held – pending/s,
-    /16:00–18:00.*Stub Evening Reception.*Booked.*Setup and teardown included: 15:30–18:00/s,
+    /16:00–18:00.*Stub Evening Reception.*Booked.*Setup included: 15:30–18:00/s,
   ])
 })
 
@@ -444,8 +444,8 @@ test('9.1 AC9: a multi-day booking is listed on every day it covers, with that d
     {
       starts_at: at(month, 9, '20:00'),
       ends_at: at(month, 13, '10:00'),
-      event_starts_at: at(month, 10, '20:00'),
-      event_ends_at: at(month, 12, '10:00'),
+      booking_starts_at: at(month, 10, '20:00'),
+      booking_ends_at: at(month, 12, '10:00'),
       reason: 'BOOKED',
       label: 'Stub Multi-day Summit',
     },
@@ -465,8 +465,13 @@ test('9.1 AC9: a multi-day booking is listed on every day it covers, with that d
   await expect(list).not.toContainText('Booked')
   await dayButton(page, /^10 /).click()
   await expect(list).toContainText('20:00–24:00')
+  // The whole day is blocked (setup runs 00:00-20:00 here), but the booking itself is only on
+  // from 20:00, so the extra time before it is called out - and it is setup, not teardown.
+  await expect(list).toContainText('Setup included: 00:00–24:00')
   await dayButton(page, /^11 /).click()
   await expect(list).toContainText('00:00–24:00')
+  // The booking's own period covers the whole day here, so there is no second line at all.
+  await expect(list).not.toContainText('included')
   await dayButton(page, /^12 /).click()
   await expect(list).toContainText('00:00–10:00')
   await dayButton(page, /^13 /).click()
@@ -483,8 +488,8 @@ test('9.1 AC9: a held request on a day only its setup reaches says held, not boo
     {
       starts_at: at(month, 11, '20:00'),
       ends_at: at(month, 12, '11:00'),
-      event_starts_at: at(month, 12, '10:00'),
-      event_ends_at: at(month, 12, '11:00'),
+      booking_starts_at: at(month, 12, '10:00'),
+      booking_ends_at: at(month, 12, '11:00'),
       reason: 'HELD',
       label: 'Stub Held Workshop',
     },
@@ -527,9 +532,15 @@ test('9.1 AC5: a day’s button is named with its date and what the cell shows, 
   page,
 }) => {
   await stubCalendar(page, (month) => [
-    plainWindow(month, 10, ['09:00', '12:00'], { reason: 'BOOKED', label: 'Stub Morning Workshop' }),
+    plainWindow(month, 10, ['09:00', '12:00'], {
+      reason: 'BOOKED',
+      label: 'Stub Morning Workshop',
+    }),
     plainWindow(month, 10, ['12:00', '14:00'], { reason: 'HELD', label: 'Stub Midday Briefing' }),
-    plainWindow(month, 10, ['16:00', '18:00'], { reason: 'BOOKED', label: 'Stub Evening Reception' }),
+    plainWindow(month, 10, ['16:00', '18:00'], {
+      reason: 'BOOKED',
+      label: 'Stub Evening Reception',
+    }),
   ])
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')

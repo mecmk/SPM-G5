@@ -10,8 +10,9 @@ AC2  confirmed bookings are unavailable for their full held period (setup and te
      in it. venue_unavailability_periods has no such constraint but is checked the same way.
 AC3  every occupied period carries its event name, for everyone who can view the calendar.
 AC4  the API returns the chosen venue's bookings and holds only, to the three internal roles.
-AC5  each window also carries the event's own period, so a day's list can show it beside the
-     held window (null for a closure).
+AC5  each window also carries the booking's own period - its requested slot, not necessarily
+     its event's whole schedule - so a day's list can show it beside the held window (null for
+     a closure).
 AC7  several non-clashing events on one day come back as separate windows.
 AC8  a booking ending at 12:00 and another starting at 12:00 are separate windows that meet.
 AC9  a multi-day booking, setup and teardown included, is one window covering every day.
@@ -227,28 +228,52 @@ def test_calendar_returns_only_the_chosen_venues_bookings(coordinator_client, db
 
 
 @pytest.mark.story("9.1", ac=5)
-def test_calendar_window_carries_the_events_own_period_and_none_for_a_closure(
+def test_calendar_window_carries_the_bookings_own_period_and_none_for_a_closure(
     coordinator_client,
 ):
-    booking = _calendar(
+    booking_response = _calendar(
         coordinator_client,
         Venues.GRAND_HALL,
         "2026-11-24T00:00:00+08:00",
         "2026-11-26T00:00:00+08:00",
-    ).json()[0]
-    closure = _calendar(
+    )
+    assert booking_response.status_code == 200, booking_response.text
+    (booking,) = booking_response.json()
+
+    closure_response = _calendar(
         coordinator_client,
         Venues.SEMINAR_ROOM,
         "2026-11-01T00:00:00+08:00",
         "2026-11-05T00:00:00+08:00",
-    ).json()[0]
+    )
+    assert closure_response.status_code == 200, closure_response.text
+    (closure,) = closure_response.json()
 
-    # The event itself runs 09:00-18:00; the window also covers 60 min setup and teardown.
-    assert _instant(booking["event_starts_at"]) == datetime(2026, 11, 25, 9, 0, tzinfo=SINGAPORE)
-    assert _instant(booking["event_ends_at"]) == datetime(2026, 11, 25, 18, 0, tzinfo=SINGAPORE)
+    # This booking's own period happens to match Nimbus's own schedule (09:00-18:00); the window
+    # also covers 60 min setup and teardown either side of it.
+    assert _instant(booking["booking_starts_at"]) == datetime(2026, 11, 25, 9, 0, tzinfo=SINGAPORE)
+    assert _instant(booking["booking_ends_at"]) == datetime(2026, 11, 25, 18, 0, tzinfo=SINGAPORE)
     assert _instant(booking["starts_at"]) == datetime(2026, 11, 25, 8, 0, tzinfo=SINGAPORE)
-    assert closure["event_starts_at"] is None
-    assert closure["event_ends_at"] is None
+    assert closure["booking_starts_at"] is None
+    assert closure["booking_ends_at"] is None
+
+
+@pytest.mark.story("9.1", ac=5)
+def test_calendar_window_carries_the_bookings_own_period_even_when_it_differs_from_the_event(
+    coordinator_client,
+):
+    """The Seminar Room request holds only part of Nimbus's schedule - "Breakout track B",
+    13:00-18:00 - while the event itself runs 09:00-18:00 (the Grand Hall booking above, for the
+    same event). booking_starts_at/booking_ends_at must be this booking's own period, not a live
+    read of the event's."""
+    (window,) = _windows(
+        coordinator_client,
+        Venues.SEMINAR_ROOM,
+        datetime(2026, 11, 25, 12, 0, tzinfo=SINGAPORE),
+        datetime(2026, 11, 25, 19, 0, tzinfo=SINGAPORE),
+    )
+    assert _instant(window["booking_starts_at"]) == datetime(2026, 11, 25, 13, 0, tzinfo=SINGAPORE)
+    assert _instant(window["booking_ends_at"]) == datetime(2026, 11, 25, 18, 0, tzinfo=SINGAPORE)
 
 
 @pytest.mark.story("9.1", ac=7)
@@ -325,8 +350,8 @@ def test_calendar_returns_a_multi_day_booking_as_one_window_covering_every_day(
         (window,) = _windows(coordinator_client, venue.id, range_start, range_end)
         assert _instant(window["starts_at"]) == _sgt(9, 20)
         assert _instant(window["ends_at"]) == _sgt(13, 10)
-        assert _instant(window["event_starts_at"]) == _sgt(10, 20)
-        assert _instant(window["event_ends_at"]) == _sgt(12, 10)
+        assert _instant(window["booking_starts_at"]) == _sgt(10, 20)
+        assert _instant(window["booking_ends_at"]) == _sgt(12, 10)
 
 
 @pytest.mark.story("9.1", ac=11)

@@ -1731,16 +1731,13 @@ td.num {
   cursor: pointer;
 }
 
-/* The base `button:hover` paints a button in the accent colour, which would hide the day. A
-   pressed-looking cell keeps its own background, so each tone repeats it on hover. */
+/* The base `button:hover` paints a button in the accent colour, which would hide the day; every
+   tone below repeats its own background on hover instead. An openable cell always has a tone (it
+   has at least one entry), so it never also carries `.calendar-cell-weekend`, which only applies
+   to a toneless day. */
 .calendar-cell-openable:hover {
-  background: var(--surface);
   outline: 1px solid var(--text-faint);
   outline-offset: -1px;
-}
-
-.calendar-cell-openable.calendar-cell-weekend:hover {
-  background: var(--surface-inset);
 }
 
 .calendar-cell-openable.calendar-cell-danger:hover {

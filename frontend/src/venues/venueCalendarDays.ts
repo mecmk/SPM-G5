@@ -10,9 +10,13 @@ export const HELD_LABEL = 'Held – pending'
 
 const CLOSED_PREFIX = 'Closed'
 const HELD_ENTRY_PREFIX = 'Held'
-const TURNAROUND_INCLUDED = 'Setup and teardown included'
-// On a day the event itself does not reach, only its setup or teardown, the row says so instead of
-// calling it booked; a pending request keeps its "Held – pending".
+// Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
+// (setup before it, teardown after it, or both), which side names the second line.
+const TURNAROUND_SETUP_LABEL = 'Setup included'
+const TURNAROUND_TEARDOWN_LABEL = 'Teardown included'
+const TURNAROUND_BOTH_LABEL = 'Setup and teardown included'
+// On a day the booking's own period does not reach, only its setup or teardown, the row says so
+// instead of calling it booked; a pending request keeps its "Held – pending".
 const TURNAROUND_ONLY_LABEL = 'Setup and teardown only'
 const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
 
@@ -52,12 +56,13 @@ export interface DayItem {
    *  teardown reaches, "Setup and teardown only" or "Held – pending, setup and teardown only". */
   kindLabel: string
   tone: CalendarEntryTone
-  /** The event's part of the day, "09:00–18:00"; a closure's, or a day the event does not reach
-   *  (only its setup or teardown does), the blocked part. "24:00" is the end of the day. */
+  /** The booking's part of the day, "09:00–18:00"; a closure's, or a day the booking does not
+   *  reach (only its setup or teardown does), the blocked part. "24:00" is the end of the day. */
   timeRange: string
-  /** A second line when the venue is blocked for longer than the event on a day the event is on:
-   *  "Setup and teardown included: 08:00–19:00". Null when the two are the same, for a closure,
-   *  and on a day the event does not reach, where `kindLabel` already says so. */
+  /** A second line when the venue is blocked for longer than the booking on a day the booking is
+   *  on: "Setup included: …", "Teardown included: …" or "Setup and teardown included: 08:00–19:00",
+   *  whichever side runs past it. Null when the two are the same, for a closure, and on a day the
+   *  booking does not reach, where `kindLabel` already says so. */
   turnaround: string | null
   /** Where the item sorts within its day. */
   sortStart: number
@@ -102,22 +107,31 @@ function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
   return isHeld ? HELD_LABEL : BOOKED_LABEL
 }
 
+/** Story 9.1 AC5: which side of the booking's own period the extra blocked time on this day
+ *  falls on - before it (setup), after it (teardown), or both. */
+function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string {
+  const hasSetup = blocked.start < bookingSlice.start
+  const hasTeardown = blocked.end > bookingSlice.end
+  if (hasSetup && hasTeardown) return TURNAROUND_BOTH_LABEL
+  return hasSetup ? TURNAROUND_SETUP_LABEL : TURNAROUND_TEARDOWN_LABEL
+}
+
 function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
   return eachDate(window.starts_at, window.ends_at).flatMap((date) => {
     const dayStart = startOfDay(date)
     const blocked = sliceOfDay(window.starts_at, window.ends_at, dayStart)
     if (blocked === null) return []
-    const event =
-      window.event_starts_at !== null && window.event_ends_at !== null
-        ? sliceOfDay(window.event_starts_at, window.event_ends_at, dayStart)
+    const bookingSlice =
+      window.booking_starts_at !== null && window.booking_ends_at !== null
+        ? sliceOfDay(window.booking_starts_at, window.booking_ends_at, dayStart)
         : null
 
     const isBooking = window.reason === BOOKING_REASON || window.reason === HELD_REASON
     const isHeld = window.reason === HELD_REASON
-    const isTurnaroundOnly = isBooking && event === null
+    const isTurnaroundOnly = isBooking && bookingSlice === null
     let turnaround: string | null = null
-    if (isBooking && event !== null && !isSameSlice(event, blocked)) {
-      turnaround = `${TURNAROUND_INCLUDED}: ${formatSlice(blocked, dayStart)}`
+    if (isBooking && bookingSlice !== null && !isSameSlice(bookingSlice, blocked)) {
+      turnaround = `${turnaroundSideLabel(bookingSlice, blocked)}: ${formatSlice(blocked, dayStart)}`
     }
 
     return [
@@ -129,9 +143,9 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
           ? bookingKindLabel(isHeld, isTurnaroundOnly)
           : closureKindLabel(window.reason),
         tone: isHeld ? 'warning' : 'danger',
-        timeRange: formatSlice(event ?? blocked, dayStart),
+        timeRange: formatSlice(bookingSlice ?? blocked, dayStart),
         turnaround,
-        sortStart: (event ?? blocked).start,
+        sortStart: (bookingSlice ?? blocked).start,
         entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
       },
     ]

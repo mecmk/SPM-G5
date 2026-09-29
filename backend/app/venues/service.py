@@ -26,6 +26,7 @@ from app.venues.models import (
     AccessibilityFeature,
     Facility,
     RoomLayout,
+    UnavailabilityReason,
     Venue,
     VenueAccessibilityFeature,
     VenueFacility,
@@ -111,6 +112,20 @@ _CALENDAR_BOOKING_REASONS = {
     BookingStatus.APPROVED: BOOKING_REASON,
     BookingStatus.PENDING: HELD_REASON,
 }
+# Catches a mismatch at import time, rather than a KeyError on the first affected request.
+assert set(_CALENDAR_BOOKING_REASONS) == set(_HOLDING_STATUSES)
+
+# Story 9.1 AC2: human names for a closure's own reason (UnavailabilityReason in models.py),
+# used only when it has no notes, so the day list reads "Annual servicing" or "Maintenance"
+# rather than the raw code next to "Closed - Maintenance" (mirrors CLOSURE_REASON_NAMES in
+# frontend/src/venues/venueCalendarDays.ts).
+_CLOSURE_REASON_LABELS = {
+    UnavailabilityReason.MAINTENANCE: "Maintenance",
+    UnavailabilityReason.RENOVATION: "Renovation",
+    UnavailabilityReason.SAFETY: "Safety",
+    UnavailabilityReason.INTERNAL_USE: "Internal use",
+    UnavailabilityReason.OTHER: "Other",
+}
 
 # Name PostgreSQL gives the only foreign key that blocks deleting a venue.
 _BOOKINGS_VENUE_FOREIGN_KEY = "venue_bookings_venue_id_fkey"
@@ -163,7 +178,7 @@ def get_venue_calendar(
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: every approved booking, pending request (held) and unavailability
     period overlapping the range, as a flat list of periods (not pre-expanded per day). AC3: each
-    booking carries its event's name; AC5: and the event's own period beside the held one.
+    booking carries its event's name; AC5: and the booking's own period beside the held one.
     Overlap mirrors the database's own half-open exclusion constraint on venue_bookings
     (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not a
     conflict. venue_unavailability_periods has no such DB constraint, but is checked the same
@@ -194,8 +209,8 @@ def get_venue_calendar(
         VenueUnavailableWindowOut(
             starts_at=booking.held_from,
             ends_at=booking.held_until,
-            event_starts_at=booking.starts_at,
-            event_ends_at=booking.ends_at,
+            booking_starts_at=booking.starts_at,
+            booking_ends_at=booking.ends_at,
             reason=_CALENDAR_BOOKING_REASONS[booking.status],
             label=booking.event_name,
         )
@@ -213,10 +228,10 @@ def get_venue_calendar(
         VenueUnavailableWindowOut(
             starts_at=period.starts_at,
             ends_at=period.ends_at,
-            event_starts_at=None,
-            event_ends_at=None,
+            booking_starts_at=None,
+            booking_ends_at=None,
             reason=period.reason,
-            label=period.notes or period.reason,
+            label=period.notes or _CLOSURE_REASON_LABELS.get(period.reason, period.reason),
         )
         for period in closures
     ]
