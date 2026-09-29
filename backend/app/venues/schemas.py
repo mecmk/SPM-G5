@@ -283,18 +283,28 @@ class VenueSearchResult(BaseModel):
 
 
 # --- calendar (story 9.1) ----------------------------------------------------------------
-# Sentinel `reason` for an approved booking. Distinct from venue_unavailability_periods' own
-# reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER, see UnavailabilityReason
-# in models.py) - the two are different vocabularies sharing one field, not a single enum.
+# Sentinel `reason` values for the two kinds of booking on the calendar: an approved booking
+# (BOOKED) and a pending request that soft-locks the venue (HELD, story 9.1 AC2). Neither is a
+# value of venue_unavailability_periods.reason (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
+# OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries either
+# vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
 BOOKING_REASON = "BOOKED"
+HELD_REASON = "HELD"
 
 
 class VenueUnavailableWindowOut(BaseModel):
-    """One blocked period on the venue calendar (AC1/AC2): either an approved booking or a
-    venue_unavailability_periods row. A flat list of periods, not pre-expanded per day - the
-    frontend expands each into the calendar days it touches."""
+    """One blocked period on the venue calendar (story 9.1 AC2): an approved booking (BOOKED), a
+    pending request (HELD) or a venue_unavailability_periods row. A flat list of periods, not
+    pre-expanded per day - the frontend expands each into the calendar days it touches.
+
+    ``starts_at`` / ``ends_at`` are the period the venue is blocked: for a booking, its held
+    period (setup and teardown included). AC5: ``booking_starts_at`` / ``booking_ends_at`` are
+    the booking's own requested period inside it - which may cover only part of its event's own
+    schedule - so a day's list can show both; None for a closure, which has no booking."""
 
     starts_at: datetime
     ends_at: datetime
+    booking_starts_at: datetime | None
+    booking_ends_at: datetime | None
     reason: str
     label: str

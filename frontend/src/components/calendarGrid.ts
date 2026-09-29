@@ -44,6 +44,15 @@ export function formatMonthYear(month: Date): string {
   return month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 }
 
+/** "25 November 2026" - a grid day named in full, e.g. for a button that opens it. */
+export function formatDayLabel(year: number, month: number, day: number): string {
+  return new Date(year, month, day).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 /** Every Singapore-calendar date (`YYYY-MM-DD`) the half-open window `[startsAt, endsAt)`
  * touches - reuses the same Singapore-time conversion every other timestamp in the app goes
  * through (shared/format.ts), rather than a second timezone conversion of its own. */

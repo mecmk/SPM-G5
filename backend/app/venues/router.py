@@ -96,7 +96,8 @@ def get_venue_calendar(
     starts_at: Annotated[AwareDatetime, Query()],
     ends_at: Annotated[AwareDatetime, Query()],
 ) -> list[VenueUnavailableWindowOut]:
-    """Story 9.1 AC1/AC2: approved bookings and unavailability periods overlapping the range."""
+    """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
+    overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only."""
     try:
         return service.get_venue_calendar(db, venue_id, starts_at=starts_at, ends_at=ends_at)
     except service.VenueNotFound:
