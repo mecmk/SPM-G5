@@ -277,6 +277,8 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
   await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
+  // 13.2.2: the coordinator also sees when Venue Staff decided.
+  await expect(page.getByText('Decided at')).toBeVisible()
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
   // - both show up on the event page's history, the new request first. Since f12.1.1 a request
@@ -299,4 +301,6 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
   await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
+  // Only the rejected booking has been decided, so the fresh pending one shows no decided-at line.
+  await expect(bookingSection.getByText('Decided at')).toHaveCount(1)
 })

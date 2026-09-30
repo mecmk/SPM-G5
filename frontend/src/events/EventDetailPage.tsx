@@ -746,6 +746,13 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
+                      {booking.decided_at !== null && (
+                        <p>
+                          <span className="fact-label">Decided at</span>
+                          <br />
+                          {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
                       {booking.decision_reason !== null && (
                         <p>
                           <span className="fact-label">Reason</span>
