@@ -1,0 +1,30 @@
+name: GitGuardian Scan
+
+# Scans every commit in a PR for leaked secrets: API keys, tokens, passwords, private keys. The
+# pre-commit `detect-private-key` hook only catches private key files; this catches the rest.
+# Needs a GITGUARDIAN_API_KEY repository secret — a GitGuardian personal access token with the
+# `scan` scope (free for teams of up to 25).
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: GitGuardian scan
+    # Dependabot's runs get no repository secrets, and its PRs only bump dependency versions.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # whole history, so every commit in the PR can be scanned
+
+      - uses: GitGuardian/ggshield/actions/secret@v1.55.0
+        env:
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
