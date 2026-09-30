@@ -29,8 +29,8 @@ interface NotificationBellProps {
 }
 
 /**
- * The notification centre's bell and panel (team decision, 17 Sep 2026): every change the user
- * made this session, with the important ones (failures, deletions) easy to pick out.
+ * The notification centre's bell and panel: every change the user made this session, with the
+ * important ones (failures, deletions) easy to pick out.
  */
 export function NotificationBell({ placement, isSidebarCollapsed = false }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications()

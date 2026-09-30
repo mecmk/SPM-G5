@@ -23,11 +23,11 @@ const INTERACTIVE_ELEMENTS =
   'a, button, input, select, textarea, label, summary, [role="button"], [role="link"]'
 
 /**
- * Team decision, 17 Sep 2026: one card style for every list of events, a full-width row with a
- * square picture on the left. Story 4.1 is the first user in the real frontend: the square shows
- * `imageUrl` when the event has one and it loads, and a placeholder icon otherwise.
+ * Story 4.1: one card style for every list of events, a full-width row with a square picture on
+ * the left. The square shows `imageUrl` when the event has one and it loads, and a placeholder
+ * icon otherwise.
  *
- * Story 7.1 made a card open its event. The title is the one real link, so a keyboard user and a
+ * Story 7.1: a card opens its event. The title is the one real link, so a keyboard user and a
  * screen reader get a single link named for the event, and it can be opened in a new tab. A click
  * anywhere else on the card opens it too, from a click handler rather than by stretching or
  * wrapping the link, so the text on the card can still be selected and anything interactive put

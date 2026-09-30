@@ -359,7 +359,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   /**
    * f12.1.1 (story 12.1 AC15): the request step's address was opened by someone who may not
    * request a venue for that event, so the page says so instead of offering a request the backend
-   * would refuse (review of PR #67). The statuses are `BOOKABLE_EVENT_STATUSES`'.
+   * would refuse. The statuses are `BOOKABLE_EVENT_STATUSES`'.
    */
   BOOKING_NOT_REQUESTABLE: {
     title: 'Venue cannot be requested',

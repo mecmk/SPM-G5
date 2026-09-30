@@ -159,9 +159,8 @@ function formatHeroMeta(event: EventDetail): string {
  * once rejected, its reason.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
- * while the request awaits a decision. Approving moves it straight to PLANNING; rejecting
- * requires a reason and moves it to REJECTED - both are offered from the same set of statuses
- * (bug b6.1.1's narrower reject rule has been reversed).
+ * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
+ * reason and moves it to REJECTED. Both are offered from the same set of statuses.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()

@@ -2,7 +2,7 @@
  * Story 1.2 - fe/be: enforce role-based access control.
  * AC1 each role has a defined set of permitted functions.
  * AC2 navigation outside the role's permitted set is not displayed; everything inside it is
- *     listed in the sidebar and on the main page (team decision, 17 Sep 2026).
+ *     listed in the sidebar and on the main page.
  * AC3 users can only view the functions permitted for their role.
  * AC4 direct URLs to functions outside the role are rejected.
  * The API-level refusals (401/403) are backend cases: backend/tests/auth/test_rbac.py.

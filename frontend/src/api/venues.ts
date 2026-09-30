@@ -119,7 +119,7 @@ export function updateVenue(venueId: string, input: VenueInput): Promise<Venue> 
   })
 }
 
-/** Team decision, 17 Sep 2026: Venue Staff can delete a venue that has no bookings. */
+/** Story 8.1 AC12: Venue Staff can delete a venue that has no bookings. */
 export function deleteVenue(venueId: string, venueName: string): Promise<void> {
   return api<void>(`/venues/${venueId}`, {
     method: 'DELETE',

@@ -1,8 +1,7 @@
 """HTTP endpoints for the venue catalogue and its availability calendar.
 
-Story 8.3 (create / update, Venue Staff only) plus the read endpoints stories 8.1 / 8.2 need,
-8.1's search (Sprint 2), and the calendar endpoint story 9.1 needs. Delete was added for Venue
-Staff by the team decision of 17 Sep 2026 (full CRUD on venues).
+Story 8.3 (create / update / delete - Venue Staff have full CRUD on venues) plus the read
+endpoints stories 8.1 / 8.2 need, 8.1's search, and the calendar endpoint story 9.1 needs.
 """
 
 from __future__ import annotations

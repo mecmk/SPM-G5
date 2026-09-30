@@ -5,8 +5,8 @@
  * AC2 where a characteristic is not recorded, this is shown as unknown ("Not recorded") rather
  *     than as absent.
  * AC3 the record is readable by Event Coordinators and Venue Staff. Technical Support Staff
- * keeps read access too (confirmed 20 Sep 2026), via the shared VENUES_READ permission rather
- * than a venues-specific one (see permissions.py).
+ * keeps read access too, via the shared VENUES_READ permission rather than a venues-specific
+ * one (see permissions.py).
  * AC3's permission boundary (Attendee/Organiser refused) is a backend case:
  * backend/tests/auth/test_rbac.py::test_venue_actions_are_allowed_only_for_permitted_roles.
  * Venue Staff reach this page from the venue catalogue, the same way coordinators do (f8.1.1,
