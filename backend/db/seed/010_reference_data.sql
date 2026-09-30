@@ -25,10 +25,14 @@ INSERT INTO facilities (code, name, description, sort_order) VALUES
     ('STAGE',              'Stage',                   'Raised platform for presenters.', 50),
     ('WHITEBOARD',         'Whiteboard / flipchart',  NULL, 60),
     ('CATERING_AREA',      'Catering area',           'Space and power for food service.', 70),
-    ('RECORDING',          'Recording equipment',     'Fixed cameras and capture for session recording.', 80),
     ('BREAKOUT_ROOMS',     'Breakout rooms',          'Adjoining smaller rooms.', 90)
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name, description = EXCLUDED.description, sort_order = EXCLUDED.sort_order;
+
+-- f2.1.2: RECORDING had no corresponding row in equipment_types, so an organiser could request
+-- it under venue requirements with nothing behind it to actually reserve or track. INSERTs above
+-- are UPSERT-only and never remove a row, so the delete is explicit.
+DELETE FROM facilities WHERE code = 'RECORDING';
 
 INSERT INTO room_layouts (code, name, description, sort_order) VALUES
     ('THEATRE',    'Theatre',    'Rows of chairs facing the front; highest capacity.', 10),

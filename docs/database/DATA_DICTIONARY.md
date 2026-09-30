@@ -761,7 +761,6 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | STAGE | Stage | Raised platform for presenters. |
 | WHITEBOARD | Whiteboard / flipchart | - |
 | CATERING_AREA | Catering area | Space and power for food service. |
-| RECORDING | Recording equipment | Fixed cameras and capture for session recording. |
 | BREAKOUT_ROOMS | Breakout rooms | Adjoining smaller rooms. |
 
 ### room_layouts values
