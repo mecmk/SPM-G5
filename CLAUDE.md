@@ -1,9 +1,12 @@
 # CLAUDE.md
 
 Monorepo root. **Thin by design**: orientation, plus the few facts that live *between*
-subsystems. Tech stack, setup and test commands, branching rules, the merge checklist, Definition
-of Done, and the database/auth conventions all live in [AGENTS.md](AGENTS.md) — the source of
-truth for every agent and human on this repo. Read it first; this file deliberately does not repeat it.
+subsystems. Tech stack, setup and test commands, branching rules, backlog IDs, the merge
+checklist, and the database/auth conventions all live in [AGENTS.md](AGENTS.md) — the source of
+truth for every agent and human on this repo, imported below so it is always loaded. This file
+deliberately does not repeat it.
+
+@AGENTS.md
 
 ## Layout
 
@@ -12,14 +15,14 @@ truth for every agent and human on this repo. Read it first; this file deliberat
 | `backend/` | Python 3.12 + FastAPI + SQLAlchemy, PostgreSQL | `backend/CLAUDE.md`, `backend/STYLE.md` |
 | `frontend/` | React 19 + TypeScript SPA, built with Vite | `frontend/CLAUDE.md`, `frontend/STYLE.md` |
 | `tests/` | Playwright e2e. Own `package.json`; run from the root with `npm run test:e2e`, which builds a throwaway database and its own servers | `tests/CLAUDE.md`, `tests/STYLE.md` |
-| `scripts/` | Repo-root Node helpers: `poc.mjs`, `uv.mjs` | Root scripts reach uv through `scripts/uv.mjs`, which locates or installs it. Use that wrapper in any new root script, never a bare `uv`. |
-| `docs/` | Architecture, database and testing docs | `docs/database/DATA_DICTIONARY.md`, `docs/database/ERD.excalidraw` and `docs/testing/TRACEABILITY.md` are **generated — never hand-edit them.** Regenerate with `npm run db:docs` / `npm run test:trace`. `TRACEABILITY.md` is git-ignored — CI uploads it as an artifact instead. |
+| `scripts/` | Node helpers behind the root `npm run` scripts | Root scripts reach uv through `scripts/uv.mjs`, which locates or installs it. Use that wrapper in any new root script, never a bare `uv`. |
+| `docs/` | Architecture, database and testing docs; `docs/sprints/` holds sprint records, which are not kept up to date | `docs/database/DATA_DICTIONARY.md`, `docs/database/ERD.excalidraw` and `docs/testing/TRACEABILITY.md` are **generated — never hand-edit them.** Regenerate with `npm run db:docs` / `npm run test:trace`. `TRACEABILITY.md` is git-ignored — CI uploads it as an artifact instead. |
 
 ## Cross-subsystem facts
 
 - **No shared type generation.** Frontend request/response types are hand-written mirrors of
-  the backend's Pydantic schemas — `frontend/src/api/auth.ts:3` mirrors `UserOut` in
-  `backend/app/auth/schemas.py`. Change an API contract and you update both sides by hand. The
+  the backend's Pydantic schemas — `CurrentUser` in `frontend/src/api/auth.ts` mirrors `UserOut`
+  in `backend/app/auth/schemas.py`. Change an API contract and you update both sides by hand. The
   same applies to the permission codes in `backend/app/auth/permissions.py`: a frontend that
   gates on them compares plain strings, so a renamed code fails silently rather than at compile
   time.

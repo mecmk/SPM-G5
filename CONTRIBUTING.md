@@ -4,37 +4,21 @@
 
 - [Branching Strategy](#branching-strategy)
 - [Daily Workflow](#daily-workflow)
-- [Commit & PR Conventions](#commit--pr-conventions)
+- [Commit & PR Titles](#commit--pr-titles)
 - [Reviewer Sign-off](#reviewer-sign-off)
 - [General Best Practices](#general-best-practices)
 
 ## Branching Strategy
 
-```text
-main                   ← trunk. Stable, protected, PR-only.
-├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
-├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
-├── refactor/<slug>    ← restructuring, no behavior change
-├── test/<slug>        ← test-only changes
-└── docs/<slug>        ← documentation only
-```
-
-- **`main`** — the trunk. Always stable and deployable. Protected, PR-only — nobody commits to
-  it directly. Every branch below is cut from `main` and merges straight back into it.
-- **`story/<ID>-<slug>`** — a feature branch implementing one backlog story, e.g.
-  `story/A1-login`.
-- **`fix/<ID>-<slug>`** — a bug fix branch, e.g. `fix/B1-draft-not-saving`.
-- **`refactor/<slug>`** — restructuring code with no behavior change.
-- **`test/<slug>`** — test-only changes.
-- **`docs/<slug>`** — documentation only, e.g. `docs/claude-md-split`. No source changes.
-
-**There is no `sprint/*`, `staging`, `release/*`, or `hotfix/*` branch in this project.** This
-is trunk-based development, not GitFlow — keep it that way.
+Trunk-based development on `main`, not GitFlow: every branch is cut from `main` and squash-merged
+straight back into it. Branch names (`story/1.1-login`) and backlog IDs are defined in
+[AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints); commit and PR titles have a quick
+reference [below](#commit--pr-titles).
 
 ## Daily Workflow
 
-1. Branch off the latest `main` using the appropriate prefix
-   (`story/`, `fix/`, `refactor/`, `test/`, or `docs/`).
+1. Branch off the latest `main`, named as
+   [AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints) says, e.g. `story/1.1-login`.
 2. Implement the change.
 3. Run tests and lint locally (see [AGENTS.md](AGENTS.md) for exact commands).
 4. Push your branch.
@@ -42,13 +26,13 @@ is trunk-based development, not GitFlow — keep it that way.
 6. Get **one approving review** carrying the [reviewer sign-off](#reviewer-sign-off).
 7. **Squash merge** the PR.
 
-Keep branches short-lived: one story or fix per branch, merged as soon as it is reviewed and
+Keep branches short-lived: one backlog item per branch, merged as soon as it is reviewed and
 green, then deleted. A branch that lives for weeks drifts from `main` and ends in merge
 conflicts — if `main` moves on while you work, update your branch from it and re-run the tests.
 
 ### Local pre-commit hooks (required)
 
-The repository ships a `.pre-commit-config.yaml` (lint/format checks, secret detection, and
+The repository ships a `.pre-commit-config.yaml` (lint/format checks, private-key detection, and
 commit-message format), but it only runs automatically on `git commit` after being enabled once
 per machine. Every contributor must run this as part of initial setup:
 
@@ -73,29 +57,32 @@ npm run format   # runs ruff format (backend) + prettier --write (frontend)
 ```
 
 The `commit-msg` hook also rejects a commit whose **message** doesn't follow the Conventional
-Commits format below (e.g. `wip fix stuff` gets rejected, `fix: correct venue capacity check`
-passes) — that check only runs if you ran the second `install` line above. It's a local
-convenience: your commits on a feature branch get squash-merged into one commit anyway, and
-`pr-title-check.yml` already enforces this same format on the **PR title** in CI regardless of
-whether you have this hook installed.
+Commits format [below](#commit--pr-titles) (e.g. `wip fix stuff` gets rejected,
+`fix: correct venue capacity check (b8.3)` passes) — that check only runs if you ran the
+second `install` line above. It's a local convenience: your commits on a feature branch get
+squash-merged into one commit anyway, and `pr-title-check.yml` already enforces this same format
+on the **PR title** in CI regardless of whether you have this hook installed.
 
-## Commit & PR Conventions
+## Commit & PR Titles
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-- `feat` — a new feature
-- `fix` — a bug fix
-- `docs` — documentation only
-- `style` — formatting, no code change
-- `refactor` — restructuring without behavior change
-- `test` — adding or fixing tests
-- `chore` — tooling, dependencies, build config
-
-Optionally reference the backlog ticket ID in the title, e.g.:
+A quick reference; [AGENTS.md](AGENTS.md#commit--pr-conventions) is the source of truth, and the
+two are kept in step.
 
 ```text
-feat: add login form (A1)
+<type>: <what changed> (<backlog ID>)
+
+feat: reassign event to another coordinator (s5.2)
+fix: keep the sign-in form steady while the session loads (b1.1)
+chore: scan PRs for secrets (c1.1)
+docs: correct the migration rule in the database guide
 ```
+
+- `<type>` is one of `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
+  `pr-title-check.yml` rejects any other type in a PR title.
+- The backlog ID goes at the end, with its prefix: `s` for a story, `b` for a bug, `c` for a chore.
+  Leave it out only when there is no backlog item, as for most `docs`, `refactor` or `test` work.
+  Branch names use the number alone: `story/5.2-reassign-coordinator`.
+- The PR title matters most. PRs are squash-merged, so it becomes the one commit on `main`.
 
 ## Reviewer Sign-off
 

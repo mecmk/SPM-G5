@@ -16,14 +16,14 @@ owns layout at 100 columns. Everything below is enforced by review, and nothing 
 rule ruff already decides.
 
 **Queued to move to tooling.** `ANN` (annotation presence) would own the *Annotate every
-signature* rule below. It reports **8 violations in feature code** today (`app/auth`, `app/venues`,
-`app/common`, `app/db.py`) and more under `app/dbtool` and `tests/`. Clear those and add `ANN` to
-`select`; the rule then leaves this file.
+signature* rule below. `uv run ruff check --select ANN app` lists what it would report today.
+Clear those and add `ANN` to `select`; the rule then leaves this file.
 
 **Provenance.** Every rule ends with the sites in this repo it was drawn from — an *exemplar*
-that does it right, a *counter-site* that does not, or a count of both. That anchor is the only
-justification a rule gets here: open the file and check. A rule with nothing to point at was
-removed rather than kept on the strength of where it came from. See
+that does it right, or a *counter-site* that does not — named by file and function, never by line
+number, so an anchor survives edits around it. That anchor is the only justification a rule gets
+here: open the file and check. A rule with nothing to point at was removed rather than kept on the
+strength of where it came from. See
 [Considered and rejected](#considered-and-rejected) for what was deliberately left out.
 
 **Rule strength.** Every rule carries its weight, and a non-blocking weight is genuinely the
@@ -46,16 +46,15 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   between the two layers; when one is renamed, the rename travels through router, service and
   every import in the same commit.
 
-  *`expected` · already holds here:
-  `venues/router.py:67` ↔ `venues/service.py:99`, and likewise for `list_venues`, `get_venue`*
+  *`expected` · already holds here: `create_venue`, `update_venue`, `list_venues` and
+  `get_venue` share their names across `venues/router.py` and `venues/service.py`*
 
 - `taste` — **Prefix a boolean with `is_`.** The columns already do (`is_active`, `is_internal`).
   Graded `taste` rather than `expected` because three existing parameters read naturally without
   it and forcing `is_include_withdrawn` would be worse — see Standing divergences.
 
   *`taste` · downgraded for this tree ·
-  exemplars `auth/models.py` (`is_active`); counter-sites `venues/service.py:70`,
-  `venues/service.py:207`*
+  exemplars `auth/models.py` (`is_active`); counter-sites: see Standing divergences*
 
 ## Queries and sessions
 
@@ -65,20 +64,20 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
 
   ```python
   # Good
-  user = db.scalar(select(User).where(User.email == email.strip()))
+  user = db.scalar(select(User).where(User.email == email))
 
   # Bad — legacy 1.x API
   user = db.query(User).filter(User.email == email).first()
   ```
 
-  *`blocking` · exemplars `app/auth/service.py:32`, `app/venues/service.py:71`; 8 uses of
-  `select()` in `app/`, 0 of `db.query()`*
+  *`blocking` · exemplars `auth/service.py::authenticate`, `venues/service.py::list_venues`;
+  `git grep "db.query(" app` finds none*
 
 - `expected` — **Filtering, sorting and limiting happen in SQL, not in Python.** Bend this only
   where moving the work would change the result.
 
-  *`expected` · exemplar
-  `venues/service.py:70-74`, which filters `status` in the statement rather than the list*
+  *`expected` · exemplar `venues/service.py::list_venues`, which filters `status` in the
+  statement rather than the list*
 
 ## Function signatures
 
@@ -97,17 +96,16 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   ```
 
   **A stricter variant of this rule exists elsewhere**, applying `*` only in front of a
-  dangerous default. This tree has 9 sites doing it the broader way and none doing it the other
-  way, so the local majority governs.
+  dangerous default. Where this tree uses `*` it uses the broader form, so the local majority
+  governs.
 
-  *`expected` · exemplars `venues/service.py:99`, `common/audit.py:36`, `passwords.py:28`;
-  9 sites across `auth/`, `venues/` and `dbtool/`*
+  *`expected` · exemplars `venues/service.py::create_venue`, `common/audit.py::record_audit`,
+  `auth/passwords.py::hash_password`*
 
 - `expected` — **Annotate every signature, parameters and return alike**, on private helpers as
   well as public functions — except a class `__init__`, which never takes `-> None`.
 
-  *`expected` · 9 counter-sites, see
-  Standing divergences*
+  *`expected` · counter-sites: see Standing divergences*
 
 ## Modules and imports
 
@@ -117,14 +115,14 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   reason is forward references: `UserOut.from_user` is annotated `-> UserOut` inside the class
   that is still being defined, which is a `NameError` at runtime without this import.
 
-  *`expected` · exemplar `app/auth/schemas.py:1`; present in 16 of 19 modules*
+  *`expected` · exemplar `auth/schemas.py`; missing only where Standing divergences says*
 
 - `taste` — **Define a private helper above the function that calls it.** The reader meets it
   before the code that depends on it, and sibling modules doing near-identical jobs keep the same
   order. Graded `taste`: Python has no convention either way, and this tree is split.
 
-  *`taste` · exemplar `auth/router.py:22`
-  (`_set_session_cookie` above `login`); counter-site `venues/service.py:186`*
+  *`taste` · exemplar `auth/router.py::_set_session_cookie` (above `login`); counter-sites: see
+  Standing divergences*
 
 ## Control flow and failure
 
@@ -150,36 +148,35 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   Validating a payload before acting on it is a different thing and stays legal —
   `_validate_reference_codes` is not a pre-check in this sense.
 
-  *`blocking` · exemplars
-  `venues/service.py:109`, `:163`*
+  *`blocking` · exemplars `venues/service.py::create_venue`, `::update_venue`*
 
 - `expected` — **Test a possibly-absent object with `is None`, never a falsy check.** A SQLAlchemy
   row, an empty string and an empty list are all falsy for different reasons; `is None` tests the
   one you meant.
 
-  *`expected` · 12 uses across 5 modules,
-  exemplar `auth/service.py:64`*
+  *`expected` · exemplar `auth/service.py::get_session_user`*
 
 - `expected` — **`except Exception` is not a handler.** A blind catch routes the bug it was not
   written for — a typo's `AttributeError`, a `KeyError` from a renamed field — into the branch
   built for a database failure.
 
-  *`expected` · 0 counter-sites in `app/`*
+  *`expected` · one licensed counter-site, see Standing divergences*
 
 - `taste` — **One `except` per exception type, narrowest first; never group types in a tuple.**
   Handlers diverge over time, and a grouped block lets the next person change one type's
   behaviour without noticing they changed the other's. Graded `taste`: `except (A, B):` is
   ordinary, idiomatic Python, so this is a house preference rather than a correctness rule.
 
-  *`taste` · counter-site
-  `venues/router.py:96`, which groups `UnknownReferenceCode` and `InvalidOperatingHours`*
+  *`taste` · counter-sites `venues/router.py::update_venue`, which groups
+  `UnknownReferenceCode` and `InvalidOperatingHours`, and
+  `coordination/router.py::assign_coordinator`*
 
 - `expected` — **Suppress the exception chain with `from None` when a router translates a service
   exception into an `HTTPException`.** The domain exception has already been handled and
   converted; leaving it chained puts an irrelevant "During handling of the above exception" block
   in the log for an ordinary 404.
 
-  *`expected` · exemplars `venues/router.py:63`, `:76`, `:93`; all 6 translations do this*
+  *`expected` · exemplars `venues/router.py::get_venue`, `::create_venue`, `::update_venue`*
 
 ## Types and data
 
@@ -187,13 +184,14 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   module-private one takes a leading underscore. The name is the documentation, and one place
   changes when the value does.
 
-  *`expected` · already holds:
-  `passwords.py:18-25`, `auth/router.py:19`, `venues/service.py:85`*
+  *`expected` · exemplars the scrypt parameters at the top of `auth/passwords.py`,
+  `INVALID_CREDENTIALS_MESSAGE` in `auth/router.py`, `_SCALAR_FIELDS` in `venues/service.py`;
+  counter-site: see Standing divergences*
 
 - `expected` — **Return several values as one typed object, never a bare tuple.** A tuple makes
   the caller unpack positionally, so adding a third value breaks every call site silently.
 
-  *`expected` · 2 counter-sites, see Standing
+  *`expected` · counter-sites: see Standing
   divergences*
 
 - `expected` — **No field defaults on a response schema.** Every field is populated explicitly at
@@ -213,21 +211,21 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
       description: str | None = None
   ```
 
-  *`expected` · exemplars `venues/schemas.py` (`VenueOut`, 16 fields, no defaults),
-  `auth/schemas.py:16` (`UserOut`, 9 fields, no defaults); 0 counter-sites*
+  *`expected` · exemplars `venues/schemas.py::VenueOut`, `auth/schemas.py::UserOut`;
+  counter-site: see Standing divergences*
 
 - `expected` — **A constructed timestamp carries its timezone:** `datetime.now(UTC)`, never the
   naive `datetime.now()` or the deprecated `datetime.utcnow()`. A naive value written to an aware
   column is wrong by the host's offset and silent about it.
 
-  *`expected` · already holds:
-  `auth/service.py:51`, `:66`, `:80`*
+  *`expected` · already holds: `auth/service.py::create_session`, `::get_session_user`,
+  `::revoke_session`*
 
 - `expected` — **Parse anything from outside the process into a Pydantic model before reading a
   field off it.** Dict access fails where the value is used; validation fails where the schema
   changed.
 
-  *`expected` · exemplar `venues/router.py:39`*
+  *`expected` · exemplar `venues/router.py::reference_data`*
 
 ## HTTP surface
 
@@ -235,14 +233,14 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   `PATCH /venues/{id}`, not `POST /venues/{id}/update`. A partial update is `PATCH`, a full
   replacement is `PUT`.
 
-  *`expected` · exemplars
-  `venues/router.py:47`, `:58`, `:66`, `:82`; counter-sites `auth/router.py:38`, `:57`*
+  *`expected` · exemplars `GET /venues`, `GET /venues/{venue_id}`, `POST /venues` and
+  `PATCH /venues/{venue_id}` in `venues/router.py`; counter-sites: see Standing divergences*
 
 - `expected` — **Never trust the client with a security-relevant value.** It is generated
   server-side or it is not trusted.
 
-  *`expected` · exemplar
-  `auth/service.py:47`, where the session token comes from `secrets.token_urlsafe`*
+  *`expected` · exemplar `auth/service.py::create_session`, where the session token comes from
+  `secrets.token_urlsafe`*
 
 - `expected` — **Write a user-facing error message as a complete sentence: second person, capital
   first word, terminal period.** Name what was refused; never speculate about the cause; never
@@ -258,9 +256,9 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   NOT_PERMITTED_MESSAGE = "forbidden"
   ```
 
-  *`expected` · exemplars
-  `auth/router.py:19`, `auth/deps.py:33`, `:47`; asserted in `tests/auth/test_login_logout.py:77`
-  and the e2e check at `tests/e2e/auth.spec.ts:29`*
+  *`expected` · exemplars `INVALID_CREDENTIALS_MESSAGE` in `auth/router.py`, the 401 and 403
+  details in `auth/deps.py`; asserted in `tests/auth/test_login_logout.py::`
+  `test_wrong_password_and_unknown_email_get_identical_responses`*
 
 ## Traceability
 
@@ -275,7 +273,8 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
       """AC1: valid credentials start a session. AC2: any failure returns the same generic 401."""
   ```
 
-  *`expected` · exemplars `auth/router.py:1`, `:45`; `venues/router.py:72`; `venues/service.py:100`*
+  *`expected` · exemplars `auth/router.py` (the module docstring and `login`),
+  `venues/router.py::create_venue`, `venues/service.py::create_venue`*
 
 ## Considered and rejected
 
@@ -284,7 +283,7 @@ Conventions weighed against this codebase and left out, recorded so nobody re-ad
 | Convention | Why not here |
 | --- | --- |
 | **No comments or docstrings — a comment is an admission the code failed to say it** | Directly contradicts the Traceability rule above, which this project's grading rubric depends on. Every module in `app/` is docstringed, and the story/AC docstrings are the audit trail. Carrying this would mean deleting the thing that makes the code gradeable. |
-| `*` only in front of a dangerous default | Contradicted by 9 local sites — see Function signatures. |
+| `*` only in front of a dangerous default | Contradicted by the local majority — see Function signatures. |
 | `ErrorCode` / `AppHttpExceptionBase`, no-argument exception classes | No such hierarchy here; services raise plain Python exceptions that routers translate. |
 | CRUD / gateway / middleware / validators layer rules | Different architecture — this project is router / service / schemas / models. |
 | Alembic single-head migrations, `RateLimiter`, `EndpointLogLevel`, Loguru over `print()`, Azure blob paths | None of these exist in this project. |
@@ -297,15 +296,19 @@ in an unrelated PR.**
 
 | Rule | Violating sites | Status |
 | --- | --- | --- |
-| Annotate every signature | 9: `venues/schemas.py:77`, `:106`, `:136`, `:140`; `venues/service.py:227`; `auth/deps.py:40`; `db.py:45`; `dbtool/docs.py:461`, `:652` | carried rule, newly adopted — existing code predates it |
-| Return a typed object, not a tuple | 2: `auth/service.py:45` (`tuple[UserSession, str]`), `dbtool/docs.py:710` | carried rule, newly adopted |
-| A URL names a resource | 2: `auth/router.py:38` (`/login`), `:57` (`/logout`) | licensed exception — `POST /auth/login` is near-universal convention and both the backend and e2e tests call the path; not a precedent for other features |
-| One `except` per type | 1: `venues/router.py:96` | pre-existing, not precedent |
-| Private helper defined above its caller | `venues/service.py:186-238` (helper block at the bottom) | pre-existing, not precedent — `auth/router.py:22` shows the intended shape |
-| `is_` on booleans | 3: `venues/service.py:70` (`include_withdrawn`), `:207` (`only_present`), `common/audit.py:44` (`commit`) | licensed exception — all three read as flags and the prefix would worsen them |
+| Annotate every signature | `uv run ruff check --select ANN app` lists them (an `__init__` without `-> None` is not a violation of this rule) | carried rule, newly adopted — existing code predates it |
+| Return a typed object, not a tuple | `auth/service.py::create_session` (`tuple[UserSession, str]`), `venues/service.py::daily_window` and `::_search_period`, `dbtool/docs.py::generate` | carried rule, newly adopted |
+| A URL names a resource | `POST /auth/login`, `POST /auth/logout` | licensed exception — `POST /auth/login` is near-universal convention and both the backend and e2e tests call the path; not a precedent for other features |
+| A URL names a resource | `POST /events/{event_id}/submit`, `/approve`, `/reject`; `POST /bookings/{booking_id}/approve`, `/reject`, `/withdraw` | pre-existing, undecided — each is a state transition with its own rules and audit record, so it was modelled as an action; agree as a team before adding another |
+| Every fixed literal becomes a named constant | the error sentences written inline in `coordination/router.py`, one of which repeats `NOT_PERMITTED_MESSAGE` from `auth/deps.py` | pre-existing, not precedent |
+| No field defaults on a response schema | `coordination/schemas.py::CoordinatorOption` (`department = None`) | pre-existing, not precedent |
+| One `except` per type | `venues/router.py::update_venue`, `coordination/router.py::assign_coordinator` | pre-existing, not precedent |
+| `except Exception` is not a handler | `events/service.py::set_cover_image` | licensed exception — it deletes the file it has just written and re-raises, so nothing is swallowed |
+| Private helper defined above its caller | helpers below their callers in `venues/service.py`, `bookings/service.py` and `dbtool/docs.py` | pre-existing, not precedent — `auth/router.py::_set_session_cookie` shows the intended shape |
+| `is_` on booleans | parameters that read as flags: `include_withdrawn` (`venues/service.py::list_venues`), `only_present` (`::_replace_characteristics`), `commit` (`common/audit.py::record_audit`, `common/notifications.py::notify`), `required` (`events/service.py::_check_registration`), and the `force` / `with_seed` / `with_docs` options in `dbtool/__main__.py` | licensed exception — each reads as a flag and the prefix would worsen it |
 | `from __future__ import annotations` | 3: `db.py`, `config.py`, `main.py` | licensed exception — none defers an annotation |
-| Services raise domain exceptions for failure | `auth/service.py:26` returns `None` | licensed exception — story 1.1 AC2 requires the failure modes be indistinguishable |
-| Routers do HTTP only; services own the transaction | `auth/router.py:52`, `:63` call `record_audit` with the default `commit=True` | pre-existing, not precedent — `venues/service.py:116` shows the intended shape |
+| Services raise domain exceptions for failure | `auth/service.py::authenticate` returns `None` | licensed exception — story 1.1 AC2 requires the failure modes be indistinguishable |
+| Routers do HTTP only; services own the transaction | `auth/router.py::login` and `::logout` call `record_audit` with the default `commit=True` | pre-existing, not precedent — `venues/service.py::create_venue` shows the intended shape |
 
 ## Maintaining this file
 
@@ -313,7 +316,8 @@ in an unrelated PR.**
   yet. A new rule needs a site in this repo it can point at — an exemplar that does it right or
   a counter-site that does not. Record a correction in the PR thread; add it here only when a
   second, independent case appears.
-- **Record divergences with counts**, not "some legacy code does this".
+- **Record divergences by file and function**, not "some legacy code does this", and never by
+  line number or count: both go stale with the next edit nearby.
 - **Match the way it is already done here, even when the local choice is worse.** Settle a dispute
   by the majority of existing untouched code, name the canonical module to copy from, and raise
   standardization as its own PR rather than fixing it in passing.

@@ -51,20 +51,18 @@ setting to its upper-case name.
 
 ## Domain
 
-`db/migrations/001_initial_schema.sql` defines **27 tables covering the entire product backlog**
-— events, bookings, equipment, registrations, notifications — while only `auth` and `venues`
-have application code. **The schema running ahead of the app is deliberate: a table existing is
-not a licence to build the feature.** Add code when a story asks for it.
+The migrations define tables for **the entire product backlog** — events, bookings, equipment,
+registrations, notifications — ahead of the application code; `ls app/` shows which feature
+areas have code. **The schema running ahead of the app is deliberate: a table existing is not a
+licence to build the feature.** Add code when a story asks for it. Every table and column is
+described in the generated [data dictionary](../docs/database/DATA_DICTIONARY.md).
 
 - `roles` → `users` → `user_sessions`. `users.role_code` is the RBAC key; external users also
   belong to a `client_organisations` row.
-- `venues`, plus reference tables `facilities`, `room_layouts`, `accessibility_features`, joined
-  through `venue_facilities`, `venue_layouts`, `venue_accessibility_features`.
 - `audit_log` — append-only, written only through `app/common/audit.py`.
 
-Statuses are `text` columns with named `CHECK` constraints, never PostgreSQL ENUMs (there are 33
-checks and zero `CREATE TYPE`). Pick-lists are reference *tables* seeded from
-`db/seed/010_reference_data.sql`, never Python constants.
+Statuses are `text` columns with named `CHECK` constraints, never PostgreSQL ENUMs. Pick-lists
+are reference *tables* seeded from `db/seed/010_reference_data.sql`, never Python constants.
 
 ## Architecture
 
@@ -87,9 +85,8 @@ the record in hand, so they belong in the feature's service, never in `permissio
 ### `db/migrations/` and `db/seed/` — the schema is SQL, not ORM
 
 The SQL is the source of truth and the ORM mirrors it;
-`tests/test_schema.py::test_orm_models_match_database` fails when the two drift. Sprint 1 only:
-`001_initial_schema.sql` may be edited in place, followed by `npm run db:reset`. From sprint 2,
-add `NNN_*.sql` and never edit a file that has been applied.
+`tests/test_schema.py::test_orm_models_match_database` fails when the two drift. Change the
+schema with a new `NNN_*.sql` file; never edit one that has been applied.
 
 ### `app/dbtool/` — tooling, not feature code
 
@@ -112,7 +109,7 @@ follow the four-file feature layout and should not be reshaped to.
 
 Adding `<feature>` end to end:
 
-1. `db/migrations/NNN_*.sql` — tables plus `COMMENT ON` (sprint 1: edit `001` and `npm run db:reset`)
+1. `db/migrations/NNN_*.sql` — a new file with the tables plus `COMMENT ON`
 2. `db/seed/010_reference_data.sql` — any new pick-list values
 3. `app/<feature>/models.py` — ORM mirroring that SQL
 4. `app/<feature>/schemas.py` — request/response models

@@ -1,6 +1,7 @@
 ## Ticket ID
 
-<!-- Story ID from the backlog, e.g. 1.1, 8.3 -->
+<!-- Backlog ID with its type prefix: s for a story, b for a bug, c for a chore,
+     e.g. s1.1, b1.1, c1.1 -->
 
 ## Summary
 
@@ -45,6 +46,7 @@
 - [ ] I have read every changed line, including any AI-generated code and tests, and can
       explain it. It does what the acceptance criteria ask, the functions, fields and
       endpoints it uses exist, and no test was weakened, skipped or edited to match a bug
+- [ ] Every doc that AGENTS.md → Keeping Docs Current ties to what this PR changes is updated
 - [ ] Lint/format checks are clean; the flow was manually exercised in the browser (if there is
       UI)
 - [ ] No secrets, API keys, or `.env` values committed

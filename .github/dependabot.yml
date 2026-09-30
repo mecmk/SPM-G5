@@ -1,27 +1,54 @@
 version: 2
 
-# Every PR targets main (trunk-based development), so Dependabot's do too.
+# Every PR targets main (trunk-based development), so Dependabot's do too. Updates come once a
+# month as one grouped PR per folder, and major versions are skipped: those are the bumps that
+# break things, and a coursework release gains little from them. Take a major deliberately,
+# in a chore/ branch of its own.
 updates:
   - package-ecosystem: "uv"
     directory: "/backend"
     target-branch: "main"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      backend:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/frontend"
     target-branch: "main"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      frontend:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/tests"
     target-branch: "main"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      e2e:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "main"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

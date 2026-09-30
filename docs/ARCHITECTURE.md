@@ -11,12 +11,10 @@ backed by PostgreSQL.
 └────────────┘                                   └──────────────┘                    └────────────┘
 ```
 
-- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, styled with the plain-CSS design system
-  from story c3.
-  Sign-in (story 1.1), the role-based sidebar and main page (1.2) and venue management (8.3)
-  are built; every other section a role can use is listed and opens a page naming its story.
-  Feature pages live in `src/<feature>/`, with a matching `src/api/<feature>.ts`. See
-  [frontend/CLAUDE.md](../frontend/CLAUDE.md).
+- **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, styled with the plain-CSS
+  design system from story c3. Every section a role can use is in its sidebar; one whose story is
+  not built yet opens a page naming that story. Feature pages live in `src/<feature>/`, with a
+  matching `src/api/<feature>.ts`. See [frontend/CLAUDE.md](../frontend/CLAUDE.md).
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
@@ -44,7 +42,7 @@ roles ──< users >── client_organisations
             │        └──< venue_bookings >── venues ──< venue_facilities / venue_layouts /
             │                  │                        venue_accessibility_features /
             │                  │                        venue_unavailability_periods
-            │                  └── (EXCLUDE: no two APPROVED bookings overlap on one venue)
+            │                  └── (EXCLUDE: no two PENDING or APPROVED bookings overlap on one venue)
             │
             └──< equipment_reservations >── equipment_types ──< equipment_unavailability_periods
                  notifications, audit_log (cross-cutting)
@@ -85,12 +83,13 @@ service, next to the record they need - not in the permission matrix.
 
 ## Adding a feature (checklist)
 
-1. Schema: new migration or, in Sprint 1, edit `001` + `npm run db:reset`; add `COMMENT ON`;
+1. Schema: a new `NNN_*.sql` migration, with a `COMMENT ON` for every new table and column; then
    `npm run db:docs`.
 2. Backend: `app/<feature>/{models,schemas,service,router}.py`; add the router in
    `app/main.py`; add permissions to `app/auth/permissions.py` if the story introduces new
    functions.
-3. Tests: `backend/tests/<feature>/test_<story>.py` with `@pytest.mark.story(...)` markers.
-4. Frontend, once UI work resumes: `src/api/<feature>.ts` and `src/<feature>/<Page>.tsx`, hiding
-   anything the role lacks the permission for (see `frontend/CLAUDE.md`).
+3. Tests: `backend/tests/<feature>/test_<topic>.py`, named for what the story does (e.g.
+   `test_raise_booking_request.py`), with `@pytest.mark.story(...)` markers.
+4. Frontend: `src/api/<feature>.ts` and `src/<feature>/<Page>.tsx`, hiding anything the role
+   lacks the permission for (see `frontend/CLAUDE.md`).
 5. E2E: one Playwright spec for the user-visible flow.

@@ -7,7 +7,7 @@ labels: story
 
 ## Story ID
 
-<!-- e.g. A1, B2 — from the team's backlog tool -->
+<!-- e.g. s1.1, s8.3 — from the team's backlog tool -->
 
 ## Story
 

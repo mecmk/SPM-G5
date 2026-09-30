@@ -1,7 +1,7 @@
 name: Pre-commit Checks
 
 # Runs the exact same hooks defined in .pre-commit-config.yaml against every file in the repo,
-# so a contributor who never ran `pre-commit install` locally is still covered in CI — secret
+# so a contributor who never ran `pre-commit install` locally is still covered in CI — private-key
 # detection, YAML validity, trailing whitespace, large files, and lint/format, all enforced here
 # regardless of local setup.
 on:
