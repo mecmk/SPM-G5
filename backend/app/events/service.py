@@ -25,9 +25,11 @@ from sqlalchemy.orm import Session, lazyload
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.audit import record_audit
+from app.common.notifications import notify
 from app.config import settings
 from app.coordination import service as coordination_service
 from app.events.models import (
+    ClarificationKind,
     EquipmentHoldStatus,
     EquipmentReservation,
     EquipmentType,
@@ -241,6 +243,10 @@ class MissingSubmissionDetails(InvalidEventRequest):
 NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may {verb} it."
 EVENT_NOT_AWAITING_DECISION_MESSAGE = "This request is {status}, so it cannot be {verb}."
 DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
+EVENT_NOT_AWAITING_CLARIFICATION_MESSAGE = (
+    "This request is not awaiting a decision, so a clarification request was not sent."
+)
+CLARIFICATION_MESSAGE_REQUIRED_MESSAGE = "A message is required to request clarification."
 
 # --- reads -------------------------------------------------------------------------------
 
@@ -1152,6 +1158,30 @@ class MissingDecisionReason(InvalidEventRequest):
         super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
 
 
+class EventNotAwaitingClarification(EventStateConflict):
+    """4.2 AC7/AC8: only a request currently Under Review, or already awaiting the organiser's
+    response to an earlier round (AC5 - several rounds are allowed), may have clarification
+    requested on it. Covers both the ordinary case (the request had already moved on before this
+    call started) and the race where it moves on between opening the page and pressing Send - a
+    reassignment or a decision landing while the coordinator was still composing their message.
+    Carries no ``{status}`` the way ``EventNotAwaitingDecision`` does: after a reassignment race
+    the status may still read UNDER_REVIEW (reassignment changes ``assigned_coordinator_id``, not
+    status), so printing it would contradict the sentence."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(EVENT_NOT_AWAITING_CLARIFICATION_MESSAGE)
+        self.event = event
+
+
+class MissingClarificationMessage(InvalidEventRequest):
+    """4.2 AC4: a message is mandatory. ``ClarificationRequest`` already refuses a blank body
+    with a 422 before ``request_clarification`` runs; this is the guard for any other caller,
+    mirroring ``MissingDecisionReason``."""
+
+    def __init__(self) -> None:
+        super().__init__(CLARIFICATION_MESSAGE_REQUIRED_MESSAGE)
+
+
 # --- decisions -----------------------------------------------------------------------------
 
 
@@ -1262,6 +1292,85 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
         reason=reason,
         action="EVENT_REJECTED",
     )
+
+
+# --- request clarification (story 4.2) -------------------------------------------------------
+
+
+def request_clarification(
+    db: Session, event: Event, *, actor: User, message: str
+) -> EventClarification:
+    """4.2 AC1/AC3/AC5-AC8: the assigned coordinator asks the organiser a question while the
+    request is Under Review, or asks a follow-up while it already awaits a response to an earlier
+    round (AC5) - the event moves to, or stays at, CLARIFICATION_REQUESTED. Nothing on this
+    branch ever moves the event back to Under Review on its own, so a second round has to work
+    directly from CLARIFICATION_REQUESTED rather than waiting for a trip back. The new
+    ``EventClarification`` row and the organiser's notification are always written; the
+    status-history row only when the status is actually changing (the first round) - a follow-up
+    is a new message, not a new transition. All of it is written in one transaction (AC3). The
+    UPDATE repeats the status and assigned-coordinator checks already made above in its WHERE
+    clause, so either a reassignment or a decision racing this call between those checks and the
+    write is refused too (AC8) - the checks above only give the ordinary, non-racing case its own
+    accurate exception rather than a generic 409."""
+    stripped = message.strip()
+    if not stripped:
+        raise MissingClarificationMessage()
+    _assert_assigned_coordinator(event, actor, verb="request clarification on")
+    if event.status not in _AWAITING_DECISION_STATUSES:
+        raise EventNotAwaitingClarification(event)
+
+    is_first_round = event.status == EventStatus.UNDER_REVIEW
+    changed_at = datetime.now(UTC)
+    updated = db.execute(
+        update(Event)
+        .where(
+            Event.id == event.id,
+            Event.status.in_(_AWAITING_DECISION_STATUSES),
+            Event.assigned_coordinator_id == actor.id,
+        )
+        .values(status=EventStatus.CLARIFICATION_REQUESTED)
+    )
+    if updated.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise EventNotAwaitingClarification(event)
+
+    entry = EventClarification(
+        event_id=event.id, author_id=actor.id, kind=ClarificationKind.REQUEST, message=stripped
+    )
+    db.add(entry)
+    if is_first_round:
+        _record_transition(
+            db,
+            event,
+            from_status=EventStatus.UNDER_REVIEW,
+            to_status=EventStatus.CLARIFICATION_REQUESTED,
+            actor=actor,
+            at=changed_at,
+            reason=stripped,
+        )
+    notify(
+        db,
+        recipient=event.organiser,
+        notification_type="EVENT_CLARIFICATION_REQUESTED",
+        event_id=event.id,
+        title=f'Clarification requested on "{event.name}"',
+        message=stripped,
+        commit=False,
+    )
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_CLARIFICATION_REQUESTED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"message": stripped},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
+    db.refresh(entry)
+    return entry
 
 
 # --- routine information edit (story 7.2) ---------------------------------------------------

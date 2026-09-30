@@ -599,7 +599,21 @@ class EventRejection(BaseModel):
         return _strip(value)
 
 
-# --- clarification history (story 4.6) ------------------------------------------------------
+# --- clarification (story 4.2 request, 4.6 history) ------------------------------------------
+class ClarificationRequest(BaseModel):
+    """4.2 AC4: a message is mandatory - blank or whitespace-only does not count, mirroring
+    EventRejection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1)
+
+    @field_validator("message", mode="before")
+    @classmethod
+    def _strip_message(cls, value):
+        return _strip(value)
+
+
 class ClarificationOut(BaseModel):
     """AC2: one entry of the clarification conversation, in the order it was written. No
     defaults (response schema)."""
