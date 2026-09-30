@@ -1,4 +1,5 @@
-"""Venue booking rules: raising a request (story 12.1) and conflict detection (story 14.2).
+"""Venue booking rules: raising a request (story 12.1), conflict detection (story 14.2), and
+withdrawing a request (story 12.2).
 
 Story 12.1 - "As an Event Coordinator I want to request a venue booking for an event so
 that Venue Staff can assess and confirm it":
@@ -49,6 +50,13 @@ on the row lock and, once it proceeds, sees the already-APPROVED row and is refu
 
 Story 13.2 ("approve venue booking request") is what calls ``approve_booking`` and translates
 ``BookingNotPending`` / ``BookingConflict`` into the HTTP response its AC1/AC4 need.
+
+Story 12.2 - "As an Event Coordinator I want to withdraw a venue I no longer need, so that I
+don't hold a venue unnecessarily": ``withdraw_booking`` closes a PENDING request (AC7), releasing
+its hold on the venue and notifying every active Venue Staff member, together in one call (AC2/
+AC3). AC6 restricts it to the event's own assigned coordinator. AC8: it shares approve/reject's
+row lock, so a withdrawal racing a Venue Staff decision on the same request is serialized by the
+same mechanism, not a new one.
 """
 
 from __future__ import annotations
@@ -62,9 +70,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
+from app.auth.permissions import RoleCode
 from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
+from app.common.notifications import notify
 from app.events.models import Event, EventRequiredFacility, EventStatus
 from app.venues import service as venue_service
 from app.venues.models import (
@@ -94,6 +104,10 @@ VENUE_NOT_BOOKABLE_MESSAGE = (
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can request a venue booking for it."
+)
+# Story 12.2 AC6: the withdraw endpoint's own wording for the same relationship rule.
+WITHDRAW_NOT_ASSIGNED_COORDINATOR_MESSAGE = (
+    "Only the coordinator assigned to this event can withdraw its booking requests."
 )
 
 # 12.1 AC3/AC12: why a request is refused when its venue is held, in words a coordinator can act
@@ -175,14 +189,15 @@ class VenueNotBookable(ValueError):
 
 
 class NotAssignedCoordinator(PermissionError):
-    """12.1 AC4: only the event's assigned coordinator may raise its booking request.
+    """12.1 AC4 / 12.2 AC6: only the event's assigned coordinator may raise or withdraw its
+    booking requests.
 
     A relationship rule, not a role rule - every coordinator holds ``bookings:request``, so
     this needs the event row in hand and belongs here rather than in ``permissions.py``.
     """
 
-    def __init__(self) -> None:
-        super().__init__(NOT_ASSIGNED_COORDINATOR_MESSAGE)
+    def __init__(self, *, message: str = NOT_ASSIGNED_COORDINATOR_MESSAGE) -> None:
+        super().__init__(message)
 
 
 class VenueHeld(ValueError):
@@ -453,6 +468,67 @@ def reject_booking(
         },
         commit=False,
     )
+    db.commit()
+    db.refresh(booking)
+
+
+def _notify_venue_staff_of_withdrawal(db: Session, booking: VenueBooking) -> None:
+    """12.2 AC2: every active Venue Staff member is told - the same role-wide, active-only
+    audience ``list_booking_requests`` already serves for the queue itself."""
+    venue_staff = db.scalars(
+        select(User).where(User.role_code == RoleCode.VENUE_STAFF, User.is_active.is_(True))
+    ).all()
+    for member in venue_staff:
+        notify(
+            db,
+            recipient=member,
+            notification_type="BOOKING_WITHDRAWN",
+            event_id=booking.event_id,
+            title="A venue booking request was withdrawn",
+            message=f"The request for {booking.venue.name} was withdrawn and its hold released.",
+            related_entity_type="venue_booking",
+            related_entity_id=booking.id,
+            commit=False,
+        )
+
+
+def withdraw_booking(db: Session, booking: VenueBooking, *, actor: User) -> None:
+    """12.2 AC2/AC3: withdraw a pending request - the status change, hold release and
+    notification all happen together, inside this one call.
+
+    AC6: refused (``NotAssignedCoordinator``) unless ``actor`` is the coordinator currently
+    assigned to the booking's event - a relationship rule, not a role check, since every
+    coordinator holds ``bookings:request``.
+    AC7: refused (``BookingNotPending``) unless the request is still PENDING.
+    AC8: reuses the same ``SELECT ... FOR UPDATE`` row lock 13.2/13.2.1 already use for
+    decide-vs-decide races - callers must fetch ``booking`` via ``get_booking_for_decision``, the
+    same as ``approve_booking``/``reject_booking``, so a withdrawal racing a Venue Staff decision
+    on the same request serializes on it exactly like two decisions already do.
+
+    Releasing the hold is implicit: since s12.1 only a PENDING or APPROVED booking holds its
+    venue, so flipping the status away from PENDING here is the release - there is no separate
+    field to clear.
+    """
+    if booking.event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator(message=WITHDRAW_NOT_ASSIGNED_COORDINATOR_MESSAGE)
+    if booking.status != BookingStatus.PENDING:
+        raise BookingNotPending(booking, action="withdrawn")
+
+    booking.status = BookingStatus.WITHDRAWN
+    booking.decided_by_id = actor.id
+    booking.decided_at = datetime.now(UTC)
+    db.flush()
+
+    record_audit(
+        db,
+        actor=actor,
+        action="BOOKING_WITHDRAWN",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
+        commit=False,
+    )
+    _notify_venue_staff_of_withdrawal(db, booking)
     db.commit()
     db.refresh(booking)
 

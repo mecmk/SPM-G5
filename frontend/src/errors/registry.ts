@@ -70,6 +70,7 @@ export type ErrorCode =
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
   | 'BOOKING_REASON_REQUIRED'
+  | 'BOOKING_WITHDRAW_REFUSED'
 
 export interface ErrorEntry {
   title: string
@@ -377,6 +378,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for rejecting this request.',
+  },
+
+  // Story 12.2: withdrawing a venue booking request. Named for the withdraw endpoint
+  // specifically, same reasoning as BOOKING_REJECT_REFUSED - its only 409 cause is "not
+  // pending", and the backend's own sentence usually arrives anyway.
+  BOOKING_WITHDRAW_REFUSED: {
+    title: 'Cannot withdraw this request',
+    message: 'This request cannot be withdrawn in its current state.',
   },
 }
 
