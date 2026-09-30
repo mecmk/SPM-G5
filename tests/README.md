@@ -43,6 +43,7 @@ bare `npm test` in this folder is refused (see `global-setup.ts`).
 | `e2e/events.spec.ts` | 7.1 event details page: core details, venue/accessibility/equipment requirements, back link follows origin, empty states for an incomplete draft, blocked direct URL to another organiser's event |
 | `e2e/decision-history.spec.ts` | 4.6 the decision status sentence (pending, awaiting-clarification hint, approved with no reason, rejected with reason) and the clarification thread (oldest first, author/kind/timestamp) on the event details page |
 | `e2e/event-routine-edit.spec.ts` | 7.2 the assigned coordinator edits an event's routine information from its detail page and the change is there on return; the edit entry point is withheld once the event is rejected (also completed/cancelled) |
+| `e2e/request-clarification.spec.ts` | 4.2 the assigned coordinator asks the organiser for clarification: the message appears immediately with its author and time, the status sentence shows the request is awaiting the organiser, and a follow-up question can still be sent while the request is already awaiting a response |
 
 `e2e/support.ts` has the seed accounts, a `signIn` helper and a `venueCard` locator. Specs share
 one throwaway database and run in parallel, so use unique names for anything you create.
