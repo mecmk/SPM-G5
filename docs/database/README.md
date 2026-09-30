@@ -67,9 +67,11 @@ Both, deliberately:
 
 ## Changing the schema
 
+### Add a new migration
+
 **Never edit a migration once it has been applied** - teammates' databases already ran it, and
-the tool refuses to continue when an applied file's checksum changes. Add a new file, numbered
-after the last one:
+the tool records a SHA-256 checksum per file and refuses to continue when an applied file's
+checksum changes. Add a new file, numbered after the last one:
 
 ```text
 backend/db/migrations/NNN_add_event_categories.sql
@@ -80,6 +82,17 @@ new table/column). `npm run db:ready` applies it on every machine. Update the ma
 model (`backend/app/<feature>/models.py`) and run `npm run test:backend` -
 `test_orm_models_match_database` tells you if they disagree. Then `npm run db:docs` and commit
 the regenerated dictionary + ERD with the migration.
+
+### While the migration is still yours alone
+
+Until you push it, a new migration is applied only to your own database, so you can keep
+editing the file and rebuild:
+
+```powershell
+npm run db:reset      # the tool notices the checksum changed and refuses `ready` until you do this
+```
+
+Once a teammate has applied it that stops being true, and a correction needs its own migration.
 
 ### Changing an allowed status value
 
