@@ -1,6 +1,7 @@
 """HTTP endpoints for venue bookings: raising a request (story 12.1), the venue staff queue
-(story 13.1), approval and rejection (stories 13.2, 13.2.1) and the read endpoints 13.2 AC3 /
-13.2.1 AC4 need to make the outcome visible to the requesting coordinator.
+(story 13.1), approval and rejection (stories 13.2, 13.2.1), the read endpoints 13.2 AC3 /
+13.2.1 AC4 need to make the outcome visible to the requesting coordinator, and withdrawing a
+request (story 12.2).
 """
 
 from __future__ import annotations
@@ -147,6 +148,30 @@ def reject_booking(
         service.reject_booking(
             db, booking, actor_id=actor.id, decision_reason=payload.decision_reason
         )
+    except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return BookingOut.model_validate(booking)
+
+
+@router.post("/{booking_id}/withdraw", response_model=BookingOut)
+def withdraw_booking(
+    booking_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanRequest],
+) -> BookingOut:
+    """12.2 AC2/AC3: withdraw a pending request - status, hold release and notification all
+    together. AC6: refused (403) for anyone but the event's assigned coordinator. AC7: refused
+    (409) unless the request is still pending. AC8: refused (409), naming the current status, if
+    a Venue Staff decision already landed.
+    """
+    try:
+        booking = service.get_booking_for_decision(db, booking_id)
+    except service.BookingNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+    try:
+        service.withdraw_booking(db, booking, actor=actor)
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.BookingNotPending as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)

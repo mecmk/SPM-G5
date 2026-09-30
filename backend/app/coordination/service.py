@@ -43,12 +43,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.permissions import Permission, RoleCode, role_has
 from app.common.audit import record_audit
+from app.common.notifications import notify
 from app.coordination.models import EventCoordinatorAssignment
 from app.coordination.schemas import AssignCoordinatorIn
 from app.events.models import Event, EventStatus
@@ -120,16 +121,41 @@ class CoordinatorInactive(ValueError):
         self.user = user
 
 
+class NotCurrentCoordinator(PermissionError):
+    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it -
+    an unassigned event stays open to any Event Coordinator (story 5.1's original claim-it case)."""
+
+    def __init__(self) -> None:
+        super().__init__("Only the coordinator currently assigned to this event may reassign it.")
+
+
+class AssignmentChanged(RuntimeError):
+    """Story 5.2 AC7: the event's coordinator changed between when this request read it and when
+    it tried to write - another (re)assignment won the race. Never partially applied: nothing
+    about the event or its history is touched when this is raised."""
+
+    def __init__(self, event_id: uuid.UUID) -> None:
+        super().__init__(
+            "This event's coordinator changed just now. Reload the event and try again."
+        )
+        self.event_id = event_id
+
+
 # --- reads -------------------------------------------------------------------------------
-def list_coordinators(db: Session) -> list[User]:
-    """AC2: the users that may be selected - active holders of the Event Coordinator role."""
-    return list(
-        db.scalars(
-            select(User)
-            .where(User.role_code == RoleCode.EVENT_COORDINATOR, User.is_active.is_(True))
-            .order_by(User.full_name)
-        ).all()
+def list_coordinators(db: Session, *, exclude_event_id: uuid.UUID | None = None) -> list[User]:
+    """AC2: the users that may be selected - active holders of the Event Coordinator role.
+
+    Story 5.2 AC4: pass ``exclude_event_id`` for the reassignment picker, which must leave that
+    event's current coordinator out - they are not a valid target for their own event.
+    """
+    query = select(User).where(
+        User.role_code == RoleCode.EVENT_COORDINATOR, User.is_active.is_(True)
     )
+    if exclude_event_id is not None:
+        current = current_assignment(db, exclude_event_id)
+        if current is not None:
+            query = query.where(User.id != current.coordinator_id)
+    return list(db.scalars(query.order_by(User.full_name)).all())
 
 
 def get_event(db: Session, event_id: uuid.UUID) -> Event:
@@ -170,25 +196,108 @@ def get_event_coordinator(
 # --- writes ------------------------------------------------------------------------------
 
 
+def _notify_reassignment(
+    db: Session,
+    event: Event,
+    *,
+    previous_coordinator_id: uuid.UUID,
+    new_coordinator: User,
+    reassigned_by: User,
+) -> None:
+    """Story 5.2 AC1: the previous coordinator, the new one, and the organiser are each told.
+    Only called for a genuine reassignment (there was a previous coordinator, and a human made
+    the change) - auto-assignment (story 5.1) and an event's first-ever claim have nobody
+    "previous" to tell and are not this AC's concern."""
+    previous_coordinator = db.get(User, previous_coordinator_id)
+    organiser = db.get(User, event.organiser_id)
+    notify(
+        db,
+        recipient=previous_coordinator,
+        notification_type="EVENT_REASSIGNED_FROM",
+        event_id=event.id,
+        title=f'"{event.name}" was reassigned',
+        message=f'{reassigned_by.full_name} handed "{event.name}" to {new_coordinator.full_name}.',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+    notify(
+        db,
+        recipient=new_coordinator,
+        notification_type="EVENT_REASSIGNED_TO",
+        event_id=event.id,
+        title=f'You are now assigned to "{event.name}"',
+        message=f'{reassigned_by.full_name} handed you "{event.name}".',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+    notify(
+        db,
+        recipient=organiser,
+        notification_type="EVENT_REASSIGNED_ORGANISER",
+        event_id=event.id,
+        title=f'"{event.name}" has a new coordinator',
+        message=f'{new_coordinator.full_name} is now the coordinator for "{event.name}".',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+
+
 def _create_assignment(
-    db: Session, event: Event, coordinator: User, *, assigned_by: User | None, note: str | None
+    db: Session,
+    event: Event,
+    coordinator: User,
+    *,
+    previous: EventCoordinatorAssignment | None,
+    assigned_by: User | None,
+    note: str | None,
 ) -> EventCoordinatorAssignment:
     """Shared machinery behind both ``assign_coordinator`` (``assigned_by`` is who chose it) and
     ``auto_assign_next_coordinator`` (``assigned_by=None`` - AC3 "the system"): close any open
     assignment, open the new one, keep ``events.assigned_coordinator_id`` in step, and write the
     audit entry. Does not commit - the caller owns the transaction.
 
+    ``previous`` is the caller's *own* read of ``current_assignment`` - the same one it already
+    used to decide the caller is allowed to do this (5.2 AC6) - not re-read here. Re-reading it
+    fresh at this point would defeat AC7's guard below: it would let this call "self-heal" past
+    exactly the staleness the guard exists to catch, silently adopting whatever changed instead
+    of noticing it changed.
+
     Re-assigning the coordinator who already holds the event is a no-op: it returns the existing
     assignment rather than closing and re-opening it, so the history in
     ``event_coordinator_assignments`` stays meaningful.
+
+    Story 5.2 AC7: the write is conditional on ``events.assigned_coordinator_id`` still holding
+    whatever ``previous`` said it did (``NULL`` when there was no previous coordinator) - the
+    same "attempt and catch the failure" shape as ``submit_event``'s conditional UPDATE. Two
+    reassignments that both read the same ``previous`` cannot both succeed: the second finds 0
+    rows match and raises ``AssignmentChanged`` before touching anything else, rather than
+    silently overwriting the first.
     """
-    previous = current_assignment(db, event.id)
     if previous is not None and previous.coordinator_id == coordinator.id:
         return previous
 
+    expected_coordinator_id = previous.coordinator_id if previous is not None else None
+    claimed = db.execute(
+        update(Event)
+        .where(
+            Event.id == event.id,
+            Event.assigned_coordinator_id.is_(expected_coordinator_id)
+            if expected_coordinator_id is None
+            else Event.assigned_coordinator_id == expected_coordinator_id,
+        )
+        .values(assigned_coordinator_id=coordinator.id)
+    )
+    if claimed.rowcount == 0:
+        raise AssignmentChanged(event.id)
+
     if previous is not None:
         # Close the old row *and flush it* before inserting the new one, otherwise the partial
-        # unique index would briefly see two open assignments for this event.
+        # unique index would briefly see two open assignments for this event. Safe unconditionally
+        # here: the guarded UPDATE above already proved nobody else changed the pointer since we
+        # read ``previous``, so this is still the one open row for this event.
         previous.unassigned_at = func.now()
         db.flush()
 
@@ -224,16 +333,34 @@ def _create_assignment(
         },
         commit=False,
     )
+
+    if previous is not None and assigned_by is not None:
+        _notify_reassignment(
+            db,
+            event,
+            previous_coordinator_id=previous.coordinator_id,
+            new_coordinator=coordinator,
+            reassigned_by=assigned_by,
+        )
+
     return assignment
 
 
 def assign_coordinator(
     db: Session, event_id: uuid.UUID, data: AssignCoordinatorIn, *, actor: User
 ) -> EventCoordinatorAssignment:
-    """Give ``event_id`` a coordinator, replacing whoever held it before (AC1)."""
+    """Give ``event_id`` a coordinator, replacing whoever held it before (5.1 AC1).
+
+    5.2 AC6: an unassigned event may be claimed by any Event Coordinator (story 5.1's original
+    case - nobody to defer to yet), but once it has one, only that coordinator may reassign it.
+    """
     event = get_event(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
+
+    previous = current_assignment(db, event.id)
+    if previous is not None and previous.coordinator_id != actor.id:
+        raise NotCurrentCoordinator()
 
     coordinator = db.get(User, data.coordinator_id)
     if coordinator is None:
@@ -243,7 +370,9 @@ def assign_coordinator(
     if not coordinator.is_active:
         raise CoordinatorInactive(coordinator)
 
-    assignment = _create_assignment(db, event, coordinator, assigned_by=actor, note=data.note)
+    assignment = _create_assignment(
+        db, event, coordinator, previous=previous, assigned_by=actor, note=data.note
+    )
     db.commit()
     db.refresh(assignment)
     return assignment
@@ -315,4 +444,8 @@ def auto_assign_next_coordinator(db: Session, event: Event) -> EventCoordinatorA
     coordinator = _next_in_rotation(db)
     if coordinator is None:
         return None
-    return _create_assignment(db, event, coordinator, assigned_by=None, note=AUTO_ASSIGNMENT_NOTE)
+    # previous=None is exact here, not just "usually true": the check above just confirmed it,
+    # under a lock nothing else could have changed it since (see _next_in_rotation's docstring).
+    return _create_assignment(
+        db, event, coordinator, previous=None, assigned_by=None, note=AUTO_ASSIGNMENT_NOTE
+    )

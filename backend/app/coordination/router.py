@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
@@ -36,9 +36,13 @@ DbSession = Annotated[Session, Depends(get_db)]
 def list_coordinators(
     db: DbSession,
     _actor: Annotated[CurrentUser, CanReadInternalUsers],
+    exclude_event_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[CoordinatorOption]:
-    """AC2: the pick-list for the assignment form holds Event Coordinators and nobody else."""
-    return [CoordinatorOption.model_validate(u) for u in service.list_coordinators(db)]
+    """5.1 AC2: the pick-list for the assignment form holds Event Coordinators and nobody else.
+    5.2 AC4: pass ``exclude_event_id`` for the reassignment picker, which leaves that event's
+    current coordinator out of its own eligible list."""
+    coordinators = service.list_coordinators(db, exclude_event_id=exclude_event_id)
+    return [CoordinatorOption.model_validate(u) for u in coordinators]
 
 
 @router.get("/events/{event_id}/coordinator", response_model=EventCoordinatorOut | None)
@@ -66,11 +70,17 @@ def assign_coordinator(
     db: DbSession,
     actor: Annotated[CurrentUser, CanReview],
 ) -> EventCoordinatorOut:
-    """AC1 / AC3: record the event's single current coordinator, with who assigned it and when."""
+    """5.1 AC1/AC3: record the event's single current coordinator, with who assigned it and when.
+    5.2 AC6: refused with 403 for anyone but the event's current coordinator, once it has one.
+    5.2 AC7: refused with 409 if the coordinator changed since the caller last read it."""
     try:
         assignment = service.assign_coordinator(db, event_id, payload, actor=actor)
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found.") from None
+    except service.NotCurrentCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.AssignmentChanged as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.EventNotAssignable as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except (

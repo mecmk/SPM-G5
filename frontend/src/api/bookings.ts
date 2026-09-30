@@ -90,6 +90,20 @@ export function approveBooking(bookingId: string, eventName: string): Promise<Bo
   })
 }
 
+/** Story 12.2 AC2/AC3: withdraw a pending booking request. 403 (`NOT_PERMITTED`) once the
+ * caller is not the event's assigned coordinator; 409 (`BOOKING_WITHDRAW_REFUSED`) once it is
+ * no longer pending - both arrive with the backend's own sentence. */
+export function withdrawBooking(bookingId: string, venueName: string): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/withdraw`, {
+    method: 'POST',
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_WITHDRAW_REFUSED' },
+    notify: {
+      title: 'Booking withdrawn',
+      message: `The request for ${venueName} was withdrawn.`,
+    },
+  })
+}
+
 /** Story 13.2.1 AC1/AC2: reject a pending booking request with a mandatory reason. */
 export function rejectBooking(
   bookingId: string,

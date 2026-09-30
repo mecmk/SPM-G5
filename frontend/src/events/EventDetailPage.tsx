@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { listBookingsForEvent, type BookingOutcome, type BookingStatus } from '../api/bookings'
+import {
+  listBookingsForEvent,
+  withdrawBooking,
+  type BookingOutcome,
+  type BookingStatus,
+} from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
+import { assignCoordinator, listCoordinators, type CoordinatorOption } from '../api/coordination'
 import {
   approveEvent,
   getEvent,
@@ -16,13 +22,20 @@ import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
 import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
-import { eventEditRoutinePath, HOME_PATH, venueSearchPath, type VenueSearch } from '../routes'
+import {
+  eventEditRoutinePath,
+  HOME_PATH,
+  VENUE_CATALOGUE_PATH,
+  venueSearchPath,
+  type VenueSearch,
+} from '../routes'
 import {
   formatDate,
   formatDateTime,
@@ -35,6 +48,7 @@ import { canRequestVenueFor } from '../shared/venueRequest'
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
+const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
@@ -166,6 +180,14 @@ export function EventDetailPage() {
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
+  const [isConfirmingReassign, setIsConfirmingReassign] = useState(false)
+  const [isReassigning, setIsReassigning] = useState(false)
+  const [reassignError, setReassignError] = useState<string | null>(null)
+  const [eligibleCoordinators, setEligibleCoordinators] = useState<CoordinatorOption[] | null>(null)
+  const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -213,6 +235,25 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, canReadBooking])
+
+  /** Story 5.2 AC4: loaded only once the Reassign dialog opens, leaving the event's current
+   *  coordinator out - they are not a valid target for their own event. */
+  useEffect(() => {
+    if (!isConfirmingReassign) return undefined
+    let cancelled = false
+    listCoordinators(eventId)
+      .then((options) => {
+        if (cancelled) return
+        setEligibleCoordinators(options)
+        setSelectedCoordinatorId(options.length > 0 ? options[0].id : '')
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setReassignError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isConfirmingReassign, eventId])
 
   if (error) {
     return (
@@ -282,6 +323,74 @@ export function EventDetailPage() {
     }
   }
 
+  function askToWithdraw(booking: BookingOutcome) {
+    setWithdrawError(null)
+    setPendingWithdraw(booking)
+  }
+
+  function cancelWithdraw() {
+    setPendingWithdraw(null)
+  }
+
+  async function confirmWithdraw() {
+    if (!pendingWithdraw) return
+    setIsWithdrawing(true)
+    setWithdrawError(null)
+    try {
+      const updated = await withdrawBooking(pendingWithdraw.id, pendingWithdraw.venue_name)
+      setBookings(
+        (current) =>
+          current &&
+          current.map((booking) =>
+            booking.id === updated.id
+              ? {
+                  ...booking,
+                  status: updated.status,
+                  decided_at: updated.decided_at,
+                  decision_reason: updated.decision_reason,
+                }
+              : booking,
+          ),
+      )
+      setPendingWithdraw(null)
+    } catch (err) {
+      setWithdrawError(formatApiError(err))
+    } finally {
+      setIsWithdrawing(false)
+    }
+  }
+
+  function askToReassign() {
+    setReassignError(null)
+    setEligibleCoordinators(null)
+    setSelectedCoordinatorId('')
+    setIsConfirmingReassign(true)
+  }
+
+  function cancelReassign() {
+    setIsConfirmingReassign(false)
+  }
+
+  async function confirmReassign() {
+    if (!event) return
+    if (!selectedCoordinatorId) {
+      setReassignError('There is no other active Event Coordinator to reassign this to.')
+      return
+    }
+    setIsReassigning(true)
+    setReassignError(null)
+    try {
+      await assignCoordinator(event.id, selectedCoordinatorId)
+      const updated = await getEvent(event.id)
+      setEvent(updated)
+      setIsConfirmingReassign(false)
+    } catch (err) {
+      setReassignError(formatApiError(err))
+    } finally {
+      setIsReassigning(false)
+    }
+  }
+
   const backState = location.state as EventCardBackState | null
   const backTo = backState?.from ?? HOME_PATH
   const backLabel = backState?.fromLabel ?? 'Home'
@@ -301,6 +410,13 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
+  /** Story 5.2 AC1/AC6: only the currently assigned coordinator may reassign, and only on an
+   *  event that is not completed, cancelled or rejected - mirroring the backend's
+   *  `ASSIGNABLE_STATUSES` (a draft never reaches this: it has no coordinator to be one of). */
+  const canReassign =
+    can(PERMISSIONS.EVENTS_REVIEW) &&
+    isAssignedCoordinator &&
+    !TERMINAL_STATUSES.includes(event.status)
   /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
    *  its assigned coordinator, while it can take a booking. */
   const canFindVenue = canRequestVenueFor(event, user, can)
@@ -326,7 +442,7 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {(canEditRoutineInformation || canApprove || canReject) && (
+      {(canEditRoutineInformation || canApprove || canReject || canReassign) && (
         <div className="page-header actions-only">
           <div className="page-actions">
             {canEditRoutineInformation && (
@@ -342,6 +458,11 @@ export function EventDetailPage() {
             {canReject && (
               <button type="button" className="danger" onClick={askToReject}>
                 Reject
+              </button>
+            )}
+            {canReassign && (
+              <button type="button" className="secondary" onClick={askToReassign}>
+                Reassign
               </button>
             )}
           </div>
@@ -641,10 +762,33 @@ export function EventDetailPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Story 12.2 AC1/AC6: only the event's own assigned coordinator may withdraw,
+                   *  and only while the request is still pending - mirrors the backend's own
+                   *  relationship and status checks. */}
+                  {booking.status === PENDING_BOOKING_STATUS && isAssignedCoordinator && (
+                    <div className="cluster">
+                      <button
+                        type="button"
+                        className="secondary button-sm"
+                        onClick={() => askToWithdraw(booking)}
+                      >
+                        Withdraw
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </section>
+        )}
+
+        {/* Story 12.2 AC4: an event with no requests yet, with a way to raise one. */}
+        {canReadBooking && bookings !== null && bookings.length === 0 && (
+          <EmptyState>
+            No venue booking requests yet.{' '}
+            <Link to={VENUE_CATALOGUE_PATH}>Browse the venue catalogue</Link> to request one.
+          </EmptyState>
         )}
 
         <section className="card stack" aria-labelledby="equipment-heading">
@@ -715,6 +859,52 @@ export function EventDetailPage() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
+          </label>
+        </ConfirmDialog>
+      )}
+      {pendingWithdraw && (
+        <ConfirmDialog
+          title="Withdraw this booking request?"
+          confirmLabel="Withdraw"
+          isBusy={isWithdrawing}
+          error={withdrawError}
+          onConfirm={confirmWithdraw}
+          onCancel={cancelWithdraw}
+        >
+          <p>
+            The request for {pendingWithdraw.venue_name} will be withdrawn and its hold on the venue
+            released. Venue Staff will be told.
+          </p>
+        </ConfirmDialog>
+      )}
+      {isConfirmingReassign && (
+        <ConfirmDialog
+          title={`Reassign "${event.name}"?`}
+          confirmLabel="Confirm reassignment"
+          tone="primary"
+          isBusy={isReassigning}
+          error={reassignError}
+          onConfirm={confirmReassign}
+          onCancel={cancelReassign}
+        >
+          <p>Hand this event to a different active Event Coordinator.</p>
+          <label>
+            New coordinator
+            <select
+              value={selectedCoordinatorId}
+              onChange={(e) => setSelectedCoordinatorId(e.target.value)}
+              disabled={eligibleCoordinators === null || eligibleCoordinators.length === 0}
+            >
+              {eligibleCoordinators === null && <option value="">Loading…</option>}
+              {eligibleCoordinators?.length === 0 && (
+                <option value="">No other coordinators available</option>
+              )}
+              {eligibleCoordinators?.map((coordinator) => (
+                <option key={coordinator.id} value={coordinator.id}>
+                  {coordinator.full_name}
+                </option>
+              ))}
+            </select>
           </label>
         </ConfirmDialog>
       )}
