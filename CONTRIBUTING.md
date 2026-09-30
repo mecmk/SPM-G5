@@ -5,7 +5,7 @@
 - [Branching Strategy](#branching-strategy)
 - [Daily Workflow](#daily-workflow)
 - [Commit & PR Conventions](#commit--pr-conventions)
-- [Code Review Checklist](#code-review-checklist)
+- [Reviewer Sign-off](#reviewer-sign-off)
 - [General Best Practices](#general-best-practices)
 
 ## Branching Strategy
@@ -39,7 +39,7 @@ is trunk-based development, not GitFlow — keep it that way.
 3. Run tests and lint locally (see [AGENTS.md](AGENTS.md) for exact commands).
 4. Push your branch.
 5. Open a PR **into `main`**.
-6. Get **one approving review**.
+6. Get **one approving review** carrying the [reviewer sign-off](#reviewer-sign-off).
 7. **Squash merge** the PR.
 
 Keep branches short-lived: one story or fix per branch, merged as soon as it is reviewed and
@@ -97,14 +97,63 @@ Optionally reference the backlog ticket ID in the title, e.g.:
 feat: add login form (A1)
 ```
 
-## Code Review Checklist
+## Reviewer Sign-off
 
-Before approving a PR, check:
+A PR needs one approving review, and the approval must carry this sign-off as its review
+comment. Green CI shows the tests pass, not that they test the right thing, so read the code
+itself. Read every line as if it may be AI-generated, because it may be. Tick only what you
+actually checked and write N/A beside anything that doesn't apply. Any ❌ or unticked box is a
+**Request changes**, not an approval with a note.
 
-- [ ] Does it meet the story's acceptance criteria?
-- [ ] Is it tested (backend tests for backend changes, manual verification for UI changes)?
-- [ ] Does lint and format check pass (`npm run lint` from the repo root)?
-- [ ] Is the PR scoped to one story/fix, not a grab-bag of unrelated changes?
+Paste this as the review comment and fill it in:
+
+````markdown
+### Reviewer sign-off: <story ID>
+
+#### Test cases
+
+I read the code of every test below: one row per test in the PR's Test Plan.
+
+| Test | AC | What it actually asserts | Verdict |
+| --- | --- | --- | --- |
+| `test_login.py::test_valid_login` | AC1 | 200, session cookie set, `UserOut` body | ✅ correct |
+| `login.spec.ts` › `1.1 AC4: …` | AC4 | only the URL changes | ❌ the AC's error message is never checked |
+
+- [ ] Every test in the Test Plan is listed above, and I read its code
+- [ ] Each ✅ test asserts the behaviour its AC describes (not just a status code, a mocked value
+      echoed back, or that the code ran) and would fail if that behaviour broke
+- [ ] Each test's setup matches its title: the right role, seed row and starting state
+- [ ] No AC is left without a test; no test is skipped, focused (`.only`), marked `xfail`, or
+      loosened to pass
+- [ ] Each case sits in one layer only (backend or e2e), as the Test Plan says
+
+#### Code read-through, AI-generated code included
+
+- [ ] I read every changed line, not only the files the summary mentions
+- [ ] The logic does what the ACs ask, error paths and the Test Plan's edge cases included
+- [ ] Every function, column, endpoint, permission code and import it uses exists; none is
+      invented
+- [ ] Nothing is special-cased to seed or fixture data (hard-coded IDs, names or dates)
+- [ ] No error is swallowed: no bare `except`, empty `catch`, or silent fallback value
+- [ ] Endpoints are guarded with `require_permission`; "only my own" rules sit in the service
+- [ ] Frontend types and permission strings match the backend's schemas and `permissions.py`
+- [ ] Comments, docstrings and story/AC tags describe what the code really does
+- [ ] No dead code, leftover debugging, or scaffolding beyond the story
+- [ ] The touched subsystem's `blocking` `STYLE.md` rules are followed
+
+#### Ran it
+
+- [ ] Checked out the branch and ran the touched suites locally; they pass
+- [ ] Exercised the flow in the browser (if there is UI)
+
+#### Scope
+
+- [ ] One story or fix, with no unrelated changes
+- [ ] No secrets; a schema change comes with its migration and regenerated docs
+      (`npm run db:docs`)
+
+I have read the test cases above and confirm each is correct, except any marked ❌.
+````
 
 ## General Best Practices
 

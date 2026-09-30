@@ -31,14 +31,28 @@
 - E2E: `npm run test:e2e` — <!-- e.g. 3 passed -->
 - Manual: <!-- anything exercised by hand in the browser -->
 
-## Definition of Done
+## Merge checklist
+
+<!-- The author ticks these. -->
 
 - [ ] A test plan was drafted and its scope decided by the human before implementation,
       covering all of: happy path, boundary, edge, permission, and conflict cases (or noting
       why one doesn't apply)
-- [ ] Acceptance criteria from the backlog are met
+- [ ] Every acceptance criterion this PR addresses has at least one row in the Test Plan table,
+      and is met
 - [ ] The tests written from that plan exist, are filed in the right suite (`backend/tests/` or
-      `tests/e2e/`), and pass; lint/format checks are clean
-- [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser
+      `tests/e2e/`), failed before the implementation, and pass now
+- [ ] I have read every changed line, including any AI-generated code and tests, and can
+      explain it. It does what the acceptance criteria ask, the functions, fields and
+      endpoints it uses exist, and no test was weakened, skipped or edited to match a bug
+- [ ] Lint/format checks are clean; the flow was manually exercised in the browser (if there is
+      UI)
 - [ ] No secrets, API keys, or `.env` values committed
-- [ ] PR opened against `main`, one review obtained, CI green
+- [ ] PR opened against `main`, CI green
+
+## Reviewer sign-off
+
+<!-- Reviewer: approve only with the sign-off from CONTRIBUTING.md → Reviewer Sign-off pasted
+     as your review comment, every test case listed and marked. Any ❌ is Request changes. -->
+
+- [ ] Approved with a reviewer sign-off comment

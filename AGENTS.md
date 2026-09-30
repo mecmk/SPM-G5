@@ -16,7 +16,7 @@ calls, agents, or AI SDKs unless a story explicitly asks for one.
 
 ## Coding Conventions
 
-This file is the source of truth for process — stack, commands, branching, Definition of Done.
+This file is the source of truth for process — stack, commands, branching, merge checklist.
 The rules for writing the code itself live beside the code:
 
 | Path | File | Holds |
@@ -232,19 +232,30 @@ plan first, then the steps they describe — it doesn't replace them.
 - Reference the story ID in the commit/PR title, e.g. `feat: assign coordinator to event (5.1)`.
 - PR description should state which story/AC it addresses and how it was tested.
 
-## Definition of Done
+## Merge Checklist
 
-A story isn't done until:
+Gates every PR, not every story: a story can take several PRs. The author ticks the checklist in
+[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md), and the two must match:
 
 - [ ] A test plan was sketched out and agreed before implementation, covering all of: happy
       path, boundary, edge, permission, and conflict cases (or noting why one doesn't apply) —
       see Feature Development Workflow above.
-- [ ] Acceptance criteria from the backlog are met.
+- [ ] Every acceptance criterion the PR addresses has at least one row in the Test Plan table,
+      and is met.
 - [ ] The tests written from that plan exist, are filed in the right suite (`backend/tests/` or
-      `tests/e2e/`), and pass; lint/format checks are clean.
-- [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser.
+      `tests/e2e/`), failed before the implementation, and pass now.
+- [ ] The author has read every changed line, including any AI-generated code and tests, and can
+      explain it. It does what the acceptance criteria ask, the functions, fields and endpoints
+      it uses exist, and no test was weakened, skipped or edited to match a bug.
+- [ ] Lint/format checks are clean; the flow was manually exercised in the browser (if there is
+      UI).
 - [ ] No secrets, API keys, or `.env` values committed.
-- [ ] PR opened against `main`, one review obtained, CI green.
+- [ ] PR opened against `main`, CI green, and approved with the
+      [reviewer sign-off](CONTRIBUTING.md#reviewer-sign-off): every test case listed, its code
+      read, and marked correct.
+
+An agent that opens a PR fills in the template but leaves the read-through box unticked. Only the
+human author can say they read and understood the code. An agent never posts a reviewer sign-off.
 
 ## Things to Avoid
 

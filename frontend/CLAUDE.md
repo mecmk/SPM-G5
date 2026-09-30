@@ -1,8 +1,8 @@
 # frontend/CLAUDE.md
 
-React 19 + TypeScript SPA built with Vite. Setup, branching and Definition of Done are in
-[AGENTS.md](../AGENTS.md). This file holds only what is specific to `frontend/` and not obvious
-from reading the code.
+React 19 + TypeScript SPA built with Vite. Setup, branching, merge checklist and Definition of
+Done are in [AGENTS.md](../AGENTS.md). This file holds only what is specific to `frontend/` and
+not obvious from reading the code.
 
 **Before writing or reviewing code in `frontend/`, read [STYLE.md](STYLE.md)** — the graded
 coding rules for this subsystem, with the sites in this repo each one is anchored to.

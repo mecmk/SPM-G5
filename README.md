@@ -203,7 +203,7 @@ Short-lived branches are created from the latest `main` using the appropriate pr
 (`story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`).
 Pull requests are opened against `main` and require one approving review before a squash merge.
 
-For the full workflow, commit conventions, and review checklist, see
+For the full workflow, commit conventions, and reviewer sign-off, see
 [CONTRIBUTING.md](CONTRIBUTING.md). For instructions directed at coding agents working in this
 repository, see [AGENTS.md](AGENTS.md). For a description of how the system's components fit
 together, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

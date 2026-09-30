@@ -1,9 +1,9 @@
 # CLAUDE.md
 
 Monorepo root. **Thin by design**: orientation, plus the few facts that live *between*
-subsystems. Tech stack, setup and test commands, branching rules, Definition of Done, and the
-database/auth conventions all live in [AGENTS.md](AGENTS.md) — the source of truth for every
-agent and human on this repo. Read it first; this file deliberately does not repeat it.
+subsystems. Tech stack, setup and test commands, branching rules, the merge checklist, Definition
+of Done, and the database/auth conventions all live in [AGENTS.md](AGENTS.md) — the source of
+truth for every agent and human on this repo. Read it first; this file deliberately does not repeat it.
 
 ## Layout
 

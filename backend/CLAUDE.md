@@ -1,6 +1,6 @@
 # backend/CLAUDE.md
 
-FastAPI + SQLAlchemy over PostgreSQL. Setup, branching and Definition of Done are in
+FastAPI + SQLAlchemy over PostgreSQL. Setup, branching and the merge checklist are in
 [AGENTS.md](../AGENTS.md); database rules in detail are in
 [docs/database/README.md](../docs/database/README.md). This file holds only what is specific to
 `backend/` and not obvious from reading the code.
