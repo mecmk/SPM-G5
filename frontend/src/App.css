@@ -512,25 +512,255 @@
   gap: 1rem;
 }
 
-/* ---------- fixed-width filter column + results (story 8.1) ---------- */
+/* ---------- filter panel + results (story 8.1) ---------- */
 
 .catalogue-layout {
   display: grid;
-  grid-template-columns: 14rem 1fr;
+  grid-template-columns: 18rem minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
+}
+
+/* Story 8.1 AC3: the catalogue's filter panel. Hairlines split it into one section per filter,
+   so a range (capacity, dates) reads as one filter rather than two. */
+.filter-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.filter-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-right: auto;
+}
+
+/* How many filters are in use, beside the panel's title. */
+.filter-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3125rem;
+  box-sizing: border-box;
+  background: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--accent-contrast);
+}
+
+/* Show / Hide: only on a phone, where the panel starts folded above the results. */
+.filter-panel-toggle {
+  display: none;
+}
+
+.filter-panel-alert {
+  margin: 1rem 1rem 0;
+}
+
+.filter-section {
+  padding: 1rem;
+}
+
+.filter-section + .filter-section {
+  border-top: 1px solid var(--hairline);
+}
+
+.filter-section > label,
+.filter-section > .error {
+  margin: 0;
+}
+
+/* A section's title, set like the form labels it sits among. */
+.filter-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.filter-section-count {
+  color: var(--text-h);
+}
+
+/* A text field with an icon inside its left edge. */
+.input-with-icon {
+  position: relative;
+  display: block;
+  margin-top: 0.375rem;
+}
+
+.input-with-icon .icon {
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+label .input-with-icon input {
+  margin-top: 0;
+  padding-left: 2.25rem;
+}
+
+/* A from-to pair on one line: the capacity range. */
+.range-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.range-fields label {
+  margin: 0;
+}
+
+.range-fields input {
+  margin-top: 0;
+  appearance: textfield;
+}
+
+.range-fields input::-webkit-inner-spin-button,
+.range-fields input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.range-fields-dash {
+  color: var(--text-faint);
+}
+
+/* A from-to pair stacked, each label in a column of its own: the dates. */
+.date-fields label {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.5rem;
+  margin: 0;
+}
+
+.date-fields label + label {
+  margin-top: 0.5rem;
+}
+
+.date-fields input {
+  margin-top: 0;
+}
+
+/* Story 8.1 AC10: facilities and accessibility features as chips. Each chip is a real checkbox,
+   stretched invisibly over the whole chip so the chip is what is clicked and focused. A ticked
+   chip takes the selected look of .pill[aria-pressed='true'] and gains a tick. */
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+label.choice-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-h);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+label.choice-chip:hover {
+  border-color: var(--accent);
+}
+
+label.choice-chip:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+label.choice-chip:has(input:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+label.choice-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The tick, drawn from two borders so it takes the chip's colour in either theme. */
+label.choice-chip:has(input:checked)::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.25rem;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
 }
 
 @media (max-width: 640px) {
   .catalogue-layout {
     grid-template-columns: 1fr;
   }
+
+  .filter-panel-toggle {
+    display: inline-block;
+  }
+
+  .filter-panel.is-collapsed .filter-panel-header {
+    border-bottom: 0;
+  }
+
+  .filter-panel.is-collapsed .filter-panel-alert {
+    margin-bottom: 1rem;
+  }
+
+  .filter-panel.is-collapsed .filter-panel-body {
+    display: none;
+  }
 }
 
-.filter-column {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+@media (prefers-reduced-motion: reduce) {
+  label.choice-chip {
+    transition: none;
+  }
 }
 
 /* ---------- venue detail: hero, split layout, capacity grid (story 8.2) ---------- */
@@ -1488,6 +1718,128 @@ td.num {
 .legend-swatch-success {
   background: var(--success-soft);
   border-color: var(--success-border);
+}
+
+/* Story 9.1 AC5: a day with entries is a button that opens that day's list. A button centres
+   its content, so it is laid out as a column from the top like the other cells; the open and
+   focused states are outlines, not borders, so pressing a day never moves the grid. */
+.calendar-cell-openable {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0; /* keep the seven columns equal, whatever a long label says */
+  cursor: pointer;
+}
+
+/* The base `button:hover` paints a button in the accent colour, which would hide the day; every
+   tone below repeats its own background on hover instead. An openable cell always has a tone (it
+   has at least one entry), so it never also carries `.calendar-cell-weekend`, which only applies
+   to a toneless day. */
+.calendar-cell-openable:hover {
+  outline: 1px solid var(--text-faint);
+  outline-offset: -1px;
+}
+
+.calendar-cell-openable.calendar-cell-danger:hover {
+  background: var(--danger-bg);
+}
+
+.calendar-cell-openable.calendar-cell-warning:hover {
+  background: var(--warning-bg);
+}
+
+.calendar-cell-openable.calendar-cell-info:hover {
+  background: var(--info-bg);
+}
+
+.calendar-cell-openable.calendar-cell-success:hover {
+  background: var(--success-bg);
+}
+
+.calendar-cell-openable:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: -2px;
+}
+
+.calendar-cell-open,
+.calendar-cell-open:hover {
+  outline: 2px solid var(--text-h);
+  outline-offset: -2px;
+}
+
+/* The list an open day shows, under the grid and legend. */
+.calendar-day-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+}
+
+.calendar-day-panel-title {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.calendar-day-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-day-item {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  grid-template-areas:
+    'time name kind'
+    '. note note';
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* On a phone the time gets a line of its own, so every row has the same shape. */
+@media (max-width: 640px) {
+  .calendar-day-item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'time time'
+      'name kind'
+      'note note';
+  }
+}
+
+.calendar-day-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.calendar-day-time {
+  grid-area: time;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-h);
+}
+
+.calendar-day-name {
+  grid-area: name;
+  font-weight: 500;
+}
+
+.calendar-day-kind {
+  grid-area: kind;
+}
+
+.calendar-day-note {
+  grid-area: note;
+}
+
+/* "+3 more" on a day that opens: dark and underlined, so it reads as something to press. */
+.calendar-cell-openable .calendar-more {
+  color: var(--text-muted);
+  text-decoration: underline;
 }
 
 /* ---------- utilities ---------- */

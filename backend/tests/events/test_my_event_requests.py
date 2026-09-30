@@ -101,6 +101,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.APPROVED_7),
         str(Events.CONFIRMED),
         str(Events.CANCELLED),
+        str(Events.PARTNER_BRIEFING),
     }
 
 

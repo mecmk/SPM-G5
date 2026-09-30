@@ -65,7 +65,14 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
 from app.events.models import Event, EventRequiredFacility, EventStatus
-from app.venues.models import Facility, Venue, VenueStatus
+from app.venues import service as venue_service
+from app.venues.models import (
+    Facility,
+    UnavailabilityReason,
+    Venue,
+    VenueStatus,
+    VenueUnavailabilityPeriod,
+)
 
 _CONFLICT_CONSTRAINT = "ex_venue_bookings_no_double_booking"
 
@@ -102,6 +109,22 @@ VENUE_HELD_TURNAROUND = ", including setup and teardown"
 _HOLDING_STATUSES = tuple(VENUE_HELD_STATES)
 # Every event runs on Singapore time, which has no daylight saving (as in app/events/service.py).
 _SINGAPORE = timezone(timedelta(hours=8))
+
+# 12.1 AC14: why a request is refused when its venue stopped being available after the catalogue
+# search - closed for a recorded period, e.g. "Seminar Room 2.1 is closed for maintenance from Mon
+# 2 Nov 2026, 00:00 to Wed 4 Nov 2026, 00:00.", or at those hours.
+VENUE_BLOCKED_MESSAGE = "{venue} is closed{reason} {period}."
+VENUE_BLOCKED_REASONS = {
+    UnavailabilityReason.MAINTENANCE: " for maintenance",
+    UnavailabilityReason.RENOVATION: " for renovation",
+    UnavailabilityReason.SAFETY: " for safety reasons",
+    UnavailabilityReason.INTERNAL_USE: " for internal use",
+    UnavailabilityReason.OTHER: "",
+}
+VENUE_CLOSED_MESSAGE = (
+    "{venue} is open {opens:%H:%M} to {closes:%H:%M}, so it cannot take an event from "
+    "{starts:%H:%M} to {ends:%H:%M}."
+)
 
 REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
 # A facility may be needed in a quantity, with a note of its own ("3 breakout rooms, HDMI
@@ -175,6 +198,37 @@ class VenueHeld(ValueError):
             )
         )
         self.holding_booking = holding_booking
+
+
+class VenueBlocked(ValueError):
+    """12.1 AC14: an unavailability period (maintenance, renovation, ...) closes the venue for
+    part of the requested period. Carries that period."""
+
+    def __init__(self, venue: Venue, closure: VenueUnavailabilityPeriod) -> None:
+        super().__init__(
+            VENUE_BLOCKED_MESSAGE.format(
+                venue=venue.name,
+                reason=VENUE_BLOCKED_REASONS.get(closure.reason, ""),
+                period=_describe_held_period(closure.starts_at, closure.ends_at),
+            )
+        )
+        self.closure = closure
+
+
+class VenueClosed(ValueError):
+    """12.1 AC14: the requested period's daily window falls outside the venue's opening hours."""
+
+    def __init__(self, venue: Venue, *, starts_at: datetime, ends_at: datetime) -> None:
+        super().__init__(
+            VENUE_CLOSED_MESSAGE.format(
+                venue=venue.name,
+                opens=venue.operating_hours_start,
+                closes=venue.operating_hours_end,
+                starts=starts_at.astimezone(_SINGAPORE),
+                ends=ends_at.astimezone(_SINGAPORE),
+            )
+        )
+        self.venue = venue
 
 
 class BookingConflict(ValueError):
@@ -509,6 +563,10 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     AC12/AC14: the hold check runs again inside the database. Two requests racing for one slot
     can both pass the check above; the exclusion constraint then makes the second write wait for
     the first and fail, and that failure becomes the same ``VenueHeld``.
+
+    Story 12.1 AC14: the venue may have stopped being available since the catalogue search, so
+    the search's other two rules are checked again after the hold - a closure overlapping the
+    period (``VenueBlocked``) and opening hours that leave part of it out (``VenueClosed``).
     """
     event = _bookable_event(db, data.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
@@ -530,6 +588,14 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     holding = find_holding_booking(db, venue.id, held_from, held_until)
     if holding is not None:
         raise VenueHeld(holding)
+    # The held period is the event's own until setup and teardown are recorded (12.1 AC1).
+    closure = venue_service.find_blocking_unavailability(
+        db, venue.id, starts_at=held_from, ends_at=held_until
+    )
+    if closure is not None:
+        raise VenueBlocked(venue, closure)
+    if venue_service.closed_for(venue, starts_at=held_from, ends_at=held_until):
+        raise VenueClosed(venue, starts_at=held_from, ends_at=held_until)
 
     venue_id = venue.id
     db.add(booking)

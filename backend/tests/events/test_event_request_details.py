@@ -737,6 +737,8 @@ def test_reference_data_lists_the_pick_lists_for_the_form(organiser_client):
     body = response.json()
     assert "THEATRE" in {item["code"] for item in body["layouts"]}
     assert "PROJECTOR" in {item["code"] for item in body["facilities"]}
+    # f2.1.2: RECORDING was removed - it named no corresponding equipment_types row to reserve.
+    assert "RECORDING" not in {item["code"] for item in body["facilities"]}
     assert "HEARING_LOOP" in {item["code"] for item in body["accessibility_features"]}
     assert "WIRELESS_MIC" in {item["code"] for item in body["equipment_types"]}
 

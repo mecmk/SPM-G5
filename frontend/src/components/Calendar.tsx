@@ -1,4 +1,11 @@
-import { formatMonthYear, isoDate, isWeekendColumn, monthGrid, weekdayLabels } from './calendarGrid'
+import {
+  formatDayLabel,
+  formatMonthYear,
+  isoDate,
+  isWeekendColumn,
+  monthGrid,
+  weekdayLabels,
+} from './calendarGrid'
 
 export type CalendarEntryTone = 'danger' | 'warning' | 'info' | 'success'
 
@@ -22,6 +29,15 @@ export interface CalendarProps {
   entries: CalendarEntry[]
   /** Called with a day's `YYYY-MM-DD` when a day with no entries is clicked. Omit for read-only. */
   onSelectDay?: (date: string) => void
+  /**
+   * Story 9.1 AC5: called with a day's `YYYY-MM-DD` when a day that has entries is pressed, so the
+   * parent can list them. Omit and a day with entries is not pressable, as before.
+   */
+  onOpenDay?: (date: string) => void
+  /** The day whose list is open (`YYYY-MM-DD`), or null. Marks that day's button expanded. */
+  openDay?: string | null
+  /** The id of the list an open day controls, for its button's `aria-controls`. */
+  openDayPanelId?: string
   legend?: CalendarLegendItem[]
   /**
    * f9.1.1: `entries` may not reflect true availability - a fetch is still in flight, or the last
@@ -29,6 +45,22 @@ export interface CalendarProps {
    * Prev/Next: the month is still navigable while its own data is unknown.
    */
   gridStatus?: 'loading' | 'unknown'
+}
+
+// How many of a day's entries its cell shows; the rest are "+N more".
+const MAX_ENTRIES_SHOWN = 2
+
+/**
+ * Story 9.1 AC5: an openable day's name for assistive tech - the date, how many items, and the
+ * entries its cell shows, "+N more" included, so the name contains the visible text (WCAG 2.5.3)
+ * and not only a count.
+ */
+function openableDayName(dayLabel: string, dayEntries: CalendarEntry[]): string {
+  const count = `${dayEntries.length} ${dayEntries.length === 1 ? 'item' : 'items'}`
+  const shown = dayEntries.slice(0, MAX_ENTRIES_SHOWN).map((entry) => entry.label)
+  const hiddenCount = dayEntries.length - shown.length
+  const summary = hiddenCount > 0 ? [...shown, `+${hiddenCount} more`] : shown
+  return `${dayLabel}, ${count}: ${summary.join('; ')}`
 }
 
 const TONE_RANK: Record<CalendarEntryTone, number> = {
@@ -49,12 +81,18 @@ function strongestTone(entries: CalendarEntry[]): CalendarEntryTone | null {
 /**
  * Story c3 - a month calendar for showing venue and equipment availability. Presentational and
  * controlled: the parent owns which month is open and what happens when a free day is clicked.
+ *
+ * Story 9.1 AC5: with `onOpenDay`, a day that has entries is a button the parent answers by
+ * listing them (`openDay` marks the open one). Without it the calendar is as it was.
  */
 export function Calendar({
   month,
   onMonthChange,
   entries,
   onSelectDay,
+  onOpenDay,
+  openDay = null,
+  openDayPanelId,
   legend,
   gridStatus,
 }: CalendarProps) {
@@ -72,6 +110,10 @@ export function Calendar({
 
   function handleSelectDay(date: string) {
     onSelectDay?.(date)
+  }
+
+  function handleOpenDay(date: string) {
+    onOpenDay?.(date)
   }
 
   function entriesForDay(day: number): CalendarEntry[] {
@@ -106,37 +148,61 @@ export function Calendar({
             return <div key={`blank-${index}`} className="calendar-cell calendar-cell-blank" />
           }
 
+          const date = isoDate(year, monthIndex, day)
           const dayEntries = entriesForDay(day)
           const tone = strongestTone(dayEntries)
           const isWeekend = isWeekendColumn(index)
           const isSelectable = Boolean(onSelectDay) && dayEntries.length === 0
+          const isOpenable = Boolean(onOpenDay) && dayEntries.length > 0
+          const isOpen = isOpenable && openDay === date
           const cellClassName = [
             'calendar-cell',
             tone ? `calendar-cell-${tone}` : '',
             !tone && isWeekend ? 'calendar-cell-weekend' : '',
             isSelectable ? 'calendar-cell-selectable' : '',
+            isOpenable ? 'calendar-cell-openable' : '',
+            isOpen ? 'calendar-cell-open' : '',
           ]
             .filter(Boolean)
             .join(' ')
 
+          // A button may only hold phrasing content, so an openable or selectable day's parts
+          // are spans; a plain (unclickable) day keeps the divs it has always had.
+          const Part = isOpenable || isSelectable ? 'span' : 'div'
           const cellContent = (
             <>
-              <div className="calendar-day">{day}</div>
-              {dayEntries.slice(0, 2).map((entry) => (
-                <div
+              <Part className="calendar-day">{day}</Part>
+              {dayEntries.slice(0, MAX_ENTRIES_SHOWN).map((entry) => (
+                <Part
                   key={entry.id}
                   className={`calendar-entry calendar-entry-${entry.tone}`}
                   title={entry.label}
                 >
                   {entry.label}
-                </div>
+                </Part>
               ))}
-              {dayEntries.length > 2 && (
-                <div className="calendar-more">+{dayEntries.length - 2} more</div>
+              {dayEntries.length > MAX_ENTRIES_SHOWN && (
+                <Part className="calendar-more">+{dayEntries.length - MAX_ENTRIES_SHOWN} more</Part>
               )}
-              {isSelectable && !isWeekend && <div className="calendar-hint">Available</div>}
+              {isSelectable && !isWeekend && <Part className="calendar-hint">Available</Part>}
             </>
           )
+
+          if (isOpenable) {
+            return (
+              <button
+                key={day}
+                type="button"
+                className={cellClassName}
+                aria-expanded={isOpen}
+                aria-controls={isOpen ? openDayPanelId : undefined}
+                aria-label={openableDayName(formatDayLabel(year, monthIndex, day), dayEntries)}
+                onClick={() => handleOpenDay(date)}
+              >
+                {cellContent}
+              </button>
+            )
+          }
 
           if (isSelectable) {
             return (
@@ -144,7 +210,7 @@ export function Calendar({
                 key={day}
                 type="button"
                 className={cellClassName}
-                onClick={() => handleSelectDay(isoDate(year, monthIndex, day))}
+                onClick={() => handleSelectDay(date)}
               >
                 {cellContent}
               </button>

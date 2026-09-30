@@ -1,8 +1,8 @@
 """HTTP endpoints for the venue catalogue and its availability calendar.
 
 Story 8.3 (create / update, Venue Staff only) plus the read endpoints stories 8.1 / 8.2 need,
-and the calendar endpoint story 9.1 needs. Delete was added for Venue Staff by the team decision
-of 17 Sep 2026 (full CRUD on venues).
+8.1's search (Sprint 2), and the calendar endpoint story 9.1 needs. Delete was added for Venue
+Staff by the team decision of 17 Sep 2026 (full CRUD on venues).
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from app.venues.schemas import (
     VenueCreate,
     VenueOut,
     VenueReferenceData,
+    VenueSearchQuery,
+    VenueSearchResult,
     VenueSummary,
     VenueUnavailableWindowOut,
     VenueUpdate,
@@ -62,6 +64,19 @@ def list_venues(
     ]
 
 
+@router.get("/search", response_model=VenueSearchResult, dependencies=[CanRead])
+def search_venues(db: DbSession, query: Annotated[VenueSearchQuery, Query()]) -> VenueSearchResult:
+    """Story 8.1 AC3/AC4: the catalogue's filters, run on the server for any role that reads
+    venues. AC8: a search that cannot be run is refused with a sentence saying why. Declared
+    above ``/{venue_id}`` so the literal path is not read as a venue id."""
+    try:
+        return service.search_venues(db, query)
+    except service.InvalidVenueSearch as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.UnknownReferenceCode as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+
 @router.get("/{venue_id}", response_model=VenueOut, dependencies=[CanRead])
 def get_venue(venue_id: uuid.UUID, db: DbSession) -> VenueOut:
     try:
@@ -81,7 +96,8 @@ def get_venue_calendar(
     starts_at: Annotated[AwareDatetime, Query()],
     ends_at: Annotated[AwareDatetime, Query()],
 ) -> list[VenueUnavailableWindowOut]:
-    """Story 9.1 AC1/AC2: approved bookings and unavailability periods overlapping the range."""
+    """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
+    overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only."""
     try:
         return service.get_venue_calendar(db, venue_id, starts_at=starts_at, ends_at=ends_at)
     except service.VenueNotFound:

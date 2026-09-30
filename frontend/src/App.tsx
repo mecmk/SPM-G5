@@ -40,7 +40,6 @@ import {
 import { VenueCataloguePage } from './venues/VenueCataloguePage'
 import { VenueDetailPage } from './venues/VenueDetailPage'
 import { VenueFormPage } from './venues/VenueFormPage'
-import { VenueManagePage } from './venues/VenueManagePage'
 import './App.css'
 
 /**
@@ -75,9 +74,15 @@ function App() {
                 <Route path={VENUE_PATH} element={<VenueDetailPage />} />
               </Route>
 
-              {/* Story 8.3: venue records, Venue Staff only. */}
+              {/*
+                Story 8.3: venue records, Venue Staff only. f8.1.1 (8.1 AC12): they manage venues
+                from the catalogue, and the old Manage venues address opens it.
+              */}
               <Route element={<RequirePermission permission={PERMISSIONS.VENUES_MANAGE} />}>
-                <Route path={VENUES_MANAGE_PATH} element={<VenueManagePage />} />
+                <Route
+                  path={VENUES_MANAGE_PATH}
+                  element={<Navigate to={VENUE_CATALOGUE_PATH} replace />}
+                />
                 <Route path={VENUE_NEW_PATH} element={<VenueFormPage key="new" />} />
                 <Route path={VENUE_EDIT_PATH} element={<VenueFormPage key="edit" />} />
               </Route>

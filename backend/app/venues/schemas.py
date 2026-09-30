@@ -1,5 +1,5 @@
-"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2)
-and its availability calendar (story 9.1)."""
+"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2), its
+search (story 8.1, Sprint 2) and its availability calendar (story 9.1)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,15 @@ import uuid
 from datetime import datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from app.venues.models import Venue
 
@@ -231,19 +239,72 @@ class VenueOut(VenueSummary):
         )
 
 
+# --- search (story 8.1, Sprint 2) --------------------------------------------------------
+class VenueSearchQuery(BaseModel):
+    """Story 8.1 AC3/AC4: the catalogue's filters, as ``GET /venues/search`` reads them from the
+    query string. Every field is optional; the service checks how they combine (AC8)."""
+
+    search: str | None = None
+    # Plain int, not PositiveWholeNumber: a query string only carries text, so "50" must convert.
+    capacity: int | None = Field(default=None, gt=0)
+    capacity_max: int | None = Field(default=None, gt=0)
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
+    layout: str | None = None
+    facility: list[str] = Field(default_factory=list)
+    accessibility: list[str] = Field(default_factory=list)
+    include_withdrawn: bool = False
+
+
+class VenueSearchHit(VenueSummary):
+    """Story 8.1 AC1/AC3: one venue a search found. Its opening hours let the catalogue say they
+    are not recorded when a period is searched, since such a venue is kept rather than refused."""
+
+    operating_hours_start: time | None
+    operating_hours_end: time | None
+
+
+class RelaxHint(BaseModel):
+    """Story 8.1 AC9: a filter group whose removal alone would give results, and how many."""
+
+    filter: str
+    label: str
+    count: int
+
+
+class VenueSearchResult(BaseModel):
+    """Story 8.1: what ``GET /venues/search`` answers. ``total`` counts every venue the search
+    looked through (those in service, and withdrawn ones when asked for), for "Showing N of M
+    venues"; ``relax`` is filled only when nothing matched (AC9)."""
+
+    venues: list[VenueSearchHit]
+    total: int
+    relax: list[RelaxHint]
+
+
 # --- calendar (story 9.1) ----------------------------------------------------------------
-# Sentinel `reason` for an approved booking. Distinct from venue_unavailability_periods' own
-# reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER, see UnavailabilityReason
-# in models.py) - the two are different vocabularies sharing one field, not a single enum.
+# Sentinel `reason` values for the two kinds of booking on the calendar: an approved booking
+# (BOOKED) and a pending request that soft-locks the venue (HELD, story 9.1 AC2). Neither is a
+# value of venue_unavailability_periods.reason (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
+# OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries either
+# vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
 BOOKING_REASON = "BOOKED"
+HELD_REASON = "HELD"
 
 
 class VenueUnavailableWindowOut(BaseModel):
-    """One blocked period on the venue calendar (AC1/AC2): either an approved booking or a
-    venue_unavailability_periods row. A flat list of periods, not pre-expanded per day - the
-    frontend expands each into the calendar days it touches."""
+    """One blocked period on the venue calendar (story 9.1 AC2): an approved booking (BOOKED), a
+    pending request (HELD) or a venue_unavailability_periods row. A flat list of periods, not
+    pre-expanded per day - the frontend expands each into the calendar days it touches.
+
+    ``starts_at`` / ``ends_at`` are the period the venue is blocked: for a booking, its held
+    period (setup and teardown included). AC5: ``booking_starts_at`` / ``booking_ends_at`` are
+    the booking's own requested period inside it - which may cover only part of its event's own
+    schedule - so a day's list can show both; None for a closure, which has no booking."""
 
     starts_at: datetime
     ends_at: datetime
+    booking_starts_at: datetime | None
+    booking_ends_at: datetime | None
     reason: str
     label: str

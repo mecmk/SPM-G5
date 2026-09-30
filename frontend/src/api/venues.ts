@@ -136,16 +136,80 @@ export function deleteVenue(venueId: string, venueName: string): Promise<void> {
   })
 }
 
-/** Sentinel `reason` for an approved booking - distinct from venue_unavailability_periods' own
- * reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE, OTHER). Mirrors BOOKING_REASON
- * in backend/app/venues/schemas.py. */
+/** Mirrors `VenueSearchQuery`: the filters of `GET /venues/search` (story 8.1, Sprint 2).
+ * `starts_at` / `ends_at` are instants with their offset; send both or neither. */
+export interface VenueSearchQuery {
+  search?: string
+  capacity?: number
+  capacity_max?: number
+  starts_at?: string
+  ends_at?: string
+  layout?: string
+  facility?: readonly string[]
+  accessibility?: readonly string[]
+  include_withdrawn?: boolean
+}
+
+/** Mirrors `VenueSearchHit`: a venue the search found. Its hours are "HH:MM:SS", or null when
+ * not recorded - such a venue is kept when a period is searched (story 8.1 AC3). */
+export interface VenueSearchHit extends VenueSummary {
+  operating_hours_start: string | null
+  operating_hours_end: string | null
+}
+
+/** The filter groups a search can relax (story 8.1 AC9); `SEARCH_GROUP_LABELS` in
+ * backend/app/venues/service.py. */
+export type RelaxFilter =
+  'search' | 'capacity' | 'dates' | 'layout' | 'facilities' | 'accessibility'
+
+/** Mirrors `RelaxHint`: a filter group whose removal alone would give results, and how many. */
+export interface RelaxHint {
+  filter: RelaxFilter
+  label: string
+  count: number
+}
+
+/** Mirrors `VenueSearchResult`. `total` counts every venue searched through, for "Showing N of
+ * M"; `relax` is filled only when nothing matched. */
+export interface VenueSearchResult {
+  venues: VenueSearchHit[]
+  total: number
+  relax: RelaxHint[]
+}
+
+/** Story 8.1 AC3/AC4: the catalogue's search, run on the server. A search that cannot be run
+ * (AC8) is refused with a 422 whose sentence says why. */
+export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult> {
+  const params = new URLSearchParams()
+  if (query.search) params.set('search', query.search)
+  if (query.capacity !== undefined) params.set('capacity', String(query.capacity))
+  if (query.capacity_max !== undefined) params.set('capacity_max', String(query.capacity_max))
+  if (query.starts_at) params.set('starts_at', query.starts_at)
+  if (query.ends_at) params.set('ends_at', query.ends_at)
+  if (query.layout) params.set('layout', query.layout)
+  for (const code of query.facility ?? []) params.append('facility', code)
+  for (const code of query.accessibility ?? []) params.append('accessibility', code)
+  if (query.include_withdrawn) params.set('include_withdrawn', 'true')
+  return api<VenueSearchResult>(`/venues/search?${params}`)
+}
+
+/** Sentinel `reason` values for a booking on the calendar: an approved booking (BOOKED) and a
+ * pending request that holds the venue (HELD, story 9.1 AC2). Neither is one of
+ * venue_unavailability_periods' own reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
+ * OTHER). Mirror BOOKING_REASON and HELD_REASON in backend/app/venues/schemas.py. */
 export const BOOKING_REASON = 'BOOKED'
+export const HELD_REASON = 'HELD'
 
 /** Mirrors `VenueUnavailableWindowOut` (story 9.1). One blocked period - a flat list, not
- * pre-expanded per day. */
+ * pre-expanded per day. `starts_at` / `ends_at` are the period the venue is blocked: for a
+ * booking, its held period, setup and teardown included. `booking_starts_at` / `booking_ends_at`
+ * (AC5) are the booking's own requested period inside it - which may cover only part of its
+ * event's own schedule - null for a closure. */
 export interface VenueUnavailableWindow {
   starts_at: string
   ends_at: string
+  booking_starts_at: string | null
+  booking_ends_at: string | null
   reason: string
   label: string
 }

@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-27 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-09-29 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -761,7 +761,6 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | STAGE | Stage | Raised platform for presenters. |
 | WHITEBOARD | Whiteboard / flipchart | - |
 | CATERING_AREA | Catering area | Space and power for food service. |
-| RECORDING | Recording equipment | Fixed cameras and capture for session recording. |
 | BREAKOUT_ROOMS | Breakout rooms | Adjoining smaller rooms. |
 
 ### room_layouts values

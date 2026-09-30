@@ -98,7 +98,7 @@ author's call. Never flatten a `taste` into a "must".
   {error && <p className="error">{error}</p>}
   ```
 
-  _`blocking` · exemplars `src/venues/VenueManagePage.tsx:127`, `src/auth/LoginPage.tsx:81`,
+  _`blocking` · exemplars `src/venues/VenueCataloguePage.tsx:223`, `src/auth/LoginPage.tsx:81`,
   `src/venues/VenueFormPage.tsx:171`, `:462`; depended on by `tests/e2e/auth.spec.ts:29`_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
@@ -180,7 +180,7 @@ author's call. Never flatten a `taste` into a "must".
   const [saving, setSaving] = useState(false)
   ```
 
-  _`expected` · 4 counter-sites, see
+  _`expected` · 3 counter-sites, see
   Standing divergences_
 
 - `expected` — **Name a function for the specific domain operation, as a verb phrase.** Not a
@@ -220,7 +220,7 @@ author's call. Never flatten a `taste` into a "must".
   {venues && venues.length === 0 && <p className="muted">No venues recorded yet.</p>}
   ```
 
-  _`taste` · exemplar `src/venues/VenueManagePage.tsx:126-142`_
+  _`taste` · exemplar `src/venues/VenueCataloguePage.tsx:222-245`_
 
 ## Types
 
@@ -274,7 +274,7 @@ author's call. Never flatten a `taste` into a "must".
   Graded `taste`: the only argument for it is matching what is already here, which is not enough
   to block a PR over.
 
-  _`taste` · exemplars `src/auth/AuthProvider.tsx:2`, `src/venues/VenueManagePage.tsx:4`;
+  _`taste` · exemplars `src/auth/AuthProvider.tsx:2`, `src/venues/VenueCataloguePage.tsx:3`;
   standalone form at `src/auth/authContext.ts:2`_
 
 ## Traceability
@@ -286,14 +286,14 @@ author's call. Never flatten a `taste` into a "must".
   the frontend is the one layer a reviewer cannot trace.
 
   ```tsx
-  /** Story 8.3 - Venue Staff entry point: list venues, jump to create / edit. */
-  export function VenueManagePage() { ... }
+  /** Story 8.1 AC12: Venue Staff also get New venue, Edit and Delete in the catalogue. */
+  export function VenueCataloguePage() { ... }
 
   /** Story 1.2 AC2: hide navigation / actions the role may not perform. */
   can: (permission: string) => boolean
   ```
 
-  _`expected` · exemplars `src/venues/VenueManagePage.tsx:31`, `src/venues/VenueFormPage.tsx:143`,
+  _`expected` · exemplars `src/venues/VenueCataloguePage.tsx:42`, `src/venues/VenueFormPage.tsx:143`,
   `src/auth/RequireAuth.tsx:14`, `src/auth/homeFor.ts:2`, `src/auth/authContext.ts:11`,
   `src/layout/AppLayout.tsx:7`; 9 sites in `src/`_
 
@@ -315,13 +315,13 @@ Rules the existing tree violates. Naming them here is what stops someone copying
 good faith because they found it first. **Fix these under their own ticket, never opportunistically
 in an unrelated PR.**
 
-| Rule                                          | Violating sites                                                                                                                                          | Status                                                                                                                  |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| One exported constant for a cross-file string | 0: permission codes are constants in `src/auth/permissions.ts` (story 1.2)                                                                               | resolved                                                                                                                |
-| Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueManagePage.tsx`, `VenueFormPage.tsx`                                                                                    | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
-| Colour comes from a token, never a literal    | 0 — resolved in story c3 (`src/App.css` is token-only)                                                                                                   | resolved                                                                                                                |
-| Boolean `is`/`can`/`has` prefix               | 4: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`), `includeWithdrawn` (`VenueManagePage.tsx:9`) | carried rule, newly adopted                                                                                             |
-| Components use named exports                  | 1: `src/App.tsx:39`                                                                                                                                      | licensed exception — conventional default export for the Vite entry point                                               |
+| Rule                                          | Violating sites                                                                                            | Status                                                                                                                  |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| One exported constant for a cross-file string | 0: permission codes are constants in `src/auth/permissions.ts` (story 1.2)                                 | resolved                                                                                                                |
+| Extract named handlers                        | 22 across `LoginPage.tsx`, `VenueCataloguePage.tsx`, `VenueFormPage.tsx`                                   | carried rule, newly adopted — most are the licensed form-setter shape; only the multi-statement ones are worth changing |
+| Colour comes from a token, never a literal    | 0 — resolved in story c3 (`src/App.css` is token-only)                                                     | resolved                                                                                                                |
+| Boolean `is`/`can`/`has` prefix               | 3: `loading` (`AuthProvider.tsx:7`), `submitting` (`LoginPage.tsx:22`), `saving` (`VenueFormPage.tsx:151`) | carried rule, newly adopted                                                                                             |
+| Components use named exports                  | 1: `src/App.tsx:39`                                                                                        | licensed exception — conventional default export for the Vite entry point                                               |
 
 ## Maintaining this file
 
