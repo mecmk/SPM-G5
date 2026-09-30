@@ -295,8 +295,6 @@ Gates every PR, not every story: a story can take several PRs. The author ticks 
 - [ ] The author has read every changed line, including any AI-generated code and tests, and can
       explain it. It does what the acceptance criteria ask, the functions, fields and endpoints
       it uses exist, and no test was weakened, skipped or edited to match a bug.
-- [ ] Every doc that [Keeping Docs Current](#keeping-docs-current) ties to what the PR changes is
-      updated.
 - [ ] Lint/format checks are clean; the flow was manually exercised in the browser (if there is
       UI).
 - [ ] No secrets, API keys, or `.env` values committed.
