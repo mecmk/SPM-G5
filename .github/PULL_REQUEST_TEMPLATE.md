@@ -1,7 +1,7 @@
 ## Ticket ID
 
-<!-- Backlog ID with its type prefix: s for a story, b for a bug, c for a chore,
-     e.g. s1.1, b1.1, c1.1 -->
+<!-- Backlog ID with its type prefix: s for a story, f for a fix, c for a chore,
+     e.g. s8.1, f1.1.1, c1.0.1 -->
 
 ## Summary
 

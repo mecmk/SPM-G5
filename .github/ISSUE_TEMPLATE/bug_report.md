@@ -5,10 +5,10 @@ title: "[BUG] "
 labels: bug
 ---
 
-## Bug ID
+## Fix ID
 
-<!-- e.g. b1.1 — from the team's backlog tool. The PR title ends with it, "fix: … (b1.1)";
-     the branch uses the number alone, fix/1.1-<slug>. -->
+<!-- e.g. f1.1.1 — from the team's backlog tool. The branch and PR title carry it:
+     fix/f1.1.1-<slug>, "fix: … (f1.1.1)". -->
 
 ## Related Story ID
 

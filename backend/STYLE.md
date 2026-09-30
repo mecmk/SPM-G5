@@ -167,9 +167,7 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   behaviour without noticing they changed the other's. Graded `taste`: `except (A, B):` is
   ordinary, idiomatic Python, so this is a house preference rather than a correctness rule.
 
-  *`taste` · counter-sites `venues/router.py::update_venue`, which groups
-  `UnknownReferenceCode` and `InvalidOperatingHours`, and
-  `coordination/router.py::assign_coordinator`*
+  *`taste` · counter-sites: see Standing divergences*
 
 - `expected` — **Suppress the exception chain with `from None` when a router translates a service
   exception into an `HTTPException`.** The domain exception has already been handled and
@@ -301,12 +299,12 @@ in an unrelated PR.**
 | A URL names a resource | `POST /auth/login`, `POST /auth/logout` | licensed exception — `POST /auth/login` is near-universal convention and both the backend and e2e tests call the path; not a precedent for other features |
 | A URL names a resource | `POST /events/{event_id}/submit`, `/approve`, `/reject`; `POST /bookings/{booking_id}/approve`, `/reject`, `/withdraw` | pre-existing, undecided — each is a state transition with its own rules and audit record, so it was modelled as an action; agree as a team before adding another |
 | Every fixed literal becomes a named constant | the error sentences written inline in `coordination/router.py`, one of which repeats `NOT_PERMITTED_MESSAGE` from `auth/deps.py` | pre-existing, not precedent |
-| No field defaults on a response schema | `coordination/schemas.py::CoordinatorOption` (`department = None`) | pre-existing, not precedent |
-| One `except` per type | `venues/router.py::update_venue`, `coordination/router.py::assign_coordinator` | pre-existing, not precedent |
+| No field defaults on a response schema | `coordination/schemas.py::CoordinatorOption` (`department = None`), `venues/schemas.py::ReferenceItem` (`description = None`) | pre-existing, not precedent |
+| One `except` per type | `venues/router.py::update_venue`, `coordination/router.py::assign_coordinator`, `auth/passwords.py::verify_password`, `dbtool/__main__.py::main` | pre-existing, not precedent |
 | `except Exception` is not a handler | `events/service.py::set_cover_image` | licensed exception — it deletes the file it has just written and re-raises, so nothing is swallowed |
 | Private helper defined above its caller | helpers below their callers in `venues/service.py`, `bookings/service.py` and `dbtool/docs.py` | pre-existing, not precedent — `auth/router.py::_set_session_cookie` shows the intended shape |
 | `is_` on booleans | parameters that read as flags: `include_withdrawn` (`venues/service.py::list_venues`), `only_present` (`::_replace_characteristics`), `commit` (`common/audit.py::record_audit`, `common/notifications.py::notify`), `required` (`events/service.py::_check_registration`), and the `force` / `with_seed` / `with_docs` options in `dbtool/__main__.py` | licensed exception — each reads as a flag and the prefix would worsen it |
-| `from __future__ import annotations` | 3: `db.py`, `config.py`, `main.py` | licensed exception — none defers an annotation |
+| `from __future__ import annotations` | `db.py`, `config.py`, `main.py` | licensed exception — none defers an annotation |
 | Services raise domain exceptions for failure | `auth/service.py::authenticate` returns `None` | licensed exception — story 1.1 AC2 requires the failure modes be indistinguishable |
 | Routers do HTTP only; services own the transaction | `auth/router.py::login` and `::logout` call `record_audit` with the default `commit=True` | pre-existing, not precedent — `venues/service.py::create_venue` shows the intended shape |
 

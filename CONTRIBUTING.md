@@ -11,14 +11,14 @@
 ## Branching Strategy
 
 Trunk-based development on `main`, not GitFlow: every branch is cut from `main` and squash-merged
-straight back into it. Branch names (`story/1.1-login`) and backlog IDs are defined in
+straight back into it. Branch names (`story/s8.1-venue-search`) and backlog IDs are defined in
 [AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints); commit and PR titles have a quick
 reference [below](#commit--pr-titles).
 
 ## Daily Workflow
 
 1. Branch off the latest `main`, named as
-   [AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints) says, e.g. `story/1.1-login`.
+   [AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints) says, e.g. `story/s8.1-venue-search`.
 2. Implement the change.
 3. Run tests and lint locally (see [AGENTS.md](AGENTS.md) for exact commands).
 4. Push your branch.
@@ -58,7 +58,7 @@ npm run format   # runs ruff format (backend) + prettier --write (frontend)
 
 The `commit-msg` hook also rejects a commit whose **message** doesn't follow the Conventional
 Commits format [below](#commit--pr-titles) (e.g. `wip fix stuff` gets rejected,
-`fix: correct venue capacity check (b8.3)` passes) — that check only runs if you ran the
+`fix: correct venue capacity check (f8.3.1)` passes) — that check only runs if you ran the
 second `install` line above. It's a local convenience: your commits on a feature branch get
 squash-merged into one commit anyway, and `pr-title-check.yml` already enforces this same format
 on the **PR title** in CI regardless of whether you have this hook installed.
@@ -72,16 +72,16 @@ two are kept in step.
 <type>: <what changed> (<backlog ID>)
 
 feat: reassign event to another coordinator (s5.2)
-fix: keep the sign-in form steady while the session loads (b1.1)
-chore: scan PRs for secrets (c1.1)
+fix: keep the sign-in form steady while the session loads (f1.1.1)
+chore: scan PRs for secrets (c1.0.1)
 docs: correct the migration rule in the database guide
 ```
 
 - `<type>` is one of `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
   `pr-title-check.yml` rejects any other type in a PR title.
-- The backlog ID goes at the end, with its prefix: `s` for a story, `b` for a bug, `c` for a chore.
-  Leave it out only when there is no backlog item, as for most `docs`, `refactor` or `test` work.
-  Branch names use the number alone: `story/5.2-reassign-coordinator`.
+- The backlog ID goes at the end, with its prefix: `s` for a story, `f` for a fix, `c` for a
+  chore. Leave it out only when there is no backlog item, as for most `docs`, `refactor` or
+  `test` work. The branch carries the same ID: `story/s5.2-reassign-coordinator`.
 - The PR title matters most. PRs are squash-merged, so it becomes the one commit on `main`.
 
 ## Reviewer Sign-off

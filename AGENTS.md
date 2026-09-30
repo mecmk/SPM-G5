@@ -172,25 +172,25 @@ Don't scaffold a new feature area speculatively; add one only when a real story 
 
 ## Backlog IDs
 
-Every backlog item has a number, and its type is shown by a prefix: `s` for a story (`s1.1`), `b`
-for a bug (`b1.1`) and `c` for a chore (`c1.1`). The prefix appears in one place only — at the end
-of a commit message or PR title, e.g. `feat: reassign event to another coordinator (s5.2)`.
-Everywhere else the number stands alone:
+Every backlog item has an ID: a type prefix and a number. `s` is a story (`s8.1`), `f` a fix
+(`f1.1.1`, a fix against story 1.1) and `c` a chore (`c1.0.1`). The same ID, prefix included, goes
+in the branch name and at the end of the commit message and PR title:
 
-- branch names — the branch prefix already says the type: `story/1.1-login`,
-  `fix/1.1-login-flash`;
-- tests — `@pytest.mark.story("1.1", ac=2)` and `'1.1 AC2: …'`. A test always proves a story's
-  acceptance criterion, even when a bug fix adds it.
+- branch: `story/s8.1-venue-search`, `fix/f1.1.1-login-flash`, `chore/c1.0.1-secret-scan`;
+- title: `feat: search and filter the venue catalogue (s8.1)`.
 
-This file doesn't track backlog content itself.
+Tests are the exception. They use the story number alone, `@pytest.mark.story("1.1", ac=2)` and
+`'1.1 AC2: …'`, because a test always proves a story's acceptance criterion, even when a fix adds
+it. Older branches and commits use `b` for a fix; `f` replaces it. This file doesn't track backlog
+content itself.
 
 ## Branching & PR Rules (hard constraints)
 
 ```text
 main                   ← trunk. Stable, protected, PR-only.
-├── story/<ID>-<slug>  ← a story, e.g. story/1.1-login
-├── fix/<ID>-<slug>    ← a bug fix, e.g. fix/1.1-login-flash
-├── chore/<ID>-<slug>  ← a chore: tooling, CI, dependencies, e.g. chore/1.1-secret-scan
+├── story/<ID>-<slug>  ← a story, e.g. story/s8.1-venue-search
+├── fix/<ID>-<slug>    ← a fix, e.g. fix/f1.1.1-login-flash
+├── chore/<ID>-<slug>  ← a chore: tooling, CI, dependencies, e.g. chore/c1.0.1-secret-scan
 ├── refactor/<slug>    ← restructuring, no behavior change
 ├── test/<slug>        ← test-only changes
 └── docs/<slug>        ← documentation only
@@ -247,8 +247,9 @@ plan first, then the steps they describe — it doesn't replace them.
 ## Commit & PR Conventions
 
 - Conventional Commits style, ending with the backlog ID when the change has one:
-  `feat: add login form (s1.1)`, `fix: correct venue availability query (b8.3)`,
-  `chore: scan PRs for secrets (c1.1)`. A `docs`, `refactor` or `test` change with no backlog
+  `feat: search and filter the venue catalogue (s8.1)`,
+  `fix: keep the sign-in form steady while the session loads (f1.1.1)`,
+  `chore: scan PRs for secrets (c1.0.1)`. A `docs`, `refactor` or `test` change with no backlog
   item leaves it out. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
 - PR description should state which story/AC it addresses and how it was tested.
 
