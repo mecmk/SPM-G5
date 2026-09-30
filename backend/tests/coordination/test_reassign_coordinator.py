@@ -29,7 +29,7 @@ from app.auth.models import User
 from app.coordination import service as coordination_service
 from app.coordination.schemas import AssignCoordinatorIn
 from tests.support.factories import make_clarification, make_user
-from tests.support.seed import Events, Users
+from tests.support.seed import Bookings, Events, Users
 
 
 def _open_assignment_row(db: Session, event_id):
@@ -222,6 +222,25 @@ def test_pending_booking_request_follows_the_new_coordinator(coordinator_client,
 
 
 @pytest.mark.story("5.2", ac=5)
+def test_an_existing_pending_booking_stays_tied_to_the_event_after_reassignment(
+    coordinator_client, login_as
+):
+    """The previous test proves *future* eligibility moves; this proves the request Events.APPROVED
+    already carries (Bookings.PENDING_SEMINAR_ROOM, seeded PENDING) is not hidden, detached or
+    otherwise disturbed by the reassignment - it is still readable through the event's own
+    history for whoever the new assignment holds BOOKINGS_READ."""
+    coordinator_client.put(
+        f"/events/{Events.APPROVED}/coordinator",
+        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+    )
+
+    carl = login_as(Users.COORDINATOR_2)
+    response = carl.get(f"/bookings/for-event/{Events.APPROVED}")
+    assert response.status_code == 200, response.text
+    assert str(Bookings.PENDING_SEMINAR_ROOM) in {b["id"] for b in response.json()}
+
+
+@pytest.mark.story("5.2", ac=5)
 def test_clarification_thread_stays_visible_after_reassignment(
     coordinator_client, login_as, db: Session
 ):
@@ -390,3 +409,41 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
     # refused attempt
     assert _history_row_count(db, event_id) == before + 1
     assert _open_assignment_row(db, event_id).coordinator_id == Users.COORDINATOR_2.id
+
+
+@pytest.mark.story("5.2", ac=7)
+def test_a_stale_reassignment_over_http_is_refused_with_409(
+    coordinator_client, db: Session, monkeypatch
+):
+    """The two tests above prove the guard by calling ``assign_coordinator`` directly and
+    catching ``AssignmentChanged`` as a Python exception - neither exercises the router's own
+    translation of that exception into an HTTP response. This drives the identical race through
+    the real ``PUT /events/{event_id}/coordinator`` endpoint instead, to prove that translation
+    (409, not 500 or an unhandled exception) actually happens."""
+    event_id = Events.APPROVED
+    chloe = db.get(User, Users.COORDINATOR.id)
+    dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator HTTP")
+
+    real_current_assignment = coordination_service.current_assignment
+    interloper_has_run = False
+
+    def _interloper_wins_first(db_, event_id_):
+        nonlocal interloper_has_run
+        result = real_current_assignment(db_, event_id_)
+        if not interloper_has_run:
+            interloper_has_run = True
+            coordination_service.assign_coordinator(
+                db_,
+                event_id_,
+                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
+                actor=chloe,
+            )
+        return result
+
+    monkeypatch.setattr(coordination_service, "current_assignment", _interloper_wins_first)
+
+    response = coordinator_client.put(
+        f"/events/{event_id}/coordinator", json={"coordinator_id": str(dana.id)}
+    )
+
+    assert response.status_code == 409, response.text
