@@ -40,6 +40,8 @@ export type ErrorCode =
   | 'EVENT_ROUTINE_EDIT_CLOSED'
   | 'EVENT_NOT_AWAITING_DECISION'
   | 'EVENT_REJECTION_REASON_REQUIRED'
+  | 'EVENT_NOT_AWAITING_CLARIFICATION'
+  | 'EVENT_CLARIFICATION_MESSAGE_REQUIRED'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -210,6 +212,19 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_REJECTION_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for rejecting this request.',
+  },
+  /** Story 4.2: requesting clarification once the request is no longer Under Review or
+   *  CLARIFICATION_REQUESTED, or a race where it moved on between opening the page and pressing
+   *  Send. The backend's own sentence (always sent) says which. */
+  EVENT_NOT_AWAITING_CLARIFICATION: {
+    title: 'Cannot send message',
+    message: 'This request has moved on, so the message was not sent.',
+  },
+  /** Story 4.2 AC4: the form's own pre-check before calling the API - never wired into an
+   *  errorCodes map, same precedent as EVENT_REJECTION_REASON_REQUIRED. */
+  EVENT_CLARIFICATION_MESSAGE_REQUIRED: {
+    title: 'Message needed',
+    message: 'Enter a message to send.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.

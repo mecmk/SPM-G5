@@ -13,6 +13,7 @@ import {
   getEvent,
   listClarifications,
   rejectEvent,
+  requestClarification,
   type Clarification,
   type EventDetail,
   type RequiredFacility,
@@ -180,6 +181,9 @@ export function EventDetailPage() {
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [clarificationMessage, setClarificationMessage] = useState('')
+  const [isRequestingClarification, setIsRequestingClarification] = useState(false)
+  const [clarificationRequestError, setClarificationRequestError] = useState<string | null>(null)
   const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
@@ -323,6 +327,26 @@ export function EventDetailPage() {
     }
   }
 
+  async function confirmRequestClarification() {
+    if (!event) return
+    if (!clarificationMessage.trim()) {
+      setClarificationRequestError(ERROR_REGISTRY.EVENT_CLARIFICATION_MESSAGE_REQUIRED.message)
+      return
+    }
+    setIsRequestingClarification(true)
+    setClarificationRequestError(null)
+    try {
+      const entry = await requestClarification(event.id, clarificationMessage, event.name)
+      setClarifications((current) => (current ?? []).concat(entry))
+      setEvent((current) => (current ? { ...current, status: 'CLARIFICATION_REQUESTED' } : current))
+      setClarificationMessage('')
+    } catch (err) {
+      setClarificationRequestError(formatApiError(err))
+    } finally {
+      setIsRequestingClarification(false)
+    }
+  }
+
   function askToWithdraw(booking: BookingOutcome) {
     setWithdrawError(null)
     setPendingWithdraw(booking)
@@ -407,6 +431,15 @@ export function EventDetailPage() {
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
   const canReject =
+    can(PERMISSIONS.EVENTS_REVIEW) &&
+    isAssignedCoordinator &&
+    AWAITING_DECISION_STATUSES.includes(event.status)
+  /** Story 4.2 AC5/AC6/AC7: only the assigned coordinator, holding events:review, may ask the
+   *  organiser a question, while the request is Under Review or already awaits a response to an
+   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing on
+   *  this branch moves the event back to Under Review) - mirroring the backend's own
+   *  `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
+  const canRequestClarification =
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
@@ -818,6 +851,38 @@ export function EventDetailPage() {
             error={clarificationsError}
             currentUserId={user?.id ?? null}
           />
+        )}
+
+        {canRequestClarification && (
+          <section className="card stack" aria-labelledby="post-clarification-heading">
+            <p className="eyebrow" id="post-clarification-heading">
+              Ask the organiser
+            </p>
+            <label>
+              Message
+              <textarea
+                rows={3}
+                placeholder="What do you need clarified before deciding?"
+                value={clarificationMessage}
+                onChange={(e) => setClarificationMessage(e.target.value)}
+              />
+            </label>
+            {clarificationRequestError && (
+              <p role="alert" className="error">
+                {clarificationRequestError}
+              </p>
+            )}
+            <div className="page-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={isRequestingClarification}
+                onClick={confirmRequestClarification}
+              >
+                {isRequestingClarification ? 'Sending…' : 'Send clarification request'}
+              </button>
+            </div>
+          </section>
         )}
       </div>
 

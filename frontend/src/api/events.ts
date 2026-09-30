@@ -252,6 +252,31 @@ export function listClarifications(eventId: string): Promise<Clarification[]> {
   })
 }
 
+const EVENT_CLARIFICATION_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_NOT_AWAITING_CLARIFICATION',
+} as const
+
+/** Story 4.2 AC1/AC3: the assigned coordinator asks the organiser a question while the request
+ *  is Under Review or already CLARIFICATION_REQUESTED, moving it to (or leaving it at)
+ *  CLARIFICATION_REQUESTED. */
+export function requestClarification(
+  eventId: string,
+  message: string,
+  eventName: string,
+): Promise<Clarification> {
+  return api<Clarification>(`/events/${eventId}/clarifications`, {
+    method: 'POST',
+    body: { message },
+    errorCodes: EVENT_CLARIFICATION_ERROR_CODES,
+    notify: {
+      title: 'Clarification requested',
+      message: `A clarification request was sent to the organiser of "${eventName}".`,
+      importance: 'important',
+    },
+  })
+}
+
 /**
  * Story 2.1 AC15: whether saving the draft says so in the notification centre. Submitting saves the
  * details first, and must say only that the request was submitted, not that a draft was saved.
