@@ -127,9 +127,8 @@ def test_seed_constants_match_database(db: Session):
         assert db.execute(text("SELECT 1 FROM venues WHERE id = :id"), {"id": venue_id}).scalar()
     for event_id, status in (
         (Events.DRAFT, "DRAFT"),
-        # Events.SUBMITTED/APPROVED* keep their names as stable fixture identifiers, but the
-        # statuses those names name were retired by migration 002 (bug b6.1.1): submitting now
-        # goes straight to UNDER_REVIEW, approving straight to PLANNING.
+        # The Events.* names identify rows, not statuses (see support/seed.py): several rows
+        # share a status, and this table is what pins down which status each one carries.
         (Events.SUBMITTED, "UNDER_REVIEW"),
         (Events.APPROVED, "PLANNING"),
         (Events.REJECTED, "REJECTED"),
