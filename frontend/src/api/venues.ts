@@ -89,10 +89,6 @@ export function fetchVenueReferenceData(): Promise<VenueReferenceData> {
   return api<VenueReferenceData>('/venues/reference-data')
 }
 
-export function listVenues(includeWithdrawn: boolean): Promise<VenueSummary[]> {
-  return api<VenueSummary[]>(`/venues?include_withdrawn=${includeWithdrawn}`)
-}
-
 export function getVenue(venueId: string): Promise<Venue> {
   return api<Venue>(`/venues/${venueId}`, { errorCodes: { 404: 'VENUE_NOT_FOUND' } })
 }

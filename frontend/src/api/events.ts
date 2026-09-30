@@ -393,8 +393,7 @@ export function approveEvent(eventId: string, name: string): Promise<EventDetail
 }
 
 /** Story 4.5 AC1-AC3: reject a request with a mandatory reason. Offered from the same statuses
- *  as approving (see `AWAITING_DECISION_STATUSES` in `../events/eventStatus`) - bug b6.1.1's
- *  narrower reject rule has been reversed. */
+ *  as approving (see `AWAITING_DECISION_STATUSES` in `../shared/eventStatus`). */
 export function rejectEvent(eventId: string, reason: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/reject`, {
     method: 'POST',

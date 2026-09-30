@@ -29,7 +29,6 @@ import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import {
   eventEditRoutinePath,
@@ -38,6 +37,7 @@ import {
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
+import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from '../shared/eventStatus'
 import {
   formatDate,
   formatDateTime,
