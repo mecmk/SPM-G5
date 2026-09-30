@@ -41,6 +41,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+import app.bookings.service as bookings_service
 from app.bookings.models import BookingStatus
 from tests.support.factories import make_booking
 from tests.support.seed import Bookings, Events, Users, Venues
@@ -72,6 +73,42 @@ def test_withdrawing_is_recorded_in_the_audit_log(coordinator_client, db: Sessio
         {"id": Bookings.PENDING_SEMINAR_ROOM},
     ).one()
     assert row.actor_id == Users.COORDINATOR.id
+
+
+@pytest.mark.story("12.2", ac=3)
+def test_a_failed_withdrawal_leaves_the_booking_and_hold_unchanged(
+    coordinator_client, db: Session, monkeypatch
+):
+    """If writing the notification fails unexpectedly, the status change must not have landed
+    either - AC3's "all happen together" is only true if a failure partway leaves nothing
+    applied."""
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("simulated failure notifying Venue Staff")
+
+    monkeypatch.setattr(bookings_service, "_notify_venue_staff_of_withdrawal", _boom)
+
+    with pytest.raises(RuntimeError):
+        coordinator_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/withdraw")
+    db.rollback()  # mirrors app.db.get_db's real teardown
+
+    row = db.execute(
+        text("SELECT status, decided_by_id, decided_at FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.PENDING_SEMINAR_ROOM},
+    ).one()
+    assert row.status == BookingStatus.PENDING
+    assert row.decided_by_id is None
+    assert row.decided_at is None
+    assert (
+        db.execute(
+            text(
+                "SELECT count(*) FROM audit_log "
+                "WHERE action = 'BOOKING_WITHDRAWN' AND entity_id = :id"
+            ),
+            {"id": Bookings.PENDING_SEMINAR_ROOM},
+        ).scalar()
+        == 0
+    )
 
 
 @pytest.mark.story("12.2", ac=2)
