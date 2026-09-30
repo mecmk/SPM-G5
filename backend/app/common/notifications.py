@@ -1,8 +1,8 @@
 """In-app notifications (table scaffolded for story 20.x; this module only writes to it, for
-story 5.2 AC1 - the read/list side, e.g. ``GET /notifications`` and a bell that shows someone
-else's actions, is not built and stays out of scope here). One row per recipient, written inside
-the same transaction as the triggering action, matching the table's own
-``COMMENT ON`` in ``backend/db/migrations/001_initial_schema.sql``.
+story 5.2 AC1 and story 12.2 AC2 - the read/list side, e.g. ``GET /notifications`` and a bell
+that shows someone else's actions, is not built and stays out of scope here). One row per
+recipient, written inside the same transaction as the triggering action, matching the table's
+own ``COMMENT ON`` in ``backend/db/migrations/001_initial_schema.sql``.
 
 Call ``notify`` from a service after a significant action, inside the same transaction::
 

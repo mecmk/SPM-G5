@@ -14,6 +14,19 @@
  *     Request this venue, which raises the booking request for that event and venue. There is no
  *     separate Request a venue page, and its old address opens the Events inbox.
  *
+ * Story 12.2 - fe: track and withdraw a venue booking request, from the same event page.
+ *
+ * AC1 Selecting a request shows the full request and any decision reason - already true of the
+ *     event page's existing Venue booking card, which this story adds a Withdraw action onto
+ *     directly rather than a separate page to click into.
+ * AC2/AC4 A pending request can be withdrawn after confirmation, and reads as its own, visually
+ *     distinct outcome afterward - proven together in one flow below, since withdrawing is what
+ *     produces a Withdrawn card to look at.
+ * AC4 (other half) An event with no booking requests shows an empty state linking to the venue
+ *     catalogue.
+ * The permission, not-pending and conflict rules (AC3, AC5-AC8) are backend cases -
+ * `backend/tests/bookings/test_withdraw_booking.py` - not repeated here.
+ *
  * What is proven here is the flow a coordinator clicks through. The rules themselves - every
  * refused event status, the 403 for a coordinator who is not the assigned one, the 404s, the
  * fields copied onto the row - are `backend/tests/bookings/test_raise_booking_request.py` and
@@ -53,6 +66,10 @@ const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
 const WORKSHOP = { id: EVENTS.submitted, name: 'Data Literacy Workshop' }
 const BRIEFING = { id: EVENTS.partnerBriefing, name: 'Quarterly Partner Briefing' }
+// Confirmed, Chloe's, Banquet layout, 90 people, 10 Feb 2027 - no other spec sends a request
+// for it or searches the catalogue on its date, so raising and withdrawing one here holds
+// nothing another test looks for (unlike Summit's own slot, which 8.1's catalogue specs read).
+const DINNER = { id: '33333333-0000-0000-0000-000000000013', name: 'Partner Appreciation Dinner' }
 const VENUE = 'Grand Hall'
 const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the seed
 const BRIEFING_VENUE = 'Seminar Room 2.1'
@@ -450,4 +467,45 @@ test('12.1 AC4: Venue Staff are not offered a way to raise a request', async ({ 
   await expect(
     mainNav(page).getByRole('link', { name: 'Request a venue', exact: true }),
   ).toHaveCount(0)
+})
+
+test('12.2 AC1/AC2/AC4: a coordinator withdraws a pending request from the event page', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findVenueFor(page, DINNER)
+  await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  const outcome = page.getByRole('region', { name: 'Request sent' })
+  await outcome.getByRole('link', { name: 'Back to the event' }).click()
+  await expect(page.getByRole('heading', { name: DINNER.name, level: 1 })).toBeVisible()
+
+  // AC1: the request's venue and status already read directly off the event page's own Venue
+  // booking card - no separate page to select into.
+  await expect(page.getByText('Pending', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Withdraw' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Withdraw this booking request?' })
+  await dialog.getByRole('button', { name: 'Withdraw' }).click()
+
+  // AC4: withdrawn reads as its own, visually distinct outcome once it exists.
+  await expect(dialog).not.toBeVisible()
+  await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(page.getByText('This booking request was withdrawn.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Withdraw' })).toHaveCount(0)
+})
+
+test('12.2 AC4: an event with no booking requests shows an empty state linking to the catalogue', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await openEvent(page, WORKSHOP)
+
+  await expect(page.getByText('No venue booking requests yet.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Browse the venue catalogue' })).toHaveAttribute(
+    'href',
+    '/venues',
+  )
 })

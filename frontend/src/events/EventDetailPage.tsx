@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { listBookingsForEvent, type BookingOutcome, type BookingStatus } from '../api/bookings'
+import {
+  listBookingsForEvent,
+  withdrawBooking,
+  type BookingOutcome,
+  type BookingStatus,
+} from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
 import { assignCoordinator, listCoordinators, type CoordinatorOption } from '../api/coordination'
 import {
@@ -17,13 +22,20 @@ import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
 import { ClarificationHistory, type ClarificationEntry } from '../components/ClarificationHistory'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
-import { eventEditRoutinePath, HOME_PATH, venueSearchPath, type VenueSearch } from '../routes'
+import {
+  eventEditRoutinePath,
+  HOME_PATH,
+  VENUE_CATALOGUE_PATH,
+  venueSearchPath,
+  type VenueSearch,
+} from '../routes'
 import {
   formatDate,
   formatDateTime,
@@ -36,6 +48,7 @@ import { canRequestVenueFor } from '../shared/venueRequest'
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
+const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
@@ -167,6 +180,9 @@ export function EventDetailPage() {
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [isConfirmingReassign, setIsConfirmingReassign] = useState(false)
   const [isReassigning, setIsReassigning] = useState(false)
   const [reassignError, setReassignError] = useState<string | null>(null)
@@ -304,6 +320,43 @@ export function EventDetailPage() {
       setRejectError(formatApiError(err))
     } finally {
       setIsRejecting(false)
+    }
+  }
+
+  function askToWithdraw(booking: BookingOutcome) {
+    setWithdrawError(null)
+    setPendingWithdraw(booking)
+  }
+
+  function cancelWithdraw() {
+    setPendingWithdraw(null)
+  }
+
+  async function confirmWithdraw() {
+    if (!pendingWithdraw) return
+    setIsWithdrawing(true)
+    setWithdrawError(null)
+    try {
+      const updated = await withdrawBooking(pendingWithdraw.id, pendingWithdraw.venue_name)
+      setBookings(
+        (current) =>
+          current &&
+          current.map((booking) =>
+            booking.id === updated.id
+              ? {
+                  ...booking,
+                  status: updated.status,
+                  decided_at: updated.decided_at,
+                  decision_reason: updated.decision_reason,
+                }
+              : booking,
+          ),
+      )
+      setPendingWithdraw(null)
+    } catch (err) {
+      setWithdrawError(formatApiError(err))
+    } finally {
+      setIsWithdrawing(false)
     }
   }
 
@@ -702,10 +755,33 @@ export function EventDetailPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Story 12.2 AC1/AC6: only the event's own assigned coordinator may withdraw,
+                   *  and only while the request is still pending - mirrors the backend's own
+                   *  relationship and status checks. */}
+                  {booking.status === PENDING_BOOKING_STATUS && isAssignedCoordinator && (
+                    <div className="cluster">
+                      <button
+                        type="button"
+                        className="secondary button-sm"
+                        onClick={() => askToWithdraw(booking)}
+                      >
+                        Withdraw
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </section>
+        )}
+
+        {/* Story 12.2 AC4: an event with no requests yet, with a way to raise one. */}
+        {canReadBooking && bookings !== null && bookings.length === 0 && (
+          <EmptyState>
+            No venue booking requests yet.{' '}
+            <Link to={VENUE_CATALOGUE_PATH}>Browse the venue catalogue</Link> to request one.
+          </EmptyState>
         )}
 
         <section className="card stack" aria-labelledby="equipment-heading">
@@ -777,6 +853,21 @@ export function EventDetailPage() {
               onChange={(e) => setRejectReason(e.target.value)}
             />
           </label>
+        </ConfirmDialog>
+      )}
+      {pendingWithdraw && (
+        <ConfirmDialog
+          title="Withdraw this booking request?"
+          confirmLabel="Withdraw"
+          isBusy={isWithdrawing}
+          error={withdrawError}
+          onConfirm={confirmWithdraw}
+          onCancel={cancelWithdraw}
+        >
+          <p>
+            The request for {pendingWithdraw.venue_name} will be withdrawn and its hold on the venue
+            released. Venue Staff will be told.
+          </p>
         </ConfirmDialog>
       )}
       {isConfirmingReassign && (
