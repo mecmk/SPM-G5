@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
@@ -19,10 +19,13 @@ from app.bookings.schemas import (
     BookableEvent,
     BookingOut,
     BookingOutcome,
+    BookingQueue,
     BookingQueueEntry,
+    BookingQueueStatus,
     BookingReferenceData,
     BookingRejection,
     BookingRequestIn,
+    BookingStatusCounts,
 )
 from app.db import get_db
 
@@ -84,10 +87,25 @@ def create_booking_request(
     return BookingOut.model_validate(booking)
 
 
-@router.get("", response_model=list[BookingQueueEntry], dependencies=[CanDecide])
-def list_bookings(db: DbSession) -> list[BookingQueueEntry]:
-    """Story 13.1 AC1-AC3: every pending request, for Venue Staff to decide."""
-    return [BookingQueueEntry.from_booking(b) for b in service.list_booking_requests(db)]
+@router.get("", response_model=BookingQueue, dependencies=[CanDecide])
+def list_bookings(
+    db: DbSession,
+    booking_status: Annotated[BookingQueueStatus | None, Query(alias="status")] = None,
+    limit: Annotated[
+        int, Query(ge=1, le=service.BOOKING_QUEUE_MAX_LIMIT)
+    ] = service.BOOKING_QUEUE_MAX_LIMIT,
+    offset: Annotated[int, Query(ge=0, le=service.BOOKING_QUEUE_MAX_OFFSET)] = 0,
+) -> BookingQueue:
+    """Story 13.1 AC1-AC3: ``?status=PENDING`` is the pending queue Venue Staff decide from.
+    Story 13.1.2 AC1: any other status is its tab, and no status is All; ``counts`` labels every
+    tab. AC4: a page of the tab and its total. ``booking_status`` is aliased so it does not
+    shadow FastAPI's ``status`` module, used for the status codes below."""
+    listing = service.list_booking_requests(db, status=booking_status, limit=limit, offset=offset)
+    return BookingQueue(
+        items=[BookingQueueEntry.from_booking(b) for b in listing.bookings],
+        total=listing.total,
+        counts=BookingStatusCounts.from_counts(listing.counts_by_status),
+    )
 
 
 @router.get("/for-event/{event_id}", response_model=list[BookingOutcome], dependencies=[CanRead])

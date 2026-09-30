@@ -62,9 +62,10 @@ same mechanism, not a new one.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -152,6 +153,11 @@ FACILITY_NOTES_SUFFIX = " ({notes})"
 # retired (migration 002) - approving now goes straight to PLANNING, so that status alone covers
 # what used to be "APPROVED or PLANNING".
 _BOOKABLE_EVENT_STATUSES = frozenset({EventStatus.PLANNING, EventStatus.CONFIRMED})
+
+# Story 13.1.2 AC4: the queue's page size, and the furthest it can be paged - the same bounds as
+# the Events inbox (``app.events.service.MY_EVENTS_MAX_LIMIT`` / ``MY_EVENTS_MAX_OFFSET``).
+BOOKING_QUEUE_MAX_LIMIT = 100
+BOOKING_QUEUE_MAX_OFFSET = 2_147_483_647
 
 
 class BookingNotFound(LookupError):
@@ -272,22 +278,51 @@ class BookingNotPending(ValueError):
         self.booking = booking
 
 
-def list_booking_requests(db: Session) -> list[VenueBooking]:
-    """Story 13.1 AC1/AC3: every pending request, soonest first. AC1's "responsible for" is
-    every venue: there is no per-venue staff responsibility table in the schema, and
-    BOOKINGS_DECIDE is a role-wide permission today, same as VENUES_MANAGE."""
-    return list(
-        db.scalars(
-            select(VenueBooking)
-            .options(
-                joinedload(VenueBooking.event),
-                joinedload(VenueBooking.venue),
-                joinedload(VenueBooking.requested_by),
-                joinedload(VenueBooking.required_layout),
-            )
-            .where(VenueBooking.status == BookingStatus.PENDING)
-            .order_by(VenueBooking.starts_at, VenueBooking.id)
-        ).all()
+@dataclass(frozen=True)
+class BookingQueueListing:
+    """One page of the queue, how many requests its tab holds, and how many hold each status."""
+
+    bookings: list[VenueBooking]
+    total: int
+    counts_by_status: dict[str, int]
+
+
+def list_booking_requests(
+    db: Session,
+    *,
+    status: str | None = None,
+    limit: int = BOOKING_QUEUE_MAX_LIMIT,
+    offset: int = 0,
+) -> BookingQueueListing:
+    """Story 13.1 AC1/AC3: ``status=PENDING`` is the pending queue, so a decided request never
+    appears in it. AC1's "responsible for" is every venue: there is no per-venue staff
+    responsibility table in the schema, and BOOKINGS_DECIDE is a role-wide permission today,
+    same as VENUES_MANAGE.
+
+    Story 13.1.2 AC1: ``status`` narrows the queue to one tab; ``None`` is the All tab.
+    ``counts_by_status`` ignores both the tab and the page, so every tab label stays right.
+    AC4: soonest first, ties broken by id so the pages cut from it are stable. The tab's total
+    comes from the same per-status count, so it costs no query of its own."""
+    page = (
+        select(VenueBooking)
+        .options(
+            joinedload(VenueBooking.event),
+            joinedload(VenueBooking.venue),
+            joinedload(VenueBooking.requested_by),
+            joinedload(VenueBooking.required_layout),
+        )
+        .order_by(VenueBooking.starts_at, VenueBooking.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    if status is not None:
+        page = page.where(VenueBooking.status == status)
+    counts_by_status = dict(
+        db.execute(select(VenueBooking.status, func.count()).group_by(VenueBooking.status)).all()
+    )
+    total = sum(counts_by_status.values()) if status is None else counts_by_status.get(status, 0)
+    return BookingQueueListing(
+        bookings=list(db.scalars(page).all()), total=total, counts_by_status=counts_by_status
     )
 
 
@@ -326,8 +361,9 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     id up front. An event may accumulate more than one row over time (a rejected request
     followed by a fresh one, possibly for a different venue), so this is a history, not a single
     outcome; deciding a booking updates that same row in place, it never creates a new one.
-    ``id`` breaks a tie on ``created_at`` - seed rows inserted by the same statement share one
-    transaction timestamp, so ``created_at`` alone leaves their relative order undefined."""
+    ``id`` breaks a tie on ``created_at`` - two bookings inserted in the same statement or
+    transaction (seed data, or two rapid test factory calls) can share one timestamp, which
+    would otherwise leave their relative order undefined."""
     return list(
         db.scalars(
             select(VenueBooking)

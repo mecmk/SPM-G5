@@ -5,11 +5,13 @@ staff queue (story 13.1), and approval / rejection / read (stories 13.2, 13.2.1)
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.bookings.models import VenueBooking
+from app.bookings.models import BookingStatus, VenueBooking
 
 
 def _strip(value: str | None) -> str | None:
@@ -93,9 +95,22 @@ class BookingOut(BaseModel):
     updated_at: datetime
 
 
+class BookingQueueStatus(StrEnum):
+    """Story 13.1.2 AC1: the statuses the queue can be narrowed to - every value
+    ``ck_venue_bookings_status`` allows, so an unknown one is a 422 rather than an empty tab."""
+
+    PENDING = BookingStatus.PENDING
+    APPROVED = BookingStatus.APPROVED
+    REJECTED = BookingStatus.REJECTED
+    WITHDRAWN = BookingStatus.WITHDRAWN
+    CANCELLED = BookingStatus.CANCELLED
+
+
 class BookingQueueEntry(BaseModel):
-    """AC2: event name, requested venue, period, expected attendance and stated requirements.
-    No defaults (response schema)."""
+    """Story 13.1 AC2: event name, requested venue, period, expected attendance and stated
+    requirements. Story 13.1.2 AC2: when the request was raised. 13.1.2 AC3: ``decision_reason``
+    and ``decided_at``, so a decided entry shows why and when it was decided without a second
+    request. No defaults (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -111,6 +126,9 @@ class BookingQueueEntry(BaseModel):
     requirement_notes: str | None
     requested_by_name: str
     status: str
+    decision_reason: str | None
+    created_at: datetime
+    decided_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -129,7 +147,41 @@ class BookingQueueEntry(BaseModel):
             requirement_notes=booking.requirement_notes,
             requested_by_name=booking.requested_by.full_name,
             status=booking.status,
+            decision_reason=booking.decision_reason,
+            created_at=booking.created_at,
+            decided_at=booking.decided_at,
         )
+
+
+class BookingStatusCounts(BaseModel):
+    """Story 13.1.2 AC1: how many requests hold each status, for the tab labels. No defaults
+    (response schema)."""
+
+    pending: int
+    approved: int
+    rejected: int
+    withdrawn: int
+    cancelled: int
+
+    @classmethod
+    def from_counts(cls, by_status: Mapping[str, int]) -> BookingStatusCounts:
+        return cls(
+            pending=by_status.get(BookingStatus.PENDING, 0),
+            approved=by_status.get(BookingStatus.APPROVED, 0),
+            rejected=by_status.get(BookingStatus.REJECTED, 0),
+            withdrawn=by_status.get(BookingStatus.WITHDRAWN, 0),
+            cancelled=by_status.get(BookingStatus.CANCELLED, 0),
+        )
+
+
+class BookingQueue(BaseModel):
+    """Story 13.1.2 AC4: one page of the queue and how many requests the chosen tab holds in all,
+    so the page can say how many more there are. AC1: ``counts`` covers every status whatever tab
+    or page was asked for. No defaults (response schema)."""
+
+    items: list[BookingQueueEntry]
+    total: int
+    counts: BookingStatusCounts
 
 
 class BookingOutcome(BaseModel):

@@ -64,12 +64,43 @@ export interface BookingQueueEntry {
   required_layout_name: string | null
   requirement_notes: string | null
   requested_by_name: string
-  status: string
+  status: BookingStatus
+  decision_reason: string | null
+  created_at: string
+  decided_at: string | null
 }
 
-/** Story 13.1 AC1-AC3: every pending booking request, for Venue Staff to decide. */
-export function listBookingRequests(): Promise<BookingQueueEntry[]> {
-  return api<BookingQueueEntry[]>('/bookings')
+/** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was
+ * asked for. */
+export interface BookingStatusCounts {
+  pending: number
+  approved: number
+  rejected: number
+  withdrawn: number
+  cancelled: number
+}
+
+/** Mirrors `BookingQueue`: one page of a queue tab, how many that tab holds, and every status's
+ * count for the tab labels. */
+export interface BookingQueue {
+  items: BookingQueueEntry[]
+  total: number
+  counts: BookingStatusCounts
+}
+
+/**
+ * Story 13.1 AC1-AC3: `'PENDING'` is the pending queue Venue Staff decide from. Story 13.1.2 AC1:
+ * any other status is its own tab, and `null` is All. AC4: `limit` requests from the `offset`th
+ * on - one numbered page.
+ */
+export function listBookingRequests(
+  status: BookingStatus | null,
+  offset: number,
+  limit: number,
+): Promise<BookingQueue> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  if (status !== null) params.set('status', status)
+  return api<BookingQueue>(`/bookings?${params}`)
 }
 
 /** Story 13.1: the full record behind one queue entry, for the request's detail view. */
