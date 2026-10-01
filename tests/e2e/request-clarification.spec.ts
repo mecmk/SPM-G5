@@ -95,7 +95,15 @@ test('4.2 AC1/AC3/AC4/AC7: the coordinator asks, asks again, and a double-click 
   // second click never reaches the handler. The reload is what proves it: only one row was written.
   const third = 'And will you need a projector?'
   await page.getByLabel('Message').fill(third)
-  await send.dblclick()
+  // Two presses at one point near the left edge, which the shorter "Sending…" label still
+  // covers. dblclick() presses the centre, which the label change moves off.
+  await send.scrollIntoViewIfNeeded()
+  const box = await send.boundingBox()
+  if (!box) throw new Error('Send is not on screen')
+  const x = box.x + 5
+  const y = box.y + box.height / 2
+  await page.mouse.click(x, y)
+  await page.mouse.click(x, y)
   await expect(clarificationsSection(page).getByRole('listitem')).toHaveCount(3)
 
   await page.reload()
