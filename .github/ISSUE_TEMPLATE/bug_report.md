@@ -5,9 +5,14 @@ title: "[BUG] "
 labels: bug
 ---
 
+## Fix ID
+
+<!-- e.g. f1.1.1 — from the team's backlog tool. The branch and PR title carry it:
+     fix/f1.1.1-<slug>, "fix: … (f1.1.1)". -->
+
 ## Related Story ID
 
-<!-- e.g. A1, B2 — if this bug relates to an existing story, otherwise leave blank -->
+<!-- e.g. s1.1 — if this bug relates to an existing story, otherwise leave blank -->
 
 ## Description
 

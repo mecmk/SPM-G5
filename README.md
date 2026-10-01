@@ -137,13 +137,12 @@ npm run dev
 
 Run `npm run setup` again whenever a pull adds or updates packages.
 
-The frontend is served at [http://localhost:5173](http://localhost:5173) and currently displays a
-placeholder page that calls the backend's `GET /health` endpoint, pending the rebuilt UI. The
-backend's API documentation (Swagger UI) is available at
-[http://localhost:8000/docs](http://localhost:8000/docs).
+The app is served at [http://localhost:5173](http://localhost:5173). The backend's API
+documentation (Swagger UI) is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-Sample accounts for signing in through the API with `POST /auth/login`, for example from Swagger
-UI (password `Password123!` for all):
+Sign in with one of the sample accounts, one per role (password `Password123!` for all). The full
+list, including a second organiser and coordinator, is in
+[docs/database/README.md](docs/database/README.md#sample-logins).
 
 | Role | Email |
 | --- | --- |
@@ -187,23 +186,8 @@ stack can stay up. Conventions (fixtures, story markers, traceability) are in
 
 ## Branching Model
 
-This project uses trunk-based development, not GitFlow. There is no `sprint/*`, `staging`,
-`release/*`, or `hotfix/*` branch.
-
-```text
-main                   ← trunk. Stable, protected, PR-only.
-├── story/<ID>-<slug>  ← feature branch, e.g. story/A1-login
-├── fix/<ID>-<slug>    ← bug fix, e.g. fix/B1-draft-not-saving
-├── refactor/<slug>    ← restructuring, no behavior change
-├── test/<slug>        ← test-only changes
-└── docs/<slug>        ← documentation only
-```
-
-Short-lived branches are created from the latest `main` using the appropriate prefix
-(`story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`).
-Pull requests are opened against `main` and require one approving review before a squash merge.
-
-For the full workflow, commit conventions, and review checklist, see
-[CONTRIBUTING.md](CONTRIBUTING.md). For instructions directed at coding agents working in this
-repository, see [AGENTS.md](AGENTS.md). For a description of how the system's components fit
-together, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Trunk-based development on `main`: short-lived branches, one backlog item each, squash-merged
+after one approving review. Branch names, backlog IDs and commit conventions are in
+[AGENTS.md](AGENTS.md#branching--pr-rules-hard-constraints); the day-to-day workflow and the
+reviewer sign-off are in [CONTRIBUTING.md](CONTRIBUTING.md). For a description of how the system's
+components fit together, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

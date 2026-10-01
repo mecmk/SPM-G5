@@ -24,8 +24,8 @@ npm run test:e2e       # rebuilds connectsphere_e2e, starts its own API + app, r
 ### Layout mirrors the app
 
 ```text
-backend/app/auth/...        <->  backend/tests/auth/test_login_logout.py, test_rbac.py
-backend/app/venues/...      <->  backend/tests/venues/test_venue_records.py
+backend/app/<feature>/...   <->  backend/tests/<feature>/test_<topic>.py, named for what the story
+                                 does, e.g. bookings/test_raise_booking_request.py
 backend/db/migrations/...   <->  backend/tests/test_schema.py
 backend/tests/support/      seed constants + factories shared by all tests
 backend/tests/conftest.py   fixtures + traceability plugin
@@ -95,7 +95,8 @@ tables, and the DB-level guards (double-booking exclusion, mandatory fields once
 
 ## End-to-end tests
 
-One spec per story area lives in `tests/e2e/`, listed in [tests/README.md](../../tests/README.md).
+One spec per story area lives in `tests/e2e/`; `npx playwright test --list` in `tests/` lists
+every case by story and AC ([tests/README.md](../../tests/README.md)).
 Keep e2e specs to the flows a user would actually click through (login, role-gated navigation,
 create/edit a venue, open one of my requests); put the detailed rule checks in backend tests where
 they are fast and deterministic.
