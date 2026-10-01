@@ -45,17 +45,17 @@ by accident.
 | Path | Holds |
 | --- | --- |
 | `e2e/<feature>.spec.ts` | One spec per story area, headed by a docblock naming the story and the ACs it covers |
-| `e2e/support.ts` | Holds `ACCOUNTS`, `PASSWORD`, `signIn(page, email)` and `expectSignedIn(page)` for specs that need to sign in |
+| `e2e/support.ts` | The seed accounts and events specs use, `signIn`, and the other helpers more than one spec needs |
 
 **These specs run against a throwaway database, never your development one.** Unlike
 `backend/tests/`, there is no per-test transaction and no rollback: within a run, anything a spec
 creates stays until the run ends, and `fullyParallel: true` means specs share that database
 concurrently. So give every created record a unique name (`E2E Room ${Date.now()}`, as
-`e2e/venues.spec.ts:9` does). Nothing survives the run, so there is no leftover to clear.
+`e2e/venues.spec.ts` does). Nothing survives the run, so there is no leftover to clear.
 
 The same sharing applies to lists: other specs create requests as the seeded organisers, so a page
 listing a user's records is asserted **by name**, never by how many rows it has
-(`e2e/my-event-requests.spec.ts`). Since story 5.1, submitting a request auto-assigns it to one of
+(`e2e/my-event-requests.spec.ts`). Submitting a request auto-assigns it (story 5.1) to one of
 the two seeded coordinators round robin, so **any** spec that submits a request can land it in
 either coordinator's inbox/review-queue tabs. A spec asserting on those tabs must filter to the
 titles it created or seeded, never assert the tab holds only those (`review-queue.spec.ts`'s
@@ -100,7 +100,9 @@ Traceability here is by **test title**, not by a marker: titles begin with the s
 2. Title each test `'<story> AC<n>: <behaviour>'`.
 3. Sign in with `signIn(page, ACCOUNTS.<role>)` from `e2e/support.ts` rather than filling the
    login form, unless the login flow itself is what is under test.
-4. Add the spec to the table in [README.md](README.md).
+4. Add the spec to the table in [README.md](README.md) with the stories and ACs it covers, or add
+   them to its row if the spec already exists. `npx playwright test --list` shows what the titles
+   cover, so the row can be checked against it.
 
 ## Git and PR workflow
 
