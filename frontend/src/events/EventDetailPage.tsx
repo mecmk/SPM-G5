@@ -10,6 +10,7 @@ import { formatApiError, mediaUrl } from '../api/client'
 import { assignCoordinator, listCoordinators, type CoordinatorOption } from '../api/coordination'
 import {
   approveEvent,
+  CLARIFICATION_MESSAGE_MAX_LENGTH,
   getEvent,
   listClarifications,
   rejectEvent,
@@ -342,6 +343,9 @@ export function EventDetailPage() {
       setClarificationMessage('')
     } catch (err) {
       setClarificationRequestError(formatApiError(err))
+      // A 403 or 409 means the page is out of date: reload it so the form, Approve and Reject go
+      // with the state they belonged to. Ignore a failed reload - it must not lose the message.
+      getEvent(event.id).then(setEvent, () => {})
     } finally {
       setIsRequestingClarification(false)
     }
@@ -434,10 +438,10 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
-  /** Story 4.2 AC5/AC6/AC7: only the assigned coordinator, holding events:review, may ask the
+  /** Story 4.2 AC4/AC5/AC6: only the assigned coordinator, holding events:review, may ask the
    *  organiser a question, while the request is Under Review or already awaits a response to an
-   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing on
-   *  this branch moves the event back to Under Review) - mirroring the backend's own
+   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing until
+   *  story 4.3 moves the event back to Under Review) - mirroring the backend's own
    *  `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
   const canRequestClarification =
     can(PERMISSIONS.EVENTS_REVIEW) &&
@@ -862,6 +866,7 @@ export function EventDetailPage() {
               Message
               <textarea
                 rows={3}
+                maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
                 placeholder="What do you need clarified before deciding?"
                 value={clarificationMessage}
                 onChange={(e) => setClarificationMessage(e.target.value)}

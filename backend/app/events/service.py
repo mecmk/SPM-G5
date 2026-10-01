@@ -1,7 +1,8 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), the approve/reject decision (stories 4.4, 4.5), the decision /
-clarification history an organiser sees (story 4.6), routine information edits (story 7.2), and
-the coordinator's assigned events in any status (story 6.1).
+event review (story 4.1), requesting clarification from the organiser (story 4.2), the
+approve/reject decision (stories 4.4, 4.5), the decision / clarification history an organiser
+sees (story 4.6), routine information edits (story 7.2), and the coordinator's assigned events in
+any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -244,7 +245,7 @@ NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this reques
 EVENT_NOT_AWAITING_DECISION_MESSAGE = "This request is {status}, so it cannot be {verb}."
 DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
 EVENT_NOT_AWAITING_CLARIFICATION_MESSAGE = (
-    "This request is not awaiting a decision, so a clarification request was not sent."
+    "You can no longer ask for clarification on this request."
 )
 CLARIFICATION_MESSAGE_REQUIRED_MESSAGE = "A message is required to request clarification."
 
@@ -1159,8 +1160,8 @@ class MissingDecisionReason(InvalidEventRequest):
 
 
 class EventNotAwaitingClarification(EventStateConflict):
-    """4.2 AC7/AC8: only a request currently Under Review, or already awaiting the organiser's
-    response to an earlier round (AC5 - several rounds are allowed), may have clarification
+    """4.2 AC6/AC7: only a request currently Under Review, or already awaiting the organiser's
+    response to an earlier round (AC4 - several rounds are allowed), may have clarification
     requested on it. Covers both the ordinary case (the request had already moved on before this
     call started) and the race where it moves on between opening the page and pressing Send - a
     reassignment or a decision landing while the coordinator was still composing their message.
@@ -1174,7 +1175,7 @@ class EventNotAwaitingClarification(EventStateConflict):
 
 
 class MissingClarificationMessage(InvalidEventRequest):
-    """4.2 AC4: a message is mandatory. ``ClarificationRequest`` already refuses a blank body
+    """4.2 AC3: a message is mandatory. ``ClarificationRequest`` already refuses a blank body
     with a 422 before ``request_clarification`` runs; this is the guard for any other caller,
     mirroring ``MissingDecisionReason``."""
 
@@ -1300,18 +1301,21 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
 def request_clarification(
     db: Session, event: Event, *, actor: User, message: str
 ) -> EventClarification:
-    """4.2 AC1/AC3/AC5-AC8: the assigned coordinator asks the organiser a question while the
+    """4.2 AC1/AC2/AC4-AC7: the assigned coordinator asks the organiser a question while the
     request is Under Review, or asks a follow-up while it already awaits a response to an earlier
-    round (AC5) - the event moves to, or stays at, CLARIFICATION_REQUESTED. Nothing on this
-    branch ever moves the event back to Under Review on its own, so a second round has to work
+    round (AC4) - the event moves to, or stays at, CLARIFICATION_REQUESTED. Nothing until story
+    4.3 ever moves the event back to Under Review on its own, so a second round has to work
     directly from CLARIFICATION_REQUESTED rather than waiting for a trip back. The new
     ``EventClarification`` row and the organiser's notification are always written; the
     status-history row only when the status is actually changing (the first round) - a follow-up
-    is a new message, not a new transition. All of it is written in one transaction (AC3). The
-    UPDATE repeats the status and assigned-coordinator checks already made above in its WHERE
-    clause, so either a reassignment or a decision racing this call between those checks and the
-    write is refused too (AC8) - the checks above only give the ordinary, non-racing case its own
-    accurate exception rather than a generic 409."""
+    is a new message, not a new transition. All of it is written in one transaction (AC2).
+    Whether this is the first round is taken from the first UPDATE's ``rowcount``, never from the
+    already-loaded ``event``: two requests that both read Under Review before either writes would
+    otherwise both record the transition into the append-only status history (AC7). Both UPDATEs
+    repeat the assigned-coordinator check in their WHERE clause, so a reassignment or a decision
+    racing this call between the checks above and the write is refused too (AC7) - those checks
+    only give the ordinary, non-racing case its own accurate exception rather than a generic
+    409."""
     stripped = message.strip()
     if not stripped:
         raise MissingClarificationMessage()
@@ -1319,21 +1323,34 @@ def request_clarification(
     if event.status not in _AWAITING_DECISION_STATUSES:
         raise EventNotAwaitingClarification(event)
 
-    is_first_round = event.status == EventStatus.UNDER_REVIEW
     changed_at = datetime.now(UTC)
-    updated = db.execute(
+    moved = db.execute(
         update(Event)
         .where(
             Event.id == event.id,
-            Event.status.in_(_AWAITING_DECISION_STATUSES),
+            Event.status == EventStatus.UNDER_REVIEW,
             Event.assigned_coordinator_id == actor.id,
         )
         .values(status=EventStatus.CLARIFICATION_REQUESTED)
     )
-    if updated.rowcount == 0:
-        db.rollback()
-        db.refresh(event)
-        raise EventNotAwaitingClarification(event)
+    is_first_round = moved.rowcount == 1
+    if not is_first_round:
+        # Not the first round, so the row has to still be awaiting a response to an earlier one.
+        # Re-writing the status it already holds is that check: a SELECT would race the very
+        # reassignment or decision this guards against.
+        still_awaiting = db.execute(
+            update(Event)
+            .where(
+                Event.id == event.id,
+                Event.status == EventStatus.CLARIFICATION_REQUESTED,
+                Event.assigned_coordinator_id == actor.id,
+            )
+            .values(status=EventStatus.CLARIFICATION_REQUESTED)
+        )
+        if still_awaiting.rowcount == 0:
+            db.rollback()
+            db.refresh(event)
+            raise EventNotAwaitingClarification(event)
 
     entry = EventClarification(
         event_id=event.id, author_id=actor.id, kind=ClarificationKind.REQUEST, message=stripped
@@ -1356,6 +1373,8 @@ def request_clarification(
         event_id=event.id,
         title=f'Clarification requested on "{event.name}"',
         message=stripped,
+        related_entity_type="event",
+        related_entity_id=event.id,
         commit=False,
     )
     record_audit(

@@ -34,7 +34,7 @@
  * organisers, so the list is asserted by request name, never by how many there are.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn } from './support'
+import { ACCOUNTS, corsHeaders, inFuture, signIn, uniqueName } from './support'
 
 const MY_EVENTS_PATH = '/events/mine'
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
@@ -56,17 +56,6 @@ const OMAR_REQUESTS = [
   'Partner Appreciation Dinner',
   'Summer Rooftop Mixer',
 ]
-
-function uniqueName(label: string): string {
-  return `E2E ${label} ${Date.now()}-${Math.floor(Math.random() * 1e6)}`
-}
-
-/** A `datetime-local` value (Singapore time) `days` from today, safely in the future. */
-function inFuture(days: number, hour = 9): string {
-  const day = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-  const date = day.toISOString().slice(0, 10)
-  return `${date}T${String(hour).padStart(2, '0')}:00`
-}
 
 /** The "← My events" / "← Home" link above the title of the request page. */
 function backLink(page: Page) {

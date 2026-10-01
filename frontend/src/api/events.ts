@@ -257,7 +257,11 @@ const EVENT_CLARIFICATION_ERROR_CODES = {
   409: 'EVENT_NOT_AWAITING_CLARIFICATION',
 } as const
 
-/** Story 4.2 AC1/AC3: the assigned coordinator asks the organiser a question while the request
+/** Story 4.2 AC3: mirrors CLARIFICATION_MESSAGE_MAX_LENGTH in backend/app/events/schemas.py,
+ *  which answers a longer message with a 422. */
+export const CLARIFICATION_MESSAGE_MAX_LENGTH = 2000
+
+/** Story 4.2 AC1/AC2: the assigned coordinator asks the organiser a question while the request
  *  is Under Review or already CLARIFICATION_REQUESTED, moving it to (or leaving it at)
  *  CLARIFICATION_REQUESTED. */
 export function requestClarification(

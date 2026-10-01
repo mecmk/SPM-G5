@@ -190,10 +190,11 @@ def request_clarification(
     db: DbSession,
     actor: Annotated[CurrentUser, CanReview],
 ) -> ClarificationOut:
-    """4.2 AC1/AC3/AC5-AC8: the assigned coordinator asks the organiser a question while the
+    """4.2 AC1/AC2/AC4-AC7: the assigned coordinator asks the organiser a question while the
     request is Under Review, or asks a follow-up while it already awaits a response to an earlier
-    round. AC4 (message mandatory) is enforced by ``ClarificationRequest`` - a blank body is a
-    422 before this function runs."""
+    round. AC3 (message mandatory, and no longer than ``CLARIFICATION_MESSAGE_MAX_LENGTH``) is
+    enforced by ``ClarificationRequest`` - a blank or over-long body is a 422 before this function
+    runs."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:

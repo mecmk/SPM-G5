@@ -220,7 +220,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Cannot send message',
     message: 'This request has moved on, so the message was not sent.',
   },
-  /** Story 4.2 AC4: the form's own pre-check before calling the API - never wired into an
+  /** Story 4.2 AC3: the form's own pre-check before calling the API - never wired into an
    *  errorCodes map, same precedent as EVENT_REJECTION_REASON_REQUIRED. */
   EVENT_CLARIFICATION_MESSAGE_REQUIRED: {
     title: 'Message needed',

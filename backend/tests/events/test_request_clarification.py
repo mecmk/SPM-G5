@@ -1,29 +1,34 @@
 """Story 4.2 - be: request clarification from organiser.
 
-AC1 The assigned coordinator writes a message and sends a clarification request; it is recorded
-    with author and time, and the organiser is notified.
-AC3 The status change, the message and the notification are all saved together.
-AC4 The message is mandatory; blank or whitespace-only messages are refused.
-AC5 Several clarification rounds are allowed, each kept in the thread in order - including a
-    follow-up sent while the event already awaits a response to an earlier round: this branch
-    implements only story 4.2, so nothing ever moves the event back to Under Review on its own,
-    and a second round has to work directly from CLARIFICATION_REQUESTED.
-AC6 Only the assigned coordinator can request clarification, and only while the event is Under
-    Review or already CLARIFICATION_REQUESTED.
-AC7 The API refuses the request if the event is not Under Review or CLARIFICATION_REQUESTED, or
-    the caller is not its assigned coordinator.
-AC8 If the event is reassigned or decided while the message is being written, sending is
-    refused. A double-click sends once.
+Happy path
+AC1 On an Under Review event, the assigned coordinator writes a message and sends a clarification
+    request. The message appears with author and time, and the organiser is notified.
+AC2 The status change, message and notification are saved together on the server.
+
+Boundary
+AC3 The message is mandatory; blank or whitespace-only messages are refused.
+
+Edge
+AC4 Several clarification rounds are allowed, and each is kept in the thread in order.
+
+Permission
+AC5 Only the assigned coordinator can request clarification, and only while the event is Under
+    Review/Clarification Requested.
+AC6 The API refuses the request if the event is not Under Review/Clarification Requested or the
+    caller is not its assigned coordinator.
+
+Conflict
+AC7 If the event is reassigned or decided while the message is being written, sending is refused.
+    A double-click sends once.
 
 Excluded, with reason:
-* AC2 ("Approve and Reject are unavailable meanwhile") was dropped as a product decision: the
-  existing rule that lets a coordinator decide a CLARIFICATION_REQUESTED request outright (bug
-  b6.1.1's reversal) is unchanged, and already covered by test_approve_event.py /
-  test_reject_event.py.
 * Reading the resulting thread in order is already proven by story 4.6's
   test_decision_history.py; this file only proves writing.
-* Story 4.3 (the organiser's response to a clarification request) is out of scope for this
-  branch, which implements only story 4.2.
+* AC7's double-click is a page behaviour - the Send button disables while the request is in
+  flight - so it is proven in tests/e2e/request-clarification.spec.ts. The server-side half of
+  the same criterion is here: two overlapping requests record one transition, not two.
+* Story 4.3 (the organiser's response to a clarification request) is out of scope until that
+  story, which is why nothing returns the event to Under Review on its own.
 """
 
 from __future__ import annotations
@@ -36,9 +41,19 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.events import service
-from app.events.models import EventStatus
+from app.events.models import Event, EventStatus
+from app.events.schemas import CLARIFICATION_MESSAGE_MAX_LENGTH
 from tests.support.factories import make_event
 from tests.support.seed import Events, Users
+
+_TRANSITIONS_IN = (
+    "event_status_history WHERE event_id = :id AND to_status = 'CLARIFICATION_REQUESTED'"
+)
+
+
+def _count(db: Session, from_clause: str, event_id: uuid.UUID = Events.SUBMITTED) -> int:
+    """Rows matching ``from_clause``: a table name plus a WHERE clause binding ``:id``."""
+    return db.execute(text(f"SELECT count(*) FROM {from_clause}"), {"id": event_id}).scalar()
 
 
 # --- AC1: recorded with author and time, organiser notified -----------------------------------
@@ -91,8 +106,8 @@ def test_the_organiser_is_notified(coordinator_client, db: Session):
     assert row.message == "Please confirm the budget."
 
 
-# --- AC3: status, message and notification are saved together ---------------------------------
-@pytest.mark.story("4.2", ac=3)
+# --- AC2: status, message and notification are saved together ---------------------------------
+@pytest.mark.story("4.2", ac=2)
 def test_status_change_message_and_notification_are_all_recorded_together(
     coordinator_client, db: Session
 ):
@@ -122,7 +137,39 @@ def test_status_change_message_and_notification_are_all_recorded_together(
     assert notification is not None
 
 
-@pytest.mark.story("4.2", ac=3)
+@pytest.mark.story("4.2", ac=2)
+def test_a_failed_notification_leaves_the_event_under_review(
+    coordinator_client, db: Session, monkeypatch
+):
+    """If notifying the organiser fails unexpectedly, the status change must not have landed
+    either - AC2's "saved together" is only true if a failure partway leaves nothing applied.
+    Mirrors test_reassign_coordinator.py (5.2 AC3) and test_withdraw_booking.py (12.2 AC3)."""
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("simulated failure notifying the organiser")
+
+    monkeypatch.setattr(service, "notify", _boom)
+
+    with pytest.raises(RuntimeError):
+        coordinator_client.post(
+            f"/events/{Events.SUBMITTED}/clarifications",
+            json={"message": "Please confirm the catering."},
+        )
+    db.rollback()  # mirrors app.db.get_db's real teardown
+
+    event_row = db.execute(
+        text("SELECT status FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).one()
+    assert event_row.status == EventStatus.UNDER_REVIEW
+    assert _count(db, "event_clarifications WHERE event_id = :id AND kind = 'REQUEST'") == 0
+    assert _count(db, _TRANSITIONS_IN) == 0
+    assert (
+        _count(db, "audit_log WHERE entity_id = :id AND action = 'EVENT_CLARIFICATION_REQUESTED'")
+        == 0
+    )
+
+
+@pytest.mark.story("4.2", ac=2)
 def test_the_transition_is_recorded_in_status_history(coordinator_client, db: Session):
     coordinator_client.post(
         f"/events/{Events.SUBMITTED}/clarifications",
@@ -141,7 +188,7 @@ def test_the_transition_is_recorded_in_status_history(coordinator_client, db: Se
     assert row.reason == "Please confirm the AV needs."
 
 
-@pytest.mark.story("4.2", ac=3)
+@pytest.mark.story("4.2", ac=2)
 def test_request_clarification_is_recorded_in_the_audit_log(coordinator_client, db: Session):
     coordinator_client.post(
         f"/events/{Events.SUBMITTED}/clarifications",
@@ -159,14 +206,14 @@ def test_request_clarification_is_recorded_in_the_audit_log(coordinator_client, 
     assert row.details["message"] == "Please confirm the schedule."
 
 
-# --- AC4: the message is mandatory --------------------------------------------------------------
-@pytest.mark.story("4.2", ac=4)
+# --- AC3: the message is mandatory --------------------------------------------------------------
+@pytest.mark.story("4.2", ac=3)
 def test_requesting_clarification_without_a_message_is_refused(coordinator_client):
     response = coordinator_client.post(f"/events/{Events.SUBMITTED}/clarifications", json={})
     assert response.status_code == 422
 
 
-@pytest.mark.story("4.2", ac=4)
+@pytest.mark.story("4.2", ac=3)
 def test_requesting_clarification_with_an_empty_message_is_refused(coordinator_client):
     response = coordinator_client.post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": ""}
@@ -174,7 +221,7 @@ def test_requesting_clarification_with_an_empty_message_is_refused(coordinator_c
     assert response.status_code == 422
 
 
-@pytest.mark.story("4.2", ac=4)
+@pytest.mark.story("4.2", ac=3)
 def test_requesting_clarification_with_a_whitespace_only_message_is_refused(
     coordinator_client, db: Session
 ):
@@ -190,7 +237,7 @@ def test_requesting_clarification_with_a_whitespace_only_message_is_refused(
     assert row.status == EventStatus.UNDER_REVIEW
 
 
-@pytest.mark.story("4.2", ac=4)
+@pytest.mark.story("4.2", ac=3)
 def test_requesting_clarification_with_an_unknown_field_is_refused(coordinator_client):
     # EventRejection and every sibling request schema sets extra="forbid" (schemas.py);
     # ClarificationRequest should too, rather than silently drop a key that looks like it might
@@ -202,9 +249,9 @@ def test_requesting_clarification_with_an_unknown_field_is_refused(coordinator_c
     assert response.status_code == 422
 
 
-@pytest.mark.story("4.2", ac=4)
+@pytest.mark.story("4.2", ac=3)
 def test_request_clarification_refuses_a_blank_message_even_bypassing_the_schema(db: Session):
-    # AC4's mandatory-message rule is enforced again in the service, not only by
+    # AC3's mandatory-message rule is enforced again in the service, not only by
     # ClarificationRequest's Pydantic validator, so a caller other than this HTTP endpoint (a
     # seed script, a test factory) cannot persist a blank one.
     event = make_event(
@@ -216,7 +263,7 @@ def test_request_clarification_refuses_a_blank_message_even_bypassing_the_schema
         service.request_clarification(db, event, actor=coordinator, message="   ")
 
 
-@pytest.mark.story("4.2", ac=4)
+@pytest.mark.story("4.2", ac=3)
 def test_requesting_clarification_strips_the_message(coordinator_client, db: Session):
     response = coordinator_client.post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": "  Please confirm X.  "}
@@ -231,8 +278,28 @@ def test_requesting_clarification_strips_the_message(coordinator_client, db: Ses
     assert row.message == "Please confirm X."
 
 
-# --- AC5: several rounds are allowed, kept in order --------------------------------------------
-@pytest.mark.story("4.2", ac=5)
+@pytest.mark.story("4.2", ac=3)
+def test_requesting_clarification_with_an_over_long_message_is_refused(coordinator_client):
+    response = coordinator_client.post(
+        f"/events/{Events.SUBMITTED}/clarifications",
+        json={"message": "x" * (CLARIFICATION_MESSAGE_MAX_LENGTH + 1)},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.story("4.2", ac=3)
+def test_a_message_at_the_length_limit_is_accepted(coordinator_client):
+    response = coordinator_client.post(
+        f"/events/{Events.SUBMITTED}/clarifications",
+        json={"message": "x" * CLARIFICATION_MESSAGE_MAX_LENGTH},
+    )
+
+    assert response.status_code == 201, response.text
+
+
+# --- AC4: several rounds are allowed, kept in order --------------------------------------------
+@pytest.mark.story("4.2", ac=4)
 def test_a_second_round_of_clarification_is_recorded_while_still_awaiting_a_response(
     coordinator_client, db: Session
 ):
@@ -266,7 +333,7 @@ def test_a_second_round_of_clarification_is_recorded_while_still_awaiting_a_resp
     assert messages == ["First question.", "Second question."]
 
 
-@pytest.mark.story("4.2", ac=5)
+@pytest.mark.story("4.2", ac=4)
 def test_a_follow_up_request_leaves_the_event_clarification_requested(
     coordinator_client, db: Session
 ):
@@ -284,7 +351,7 @@ def test_a_follow_up_request_leaves_the_event_clarification_requested(
     assert row.status == EventStatus.CLARIFICATION_REQUESTED
 
 
-@pytest.mark.story("4.2", ac=5)
+@pytest.mark.story("4.2", ac=4)
 def test_a_follow_up_request_does_not_add_a_status_history_row(coordinator_client, db: Session):
     event = make_event(
         db, status=EventStatus.CLARIFICATION_REQUESTED, assigned_coordinator_id=Users.COORDINATOR.id
@@ -303,7 +370,7 @@ def test_a_follow_up_request_does_not_add_a_status_history_row(coordinator_clien
     assert after == before
 
 
-@pytest.mark.story("4.2", ac=5)
+@pytest.mark.story("4.2", ac=4)
 def test_a_follow_up_request_notifies_the_organiser_again(coordinator_client, db: Session):
     event = make_event(
         db, status=EventStatus.CLARIFICATION_REQUESTED, assigned_coordinator_id=Users.COORDINATOR.id
@@ -324,8 +391,8 @@ def test_a_follow_up_request_notifies_the_organiser_again(coordinator_client, db
     assert row.message == "One more thing."
 
 
-# --- AC6/AC7: only the assigned coordinator, only while Under Review ---------------------------
-@pytest.mark.story("4.2", ac=6)
+# --- AC5/AC6: assigned coordinator only, Under Review or Clarification Requested only -------------
+@pytest.mark.story("4.2", ac=5)
 def test_a_different_coordinator_cannot_request_clarification(login_as, db: Session):
     response = login_as(Users.COORDINATOR_2).post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": "Not my request."}
@@ -339,7 +406,7 @@ def test_a_different_coordinator_cannot_request_clarification(login_as, db: Sess
     assert row.status == EventStatus.UNDER_REVIEW
 
 
-@pytest.mark.story("4.2", ac=6)
+@pytest.mark.story("4.2", ac=5)
 def test_an_unassigned_request_cannot_have_clarification_requested(coordinator_client, db: Session):
     event = make_event(db, status=EventStatus.UNDER_REVIEW)  # no assigned_coordinator_id
 
@@ -350,7 +417,7 @@ def test_an_unassigned_request_cannot_have_clarification_requested(coordinator_c
     assert response.status_code == 403
 
 
-@pytest.mark.story("4.2", ac=6)
+@pytest.mark.story("4.2", ac=5)
 def test_requesting_clarification_on_a_draft_is_not_found(coordinator_client, db: Session):
     # A draft is private to its organiser (service.get_event), so even the coordinator it names
     # cannot see it, let alone ask a question about it.
@@ -363,7 +430,7 @@ def test_requesting_clarification_on_a_draft_is_not_found(coordinator_client, db
     assert response.status_code == 404
 
 
-@pytest.mark.story("4.2", ac=6)
+@pytest.mark.story("4.2", ac=5)
 def test_signed_out_visitors_cannot_request_clarification(client):
     response = client.post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": "No session."}
@@ -371,16 +438,16 @@ def test_signed_out_visitors_cannot_request_clarification(client):
     assert response.status_code == 401
 
 
-@pytest.mark.story("4.2", ac=6)
+@pytest.mark.story("4.2", ac=5)
 @pytest.mark.parametrize(
     "user",
     [Users.ORGANISER, Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ATTENDEE],
     ids=lambda u: u.role,
 )
 def test_other_roles_cannot_request_clarification(client, user):
-    # Events.SUBMITTED's own organiser is included here: this branch implements only story 4.2
-    # (the coordinator's request), so the route is gated on events:review alone and an organiser
-    # is refused the same way any other non-coordinator role is.
+    # Events.SUBMITTED's own organiser is included here: this route is story 4.2, the
+    # coordinator's request, so it is gated on events:review alone and an organiser is refused the
+    # same way any other non-coordinator role is. The organiser's own reply is story 4.3.
     client.login(user)
     response = client.post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": "Wrong role."}
@@ -388,7 +455,7 @@ def test_other_roles_cannot_request_clarification(client, user):
     assert response.status_code == 403
 
 
-@pytest.mark.story("4.2", ac=7)
+@pytest.mark.story("4.2", ac=6)
 def test_requesting_clarification_on_a_missing_event_is_404(coordinator_client):
     response = coordinator_client.post(
         f"/events/{uuid.uuid4()}/clarifications", json={"message": "No event to ask."}
@@ -396,7 +463,7 @@ def test_requesting_clarification_on_a_missing_event_is_404(coordinator_client):
     assert response.status_code == 404
 
 
-@pytest.mark.story("4.2", ac=7)
+@pytest.mark.story("4.2", ac=6)
 @pytest.mark.parametrize(
     "status",
     [
@@ -424,8 +491,8 @@ def test_requesting_clarification_once_decided_is_refused(coordinator_client, db
     assert count == 0
 
 
-# --- AC8: refused if reassigned or decided while composing -------------------------------------
-@pytest.mark.story("4.2", ac=8)
+# --- AC7: refused if reassigned or decided while composing -------------------------------------
+@pytest.mark.story("4.2", ac=7)
 def test_a_reassignment_racing_the_request_is_refused(db: Session):
     coordinator = db.get(User, Users.COORDINATOR.id)
     event = service.get_event(db, Events.UNDER_REVIEW, viewer=coordinator)
@@ -441,7 +508,7 @@ def test_a_reassignment_racing_the_request_is_refused(db: Session):
         service.request_clarification(db, event, actor=coordinator, message="Still trying to ask.")
 
 
-@pytest.mark.story("4.2", ac=8)
+@pytest.mark.story("4.2", ac=7)
 def test_a_decision_racing_the_request_is_refused(db: Session):
     # Uses the seeded Events.SUBMITTED rather than a hand-built one: request_clarification's
     # failure path calls db.rollback(), which - with no seeded baseline already committed before
@@ -458,12 +525,13 @@ def test_a_decision_racing_the_request_is_refused(db: Session):
         service.request_clarification(db, event, actor=coordinator, message="Still trying to ask.")
 
 
-@pytest.mark.story("4.2", ac=8)
+@pytest.mark.story("4.2", ac=7)
 def test_a_stale_request_over_http_is_refused_with_409(coordinator_client, db: Session):
-    # Warms the session's identity map with the pre-race event state, the way a coordinator's
-    # already-open page would hold it.
-    loaded = coordinator_client.get(f"/events/{Events.UNDER_REVIEW}")
-    assert loaded.status_code == 200
+    # Holds the pre-race event in the session the request will run in, the way a coordinator's
+    # already-open page holds it. A GET is not enough - it leaves nothing in the identity map, so
+    # the POST reaches the ordinary status check rather than the race guard this case is about.
+    held = db.get(Event, Events.UNDER_REVIEW)
+    assert held.status == EventStatus.UNDER_REVIEW
 
     db.execute(
         text("UPDATE events SET status = 'PLANNING' WHERE id = :id"), {"id": Events.UNDER_REVIEW}
@@ -474,3 +542,24 @@ def test_a_stale_request_over_http_is_refused_with_409(coordinator_client, db: S
     )
 
     assert response.status_code == 409, response.text
+
+
+@pytest.mark.story("4.2", ac=7)
+def test_an_overlapping_request_does_not_record_a_second_transition(db: Session):
+    """event_status_history is append-only, so a request that did not itself move the event must
+    not write a transition row. Two requests that both read Under Review before either writes are
+    the case that produces one: the loser has to be recorded as a follow-up."""
+    coordinator = db.get(User, Users.COORDINATOR.id)
+    event = service.get_event(db, Events.UNDER_REVIEW, viewer=coordinator)
+
+    # A concurrent request got there first, so the row already awaits a response - but this call's
+    # copy, loaded before that landed, still reads UNDER_REVIEW.
+    db.execute(
+        text("UPDATE events SET status = 'CLARIFICATION_REQUESTED' WHERE id = :id"),
+        {"id": event.id},
+    )
+    before = _count(db, _TRANSITIONS_IN, event.id)
+
+    service.request_clarification(db, event, actor=coordinator, message="Asking again.")
+
+    assert _count(db, _TRANSITIONS_IN, event.id) == before

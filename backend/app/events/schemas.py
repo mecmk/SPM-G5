@@ -1,7 +1,7 @@
 """Request and response shapes for event requests (story 2.1), the organiser's own list of
-them (story 2.6), the review queue (story 4.1), the approve/reject decision (stories 4.4,
-4.5), the decision / clarification history an organiser sees (story 4.6), and the coordinator's
-assigned events in any status (story 6.1)."""
+them (story 2.6), the review queue (story 4.1), requesting clarification from the organiser
+(story 4.2), the approve/reject decision (stories 4.4, 4.5), the decision / clarification history
+an organiser sees (story 4.6), and the coordinator's assigned events in any status (story 6.1)."""
 
 from __future__ import annotations
 
@@ -55,6 +55,11 @@ CONTACT_PHONE_MAX_DIGITS = 15
 CONTACT_NAME_TOO_LONG_MESSAGE = "The contact name must be 200 characters or fewer."
 CONTACT_EMAIL_INVALID_MESSAGE = "Enter an email address like name@example.com."
 CONTACT_PHONE_INVALID_MESSAGE = "Enter a phone number with 8 to 15 digits."
+
+# Story 4.2 AC3: a clarification message is stored in four tables (the thread, the status-history
+# reason, the notification and the audit entry), so it is bounded. Mirrored by the textarea's
+# maxLength in frontend/src/api/events.ts - keep the two in step.
+CLARIFICATION_MESSAGE_MAX_LENGTH = 2000
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PHONE_PATTERN = re.compile(r"^\+?[\d -]+$")
 
@@ -601,12 +606,12 @@ class EventRejection(BaseModel):
 
 # --- clarification (story 4.2 request, 4.6 history) ------------------------------------------
 class ClarificationRequest(BaseModel):
-    """4.2 AC4: a message is mandatory - blank or whitespace-only does not count, mirroring
-    EventRejection."""
+    """4.2 AC3: a message is mandatory - blank or whitespace-only does not count, mirroring
+    EventRejection - and is capped at ``CLARIFICATION_MESSAGE_MAX_LENGTH``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=CLARIFICATION_MESSAGE_MAX_LENGTH)
 
     @field_validator("message", mode="before")
     @classmethod
