@@ -789,6 +789,20 @@ def test_migration_012_keeps_an_undated_drafts_times_and_people_blank(db: Sessio
 
 
 @pytest.mark.story("2.7", ac=7)
+def test_migration_012_leaves_a_half_dated_drafts_times_blank(db: Session):
+    """A draft may have a start but no end yet. A requirement has both times or neither, so the
+    Main venue gets neither rather than failing the migration on someone's database."""
+    db.connection().exec_driver_sql(PRE_012_SCHEMA)
+    half_dated = _pre_012_event(db, status="DRAFT", ends_at=None, layout="THEATRE")
+
+    _run_migration_012(db)
+
+    (main,) = _requirement_rows(db, half_dated)
+    assert (main.starts_at, main.ends_at) == (None, None)
+    assert main.layout_code == "THEATRE"
+
+
+@pytest.mark.story("2.7", ac=7)
 def test_seeded_events_keep_their_venue_requirements(coordinator_client):
     """The seed runs after the migrations, so it writes its own requirements; the sample events
     keep the venue requirements they had, as a Main venue."""

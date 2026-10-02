@@ -142,6 +142,7 @@ test('2.7 AC4: the event page lists each venue requirement with its times', asyn
 
   await page.goto(eventPath)
   const coordinator = await assignedCoordinator(page)
+  await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, coordinator.account)
   await page.goto(eventPath)
 

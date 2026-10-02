@@ -133,6 +133,13 @@ function myEventsCard(page: Page, name: string): Locator {
   return page.getByRole('listitem').filter({ hasText: name })
 }
 
+/** Story 2.7 AC1: room layout, facilities and other requirements now belong to a venue
+ * requirement, so a test of them adds one first. With only one on the page, each field's label
+ * still names it uniquely. */
+async function addVenueRequirement(page: Page) {
+  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+}
+
 /** Answer the two sections a request cannot be submitted without: "none" is an answer. */
 async function answerVenueAndAccessibility(page: Page) {
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
@@ -210,6 +217,7 @@ test('2.1 AC3: attendance, facility and equipment quantities must be positive wh
   }
 
   await page.getByLabel('Expected attendance').fill('60')
+  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   await page.getByLabel('Breakout rooms quantity').fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -228,12 +236,14 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   await fillEssentials(page, uniqueName('Venue'))
+  await addVenueRequirement(page)
+  await page.getByLabel('Requirement name').fill('Main venue')
 
   await page.getByLabel('Room layout').selectOption({ label: 'Theatre' })
   await page.getByRole('checkbox', { name: 'Projector & screen', exact: true }).check()
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   await page.getByLabel('Breakout rooms quantity').fill('3')
-  await page.getByLabel('Other venue requirements').fill('Close to the lifts')
+  await page.getByLabel('Other requirements').fill('Close to the lifts')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
 
@@ -244,7 +254,7 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
   ).toBeChecked()
   await expect(page.getByRole('checkbox', { name: 'Breakout rooms', exact: true })).toBeChecked()
   await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('3')
-  await expect(page.getByLabel('Other venue requirements')).toHaveValue('Close to the lifts')
+  await expect(page.getByLabel('Other requirements')).toHaveValue('Close to the lifts')
   await expect(page.getByLabel('Preferred location')).toHaveCount(0)
 })
 
@@ -261,18 +271,19 @@ test('2.1 AC4: "No venue requirements" is kept apart from left empty and clears 
   await page.reload()
   await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).not.toBeChecked()
 
-  // Ticking it leaves the other venue fields blank; choosing anything again un-ticks it.
+  // Ticking it clears the venue requirements (story 2.7 AC3); listing one again un-ticks it.
   await startNewRequest(page)
   await fillEssentials(page, uniqueName('Venue none'))
+  await addVenueRequirement(page)
   await page.getByLabel('Room layout').selectOption({ label: 'Theatre' })
   await page.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
-  await page.getByLabel('Other venue requirements').fill('Near the lifts')
+  await page.getByLabel('Other requirements').fill('Near the lifts')
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
-  await expect(page.getByLabel('Room layout')).toHaveValue('')
-  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).not.toBeChecked()
-  await expect(page.getByLabel('Other venue requirements')).toHaveValue('')
+  await expect(page.getByLabel('Room layout')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('Other requirements')).toHaveCount(0)
 
-  await page.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
+  await addVenueRequirement(page)
   await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).not.toBeChecked()
 
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
@@ -280,7 +291,7 @@ test('2.1 AC4: "No venue requirements" is kept apart from left empty and clears 
   await expect(page).toHaveURL(EDIT_PATH)
   await page.reload()
   await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).toBeChecked()
-  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).not.toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).toHaveCount(0)
 })
 
 test('2.1 AC5: selected accessibility needs, "none required" and left empty are kept apart', async ({
@@ -533,6 +544,7 @@ test('2.1 AC3: the field that needs fixing is marked and focused', async ({ page
   await attendance.fill('60')
   await expect(attendance).not.toHaveAttribute('aria-invalid', 'true')
 
+  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   const rooms = page.getByLabel('Breakout rooms quantity')
   await rooms.fill('0')
@@ -819,6 +831,7 @@ test('2.1 AC3: a bad number is said next to the field as soon as it is typed', a
   )
 
   // A facility quantity
+  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   await page.getByLabel('Breakout rooms quantity').fill('-2')
   await expect(

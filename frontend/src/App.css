@@ -2760,6 +2760,22 @@ tbody tr:hover td {
   margin-top: 0.75rem;
 }
 
+/* Story 2.7 AC4: each venue requirement on the event page, set apart like an equipment item. */
+.venue-requirement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.venue-requirement-list > li {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
 /* Story 2.1: the field the last save was refused for. */
 label input[aria-invalid='true'],
 label select[aria-invalid='true'],

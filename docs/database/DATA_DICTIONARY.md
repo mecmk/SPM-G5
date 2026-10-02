@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-29 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-02 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -35,7 +35,8 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
-| Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
+| Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
+| Event details & history | [`venue_requirement_facilities`](#venue_requirement_facilities) | 2.7, 10.3, 11.1, 12.1 | Facilities one venue requirement needs, optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
 | Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.x, 16.4, 17.3 | One line per equipment type an event asks for, with quantity and technical notes |
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
@@ -345,9 +346,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. SUBMITTED and APPROVED were retired by migration 002 (bug b6.1.1) - submitting now goes straight to UNDER_REVIEW and approving straight to PLANNING. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
-| `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Venue requirement: required room layout (story 2.1 AC4). |
-| `venue_requirement_notes` | `text` | yes | - | - | Free-text venue requirements not captured elsewhere. |
-| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no venue requirements (no layout, facilities or notes). FALSE with none of those recorded = not yet specified (story 2.1 AC4). A request cannot be submitted until one or the other is given (story 2.1 AC10). |
+| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated the event needs no venue, and it has no venue_requirements rows. FALSE with no rows = not yet specified. A request cannot be submitted until one or the other is given (story 2.1 AC10, story 2.7 AC8). |
 | `accessibility_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable). |
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
 | `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.1 AC17). |
@@ -388,22 +387,52 @@ Rules and indexes:
 
 ## Event details & history
 
-### event_required_facilities
+### venue_requirements
 
-**Stories:** 2.1, 10.3, 11.1, 12.1
+**Stories:** 2.7, 7.1, 12.1, 8.4, 12.5
 
-Facilities the event requires of its venue (many-to-many), optionally how many.
+One venue an event needs: a name, how many people it must hold, when, and what the room must offer. An event has none (venue_none_required, or not yet specified) or several, in position order. Drafts may hold incomplete rows; submission needs a name and a number of people on each (story 2.7 AC8). Each row has a stable id a booking can later point at.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
-| `event_id` | `uuid` | no | - | PK FK → `events.id` | FK -> events.id. |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event that needs this venue. |
+| `position` | `integer` | no | - | - | Order on the request, from 0. The first requirement (0) is what a booking request copies until story 12.5 lets a booking name its requirement. |
+| `name` | `text` | yes | - | - | Short name, e.g. "Plenary hall" (story 2.7 AC1). Unique per event, trimmed and case-insensitive (AC9). NULL only while the request is a draft. |
+| `capacity` | `integer` | yes | - | - | How many people the venue must hold: a positive whole number, at most the event's expected attendance (story 2.7 AC6). NULL only while the request is a draft. |
+| `starts_at` | `timestamp with time zone` | yes | - | - | When the venue is needed from, within the event's proposed period (story 2.7 AC2, AC5). Set together with ends_at; NULL on a draft takes the event's times on submission. |
+| `ends_at` | `timestamp with time zone` | yes | - | - | When the venue is needed until. After starts_at, and no later than the event's end (story 2.7 AC5). |
+| `layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Required room layout; NULL = no preference. |
+| `notes` | `text` | yes | - | - | Other requirements in free text (story 2.7 AC1). |
+| `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
+| `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+
+Rules and indexes:
+
+- unique `uq_venue_requirements_event_position`: `UNIQUE (event_id, "position") DEFERRABLE INITIALLY DEFERRED`
+- check `ck_venue_requirements_capacity`: `CHECK (((capacity IS NULL) OR (capacity > 0)))`
+- check `ck_venue_requirements_name`: `CHECK (((name IS NULL) OR ((btrim(name) <> ''::text) AND (char_length(name) <= 100))))`
+- check `ck_venue_requirements_period`: `CHECK (((starts_at IS NULL) OR (ends_at > starts_at)))`
+- check `ck_venue_requirements_position`: `CHECK (("position" >= 0))`
+- check `ck_venue_requirements_times_together`: `CHECK (((starts_at IS NULL) = (ends_at IS NULL)))`
+- unique index `uq_venue_requirements_event_name`: `btree (event_id, lower(btrim(name))) WHERE (name IS NOT NULL)`
+
+### venue_requirement_facilities
+
+**Stories:** 2.7, 10.3, 11.1, 12.1
+
+Facilities one venue requirement needs, optionally how many. Replaces event_required_facilities (migration 012).
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `requirement_id` | `uuid` | no | - | PK FK → `venue_requirements.id` | FK -> venue_requirements.id. |
 | `facility_code` | `text` | no | - | PK FK → `facilities.code` | FK -> facilities.code. |
-| `quantity` | `integer` | yes | - | - | How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number (story 2.1 AC3). |
+| `quantity` | `integer` | yes | - | - | How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number. |
 | `notes` | `text` | yes | - | - | Free text, e.g. "needs HDMI input". |
 
 Rules and indexes:
 
-- check `ck_event_required_facilities_quantity`: `CHECK (((quantity IS NULL) OR (quantity > 0)))`
+- check `ck_venue_requirement_facilities_quantity`: `CHECK (((quantity IS NULL) OR (quantity > 0)))`
 
 ### event_accessibility_needs
 

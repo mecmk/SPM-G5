@@ -46,7 +46,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
-from app.events.models import EventRequiredFacility, EventStatus
+from app.events.models import EventStatus
 from tests.support.factories import make_event, make_venue, make_venue_requirement
 from tests.support.seed import Events, Users, Venues
 
@@ -66,22 +66,6 @@ def request_body(**overrides) -> dict:
     body = {"event_id": str(Events.APPROVED), "venue_id": str(REQUESTED_VENUE)}
     body.update(overrides)
     return body
-
-
-def _require_facility(
-    db: Session,
-    event_id: uuid.UUID,
-    code: str,
-    *,
-    quantity: int | None = None,
-    notes: str | None = None,
-) -> None:
-    """Record a facility an event requires. The seed rows carry neither a quantity nor a note, so
-    a test that is about those has to add its own."""
-    db.add(
-        EventRequiredFacility(event_id=event_id, facility_code=code, quantity=quantity, notes=notes)
-    )
-    db.flush()
 
 
 def _booking_count(db: Session, event_id: uuid.UUID) -> int:
@@ -270,8 +254,13 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
-    _require_facility(db, event.id, "BREAKOUT_ROOMS", quantity=3, notes="HDMI input needed")
-    _require_facility(db, event.id, "PROJECTOR")
+    # The seed rows carry neither a quantity nor a note, so this test adds its own (story 2.7:
+    # on the event's venue requirement).
+    make_venue_requirement(
+        db,
+        event.id,
+        facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
+    )
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
 
@@ -284,11 +273,9 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
 @pytest.mark.story("12.1", ac=2)
 def test_the_events_own_venue_requirement_notes_are_carried_too(coordinator_client, db: Session):
     event = make_event(
-        db,
-        status=EventStatus.PLANNING,
-        assigned_coordinator_id=Users.COORDINATOR.id,
-        venue_requirement_notes="Must be step-free from the drop-off point.",
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
+    make_venue_requirement(db, event.id, notes="Must be step-free from the drop-off point.")
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
 
@@ -300,10 +287,7 @@ def test_an_event_with_no_layout_or_facilities_recorded_carries_neither(
     coordinator_client, db: Session
 ):
     event = make_event(
-        db,
-        status=EventStatus.PLANNING,
-        assigned_coordinator_id=Users.COORDINATOR.id,
-        required_layout_code=None,
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))

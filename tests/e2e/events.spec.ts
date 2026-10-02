@@ -61,7 +61,8 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
     page.getByRole('heading', { name: 'Nimbus Developer Conference', level: 1 }),
   ).toBeVisible()
   await expect(page.getByText('Planning').first()).toBeVisible()
-  await expect(page.getByText('350')).toBeVisible()
+  // exact: story 2.7 AC4 also lists the Main venue's "350 people" on this page.
+  await expect(page.getByText('350', { exact: true })).toBeVisible()
   await expect(page.getByText('Chloe Coordinator').first()).toBeVisible()
 
   await expect(page.getByText('Theatre')).toBeVisible()

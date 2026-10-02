@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -39,9 +39,10 @@ from app.events.models import (
     EventAccessibilityNeed,
     EventClarification,
     EventEquipmentRequest,
-    EventRequiredFacility,
     EventStatus,
     EventStatusHistory,
+    VenueRequirement,
+    VenueRequirementFacility,
 )
 from app.events.schemas import (
     ACCESSIBILITY_CONTRADICTION_MESSAGE,
@@ -51,12 +52,12 @@ from app.events.schemas import (
     EventAccessibilityNeedIn,
     EventCreate,
     EventEquipmentIn,
-    EventFacilityIn,
     EventReferenceData,
     EventRoutineUpdate,
     EventUpdate,
     ReferenceItemOut,
     ReviewQueueSort,
+    VenueRequirementIn,
 )
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
@@ -83,6 +84,19 @@ REGISTRATION_CLOSES_AFTER_START_MESSAGE = (
 REGISTRATION_OPENS_AFTER_CLOSES_MESSAGE = "Registration must open before it closes."
 NOT_EDITABLE_MESSAGE = "This request has been submitted and can no longer be edited."
 ALREADY_SUBMITTED_MESSAGE = "This request has already been submitted."
+# Story 2.7: refusals that name the venue requirement at fault - by its name, or by its place in
+# the list while it has none.
+REQUIREMENT_END_NOT_AFTER_START_MESSAGE = "{requirement} must end after it starts."
+REQUIREMENT_STARTS_BEFORE_EVENT_MESSAGE = "{requirement} cannot start before the event starts."
+REQUIREMENT_ENDS_AFTER_EVENT_MESSAGE = "{requirement} cannot end after the event ends."
+REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
+    "{requirement} cannot need room for more people than the expected attendance."
+)
+DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
+UNKNOWN_REQUIREMENT_MESSAGE = "A venue requirement does not belong to this request."
+_UNNAMED_REQUIREMENT_LABEL = "Venue requirement {position}"
+_REQUIREMENT_MISSING_NAME_LABEL = "venue requirement {position}: name"
+_REQUIREMENT_MISSING_CAPACITY_LABEL = "venue requirement {position}: number of people"
 ROUTINE_EDIT_CLOSED_MESSAGE = (
     "This event is {status}, so its routine information can no longer be edited."
 )
@@ -92,6 +106,7 @@ _LINE_RESERVED = "RESERVED"
 
 # AC20: the partial unique index a duplicate name+dates violates (db/migrations/008_*.sql).
 DUPLICATE_REQUEST_INDEX = "uq_events_organiser_name_dates"
+DUPLICATE_REQUIREMENT_NAME_INDEX = "uq_venue_requirements_event_name"
 
 _AWAITING_DECISION_STATUSES = (
     EventStatus.UNDER_REVIEW,
@@ -125,8 +140,6 @@ _DETAIL_FIELDS = (
     "contact_name",
     "contact_email",
     "contact_phone",
-    "required_layout_code",
-    "venue_requirement_notes",
     "venue_none_required",
     "accessibility_none_required",
     "accessibility_notes",
@@ -220,6 +233,32 @@ class ContradictoryAccessibility(InvalidEventRequest):
 class ContradictoryVenueRequirements(InvalidEventRequest):
     def __init__(self):
         super().__init__(VENUE_CONTRADICTION_MESSAGE)
+
+
+class InvalidVenueRequirement(InvalidEventRequest):
+    """Story 2.7 AC11: a venue requirement that breaks a rule, and the field the form should mark
+    - its place in the list and the field's name, as a FastAPI validation error locates it."""
+
+    def __init__(self, message: str, *, index: int, field: str):
+        super().__init__(message)
+        self.index = index
+        self.field = field
+
+    @property
+    def location(self) -> list[str | int]:
+        return ["body", "venue_requirements", self.index, self.field]
+
+
+class UnknownVenueRequirement(InvalidEventRequest):
+    def __init__(self):
+        super().__init__(UNKNOWN_REQUIREMENT_MESSAGE)
+
+
+class DuplicateVenueRequirementName(InvalidEventRequest):
+    """AC9's backstop: the database refused a second requirement with the same name."""
+
+    def __init__(self, name: str):
+        super().__init__(DUPLICATE_REQUIREMENT_NAME_MESSAGE.format(name=name))
 
 
 class ContradictoryRegistration(InvalidEventRequest):
@@ -407,8 +446,16 @@ def list_clarifications(
     )
 
 
-def _get_own_event(db: Session, event_id: uuid.UUID, actor: User) -> Event:
-    event = db.get(Event, event_id)
+def _get_own_event(
+    db: Session, event_id: uuid.UUID, actor: User, *, for_update: bool = False
+) -> Event:
+    """``actor``'s own request. ``for_update`` holds the row until the transaction ends, so a
+    save and a submission of the same request run one after the other (story 2.7 AC12): the
+    second waits, then reads what the first committed."""
+    # FOR UPDATE OF events: only the request's own row is held. Postgres refuses to lock the
+    # organiser and coordinator rows Event joins in eagerly, and nothing here needs them held.
+    lock = {"of": Event} if for_update else None
+    event = db.get(Event, event_id, with_for_update=lock, populate_existing=for_update)
     if event is None or event.organiser_id != actor.id:
         raise EventNotFound(event_id)
     return event
@@ -457,12 +504,81 @@ def _check_accessibility(*, is_none_required: bool, has_needs: bool, notes: str 
         raise ContradictoryAccessibility()
 
 
-def _check_venue_requirements(
-    *, is_none_required: bool, layout_code: str | None, has_facilities: bool, notes: str | None
-) -> None:
-    """AC4: "no venue requirements" cannot sit beside a stated requirement."""
-    if is_none_required and (layout_code or has_facilities or notes):
+def _check_venue_requirements(*, is_none_required: bool, has_requirements: bool) -> None:
+    """2.1 AC4 / 2.7 AC3: "no venue requirements" cannot sit beside a listed requirement."""
+    if is_none_required and has_requirements:
         raise ContradictoryVenueRequirements()
+
+
+def _describe_requirement(name: str | None, index: int) -> str:
+    return name or _UNNAMED_REQUIREMENT_LABEL.format(position=index + 1)
+
+
+def _check_venue_requirement_rules(
+    requirements: Sequence[VenueRequirementIn | VenueRequirement],
+    *,
+    event_starts_at: datetime | None,
+    event_ends_at: datetime | None,
+    attendance: int | None,
+) -> None:
+    """Story 2.7: each requirement's times end after they start (AC5) and fall within the
+    event's, inclusive (AC5, AC10); it needs room for no more than the expected attendance (AC6);
+    and no two share a name, trimmed and case-insensitive (AC9). ``requirements`` and the event's
+    values are the ones the request will end up with, so moving the event and its requirements in
+    one save is judged on the result. A rule is skipped while a value it compares is still
+    empty on a draft."""
+    seen_names: dict[str, int] = {}
+    for index, requirement in enumerate(requirements):
+        label = _describe_requirement(requirement.name, index)
+        starts_at, ends_at = requirement.starts_at, requirement.ends_at
+        if starts_at is not None and ends_at is not None:
+            if ends_at <= starts_at:
+                raise InvalidVenueRequirement(
+                    REQUIREMENT_END_NOT_AFTER_START_MESSAGE.format(requirement=label),
+                    index=index,
+                    field="ends_at",
+                )
+            if event_starts_at is not None and starts_at < event_starts_at:
+                raise InvalidVenueRequirement(
+                    REQUIREMENT_STARTS_BEFORE_EVENT_MESSAGE.format(requirement=label),
+                    index=index,
+                    field="starts_at",
+                )
+            if event_ends_at is not None and ends_at > event_ends_at:
+                raise InvalidVenueRequirement(
+                    REQUIREMENT_ENDS_AFTER_EVENT_MESSAGE.format(requirement=label),
+                    index=index,
+                    field="ends_at",
+                )
+        capacity = requirement.capacity
+        if capacity is not None and attendance is not None and capacity > attendance:
+            raise InvalidVenueRequirement(
+                REQUIREMENT_OVER_ATTENDANCE_MESSAGE.format(requirement=label),
+                index=index,
+                field="capacity",
+            )
+        if requirement.name is not None:
+            key = requirement.name.strip().lower()
+            if key in seen_names:
+                first = requirements[seen_names[key]]
+                raise InvalidVenueRequirement(
+                    DUPLICATE_REQUIREMENT_NAME_MESSAGE.format(name=first.name),
+                    index=index,
+                    field="name",
+                )
+            seen_names[key] = index
+
+
+def _check_venue_requirement_references(
+    db: Session, items: list[VenueRequirementIn], *, owned_ids: set[uuid.UUID]
+) -> None:
+    """2.7 AC1/AC3: every layout and facility exists, and an item may carry only the ``id`` of a
+    requirement this request already has."""
+    layouts = [item.layout_code for item in items if item.layout_code is not None]
+    _known(db, RoomLayout, layouts, label="room layout")
+    _known(db, Facility, [f.code for item in items for f in item.facilities], label="facility")
+    if any(item.id is not None and item.id not in owned_ids for item in items):
+        raise UnknownVenueRequirement()
 
 
 def _check_registration(
@@ -642,11 +758,41 @@ def _hold_equipment(db: Session, event: Event, actor: User) -> None:
         line.status = _LINE_RESERVED
 
 
-def _replace_facilities(event: Event, items: list[EventFacilityIn]) -> None:
-    event.required_facilities = [
-        EventRequiredFacility(facility_code=item.code, quantity=item.quantity, notes=item.notes)
-        for item in items
-    ]
+def _replace_venue_requirements(db: Session, event: Event, items: list[VenueRequirementIn]) -> None:
+    """2.7 AC3: make the request's venue requirements match ``items``, in that order. One whose
+    ``id`` is sent is kept and edited, so its id never changes (a booking may later point at it,
+    stories 8.4/12.5); one left out is removed; one without an ``id`` is new.
+
+    The unique name index (AC9) is checked row by row, so the removals and the names being
+    changed are written first: otherwise two requirements swapping names, or a removed one's
+    name reused, would clash with a row that is about to change. Positions clash the same way,
+    which is why their constraint is checked only at commit."""
+    existing = {requirement.id: requirement for requirement in event.venue_requirements}
+    kept_ids = {item.id for item in items if item.id is not None}
+    for removed in [r for r in event.venue_requirements if r.id not in kept_ids]:
+        event.venue_requirements.remove(removed)
+    for item in items:
+        if item.id is not None:
+            existing[item.id].name = None
+    if existing:
+        db.flush()
+    for position, item in enumerate(items):
+        if item.id is not None:
+            requirement = existing[item.id]
+        else:
+            requirement = VenueRequirement()
+            event.venue_requirements.append(requirement)
+        requirement.position = position
+        requirement.name = item.name
+        requirement.capacity = item.capacity
+        requirement.starts_at = item.starts_at
+        requirement.ends_at = item.ends_at
+        requirement.layout_code = item.layout_code
+        requirement.notes = item.notes
+        requirement.facilities = [
+            VenueRequirementFacility(facility_code=f.code, quantity=f.quantity, notes=f.notes)
+            for f in item.facilities
+        ]
 
 
 def _replace_accessibility_needs(event: Event, items: list[EventAccessibilityNeedIn]) -> None:
@@ -698,9 +844,13 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
         supplied_opens_at=data.registration_opens_at,
         supplied_closes_at=data.registration_closes_at,
     )
-    if data.required_layout_code is not None:
-        _known(db, RoomLayout, [data.required_layout_code], label="room layout")
-    _known(db, Facility, [f.code for f in data.required_facilities], label="facility")
+    _check_venue_requirement_references(db, data.venue_requirements, owned_ids=set())
+    _check_venue_requirement_rules(
+        data.venue_requirements,
+        event_starts_at=data.starts_at,
+        event_ends_at=data.ends_at,
+        attendance=data.expected_attendance,
+    )
     _known(
         db,
         AccessibilityFeature,
@@ -728,7 +878,7 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
         status=EventStatus.DRAFT,
         **{field: getattr(data, field) for field in _DETAIL_FIELDS},
     )
-    _replace_facilities(event, data.required_facilities)
+    _replace_venue_requirements(db, event, data.venue_requirements)
     _replace_accessibility_needs(event, data.accessibility_needs)
     _replace_equipment(event, data.equipment, types, actor=actor)
     db.add(event)
@@ -738,6 +888,8 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
         db.rollback()
         if DUPLICATE_REQUEST_INDEX in str(exc.orig):
             raise DuplicateEventRequest(data.name) from exc
+        if DUPLICATE_REQUIREMENT_NAME_INDEX in str(exc.orig):
+            raise DuplicateVenueRequirementName(data.name) from exc
         raise
     db.add(
         EventStatusHistory(
@@ -772,8 +924,10 @@ def _resent_unchanged(value: datetime | None, stored: datetime | None) -> dateti
 
 def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: User) -> Event:
     """AC7: edit or remove any recorded detail, requirement or equipment item while a draft.
-    Only the fields sent change; a list sent replaces that list."""
-    event = _get_own_event(db, event_id, actor)
+    Only the fields sent change; a list sent replaces that list. Story 2.7 AC12: the row is held
+    from the moment it is read, so a submission in another tab either finishes first (and this
+    save is refused) or waits for this save to finish."""
+    event = _get_own_event(db, event_id, actor, for_update=True)
     if event.status != EventStatus.DRAFT:
         raise EventNotEditable()
 
@@ -809,14 +963,28 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
                 details.get("registration_closes_at"), event.registration_closes_at
             ),
         )
+    requirements = (
+        data.venue_requirements if data.venue_requirements is not None else event.venue_requirements
+    )
     _check_venue_requirements(
         is_none_required=details.get("venue_none_required", event.venue_none_required),
-        layout_code=details.get("required_layout_code", event.required_layout_code),
-        has_facilities=bool(data.required_facilities)
-        if "required_facilities" in sent
-        else bool(event.required_facilities),
-        notes=details.get("venue_requirement_notes", event.venue_requirement_notes),
+        has_requirements=bool(requirements),
     )
+    if data.venue_requirements is not None:
+        _check_venue_requirement_references(
+            db,
+            data.venue_requirements,
+            owned_ids={requirement.id for requirement in event.venue_requirements},
+        )
+    # 2.7 AC5/AC6/AC10: re-judged whenever the event's period or attendance moves, as well as
+    # when the requirements themselves are sent, against the values this save would leave.
+    if sent & {"starts_at", "ends_at", "expected_attendance", "venue_requirements"}:
+        _check_venue_requirement_rules(
+            requirements,
+            event_starts_at=starts_at,
+            event_ends_at=ends_at,
+            attendance=details.get("expected_attendance", event.expected_attendance),
+        )
     _check_accessibility(
         is_none_required=details.get(
             "accessibility_none_required", event.accessibility_none_required
@@ -826,10 +994,6 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
         else bool(event.accessibility_needs),
         notes=details.get("accessibility_notes", event.accessibility_notes),
     )
-    if details.get("required_layout_code") is not None:
-        _known(db, RoomLayout, [details["required_layout_code"]], label="room layout")
-    if data.required_facilities is not None:
-        _known(db, Facility, [f.code for f in data.required_facilities], label="facility")
     if data.accessibility_needs is not None:
         _known(
             db,
@@ -861,8 +1025,6 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
 
     for field, value in details.items():
         setattr(event, field, value)
-    if data.required_facilities is not None:
-        _replace_facilities(event, data.required_facilities)
     if data.accessibility_needs is not None:
         _replace_accessibility_needs(event, data.accessibility_needs)
     if data.equipment is not None:
@@ -874,11 +1036,15 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
     # would re-fetch the pre-update value instead of the one the failed write attempted.
     attempted_name = event.name
     try:
+        if data.venue_requirements is not None:
+            _replace_venue_requirements(db, event, data.venue_requirements)
         db.flush()
     except IntegrityError as exc:
         db.rollback()
         if DUPLICATE_REQUEST_INDEX in str(exc.orig):
             raise DuplicateEventRequest(attempted_name) from exc
+        if DUPLICATE_REQUIREMENT_NAME_INDEX in str(exc.orig):
+            raise DuplicateVenueRequirementName(attempted_name) from exc
         raise
     record_audit(
         db,
@@ -905,14 +1071,15 @@ def _missing_for_submission(event: Event) -> list[str]:
     ]
     if event.registration_required and event.registration_closes_at is None:
         missing.append("registration closing date")
-    has_venue_answer = (
-        event.venue_none_required
-        or event.required_layout_code is not None
-        or bool(event.required_facilities)
-        or event.venue_requirement_notes is not None
-    )
-    if not has_venue_answer:
+    # 2.7 AC8: at least one requirement, or "none"; and every requirement listed has a name and
+    # a number of people, each pointed out by its place in the list.
+    if not (event.venue_none_required or event.venue_requirements):
         missing.append(_VENUE_ANSWER_LABEL)
+    for index, requirement in enumerate(event.venue_requirements):
+        if requirement.name is None:
+            missing.append(_REQUIREMENT_MISSING_NAME_LABEL.format(position=index + 1))
+        if requirement.capacity is None:
+            missing.append(_REQUIREMENT_MISSING_CAPACITY_LABEL.format(position=index + 1))
     has_accessibility_answer = (
         event.accessibility_none_required
         or bool(event.accessibility_needs)
@@ -951,8 +1118,10 @@ def _record_transition(
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in.
     Story 5.1 AC1: submitting also auto-assigns the next coordinator in round robin, in this
-    same transaction - see ``coordination.service.auto_assign_next_coordinator``."""
-    event = _get_own_event(db, event_id, actor)
+    same transaction - see ``coordination.service.auto_assign_next_coordinator``.
+    Story 2.7 AC12: the row is held from the moment it is read, so what is judged here is what
+    an edit in another tab left, never what was there before it committed."""
+    event = _get_own_event(db, event_id, actor, for_update=True)
     if event.status != EventStatus.DRAFT:
         raise EventAlreadySubmitted()
     missing = _missing_for_submission(event)
@@ -973,6 +1142,11 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         supplied_closes_at=event.registration_closes_at,
     )
 
+    # 2.7 AC2 (PO decision, 2 Oct 2026): a requirement never given times of its own is needed for
+    # the whole event, so a submitted requirement always has a period a booking can copy.
+    for requirement in event.venue_requirements:
+        if requirement.starts_at is None:
+            requirement.starts_at, requirement.ends_at = event.starts_at, event.ends_at
     _hold_equipment(db, event, actor)
     submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
