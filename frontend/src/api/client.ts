@@ -4,8 +4,8 @@
  * - Sends the session cookie on every call (story 1.1).
  * - Turns every failure into an `ApiError` carrying a registry code (src/errors/registry.ts), so
  *   pages show `formatApiError(error)` and can branch on `error.code`.
- * - Reports the outcome of every POST, PUT, PATCH and DELETE to the notification centre (team
- *   decision, 17 Sep 2026), through `subscribeToMutations`.
+ * - Reports the outcome of every POST, PUT, PATCH and DELETE to the notification centre, through
+ *   `subscribeToMutations`.
  */
 import {
   ERROR_REGISTRY,

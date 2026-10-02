@@ -12,9 +12,9 @@ import {
  * Story 1.2 AC1/AC2: every section of the app, and the permission a role needs to see it.
  *
  * The sidebar and the main page are both built from this list, so a role sees everything it can
- * use and nothing else (team decision, 17 Sep 2026). A section whose page is still being built
- * is listed with `isAvailable: false` and opens a "coming soon" page naming its story; the story
- * that builds the page flips the flag and adds its own route in App.tsx.
+ * use and nothing else. A section whose page is still being built is listed with
+ * `isAvailable: false` and opens a "coming soon" page naming its story; the story that builds
+ * the page flips the flag and adds its own route in App.tsx.
  */
 export interface NavItem {
   /** Route path, unique across the app. */
