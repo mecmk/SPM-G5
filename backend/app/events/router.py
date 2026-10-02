@@ -1,8 +1,8 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
-(coordinator review queue), stories 4.4/4.5 (approve / reject an event request), story 4.6
-(the decision /clarification history an organiser sees), story 7.2 (routine information edits),
-story 6.1 (the coordinator's assigned events in any status), and story 2.1 AC14 (the cover
-picture)."""
+(coordinator review queue), story 4.2 (request clarification from the organiser), stories
+4.4/4.5 (approve / reject an event request), story 4.6 (the decision /clarification history an
+organiser sees), story 7.2 (routine information edits), story 6.1 (the coordinator's assigned
+events in any status), and story 2.1 AC14 (the cover picture)."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from app.events.schemas import (
     AssignedEventEntry,
     AssignedEventList,
     ClarificationOut,
+    ClarificationRequest,
     EquipmentAvailabilityOut,
     EventCreate,
     EventDetailOut,
@@ -176,6 +177,35 @@ def list_clarifications(
     except service.NotRelatedParty as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     return [ClarificationOut.from_clarification(row) for row in rows]
+
+
+@router.post(
+    "/{event_id}/clarifications",
+    response_model=ClarificationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def request_clarification(
+    event_id: uuid.UUID,
+    payload: ClarificationRequest,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanReview],
+) -> ClarificationOut:
+    """4.2 AC1/AC2/AC4-AC7: the assigned coordinator asks the organiser a question while the
+    request is Under Review, or asks a follow-up while it already awaits a response to an earlier
+    round. AC3 (message mandatory, and no longer than ``CLARIFICATION_MESSAGE_MAX_LENGTH``) is
+    enforced by ``ClarificationRequest`` - a blank or over-long body is a 422 before this function
+    runs."""
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        entry = service.request_clarification(db, event, actor=actor, message=payload.message)
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return ClarificationOut.from_clarification(entry)
 
 
 @router.patch("/{event_id}", response_model=EventDetailOut)
