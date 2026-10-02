@@ -47,7 +47,7 @@ from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
 from app.events.models import EventRequiredFacility, EventStatus
-from tests.support.factories import make_event, make_venue
+from tests.support.factories import make_event, make_venue, make_venue_requirement
 from tests.support.seed import Events, Users, Venues
 
 # The seeded APPROVED event (Nimbus Developer Conference): 2026-11-25 09:00-18:00 +08, 350
@@ -350,6 +350,80 @@ def test_the_held_period_is_the_event_period_until_story_12_2(coordinator_client
     assert (body["setup_minutes"], body["teardown_minutes"]) == (0, 0)
     assert datetime.fromisoformat(body["held_from"]) == EVENT_STARTS_AT
     assert datetime.fromisoformat(body["held_until"]) == EVENT_ENDS_AT
+
+
+# --- AC2 after story 2.7: an event lists several venue requirements ---------------------------
+# Until story 12.5 lets a booking name the requirement it is for, a request carries the event's
+# first requirement (PO decision, 2 Oct 2026). An event without one books its own period.
+@pytest.mark.story("12.1", ac=2)
+def test_the_request_carries_the_first_venue_requirement(coordinator_client, db: Session):
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        expected_attendance=200,
+    )
+    plenary_starts = event.starts_at
+    plenary_ends = event.starts_at + timedelta(hours=3)
+    make_venue_requirement(
+        db,
+        event.id,
+        position=0,
+        name="Plenary hall",
+        capacity=150,
+        starts_at=plenary_starts,
+        ends_at=plenary_ends,
+        layout_code="THEATRE",
+        notes="Step-free from the drop-off point.",
+        facilities=(("PROJECTOR", 2, "HDMI input needed"),),
+    )
+    make_venue_requirement(
+        db,
+        event.id,
+        position=1,
+        name="Breakout",
+        capacity=40,
+        starts_at=plenary_ends,
+        ends_at=event.ends_at,
+        layout_code="CLASSROOM",
+        notes="Quiet corridor.",
+        facilities=(("WIFI", None, None),),
+    )
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert datetime.fromisoformat(body["starts_at"]) == plenary_starts
+    assert datetime.fromisoformat(body["ends_at"]) == plenary_ends
+    assert body["expected_attendance"] == 150
+    assert body["required_layout_code"] == "THEATRE"
+    assert "Projector & screen ×2 (HDMI input needed)" in body["requirement_notes"]
+    assert "Step-free from the drop-off point." in body["requirement_notes"]
+    assert "Wi-Fi" not in body["requirement_notes"]
+    assert "Quiet corridor." not in body["requirement_notes"]
+
+
+@pytest.mark.story("12.1", ac=2)
+def test_an_event_without_venue_requirements_books_its_own_period_and_attendance(
+    coordinator_client, db: Session
+):
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        venue_none_required=True,
+    )
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert datetime.fromisoformat(body["starts_at"]) == event.starts_at
+    assert datetime.fromisoformat(body["ends_at"]) == event.ends_at
+    assert body["expected_attendance"] == event.expected_attendance
+    assert body["required_layout_code"] is None
+    assert body["requirement_notes"] is None
 
 
 # --- AC3: the request is pending and visible to Venue Staff ---------------------------------
