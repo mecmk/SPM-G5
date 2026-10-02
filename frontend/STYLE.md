@@ -126,9 +126,9 @@ author's call. Never flatten a `taste` into a "must".
   // Good — AuthProvider's session lookup
   useEffect(() => {
     let cancelled = false
-    listVenues(includeWithdrawn)
-      .then((data) => {
-        if (!cancelled) setVenues(data)
+    fetchCurrentUser()
+      .then((me) => {
+        if (!cancelled) setUser(me)
       })
       .catch(() => {
         if (!cancelled) setUser(null)
@@ -139,12 +139,12 @@ author's call. Never flatten a `taste` into a "must".
     return () => {
       cancelled = true
     }
-  }, [includeWithdrawn])
+  }, [])
 
   // Bad — no guard, no cleanup
   useEffect(() => {
-    listVenues(includeWithdrawn).then(setVenues)
-  }, [includeWithdrawn])
+    fetchCurrentUser().then(setUser)
+  }, [])
   ```
 
   _`expected` · exemplars `src/shared/useLoaded.ts` (the pattern, written once for every page that only
