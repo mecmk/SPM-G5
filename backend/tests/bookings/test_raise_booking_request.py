@@ -347,7 +347,9 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
         assigned_coordinator_id=Users.COORDINATOR.id,
         expected_attendance=200,
     )
-    plenary_starts = event.starts_at
+    # Starts an hour into the event, so the request's start can only have come from the
+    # requirement, never from the event.
+    plenary_starts = event.starts_at + timedelta(hours=1)
     plenary_ends = event.starts_at + timedelta(hours=3)
     make_venue_requirement(
         db,
@@ -386,6 +388,22 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
     assert "Step-free from the drop-off point." in body["requirement_notes"]
     assert "Wi-Fi" not in body["requirement_notes"]
     assert "Quiet corridor." not in body["requirement_notes"]
+
+
+@pytest.mark.story("12.1", ac=2)
+def test_a_first_requirement_with_no_facilities_or_notes_states_none(
+    coordinator_client, db: Session
+):
+    event = make_event(
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
+    )
+    make_venue_requirement(db, event.id, name="Main venue", capacity=20, layout_code="THEATRE")
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["required_layout_code"] == "THEATRE"
+    assert response.json()["requirement_notes"] is None
 
 
 @pytest.mark.story("12.1", ac=2)

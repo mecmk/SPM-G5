@@ -8,13 +8,21 @@
  * AC4 every requirement, with its times, is shown to the reviewing coordinator on the event page.
  * AC6 the first requirement's number of people defaults to the expected attendance.
  * AC8 an incomplete requirement is listed as still needed before submitting.
- * AC11 the requirement field to fix is marked and focused when a save is refused in the browser.
+ * AC11 the requirement field to fix is marked and focused when a save is refused - in the browser,
+ *     or by the server, which says which requirement and field in its refusal.
  * Rule detail, refusals (401/403/404/409/422), the migration (AC7), unique names (AC9), moving the
  * event (AC10) and the race with a submission (AC12) are backend cases:
  * backend/tests/events/test_multiple_venue_requirements.py.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, assignedCoordinator, inFuture, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  assignedCoordinator,
+  corsHeaders,
+  inFuture,
+  signIn,
+  uniqueName,
+} from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
@@ -217,4 +225,51 @@ test('2.7 AC11: the requirement field to fix is marked and focused', async ({ pa
   const duplicateName = breakout.getByLabel('Requirement name')
   await expect(duplicateName).toBeFocused()
   await expect(duplicateName).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('2.7 AC11: a save the server refuses marks the requirement field it names', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Server refusal'))
+  await addRequirement(page, 1, 'Plenary hall', '60')
+  await addRequirement(page, 2, 'Breakout', '20')
+  await saveDraft(page)
+
+  // A refusal only the server can give - say the form was stale - is stubbed: the browser's own
+  // checks would otherwise stop this save first. The server names requirement 2's end time.
+  const refusal = 'Breakout cannot end after the event ends.'
+  await page.route(
+    (url) => /\/events\/[0-9a-f-]{36}$/.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'PATCH') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: [
+            {
+              loc: ['body', 'venue_requirements', 1, 'ends_at'],
+              msg: refusal,
+              type: 'value_error',
+            },
+          ],
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  const until = requirement(page, 2).getByLabel('Needed until')
+  await expect(until).toBeFocused()
+  await expect(until).toHaveAttribute('aria-invalid', 'true')
+  await expect(requirement(page, 1).getByLabel('Needed until')).not.toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+  await expect(page.getByRole('alert')).toHaveText(refusal)
 })

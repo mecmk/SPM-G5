@@ -470,6 +470,24 @@ def test_a_requirement_id_from_another_request_is_refused(organiser_client):
 
 
 @pytest.mark.story("2.7", ac=3)
+def test_the_same_requirement_sent_twice_in_one_save_is_refused(organiser_client):
+    created = _create(organiser_client, [_requirement("Plenary hall")])
+    requirement_id = created["venue_requirements"][0]["id"]
+
+    response = _patch(
+        organiser_client,
+        created["id"],
+        venue_requirements=[
+            {**_requirement("Plenary hall"), "id": requirement_id},
+            {**_requirement("Breakout", 20), "id": requirement_id},
+        ],
+    )
+
+    assert response.status_code == 422
+    assert _names(organiser_client.get(f"/events/{created['id']}").json()) == ["Plenary hall"]
+
+
+@pytest.mark.story("2.7", ac=3)
 def test_no_venue_requirements_clears_every_requirement(organiser_client):
     created = _create(
         organiser_client, [_requirement("Plenary hall"), _requirement("Breakout", 20)]
