@@ -24,15 +24,17 @@ app/
   main.py          FastAPI app; include each feature's router here
   config.py        settings (DATABASE_URL, session cookie, ...) read from .env
   db.py            SQLAlchemy engine/session + Base + shared mixins
-  auth/            story 1.1 login/logout, 1.2 permissions (models, service, deps, router)
-  venues/          story 8.x venue catalogue
-  common/          cross-cutting helpers (audit log)
+  <feature>/       one package per feature area (auth, bookings, events, ...), listed below
+  common/          shared by feature areas: the audit log, in-app notifications
   dbtool/          migrate / seed / reset / ready / docs  (python -m app.dbtool --help)
 db/
   migrations/      schema DDL, applied once in order (source of truth)
   seed/            idempotent reference + sample data
 tests/             mirrors app/ by feature; see ../docs/testing/README.md
 ```
+
+The feature areas, and what each one holds, are listed once for the whole repository in
+[AGENTS.md](../AGENTS.md#repository-structure).
 
 New to `uv`, or need to activate the virtual environment manually / add a new dependency? See
 [docs/UV_GUIDE.md](../docs/UV_GUIDE.md). Database workflow: [docs/database/README.md](../docs/database/README.md).

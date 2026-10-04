@@ -1,5 +1,10 @@
 # Sprint 1 foundation - summary and next steps
 
+> **Historical record.** This describes the repository as it stood during Sprint 1 and is not
+> kept up to date. The `sprint/1` branch it mentions has since been merged and retired, and the
+> project now works trunk-based on `main`. For how things work today, see
+> [AGENTS.md](../../AGENTS.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 Prepared for the ConnectSphere team (IS212 G5) on 2026-09-10 from Joshua's Sprint 1 stories.
 Refreshed on 2026-09-18: everything described below is **merged into `sprint/1`** — the schema in
 PR #11, and the login, role-based access and venue screens in PR #28, which carried all three

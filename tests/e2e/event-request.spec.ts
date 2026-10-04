@@ -47,7 +47,7 @@
  * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn } from './support'
+import { ACCOUNTS, inFuture, signIn, uniqueName } from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
@@ -59,17 +59,6 @@ const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
 )
-
-/** A `datetime-local` value (Singapore time) `days` from today, safely in the future. */
-function inFuture(days: number, hour = 9): string {
-  const day = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-  const date = day.toISOString().slice(0, 10)
-  return `${date}T${String(hour).padStart(2, '0')}:00`
-}
-
-function uniqueName(label: string): string {
-  return `E2E ${label} ${Date.now()}-${Math.floor(Math.random() * 1e6)}`
-}
 
 function equipmentItem(page: Page, position: number): Locator {
   return page.getByRole('group', { name: `Equipment item ${position}` })
