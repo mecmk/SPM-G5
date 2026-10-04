@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { formatApiError, mediaUrl } from '../api/client'
+import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   createEvent,
   fetchEquipmentAvailability,
@@ -36,6 +36,7 @@ import {
   REGISTRATION_DATE_FIELD_IDS,
   VENUE_REQUIREMENT_NAME_MAX_LENGTH,
   eventInputFrom,
+  findServerProblemField,
   formFromEvent,
   getEquipmentQuantityId,
   getEquipmentTypeId,
@@ -550,6 +551,24 @@ export function EventRequestFormPage() {
     }
   }
 
+  /**
+   * Say why a save was refused. Story 2.7 AC11: when the server names a field the form shows,
+   * mark and focus it, as the browser's own checks do, and give its sentence on its own.
+   */
+  function showSaveRefusal(err: unknown) {
+    const serverField =
+      form && err instanceof ApiError ? findServerProblemField(form, err.detail) : null
+    if (form && serverField) {
+      setSaveError(serverField.message || formatApiError(err))
+      setInvalidField({ id: serverField.fieldId, form })
+      document.getElementById(serverField.fieldId)?.focus()
+    } else {
+      setSaveError(formatApiError(err))
+    }
+    // The stock may be why it failed, so ask again how many are free.
+    setAvailabilityRefresh((count) => count + 1)
+  }
+
   /** Show a draft that has just been saved: in place when editing, else on its own address. */
   function showSavedDraft(saved: EventDetail, problem: string | null) {
     if (isEditing) {
@@ -572,9 +591,7 @@ export function EventRequestFormPage() {
       if (!result) return
       showSavedDraft(result.event, result.pictureProblem)
     } catch (err) {
-      setSaveError(formatApiError(err))
-      // The stock may be why it failed, so ask again how many are free.
-      setAvailabilityRefresh((count) => count + 1)
+      showSaveRefusal(err)
     } finally {
       setIsSaving(false)
     }
@@ -615,9 +632,7 @@ export function EventRequestFormPage() {
         }
       }
     } catch (err) {
-      setSaveError(formatApiError(err))
-      // The stock may be why it failed, so ask again how many are free.
-      setAvailabilityRefresh((count) => count + 1)
+      showSaveRefusal(err)
     } finally {
       setIsSaving(false)
     }

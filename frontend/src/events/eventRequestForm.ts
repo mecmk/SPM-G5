@@ -648,6 +648,48 @@ function validateVenueRequirements(form: EventFormState): FormProblem | null {
   return null
 }
 
+/** The field names the backend uses in a refused venue requirement's `loc`, and the form's own. */
+const SERVER_REQUIREMENT_FIELDS: Record<string, VenueRequirementField> = {
+  name: 'name',
+  capacity: 'capacity',
+  starts_at: 'starts',
+  ends_at: 'ends',
+}
+
+/** A refusal from the server that points at one field of the form. */
+export interface ServerFieldProblem {
+  fieldId: string
+  message: string
+}
+
+/**
+ * Story 2.7 AC11: the field a server refusal names, so the page can mark and focus it even when
+ * only the server could tell (say, the form was stale). The backend locates a refused venue
+ * requirement the way FastAPI locates a validation error: `loc` is
+ * `['body', 'venue_requirements', <place in the list>, <field>]`. Null when the refusal names no
+ * field the form shows.
+ */
+export function findServerProblemField(
+  form: EventFormState,
+  detail: unknown,
+): ServerFieldProblem | null {
+  if (!Array.isArray(detail)) return null
+  for (const issue of detail) {
+    const loc: unknown = issue?.loc
+    if (!Array.isArray(loc) || loc.length !== 4 || loc[1] !== 'venue_requirements') continue
+    const [, , index, serverField] = loc
+    const requirement = typeof index === 'number' ? form.venueRequirements[index] : undefined
+    const field =
+      typeof serverField === 'string' ? SERVER_REQUIREMENT_FIELDS[serverField] : undefined
+    if (requirement === undefined || field === undefined) continue
+    return {
+      fieldId: getVenueRequirementFieldId(requirement.key, field),
+      message: typeof issue.msg === 'string' ? issue.msg : '',
+    }
+  }
+  return null
+}
+
 /** The first problem with the venue requirements and equipment, or null. */
 function validateRequirements(
   form: EventFormState,
