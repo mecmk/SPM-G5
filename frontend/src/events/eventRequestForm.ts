@@ -32,6 +32,10 @@ export interface VenueRequirementDraft {
   layoutCode: string
   facilities: Record<string, FacilityDraft>
   notes: string
+  /** AC6: the number still follows the expected attendance - the first card, until it is edited. */
+  isCapacityDefault: boolean
+  /** AC2: the times still follow the event's - a new card, until either time is edited. */
+  areTimesDefault: boolean
 }
 
 export interface EquipmentDraft {
@@ -201,20 +205,43 @@ let nextVenueRequirementKey = 0
 /**
  * Story 2.7: a new venue requirement. AC2: its times start as the event's proposed start and end.
  * AC6: the first one's number of people starts as the expected attendance; a later room is rarely
- * the whole audience, so its number is left for the organiser.
+ * the whole audience, so its number is left for the organiser. Both keep following the event
+ * until the organiser edits them - see `withEventDefaults`.
  */
 export function newVenueRequirementDraft(form: EventFormState): VenueRequirementDraft {
   nextVenueRequirementKey += 1
+  const isFirst = form.venueRequirements.length === 0
   return {
     key: nextVenueRequirementKey,
     id: null,
     name: '',
-    capacity: form.venueRequirements.length === 0 ? form.attendance.trim() : '',
+    capacity: isFirst ? form.attendance.trim() : '',
     startsAt: form.startsAt,
     endsAt: form.endsAt,
     layoutCode: '',
     facilities: {},
     notes: '',
+    isCapacityDefault: isFirst,
+    areTimesDefault: true,
+  }
+}
+
+/**
+ * Story 2.7 AC2/AC6: bring each card's defaults in line with the event as it now stands, so the
+ * order the form is filled in does not matter - a card added before the dates or attendance were
+ * known picks them up when they arrive. Only defaults move: a value the organiser edited, or one
+ * already saved (`formFromEvent` loads none as a default), is theirs and stays put, so moving the
+ * event past it is refused instead (AC10).
+ */
+export function withEventDefaults(form: EventFormState): EventFormState {
+  return {
+    ...form,
+    venueRequirements: form.venueRequirements.map((requirement) => ({
+      ...requirement,
+      capacity: requirement.isCapacityDefault ? form.attendance.trim() : requirement.capacity,
+      startsAt: requirement.areTimesDefault ? form.startsAt : requirement.startsAt,
+      endsAt: requirement.areTimesDefault ? form.endsAt : requirement.endsAt,
+    })),
   }
 }
 
@@ -238,6 +265,9 @@ function venueRequirementDraftFrom(requirement: VenueRequirement): VenueRequirem
       ]),
     ),
     notes: textOf(requirement.notes),
+    // Saved values are the organiser's: they never follow the event by themselves (AC10).
+    isCapacityDefault: false,
+    areTimesDefault: false,
   }
 }
 
@@ -512,16 +542,10 @@ export function getLiveProblems(
   if (!isBlankOrPhoneNumber(form.contactPhone)) {
     problems[FIELD_ID.contactPhone] = 'EVENT_CONTACT_PHONE_INVALID'
   }
-  for (const requirement of form.venueRequirements) {
-    const capacityProblem = getCapacityProblem(requirement, form)
-    if (capacityProblem) {
-      problems[getVenueRequirementFieldId(requirement.key, 'capacity')] = capacityProblem
-    }
-    for (const [code, facility] of Object.entries(requirement.facilities)) {
-      if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
-        problems[getFacilityQuantityId(requirement.key, code)] = 'EVENT_FACILITY_QUANTITY_INVALID'
-      }
-    }
+  // Story 2.7: every venue requirement problem, said next to its field as it is typed (AC5, AC6,
+  // AC9, AC10) - the same rules a save is refused for.
+  for (const problem of getVenueRequirementProblems(form)) {
+    problems[problem.fieldId] ??= problem.code
   }
   for (const line of form.equipment) {
     if (!isPositiveWholeNumber(line.quantity)) {
@@ -589,63 +613,70 @@ function getCapacityProblem(
   return null
 }
 
+/** Story 2.7 AC2/AC5/AC10: the problem with one requirement's times, or null. */
+function getTimesProblem(
+  requirement: VenueRequirementDraft,
+  form: EventFormState,
+): { code: ErrorCode; field: VenueRequirementField } | null {
+  const { startsAt, endsAt } = requirement
+  if (startsAt && !isReadableDateTime(startsAt)) {
+    return { code: 'VENUE_REQUIREMENT_DATE_INVALID', field: 'starts' }
+  }
+  if (endsAt && !isReadableDateTime(endsAt)) {
+    return { code: 'VENUE_REQUIREMENT_DATE_INVALID', field: 'ends' }
+  }
+  if ((startsAt === '') !== (endsAt === '')) {
+    return {
+      code: 'VENUE_REQUIREMENT_TIMES_INCOMPLETE',
+      field: startsAt === '' ? 'starts' : 'ends',
+    }
+  }
+  if (!startsAt || !endsAt) return null
+  if (endsAt <= startsAt) return { code: 'VENUE_REQUIREMENT_END_BEFORE_START', field: 'ends' }
+  if (form.startsAt && startsAt < form.startsAt) {
+    return { code: 'VENUE_REQUIREMENT_STARTS_BEFORE_EVENT', field: 'starts' }
+  }
+  if (form.endsAt && endsAt > form.endsAt) {
+    return { code: 'VENUE_REQUIREMENT_ENDS_AFTER_EVENT', field: 'ends' }
+  }
+  return null
+}
+
 /**
- * Story 2.7: the first problem with the venue requirements, in list order, or null - the rules the
- * backend's `_check_venue_requirement_rules` applies, so a refusal is said before a round trip.
- * AC2: both times or neither. AC5/AC10: within the event's proposed start and end, inclusive, and
- * ending after starting - judged against the event's times as they stand on the form, so moving
- * the event flags a requirement left outside it. AC6: the number of people. AC9: no two share a
- * name, trimmed and case-insensitive.
+ * Story 2.7: every problem with the venue requirements, in list order and at most one per field -
+ * the rules the backend's `_check_venue_requirement_rules` applies. AC2: both times or neither.
+ * AC5/AC10: within the event's proposed start and end, inclusive, and ending after starting -
+ * judged against the event's times as they stand on the form, so moving the event flags a
+ * requirement left outside it. AC6: the number of people. AC9: no two share a name, trimmed and
+ * case-insensitive (the later one is the one marked). The page says each next to its field as it
+ * is typed; a save is refused for the first.
  */
-function validateVenueRequirements(form: EventFormState): FormProblem | null {
+export function getVenueRequirementProblems(form: EventFormState): FormProblem[] {
+  const problems: FormProblem[] = []
   const seenNames = new Set<string>()
   for (const requirement of form.venueRequirements) {
     const fieldId = (field: VenueRequirementField) =>
       getVenueRequirementFieldId(requirement.key, field)
-    const capacityProblem = getCapacityProblem(requirement, form)
-    if (capacityProblem) return { code: capacityProblem, fieldId: fieldId('capacity') }
-    const { startsAt, endsAt } = requirement
-    if (startsAt && !isReadableDateTime(startsAt)) {
-      return { code: 'VENUE_REQUIREMENT_DATE_INVALID', fieldId: fieldId('starts') }
-    }
-    if (endsAt && !isReadableDateTime(endsAt)) {
-      return { code: 'VENUE_REQUIREMENT_DATE_INVALID', fieldId: fieldId('ends') }
-    }
-    if ((startsAt === '') !== (endsAt === '')) {
-      return {
-        code: 'VENUE_REQUIREMENT_TIMES_INCOMPLETE',
-        fieldId: fieldId(startsAt === '' ? 'starts' : 'ends'),
-      }
-    }
-    if (startsAt && endsAt) {
-      if (endsAt <= startsAt) {
-        return { code: 'VENUE_REQUIREMENT_END_BEFORE_START', fieldId: fieldId('ends') }
-      }
-      if (form.startsAt && startsAt < form.startsAt) {
-        return { code: 'VENUE_REQUIREMENT_STARTS_BEFORE_EVENT', fieldId: fieldId('starts') }
-      }
-      if (form.endsAt && endsAt > form.endsAt) {
-        return { code: 'VENUE_REQUIREMENT_ENDS_AFTER_EVENT', fieldId: fieldId('ends') }
-      }
-    }
     const name = requirement.name.trim().toLowerCase()
-    if (name !== '') {
-      if (seenNames.has(name)) {
-        return { code: 'VENUE_REQUIREMENT_NAME_DUPLICATE', fieldId: fieldId('name') }
-      }
-      seenNames.add(name)
+    if (name !== '' && seenNames.has(name)) {
+      problems.push({ code: 'VENUE_REQUIREMENT_NAME_DUPLICATE', fieldId: fieldId('name') })
     }
-    const badFacility = Object.entries(requirement.facilities).find(
-      ([, facility]) => !isBlankOrPositiveWholeNumber(facility.quantity),
-    )
-    if (badFacility) {
-      return {
-        code: 'EVENT_FACILITY_QUANTITY_INVALID',
-        fieldId: getFacilityQuantityId(requirement.key, badFacility[0]),
+    if (name !== '') seenNames.add(name)
+    const capacityProblem = getCapacityProblem(requirement, form)
+    if (capacityProblem) problems.push({ code: capacityProblem, fieldId: fieldId('capacity') })
+    const timesProblem = getTimesProblem(requirement, form)
+    if (timesProblem)
+      problems.push({ code: timesProblem.code, fieldId: fieldId(timesProblem.field) })
+    for (const [code, facility] of Object.entries(requirement.facilities)) {
+      if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
+        problems.push({
+          code: 'EVENT_FACILITY_QUANTITY_INVALID',
+          fieldId: getFacilityQuantityId(requirement.key, code),
+        })
       }
     }
   }
-  return null
+  return problems
 }
 
 /** The field names the backend uses in a refused venue requirement's `loc`, and the form's own. */
@@ -695,7 +726,7 @@ function validateRequirements(
   form: EventFormState,
   availability: Record<string, number> | null,
 ): FormProblem | null {
-  const venueProblem = validateVenueRequirements(form)
+  const [venueProblem] = getVenueRequirementProblems(form)
   if (venueProblem) return venueProblem
   const untypedLine = form.equipment.find((line) => line.typeCode === NO_EQUIPMENT_TYPE)
   if (untypedLine) {

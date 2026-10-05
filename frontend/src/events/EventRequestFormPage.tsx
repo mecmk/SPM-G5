@@ -47,6 +47,7 @@ import {
   getMissingForSubmission,
   getVenueRequirementFieldId,
   isEquipmentTypeTaken,
+  withEventDefaults,
   newEquipmentDraft,
   newVenueRequirementDraft,
   toggleEntry,
@@ -218,8 +219,14 @@ export function EventRequestFormPage() {
   }
 
   function updateDate(key: 'startsAt' | 'endsAt', value: string) {
-    updateField(key, value)
+    updateEventDefaultSource(key, value)
     noteIncompleteDate()
+  }
+
+  /** Story 2.7 AC2/AC6: the event's dates and attendance carry into the venue requirements that
+   * still take them by default. */
+  function updateEventDefaultSource(key: 'startsAt' | 'endsAt' | 'attendance', value: string) {
+    setForm((current) => current && withEventDefaults({ ...current, [key]: value }))
   }
 
   function updateRegistrationDate(
@@ -703,7 +710,7 @@ export function EventRequestFormPage() {
                   step={1}
                   {...fieldProps(FIELD_ID.attendance)}
                   value={form.attendance}
-                  onChange={(e) => updateField('attendance', e.target.value)}
+                  onChange={(e) => updateEventDefaultSource('attendance', e.target.value)}
                 />
                 {renderProblem(FIELD_ID.attendance)}
               </label>
@@ -886,6 +893,7 @@ export function EventRequestFormPage() {
                           updateVenueRequirement(requirement.key, { name: e.target.value })
                         }
                       />
+                      {renderProblem(fieldIdOf('name'))}
                     </label>
                     <label>
                       Number of people
@@ -897,7 +905,10 @@ export function EventRequestFormPage() {
                         {...fieldProps(fieldIdOf('capacity'))}
                         value={requirement.capacity}
                         onChange={(e) =>
-                          updateVenueRequirement(requirement.key, { capacity: e.target.value })
+                          updateVenueRequirement(requirement.key, {
+                            capacity: e.target.value,
+                            isCapacityDefault: false,
+                          })
                         }
                       />
                       {renderProblem(fieldIdOf('capacity'))}
@@ -911,9 +922,13 @@ export function EventRequestFormPage() {
                         {...fieldProps(fieldIdOf('starts'))}
                         value={requirement.startsAt}
                         onChange={(e) =>
-                          updateVenueRequirement(requirement.key, { startsAt: e.target.value })
+                          updateVenueRequirement(requirement.key, {
+                            startsAt: e.target.value,
+                            areTimesDefault: false,
+                          })
                         }
                       />
+                      {renderProblem(fieldIdOf('starts'))}
                     </label>
                     <label>
                       Needed until
@@ -924,9 +939,13 @@ export function EventRequestFormPage() {
                         {...fieldProps(fieldIdOf('ends'))}
                         value={requirement.endsAt}
                         onChange={(e) =>
-                          updateVenueRequirement(requirement.key, { endsAt: e.target.value })
+                          updateVenueRequirement(requirement.key, {
+                            endsAt: e.target.value,
+                            areTimesDefault: false,
+                          })
                         }
                       />
+                      {renderProblem(fieldIdOf('ends'))}
                     </label>
                     <label className="span-all">
                       Room layout
