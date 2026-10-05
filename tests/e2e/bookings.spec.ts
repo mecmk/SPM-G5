@@ -166,6 +166,10 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await page.getByRole('tab', { name: /^Approved/ }).click()
   await expect(approvedGrandHallCard(page)).toBeVisible()
   await expect(approvedGrandHallCard(page).getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  // Fewer than ten requests: one page, so no page controls. Checked on Approved, not All: All
+  // gains a request from every spec that sends one, so it can reach ten in a full run, while
+  // Approved holds the one seeded booking plus at most the two 13.2's tests approve.
+  await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
 
   await page.getByRole('tab', { name: /^Rejected/ }).click()
   await expect(approvedGrandHallCard(page)).toHaveCount(0)
@@ -173,8 +177,6 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await page.getByRole('tab', { name: /^All/ }).click()
   await expect(approvedGrandHallCard(page)).toBeVisible()
   await expect(pendingCard(page, '00000002')).toBeVisible()
-  // Fewer than ten requests: one page, so no page controls.
-  await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
 })
 
 test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
