@@ -7,6 +7,17 @@
  * The team meeting of 17 Sep 2026 added delete (full CRUD), search and a capacity filter, and
  * asked for every save to appear in the notification centre.
  *
+ * Story 8.3 AC5-AC8 (bug f8.3.2, Sprint 1 review): a venue's pictures.
+ * AC5 Venue Staff add pictures by choosing files or dragging them onto the form, preview them,
+ *     and remove any of them; they are saved with the venue's details.
+ * AC6 the record shows them as a gallery, the first also in its banner, and the catalogue card
+ *     shows the first.
+ * AC7 JPEG, PNG or WebP, at most 5 MB each, at most 10 a venue: the form refuses anything else
+ *     before sending it.
+ * AC8 a picture the server refuses leaves the venue saved, and its edit page says why.
+ * The server's own refusals, the files, AC9's permissions and AC10's simultaneous additions are
+ * backend cases: backend/tests/venues/test_venue_pictures.py.
+ *
  * Story 8.1 AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
  * venues, for venues:manage holders only. The separate Manage venues page is gone and its old
@@ -15,13 +26,47 @@
  * Refusals and conflicts (401, 403, 409 in use, 422) are backend cases:
  * backend/tests/venues/test_venue_records.py.
  */
-import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn, venueCard } from './support'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { ACCOUNTS, signIn, uniqueName, venueCard } from './support'
 
 const CATALOGUE_PATH = /\/venues$/
+const EDIT_PATH = /\/venues\/[0-9a-f-]{36}\/edit$/
+const MAX_PICTURE_BYTES = 5 * 1024 * 1024
+const PREVIEW_NAME = /^Picture \d+ preview$/
+/** The smallest valid PNG: one transparent pixel. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 function mainNav(page: Page) {
   return page.getByRole('navigation', { name: 'Main' })
+}
+
+function pictureFile(name: string, buffer: Buffer = PNG_BYTES) {
+  return { name, mimeType: 'image/png', buffer }
+}
+
+/** Open the new-venue form with the required details filled in. */
+async function startNewVenue(page: Page, name: string) {
+  await page.goto('/venues/new')
+  await expect(page.getByRole('heading', { name: 'New venue', level: 1 })).toBeVisible()
+  await page.getByLabel('Venue name').fill(name)
+  await page.getByLabel('Location').fill('Tower E, Level 2')
+  await page.getByLabel('Maximum capacity').fill('45')
+}
+
+/** Choose pictures the way the file picker does. */
+async function choosePictures(page: Page, ...files: ReturnType<typeof pictureFile>[]) {
+  await page.getByLabel('Choose pictures').setInputFiles(files)
+}
+
+/** A picture that is on screen and has actually loaded. */
+async function expectLoaded(picture: Locator) {
+  await expect(picture).toBeVisible()
+  await expect
+    .poll(() => picture.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0)
 }
 
 async function createVenue(page: Page, name: string, capacity = '45') {
@@ -302,3 +347,144 @@ for (const { role, email } of [
     await expect(grandHall.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0)
   })
 }
+
+// --- 8.3 AC5-AC8: pictures (f8.3.2) -----------------------------------------------------------
+test('8.3 AC5/AC6: pictures chosen for a new venue are saved and shown on its card and record', async ({
+  page,
+}) => {
+  const name = uniqueName('Pictures')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+
+  await choosePictures(page, pictureFile('front.png'), pictureFile('stage.png'))
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
+  await page.getByRole('button', { name: 'Create venue' }).click()
+
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await expectLoaded(venueCard(page, name).getByRole('presentation', { includeHidden: true }))
+
+  await venueCard(page, name).getByRole('link', { name }).click()
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  const gallery = page.getByRole('region', { name: 'Pictures' })
+  await expectLoaded(gallery.getByRole('img', { name: 'Picture 1 of 2' }))
+  await expectLoaded(gallery.getByRole('img', { name: 'Picture 2 of 2' }))
+  // The first picture also fills the banner behind the venue's name.
+  await expectLoaded(page.getByRole('main').getByRole('presentation'))
+})
+
+test('8.3 AC5: pictures can be dragged onto the form', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const zone = page.getByRole('group', { name: 'Pictures drop area' })
+
+  const transfer = await page.evaluateHandle((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+    const data = new DataTransfer()
+    data.items.add(new File([bytes], 'hall.png', { type: 'image/png' }))
+    data.items.add(new File([bytes], 'foyer.png', { type: 'image/png' }))
+    return data
+  }, PNG_BYTES.toString('base64'))
+  await zone.dispatchEvent('dragenter', { dataTransfer: transfer })
+  await expect(page.getByText('Drop the pictures here')).toBeVisible()
+  await zone.dispatchEvent('drop', { dataTransfer: transfer })
+
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
+  await expect(page.getByText('Drop the pictures here')).toHaveCount(0)
+})
+
+test('8.3 AC5/AC6: pictures can be removed while editing', async ({ page }) => {
+  const name = uniqueName('Fewer pictures')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await choosePictures(page, pictureFile('one.png'), pictureFile('two.png'))
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+
+  await venueCard(page, name).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
+  await page.getByRole('button', { name: 'Remove picture 1' }).click()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(1)
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+
+  await venueCard(page, name).getByRole('link', { name }).click()
+  const gallery = page.getByRole('region', { name: 'Pictures' })
+  await expectLoaded(gallery.getByRole('img', { name: 'Picture 1 of 1' }))
+  await expect(gallery.getByRole('img')).toHaveCount(1)
+
+  // Taking the last one off leaves the placeholder: no banner picture and no gallery.
+  await page.goto('/venues')
+  await venueCard(page, name).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await page.getByRole('button', { name: 'Remove picture 1' }).click()
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await expect(
+    venueCard(page, name).getByRole('presentation', { includeHidden: true }),
+  ).toHaveCount(0)
+
+  await venueCard(page, name).getByRole('link', { name }).click()
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Pictures' })).toHaveCount(0)
+  await expect(page.getByRole('main').getByRole('presentation')).toHaveCount(0)
+})
+
+test('8.3 AC7: a file that is not a JPEG, PNG or WebP is refused in the browser', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  await page.getByLabel('Choose pictures').setInputFiles({
+    name: 'brief.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4'),
+  })
+
+  await expect(page.getByText('Choose a JPEG, PNG or WebP picture.')).toBeVisible()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(0)
+})
+
+test('8.3 AC7: a file over 5 MB is refused in the browser', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  await choosePictures(page, pictureFile('huge.png', Buffer.alloc(MAX_PICTURE_BYTES + 1)))
+
+  await expect(page.getByText('The picture must be 5 MB or smaller.')).toBeVisible()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(0)
+})
+
+test('8.3 AC7: an eleventh picture is refused in the browser', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  await choosePictures(
+    page,
+    ...Array.from({ length: 11 }, (_, index) => pictureFile(`room-${index + 1}.png`)),
+  )
+
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(10)
+  await expect(page.getByText('A venue can have at most 10 pictures.')).toBeVisible()
+})
+
+test('8.3 AC8: a picture the server refuses leaves the new venue saved and says why', async ({
+  page,
+}) => {
+  const name = uniqueName('Refused picture')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  // Named and typed as a PNG, so the browser lets it through; the server reads the bytes.
+  await choosePictures(page, pictureFile('fake.png', Buffer.from('not a picture')))
+
+  await page.getByRole('button', { name: 'Create venue' }).click()
+
+  await expect(page).toHaveURL(EDIT_PATH)
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('alert')).toContainText(
+    'Choose a JPEG, PNG or WebP picture.',
+  )
+  await page.goto('/venues')
+  await expect(venueCard(page, name)).toBeVisible()
+})
