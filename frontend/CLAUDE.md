@@ -104,8 +104,10 @@ Every POST, PUT, PATCH and DELETE lands in the notification centre (team decisio
 `api<T>()` reports the outcome, and `NotificationProvider` lists it under the bell beside the
 sidebar wordmark and shows it briefly as a toast. Pass `notify: { title, message }` so the entry
 says what changed; failures take their title from the error registry and are always marked
-important. Only sign-in and sign-out pass `notify: false`. The list is per session and clears on
-sign-out.
+important. Only sign-in and sign-out pass `notify: false`, plus a request sent as part of a save
+that has a notice of its own, so one save gives one notice: an event's picture when the request
+is submitted (story 2.1 AC15), and a venue's pictures (story 8.3 AC5). Those show a refusal on
+the form instead. The list is per session and clears on sign-out.
 
 ### Permission checks here are UX, not security
 

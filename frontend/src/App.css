@@ -389,11 +389,22 @@
 }
 
 .item-card-picture {
+  position: relative;
   display: grid;
   place-items: center;
   height: 6rem;
   background: var(--surface-alt);
   color: var(--text-muted);
+}
+
+/* Story 8.3 AC6: a venue's first picture, filling the card's band. Placed over the band rather
+   than in its grid, so the picture's own height cannot stretch past it over the card. */
+.item-card-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .item-card-body {
@@ -877,7 +888,8 @@ label.choice-chip:has(input:checked)::before {
   color: var(--on-brand-panel-muted);
 }
 
-/* Story 7.1: a real photo filling the hero, for pages that have one (venues never do). */
+/* A real photo filling the hero: an event's cover picture (story 7.1), or a venue's first picture
+   (story 8.3 AC6). */
 .venue-hero-picture {
   position: absolute;
   inset: 0;
@@ -2832,6 +2844,56 @@ label select[aria-invalid='true'],
 }
 
 .picture-drop-actions label:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ---------- a venue's pictures (story 8.3 AC5/AC6, f8.3.2) ---------- */
+
+/* The venue form's pictures, each with its Remove button, above the drop area it shares with the
+   event cover picture. */
+.picture-tiles {
+  display: grid;
+  /* Two to a row on a phone, where 9rem would leave one. */
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 40%), 1fr));
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.picture-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.picture-tile img,
+.picture-gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  object-fit: cover;
+}
+
+/* The venue record's gallery: every picture in order, each opening full size. */
+.picture-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 40%), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.picture-gallery a {
+  display: block;
+}
+
+.picture-gallery a:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }

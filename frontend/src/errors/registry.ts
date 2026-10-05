@@ -35,6 +35,9 @@ export type ErrorCode =
   | 'VENUE_TURNAROUND_INVALID'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
+  | 'VENUE_PICTURE_TYPE_INVALID'
+  | 'VENUE_PICTURE_TOO_LARGE'
+  | 'VENUE_PICTURES_TOO_MANY'
   | 'EVENT_NOT_FOUND'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
@@ -177,6 +180,21 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_LAYOUT_CAPACITY_INVALID: {
     title: 'Check layout capacities',
     message: 'A layout capacity must be a positive whole number, or left empty.',
+  },
+  /** Story 8.3 AC7: checked on choosing a picture; the backend answers 422 to the same rule. */
+  VENUE_PICTURE_TYPE_INVALID: {
+    title: 'Check the picture',
+    message: 'Choose a JPEG, PNG or WebP picture.',
+  },
+  /** Story 8.3 AC7: checked on choosing a picture; the backend answers 413 to the same limit. */
+  VENUE_PICTURE_TOO_LARGE: {
+    title: 'Check the picture',
+    message: 'The picture must be 5 MB or smaller.',
+  },
+  /** Story 8.3 AC7: checked on choosing pictures; the backend answers 409 to the same limit. */
+  VENUE_PICTURES_TOO_MANY: {
+    title: 'Too many pictures',
+    message: 'A venue can have at most 10 pictures.',
   },
 
   // Story 2.1: event requests. These API codes usually arrive with the backend's own sentence.

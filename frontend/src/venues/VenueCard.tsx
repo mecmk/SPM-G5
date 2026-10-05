@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
+import { mediaUrl } from '../api/client'
 import type { VenueSummary } from '../api/venues'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -20,13 +21,32 @@ export interface VenueCardProps {
 /**
  * Story 8.1: one venue in the catalogue. AC1 name, location and capacity, and the name opens the
  * full record. A withdrawn venue is listed only when Venue Staff ask for it (AC12), and is badged
- * so it cannot pass for one in service (AC2: "excluded or clearly marked").
+ * so it cannot pass for one in service (AC2: "excluded or clearly marked"). Story 8.3 AC6: the
+ * venue's first picture fills the band at the top; without one, or if it fails to load, the
+ * placeholder stays.
  */
 export function VenueCard({ venue, recordPath, notes, actions }: VenueCardProps) {
+  // The address that failed, not just that one did, so a new cover is tried rather than hidden.
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
+  const coverUrl = venue.cover_image_url
+
+  function markCoverFailed() {
+    setFailedCoverUrl(coverUrl)
+  }
+
   return (
     <article className="item-card">
       <div className="item-card-picture" aria-hidden="true">
-        <Icon name="building" size={28} />
+        {coverUrl !== null && coverUrl !== failedCoverUrl ? (
+          <img
+            className="item-card-image"
+            src={mediaUrl(coverUrl) ?? undefined}
+            alt=""
+            onError={markCoverFailed}
+          />
+        ) : (
+          <Icon name="building" size={28} />
+        )}
       </div>
       <div className="item-card-body">
         <div className="item-card-header">

@@ -16,13 +16,22 @@ export interface VenueReferenceData {
 
 export type VenueStatus = 'ACTIVE' | 'WITHDRAWN'
 
-/** Mirrors `VenueSummary`: one row of the venue list. */
+/** Mirrors `VenueSummary`: one row of the venue list. Story 8.3 AC6: `cover_image_url` is the
+ * venue's first picture, for its card; null shows the placeholder. Load it through `mediaUrl`. */
 export interface VenueSummary {
   id: string
   name: string
   location: string
   capacity: number
   status: VenueStatus
+  cover_image_url: string | null
+}
+
+/** Mirrors `VenueImageOut`: one of a venue's pictures (story 8.3 AC5/AC6). `url` is where the
+ * backend serves it; load it through `mediaUrl`. */
+export interface VenueImage {
+  id: string
+  url: string
 }
 
 /** Mirrors `VenueFacilityOut`. */
@@ -61,6 +70,8 @@ export interface Venue extends VenueSummary {
   facilities: VenueFacility[]
   layouts: VenueLayout[]
   accessibility_features: VenueAccessibilityFeature[]
+  /** Story 8.3 AC6: the venue's pictures in their order; the first is `cover_image_url`. */
+  images: VenueImage[]
   created_by_id: string | null
   created_at: string
   updated_at: string
@@ -120,6 +131,38 @@ export function updateVenue(venueId: string, input: VenueInput): Promise<Venue> 
       title: 'Venue updated',
       message: `Changes to ${input.name} were saved.`,
     },
+  })
+}
+
+const VENUE_IMAGE_ERROR_CODES = {
+  404: 'VENUE_NOT_FOUND',
+  409: 'VENUE_PICTURES_TOO_MANY',
+  413: 'VENUE_PICTURE_TOO_LARGE',
+  422: 'VENUE_PICTURE_TYPE_INVALID',
+} as const
+
+/**
+ * Story 8.3 AC5: add a picture after the venue's others. It is sent as part of saving the venue,
+ * whose own notice ("Venue created" or "Venue updated") covers it, so it adds no notice of its
+ * own - one save, one notice, as 2.1 AC15 does with an event's picture. The form shows a refusal.
+ */
+export function addVenueImage(venueId: string, file: File): Promise<Venue> {
+  const body = new FormData()
+  body.append('file', file)
+  return api<Venue>(`/venues/${venueId}/images`, {
+    method: 'POST',
+    body,
+    errorCodes: VENUE_IMAGE_ERROR_CODES,
+    notify: false,
+  })
+}
+
+/** Story 8.3 AC5: take a picture off a venue. Silent for the reason `addVenueImage` gives. */
+export function removeVenueImage(venueId: string, imageId: string): Promise<Venue> {
+  return api<Venue>(`/venues/${venueId}/images/${imageId}`, {
+    method: 'DELETE',
+    errorCodes: { 404: 'VENUE_NOT_FOUND' },
+    notify: false,
   })
 }
 

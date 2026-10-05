@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
 import { Calendar, type CalendarLegendItem } from '../components/Calendar'
 import { isoDate } from '../components/calendarGrid'
@@ -55,6 +55,10 @@ const NOT_RECORDED = 'Not recorded'
  *
  * f12.1.1 (story 12.1 AC15): opened from the catalogue for an event, the event's assigned
  * coordinator can request the venue from here too, and the back link returns to that same search.
+ *
+ * Story 8.3 AC6 (bug f8.3.2): the venue's first picture fills the banner, and every picture shows
+ * in a gallery, in order, each opening full size. Without pictures the banner keeps its icon and
+ * there is no gallery.
  */
 export function VenueDetailPage() {
   const { venueId = '' } = useParams()
@@ -72,6 +76,8 @@ export function VenueDetailPage() {
   const [isCalendarLoading, setIsCalendarLoading] = useState(true)
   /** Story 9.1 AC5: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
   const [openDay, setOpenDay] = useState<string | null>(null)
+  /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -129,6 +135,10 @@ export function VenueDetailPage() {
     setMonth(nextMonth)
   }
 
+  function markCoverFailed() {
+    setFailedCoverUrl(venue?.cover_image_url ?? null)
+  }
+
   if (error) {
     return (
       <div className="page">
@@ -139,6 +149,7 @@ export function VenueDetailPage() {
     )
   }
   if (!venue) return <LoadingState label="Loading the venue…" />
+  const coverUrl = venue.cover_image_url
 
   return (
     <div className="page page-wide">
@@ -164,9 +175,18 @@ export function VenueDetailPage() {
       )}
 
       <div className="venue-hero">
-        <span aria-hidden="true">
-          <Icon name="building" size={36} />
-        </span>
+        {coverUrl !== null && coverUrl !== failedCoverUrl ? (
+          <img
+            className="venue-hero-picture"
+            src={mediaUrl(coverUrl) ?? undefined}
+            alt=""
+            onError={markCoverFailed}
+          />
+        ) : (
+          <span aria-hidden="true">
+            <Icon name="building" size={36} />
+          </span>
+        )}
         <div className="venue-hero-overlay">
           <div className="cluster">
             <StatusBadge status={venue.status} label={STATUS_LABELS[venue.status]} />
@@ -179,6 +199,27 @@ export function VenueDetailPage() {
 
       <div className="layout-split">
         <div className="stack">
+          {venue.images.length > 0 && (
+            <section className="card stack" aria-labelledby="venue-pictures-heading">
+              <p className="eyebrow" id="venue-pictures-heading">
+                Pictures
+              </p>
+              <ul className="picture-gallery">
+                {venue.images.map((image, index) => (
+                  <li key={image.id}>
+                    <a href={mediaUrl(image.url) ?? undefined} target="_blank" rel="noreferrer">
+                      <img
+                        src={mediaUrl(image.url) ?? undefined}
+                        alt={`Picture ${index + 1} of ${venue.images.length}`}
+                      />
+                      <span className="visually-hidden"> (opens in a new tab)</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="card stack" aria-labelledby="venue-capacity-heading">
             <p className="eyebrow" id="venue-capacity-heading">
               Capacity

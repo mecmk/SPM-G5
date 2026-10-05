@@ -185,3 +185,46 @@ export function toggleEntry<T>(entries: Record<string, T>, code: string, empty: 
   else next[code] = empty
   return next
 }
+
+/**
+ * Story 8.3 AC7: what a venue's pictures may be, mirrored from the backend's service
+ * (`MAX_VENUE_IMAGE_BYTES`, `MAX_VENUE_IMAGES` and `VENUE_IMAGE_MEDIA_TYPES` in
+ * backend/app/venues/service.py).
+ */
+export const MAX_VENUE_IMAGE_BYTES = 5 * 1024 * 1024
+export const MAX_VENUE_IMAGES = 10
+export const VENUE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+/**
+ * Story 8.3 AC7: what is wrong with a chosen picture, or null. The backend checks the bytes again;
+ * this only spares sending a file that is certain to be refused.
+ */
+export function validateVenueImage(file: File): ErrorCode | null {
+  if (!VENUE_IMAGE_TYPES.includes(file.type)) return 'VENUE_PICTURE_TYPE_INVALID'
+  if (file.size > MAX_VENUE_IMAGE_BYTES) return 'VENUE_PICTURE_TOO_LARGE'
+  return null
+}
+
+/** The files a venue can take from those chosen, and why the first of the others cannot. */
+export interface ChosenVenueImages {
+  accepted: File[]
+  problem: ErrorCode | null
+}
+
+/**
+ * Story 8.3 AC7: which of `files`, in order, a venue already holding `count` pictures can take:
+ * each must pass `validateVenueImage`, and the venue holds `MAX_VENUE_IMAGES` at most.
+ */
+export function chooseVenueImages(files: File[], count: number): ChosenVenueImages {
+  const accepted: File[] = []
+  let problem: ErrorCode | null = null
+  for (const file of files) {
+    const fileProblem =
+      count + accepted.length >= MAX_VENUE_IMAGES
+        ? 'VENUE_PICTURES_TOO_MANY'
+        : validateVenueImage(file)
+    if (fileProblem === null) accepted.push(file)
+    else problem ??= fileProblem
+  }
+  return { accepted, problem }
+}
