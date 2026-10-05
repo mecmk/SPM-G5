@@ -37,6 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.events import service
 from app.events.models import EventStatus
 from tests.support.factories import (
     create_submittable_event_request,
@@ -244,6 +245,23 @@ def test_the_2_1_rules_apply_to_a_correction(coordinator_client, changes, expect
     assert response.status_code == 422
     assert expected in response.text.lower()
     assert _read(coordinator_client, Events.SUBMITTED)["updated_at"] == event["updated_at"]
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_name_another_of_the_organisers_requests_has_is_refused_naming_the_organiser(
+    login_as, db: Session
+):
+    """2.1 AC20 applies to a correction too, worded for the coordinator: it is the organiser, not
+    the coordinator, who already has a request with that name and those dates."""
+    period = _period()
+    event = _submitted_with_equipment(login_as, db, period)
+    create_submittable_event_request(login_as(Users.ORGANISER), name="Taken name", **_dates(period))
+
+    response = _correct(login_as(Users.COORDINATOR), event, name="Taken name")
+
+    assert response.status_code == 422
+    assert "the organiser already has a request" in response.text.lower()
+    assert _read(login_as(Users.COORDINATOR), event["id"])["name"] == event["name"]
 
 
 @pytest.mark.story("7.2", ac=4)
@@ -657,6 +675,60 @@ def test_moving_into_a_period_without_enough_stock_is_refused_and_changes_nothin
     assert (after["name"], after["starts_at"]) == (event["name"], event["starts_at"])
     assert _held(db, event["id"]) == {("LAPTOP", 2, old[0], old[1])}
     assert len(_holds(db, event["id"])) == 1
+
+
+@pytest.mark.story("7.2", ac=7)
+def test_stock_taken_between_the_check_and_the_hold_is_refused_as_unavailable(
+    login_as, db: Session, monkeypatch
+):
+    """The 2.1 check passes, then the last units go before the types are locked: the save is
+    refused as unavailable equipment (422), not as an event that changed (409), and nothing
+    changes."""
+    old, new = _period(40), _period(60)
+    event = _submitted_with_equipment(login_as, db, old, _equipment("LAPTOP", 2))
+    make_equipment_hold(db, type_code="LAPTOP", quantity=5, starts_at=new[0], ends_at=new[1])
+    db.commit()
+    monkeypatch.setattr(service, "_check_equipment_available", lambda *args, **kwargs: None)
+
+    response = _correct(login_as(Users.COORDINATOR), event, **_dates(new))
+
+    assert response.status_code == 422
+    assert "presentation laptop" in response.text.lower()
+    assert _held(db, event["id"]) == {("LAPTOP", 2, old[0], old[1])}
+
+
+@pytest.mark.story("7.2", ac=7)
+def test_resending_unchanged_dates_and_equipment_is_not_rechecked_against_the_stock(
+    login_as, db: Session
+):
+    """The form sends every field. Another event has since taken stock the period no longer has,
+    but this event already holds its own, so a correction to anything else still saves."""
+    period = _period()
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 4))
+    make_equipment_hold(db, type_code="LAPTOP", quantity=3, starts_at=period[0], ends_at=period[1])
+    db.commit()
+    before = _holds(db, event["id"])
+    resent_equipment = [
+        {
+            "id": line["id"],
+            "equipment_type_code": line["equipment_type_code"],
+            "quantity": line["quantity"],
+        }
+        for line in event["equipment"]
+    ]
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        starts_at=event["starts_at"],
+        ends_at=event["ends_at"],
+        equipment=resent_equipment,
+        contact_email="events@acme.example",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["contact_email"] == "events@acme.example"
+    assert _holds(db, event["id"]) == before
 
 
 @pytest.mark.story("7.2", ac=7)
