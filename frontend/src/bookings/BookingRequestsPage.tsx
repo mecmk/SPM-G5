@@ -81,11 +81,16 @@ function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueu
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  */
 export function BookingRequestsPage() {
-  const [tab, setTab] = useState<BookingStatusTabKey>('PENDING')
-  const [page, setPage] = useState(1)
-  const loadPage = useCallback(() => loadQueuePage(tab, page), [tab, page])
+  // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
+  // even when the tab and page stay the same - which is how a decision refetches the page. The
+  // `cancelled` flag in `useLoaded` then drops an older load's answer if the tab changes first.
+  const [view, setView] = useState<{ tab: BookingStatusTabKey; page: number }>({
+    tab: 'PENDING',
+    page: 1,
+  })
+  const { tab, page } = view
+  const loadPage = useCallback(() => loadQueuePage(view.tab, view.page), [view])
   const { data: queue, error, isLoading, setData: setQueue } = useLoaded(loadPage)
-  const [reloadError, setReloadError] = useState<string | null>(null)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -107,20 +112,17 @@ export function BookingRequestsPage() {
   const firstShown = (page - 1) * QUEUE_PAGE_SIZE + 1
 
   function changeTab(next: BookingStatusTabKey) {
-    setReloadError(null)
-    setTab(next)
-    setPage(1)
+    setView({ tab: next, page: 1 })
   }
 
   function changePage(next: number) {
-    setReloadError(null)
-    setPage(next)
+    setView({ tab, page: next })
   }
 
   /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
    * belongs, so the page is fetched again and the next request moves up - or, if it was the
    * only one on the last page, the page before is shown instead. */
-  async function recordDecision(decided: Booking) {
+  function recordDecision(decided: Booking) {
     if (tab === 'ALL') {
       setQueue((current) => current && withDecisionInPlace(current, decided))
       return
@@ -129,13 +131,9 @@ export function BookingRequestsPage() {
       (current) =>
         current && { ...current, items: current.items.filter((entry) => entry.id !== decided.id) },
     )
-    try {
-      const reloaded = await loadQueuePage(tab, page)
-      if (reloaded.items.length === 0 && page > 1) setPage(page - 1)
-      else setQueue(reloaded)
-    } catch (err) {
-      setReloadError(formatApiError(err))
-    }
+    const remaining = (queue?.total ?? 0) - 1
+    const isPageNowEmpty = page > 1 && (page - 1) * QUEUE_PAGE_SIZE >= remaining
+    setView({ tab, page: isPageNowEmpty ? page - 1 : page })
   }
 
   function askToApprove(entry: BookingQueueEntry) {
@@ -155,7 +153,7 @@ export function BookingRequestsPage() {
     try {
       const decided = await approveBooking(id, eventName)
       setPendingApprove(null)
-      await recordDecision(decided)
+      recordDecision(decided)
     } catch (err) {
       setApproveError(formatApiError(err))
     } finally {
@@ -186,7 +184,7 @@ export function BookingRequestsPage() {
     try {
       const decided = await rejectBooking(id, eventName, reason)
       setPendingReject(null)
-      await recordDecision(decided)
+      recordDecision(decided)
     } catch (err) {
       setRejectError(formatApiError(err))
     } finally {
@@ -314,11 +312,6 @@ export function BookingRequestsPage() {
             </ul>
           )}
 
-          {reloadError && (
-            <p role="alert" className="error">
-              {reloadError}
-            </p>
-          )}
           {pageCount > 1 && (
             <div className="pager-bar">
               <p className="small muted">
