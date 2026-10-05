@@ -2,9 +2,8 @@
 review.
 
 AC4 While an event is Under Review, the assigned coordinator can edit the organiser-provided event
-    details using the same checks as creating a request (2.1), except the event cover picture,
-    which remains read-only after submission. Each saved change is recorded for the change
-    history (7.4).
+    details, including the cover picture, using the same checks as creating a request (2.1).
+    Each saved change is recorded for the change history (7.4).
 AC5 Once the event is approved, organiser-provided details become read-only; internal notes stay
     editable.
 AC6 The lock begins at approval: a correction saved before approval applies, one that arrives
@@ -23,17 +22,21 @@ Excluded, with reason:
   until story 4.3 exists. The stale check is exercised here with a token that no longer matches;
   the real two-transaction case is covered end to end in tests/e2e.
 * Change history UI (AC4) - story 7.4. These tests check the audit row it will read.
+* The cover picture is sent as a file, so it has its own endpoint beside the JSON correction,
+  under the same rules (assigned coordinator, under review, the stale-copy token).
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.events.models import EventStatus
 from tests.support.factories import (
     create_submittable_event_request,
@@ -43,6 +46,10 @@ from tests.support.factories import (
 from tests.support.seed import Events, Users
 
 ROUTE = "/events/{event_id}/review-details"
+PICTURE_ROUTE = "/events/{event_id}/review-details/cover-image"
+# Enough of a PNG for the 2.1 type check, which reads the signature only.
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+SEEDED_PICTURE = "/images/events/cat.jpg"
 LAPTOP_STOCK = 6
 
 
@@ -56,6 +63,28 @@ def _correct(client, event: dict, **changes):
     """PATCH the details of ``event`` (a GET body), sending the token it was read with."""
     body = {"expected_updated_at": event["updated_at"], **changes}
     return client.patch(ROUTE.format(event_id=event["id"]), json=body)
+
+
+@pytest.fixture
+def upload_dir(tmp_path: Path, monkeypatch) -> Path:
+    """Uploaded pictures go to a temporary folder, never backend/uploads."""
+    monkeypatch.setattr(settings, "upload_dir", tmp_path)
+    return tmp_path
+
+
+def _upload_picture(client, event: dict, content: bytes = _PNG, *, token: str | None = None):
+    return client.put(
+        PICTURE_ROUTE.format(event_id=event["id"]),
+        params={"expected_updated_at": token or event["updated_at"]},
+        files={"file": ("cover.png", content, "image/png")},
+    )
+
+
+def _remove_picture(client, event: dict):
+    return client.delete(
+        PICTURE_ROUTE.format(event_id=event["id"]),
+        params={"expected_updated_at": event["updated_at"]},
+    )
 
 
 def _period(days: int = 40) -> tuple[datetime, datetime]:
@@ -342,6 +371,96 @@ def test_the_coordinator_can_load_the_request_forms_pick_lists(coordinator_clien
 
     assert response.status_code == 200
     assert response.json()["equipment_types"]
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_the_assigned_coordinator_replaces_the_cover_picture_under_review(
+    coordinator_client, db: Session, upload_dir
+):
+    event = _read(coordinator_client, Events.SUBMITTED)
+    assert event["cover_image_url"] == SEEDED_PICTURE
+
+    response = _upload_picture(coordinator_client, event)
+
+    assert response.status_code == 200, response.text
+    url = response.json()["cover_image_url"]
+    assert url.startswith("/uploads/events/")
+    assert (upload_dir / "events" / url.removeprefix("/uploads/events/")).read_bytes() == _PNG
+    assert response.json()["status"] == "UNDER_REVIEW"
+    details = db.execute(
+        text(
+            "SELECT details FROM audit_log"
+            " WHERE action = 'EVENT_DETAILS_CORRECTED' AND entity_id = :id"
+        ),
+        {"id": Events.SUBMITTED},
+    ).scalar_one()
+    assert details == {"cover_image_url": {"from": SEEDED_PICTURE, "to": url}}
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_the_assigned_coordinator_removes_the_cover_picture_under_review(
+    coordinator_client, upload_dir
+):
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    response = _remove_picture(coordinator_client, event)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["cover_image_url"] is None
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_cover_picture_the_2_1_rules_refuse_is_refused_and_changes_nothing(
+    coordinator_client, upload_dir
+):
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    response = _upload_picture(coordinator_client, event, b"GIF89a not a picture we take")
+
+    assert response.status_code == 422
+    after = _read(coordinator_client, Events.SUBMITTED)
+    assert after["cover_image_url"] == SEEDED_PICTURE
+    assert after["updated_at"] == event["updated_at"]
+    assert list(upload_dir.rglob("*.*")) == []
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_the_organiser_cannot_use_the_coordinators_picture_upload(login_as, upload_dir):
+    event = _read(login_as(Users.COORDINATOR), Events.SUBMITTED)
+
+    response = _upload_picture(login_as(Users.ORGANISER), event)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("7.2", ac=8)
+def test_a_coordinator_not_assigned_to_the_event_cannot_change_its_picture(login_as, upload_dir):
+    client = login_as(Users.COORDINATOR_2)
+    event = _read(client, Events.SUBMITTED)
+
+    assert _upload_picture(client, event).status_code == 403
+    assert _remove_picture(client, event).status_code == 403
+    assert _read(client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
+
+
+@pytest.mark.story("7.2", ac=5)
+def test_the_cover_picture_is_locked_once_the_event_is_approved(coordinator_client, upload_dir):
+    event = _read(coordinator_client, Events.PLANNING)
+
+    assert _upload_picture(coordinator_client, event).status_code == 409
+    assert _remove_picture(coordinator_client, event).status_code == 409
+
+
+@pytest.mark.story("7.2", ac=9)
+def test_a_picture_saved_against_a_stale_copy_is_refused(coordinator_client, upload_dir):
+    event = _read(coordinator_client, Events.SUBMITTED)
+    stale_at = datetime.fromisoformat(event["updated_at"]) - timedelta(seconds=1)
+
+    response = _upload_picture(coordinator_client, event, token=stale_at.isoformat())
+
+    assert response.status_code == 409
+    assert "reload" in response.json()["detail"].lower()
+    assert _read(coordinator_client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
 
 
 # --- AC5: details lock at approval; internal notes do not -------------------------------------
