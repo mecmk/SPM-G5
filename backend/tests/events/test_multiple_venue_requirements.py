@@ -957,6 +957,31 @@ def test_two_requirements_cannot_share_a_name(organiser_client, second_name):
 
 
 @pytest.mark.story("2.7", ac=9)
+@pytest.mark.parametrize("via", ["create", "edit"])
+def test_a_duplicate_name_caught_only_by_the_database_is_refused_without_the_event_name(
+    organiser_client, monkeypatch, via
+):
+    """Review of PR #84: the unique index is AC9's backstop, reached only if the service's own
+    check is bypassed. Its refusal must not name the event as if it were the requirement."""
+    monkeypatch.setattr(service, "_check_venue_requirement_rules", lambda *args, **kwargs: None)
+    event_name = f"Annual Gala {uuid.uuid4().hex[:8]}"
+    twins = [_requirement("Plenary hall"), _requirement("plenary HALL", 20)]
+    if via == "create":
+        response = _post(organiser_client, twins, name=event_name)
+    else:
+        created = _create(
+            organiser_client,
+            [_requirement("Plenary hall"), _requirement("Breakout", 20)],
+            name=event_name,
+        )
+        response = _patch(organiser_client, created["id"], venue_requirements=twins)
+
+    assert response.status_code == 422
+    assert "cannot share a name" in response.text.lower()
+    assert event_name.lower() not in response.text.lower()
+
+
+@pytest.mark.story("2.7", ac=9)
 def test_the_database_refuses_two_requirements_with_one_name(db: Session):
     """The unique index behind AC9, bypassing the service: the last line of defence."""
     event = make_event(db, status="DRAFT")

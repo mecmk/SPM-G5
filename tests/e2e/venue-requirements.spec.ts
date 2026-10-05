@@ -348,3 +348,26 @@ test("2.7 AC2/AC6: a new requirement's times and number follow the event's until
   // The second requirement's times were never touched, so they moved with the event.
   await expect(requirement(page, 2).getByLabel('Needed from')).toHaveValue(inFuture(30, 8))
 })
+
+test("2.7 AC3: each requirement's Remove button and facility quantities say which requirement they belong to", async ({
+  page,
+}) => {
+  // Review of PR #84: every card repeats the same controls, so a screen reader must hear which
+  // requirement each one acts on, not just "Remove".
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Labelled controls'))
+  await addRequirement(page, 1, 'Plenary hall', '60')
+  const breakout = await addRequirement(page, 2, 'Breakout', '20')
+  await breakout.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
+
+  await expect(
+    page.getByLabel('Breakout rooms quantity, venue requirement 2', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Remove venue requirement 1', exact: true }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: 'Remove venue requirement 2', exact: true }).click()
+  await expect(requirement(page, 2)).toHaveCount(0)
+  await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Plenary hall')
+})
