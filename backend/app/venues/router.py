@@ -2,15 +2,18 @@
 
 Story 8.3 (create / update, Venue Staff only) plus the read endpoints stories 8.1 / 8.2 need,
 8.1's search (Sprint 2), and the calendar endpoint story 9.1 needs. Delete was added for Venue
-Staff by the team decision of 17 Sep 2026 (full CRUD on venues).
+Staff by the team decision of 17 Sep 2026 (full CRUD on venues). Story 8.3 AC5-AC10 (bug
+f8.3.2): a venue's pictures, added and removed by Venue Staff and served from /uploads/venues/.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
@@ -31,6 +34,9 @@ from app.venues.schemas import (
 )
 
 router = APIRouter(prefix="/venues", tags=["venues"])
+# Story 8.3 AC6: uploaded venue pictures are served from here. Public, like an event's cover
+# picture: a picture is only ever reached by its generated name.
+uploads_router = APIRouter(prefix="/uploads/venues", tags=["uploads"])
 
 CanRead = Depends(require_permission(Permission.VENUES_READ))
 CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
@@ -38,6 +44,14 @@ CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
 DbSession = Annotated[Session, Depends(get_db)]
 
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
+PICTURE_NOT_FOUND_MESSAGE = "Picture not found."
+EMPTY_PICTURE_MESSAGE = "Choose a picture to upload."
+# A name the server generated: a UUID and one of the accepted extensions, nothing else.
+_STORED_PICTURE_NAME = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp)$"
+)
+# The name never changes what it points at, so a browser may keep a picture indefinitely.
+_PICTURE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 @router.get("/reference-data", response_model=VenueReferenceData, dependencies=[CanRead])
@@ -154,3 +168,62 @@ def delete_venue(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.VenueInUse as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+
+
+@router.post("/{venue_id}/images", response_model=VenueOut, status_code=status.HTTP_201_CREATED)
+def add_venue_image(
+    venue_id: uuid.UUID,
+    file: UploadFile,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> VenueOut:
+    """Story 8.3 AC5/AC7/AC9: Venue Staff add a picture to a venue, after its others."""
+    # The upload has already been received and spooled by the time this runs, so this bounds what
+    # is read into memory, not what is transferred. One byte past the limit is enough to know the
+    # file is too large.
+    content = file.file.read(service.MAX_VENUE_IMAGE_BYTES + 1)
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, EMPTY_PICTURE_MESSAGE)
+    try:
+        venue = service.add_venue_image(db, venue_id, content, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.VenueImageTooLarge as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from None
+    except service.UnsupportedVenueImage as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.TooManyVenueImages as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return VenueOut.from_venue(venue)
+
+
+@router.delete("/{venue_id}/images/{image_id}", response_model=VenueOut)
+def remove_venue_image(
+    venue_id: uuid.UUID,
+    image_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> VenueOut:
+    """Story 8.3 AC5/AC8/AC9: Venue Staff take a picture off a venue; the rest keep their order."""
+    try:
+        venue = service.remove_venue_image(db, venue_id, image_id, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.VenueImageNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE) from None
+    return VenueOut.from_venue(venue)
+
+
+@uploads_router.get("/{filename}")
+def get_venue_image(filename: str) -> FileResponse:
+    """Story 8.3 AC6: the stored venue picture called ``filename``."""
+    if _STORED_PICTURE_NAME.match(filename) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE)
+    path = service.venue_image_path(filename)
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE)
+    return FileResponse(
+        path,
+        media_type=service.VENUE_IMAGE_MEDIA_TYPES[path.suffix],
+        headers={"Cache-Control": _PICTURE_CACHE_CONTROL},
+    )

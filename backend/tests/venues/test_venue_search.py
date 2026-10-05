@@ -79,6 +79,7 @@ def test_no_filters_lists_every_venue_in_service(coordinator_client):
         "location": "Tower A, Level 1",
         "capacity": 400,
         "status": "ACTIVE",
+        "cover_image_url": None,
         "operating_hours_start": "08:00:00",
         "operating_hours_end": "22:00:00",
     }

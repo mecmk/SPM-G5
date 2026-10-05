@@ -9,6 +9,7 @@ from app.coordination.router import router as coordination_router
 from app.events.router import router as events_router
 from app.events.router import uploads_router
 from app.venues.router import router as venues_router
+from app.venues.router import uploads_router as venue_uploads_router
 
 app = FastAPI(title="ConnectSphere API")
 
@@ -29,6 +30,7 @@ app.include_router(coordination_router)
 app.include_router(events_router)
 app.include_router(uploads_router)
 app.include_router(venues_router)
+app.include_router(venue_uploads_router)
 
 
 @app.get("/health")

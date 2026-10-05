@@ -47,7 +47,7 @@ setting to its upper-case name.
 | `LOGIN_MAX_FAILURES` | `5` | Failed sign-ins for one e-mail, within the window below, that lock sign-in for it (story 1.1 AC6) |
 | `LOGIN_FAILURE_WINDOW_MINUTES` | `15` | How long failures keep counting towards a lock, from the first one |
 | `LOGIN_LOCK_MINUTES` | `15` | How long a locked e-mail is refused. Attempts made while locked do not extend it |
-| `UPLOAD_DIR` | `backend/uploads` | Where event cover pictures are written (story 2.1 AC14) and served from `/uploads/events/`. Git-ignored; tests and the e2e runner use a temporary folder |
+| `UPLOAD_DIR` | `backend/uploads` | Where event cover pictures (story 2.1 AC14) and venue pictures (story 8.3 AC5) are written, served from `/uploads/events/` and `/uploads/venues/`. Git-ignored; tests and the e2e runner use a temporary folder |
 
 ## Domain
 

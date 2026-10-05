@@ -1,5 +1,6 @@
 """Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2),
-its search (story 8.1, Sprint 2) and its availability calendar (story 9.1).
+a venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2) and its availability
+calendar (story 9.1).
 
 Routers translate the exceptions raised here into HTTP statuses; keeping the rules in plain
 functions makes them easy to unit-test and to reuse from other features (e.g. booking
@@ -8,10 +9,12 @@ suitability checks in stories 11.x).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime, time, timedelta, timezone
 from itertools import chain
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import ColumnElement, and_, func, or_, select
@@ -21,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
+from app.config import settings
 from app.events.models import Event
 from app.venues.models import (
     AccessibilityFeature,
@@ -30,6 +34,7 @@ from app.venues.models import (
     Venue,
     VenueAccessibilityFeature,
     VenueFacility,
+    VenueImage,
     VenueLayout,
     VenueStatus,
     VenueUnavailabilityPeriod,
@@ -45,6 +50,8 @@ from app.venues.schemas import (
     VenueUnavailableWindowOut,
     VenueUpdate,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class VenueNotFound(LookupError):
@@ -606,10 +613,12 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
     """Remove a venue nothing refers to (team decision, 17 Sep 2026: Venue Staff have full CRUD).
 
     Facilities, layouts, accessibility features and unavailability periods go with it. A venue
-    with booking rows is refused by the database's foreign key, translated to VenueInUse.
+    with booking rows is refused by the database's foreign key, translated to VenueInUse. Story
+    8.3 AC8: its pictures go too, rows and files, the files once the deletion is saved.
     """
     venue = get_venue(db, venue_id)
     name = venue.name
+    image_urls = [image.url for image in venue.images]
     db.delete(venue)
     try:
         db.flush()
@@ -628,6 +637,168 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
         commit=False,
     )
     db.commit()
+    _delete_venue_image_files(image_urls)
+
+
+# --- pictures (story 8.3 AC5-AC10, bug f8.3.2) --------------------------------------------
+# The same rules as an event's cover picture (story 2.1 AC14, app/events/service.py), kept as
+# their own copy. Keep in step with MAX_VENUE_IMAGE_BYTES, MAX_VENUE_IMAGES and
+# VENUE_IMAGE_TYPES in frontend/src/venues/venueForm.ts, which check them before sending.
+VENUE_IMAGE_TOO_LARGE_MESSAGE = "The picture must be 5 MB or smaller."
+VENUE_IMAGE_UNSUPPORTED_MESSAGE = "Choose a JPEG, PNG or WebP picture."
+TOO_MANY_VENUE_IMAGES_MESSAGE = "A venue can have at most 10 pictures."
+# AC7: the most one picture may weigh, and the most pictures one venue may hold.
+MAX_VENUE_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_VENUE_IMAGES = 10
+# Where uploads are served from: ``/uploads/venues/<file>``, under ``settings.upload_dir``.
+VENUE_IMAGE_URL_PREFIX = "/uploads/venues/"
+_VENUE_IMAGE_FOLDER = "venues"
+# What each accepted format starts with, and the extension and content type it is stored as.
+# The bytes decide the type: a file's name and declared type are the client's word only.
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_JPEG_SIGNATURE = b"\xff\xd8\xff"
+VENUE_IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
+
+
+class VenueImageNotFound(LookupError):
+    """AC8: the venue has no picture with that id - never had, or it has been removed."""
+
+
+class VenueImageTooLarge(ValueError):
+    def __init__(self) -> None:
+        super().__init__(VENUE_IMAGE_TOO_LARGE_MESSAGE)
+
+
+class UnsupportedVenueImage(ValueError):
+    def __init__(self) -> None:
+        super().__init__(VENUE_IMAGE_UNSUPPORTED_MESSAGE)
+
+
+class TooManyVenueImages(ValueError):
+    def __init__(self) -> None:
+        super().__init__(TOO_MANY_VENUE_IMAGES_MESSAGE)
+
+
+def venue_image_path(filename: str) -> Path:
+    """Where the stored picture called ``filename`` lives. The caller has already checked the
+    name is one the server generated, so it cannot climb out of the folder."""
+    return settings.upload_dir / _VENUE_IMAGE_FOLDER / filename
+
+
+def _venue_image_extension(content: bytes) -> str | None:
+    if content.startswith(_PNG_SIGNATURE):
+        return ".png"
+    if content.startswith(_JPEG_SIGNATURE):
+        return ".jpg"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def _delete_venue_image_files(urls: Iterable[str]) -> None:
+    """Remove the files behind ``urls``. An absent file is not an error, and neither is one that
+    cannot be removed (locked on Windows, say): this runs after the change was committed, so
+    failing here would report a change that worked as a failure. It is logged, and the file is
+    left behind."""
+    for url in urls:
+        path = venue_image_path(url.removeprefix(VENUE_IMAGE_URL_PREFIX))
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            _log.warning("Could not delete the venue picture %s", path, exc_info=True)
+
+
+def _lock_venue(db: Session, venue_id: uuid.UUID) -> Venue:
+    """The venue, re-read with its row locked until the transaction ends (AC10): changes to one
+    venue's pictures then happen one at a time, so each sees the pictures the last one left."""
+    venue = db.scalar(
+        select(Venue)
+        .where(Venue.id == venue_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if venue is None:
+        raise VenueNotFound(venue_id)
+    return venue
+
+
+def add_venue_image(db: Session, venue_id: uuid.UUID, content: bytes, *, actor: User) -> Venue:
+    """AC5/AC7: add a picture after the venue's others, at most ``MAX_VENUE_IMAGES`` of them.
+
+    AC10: the venue's row is locked before its pictures are counted, so pictures added at the
+    same moment each take their own position and together never pass the limit. The file is
+    written before its row and deleted again if the row is not saved, so no failure leaves a file
+    behind."""
+    venue = _lock_venue(db, venue_id)
+    if len(content) > MAX_VENUE_IMAGE_BYTES:
+        raise VenueImageTooLarge()
+    extension = _venue_image_extension(content)
+    if extension is None:
+        raise UnsupportedVenueImage()
+    count, last_position = db.execute(
+        select(func.count(), func.coalesce(func.max(VenueImage.position), 0)).where(
+            VenueImage.venue_id == venue.id
+        )
+    ).one()
+    if count >= MAX_VENUE_IMAGES:
+        raise TooManyVenueImages()
+
+    filename = f"{uuid.uuid4()}{extension}"
+    path = venue_image_path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    is_saved = False
+    try:
+        image = VenueImage(
+            url=f"{VENUE_IMAGE_URL_PREFIX}{filename}",
+            position=last_position + 1,
+            created_by_id=actor.id,
+        )
+        venue.images.append(image)
+        db.flush()
+        record_audit(
+            db,
+            actor=actor,
+            action="VENUE_IMAGE_ADDED",
+            entity_type="venue",
+            entity_id=venue.id,
+            details={"image_id": str(image.id), "url": image.url},
+            commit=False,
+        )
+        db.commit()
+        is_saved = True
+    finally:
+        if not is_saved:
+            path.unlink(missing_ok=True)
+    db.refresh(venue)
+    return venue
+
+
+def remove_venue_image(
+    db: Session, venue_id: uuid.UUID, image_id: uuid.UUID, *, actor: User
+) -> Venue:
+    """AC5/AC8: take one picture off a venue and delete its file once that is saved. The others
+    keep their places, so the next one becomes the cover when the first goes (AC6). The venue's
+    row is locked as when adding (AC10), so a picture removed twice at once is removed once."""
+    venue = _lock_venue(db, venue_id)
+    image = next((image for image in venue.images if image.id == image_id), None)
+    if image is None:
+        raise VenueImageNotFound(image_id)
+    url = image.url
+    venue.images.remove(image)
+    record_audit(
+        db,
+        actor=actor,
+        action="VENUE_IMAGE_REMOVED",
+        entity_type="venue",
+        entity_id=venue.id,
+        details={"image_id": str(image_id), "url": url},
+        commit=False,
+    )
+    db.commit()
+    _delete_venue_image_files([url])
+    db.refresh(venue)
+    return venue
 
 
 # --- helpers -----------------------------------------------------------------------------

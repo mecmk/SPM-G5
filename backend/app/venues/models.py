@@ -1,5 +1,5 @@
-"""ORM models for the venue catalogue (stories 8.x) and its calendar (story 9.1). Mirrors
-backend/db/migrations."""
+"""ORM models for the venue catalogue (stories 8.x, including a venue's pictures, 8.3 AC5-AC10)
+and its calendar (story 9.1). Mirrors backend/db/migrations."""
 
 from __future__ import annotations
 
@@ -78,6 +78,34 @@ class Venue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         lazy="selectin",
         order_by="VenueAccessibilityFeature.feature_code",
+    )
+    images: Mapped[list[VenueImage]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="VenueImage.position"
+    )
+
+    @property
+    def cover_image_url(self) -> str | None:
+        """Story 8.3 AC6: the first picture, shown on the catalogue card and the record's banner.
+        None when the venue has no pictures, which shows the placeholder."""
+        return self.images[0].url if self.images else None
+
+
+class VenueImage(UUIDPrimaryKeyMixin, Base):
+    """Story 8.3 AC5 (bug f8.3.2): one of a venue's pictures. ``url`` is where the API serves the
+    file from; the file itself lives under ``settings.upload_dir``."""
+
+    __tablename__ = "venue_images"
+
+    venue_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("venues.id", ondelete="CASCADE"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
 
