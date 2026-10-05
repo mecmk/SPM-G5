@@ -348,6 +348,64 @@ def correct_event_under_review(
     return EventDetailOut.from_event(event, viewer=actor)
 
 
+@router.put("/{event_id}/review-details/cover-image", response_model=EventDetailOut)
+def set_cover_image_under_review(
+    event_id: uuid.UUID,
+    file: UploadFile,
+    expected_updated_at: Annotated[AwareDatetime, Query()],
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanEditRoutine],
+) -> EventDetailOut:
+    """Story 7.2 AC4: the coordinator assigned to this event replaces its cover picture while it is
+    under review. The same refusals as the JSON correction (403/409), plus 2.1 AC14's file checks
+    (413/422)."""
+    # As set_cover_image: bounds what is read into memory; one byte past the limit is enough.
+    content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, EMPTY_PICTURE_MESSAGE)
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.set_cover_image_under_review(
+            db, event, content, actor=actor, expected_updated_at=expected_updated_at
+        )
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.CoverImageTooLarge as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from None
+    except service.UnsupportedCoverImage as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.delete("/{event_id}/review-details/cover-image", response_model=EventDetailOut)
+def remove_cover_image_under_review(
+    event_id: uuid.UUID,
+    expected_updated_at: Annotated[AwareDatetime, Query()],
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanEditRoutine],
+) -> EventDetailOut:
+    """Story 7.2 AC4: the coordinator assigned to this event takes its cover picture off while it
+    is under review. The same refusals as the JSON correction (403/409)."""
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.remove_cover_image_under_review(
+            db, event, actor=actor, expected_updated_at=expected_updated_at
+        )
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
 @router.post("/{event_id}/submit", response_model=EventDetailOut)
 def submit_event(
     event_id: uuid.UUID,

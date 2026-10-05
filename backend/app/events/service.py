@@ -1170,33 +1170,38 @@ def _delete_cover_image_file(url: str | None) -> None:
         _log.warning("Could not delete the replaced cover picture %s", path, exc_info=True)
 
 
-def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: User) -> Event:
-    """AC14: give ``actor``'s own draft a cover picture, replacing any it had. The file is written
-    first and the old one deleted only once the new address is stored, so a failure never leaves
-    the request pointing at a file that is gone."""
-    event = _get_own_event(db, event_id, actor)
-    if event.status != EventStatus.DRAFT:
-        raise EventNotEditable()
+def _cover_image_extension_or_refuse(content: bytes) -> str:
+    """AC14: the extension ``content`` is stored as, or the reason it is refused."""
     if len(content) > MAX_COVER_IMAGE_BYTES:
         raise CoverImageTooLarge()
     extension = _cover_image_extension(content)
     if extension is None:
         raise UnsupportedCoverImage()
+    return extension
 
+
+def _replace_cover_image(
+    db: Session, event: Event, content: bytes, extension: str, *, actor: User, action: str
+) -> None:
+    """Store ``content`` as ``event``'s cover picture and commit, recording the old and new
+    address (story 7.4). The file is written first and the old one deleted only once the new
+    address is stored, so a failure never leaves the request pointing at a file that is gone."""
     filename = f"{uuid.uuid4()}{extension}"
     path = cover_image_path(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     previous_url = event.cover_image_url
+    new_url = f"{COVER_IMAGE_URL_PREFIX}{filename}"
     try:
-        event.cover_image_url = f"{COVER_IMAGE_URL_PREFIX}{filename}"
+        event.cover_image_url = new_url
         event.updated_at = datetime.now(UTC)
         record_audit(
             db,
             actor=actor,
-            action="EVENT_COVER_IMAGE_SET",
+            action=action,
             entity_type="event",
             entity_id=event.id,
+            details={"cover_image_url": {"from": previous_url, "to": new_url}},
             commit=False,
         )
         db.commit()
@@ -1205,6 +1210,35 @@ def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: 
         raise
     _delete_cover_image_file(previous_url)
     db.refresh(event)
+
+
+def _clear_cover_image(db: Session, event: Event, *, actor: User, action: str) -> None:
+    """Take ``event``'s cover picture off and commit, recording the old address (story 7.4), then
+    delete its file."""
+    previous_url = event.cover_image_url
+    event.cover_image_url = None
+    event.updated_at = datetime.now(UTC)
+    record_audit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type="event",
+        entity_id=event.id,
+        details={"cover_image_url": {"from": previous_url, "to": None}},
+        commit=False,
+    )
+    db.commit()
+    _delete_cover_image_file(previous_url)
+    db.refresh(event)
+
+
+def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: User) -> Event:
+    """AC14: give ``actor``'s own draft a cover picture, replacing any it had."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+    extension = _cover_image_extension_or_refuse(content)
+    _replace_cover_image(db, event, content, extension, actor=actor, action="EVENT_COVER_IMAGE_SET")
     return event
 
 
@@ -1213,22 +1247,9 @@ def remove_cover_image(db: Session, event_id: uuid.UUID, *, actor: User) -> Even
     event = _get_own_event(db, event_id, actor)
     if event.status != EventStatus.DRAFT:
         raise EventNotEditable()
-    previous_url = event.cover_image_url
-    if previous_url is None:
+    if event.cover_image_url is None:
         return event
-    event.cover_image_url = None
-    event.updated_at = datetime.now(UTC)
-    record_audit(
-        db,
-        actor=actor,
-        action="EVENT_COVER_IMAGE_REMOVED",
-        entity_type="event",
-        entity_id=event.id,
-        commit=False,
-    )
-    db.commit()
-    _delete_cover_image_file(previous_url)
-    db.refresh(event)
+    _clear_cover_image(db, event, actor=actor, action="EVENT_COVER_IMAGE_REMOVED")
     return event
 
 
@@ -1700,3 +1721,35 @@ def correct_event_under_review(
     )
     db.commit()
     db.refresh(event)
+
+
+def set_cover_image_under_review(
+    db: Session, event: Event, content: bytes, *, actor: User, expected_updated_at: datetime
+) -> None:
+    """AC4: the coordinator assigned to ``event`` replaces its cover picture while it is under
+    review, under the same checks as the organiser's (2.1 AC14). Refused once approved or closed
+    (AC5/AC6) or when the copy being saved is stale (AC9), exactly as a JSON correction is; the
+    picture is checked before the row is taken, so a refused file changes nothing. Recorded as a
+    correction, with the old and new address, for story 7.4."""
+    _refuse_unless_correctable(event)
+    _assert_assigned_coordinator(event, actor, verb="edit")
+    extension = _cover_image_extension_or_refuse(content)
+    _claim_for_correction(db, event, expected_updated_at=expected_updated_at)
+    _replace_cover_image(
+        db, event, content, extension, actor=actor, action="EVENT_DETAILS_CORRECTED"
+    )
+
+
+def remove_cover_image_under_review(
+    db: Session, event: Event, *, actor: User, expected_updated_at: datetime
+) -> None:
+    """AC4: the coordinator assigned to ``event`` takes its cover picture off while it is under
+    review, under the same rules as ``set_cover_image_under_review``. Nothing to take off is a
+    no-op: no write, no audit entry."""
+    _refuse_unless_correctable(event)
+    _assert_assigned_coordinator(event, actor, verb="edit")
+    _claim_for_correction(db, event, expected_updated_at=expected_updated_at)
+    if event.cover_image_url is None:
+        db.rollback()  # gives back the claim, which only stamped updated_at
+        return
+    _clear_cover_image(db, event, actor=actor, action="EVENT_DETAILS_CORRECTED")
