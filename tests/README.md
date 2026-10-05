@@ -40,7 +40,8 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/decision-history.spec.ts` | 4.6 AC1, AC2 | the decision and the clarification thread |
 | `e2e/coordinator-reassignment.spec.ts` | 5.2 AC3 | handing an event to another coordinator |
 | `e2e/events.spec.ts` | 2.1 AC8, AC19; 7.1 AC1, AC2 | the event details page |
-| `e2e/event-routine-edit.spec.ts` | 7.2 AC1–AC3 | editing an event's routine information |
+| `e2e/event-routine-edit.spec.ts` | 7.2 AC1–AC3 | editing an event's internal notes through Edit event |
+| `e2e/event-correction.spec.ts` | 7.2 AC4–AC9 | the assigned coordinator correcting a request under review: the save, a required field that cannot be emptied, the read-only cover picture, equipment marked unavailable for new dates, a stale save and an approval landing mid-edit, details greyed out after approval with notes still saving, and who is offered the edit |
 | `e2e/venue-catalogue.spec.ts` | 8.1 AC1–AC6, AC8, AC9, AC11 | browsing and filtering the venue catalogue |
 | `e2e/venue-detail.spec.ts` | 8.2 AC1–AC3 | a venue's record |
 | `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC4 | creating, editing and deleting venues |
