@@ -273,3 +273,78 @@ test('2.7 AC11: a save the server refuses marks the requirement field it names',
   )
   await expect(page.getByRole('alert')).toHaveText(refusal)
 })
+
+test('2.7 AC5/AC9/AC10: a venue requirement problem is said next to its field as soon as it is typed', async ({
+  page,
+}) => {
+  const endsAfter = 'A venue requirement cannot end after the event ends.'
+  const duplicate = 'Two venue requirements cannot have the same name.'
+  const startsBefore = 'A venue requirement cannot start before the event starts.'
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Live problems'))
+  await addRequirement(page, 1, 'Plenary hall', '60')
+  const breakout = await addRequirement(page, 2, 'Breakout', '20')
+
+  // AC5: an end after the event's is said under that field, before any save.
+  await breakout.getByLabel('Needed until').fill(inFuture(30, 18))
+  await expect(breakout.getByText(endsAfter)).toBeVisible()
+  await expect(breakout.getByLabel('Needed until')).toHaveAttribute('aria-invalid', 'true')
+  await expect(requirement(page, 1).getByText(endsAfter)).toHaveCount(0)
+  await breakout.getByLabel('Needed until').fill(inFuture(30, 17))
+  await expect(breakout.getByText(endsAfter)).toHaveCount(0)
+
+  // AC9: a name another requirement already has, trimmed and in any case.
+  await breakout.getByLabel('Requirement name').fill(' plenary HALL ')
+  await expect(breakout.getByText(duplicate)).toBeVisible()
+  await expect(requirement(page, 1).getByText(duplicate)).toHaveCount(0)
+  await breakout.getByLabel('Requirement name').fill('Breakout')
+  await expect(breakout.getByText(duplicate)).toHaveCount(0)
+
+  // AC10: once saved, a requirement's times are the organiser's, so moving the event's start
+  // past them says so under the requirement at once.
+  await saveDraft(page)
+  await page.getByLabel('Proposed start').fill(inFuture(30, 10))
+  await expect(requirement(page, 1).getByText(startsBefore)).toBeVisible()
+  await expect(requirement(page, 1).getByLabel('Needed from')).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+  await requirement(page, 1).getByLabel('Needed from').fill(inFuture(30, 10))
+  await expect(requirement(page, 1).getByText(startsBefore)).toHaveCount(0)
+})
+
+test("2.7 AC2/AC6: a new requirement's times and number follow the event's until they are changed", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto('/events/new')
+  await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
+  await page.getByLabel('Event name').fill(uniqueName('Follow defaults'))
+
+  // Added before the event's dates and attendance are known: the defaults arrive with them.
+  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  await page.getByLabel('Proposed start').fill(inFuture(30, 9))
+  await page.getByLabel('Proposed end').fill(inFuture(30, 17))
+  await page.getByLabel('Expected attendance').fill('60')
+  const first = requirement(page, 1)
+  await expect(first.getByLabel('Needed from')).toHaveValue(inFuture(30, 9))
+  await expect(first.getByLabel('Needed until')).toHaveValue(inFuture(30, 17))
+  await expect(first.getByLabel('Number of people')).toHaveValue('60')
+  // AC6: only the first requirement takes the attendance.
+  await expect(requirement(page, 2).getByLabel('Number of people')).toHaveValue('')
+
+  // Still untouched, so they keep following.
+  await page.getByLabel('Expected attendance').fill('75')
+  await expect(first.getByLabel('Number of people')).toHaveValue('75')
+
+  // Once the organiser changes a value, it is theirs and stays put.
+  await first.getByLabel('Number of people').fill('50')
+  await first.getByLabel('Needed from').fill(inFuture(30, 13))
+  await page.getByLabel('Expected attendance').fill('80')
+  await page.getByLabel('Proposed start').fill(inFuture(30, 8))
+  await expect(first.getByLabel('Number of people')).toHaveValue('50')
+  await expect(first.getByLabel('Needed from')).toHaveValue(inFuture(30, 13))
+  // The second requirement's times were never touched, so they moved with the event.
+  await expect(requirement(page, 2).getByLabel('Needed from')).toHaveValue(inFuture(30, 8))
+})
