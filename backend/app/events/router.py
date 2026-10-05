@@ -330,9 +330,10 @@ def correct_event_under_review(
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
     """Story 7.2 AC4-AC9: the coordinator assigned to this event corrects the organiser's request
-    while it is under review. 403 for anyone else (AC8); 409 once it is approved or closed (AC5,
-    AC6) or when the copy being saved is stale (AC9); 422 for anything the 2.1 checks refuse,
-    including equipment no longer available for the new dates (AC4, AC7)."""
+    while it is under review or awaiting clarification. 403 for anyone else (AC8); 409 once it is
+    approved or closed (AC5, AC6) or when the copy being saved is stale (AC9); 422 for anything
+    the 2.1 checks refuse, including equipment no longer available for the new dates (AC4,
+    AC7)."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:
@@ -357,8 +358,8 @@ def set_cover_image_under_review(
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
     """Story 7.2 AC4: the coordinator assigned to this event replaces its cover picture while it is
-    under review. The same refusals as the JSON correction (403/409), plus 2.1 AC14's file checks
-    (413/422)."""
+    under review or awaiting clarification. The same refusals as the JSON correction (403/409),
+    plus 2.1 AC14's file checks (413/422)."""
     # As set_cover_image: bounds what is read into memory; one byte past the limit is enough.
     content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
     if not content:
@@ -390,7 +391,8 @@ def remove_cover_image_under_review(
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
     """Story 7.2 AC4: the coordinator assigned to this event takes its cover picture off while it
-    is under review. The same refusals as the JSON correction (403/409)."""
+    is under review or awaiting clarification. The same refusals as the JSON correction
+    (403/409)."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:

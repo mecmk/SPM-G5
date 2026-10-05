@@ -133,7 +133,7 @@ function App() {
               {/*
                 Story 7.2: the assigned Event Coordinator edits an event in the 2.1 request form -
                 its internal notes until it is closed, the organiser's request too while it is
-                under review. Sits behind EVENTS_EDIT_ROUTINE (a role check, UX only); the page
+                under review or awaiting clarification. Sits behind EVENTS_EDIT_ROUTINE (a role check, UX only); the page
                 itself confirms the signed-in coordinator is the one assigned to this specific
                 event, and the backend is the real enforcement of both.
               */}

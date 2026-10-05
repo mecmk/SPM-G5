@@ -1,8 +1,8 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
 event review (story 4.1), requesting clarification from the organiser (story 4.2), the
 approve/reject decision (stories 4.4, 4.5), the decision / clarification history an organiser
-sees (story 4.6), routine information edits and corrections to a request under review (story
-7.2), and the coordinator's assigned events in any status (story 6.1).
+sees (story 4.6), routine information edits and corrections to a request awaiting a decision
+(story 7.2), and the coordinator's assigned events in any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
@@ -91,8 +92,9 @@ DETAILS_LOCKED_MESSAGE = (
     "This event has been approved, so its details can no longer be edited directly. Further "
     "changes must go through a change request."
 )
-DETAILS_NOT_UNDER_REVIEW_MESSAGE = (
-    "This event is {status}, so its details can only be edited while it is under review."
+DETAILS_NOT_CORRECTABLE_MESSAGE = (
+    "This event is {status}, so its details can only be edited while it is under review or "
+    "awaiting clarification."
 )
 STALE_EVENT_EDIT_MESSAGE = (
     "This event has changed since you opened it. Reload it and make your changes again."
@@ -126,13 +128,11 @@ _ROUTINE_FIELDS = ("internal_notes",)
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
 
-# Story 7.2 AC4: the organiser's details may be corrected directly only in this status.
-# CLARIFICATION_REQUESTED is deliberately not included: that round-trip belongs to 4.2/4.3.
-_DETAILS_CORRECTABLE_STATUS = EventStatus.UNDER_REVIEW
+# Story 7.2 AC4: the organiser's details may be corrected directly only in these statuses. An open
+# clarification does not stop the coordinator: the organiser may answer it by phone or e-mail.
+_DETAILS_CORRECTABLE_STATUSES = (EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED)
 # Story 7.2 AC5: approved and still running - further changes go through a change request (19.1).
 _DETAILS_LOCKED_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
-# Story 7.2 AC7: a correction to any of these places the event's equipment holds again.
-_HOLD_FIELDS = frozenset({"starts_at", "ends_at", "equipment"})
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -211,11 +211,12 @@ class EventDetailsLocked(EventStateConflict):
         super().__init__(DETAILS_LOCKED_MESSAGE)
 
 
-class EventNotUnderReview(EventStateConflict):
-    """7.2 AC4: details can be corrected only while the event is under review."""
+class EventDetailsNotCorrectable(EventStateConflict):
+    """7.2 AC4: details can be corrected only while the event is under review or awaiting
+    clarification."""
 
     def __init__(self, status: str):
-        super().__init__(DETAILS_NOT_UNDER_REVIEW_MESSAGE.format(status=status))
+        super().__init__(DETAILS_NOT_CORRECTABLE_MESSAGE.format(status=status))
 
 
 class StaleEventEdit(EventStateConflict):
@@ -856,24 +857,36 @@ def _resent_unchanged(value: datetime | None, stored: datetime | None) -> dateti
 
 @dataclass(frozen=True)
 class _RequestEdit:
-    """A request edit that has passed every 2.1 check: the columns to set, and the equipment types
-    its equipment lines name."""
+    """A request edit that has passed every 2.1 check: the columns to set, the equipment types its
+    equipment lines name, and whether it changes what the event's equipment holds cover (story
+    7.2 AC7)."""
 
     details: dict[str, Any]
     equipment_types: dict[str, EquipmentType]
+    is_hold_changed: bool
 
 
 def _is_hold_changed(
     event: Event,
     starts_at: datetime | None,
     ends_at: datetime | None,
-    lines: list[tuple[EquipmentType, int]],
+    items: list[EventEquipmentIn] | None,
+    types: dict[str, EquipmentType],
 ) -> bool:
-    """Story 7.2 AC7: whether an edit moves the dates or changes what equipment, and how much, the
-    event asks for - the only edits its existing holds can be short for."""
-    stored = sorted((line.equipment_type_id, line.quantity) for line in event.equipment_requests)
-    edited = sorted((equipment_type.id, quantity) for equipment_type, quantity in lines)
-    return starts_at != event.starts_at or ends_at != event.ends_at or edited != stored
+    """Story 7.2 AC7: whether an edit moves the dates or changes a line's type or quantity - the
+    only edits the event's existing holds can be short for. A hold belongs to one line, so lines
+    are compared by ``id`` too: a line removed and an identical one added still needs holding.
+    Technical notes are left out, since no hold depends on them. Counted rather than sorted,
+    because every new line's ``id`` is None."""
+    if starts_at != event.starts_at or ends_at != event.ends_at:
+        return True
+    if items is None:
+        return False
+    stored = Counter(
+        (line.id, line.equipment_type_id, line.quantity) for line in event.equipment_requests
+    )
+    edited = Counter((item.id, types[item.equipment_type_code].id, item.quantity) for item in items)
+    return edited != stored
 
 
 def _validate_request_edit(
@@ -960,15 +973,17 @@ def _validate_request_edit(
             data.equipment, owned_line_ids={line.id for line in event.equipment_requests}
         )
 
+    is_hold_changed = False
     if sent & {"equipment", "starts_at", "ends_at"}:
         lines = (
             [(types[e.equipment_type_code], e.quantity) for e in data.equipment]
             if data.equipment is not None
             else [(line.equipment_type, line.quantity) for line in event.equipment_requests]
         )
-        if recheck_resent_equipment or _is_hold_changed(event, starts_at, ends_at, lines):
+        is_hold_changed = _is_hold_changed(event, starts_at, ends_at, data.equipment, types)
+        if recheck_resent_equipment or is_hold_changed:
             _check_equipment_available(db, starts_at, ends_at, lines, exclude_event_id=event.id)
-    return _RequestEdit(details=details, equipment_types=types)
+    return _RequestEdit(details=details, equipment_types=types, is_hold_changed=is_hold_changed)
 
 
 def _apply_request_edit(
@@ -1592,19 +1607,20 @@ def update_routine_information(
     db.refresh(event)
 
 
-# --- correcting details under review (story 7.2 AC4-AC9) -------------------------------------
+# --- correcting details before a decision (story 7.2 AC4-AC9) --------------------------------
 
 
 def _refuse_unless_correctable(event: Event) -> None:
-    """AC4/AC5: only an event under review takes corrections; an approved one is locked."""
+    """AC4/AC5: only an event under review or awaiting clarification takes corrections; an
+    approved one is locked."""
     if event.status in _DETAILS_LOCKED_STATUSES:
         raise EventDetailsLocked()
-    if event.status != _DETAILS_CORRECTABLE_STATUS:
-        raise EventNotUnderReview(event.status)
+    if event.status not in _DETAILS_CORRECTABLE_STATUSES:
+        raise EventDetailsNotCorrectable(event.status)
 
 
 def _claim_for_correction(db: Session, event: Event, *, expected_updated_at: datetime) -> None:
-    """AC6/AC9: take the event row for this correction, provided it is still under review and
+    """AC6/AC9: take the event row for this correction, provided it is still correctable and
     still exactly the copy the coordinator read. The update is conditional, the same shape as
     ``_decide``'s guard: an approval or any other change that landed first makes it match no row,
     and the correction is refused. Once taken, the row stays locked until this transaction ends,
@@ -1613,7 +1629,7 @@ def _claim_for_correction(db: Session, event: Event, *, expected_updated_at: dat
         update(Event)
         .where(
             Event.id == event.id,
-            Event.status == _DETAILS_CORRECTABLE_STATUS,
+            Event.status.in_(_DETAILS_CORRECTABLE_STATUSES),
             Event.updated_at == expected_updated_at,
         )
         .values(updated_at=datetime.now(UTC))
@@ -1707,7 +1723,7 @@ def _apply_correction(
         _flush_request_edit(db, event)
     except DuplicateEventRequest as exc:
         raise DuplicateCorrectedRequest(exc.name) from exc
-    if changes.keys() & _HOLD_FIELDS:
+    if edit.is_hold_changed:
         try:
             _replace_equipment_holds(db, event, actor=actor)
         except EquipmentNoLongerAvailable as exc:
@@ -1721,7 +1737,8 @@ def correct_event_under_review(
     db: Session, event: Event, data: EventReviewCorrection, *, actor: User
 ) -> None:
     """AC4-AC9: the coordinator assigned to ``event`` corrects the organiser's request while it is
-    under review, without the organiser's approval and without changing its status.
+    under review or awaiting clarification, without the organiser's approval and without changing
+    its status.
 
     The status gate comes first, as with the internal-notes edit (AC3), so a locked or closed
     event refuses with 409 whoever asks; then only the assigned coordinator may go on (AC8).
@@ -1764,10 +1781,10 @@ def set_cover_image_under_review(
     db: Session, event: Event, content: bytes, *, actor: User, expected_updated_at: datetime
 ) -> None:
     """AC4: the coordinator assigned to ``event`` replaces its cover picture while it is under
-    review, under the same checks as the organiser's (2.1 AC14). Refused once approved or closed
-    (AC5/AC6) or when the copy being saved is stale (AC9), exactly as a JSON correction is; the
-    picture is checked before the row is taken, so a refused file changes nothing. Recorded as a
-    correction, with the old and new address, for story 7.4."""
+    review or awaiting clarification, under the same checks as the organiser's (2.1 AC14).
+    Refused once approved or closed (AC5/AC6) or when the copy being saved is stale (AC9), exactly
+    as a JSON correction is; the picture is checked before the row is taken, so a refused file
+    changes nothing. Recorded as a correction, with the old and new address, for story 7.4."""
     _refuse_unless_correctable(event)
     _assert_assigned_coordinator(event, actor, verb="edit")
     extension = _cover_image_extension_or_refuse(content)
@@ -1781,8 +1798,8 @@ def remove_cover_image_under_review(
     db: Session, event: Event, *, actor: User, expected_updated_at: datetime
 ) -> None:
     """AC4: the coordinator assigned to ``event`` takes its cover picture off while it is under
-    review, under the same rules as ``set_cover_image_under_review``. Nothing to take off is a
-    no-op: no write, no audit entry."""
+    review or awaiting clarification, under the same rules as ``set_cover_image_under_review``.
+    Nothing to take off is a no-op: no write, no audit entry."""
     _refuse_unless_correctable(event)
     _assert_assigned_coordinator(event, actor, verb="edit")
     _claim_for_correction(db, event, expected_updated_at=expected_updated_at)

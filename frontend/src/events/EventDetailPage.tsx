@@ -157,7 +157,7 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
  * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
  * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
- * always, the organiser's details only while under review (AC4). AC5: once approved, that
+ * always, the organiser's details only while under review or awaiting clarification (AC4). AC5: once approved, that
  * coordinator is also told here that further changes go through the change request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
@@ -432,7 +432,8 @@ export function EventDetailPage() {
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
   /** Story 7.2 AC1/AC3/AC8: the assigned coordinator edits the event until it is closed - its
-   *  internal notes always, the organiser's details only while it is under review. */
+   *  internal notes always, the organiser's details only while it is under review or awaiting
+   *  clarification. */
   const canEditEvent =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&

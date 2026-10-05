@@ -173,7 +173,7 @@ export function eventPath(eventId: string): string {
 }
 
 // Story 7.2: the assigned Event Coordinator edits an event - its internal notes until it is
-// closed, and the organiser's request too while it is under review.
+// closed, and the organiser's request too while it is under review or awaiting clarification.
 export const EVENT_COORDINATOR_EDIT_PATH = '/events/:eventId/coordinator-edit'
 
 export function eventCoordinatorEditPath(eventId: string): string {

@@ -62,7 +62,7 @@ import {
 } from './eventRequestForm'
 import { readBackState } from './backState'
 import {
-  DETAILS_CORRECTABLE_STATUS,
+  DETAILS_CORRECTABLE_STATUSES,
   DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
   TERMINAL_STATUSES,
@@ -133,19 +133,22 @@ function coordinatorEditNotice(event: EventDetail, userId: string | undefined): 
   if (DETAILS_LOCKED_STATUSES.includes(event.status)) {
     return `${DETAILS_LOCKED_HINT} Internal notes can still be edited.`
   }
-  if (event.status !== DETAILS_CORRECTABLE_STATUS) {
-    return 'Event details can only be corrected while the event is under review. Internal notes can still be edited.'
+  if (!DETAILS_CORRECTABLE_STATUSES.includes(event.status)) {
+    return 'Event details can only be corrected while the event is under review or awaiting clarification. Internal notes can still be edited.'
   }
-  return "You are correcting the organiser's request while it is under review. Saved changes apply straight away; the organiser does not need to approve them."
+  return "You are correcting the organiser's request before it is decided. Saved changes apply straight away; the organiser does not need to approve them."
 }
 
 /**
- * Story 7.2 AC7: the dates and the equipment lines (type and quantity) of a form, the only part a
- * correction's equipment holds depend on - comparable with the same part of the saved request.
+ * Story 7.2 AC7: the dates and the equipment lines (id, type and quantity) of a form, the only part
+ * a correction's equipment holds depend on - comparable with the same part of the saved request.
+ * The line id counts because a hold belongs to one line, matching the backend's `_is_hold_changed`.
  */
 function holdKeyOf(form: EventFormState): string {
   const input = eventInputFrom(form)
-  const lines = input.equipment.map((line) => `${line.equipment_type_code}:${line.quantity}`).sort()
+  const lines = input.equipment
+    .map((line) => `${line.id}:${line.equipment_type_code}:${line.quantity}`)
+    .sort()
   return JSON.stringify([input.starts_at, input.ends_at, lines])
 }
 
@@ -175,7 +178,7 @@ interface EventRequestFormPageProps {
  *
  * Story 7.2: with `isCoordinatorEdit`, serves /events/:eventId/coordinator-edit, where the assigned
  * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4: while it
- * is under review, the organiser's request too, cover picture included - the same fields, the
+ * is under review or awaiting clarification, the organiser's request too, cover picture included - the same fields, the
  * same controls and the same checks; and every field marked * must be filled to save them, as on
  * the backend. AC5: once approved, those fields are shown greyed out. AC7: equipment no longer free for
  * new dates is marked on its line, as 2.1 does. AC6/AC9: a save made against a copy that was
@@ -259,8 +262,10 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     event !== null &&
     event.assigned_coordinator_id === user?.id &&
     !TERMINAL_STATUSES.includes(event.status)
-  /** Story 7.2 AC4/AC5: and the organiser's details too, only while the event is under review. */
-  const canCorrectDetails = canEditNotes && event?.status === DETAILS_CORRECTABLE_STATUS
+  /** Story 7.2 AC4/AC5: and the organiser's details too, only while the event is under review or
+   *  awaiting clarification. */
+  const canCorrectDetails =
+    canEditNotes && event !== null && DETAILS_CORRECTABLE_STATUSES.includes(event.status)
   const isReadOnly = isCoordinatorEdit
     ? !canCorrectDetails
     : event !== null && event.status !== 'DRAFT'
