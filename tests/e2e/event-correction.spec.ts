@@ -1,8 +1,10 @@
 /**
  * Story 7.2 - fe: the assigned Event Coordinator corrects an organiser's request while it is under
- * review, from the event details page, in the same form the organiser filled in (2.1).
+ * review or awaiting clarification, from the event details page, in the same form the organiser
+ * filled in (2.1).
  * AC4 the coordinator edits the organiser-provided details and saves them without the organiser's
- *     approval; the status stays Under review. The cover picture is replaced with the organiser's
+ *     approval; the status stays where it was, including while a clarification is open. The cover
+ *     picture is replaced with the organiser's
  *     own controls, and details cannot be saved while a field marked * is empty (checked before
  *     anything is sent).
  * AC5 once approved, the organiser's details and cover picture are greyed out with a hint that
@@ -162,6 +164,32 @@ test('7.2 AC4: the assigned coordinator corrects a request under review and the 
   await expect(coordinator.getByText('Corrected: a two-part hands-on workshop.')).toBeVisible()
   await expect(coordinator.getByText('75', { exact: true })).toBeVisible()
   await expect(coordinator.getByText('Under review', { exact: true })).toBeVisible()
+})
+
+test('7.2 AC4: the coordinator still corrects a request after asking the organiser a question', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(TWO_USER_TIMEOUT)
+  const name = uniqueName('Clarifying')
+  await signIn(page, ACCOUNTS.organiser)
+  const request = await submittedRequest(page, name)
+  const coordinator = await signedInAs(browser, page, request.coordinator)
+  await coordinator.goto(`/events/${request.id}`)
+  await coordinator.getByLabel('Message').fill('Is it 60 or 80 people?')
+  await coordinator.getByRole('button', { name: 'Send clarification request' }).click()
+  const status = coordinator.getByRole('main').getByText('Clarification requested', { exact: true })
+  await expect(status).toBeVisible()
+
+  await openCorrection(coordinator, request.id, name)
+  await coordinator.getByLabel('Expected attendance').fill('80')
+  await saveCorrection(coordinator)
+  await expect(coordinator.getByRole('alert')).toHaveCount(0)
+
+  await coordinator.getByRole('link', { name: /^← / }).click()
+  await expect(coordinator).toHaveURL(DETAILS_PATH)
+  await expect(coordinator.getByText('80', { exact: true })).toBeVisible()
+  await expect(status).toBeVisible()
 })
 
 test('7.2 AC7: the form leaves out the event’s own holds and marks equipment no longer free for new dates', async ({

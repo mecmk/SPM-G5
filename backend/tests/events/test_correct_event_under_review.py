@@ -1,14 +1,14 @@
 """Story 7.2 - be: the assigned Event Coordinator corrects an event's details while it is under
 review.
 
-AC4 While an event is Under Review, the assigned coordinator can edit the organiser-provided event
-    details, including the cover picture, using the same checks as creating a request (2.1).
-    Each saved change is recorded for the change history (7.4).
+AC4 While an event is Under Review or Clarification Requested, the assigned coordinator can edit
+    the organiser-provided event details, including the cover picture, using the same checks as
+    creating a request (2.1). Each saved change is recorded for the change history (7.4).
 AC5 Once the event is approved, organiser-provided details become read-only; internal notes stay
     editable.
 AC6 The lock begins at approval: a correction saved before approval applies, one that arrives
     after it is refused.
-AC7 Editing the event dates during review re-validates all date-dependent fields and re-checks
+AC7 Editing the event dates before approval re-validates all date-dependent fields and re-checks
     existing equipment holds for the new period. If the required equipment is no longer
     available, the edit is refused, leaving the event and its existing holds unchanged. Venue
     conflicts are checked later when a specific venue is requested.
@@ -38,10 +38,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.events import service
-from app.events.models import EventStatus
+from app.events.models import Event, EventStatus
+from app.events.schemas import EventReviewCorrection
 from tests.support.factories import (
     create_submittable_event_request,
     make_equipment_hold,
+    make_equipment_out_of_service,
     make_event,
 )
 from tests.support.seed import Events, Users
@@ -159,6 +161,20 @@ def test_the_assigned_coordinator_corrects_details_under_review(coordinator_clie
     assert after["description"] == "A one-day workshop."
     assert after["expected_attendance"] == 65
     assert after["contact_phone"] == "+65 6123 4567"
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_details_can_be_corrected_while_clarification_is_requested(coordinator_client):
+    """The organiser may answer by phone or e-mail while the question is open, so asking one does
+    not take the coordinator's edit away. The status stays where it was."""
+    event = _read(coordinator_client, Events.CLARIFICATION_REQUESTED)
+
+    response = _correct(coordinator_client, event, name="Renamed mid-clarification")
+
+    assert response.status_code == 200, response.text
+    after = _read(coordinator_client, Events.CLARIFICATION_REQUESTED)
+    assert after["name"] == "Renamed mid-clarification"
+    assert after["status"] == "CLARIFICATION_REQUESTED"
 
 
 @pytest.mark.story("7.2", ac=4)
@@ -384,6 +400,14 @@ def test_a_correction_that_changes_nothing_writes_nothing(coordinator_client, db
 
 
 @pytest.mark.story("7.2", ac=4)
+def test_every_field_a_correction_accepts_is_compared_for_the_change_history():
+    """A field missing from _request_values would make a correction to it alone look like no
+    change: rolled back, answered 200, nothing saved."""
+    fields = set(EventReviewCorrection.model_fields) - {"expected_updated_at"}
+    assert fields <= service._request_values(Event()).keys()
+
+
+@pytest.mark.story("7.2", ac=4)
 def test_the_coordinator_can_load_the_request_forms_pick_lists(coordinator_client):
     response = coordinator_client.get("/events/reference-data")
 
@@ -504,16 +528,6 @@ def test_internal_notes_stay_editable_once_details_are_locked(coordinator_client
     assert response.status_code == 200, response.text
     assert response.json()["internal_notes"] == "Catering confirmed."
     assert response.json()["status"] == "PLANNING"
-
-
-@pytest.mark.story("7.2", ac=5)
-def test_details_cannot_be_corrected_while_clarification_is_requested(coordinator_client):
-    """Only UNDER_REVIEW is "under review"; the clarification round-trip belongs to 4.2/4.3."""
-    event = _read(coordinator_client, Events.CLARIFICATION_REQUESTED)
-
-    response = _correct(coordinator_client, event, name="Renamed mid-clarification")
-
-    assert response.status_code == 409
 
 
 @pytest.mark.story("7.2", ac=5)
@@ -757,6 +771,42 @@ def test_a_correction_that_leaves_dates_and_equipment_alone_leaves_the_holds_alo
 
     assert response.status_code == 200, response.text
     assert _holds(db, event["id"]) == before
+
+
+@pytest.mark.story("7.2", ac=7)
+def test_a_technical_notes_change_leaves_the_holds_alone(login_as, db: Session):
+    """Units taken out of service after submission leave the event short of what it holds, but a
+    correction to a line's technical notes alone does not touch the hold."""
+    period = _period()
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 4))
+    make_equipment_out_of_service(
+        db, type_code="LAPTOP", quantity=3, starts_at=period[0], ends_at=period[1]
+    )
+    db.commit()
+    before = _holds(db, event["id"])
+    line = {**_equipment("LAPTOP", 4), "id": event["equipment"][0]["id"]}
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        equipment=[{**line, "technical_notes": "Bring HDMI adapters."}],
+    )
+
+    assert response.status_code == 200, response.text
+    assert _holds(db, event["id"]) == before
+
+
+@pytest.mark.story("7.2", ac=7)
+def test_a_line_replaced_by_an_identical_one_is_held_again(login_as, db: Session):
+    period = _period()
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 2))
+
+    response = _correct(
+        login_as(Users.COORDINATOR), event, name="Renamed", equipment=[_equipment("LAPTOP", 2)]
+    )
+
+    assert response.status_code == 200, response.text
+    assert {line["status"] for line in response.json()["equipment"]} == {"RESERVED"}
 
 
 # --- AC8: only the assigned coordinator, enforced by the API ----------------------------------
