@@ -30,9 +30,14 @@
  * The reject validation matrix, permission refusals, 409s and audit behaviour are backend cases:
  * backend/tests/bookings/test_reject_booking.py. Each mutating test here uses its own dedicated
  * seeded booking, same reasoning as 13.2's.
+ *
+ * Story 13.2.2 - fe: the event page shows when Venue Staff decided a booking.
+ * AC1 an approved or rejected booking's card shows its decision time; a pending one shows none.
+ * That the API returns `decided_at` at all (null while pending, set once decided) is a backend
+ * case: backend/tests/bookings/test_booking_decided_at.py.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn, venueCard } from './support'
+import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 
 /**
  * A pending request's card, by the short id shown on it (the seeded row's last 8 hex characters,
@@ -257,7 +262,11 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await card.getByRole('link', { name: 'View details' }).click()
 
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
+  // level 1 is the detail page's own title; the queue card it came from carries the same name as
+  // an h3, so without it this passes before the detail page has rendered.
+  await expect(
+    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Reject' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
@@ -277,8 +286,6 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
   await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
-  // 13.2.2: the coordinator also sees when Venue Staff decided.
-  await expect(page.getByText('Decided at')).toBeVisible()
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
   // - both show up on the event page's history, the new request first. Since f12.1.1 a request
@@ -301,6 +308,18 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
   await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
-  // Only the rejected booking has been decided, so the fresh pending one shows no decided-at line.
+})
+
+test('13.2.2 AC1: the event page shows when Venue Staff decided a booking', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  // The seeded Grand Hall booking was approved at 2026-09-04 10:00+08; format.ts pins en-SG and
+  // Asia/Singapore, so the rendered time is fixed. The seeded Seminar Room 2.1 booking, and any
+  // request booking-requests.spec.ts raises on this event in parallel, are still pending, so
+  // the approved card is the only one with the line.
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Approved', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('Decided at')).toHaveCount(1)
+  await expect(bookingSection.getByText('Fri, 4 Sept 2026, 10:00')).toBeVisible()
 })
