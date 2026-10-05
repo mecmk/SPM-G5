@@ -145,10 +145,10 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   const card = page.getByRole('listitem').filter({ hasText: 'Investor Demo Day' })
   await card.getByRole('link', { name: 'View details' }).click()
 
-  // The queue card's own event name is also a heading, so wait for the URL - the only
-  // unambiguous sign navigation to the detail page actually finished.
+  // The URL changes before the detail page renders, and the queue card's event name is an h3, so
+  // only the detail page's level-1 title shows the queue's Approve buttons are gone.
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Investor Demo Day' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Investor Demo Day', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
