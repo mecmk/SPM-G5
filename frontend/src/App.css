@@ -971,6 +971,37 @@ label textarea:focus {
   border-color: var(--accent);
 }
 
+/* A form section that can no longer be changed - a submitted request, or story 7.2's organiser
+   details once the event is approved - is greyed out, so it reads as read-only rather than as
+   fields that simply do not respond. */
+fieldset:disabled label input,
+fieldset:disabled label select,
+fieldset:disabled label textarea {
+  color: var(--text-muted);
+  background: transparent;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+fieldset:disabled legend {
+  color: var(--text-muted);
+}
+
+fieldset:disabled label,
+fieldset:disabled .form-hint {
+  color: var(--text-faint);
+}
+
+fieldset:disabled .picture-drop {
+  opacity: 0.6;
+}
+
+fieldset:disabled .button,
+fieldset:disabled button {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 label.checkbox {
   display: flex;
   align-items: center;
