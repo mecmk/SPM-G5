@@ -227,13 +227,14 @@ def test_availability_needs_a_valid_period(organiser_client, params):
 @pytest.mark.story("2.1", ac=6)
 @pytest.mark.parametrize(
     "user",
+    # Story 7.2 AC7: the assigned coordinator correcting a request sees availability in the same
+    # form, so coordinators are allowed too (tests/events/test_correct_event_under_review.py).
     [
-        pytest.param(Users.COORDINATOR, id="coordinator"),
         pytest.param(Users.TECH_SUPPORT, id="tech-support"),
         pytest.param(Users.ATTENDEE, id="attendee"),
     ],
 )
-def test_only_an_organiser_can_see_availability_for_a_request(login_as, user):
+def test_only_the_request_form_can_see_availability_for_a_request(login_as, user):
     start, end = _period()
     response = login_as(user).get(
         "/events/equipment-availability",

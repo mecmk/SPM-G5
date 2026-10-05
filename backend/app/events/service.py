@@ -1,8 +1,8 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
 event review (story 4.1), requesting clarification from the organiser (story 4.2), the
 approve/reject decision (stories 4.4, 4.5), the decision / clarification history an organiser
-sees (story 4.6), routine information edits (story 7.2), and the coordinator's assigned events in
-any status (story 6.1).
+sees (story 4.6), routine information edits and corrections to a request under review (story
+7.2), and the coordinator's assigned events in any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -53,6 +53,7 @@ from app.events.schemas import (
     EventEquipmentIn,
     EventFacilityIn,
     EventReferenceData,
+    EventReviewCorrection,
     EventRoutineUpdate,
     EventUpdate,
     ReferenceItemOut,
@@ -86,9 +87,25 @@ ALREADY_SUBMITTED_MESSAGE = "This request has already been submitted."
 ROUTINE_EDIT_CLOSED_MESSAGE = (
     "This event is {status}, so its routine information can no longer be edited."
 )
+DETAILS_LOCKED_MESSAGE = (
+    "This event has been approved, so its details can no longer be edited directly. Further "
+    "changes must go through a change request."
+)
+DETAILS_NOT_UNDER_REVIEW_MESSAGE = (
+    "This event is {status}, so its details can only be edited while it is under review."
+)
+STALE_EVENT_EDIT_MESSAGE = (
+    "This event has changed since you opened it. Reload it and make your changes again."
+)
+SUBMITTED_DETAILS_MISSING_MESSAGE = (
+    "Add the following before saving this submitted request: {missing}."
+)
 
 # ``event_equipment_requests.status`` once the units are held for the event.
 _LINE_RESERVED = "RESERVED"
+# ``equipment_reservations.notes`` on a hold: why it was placed (2.1 AC11, 7.2 AC7).
+_SUBMITTED_HOLD_NOTE = "Held when the request was submitted."
+_CORRECTED_HOLD_NOTE = "Held again when the coordinator corrected the request."
 
 # AC20: the partial unique index a duplicate name+dates violates (db/migrations/008_*.sql).
 DUPLICATE_REQUEST_INDEX = "uq_events_organiser_name_dates"
@@ -108,6 +125,14 @@ _ROUTINE_FIELDS = ("internal_notes",)
 
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
+
+# Story 7.2 AC4: the organiser's details may be corrected directly only in this status.
+# CLARIFICATION_REQUESTED is deliberately not included: that round-trip belongs to 4.2/4.3.
+_DETAILS_CORRECTABLE_STATUS = EventStatus.UNDER_REVIEW
+# Story 7.2 AC5: approved and still running - further changes go through a change request (19.1).
+_DETAILS_LOCKED_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
+# Story 7.2 AC7: a correction to any of these places the event's equipment holds again.
+_HOLD_FIELDS = frozenset({"starts_at", "ends_at", "equipment"})
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -179,6 +204,27 @@ class RoutineEditClosed(EventStateConflict):
         super().__init__(ROUTINE_EDIT_CLOSED_MESSAGE.format(status=status))
 
 
+class EventDetailsLocked(EventStateConflict):
+    """7.2 AC5/AC6: the event has been approved, so its details are read-only."""
+
+    def __init__(self):
+        super().__init__(DETAILS_LOCKED_MESSAGE)
+
+
+class EventNotUnderReview(EventStateConflict):
+    """7.2 AC4: details can be corrected only while the event is under review."""
+
+    def __init__(self, status: str):
+        super().__init__(DETAILS_NOT_UNDER_REVIEW_MESSAGE.format(status=status))
+
+
+class StaleEventEdit(EventStateConflict):
+    """7.2 AC9: the event changed after the copy being saved was read."""
+
+    def __init__(self):
+        super().__init__(STALE_EVENT_EDIT_MESSAGE)
+
+
 class InvalidEventRequest(ValueError):
     """What was sent cannot be recorded as it stands (a 422)."""
 
@@ -238,6 +284,14 @@ class DuplicateEventRequest(InvalidEventRequest):
 class MissingSubmissionDetails(InvalidEventRequest):
     def __init__(self, missing: list[str]):
         super().__init__(f"Add the following before submitting: {', '.join(missing)}.")
+        self.missing = missing
+
+
+class SubmittedDetailsMissing(InvalidEventRequest):
+    """7.2 AC4: a corrected request must still have everything 2.1 AC10 required for submission."""
+
+    def __init__(self, missing: list[str]):
+        super().__init__(SUBMITTED_DETAILS_MISSING_MESSAGE.format(missing=", ".join(missing)))
         self.missing = missing
 
 
@@ -530,25 +584,32 @@ def _known(
 
 
 def _available_by_type(
-    db: Session, period_start: datetime, period_end: datetime
+    db: Session,
+    period_start: datetime,
+    period_end: datetime,
+    *,
+    exclude_event_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
     events over the period (a hold's quantity less what was released), less units out of service.
-    Overlap is half-open, so a hold ending exactly as the period starts does not count."""
-    held = dict(
-        db.execute(
-            select(
-                EquipmentReservation.equipment_type_id,
-                func.sum(EquipmentReservation.quantity - EquipmentReservation.released_quantity),
-            )
-            .where(
-                EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
-                EquipmentReservation.starts_at < period_end,
-                EquipmentReservation.ends_at > period_start,
-            )
-            .group_by(EquipmentReservation.equipment_type_id)
-        ).all()
+    Overlap is half-open, so a hold ending exactly as the period starts does not count.
+    Story 7.2 AC7: ``exclude_event_id`` leaves that event's own holds out, so an event being
+    corrected is not counted against itself."""
+    held_query = (
+        select(
+            EquipmentReservation.equipment_type_id,
+            func.sum(EquipmentReservation.quantity - EquipmentReservation.released_quantity),
+        )
+        .where(
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+            EquipmentReservation.starts_at < period_end,
+            EquipmentReservation.ends_at > period_start,
+        )
+        .group_by(EquipmentReservation.equipment_type_id)
     )
+    if exclude_event_id is not None:
+        held_query = held_query.where(EquipmentReservation.event_id != exclude_event_id)
+    held = dict(db.execute(held_query).all())
     out_of_service = dict(
         db.execute(
             select(
@@ -573,12 +634,21 @@ def _available_by_type(
 
 
 def list_equipment_availability(
-    db: Session, *, starts_at: datetime, ends_at: datetime
+    db: Session,
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    exclude_event_id: uuid.UUID | None = None,
+    viewer: User,
 ) -> list[EquipmentAvailabilityOut]:
-    """AC6: how many of each active equipment type are free for the proposed dates."""
+    """AC6: how many of each active equipment type are free for the proposed dates. Story 7.2
+    AC7: with ``exclude_event_id``, as the request being corrected sees it - its own holds left
+    out. Only an event the viewer can see may be named, so nothing is learnt about any other."""
     if ends_at <= starts_at:
         raise InvalidSchedule(END_NOT_AFTER_START_MESSAGE)
-    available = _available_by_type(db, starts_at, ends_at)
+    if exclude_event_id is not None:
+        get_event(db, exclude_event_id, viewer=viewer)
+    available = _available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
     active_types = db.scalars(
         select(EquipmentType).where(EquipmentType.is_active.is_(True)).order_by(EquipmentType.name)
     ).all()
@@ -593,20 +663,24 @@ def _check_equipment_available(
     starts_at: datetime | None,
     ends_at: datetime | None,
     lines: list[tuple[EquipmentType, int]],
+    *,
+    exclude_event_id: uuid.UUID | None = None,
 ) -> None:
     """AC6: no more of a type than is free for the dates. Until both dates are known there is no
-    period to check, and submission needs them anyway, where it is checked again."""
+    period to check, and submission needs them anyway, where it is checked again.
+    ``exclude_event_id`` leaves that event's own holds out (story 7.2 AC7)."""
     if starts_at is None or ends_at is None or not lines:
         return
-    available = _available_by_type(db, starts_at, ends_at)
+    available = _available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
     short = [t.name for t, quantity in lines if quantity > available[t.id]]
     if short:
         raise EquipmentNotAvailable(short)
 
 
-def _hold_equipment(db: Session, event: Event, actor: User) -> None:
+def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> None:
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
-    requests for the last units cannot both be held; the loser is refused and nothing is held."""
+    requests for the last units cannot both be held; the loser is refused and nothing is held.
+    ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
     lines = list(event.equipment_requests)
     if not lines or event.starts_at is None or event.ends_at is None:
         return
@@ -636,7 +710,7 @@ def _hold_equipment(db: Session, event: Event, actor: User) -> None:
                 ends_at=event.ends_at,
                 status=EquipmentHoldStatus.RESERVED,
                 reserved_by_id=actor.id,
-                notes="Held when the request was submitted.",
+                notes=notes,
             )
         )
         line.status = _LINE_RESERVED
@@ -770,13 +844,20 @@ def _resent_unchanged(value: datetime | None, stored: datetime | None) -> dateti
     return None if value == stored else value
 
 
-def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: User) -> Event:
-    """AC7: edit or remove any recorded detail, requirement or equipment item while a draft.
-    Only the fields sent change; a list sent replaces that list."""
-    event = _get_own_event(db, event_id, actor)
-    if event.status != EventStatus.DRAFT:
-        raise EventNotEditable()
+@dataclass(frozen=True)
+class _RequestEdit:
+    """A request edit that has passed every 2.1 check: the columns to set, and the equipment types
+    its equipment lines name."""
 
+    details: dict[str, Any]
+    equipment_types: dict[str, EquipmentType]
+
+
+def _validate_request_edit(db: Session, event: Event, data: EventUpdate) -> _RequestEdit:
+    """AC2-AC7/AC17/AC18: every 2.1 check on an edit to ``event``, before anything is changed, so
+    a refused edit leaves the request as it was. Shared by the organiser's draft edit (AC7) and the
+    coordinator's correction under review (story 7.2 AC4), so the two can never drift apart.
+    Equipment availability leaves ``event``'s own holds out (story 7.2 AC7); a draft has none."""
     sent = data.model_fields_set
     details = {field: getattr(data, field) for field in _DETAIL_FIELDS if field in sent}
     starts_at = details.get("starts_at", event.starts_at)
@@ -857,19 +938,31 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
             if data.equipment is not None
             else [(line.equipment_type, line.quantity) for line in event.equipment_requests]
         )
-        _check_equipment_available(db, starts_at, ends_at, lines)
+        _check_equipment_available(db, starts_at, ends_at, lines, exclude_event_id=event.id)
+    return _RequestEdit(details=details, equipment_types=types)
 
-    for field, value in details.items():
+
+def _apply_request_edit(
+    event: Event, data: EventUpdate, edit: _RequestEdit, *, actor: User
+) -> None:
+    """AC7: set what ``edit`` validated. Only the fields sent change; a list sent replaces that
+    list."""
+    for field, value in edit.details.items():
         setattr(event, field, value)
     if data.required_facilities is not None:
         _replace_facilities(event, data.required_facilities)
     if data.accessibility_needs is not None:
         _replace_accessibility_needs(event, data.accessibility_needs)
     if data.equipment is not None:
-        _replace_equipment(event, data.equipment, types, actor=actor)
+        _replace_equipment(event, data.equipment, edit.equipment_types, actor=actor)
     # A change to a list alone would not touch the events row; stamping it makes updated_at the
-    # draft's last-modified time whatever was edited (the trigger sets the real value).
+    # request's last-modified time whatever was edited (the trigger sets the real value).
     event.updated_at = datetime.now(UTC)
+
+
+def _flush_request_edit(db: Session, event: Event) -> None:
+    """Write an applied edit, translating AC20's duplicate-request index into
+    ``DuplicateEventRequest``."""
     # Read before the flush: a rollback below expires this object, so event.name read afterwards
     # would re-fetch the pre-update value instead of the one the failed write attempted.
     attempted_name = event.name
@@ -880,13 +973,25 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
         if DUPLICATE_REQUEST_INDEX in str(exc.orig):
             raise DuplicateEventRequest(attempted_name) from exc
         raise
+
+
+def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: User) -> Event:
+    """AC7: edit or remove any recorded detail, requirement or equipment item while a draft.
+    Only the fields sent change; a list sent replaces that list."""
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.DRAFT:
+        raise EventNotEditable()
+
+    edit = _validate_request_edit(db, event, data)
+    _apply_request_edit(event, data, edit, actor=actor)
+    _flush_request_edit(db, event)
     record_audit(
         db,
         actor=actor,
         action="EVENT_UPDATED",
         entity_type="event",
         entity_id=event.id,
-        details={"fields": sorted(sent)},
+        details={"fields": sorted(data.model_fields_set)},
         commit=False,
     )
     db.commit()
@@ -973,7 +1078,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         supplied_closes_at=event.registration_closes_at,
     )
 
-    _hold_equipment(db, event, actor)
+    _hold_equipment(db, event, actor, notes=_SUBMITTED_HOLD_NOTE)
     submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
     # Goes straight to UNDER_REVIEW (migration 002, bug b6.1.1) - SUBMITTED is no longer a
@@ -1431,6 +1536,166 @@ def update_routine_information(
         entity_type="event",
         entity_id=event.id,
         details={"fields": sorted(changed)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
+
+
+# --- correcting details under review (story 7.2 AC4-AC9) -------------------------------------
+
+
+def _refuse_unless_correctable(event: Event) -> None:
+    """AC4/AC5: only an event under review takes corrections; an approved one is locked."""
+    if event.status in _DETAILS_LOCKED_STATUSES:
+        raise EventDetailsLocked()
+    if event.status != _DETAILS_CORRECTABLE_STATUS:
+        raise EventNotUnderReview(event.status)
+
+
+def _claim_for_correction(db: Session, event: Event, *, expected_updated_at: datetime) -> None:
+    """AC6/AC9: take the event row for this correction, provided it is still under review and
+    still exactly the copy the coordinator read. The update is conditional, the same shape as
+    ``_decide``'s guard: an approval or any other change that landed first makes it match no row,
+    and the correction is refused. Once taken, the row stays locked until this transaction ends,
+    so an approval arriving meanwhile waits and then approves the corrected event."""
+    claimed = db.execute(
+        update(Event)
+        .where(
+            Event.id == event.id,
+            Event.status == _DETAILS_CORRECTABLE_STATUS,
+            Event.updated_at == expected_updated_at,
+        )
+        .values(updated_at=datetime.now(UTC))
+    )
+    if claimed.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        _refuse_unless_correctable(event)
+        raise StaleEventEdit()
+
+
+def _audit_value(value: Any) -> Any:
+    """A column value as JSON the audit log can hold: a moment as ISO 8601 in UTC, so the same
+    instant sent with another offset never reads as a change."""
+    return value.astimezone(UTC).isoformat() if isinstance(value, datetime) else value
+
+
+def _request_values(event: Event) -> dict[str, Any]:
+    """AC4 / story 7.4: every organiser-provided value on the request, comparable before and after
+    a correction. Lists are sorted by code, so a reordering alone is not a change."""
+    values = {field: _audit_value(getattr(event, field)) for field in _DETAIL_FIELDS}
+    values["required_facilities"] = sorted(
+        (
+            {"code": f.facility_code, "quantity": f.quantity, "notes": f.notes}
+            for f in event.required_facilities
+        ),
+        key=lambda item: item["code"],
+    )
+    values["accessibility_needs"] = sorted(
+        ({"code": n.feature_code, "notes": n.notes} for n in event.accessibility_needs),
+        key=lambda item: item["code"],
+    )
+    values["equipment"] = sorted(
+        (
+            {
+                "equipment_type_code": line.equipment_type.code,
+                "quantity": line.quantity,
+                "technical_notes": line.technical_notes,
+            }
+            for line in event.equipment_requests
+        ),
+        key=lambda item: item["equipment_type_code"],
+    )
+    return values
+
+
+def _replace_equipment_holds(db: Session, event: Event, *, actor: User) -> None:
+    """AC7: release the holds 2.1 AC11 placed for ``event`` and hold its equipment again for its
+    current lines and dates. Releasing first means the event's own units are free to it again;
+    ``_hold_equipment`` then locks the types and refuses if anything is short, and the caller's
+    rollback restores the old holds. An event seeded with lines but no holds simply gains them."""
+    db.execute(
+        update(EquipmentReservation)
+        .where(
+            EquipmentReservation.event_id == event.id,
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        )
+        .values(
+            status=EquipmentHoldStatus.RELEASED,
+            released_quantity=EquipmentReservation.quantity,
+            released_at=datetime.now(UTC),
+        )
+    )
+    _hold_equipment(db, event, actor, notes=_CORRECTED_HOLD_NOTE)
+
+
+def _apply_correction(
+    db: Session, event: Event, data: EventReviewCorrection, *, actor: User
+) -> dict[str, dict[str, Any]]:
+    """AC4/AC7: validate and apply ``data`` with the 2.1 checks, write it, and hold the equipment
+    again when the dates or the equipment changed. Returns each changed field as
+    ``{"from": ..., "to": ...}``; an empty result means nothing changed and nothing was written.
+    A correction that changes something must leave the request with everything 2.1 AC10 requires
+    for submission - including a detail that was already missing (a seeded request predating the
+    point of contact), so a field marked required on the form always is."""
+    before = _request_values(event)
+    edit = _validate_request_edit(db, event, data)
+    _apply_request_edit(event, data, edit, actor=actor)
+    after = _request_values(event)
+    changes = {
+        field: {"from": before[field], "to": value}
+        for field, value in after.items()
+        if value != before[field]
+    }
+    if not changes:
+        return changes
+    missing = _missing_for_submission(event)
+    if missing:
+        raise SubmittedDetailsMissing(missing)
+    _flush_request_edit(db, event)
+    if changes.keys() & _HOLD_FIELDS:
+        _replace_equipment_holds(db, event, actor=actor)
+    return changes
+
+
+def correct_event_under_review(
+    db: Session, event: Event, data: EventReviewCorrection, *, actor: User
+) -> None:
+    """AC4-AC9: the coordinator assigned to ``event`` corrects the organiser's request while it is
+    under review, without the organiser's approval and without changing its status.
+
+    The status gate comes first, as with the internal-notes edit (AC3), so a locked or closed
+    event refuses with 409 whoever asks; then only the assigned coordinator may go on (AC8).
+    ``_claim_for_correction`` is the real guard for AC6/AC9 - the status check above it only picks
+    the message. Any refusal after the claim rolls the whole correction back, so the event, its
+    equipment lines and its holds are left exactly as they were (AC7). Each saved correction
+    writes one ``EVENT_DETAILS_CORRECTED`` audit row holding every changed field's old and new
+    value, for story 7.4 to read; one that changes nothing writes nothing.
+
+    AC9's organiser-vs-coordinator case needs story 4.3, which will let an organiser edit a
+    submitted request; that edit must claim the row the same way."""
+    _refuse_unless_correctable(event)
+    _assert_assigned_coordinator(event, actor, verb="edit")
+    _claim_for_correction(db, event, expected_updated_at=data.expected_updated_at)
+    try:
+        changes = _apply_correction(db, event, data, actor=actor)
+    except InvalidEventRequest:
+        db.rollback()
+        raise
+    except EventStateConflict:
+        db.rollback()
+        raise
+    if not changes:
+        db.rollback()  # gives back the claim, which only stamped updated_at
+        return
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_DETAILS_CORRECTED",
+        entity_type="event",
+        entity_id=event.id,
+        details=changes,
         commit=False,
     )
     db.commit()
