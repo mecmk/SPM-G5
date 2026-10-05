@@ -195,15 +195,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'No longer editable',
     message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
   },
-  /**
-   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
-   * backend's detail sentence says which; either way the page offers a reload.
-   */
   /** Story 7.2 AC4: a corrected request must keep everything it needed to be submitted. */
   EVENT_REQUIRED_DETAIL_CLEARED: {
     title: 'Required detail missing',
     message: 'Fill in every field marked * before saving - a submitted request needs them all.',
   },
+  /**
+   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
+   * backend's detail sentence says which; either way the page offers a reload.
+   */
   EVENT_CORRECTION_CONFLICT: {
     title: 'Event changed',
     message: 'This event changed after you opened it. Reload it to see its latest details.',

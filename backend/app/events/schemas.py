@@ -431,14 +431,14 @@ class EventUpdate(_EventRequestRules):
 class EventReviewCorrection(EventUpdate):
     """Story 7.2 AC4: the assigned coordinator corrects the organiser's request while it is under
     review - the same fields and the same 2.1 rules as ``EventUpdate``. The cover picture is not
-    among them: it stays read-only after submission. AC9: ``expected_updated_at`` is the
-    ``updated_at`` the coordinator's copy was read with; a save made against an older copy is
-    refused."""
+    among them: it is sent as a file, to its own endpoints beside this one, under the same rules.
+    AC9: ``expected_updated_at`` is the ``updated_at`` the coordinator's copy was read with; a save
+    made against an older copy is refused."""
 
     expected_updated_at: AwareDatetime
 
 
-# --- response bodies (story 2.1)-----------------------------------------------------------
+# --- response bodies (story 2.1) ----------------------------------------------------------
 class RequiredFacilityOut(BaseModel):
     code: str
     name: str

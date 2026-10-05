@@ -31,6 +31,7 @@ import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import {
   AWAITING_DECISION_STATUSES,
+  DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
   TERMINAL_STATUSES,
 } from './eventStatus'
@@ -594,12 +595,7 @@ export function EventDetailPage() {
 
         <section className="card stack" aria-labelledby="event-info-heading">
           <h2 id="event-info-heading">Event information</h2>
-          {isDetailsLockHintShown && (
-            <p className="form-hint">
-              Event details can no longer be edited directly after approval. Further changes must go
-              through the change request process.
-            </p>
-          )}
+          {isDetailsLockHintShown && <p className="form-hint">{DETAILS_LOCKED_HINT}</p>}
           <div className="row">
             <div>
               <p className="eyebrow">Purpose</p>

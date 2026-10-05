@@ -63,6 +63,7 @@ import {
 import { readBackState } from './backState'
 import {
   DETAILS_CORRECTABLE_STATUS,
+  DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
   TERMINAL_STATUSES,
 } from './eventStatus'
@@ -127,10 +128,10 @@ function coordinatorEditNotice(event: EventDetail, userId: string | undefined): 
     return 'Only the Event Coordinator assigned to this event can edit it.'
   }
   if (TERMINAL_STATUSES.includes(event.status)) {
-    return 'This event is completed, cancelled or rejected, so it can no longer be edited.'
+    return ERROR_REGISTRY.EVENT_ROUTINE_EDIT_CLOSED.message
   }
   if (DETAILS_LOCKED_STATUSES.includes(event.status)) {
-    return 'Event details can no longer be edited directly after approval. Further changes must go through the change request process. Internal notes can still be edited.'
+    return `${DETAILS_LOCKED_HINT} Internal notes can still be edited.`
   }
   if (event.status !== DETAILS_CORRECTABLE_STATUS) {
     return 'Event details can only be corrected while the event is under review. Internal notes can still be edited.'
