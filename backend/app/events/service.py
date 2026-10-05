@@ -256,6 +256,7 @@ class EquipmentNoLongerAvailable(EventStateConflict):
         super().__init__(
             f"Not enough {', '.join(names)} available for the proposed dates any more."
         )
+        self.names = names
 
 
 class ContradictoryAccessibility(InvalidEventRequest):
@@ -279,6 +280,15 @@ class DuplicateEventRequest(InvalidEventRequest):
 
     def __init__(self, name: str):
         super().__init__(f'You already have a request named "{name}" for these dates.')
+        self.name = name
+
+
+class DuplicateCorrectedRequest(InvalidEventRequest):
+    """Story 7.2 AC4: AC20 on a correction - it is the organiser, not the coordinator correcting the
+    request, who already has one with this name and these dates."""
+
+    def __init__(self, name: str):
+        super().__init__(f'The organiser already has a request named "{name}" for these dates.')
 
 
 class MissingSubmissionDetails(InvalidEventRequest):
@@ -853,11 +863,29 @@ class _RequestEdit:
     equipment_types: dict[str, EquipmentType]
 
 
-def _validate_request_edit(db: Session, event: Event, data: EventUpdate) -> _RequestEdit:
+def _is_hold_changed(
+    event: Event,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+    lines: list[tuple[EquipmentType, int]],
+) -> bool:
+    """Story 7.2 AC7: whether an edit moves the dates or changes what equipment, and how much, the
+    event asks for - the only edits its existing holds can be short for."""
+    stored = sorted((line.equipment_type_id, line.quantity) for line in event.equipment_requests)
+    edited = sorted((equipment_type.id, quantity) for equipment_type, quantity in lines)
+    return starts_at != event.starts_at or ends_at != event.ends_at or edited != stored
+
+
+def _validate_request_edit(
+    db: Session, event: Event, data: EventUpdate, *, recheck_resent_equipment: bool
+) -> _RequestEdit:
     """AC2-AC7/AC17/AC18: every 2.1 check on an edit to ``event``, before anything is changed, so
     a refused edit leaves the request as it was. Shared by the organiser's draft edit (AC7) and the
     coordinator's correction under review (story 7.2 AC4), so the two can never drift apart.
-    Equipment availability leaves ``event``'s own holds out (story 7.2 AC7); a draft has none."""
+    Equipment availability leaves ``event``'s own holds out (story 7.2 AC7); a draft has none.
+    ``recheck_resent_equipment`` is True for a draft, whose equipment is checked on every save that
+    sends it. A submitted request already holds its stock, so a correction that resends the same
+    dates and equipment is not judged against stock it holds (story 7.2 AC7)."""
     sent = data.model_fields_set
     details = {field: getattr(data, field) for field in _DETAIL_FIELDS if field in sent}
     starts_at = details.get("starts_at", event.starts_at)
@@ -938,7 +966,8 @@ def _validate_request_edit(db: Session, event: Event, data: EventUpdate) -> _Req
             if data.equipment is not None
             else [(line.equipment_type, line.quantity) for line in event.equipment_requests]
         )
-        _check_equipment_available(db, starts_at, ends_at, lines, exclude_event_id=event.id)
+        if recheck_resent_equipment or _is_hold_changed(event, starts_at, ends_at, lines):
+            _check_equipment_available(db, starts_at, ends_at, lines, exclude_event_id=event.id)
     return _RequestEdit(details=details, equipment_types=types)
 
 
@@ -982,7 +1011,7 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
     if event.status != EventStatus.DRAFT:
         raise EventNotEditable()
 
-    edit = _validate_request_edit(db, event, data)
+    edit = _validate_request_edit(db, event, data, recheck_resent_equipment=True)
     _apply_request_edit(event, data, edit, actor=actor)
     _flush_request_edit(db, event)
     record_audit(
@@ -1661,7 +1690,7 @@ def _apply_correction(
     for submission - including a detail that was already missing (a seeded request predating the
     point of contact), so a field marked required on the form always is."""
     before = _request_values(event)
-    edit = _validate_request_edit(db, event, data)
+    edit = _validate_request_edit(db, event, data, recheck_resent_equipment=False)
     _apply_request_edit(event, data, edit, actor=actor)
     after = _request_values(event)
     changes = {
@@ -1674,9 +1703,17 @@ def _apply_correction(
     missing = _missing_for_submission(event)
     if missing:
         raise SubmittedDetailsMissing(missing)
-    _flush_request_edit(db, event)
+    try:
+        _flush_request_edit(db, event)
+    except DuplicateEventRequest as exc:
+        raise DuplicateCorrectedRequest(exc.name) from exc
     if changes.keys() & _HOLD_FIELDS:
-        _replace_equipment_holds(db, event, actor=actor)
+        try:
+            _replace_equipment_holds(db, event, actor=actor)
+        except EquipmentNoLongerAvailable as exc:
+            # Stock taken by another request after the 2.1 check: the copy on screen is not out of
+            # date, the equipment is, so it is refused as 2.1's check would have refused it.
+            raise EquipmentNotAvailable(exc.names) from exc
     return changes
 
 
