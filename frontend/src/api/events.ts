@@ -441,9 +441,9 @@ export interface EventReviewCorrectionInput extends EventInput {
 
 /**
  * Story 7.2 AC4-AC9: the coordinator assigned to the event corrects the organiser's request while
- * it is under review. Every 409 - approved meanwhile (AC6), changed since it was opened (AC9), or
- * equipment taken meanwhile (AC7) - means the copy on screen is out of date, so it is one code:
- * EVENT_CORRECTION_CONFLICT, which the page answers with a reload.
+ * it is under review. Every 409 - approved meanwhile (AC6) or changed since it was opened (AC9) -
+ * means the copy on screen is out of date, so it is one code: EVENT_CORRECTION_CONFLICT, which the
+ * page answers with a reload. Equipment no longer free for the dates (AC7) is a 422, as in 2.1.
  */
 export function correctEventUnderReview(
   eventId: string,

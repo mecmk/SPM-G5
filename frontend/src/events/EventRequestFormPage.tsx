@@ -138,6 +138,16 @@ function coordinatorEditNotice(event: EventDetail, userId: string | undefined): 
   return "You are correcting the organiser's request while it is under review. Saved changes apply straight away; the organiser does not need to approve them."
 }
 
+/**
+ * Story 7.2 AC7: the dates and the equipment lines (type and quantity) of a form, the only part a
+ * correction's equipment holds depend on - comparable with the same part of the saved request.
+ */
+function holdKeyOf(form: EventFormState): string {
+  const input = eventInputFrom(form)
+  const lines = input.equipment.map((line) => `${line.equipment_type_code}:${line.quantity}`).sort()
+  return JSON.stringify([input.starts_at, input.ends_at, lines])
+}
+
 interface EventRequestFormPageProps {
   /** Story 7.2: the assigned coordinator editing a submitted event - its details while under
    *  review, its internal notes until it is closed. */
@@ -301,6 +311,17 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       : null
   const availabilityByType =
     availability !== null && availability.key === datesKey ? availability.byType : null
+  /**
+   * Story 7.2 AC7: a correction that leaves the dates and equipment as they were saved is not
+   * judged against the stock - the event already holds its own, and the backend does not re-check
+   * it either. Availability is still shown on each line.
+   */
+  const isHoldUnchanged =
+    isCoordinatorEdit &&
+    form !== null &&
+    event !== null &&
+    holdKeyOf(form) === holdKeyOf(formFromEvent(event))
+  const judgedAvailability = isHoldUnchanged ? null : availabilityByType
 
   useEffect(() => {
     if (datesKey === null) return
@@ -322,7 +343,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
 
   // Problems with the name and the numbers, said next to each field as it is typed.
   const liveProblems: Record<string, ErrorCode> = {
-    ...(form ? getLiveProblems(form, availabilityByType) : {}),
+    ...(form ? getLiveProblems(form, judgedAvailability) : {}),
     ...(form && isNameTouched && !form.name.trim()
       ? { [FIELD_ID.name]: 'EVENT_NAME_REQUIRED' as ErrorCode }
       : {}),
@@ -587,7 +608,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             : 'EVENT_DATE_INCOMPLETE',
           fieldId: incompleteFieldId,
         }
-      : validateEventForm(current, event, availabilityByType)
+      : validateEventForm(current, event, judgedAvailability)
     if (problem) {
       setSaveError(ERROR_REGISTRY[problem.code].message)
       setInvalidField({ id: problem.fieldId, form: current })
@@ -748,6 +769,11 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   function reloadEvent() {
     setSaveError(null)
     setIsOutOfDate(false)
+    // The picture is not part of the loaded event, so an unsaved one is dropped here too.
+    setPicture(null)
+    setIsPictureRemoved(false)
+    setPictureProblem(null)
+    setInvalidField(null)
     setLoadCount((count) => count + 1)
   }
 
