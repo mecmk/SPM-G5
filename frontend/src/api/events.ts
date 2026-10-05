@@ -459,6 +459,47 @@ export function correctEventUnderReview(
   })
 }
 
+const CORRECTION_PICTURE_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_CORRECTION_CONFLICT',
+  413: 'EVENT_PICTURE_TOO_LARGE',
+} as const
+
+/**
+ * Story 7.2 AC4: the coordinator assigned to the event replaces its cover picture while it is
+ * under review. `expectedUpdatedAt` is AC9's token, as for `correctEventUnderReview`, and a 409
+ * means the copy on screen is out of date.
+ */
+export function uploadCoverImageUnderReview(
+  eventId: string,
+  file: File,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body = new FormData()
+  body.append('file', file)
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'PUT',
+    body,
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture saved', message: 'The cover picture was saved.' },
+  })
+}
+
+/** Story 7.2 AC4: the coordinator assigned to the event takes its cover picture off while it is
+ *  under review. The same token and refusals as `uploadCoverImageUnderReview`. */
+export function removeCoverImageUnderReview(
+  eventId: string,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'DELETE',
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture removed', message: 'The cover picture was removed.' },
+  })
+}
+
 /** Mirrors `EquipmentAvailabilityOut`: units of one equipment type free for a period. */
 export interface EquipmentAvailability {
   equipment_type_code: string

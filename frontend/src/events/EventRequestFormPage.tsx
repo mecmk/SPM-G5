@@ -8,10 +8,12 @@ import {
   fetchEventReferenceData,
   getEvent,
   removeCoverImage,
+  removeCoverImageUnderReview,
   submitEvent,
   updateEvent,
   updateEventRoutineInformation,
   uploadCoverImage,
+  uploadCoverImageUnderReview,
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
@@ -162,9 +164,9 @@ interface EventRequestFormPageProps {
  *
  * Story 7.2: with `isCoordinatorEdit`, serves /events/:eventId/coordinator-edit, where the assigned
  * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4: while it
- * is under review, the organiser's request too - the same fields and the same checks, except the
- * cover picture, which stays read-only after submission; and every field marked * must be
- * filled to save them, as on the backend. AC5: once approved, those fields are shown greyed out. AC7: equipment no longer free for
+ * is under review, the organiser's request too, cover picture included - the same fields, the
+ * same controls and the same checks; and every field marked * must be filled to save them, as on
+ * the backend. AC5: once approved, those fields are shown greyed out. AC7: equipment no longer free for
  * new dates is marked on its line, as 2.1 does. AC6/AC9: a save made against a copy that was
  * approved or changed meanwhile is refused, and the page offers a reload.
  */
@@ -331,6 +333,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     event !== null &&
     JSON.stringify(eventInputFrom(form)) !== JSON.stringify(eventInputFrom(formFromEvent(event)))
   const isNotesChanged = event !== null && internalNotes !== (event.internal_notes ?? '')
+  const isPictureChanged =
+    picture !== null || (isPictureRemoved && event !== null && event.cover_image_url !== null)
 
   /** What the row says about stock: how many are free. */
   function equipmentAvailabilityNote(line: EquipmentDraft) {
@@ -689,10 +693,11 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   }
 
   /**
-   * Story 7.2: save what the coordinator changed - the details first (AC4, with the `updated_at`
-   * of the copy on screen for AC9), then the internal notes (AC1), each only when it changed. The
-   * notes go second because saving them moves `updated_at`, which would otherwise make the details
-   * save look stale. A refusal because the copy is out of date offers a reload, not a retry.
+   * Story 7.2: save what the coordinator changed - the details (AC4, with the `updated_at` of the
+   * copy on screen for AC9), then the cover picture, then the internal notes (AC1), each only when
+   * it changed. Each step sends the `updated_at` the step before it returned, so the coordinator's
+   * own saves never look stale to each other; the notes go last because their endpoint takes no
+   * token. A refusal because the copy is out of date offers a reload, not a retry.
    */
   async function handleSaveCoordinatorEdit(submission: FormEvent<HTMLFormElement>) {
     submission.preventDefault()
@@ -708,14 +713,19 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     setSaveError(null)
     setIsSaving(true)
     try {
+      let latest = event
       if (isSavingDetails) {
-        const saved = await correctEventUnderReview(
-          event.id,
-          eventInputFrom(form),
-          event.updated_at,
-        )
-        setEvent(saved)
-        setForm(formFromEvent(saved))
+        latest = await correctEventUnderReview(latest.id, eventInputFrom(form), latest.updated_at)
+        setEvent(latest)
+        setForm(formFromEvent(latest))
+      }
+      if (canCorrectDetails && isPictureChanged) {
+        latest = picture
+          ? await uploadCoverImageUnderReview(latest.id, picture.file, latest.updated_at)
+          : await removeCoverImageUnderReview(latest.id, latest.updated_at)
+        setEvent(latest)
+        setPicture(null)
+        setIsPictureRemoved(false)
       }
       if (isNotesChanged) {
         const saved = await updateEventRoutineInformation(event.id, {
@@ -928,72 +938,56 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             </div>
           </fieldset>
 
-          {isCoordinatorEdit ? (
-            // Story 7.2 AC4: the cover picture stays read-only after submission, so only the
-            // picture itself is shown, without the upload controls.
-            <fieldset className="card">
-              <legend>Cover picture</legend>
-              <p className="form-hint">
-                The cover picture cannot be changed once the request is submitted.
-              </p>
-              {savedPictureUrl ? (
-                <img className="picture-drop-preview" src={savedPictureUrl} alt="Cover picture" />
+          <fieldset className="card" disabled={isReadOnly}>
+            <legend>Cover picture</legend>
+            <p className="form-hint">
+              Optional. JPEG, PNG or WebP, up to 5 MB. It shows on the event's card.
+            </p>
+            <div
+              role="group"
+              aria-label="Cover picture drop area"
+              className={isDraggingPicture ? 'picture-drop is-dragging' : 'picture-drop'}
+              onDragEnter={handlePictureDragOver}
+              onDragOver={handlePictureDragOver}
+              onDragLeave={handlePictureDragLeave}
+              onDrop={handlePictureDrop}
+            >
+              {shownPictureUrl ? (
+                <img
+                  className="picture-drop-preview"
+                  src={shownPictureUrl}
+                  alt="Cover picture preview"
+                />
               ) : (
-                <p className="muted">No cover picture.</p>
+                <span className="picture-drop-icon" aria-hidden="true">
+                  <Icon name="image" size={32} />
+                </span>
               )}
-            </fieldset>
-          ) : (
-            <fieldset className="card" disabled={isReadOnly}>
-              <legend>Cover picture</legend>
-              <p className="form-hint">
-                Optional. JPEG, PNG or WebP, up to 5 MB. It shows on the event's card.
+              <p className="picture-drop-hint">
+                {isDraggingPicture ? 'Drop the picture here' : 'Drag a picture here, or'}
               </p>
-              <div
-                role="group"
-                aria-label="Cover picture drop area"
-                className={isDraggingPicture ? 'picture-drop is-dragging' : 'picture-drop'}
-                onDragEnter={handlePictureDragOver}
-                onDragOver={handlePictureDragOver}
-                onDragLeave={handlePictureDragLeave}
-                onDrop={handlePictureDrop}
-              >
-                {shownPictureUrl ? (
-                  <img
-                    className="picture-drop-preview"
-                    src={shownPictureUrl}
-                    alt="Cover picture preview"
+              <div className="picture-drop-actions">
+                <label className="button secondary">
+                  {shownPictureUrl ? 'Replace picture' : 'Choose picture'}
+                  <input
+                    type="file"
+                    className="visually-hidden"
+                    accept={COVER_IMAGE_TYPES.join(',')}
+                    aria-label="Choose cover picture"
+                    onChange={handlePictureInput}
                   />
-                ) : (
-                  <span className="picture-drop-icon" aria-hidden="true">
-                    <Icon name="image" size={32} />
-                  </span>
+                </label>
+                {shownPictureUrl && !isReadOnly && (
+                  <button type="button" className="secondary" onClick={removePicture}>
+                    Remove picture
+                  </button>
                 )}
-                <p className="picture-drop-hint">
-                  {isDraggingPicture ? 'Drop the picture here' : 'Drag a picture here, or'}
-                </p>
-                <div className="picture-drop-actions">
-                  <label className="button secondary">
-                    {shownPictureUrl ? 'Replace picture' : 'Choose picture'}
-                    <input
-                      type="file"
-                      className="visually-hidden"
-                      accept={COVER_IMAGE_TYPES.join(',')}
-                      aria-label="Choose cover picture"
-                      onChange={handlePictureInput}
-                    />
-                  </label>
-                  {shownPictureUrl && !isReadOnly && (
-                    <button type="button" className="secondary" onClick={removePicture}>
-                      Remove picture
-                    </button>
-                  )}
-                </div>
               </div>
-              {pictureProblem && (
-                <span className="field-error">{ERROR_REGISTRY[pictureProblem].message}</span>
-              )}
-            </fieldset>
-          )}
+            </div>
+            {pictureProblem && (
+              <span className="field-error">{ERROR_REGISTRY[pictureProblem].message}</span>
+            )}
+          </fieldset>
 
           <fieldset className="card" disabled={isReadOnly}>
             <legend>
@@ -1317,7 +1311,10 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               <Link to={backTo} className="button secondary">
                 Cancel
               </Link>
-              <button type="submit" disabled={isSaving || (!isDetailsChanged && !isNotesChanged)}>
+              <button
+                type="submit"
+                disabled={isSaving || (!isDetailsChanged && !isNotesChanged && !isPictureChanged)}
+              >
                 {isSaving && <span className="spinner button-spinner" aria-hidden="true" />}
                 Save changes
               </button>
