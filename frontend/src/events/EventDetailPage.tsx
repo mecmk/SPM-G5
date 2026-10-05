@@ -53,12 +53,16 @@ const NOT_YET_SCHEDULED = 'Not yet scheduled'
 const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
- * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
+ * icon and the status sentence, matching the wording a Venue Staff decision already produces.
+ * Story 13.2.2 AC1: `showsDecidedAt` marks the outcomes Venue Staff decide. A withdrawal or a
+ * cancellation also stamps `decided_at`, but nobody on Venue Staff decided anything then, so
+ * those cards leave the "Decided at" line out. */
 interface BookingOutcomePresentation {
   label: string
   tone: 'success' | 'warning' | 'danger' | 'neutral'
   icon: IconName
   message: string
+  showsDecidedAt: boolean
 }
 
 const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
@@ -67,30 +71,35 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     tone: 'success',
     icon: 'check-circle',
     message: 'This venue booking has been approved and the venue is confirmed for this event.',
+    showsDecidedAt: true,
   },
   PENDING: {
     label: 'Pending',
     tone: 'warning',
     icon: 'clock',
     message: 'Awaiting review by Venue Staff.',
+    showsDecidedAt: false,
   },
   REJECTED: {
     label: 'Rejected',
     tone: 'danger',
     icon: 'x-circle',
     message: 'This booking request was rejected.',
+    showsDecidedAt: true,
   },
   WITHDRAWN: {
     label: 'Withdrawn',
     tone: 'neutral',
     icon: 'x-circle',
     message: 'This booking request was withdrawn.',
+    showsDecidedAt: false,
   },
   CANCELLED: {
     label: 'Cancelled',
     tone: 'neutral',
     icon: 'x-circle',
     message: 'This booking was cancelled.',
+    showsDecidedAt: false,
   },
 }
 
@@ -157,6 +166,9 @@ function formatHeroMeta(event: EventDetail): string {
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
  * every venue booking ever raised for the event, most recent first, each with its status and,
  * once rejected, its reason.
+ *
+ * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
+ * decided.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it straight to PLANNING; rejecting
@@ -783,7 +795,7 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
-                      {booking.decided_at !== null && (
+                      {bookingOutcome.showsDecidedAt && booking.decided_at !== null && (
                         <p>
                           <span className="fact-label">Decided at</span>
                           <br />
