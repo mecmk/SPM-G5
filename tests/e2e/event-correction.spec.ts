@@ -2,11 +2,11 @@
  * Story 7.2 - fe: the assigned Event Coordinator corrects an organiser's request while it is under
  * review, from the event details page, in the same form the organiser filled in (2.1).
  * AC4 the coordinator edits the organiser-provided details and saves them without the organiser's
- *     approval; the status stays Under review. The cover picture is shown without upload
- *     controls, and details cannot be saved while a field marked * is empty (checked before
+ *     approval; the status stays Under review. The cover picture is replaced with the organiser's
+ *     own controls, and details cannot be saved while a field marked * is empty (checked before
  *     anything is sent).
- * AC5 once approved, the details page offers no edit and says further changes go through a change
- *     request; internal notes are still offered.
+ * AC5 once approved, the organiser's details and cover picture are greyed out with a hint that
+ *     further changes go through a change request; internal notes still save.
  * AC6 an approval that lands while the editor is open makes the save fail, and a reload shows the
  *     details read-only.
  * AC7 the form counts availability without the event's own holds, and marks equipment no longer
@@ -41,6 +41,11 @@ const LOCKED_HINT =
 // cycles take longer than the default per-test budget - the same reasoning as
 // request-clarification.spec.ts and coordinator-reassignment.spec.ts.
 const TWO_USER_TIMEOUT = 90_000
+/** The smallest valid PNG: one transparent pixel. */
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 interface SubmittedRequest {
   id: string
@@ -132,14 +137,25 @@ test('7.2 AC4: the assigned coordinator corrects a request under review and the 
   const coordinator = await signedInAs(browser, page, request.coordinator)
 
   await openCorrection(coordinator, request.id, name)
-  await expect(
-    coordinator.getByText('The cover picture cannot be changed once the request is submitted.'),
-  ).toBeVisible()
-  await expect(coordinator.getByLabel('Choose cover picture')).toHaveCount(0)
   await coordinator.getByLabel('Description').fill('Corrected: a two-part hands-on workshop.')
   await coordinator.getByLabel('Expected attendance').fill('75')
+  await coordinator
+    .getByLabel('Choose cover picture')
+    .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: PNG_BYTES })
+  await expect(coordinator.getByRole('img', { name: 'Cover picture preview' })).toBeVisible()
+  const pictureSaved = coordinator.waitForResponse(
+    (response) =>
+      response.url().includes('/review-details/cover-image') &&
+      response.request().method() === 'PUT' &&
+      response.ok(),
+  )
   await saveCorrection(coordinator)
+  await pictureSaved
   await expect(coordinator.getByRole('alert')).toHaveCount(0)
+  await expect(coordinator.getByRole('img', { name: 'Cover picture preview' })).toHaveAttribute(
+    'src',
+    /\/uploads\/events\//,
+  )
 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(coordinator).toHaveURL(DETAILS_PATH)
@@ -256,6 +272,7 @@ test('7.2 AC5: once approved, the details are greyed out, the hint says why, and
   await expect(page.getByText(LOCKED_HINT)).toBeVisible()
   await expect(page.getByLabel('Event name')).toBeDisabled()
   await expect(page.getByLabel('Description')).toBeDisabled()
+  await expect(page.getByLabel('Choose cover picture')).toBeDisabled()
   const note = `E2E planning note ${Date.now()}`
   await page.getByLabel('Internal notes').fill(note)
   await Promise.all([
