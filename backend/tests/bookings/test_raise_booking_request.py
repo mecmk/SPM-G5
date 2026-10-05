@@ -248,8 +248,8 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     coordinator_client, db: Session
 ):
     """Review of PR #42: "3 breakout rooms with HDMI" has to reach Venue Staff as such. The name
-    alone understates what the venue must provide, and both columns already exist on
-    ``event_required_facilities``.
+    alone understates what the venue must provide, and both columns exist on
+    ``venue_requirement_facilities`` (``event_required_facilities`` until migration 012).
     """
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id

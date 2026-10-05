@@ -93,6 +93,10 @@ REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
     "{requirement} cannot need room for more people than the expected attendance."
 )
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
+# AC9's database backstop knows only that the index refused a name, not which requirement held it.
+DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE = (
+    "Two venue requirements on this request cannot share a name."
+)
 UNKNOWN_REQUIREMENT_MESSAGE = "A venue requirement does not belong to this request."
 _UNNAMED_REQUIREMENT_LABEL = "Venue requirement {position}"
 _REQUIREMENT_MISSING_NAME_LABEL = "venue requirement {position}: name"
@@ -255,10 +259,12 @@ class UnknownVenueRequirement(InvalidEventRequest):
 
 
 class DuplicateVenueRequirementName(InvalidEventRequest):
-    """AC9's backstop: the database refused a second requirement with the same name."""
+    """AC9's backstop: the database refused a second requirement with the same name. Review of
+    PR #84: the index does not say which requirement it was, so the message names none - never
+    the event, which is the only name to hand where this is raised."""
 
-    def __init__(self, name: str):
-        super().__init__(DUPLICATE_REQUIREMENT_NAME_MESSAGE.format(name=name))
+    def __init__(self):
+        super().__init__(DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE)
 
 
 class ContradictoryRegistration(InvalidEventRequest):
@@ -889,7 +895,7 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
         if DUPLICATE_REQUEST_INDEX in str(exc.orig):
             raise DuplicateEventRequest(data.name) from exc
         if DUPLICATE_REQUIREMENT_NAME_INDEX in str(exc.orig):
-            raise DuplicateVenueRequirementName(data.name) from exc
+            raise DuplicateVenueRequirementName() from exc
         raise
     db.add(
         EventStatusHistory(
@@ -1044,7 +1050,7 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
         if DUPLICATE_REQUEST_INDEX in str(exc.orig):
             raise DuplicateEventRequest(attempted_name) from exc
         if DUPLICATE_REQUIREMENT_NAME_INDEX in str(exc.orig):
-            raise DuplicateVenueRequirementName(attempted_name) from exc
+            raise DuplicateVenueRequirementName() from exc
         raise
     record_audit(
         db,

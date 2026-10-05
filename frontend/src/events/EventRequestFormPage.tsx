@@ -878,6 +878,9 @@ export function EventRequestFormPage() {
             {form.venueRequirements.map((requirement, index) => {
               const fieldIdOf = (field: 'name' | 'capacity' | 'starts' | 'ends') =>
                 getVenueRequirementFieldId(requirement.key, field)
+              // Review of PR #84: every card repeats the same controls, so their accessible
+              // names say which requirement they act on.
+              const requirementLabel = `venue requirement ${index + 1}`
               return (
                 <fieldset key={requirement.key} className="equipment-item">
                   <legend>{`Venue requirement ${index + 1}`}</legend>
@@ -987,7 +990,7 @@ export function EventRequestFormPage() {
                                 step={1}
                                 className="inline-number"
                                 placeholder="How many"
-                                aria-label={`${item.name} quantity`}
+                                aria-label={`${item.name} quantity, ${requirementLabel}`}
                                 {...fieldProps(quantityId)}
                                 value={selected.quantity}
                                 onChange={(e) =>
@@ -998,7 +1001,7 @@ export function EventRequestFormPage() {
                               />
                               <input
                                 placeholder="Notes"
-                                aria-label={`${item.name} notes`}
+                                aria-label={`${item.name} notes, ${requirementLabel}`}
                                 value={selected.notes}
                                 onChange={(e) =>
                                   updateRequirementFacility(requirement, item.code, {
@@ -1026,6 +1029,7 @@ export function EventRequestFormPage() {
                   <button
                     type="button"
                     className="secondary button-sm"
+                    aria-label={`Remove ${requirementLabel}`}
                     onClick={() => removeVenueRequirement(requirement.key)}
                   >
                     Remove
