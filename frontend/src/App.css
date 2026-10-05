@@ -186,6 +186,12 @@
   color: var(--text-muted);
 }
 
+/* A sentence on its own line under a subtitle's status badge (story 7.2's coordinator edit page). */
+.page-subtitle-note {
+  display: block;
+  margin-top: 0.5rem;
+}
+
 .page-actions {
   display: flex;
   gap: 0.5rem;
@@ -195,6 +201,12 @@
 /* A page-header with only an action slot (its title lives elsewhere, e.g. a hero banner). */
 .page-header.actions-only {
   justify-content: flex-end;
+}
+
+/* An action set apart on the left of an actions-only header (story 7.2's Edit event), while the
+   rest stay right-aligned whether it is there or not. */
+.page-header-lead {
+  margin-right: auto;
 }
 
 .back-link {

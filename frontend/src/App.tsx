@@ -8,7 +8,6 @@ import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
-import { EventRoutineEditPage } from './events/EventRoutineEditPage'
 import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AppLayout } from './layout/AppLayout'
@@ -23,7 +22,7 @@ import {
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EVENT_EDIT_PATH,
-  EVENT_EDIT_ROUTINE_PATH,
+  EVENT_COORDINATOR_EDIT_PATH,
   EVENT_NEW_PATH,
   EVENT_PATH,
   EVENTS_INBOX_PATH,
@@ -132,13 +131,17 @@ function App() {
               <Route path={EVENT_PATH} element={<EventDetailPage />} />
 
               {/*
-                Story 7.2: the assigned Event Coordinator edits an event's routine information.
-                Sits behind EVENTS_EDIT_ROUTINE (a role check, UX only); the page itself confirms
-                the signed-in coordinator is the one assigned to this specific event, and the
-                backend is the real enforcement of both.
+                Story 7.2: the assigned Event Coordinator edits an event in the 2.1 request form -
+                its internal notes until it is closed, the organiser's request too while it is
+                under review. Sits behind EVENTS_EDIT_ROUTINE (a role check, UX only); the page
+                itself confirms the signed-in coordinator is the one assigned to this specific
+                event, and the backend is the real enforcement of both.
               */}
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_EDIT_ROUTINE} />}>
-                <Route path={EVENT_EDIT_ROUTINE_PATH} element={<EventRoutineEditPage />} />
+                <Route
+                  path={EVENT_COORDINATOR_EDIT_PATH}
+                  element={<EventRequestFormPage key="coordinator-edit" isCoordinatorEdit />}
+                />
               </Route>
 
               {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (

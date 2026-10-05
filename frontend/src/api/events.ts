@@ -415,9 +415,9 @@ export interface EventRoutineInput {
 }
 
 /**
- * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its routine information
- * directly. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event is completed,
- * cancelled or rejected.
+ * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its internal notes directly,
+ * from the coordinator's edit page. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event
+ * is completed, cancelled or rejected.
  */
 export function updateEventRoutineInformation(
   eventId: string,
@@ -427,7 +427,35 @@ export function updateEventRoutineInformation(
     method: 'PATCH',
     body: input,
     errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_ROUTINE_EDIT_CLOSED' },
-    notify: { title: 'Event updated', message: 'The routine event information was saved.' },
+    notify: { title: 'Internal notes saved', message: 'The internal notes were saved.' },
+  })
+}
+
+/**
+ * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
+ * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.
+ */
+export interface EventReviewCorrectionInput extends EventInput {
+  expected_updated_at: string
+}
+
+/**
+ * Story 7.2 AC4-AC9: the coordinator assigned to the event corrects the organiser's request while
+ * it is under review. Every 409 - approved meanwhile (AC6), changed since it was opened (AC9), or
+ * equipment taken meanwhile (AC7) - means the copy on screen is out of date, so it is one code:
+ * EVENT_CORRECTION_CONFLICT, which the page answers with a reload.
+ */
+export function correctEventUnderReview(
+  eventId: string,
+  input: EventInput,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body: EventReviewCorrectionInput = { ...input, expected_updated_at: expectedUpdatedAt }
+  return api<EventDetail>(`/events/${eventId}/review-details`, {
+    method: 'PATCH',
+    body,
+    errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_CORRECTION_CONFLICT' },
+    notify: { title: 'Event details corrected', message: `"${input.name}" was updated.` },
   })
 }
 
@@ -437,11 +465,17 @@ export interface EquipmentAvailability {
   available: number
 }
 
-/** Story 2.1 AC6: how many of each equipment type are free for the proposed dates. */
+/**
+ * Story 2.1 AC6: how many of each equipment type are free for the proposed dates. Story 7.2 AC7:
+ * `excludeEventId` leaves out that event's own holds, so a request being corrected is not counted
+ * against itself.
+ */
 export function fetchEquipmentAvailability(
   startsAt: string,
   endsAt: string,
+  excludeEventId: string | null = null,
 ): Promise<EquipmentAvailability[]> {
   const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  if (excludeEventId !== null) params.set('exclude_event_id', excludeEventId)
   return api<EquipmentAvailability[]>(`/events/equipment-availability?${params.toString()}`)
 }

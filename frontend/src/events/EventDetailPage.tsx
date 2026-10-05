@@ -29,10 +29,14 @@ import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from './eventStatus'
+import {
+  AWAITING_DECISION_STATUSES,
+  DETAILS_LOCKED_STATUSES,
+  TERMINAL_STATUSES,
+} from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import {
-  eventEditRoutinePath,
+  eventCoordinatorEditPath,
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
   venueSearchPath,
@@ -149,9 +153,11 @@ function formatHeroMeta(event: EventDetail): string {
  * AC3: this page only ever renders fields, it never edits them, so every field the viewer's role
  * cannot change is simply shown, never hidden.
  *
- * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
- * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
- * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
+ * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
+ * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
+ * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
+ * always, the organiser's details only while under review (AC4). AC5: once approved, that
+ * coordinator is also told here that further changes go through the change request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
@@ -424,10 +430,17 @@ export function EventDetailPage() {
   const backLabel = backState?.fromLabel ?? 'Home'
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
-  const canEditRoutineInformation =
+  /** Story 7.2 AC1/AC3/AC8: the assigned coordinator edits the event until it is closed - its
+   *  internal notes always, the organiser's details only while it is under review. */
+  const canEditEvent =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 7.2 AC5: the details are locked, which the assigned coordinator is told. */
+  const isDetailsLockHintShown =
+    can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
+    isAssignedCoordinator &&
+    DETAILS_LOCKED_STATUSES.includes(event.status)
   /** Story 4.4/4.5: only the assigned coordinator, holding events:review, may decide a request
    *  that is still awaiting one - mirroring the backend's own record-level and status checks. */
   const canApprove =
@@ -479,14 +492,18 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {(canEditRoutineInformation || canApprove || canReject || canReassign) && (
+      {(canEditEvent || canApprove || canReject || canReassign) && (
         <div className="page-header actions-only">
+          {/* Story 7.2: editing sits apart, on the left; the decisions stay on the right. */}
+          {canEditEvent && (
+            <Link
+              to={eventCoordinatorEditPath(event.id)}
+              className="button button-with-icon page-header-lead"
+            >
+              <Icon name="pencil" size={20} /> Edit event
+            </Link>
+          )}
           <div className="page-actions">
-            {canEditRoutineInformation && (
-              <Link to={eventEditRoutinePath(event.id)} className="button">
-                Edit routine information
-              </Link>
-            )}
             {canApprove && (
               <button type="button" className="brand" onClick={askToApprove}>
                 Approve
@@ -577,6 +594,12 @@ export function EventDetailPage() {
 
         <section className="card stack" aria-labelledby="event-info-heading">
           <h2 id="event-info-heading">Event information</h2>
+          {isDetailsLockHintShown && (
+            <p className="form-hint">
+              Event details can no longer be edited directly after approval. Further changes must go
+              through the change request process.
+            </p>
+          )}
           <div className="row">
             <div>
               <p className="eyebrow">Purpose</p>
