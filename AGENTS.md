@@ -16,14 +16,14 @@ calls, agents, or AI SDKs unless a story explicitly asks for one.
 
 ## Coding Conventions
 
-This file is the source of truth for process — stack, commands, branching, Definition of Done.
+This file is the source of truth for process — stack, commands, branching, merge checklist.
 The rules for writing the code itself live beside the code:
 
 | Path | File | Holds |
 | --- | --- | --- |
 | root | `CLAUDE.md` | Layout, cross-subsystem facts, and the resolution rule |
 | `backend/`, `frontend/`, `tests/` | `CLAUDE.md` | Setup, domain, architecture, hard prohibitions, feature workflow |
-| `backend/`, `frontend/`, `tests/` | `STYLE.md` | Graded coding rules, each anchored to a real file and line in this repo |
+| `backend/`, `frontend/`, `tests/` | `STYLE.md` | Graded coding rules, each anchored to a real file and function in this repo |
 
 **Read the `CLAUDE.md` and `STYLE.md` of the subsystem you are touching before writing code**, and
 defer to the most specific `CLAUDE.md` for the code in front of you. A rule graded `blocking` in a
@@ -115,8 +115,8 @@ also run them, but don't rely on CI to catch what you could catch locally.
   `python -m app.dbtool` (`npm run db:*`). Every table/column has a `COMMENT ON`; the data
   dictionary and ERD in `docs/database/` are **generated** from them (`npm run db:docs`) -
   never edit those two files by hand.
-- Sprint 1: `001_initial_schema.sql` may be edited in place, then `npm run db:reset`. Later
-  sprints: add `NNN_*.sql`, never edit applied files. Full rules: `docs/database/README.md`.
+- Never edit a migration once it has been applied. Change the schema with a new `NNN_*.sql`
+  file, the next free number. Full rules: `docs/database/README.md`.
 - Seed files are idempotent upserts with fixed UUIDs; mirror rows tests use in
   `backend/tests/support/seed.py`.
 - Statuses are `text` + named `CHECK` constraints, not ENUMs. Lists (facilities, layouts,
@@ -133,54 +133,73 @@ also run them, but don't rely on CI to catch what you could catch locally.
 
 ## Repository Structure
 
+Folders, not files: the files inside a folder change with every story, so list the folder for
+those. A new feature area gets its line here in the same PR (see
+[Keeping Docs Current](#keeping-docs-current)).
+
 ```text
 backend/
-  app/
-    auth/               # login/logout, sessions, permission matrix (stories 1.1, 1.2)
-    venues/             # venue catalogue (stories 8.x)
-    common/             # cross-cutting helpers (audit log)
-    dbtool/             # migrate / seed / reset / ready / docs
-    <feature>/          # router.py, service.py, schemas.py, models.py per feature area
+  app/                  # one package per feature area: router.py, service.py, schemas.py, models.py
+    auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
+    bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
+    coordination/       # assigning and reassigning an event's coordinator
+    events/             # event requests, review and decisions, event details, routine edits
+    venues/             # the venue catalogue, its search and its availability calendar
+    common/             # shared by feature areas: the audit log, in-app notifications
+    dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
   db/
     migrations/         # NNN_*.sql schema, applied once in order
     seed/               # idempotent reference + sample data
   tests/                # mirrors app/ by feature; support/ has seed constants + factories
-  pyproject.toml
 frontend/
   src/
-    api/                # calls to the backend (health.ts today)
-    <feature>/          # pages for one feature area, added as stories are picked up
-tests/                  # Playwright e2e specs, separate from backend/frontend
-scripts/                # repo-root Node helpers: uv.mjs (uv wrapper for root npm scripts)
-docs/
-  ARCHITECTURE.md
-  database/             # README + generated DATA_DICTIONARY.md and ERD.excalidraw
-  testing/              # README + generated, git-ignored TRACEABILITY.md
-AGENTS.md
-CONTRIBUTING.md
-README.md
+    api/                # one <feature>.ts per backend feature area, plus the shared client
+    auth/               # the sign-in page, the session, route guards, permission codes
+    bookings/, events/, venues/   # the pages of each feature area
+    components/         # presentational pieces used by more than one page
+    layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
+    notifications/      # the notification centre
+    pages/              # pages of no feature area: home, not permitted, coming soon
+    shared/             # helpers used by more than one page
+    errors/             # the registry of every user-facing error
+tests/
+  e2e/                  # Playwright specs, one per story area
+scripts/                # Node helpers behind the root npm scripts
+docs/                   # architecture, database and testing guides; sprints/ holds sprint records
 ```
 
-Branches, commits, and PRs reference a ticket/story ID (e.g. `1.1`, `8.3`) from whatever backlog
-tool the team is using that sprint. This file doesn't track backlog content itself — just the
-convention of referencing IDs so code can be traced back to a story. Don't scaffold a new
-feature area speculatively; add one only when a real story needs it.
+Don't scaffold a new feature area speculatively; add one only when a real story needs it.
+
+## Backlog IDs
+
+Every backlog item has an ID: a type prefix and a number. `s` is a story (`s8.1`), `f` a fix
+(`f1.1.1`, a fix against story 1.1) and `c` a chore (`c1.0.1`). The same ID, prefix included, goes
+in the branch name and at the end of the commit message and PR title:
+
+- branch: `story/s8.1-venue-search`, `fix/f1.1.1-login-flash`, `chore/c1.0.1-secret-scan`;
+- title: `feat: search and filter the venue catalogue (s8.1)`.
+
+Tests are the exception. They use the story number alone, `@pytest.mark.story("1.1", ac=2)` and
+`'1.1 AC2: …'`, because a test always proves a story's acceptance criterion, even when a fix adds
+it. Older branches and commits use `b` for a fix; `f` replaces it. This file doesn't track backlog
+content itself.
 
 ## Branching & PR Rules (hard constraints)
 
 ```text
 main                   ← trunk. Stable, protected, PR-only.
-├── story/<ID>-<slug>  ← feature branch, e.g. story/1.1-login
-├── fix/<ID>-<slug>    ← bug fix
+├── story/<ID>-<slug>  ← a story, e.g. story/s8.1-venue-search
+├── fix/<ID>-<slug>    ← a fix, e.g. fix/f1.1.1-login-flash
+├── chore/<ID>-<slug>  ← a chore: tooling, CI, dependencies, e.g. chore/c1.0.1-secret-scan
 ├── refactor/<slug>    ← restructuring, no behavior change
 ├── test/<slug>        ← test-only changes
 └── docs/<slug>        ← documentation only
 ```
 
 - **Trunk-based: never commit directly to `main`.** Always branch off the latest `main` using
-  `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `refactor/<slug>`, `test/<slug>`, or `docs/<slug>`.
-  There are no `sprint/<N>` integration branches.
-- Keep branches **short-lived**: one story or fix each, merged once reviewed and green, then
+  `story/<ID>-<slug>`, `fix/<ID>-<slug>`, `chore/<ID>-<slug>`, `refactor/<slug>`,
+  `test/<slug>`, or `docs/<slug>`. There are no `sprint/<N>` integration branches.
+- Keep branches **short-lived**: one backlog item each, merged once reviewed and green, then
   deleted. If `main` moves on while you work, update your branch from it and re-run the tests.
 - Run tests locally before pushing.
 - Open the PR against `main`.
@@ -227,24 +246,65 @@ plan first, then the steps they describe — it doesn't replace them.
 
 ## Commit & PR Conventions
 
-- Conventional Commits style: `feat: add login form (1.1)`, `fix: correct venue availability query (8.3)`.
-  Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
-- Reference the story ID in the commit/PR title, e.g. `feat: assign coordinator to event (5.1)`.
+- Conventional Commits style, ending with the backlog ID when the change has one:
+  `feat: search and filter the venue catalogue (s8.1)`,
+  `fix: keep the sign-in form steady while the session loads (f1.1.1)`,
+  `chore: scan PRs for secrets (c1.0.1)`. A `docs`, `refactor` or `test` change with no backlog
+  item leaves it out. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
 - PR description should state which story/AC it addresses and how it was tested.
 
-## Definition of Done
+## Keeping Docs Current
 
-A story isn't done until:
+Most docs describe a pattern and point at the code, so they stay true without upkeep. These are
+the exceptions. Each is updated by hand, in the same PR as the change that affects it:
+
+| When a PR… | Update |
+| --- | --- |
+| adds a migration (`NNN_*.sql`) | the data dictionary and ERD: run `npm run db:docs` and commit the result |
+| adds, removes or renames a feature-area folder | the folder map in [Repository Structure](#repository-structure) |
+| adds an e2e spec, or tests another story or AC in one | that spec's row in the table in [tests/README.md](tests/README.md) |
+| changes an API request or response shape | its hand-written mirror in `frontend/src/api/<feature>.ts` |
+| adds or renames a permission code | `frontend/src/auth/permissions.ts`, to match `backend/app/auth/permissions.py` |
+| adds or changes a seed row that tests use | `backend/tests/support/seed.py`; `tests/e2e/support.ts` for an account or event a spec uses; the sample-login tables in [README.md](README.md) and [docs/database/README.md](docs/database/README.md) for a seed user |
+| renames, moves or deletes a function or component a `STYLE.md` cites | that citation, and any code example there modelled on it |
+| adds a violation of a `STYLE.md` rule, or fixes one | that file's Standing divergences table |
+| changes a step of the merge checklist | both [Merge Checklist](#merge-checklist) below and `.github/PULL_REQUEST_TEMPLATE.md` |
+| changes the commit or PR title format | both [Commit & PR Conventions](#commit--pr-conventions) above and the quick reference in [CONTRIBUTING.md](CONTRIBUTING.md#commit--pr-titles) |
+| adds a feature area or moves a responsibility between components | [docs/C4_MODEL.md](docs/C4_MODEL.md), per its own "Keeping this file honest" |
+
+**Generated — never edit by hand:** `docs/database/DATA_DICTIONARY.md` and
+`docs/database/ERD.excalidraw` (`npm run db:docs`), and `docs/testing/TRACEABILITY.md`
+(`npm run test:trace`; git-ignored). **Not kept current, on purpose:** `docs/sprints/`, a record of
+each sprint as it stood.
+
+When writing any doc, cite code by file and function name, never by line number, and leave out
+counts ("27 tables") and progress ("built so far"). All three go stale with the next change;
+progress belongs in the backlog.
+
+## Merge Checklist
+
+Gates every PR, not every story: a story can take several PRs. The author ticks the checklist in
+[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md), and the two must match:
 
 - [ ] A test plan was sketched out and agreed before implementation, covering all of: happy
       path, boundary, edge, permission, and conflict cases (or noting why one doesn't apply) —
       see Feature Development Workflow above.
-- [ ] Acceptance criteria from the backlog are met.
+- [ ] Every acceptance criterion the PR addresses has at least one row in the Test Plan table,
+      and is met.
 - [ ] The tests written from that plan exist, are filed in the right suite (`backend/tests/` or
-      `tests/e2e/`), and pass; lint/format checks are clean.
-- [ ] Frontend lint is clean (if applicable); the flow was manually exercised in the browser.
+      `tests/e2e/`), failed before the implementation, and pass now.
+- [ ] The author has read every changed line, including any AI-generated code and tests, and can
+      explain it. It does what the acceptance criteria ask, the functions, fields and endpoints
+      it uses exist, and no test was weakened, skipped or edited to match a bug.
+- [ ] Lint/format checks are clean; the flow was manually exercised in the browser (if there is
+      UI).
 - [ ] No secrets, API keys, or `.env` values committed.
-- [ ] PR opened against `main`, one review obtained, CI green.
+- [ ] PR opened against `main`, CI green, and approved with the
+      [reviewer sign-off](CONTRIBUTING.md#reviewer-sign-off): every test case listed, its code
+      read, and marked correct.
+
+An agent that opens a PR fills in the template but leaves the read-through box unticked. Only the
+human author can say they read and understood the code. An agent never posts a reviewer sign-off.
 
 ## Things to Avoid
 

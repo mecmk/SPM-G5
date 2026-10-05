@@ -9,12 +9,8 @@
  * request), ordering edge cases and immutability are backend cases:
  * backend/tests/events/test_decision_history.py.
  */
-import { expect, test, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, signIn } from './support'
-
-function clarificationsSection(page: Page): Locator {
-  return page.getByRole('region', { name: 'Clarifications', exact: true })
-}
+import { expect, test } from '@playwright/test'
+import { ACCOUNTS, EVENTS, clarificationsSection, signIn } from './support'
 
 test('4.6 AC1: a request awaiting decision shows the decision has not been made yet', async ({
   page,

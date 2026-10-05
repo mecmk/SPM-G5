@@ -1,6 +1,6 @@
 # frontend/CLAUDE.md
 
-React 19 + TypeScript SPA built with Vite. Setup, branching and Definition of Done are in
+React 19 + TypeScript SPA built with Vite. Setup, branching and the merge checklist are in
 [AGENTS.md](../AGENTS.md). This file holds only what is specific to `frontend/` and not obvious
 from reading the code.
 
@@ -48,38 +48,39 @@ Pydantic schema, so `backend/app/` is the reference, for example:
 - `CurrentUser` (`src/api/auth.ts`) mirrors `UserOut`, and carries `permissions: string[]`.
 - `Venue` / `VenueSummary` (`src/api/venues.ts`) mirror the venue schemas.
 
-When a page is gated on a permission again, the code is compared as a plain string against
+When a page is gated on a permission, the code is compared as a plain string against
 `backend/app/auth/permissions.py`, so a renamed code fails **silently** — no type error, the nav
 link simply stops appearing. Grep both sides when changing one.
 
 ## Architecture
 
-| Path                     | Holds                                                                                                                                                                                                          | May import                                                                                                                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                                                                                                 | `./client` only                                                                                                                                                                         |
-| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                                                                                           | `../errors/registry` only                                                                                                                                                               |
-| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                                                               | nothing                                                                                                                                                                                 |
-| `src/routes.ts`          | Route paths used by more than one file                                                                                                                                                                         | nothing                                                                                                                                                                                 |
-| `src/components/`        | Shared presentational pieces: story c3's `Sidebar`, `PageHeader`, `StatusBadge`, `Calendar`, …, story 1.2's `Icon`, story 8.3's `ConfirmDialog` and story 4.1's `EventCard`. Props only: no API calls, no auth | `../routes`, `../shared/*`                                                                                                                                                              |
-| `src/shared/`            | Formatting helpers shared by pages, e.g. `format.ts` (story 4.1), `useLoaded.ts`, the load-on-arrival hook (story 2.6), and `venueRequest.ts`, f12.1.1's who-may-request-a-venue rule                          | `../api/client`, for `useLoaded` only; `../auth/permissions`, for `venueRequest.ts` only; `../api/<feature>` types only, for the status helpers `eventStatus.ts` and `bookingStatus.ts` |
-| `src/<feature>/`         | Pages for one feature area, e.g. `src/venues/` (story 8.3)                                                                                                                                                     | `../api/<feature>`, `../auth/authContext`, `../components/*`, `../layout/LoadingState`, `../shared/*`                                                                                   |
-| `src/auth/`              | `AuthProvider`, `authContext`, `RequireAuth` / `RequirePermission`, `LoginPage`, story 1.1 AC6's `SignInLockedAlert` (the sign-in lock countdown), `homeFor`, `permissions.ts`                                 | `../api/auth`, `../api/client`, `../errors/registry`, `../layout/LoadingState`, `../pages/NotPermittedPage`, `../shared/format`                                                         |
-| `src/layout/`            | `AppLayout` (the signed-in frame: collapsible `Sidebar`, phone bar and drawer, notification bell, toasts), `navigation.ts` (every section and the permission it needs), `LoadingState`                         | `../auth/authContext`, `../components/*`, `../notifications/*`                                                                                                                          |
-| `src/notifications/`     | The notification centre: `NotificationProvider`, `notificationContext`, `NotificationBell`, `ToastStack`                                                                                                       | `../api/client`, `../components/*`                                                                                                                                                      |
-| `src/pages/`             | Pages belonging to no feature area (`HomePage`, `ComingSoonPage`, `NotPermittedPage`, and c3's `ComponentGalleryPage`, served at `/dev/components` in development builds only)                                 | anything above                                                                                                                                                                          |
-| `src/App.tsx`            | The route map                                                                                                                                                                                                  | everything                                                                                                                                                                              |
-| `public/images/events/`  | Event pictures referenced by `events.cover_image_url` (root-relative `/images/events/<file>`); Vite serves `public/` as-is                                                                                     | —                                                                                                                                                                                       |
+| Path                     | Holds                                                                                                                                                                                       | May import                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/api/<feature>.ts`   | Types mirroring backend schemas, and one function per endpoint                                                                                                                              | `./client` only                                                                                                                                               |
+| `src/api/client.ts`      | The single `fetch` wrapper: `api<T>()`, `ApiError`, `formatApiError`                                                                                                                        | `../errors/registry` only                                                                                                                                     |
+| `src/errors/registry.ts` | The error registry: every error code, title and fallback message                                                                                                                            | nothing                                                                                                                                                       |
+| `src/routes.ts`          | Route paths used by more than one file                                                                                                                                                      | nothing                                                                                                                                                       |
+| `src/components/`        | Presentational pieces used by more than one page. Props only: no API calls, no auth                                                                                                         | `../api/<feature>` types, `../routes`, `../shared/*`                                                                                                          |
+| `src/shared/`            | Helpers used by more than one page: formatting, the load-on-arrival hook `useLoaded`, and the status helpers `eventStatus.ts` / `bookingStatus.ts` and permission rules several pages apply | `../api/<feature>` types; `../api/client`, for `useLoaded` only; `../auth/permissions`, for `venueRequest.ts` only                                            |
+| `src/<feature>/`         | The pages of one feature area                                                                                                                                                               | `../api/*`, `../auth/authContext`, `../auth/permissions`, `../components/*`, `../errors/registry`, `../layout/LoadingState`, `../routes`, `../shared/*`       |
+| `src/auth/`              | Sign-in and the session: `AuthProvider` / `useAuth`, the route guards, the sign-in page, `permissions.ts`                                                                                   | `../api/auth`, `../api/client`, `../api/health`, `../errors/registry`, `../layout/LoadingState`, `../pages/NotPermittedPage`, `../routes`, `../shared/format` |
+| `src/layout/`            | The signed-in frame (sidebar, phone bar and drawer, notification bell), `navigation.ts` (every section and the permission it needs), `LoadingState`                                         | `../auth/authContext`, `../auth/permissions`, `../components/*`, `../notifications/*`, `../routes`                                                            |
+| `src/notifications/`     | The notification centre: its provider, the bell's list and the toasts                                                                                                                       | `../api/client`, `../components/*`                                                                                                                            |
+| `src/pages/`             | Pages belonging to no feature area, including the component gallery at `/dev/components`, routed in development builds only                                                                 | anything above                                                                                                                                                |
+| `src/App.tsx`            | The route map                                                                                                                                                                               | everything                                                                                                                                                    |
+| `public/images/events/`  | Pictures seed events point at (`/images/events/<file>`); Vite serves `public/` as-is. Uploaded pictures are stored and served by the backend, under `/uploads/events/`                      | —                                                                                                                                                             |
 
 Routing is **react-router v7**, imported from the `react-router` package — _not_
 `react-router-dom`. Paths used in more than one file are constants in `src/routes.ts`, and links
 are router `Link` / `NavLink`, never a bare `<a href>` to an in-app path.
 
 State is plain React: `useState` + `useEffect`, with a `cancelled` flag in the cleanup so a slow
-response cannot set state after unmount (`src/auth/AuthProvider.tsx:10-25` is the pattern). A
-page that only loads data when it opens uses `useLoaded` (`src/shared/useLoaded.ts`), which holds
-that pattern once and returns `{ data, error, isLoading, setData }`; give it a module-level
-function or a `useCallback`, never an inline arrow. The shared state is auth, held in `AuthProvider` and read through `useAuth()`, and the notification
-centre, held in `NotificationProvider` and read through `useNotifications()`.
+response cannot set state after unmount (`AuthProvider` in `src/auth/AuthProvider.tsx` is the
+pattern). A page that only loads data when it opens uses `useLoaded` (`src/shared/useLoaded.ts`),
+which holds that pattern once and returns `{ data, error, isLoading, setData }`; give it a
+module-level function or a `useCallback`, never an inline arrow. The shared state is auth, held in
+`AuthProvider` and read through `useAuth()`, and the notification centre, held in
+`NotificationProvider` and read through `useNotifications()`.
 There is no Redux, Zustand, TanStack Query or SWR, and adding one is a team decision.
 
 Styling is plain global CSS: colour and font tokens as custom properties in `src/index.css`
@@ -122,10 +123,9 @@ An item whose page is not built yet has `isAvailable: false`, and `App.tsx` rout
 ## Do not
 
 - Do not import from `react-router-dom`.
-- Do not call `fetch` directly once pages call the API — go through `api<T>()` in
-  `src/api/client.ts`, which sends the session cookie (`credentials: 'include'`) and raises
-  `ApiError`. A bare `fetch` silently drops the session. The scaffold's `src/api/health.ts`
-  needs no session, so it is the exception.
+- Do not call `fetch` directly — go through `api<T>()` in `src/api/client.ts`, which sends the
+  session cookie (`credentials: 'include'`) and raises `ApiError`. A bare `fetch` silently drops
+  the session. The scaffold's `src/api/health.ts` needs no session, so it is the exception.
 - Do not read `import.meta.env.VITE_API_BASE_URL` outside `src/api/client.ts`.
 - Do not write a user-facing error string in a page. Add it to `src/errors/registry.ts`, or let
   the backend's `detail` sentence through `formatApiError`.
@@ -141,7 +141,7 @@ Adding `<feature>` end to end, after the backend endpoints exist:
 
 1. `src/api/<feature>.ts` — interfaces mirroring the backend schemas, plus one function per
    endpoint calling `api<T>()`. Head each interface with a docblock naming the backend schema
-   it mirrors, the way `src/api/auth.ts:3` does.
+   it mirrors, the way `CurrentUser` in `src/api/auth.ts` does.
 2. `src/<feature>/<Name>Page.tsx` — named export. Loading, empty, and error states all rendered;
    errors through `formatApiError` into `<p role="alert" className="error">`.
 3. `src/App.tsx` — add the route inside `<RequireAuth>` / `<AppLayout>`, behind

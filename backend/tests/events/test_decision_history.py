@@ -6,8 +6,9 @@ AC2 Clarification messages and responses are listed in chronological order with 
 AC3 Historical entries cannot be edited or removed.
 
 Excluded, with reason:
-* Nothing writes a clarification yet (stories 4.2/4.3 add the POST) - AC3 is proven here by the
-  absence of any write route, not by attempting to undo a write.
+* Nothing edits or removes a clarification once created (AC3) - proven here by the absence of any
+  PUT/PATCH/DELETE route. Creating one (POST) is story 4.2, tested in
+  backend/tests/events/test_request_clarification.py, not here.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from app.main import app
 from tests.support.factories import make_clarification, make_event
 from tests.support.seed import Clarifications, Events, Users
 
-WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+EDIT_OR_DELETE_METHODS = {"PUT", "PATCH", "DELETE"}
 
 
 # --- AC1: decision state and reason ---------------------------------------------------------
@@ -182,16 +183,17 @@ def test_reading_clarifications_requires_sign_in_and_an_existing_request(client,
 
 # --- AC3: historical entries cannot be edited or removed ---------------------------------------
 @pytest.mark.story("4.6", ac=3)
-def test_no_route_writes_to_the_clarifications_endpoint():
-    """No POST/PUT/PATCH/DELETE exists on any clarifications path - proven from the route table
+def test_no_route_edits_or_deletes_a_clarification():
+    """No PUT/PATCH/DELETE exists on any clarifications path - proven from the route table
     itself, not by trying each verb and hoping the framework refuses it. ``iter_route_contexts``
-    flattens the routers ``app.include_router`` wraps, which ``app.routes`` does not."""
+    flattens the routers ``app.include_router`` wraps, which ``app.routes`` does not. POST now
+    exists (story 4.2) - AC3 only requires that nothing edits or removes an existing entry."""
     routes = [ctx.route for ctx in iter_route_contexts(app.routes)]
     offenders = [
-        (route.path, sorted(route.methods & WRITE_METHODS))
+        (route.path, sorted(route.methods & EDIT_OR_DELETE_METHODS))
         for route in routes
         if isinstance(route, APIRoute) and "/clarifications" in route.path
-        if route.methods & WRITE_METHODS
+        if route.methods & EDIT_OR_DELETE_METHODS
     ]
     assert not offenders, offenders
 

@@ -67,28 +67,19 @@ Both, deliberately:
 
 ## Changing the schema
 
-### Sprint 1 (now)
-
-`001_initial_schema.sql` may be edited in place. After editing:
-
-```powershell
-npm run db:reset      # the tool notices the checksum changed and refuses `ready` until you do this
-```
-
-Then update the matching SQLAlchemy model (`backend/app/<feature>/models.py`) and run
-`npm run test:backend` - `test_orm_models_match_database` tells you if they disagree.
-
-### Sprint 2 onwards
-
-Once teammates have applied `001` you must **not** edit it. Add a new file:
+**Never edit a migration once it has been applied** - teammates' databases already ran it, and
+the tool refuses to continue when an applied file's checksum changes. Add a new file, numbered
+after the last one:
 
 ```text
-backend/db/migrations/002_add_event_categories.sql
+backend/db/migrations/NNN_add_event_categories.sql
 ```
 
 containing only the change (`ALTER TABLE ...`, `CREATE TABLE ...`, plus `COMMENT ON` for every
-new table/column). `npm run db:ready` applies it on every machine. Then `npm run db:docs` and
-commit the regenerated dictionary + ERD with the migration.
+new table/column). `npm run db:ready` applies it on every machine. Update the matching SQLAlchemy
+model (`backend/app/<feature>/models.py`) and run `npm run test:backend` -
+`test_orm_models_match_database` tells you if they disagree. Then `npm run db:docs` and commit
+the regenerated dictionary + ERD with the migration.
 
 ### Changing an allowed status value
 
@@ -120,7 +111,7 @@ file, and mirror any row tests need in `backend/tests/support/seed.py`. Keep eve
 | `text` + `CHECK` for statuses | ENUM values can never be removed; a CHECK is replaced in one statement. |
 | Reference tables for facilities / layouts / accessibility / equipment types / roles | The customer said these lists will grow; adding a value is data, not a schema change. |
 | One `events` row for the whole lifecycle (draft to completed) | Status history lives in `event_status_history`; nothing is copied between "request" and "event" tables, so information can never diverge (a pain point in the briefing). |
-| `venue_bookings` exclusion constraint on APPROVED bookings | Story 14.2: the database itself makes double-booking impossible, even under concurrent requests. Half-open ranges mean back-to-back bookings are fine (14.1 AC3). |
+| `venue_bookings` exclusion constraint on PENDING and APPROVED bookings | Stories 14.2 and 12.1 (a pending request holds its venue): the database itself makes double-booking impossible, even under concurrent requests. Half-open ranges mean back-to-back bookings are fine (14.1 AC3). |
 | Held period = event time + setup/teardown (`held_from`/`held_until`, trigger-maintained) | Story 12.2 and the briefing's turnaround-time concern, without every query re-deriving it. |
 | Pooled equipment stock per type, not per unit | Matches how the backlog phrases availability ("quantity available for a period"). Per-unit tracking can be added as a child table later. |
 | `audit_log` with JSONB details | Auditability requirement; any entity can be audited without new tables. |
