@@ -19,7 +19,15 @@ import app.events.models  # noqa: F401
 import app.venues.models  # noqa: F401
 from app.db import Base
 from app.dbtool import migrate
-from tests.support.seed import Clarifications, Events, Users, Venues
+from tests.support.seed import (
+    Clarifications,
+    EquipmentHolds,
+    EquipmentItems,
+    EquipmentOutOfService,
+    Events,
+    Users,
+    Venues,
+)
 
 CORE_TABLES = {
     "users": "users",
@@ -146,6 +154,8 @@ def test_seed_constants_match_database(db: Session):
         (Events.COMPLETED, "COMPLETED"),
         (Events.CANCELLED, "CANCELLED"),
         (Events.PARTNER_BRIEFING, "PLANNING"),
+        (Events.EQUIPMENT_WORKSHOP, "PLANNING"),
+        (Events.EQUIPMENT_SHOWCASE, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -155,6 +165,36 @@ def test_seed_constants_match_database(db: Session):
         assert db.execute(
             text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}
         ).scalar()
+    # Story 15.1's e2e rows: an item not yet sent and a pending one, each with its hold, and the
+    # out-of-service record that leaves no video camera free for the showcase.
+    for item_id, status in (
+        (EquipmentItems.WORKSHOP_PROJECTORS, "REQUESTED"),
+        (EquipmentItems.SHOWCASE_SPEAKERS, "PENDING"),
+    ):
+        assert (
+            db.execute(
+                text("SELECT status FROM event_equipment_requests WHERE id = :id"), {"id": item_id}
+            ).scalar()
+            == status
+        )
+    for hold_id, item_id in (
+        (EquipmentHolds.WORKSHOP_PROJECTORS, EquipmentItems.WORKSHOP_PROJECTORS),
+        (EquipmentHolds.SHOWCASE_SPEAKERS, EquipmentItems.SHOWCASE_SPEAKERS),
+    ):
+        assert (
+            db.execute(
+                text(
+                    "SELECT equipment_request_id FROM equipment_reservations"
+                    " WHERE id = :id AND status = 'RESERVED'"
+                ),
+                {"id": hold_id},
+            ).scalar()
+            == item_id
+        )
+    assert db.execute(
+        text("SELECT 1 FROM equipment_unavailability_periods WHERE id = :id"),
+        {"id": EquipmentOutOfService.SHOWCASE_CAMERAS},
+    ).scalar()
 
 
 @pytest.mark.story("1")

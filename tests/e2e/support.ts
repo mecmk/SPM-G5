@@ -28,6 +28,11 @@ export const EVENTS = {
   draft: '33333333-0000-0000-0000-000000000001',
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
   partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; 12.1's request is sent for it
+  confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
+  // Story 15.1, both Planning, organiser: organiser, coordinator, dated May 2027. Only the
+  // equipment flow changes the workshop's equipment; nothing changes the showcase's.
+  equipmentWorkshop: '33333333-0000-0000-0000-000000000019',
+  equipmentShowcase: '33333333-0000-0000-0000-000000000020',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
