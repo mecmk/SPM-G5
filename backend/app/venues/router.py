@@ -1,7 +1,7 @@
 """HTTP endpoints for the venue catalogue and its availability calendar.
 
-Story 8.3 (create / update / delete - Venue Staff have full CRUD on venues) plus the read
-endpoints stories 8.1 / 8.2 need, 8.1's search, and the calendar endpoint story 9.1 needs.
+Story 8.3 (create / update, Venue Staff only), delete (story 8.1 AC12), plus the read endpoints
+stories 8.1 / 8.2 need, 8.1's search, and the calendar endpoint story 9.1 needs.
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def delete_venue(
     db: DbSession,
     actor: Annotated[CurrentUser, CanManage],
 ) -> None:
-    """Story 8.3 AC4 applied to delete: only Venue Staff may remove a venue."""
+    """Story 8.1 AC12: only Venue Staff may remove a venue."""
     try:
         service.delete_venue(db, venue_id, actor=actor)
     except service.VenueNotFound:

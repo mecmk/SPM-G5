@@ -54,7 +54,8 @@ function groupNavItems(items: SidebarNavItem[]): SidebarNavGroup[] {
  * items to pass.
  * Story 1.1 - links are router `NavLink`s, which mark the current page active, and the wordmark
  * links to the main page. The page's own `<h1>` is its heading, so the wordmark is not one.
- * Story 1.2 - it collapses to icons, and the same component fills the phone drawer.
+ * Story 1.2 - it collapses to icons (team decision, 17 Sep 2026), and the same component fills
+ * the phone drawer.
  */
 export function Sidebar({
   navItems,

@@ -135,6 +135,17 @@ def test_seed_constants_match_database(db: Session):
         (Events.UNDER_REVIEW, "UNDER_REVIEW"),
         (Events.CLARIFICATION_REQUESTED, "CLARIFICATION_REQUESTED"),
         (Events.SUBMITTED_2, "UNDER_REVIEW"),
+        (Events.APPROVED_2, "PLANNING"),
+        (Events.APPROVED_3, "PLANNING"),
+        (Events.APPROVED_4, "PLANNING"),
+        (Events.APPROVED_5, "PLANNING"),
+        (Events.APPROVED_6, "PLANNING"),
+        (Events.APPROVED_7, "PLANNING"),
+        (Events.PLANNING, "PLANNING"),
+        (Events.CONFIRMED, "CONFIRMED"),
+        (Events.COMPLETED, "COMPLETED"),
+        (Events.CANCELLED, "CANCELLED"),
+        (Events.PARTNER_BRIEFING, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()

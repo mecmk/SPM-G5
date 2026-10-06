@@ -45,7 +45,7 @@ function sidebarItems(sections: NavSection[]): SidebarNavItem[] {
  * The signed-in frame.
  * Story 1.1: the sidebar shows who is signed in and a way to sign out (AC5).
  * Story 1.2 AC2: the sidebar lists only the role's sections. It collapses to icons on a wide
- * screen and becomes a drawer on a phone.
+ * screen and becomes a drawer on a phone (team decision, 17 Sep 2026).
  * Story 8.3: the notification centre's bell sits beside the wordmark, and toasts appear bottom
  * right.
  */

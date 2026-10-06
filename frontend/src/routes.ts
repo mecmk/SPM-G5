@@ -144,7 +144,7 @@ export function venueRequestPath(eventId: string, venueId: string, search = ''):
 }
 
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section is structured as
-// separate concerns: booking requests, schedule, and venues (which reuses the venue catalogue
+// separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues (which reuses the venue catalogue
 // above rather than a duplicate).
 export const BOOKING_REQUESTS_PATH = '/venue-staff/booking-requests'
 export const BOOKING_REQUEST_PATH = '/venue-staff/booking-requests/:bookingId'

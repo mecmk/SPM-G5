@@ -85,14 +85,15 @@ the regenerated dictionary + ERD with the migration.
 
 ### While the migration is still yours alone
 
-Until you push it, a new migration is applied only to your own database, so you can keep
-editing the file and rebuild:
+Until it merges into `main`, a new migration is still yours: keep editing the file and rebuild.
+Anyone else who ran your branch does the same:
 
 ```powershell
 npm run db:reset      # the tool notices the checksum changed and refuses `ready` until you do this
 ```
 
-Once a teammate has applied it that stops being true, and a correction needs its own migration.
+Once it is on `main`, every teammate's database runs it, and a correction needs its own
+migration.
 
 ### Changing an allowed status value
 

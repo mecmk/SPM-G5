@@ -10,8 +10,9 @@ const TOAST_LIFETIME_MS = 5000
 const MAX_NOTIFICATIONS = 50
 
 /**
- * The notification centre: every change a user makes, successful or not, is listed here and
- * briefly shown as a toast. It lives inside the signed-in frame, so signing out clears it.
+ * The notification centre (team decision, 17 Sep 2026): every change a user makes, successful or
+ * not, is listed here and briefly shown as a toast. It lives inside the signed-in frame, so
+ * signing out clears it.
  */
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])

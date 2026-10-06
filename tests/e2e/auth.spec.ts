@@ -206,7 +206,7 @@ test('1.1 AC5: signing out ends the session', async ({ page }) => {
 })
 
 /**
- * Regression test for bug b1.1.1: the sign-in page waits for `GET /auth/me` to answer before it
+ * Regression test for bug f1.1.1: the sign-in page waits for `GET /auth/me` to answer before it
  * decides what to render, so a visitor who still has a live session never sees the form flash.
  */
 test('1.1 AC4: opening sign-in with a live session shows the check, not the form', async ({

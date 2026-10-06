@@ -334,7 +334,7 @@ test('12.1 AC2: the request cannot be sent before the event details arrive', asy
   await findVenueFor(page, SUMMIT)
 
   // Hold the request step's own event lookup in flight so the state before it answers can be
-  // asserted at all - the same trick auth.spec.ts uses for b1.1.1. The button must stay disabled
+  // asserted at all - the same trick auth.spec.ts uses for f1.1.1. The button must stay disabled
   // while the lookup is in flight, because the request is built from these details.
   await page.route('**/events/*', async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()

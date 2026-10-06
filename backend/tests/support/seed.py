@@ -70,8 +70,9 @@ class Events:
     """Sample events by fixture name.
 
     A name identifies a row; it is not a promise about that row's status. Several of these
-    carry the same status, and two names (SUBMITTED, APPROVED) are not statuses an event can
-    hold at all - the status each row actually has is asserted in tests/test_schema.py.
+    carry the same status, and the SUBMITTED* and APPROVED* names are not statuses an event can
+    hold at all (APPROVED_2 to APPROVED_7 are all PLANNING) - the status each row actually has
+    is asserted in tests/test_schema.py.
     """
 
     DRAFT = _e(1)  # organiser 1, incomplete
