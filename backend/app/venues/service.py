@@ -647,6 +647,10 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
 VENUE_IMAGE_TOO_LARGE_MESSAGE = "The picture must be 5 MB or smaller."
 VENUE_IMAGE_UNSUPPORTED_MESSAGE = "Choose a JPEG, PNG or WebP picture."
 TOO_MANY_VENUE_IMAGES_MESSAGE = "A venue can have at most 10 pictures."
+VENUE_IMAGES_CHANGED_MESSAGE = (
+    "The venue's pictures have changed since this page was opened. Reload the page and arrange "
+    "them again."
+)
 # AC7: the most one picture may weigh, and the most pictures one venue may hold.
 MAX_VENUE_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_VENUE_IMAGES = 10
@@ -677,6 +681,14 @@ class UnsupportedVenueImage(ValueError):
 class TooManyVenueImages(ValueError):
     def __init__(self) -> None:
         super().__init__(TOO_MANY_VENUE_IMAGES_MESSAGE)
+
+
+class VenueImagesChanged(ValueError):
+    """AC10: an order that does not list exactly the venue's pictures - one was added or removed
+    since the order was made."""
+
+    def __init__(self) -> None:
+        super().__init__(VENUE_IMAGES_CHANGED_MESSAGE)
 
 
 def venue_image_path(filename: str) -> Path:
@@ -797,6 +809,44 @@ def remove_venue_image(
     )
     db.commit()
     _delete_venue_image_files([url])
+    db.refresh(venue)
+    return venue
+
+
+def reorder_venue_images(
+    db: Session, venue_id: uuid.UUID, image_ids: list[uuid.UUID], *, actor: User
+) -> Venue:
+    """AC5: put the venue's pictures in the order ``image_ids`` gives; the first becomes the cover
+    (AC6). AC10: ``image_ids`` must be exactly the venue's pictures - an order made before one was
+    added or removed is refused and changes nothing. The same order again changes nothing either.
+
+    The venue's row is locked as when adding (AC10). Positions are renumbered from 1 in two steps:
+    first every picture moves above the highest position in use, then each takes its new place.
+    ``uq_venue_images_position`` is checked row by row, so a direct swap would collide."""
+    venue = _lock_venue(db, venue_id)
+    current = [image.id for image in venue.images]
+    if sorted(image_ids) != sorted(current):
+        raise VenueImagesChanged()
+    if image_ids == current:
+        return venue
+
+    highest = max(image.position for image in venue.images)
+    for image in venue.images:
+        image.position += highest
+    db.flush()
+    by_id = {image.id: image for image in venue.images}
+    for position, image_id in enumerate(image_ids, start=1):
+        by_id[image_id].position = position
+    record_audit(
+        db,
+        actor=actor,
+        action="VENUE_IMAGES_REORDERED",
+        entity_type="venue",
+        entity_id=venue.id,
+        details={"from": [str(i) for i in current], "to": [str(i) for i in image_ids]},
+        commit=False,
+    )
+    db.commit()
     db.refresh(venue)
     return venue
 

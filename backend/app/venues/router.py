@@ -24,6 +24,7 @@ from app.venues import service
 from app.venues.schemas import (
     ReferenceItem,
     VenueCreate,
+    VenueImageOrder,
     VenueOut,
     VenueReferenceData,
     VenueSearchQuery,
@@ -211,6 +212,23 @@ def remove_venue_image(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.VenueImageNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, PICTURE_NOT_FOUND_MESSAGE) from None
+    return VenueOut.from_venue(venue)
+
+
+@router.put("/{venue_id}/images/order", response_model=VenueOut)
+def reorder_venue_images(
+    venue_id: uuid.UUID,
+    payload: VenueImageOrder,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> VenueOut:
+    """Story 8.3 AC5/AC9/AC10: Venue Staff put a venue's pictures in a new order."""
+    try:
+        venue = service.reorder_venue_images(db, venue_id, payload.image_ids, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.VenueImagesChanged as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return VenueOut.from_venue(venue)
 
 

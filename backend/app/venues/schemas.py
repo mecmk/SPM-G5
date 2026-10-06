@@ -193,6 +193,22 @@ class VenueImageOut(BaseModel):
     url: str
 
 
+class VenueImageOrder(BaseModel):
+    """Story 8.3 AC5: every one of a venue's pictures, by id, in the order wanted - the first
+    becomes the cover. AC8: each picture once; AC10: the service checks they are the venue's own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_ids: list[uuid.UUID]
+
+    @field_validator("image_ids")
+    @classmethod
+    def _each_picture_once(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("Name each picture once.")
+        return value
+
+
 class VenueOut(VenueSummary):
     """Full record (story 8.2 AC1). NULL means "not recorded" - show it as unknown, not absent.
     Story 8.3 AC6: ``images`` are the venue's pictures in their order, the first being the cover."""
