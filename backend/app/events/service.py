@@ -1,8 +1,8 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
-event review (story 4.1), requesting clarification from the organiser (story 4.2), the
-approve/reject decision (stories 4.4, 4.5), the decision / clarification history an organiser
-sees (story 4.6), routine information edits (story 7.2), and the coordinator's assigned events in
-any status (story 6.1).
+event review (story 4.1), requesting clarification from the organiser (story 4.2) and the
+organiser's response (story 4.3), the approve/reject decision (stories 4.4, 4.5), the decision /
+clarification history an organiser sees (story 4.6), routine information edits (story 7.2), and
+the coordinator's assigned events in any status (story 6.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -292,7 +292,8 @@ DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request.
 EVENT_NOT_AWAITING_CLARIFICATION_MESSAGE = (
     "You can no longer ask for clarification on this request."
 )
-CLARIFICATION_MESSAGE_REQUIRED_MESSAGE = "A message is required to request clarification."
+CLARIFICATION_MESSAGE_REQUIRED_MESSAGE = "A message is required."
+EVENT_NOT_AWAITING_RESPONSE_MESSAGE = "This request is no longer awaiting your response."
 
 # --- reads -------------------------------------------------------------------------------
 
@@ -1353,10 +1354,20 @@ class EventNotAwaitingClarification(EventStateConflict):
         self.event = event
 
 
+class EventNotAwaitingResponse(EventStateConflict):
+    """4.3 AC10/AC11: the organiser may respond only while the request is CLARIFICATION_REQUESTED.
+    Covers both the ordinary case and the race where the request is cancelled, approved or
+    rejected between opening the page and pressing Send."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(EVENT_NOT_AWAITING_RESPONSE_MESSAGE)
+        self.event = event
+
+
 class MissingClarificationMessage(InvalidEventRequest):
-    """4.2 AC3: a message is mandatory. ``ClarificationRequest`` already refuses a blank body
-    with a 422 before ``request_clarification`` runs; this is the guard for any other caller,
-    mirroring ``MissingDecisionReason``."""
+    """4.2 AC3 / 4.3 AC4: a message is mandatory. ``ClarificationRequest`` already refuses a blank
+    body with a 422 before ``request_clarification`` or ``respond_to_clarification`` runs; this is
+    the guard for any other caller, mirroring ``MissingDecisionReason``."""
 
     def __init__(self) -> None:
         super().__init__(CLARIFICATION_MESSAGE_REQUIRED_MESSAGE)
@@ -1480,9 +1491,9 @@ def request_clarification(
 ) -> EventClarification:
     """4.2 AC1/AC2/AC4-AC7: the assigned coordinator asks the organiser a question while the
     request is Under Review, or asks a follow-up while it already awaits a response to an earlier
-    round (AC4) - the event moves to, or stays at, CLARIFICATION_REQUESTED. Nothing until story
-    4.3 ever moves the event back to Under Review on its own, so a second round has to work
-    directly from CLARIFICATION_REQUESTED rather than waiting for a trip back. The new
+    round (AC4) - the event moves to, or stays at, CLARIFICATION_REQUESTED. Nothing moves it back
+    to Under Review - the organiser's response (story 4.3) leaves the status alone - so a second
+    round has to work directly from CLARIFICATION_REQUESTED. The new
     ``EventClarification`` row and the organiser's notification are always written; the
     status-history row only when the status is actually changing (the first round) - a follow-up
     is a new message, not a new transition. All of it is written in one transaction (AC2).
@@ -1565,6 +1576,72 @@ def request_clarification(
     )
     db.commit()
     db.refresh(event)
+    db.refresh(entry)
+    return entry
+
+
+# --- respond to a clarification request (story 4.3) -------------------------------------------
+
+
+def respond_to_clarification(
+    db: Session, event_id: uuid.UUID, *, actor: User, message: str
+) -> EventClarification:
+    """4.3 AC1-AC3/AC6-AC11: the organiser who owns the event answers while it is
+    CLARIFICATION_REQUESTED. Anyone else gets ``EventNotFound`` (AC10). The status does not
+    change, so the organiser may answer more than once (AC6) and the coordinator may still ask
+    again or decide (AC9); no status-history row is written. The response, the currently assigned
+    coordinator's notification (AC7) and the audit entry are one transaction (AC8). The UPDATE
+    repeats the status and owner check in its WHERE clause, so a cancellation or decision landing
+    after the event was loaded is refused too (AC11); the status check above it only refuses the
+    ordinary case without a write."""
+    stripped = message.strip()
+    if not stripped:
+        raise MissingClarificationMessage()
+    event = _get_own_event(db, event_id, actor)
+    if event.status != EventStatus.CLARIFICATION_REQUESTED:
+        raise EventNotAwaitingResponse(event)
+
+    # Re-writing the status the row already holds is the check: a SELECT would race the very
+    # cancellation or decision this guards against.
+    still_awaiting = db.execute(
+        update(Event)
+        .where(
+            Event.id == event.id,
+            Event.status == EventStatus.CLARIFICATION_REQUESTED,
+            Event.organiser_id == actor.id,
+        )
+        .values(status=EventStatus.CLARIFICATION_REQUESTED)
+    )
+    if still_awaiting.rowcount == 0:
+        db.rollback()
+        db.refresh(event)
+        raise EventNotAwaitingResponse(event)
+
+    entry = EventClarification(
+        event_id=event.id, author_id=actor.id, kind=ClarificationKind.RESPONSE, message=stripped
+    )
+    db.add(entry)
+    notify(
+        db,
+        recipient=event.assigned_coordinator,
+        notification_type="EVENT_CLARIFICATION_RESPONDED",
+        event_id=event.id,
+        title=f'Organiser responded on "{event.name}"',
+        message=stripped,
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_CLARIFICATION_RESPONDED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"message": stripped},
+        commit=False,
+    )
+    db.commit()
     db.refresh(entry)
     return entry
 
