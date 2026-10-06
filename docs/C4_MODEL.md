@@ -280,7 +280,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | # | Core feature | Component | Main tables | Code |
 | --- | --- | --- | --- | --- |
 | 1 | User authorisation and authentication | Auth endpoints, Authentication service, Access control | `roles`, `users`, `user_sessions` | `app/auth` |
-| 2 | Event request creation | Event request service | `events`, `event_required_facilities`, `event_accessibility_needs`, `event_equipment_requests` | `app/events` |
+| 2 | Event request creation | Event request service | `events`, `venue_requirements`, `venue_requirement_facilities`, `event_accessibility_needs`, `event_equipment_requests` | `app/events` |
 | 3 | Draft event requests | Event request service | `events` with status `DRAFT` | `app/events` |
 | 4 | Event review and approval | Review and assignment service | `events`, `event_status_history`, `event_clarifications` | `app/events` |
 | 5 | Coordinator assignment | Review and assignment service | `event_coordinator_assignments`, `events.assigned_coordinator_id` | `app/coordination` |

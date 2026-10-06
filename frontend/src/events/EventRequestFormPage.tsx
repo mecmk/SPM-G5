@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { formatApiError, mediaUrl } from '../api/client'
+import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   createEvent,
   fetchEquipmentAvailability,
@@ -32,8 +32,11 @@ import {
   FIELD_ID,
   MAX_EVENT_DAYS,
   MAX_LEAD_YEARS,
+  MAX_VENUE_REQUIREMENTS,
   REGISTRATION_DATE_FIELD_IDS,
+  VENUE_REQUIREMENT_NAME_MAX_LENGTH,
   eventInputFrom,
+  findServerProblemField,
   formFromEvent,
   getEquipmentQuantityId,
   getEquipmentTypeId,
@@ -42,8 +45,11 @@ import {
   getLatestStartInput,
   getLiveProblems,
   getMissingForSubmission,
+  getVenueRequirementFieldId,
   isEquipmentTypeTaken,
+  withEventDefaults,
   newEquipmentDraft,
+  newVenueRequirementDraft,
   toggleEntry,
   validateCoverImage,
   validateDates,
@@ -54,6 +60,7 @@ import {
   type FacilityDraft,
   type FormProblem,
   type NoteDraft,
+  type VenueRequirementDraft,
 } from './eventRequestForm'
 import { readBackState } from './backState'
 
@@ -108,9 +115,9 @@ function noticeFrom(state: unknown): string | null {
  * needed to submit (AC10), and so is an answer to each of venue requirements and accessibility.
  * AC2/AC3: dates and whole numbers are checked here before anything is sent; the backend checks
  * them again.
- * AC4: venue requirements: a room layout, facilities (each optionally how many) and other
- * requirements, or "No venue requirements". Expected attendance doubles as the capacity the
- * venue must have.
+ * AC4: venue requirements, or "No venue requirements". Story 2.7: any number of them, each with
+ * a name, how many people it must hold, its own times, a room layout, facilities (each optionally
+ * how many) and other requirements, added, edited and removed until submission.
  * AC5: accessibility needs, or "No accessibility needs". Either "none" box clears the other
  * choices in its section, so a request never says both. Left untouched, a draft is "not yet
  * specified".
@@ -212,8 +219,14 @@ export function EventRequestFormPage() {
   }
 
   function updateDate(key: 'startsAt' | 'endsAt', value: string) {
-    updateField(key, value)
+    updateEventDefaultSource(key, value)
     noteIncompleteDate()
+  }
+
+  /** Story 2.7 AC2/AC6: the event's dates and attendance carry into the venue requirements that
+   * still take them by default. */
+  function updateEventDefaultSource(key: 'startsAt' | 'endsAt' | 'attendance', value: string) {
+    setForm((current) => current && withEventDefaults({ ...current, [key]: value }))
   }
 
   function updateRegistrationDate(
@@ -291,62 +304,73 @@ export function EventRequestFormPage() {
     setForm((current) => current && { ...current, [key]: value })
   }
 
-  /** Choosing "no venue requirements" clears the other venue choices, so they never disagree. */
+  /** Story 2.7 AC3: "no venue requirements" clears every requirement, so the two never disagree. */
   function toggleNoVenueRequirements(isChecked: boolean) {
     setForm(
       (current) =>
         current && {
           ...current,
           hasNoVenueRequirements: isChecked,
-          layoutCode: isChecked ? NO_LAYOUT_PREFERENCE : current.layoutCode,
-          facilities: isChecked ? {} : current.facilities,
-          venueNotes: isChecked ? '' : current.venueNotes,
+          venueRequirements: isChecked ? [] : current.venueRequirements,
         },
     )
   }
 
-  function updateLayout(code: string) {
-    setForm(
-      (current) =>
-        current && {
-          ...current,
-          layoutCode: code,
-          hasNoVenueRequirements:
-            code !== NO_LAYOUT_PREFERENCE ? false : current.hasNoVenueRequirements,
-        },
-    )
-  }
-
-  function toggleFacility(code: string) {
+  /** Story 2.7 AC1-AC3: add a requirement, starting from the event's times (AC2) and, for the
+   * first, its expected attendance (AC6). Listing one answers the venue question, so it un-ticks
+   * "No venue requirements". */
+  function addVenueRequirement() {
     setForm(
       (current) =>
         current && {
           ...current,
           hasNoVenueRequirements: false,
-          facilities: toggleEntry(current.facilities, code, EMPTY_FACILITY),
+          venueRequirements: [...current.venueRequirements, newVenueRequirementDraft(current)],
         },
     )
   }
 
-  function updateFacility(code: string, change: Partial<FacilityDraft>) {
+  function updateVenueRequirement(key: number, change: Partial<VenueRequirementDraft>) {
     setForm(
       (current) =>
         current && {
           ...current,
-          facilities: { ...current.facilities, [code]: { ...current.facilities[code], ...change } },
+          venueRequirements: current.venueRequirements.map((requirement) =>
+            requirement.key === key ? { ...requirement, ...change } : requirement,
+          ),
         },
     )
   }
 
-  function updateVenueNotes(text: string) {
+  function removeVenueRequirement(key: number) {
     setForm(
       (current) =>
         current && {
           ...current,
-          venueNotes: text,
-          hasNoVenueRequirements: text.trim() ? false : current.hasNoVenueRequirements,
+          venueRequirements: current.venueRequirements.filter(
+            (requirement) => requirement.key !== key,
+          ),
         },
     )
+  }
+
+  function toggleRequirementFacility(requirement: VenueRequirementDraft, code: string) {
+    updateVenueRequirement(requirement.key, {
+      facilities: toggleEntry(requirement.facilities, code, EMPTY_FACILITY),
+    })
+  }
+
+  function updateRequirementFacility(
+    requirement: VenueRequirementDraft,
+    code: string,
+    change: Partial<FacilityDraft>,
+  ) {
+    updateVenueRequirement(requirement.key, {
+      facilities: {
+        ...requirement.facilities,
+        [code]: { ...requirement.facilities[code], ...change },
+      },
+    })
   }
 
   /** Choosing "no accessibility needs" clears any needs, so the two can never disagree. */
@@ -534,6 +558,24 @@ export function EventRequestFormPage() {
     }
   }
 
+  /**
+   * Say why a save was refused. Story 2.7 AC11: when the server names a field the form shows,
+   * mark and focus it, as the browser's own checks do, and give its sentence on its own.
+   */
+  function showSaveRefusal(err: unknown) {
+    const serverField =
+      form && err instanceof ApiError ? findServerProblemField(form, err.detail) : null
+    if (form && serverField) {
+      setSaveError(serverField.message || formatApiError(err))
+      setInvalidField({ id: serverField.fieldId, form })
+      document.getElementById(serverField.fieldId)?.focus()
+    } else {
+      setSaveError(formatApiError(err))
+    }
+    // The stock may be why it failed, so ask again how many are free.
+    setAvailabilityRefresh((count) => count + 1)
+  }
+
   /** Show a draft that has just been saved: in place when editing, else on its own address. */
   function showSavedDraft(saved: EventDetail, problem: string | null) {
     if (isEditing) {
@@ -556,9 +598,7 @@ export function EventRequestFormPage() {
       if (!result) return
       showSavedDraft(result.event, result.pictureProblem)
     } catch (err) {
-      setSaveError(formatApiError(err))
-      // The stock may be why it failed, so ask again how many are free.
-      setAvailabilityRefresh((count) => count + 1)
+      showSaveRefusal(err)
     } finally {
       setIsSaving(false)
     }
@@ -599,9 +639,7 @@ export function EventRequestFormPage() {
         }
       }
     } catch (err) {
-      setSaveError(formatApiError(err))
-      // The stock may be why it failed, so ask again how many are free.
-      setAvailabilityRefresh((count) => count + 1)
+      showSaveRefusal(err)
     } finally {
       setIsSaving(false)
     }
@@ -672,7 +710,7 @@ export function EventRequestFormPage() {
                   step={1}
                   {...fieldProps(FIELD_ID.attendance)}
                   value={form.attendance}
-                  onChange={(e) => updateField('attendance', e.target.value)}
+                  onChange={(e) => updateEventDefaultSource('attendance', e.target.value)}
                 />
                 {renderProblem(FIELD_ID.attendance)}
               </label>
@@ -825,8 +863,9 @@ export function EventRequestFormPage() {
               Venue requirements <RequiredMark />
             </legend>
             <p className="form-hint">
-              Choose what the venue needs, or tick &ldquo;No venue requirements&rdquo;. We match
-              venues to your expected attendance, so there is no separate capacity to enter.
+              List each venue the event needs, or tick &ldquo;No venue requirements&rdquo;. A new
+              requirement starts with the event&rsquo;s times, and the first with the expected
+              attendance; change either to suit, e.g. breakout rooms needed only on the second day.
             </p>
             <label className="checkbox">
               <input
@@ -836,67 +875,176 @@ export function EventRequestFormPage() {
               />
               No venue requirements
             </label>
-            <div className="form-grid">
-              <label className="span-2">
-                Room layout
-                <select value={form.layoutCode} onChange={(e) => updateLayout(e.target.value)}>
-                  <option value={NO_LAYOUT_PREFERENCE}>No preference</option>
-                  {reference.layouts.map((layout) => (
-                    <option key={layout.code} value={layout.code}>
-                      {layout.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <ul className="check-list">
-              {reference.facilities.map((item) => {
-                const selected: FacilityDraft | undefined = form.facilities[item.code]
-                return (
-                  <li key={item.code}>
-                    <label className="checkbox">
+            {form.venueRequirements.map((requirement, index) => {
+              const fieldIdOf = (field: 'name' | 'capacity' | 'starts' | 'ends') =>
+                getVenueRequirementFieldId(requirement.key, field)
+              // Review of PR #84: every card repeats the same controls, so their accessible
+              // names say which requirement they act on.
+              const requirementLabel = `venue requirement ${index + 1}`
+              return (
+                <fieldset key={requirement.key} className="equipment-item">
+                  <legend>{`Venue requirement ${index + 1}`}</legend>
+                  <div className="form-grid">
+                    <label className="span-2">
+                      Requirement name
                       <input
-                        type="checkbox"
-                        checked={selected !== undefined}
-                        onChange={() => toggleFacility(item.code)}
+                        maxLength={VENUE_REQUIREMENT_NAME_MAX_LENGTH}
+                        placeholder="e.g. Plenary hall"
+                        {...fieldProps(fieldIdOf('name'))}
+                        value={requirement.name}
+                        onChange={(e) =>
+                          updateVenueRequirement(requirement.key, { name: e.target.value })
+                        }
                       />
-                      {item.name}
+                      {renderProblem(fieldIdOf('name'))}
                     </label>
-                    {selected && (
-                      <div className="inline-fields">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          step={1}
-                          className="inline-number"
-                          placeholder="How many"
-                          aria-label={`${item.name} quantity`}
-                          {...fieldProps(getFacilityQuantityId(item.code))}
-                          value={selected.quantity}
-                          onChange={(e) => updateFacility(item.code, { quantity: e.target.value })}
-                        />
-                        <input
-                          placeholder="Notes"
-                          aria-label={`${item.name} notes`}
-                          value={selected.notes}
-                          onChange={(e) => updateFacility(item.code, { notes: e.target.value })}
-                        />
-                        {renderProblem(getFacilityQuantityId(item.code))}
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-            <label>
-              Other venue requirements
-              <textarea
-                rows={2}
-                value={form.venueNotes}
-                onChange={(e) => updateVenueNotes(e.target.value)}
-              />
-            </label>
+                    <label>
+                      Number of people
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        {...fieldProps(fieldIdOf('capacity'))}
+                        value={requirement.capacity}
+                        onChange={(e) =>
+                          updateVenueRequirement(requirement.key, {
+                            capacity: e.target.value,
+                            isCapacityDefault: false,
+                          })
+                        }
+                      />
+                      {renderProblem(fieldIdOf('capacity'))}
+                    </label>
+                    <label className="span-2">
+                      Needed from
+                      <input
+                        type="datetime-local"
+                        min={form.startsAt || undefined}
+                        max={form.endsAt || undefined}
+                        {...fieldProps(fieldIdOf('starts'))}
+                        value={requirement.startsAt}
+                        onChange={(e) =>
+                          updateVenueRequirement(requirement.key, {
+                            startsAt: e.target.value,
+                            areTimesDefault: false,
+                          })
+                        }
+                      />
+                      {renderProblem(fieldIdOf('starts'))}
+                    </label>
+                    <label>
+                      Needed until
+                      <input
+                        type="datetime-local"
+                        min={requirement.startsAt || form.startsAt || undefined}
+                        max={form.endsAt || undefined}
+                        {...fieldProps(fieldIdOf('ends'))}
+                        value={requirement.endsAt}
+                        onChange={(e) =>
+                          updateVenueRequirement(requirement.key, {
+                            endsAt: e.target.value,
+                            areTimesDefault: false,
+                          })
+                        }
+                      />
+                      {renderProblem(fieldIdOf('ends'))}
+                    </label>
+                    <label className="span-all">
+                      Room layout
+                      <select
+                        value={requirement.layoutCode}
+                        onChange={(e) =>
+                          updateVenueRequirement(requirement.key, { layoutCode: e.target.value })
+                        }
+                      >
+                        <option value={NO_LAYOUT_PREFERENCE}>No preference</option>
+                        {reference.layouts.map((layout) => (
+                          <option key={layout.code} value={layout.code}>
+                            {layout.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <ul className="check-list">
+                    {reference.facilities.map((item) => {
+                      const selected: FacilityDraft | undefined = requirement.facilities[item.code]
+                      const quantityId = getFacilityQuantityId(requirement.key, item.code)
+                      return (
+                        <li key={item.code}>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={selected !== undefined}
+                              onChange={() => toggleRequirementFacility(requirement, item.code)}
+                            />
+                            {item.name}
+                          </label>
+                          {selected && (
+                            <div className="inline-fields">
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                step={1}
+                                className="inline-number"
+                                placeholder="How many"
+                                aria-label={`${item.name} quantity, ${requirementLabel}`}
+                                {...fieldProps(quantityId)}
+                                value={selected.quantity}
+                                onChange={(e) =>
+                                  updateRequirementFacility(requirement, item.code, {
+                                    quantity: e.target.value,
+                                  })
+                                }
+                              />
+                              <input
+                                placeholder="Notes"
+                                aria-label={`${item.name} notes, ${requirementLabel}`}
+                                value={selected.notes}
+                                onChange={(e) =>
+                                  updateRequirementFacility(requirement, item.code, {
+                                    notes: e.target.value,
+                                  })
+                                }
+                              />
+                              {renderProblem(quantityId)}
+                            </div>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <label>
+                    Other requirements
+                    <textarea
+                      rows={2}
+                      value={requirement.notes}
+                      onChange={(e) =>
+                        updateVenueRequirement(requirement.key, { notes: e.target.value })
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary button-sm"
+                    aria-label={`Remove ${requirementLabel}`}
+                    onClick={() => removeVenueRequirement(requirement.key)}
+                  >
+                    Remove
+                  </button>
+                </fieldset>
+              )
+            })}
+            <button
+              type="button"
+              className="secondary"
+              disabled={form.venueRequirements.length >= MAX_VENUE_REQUIREMENTS}
+              onClick={addVenueRequirement}
+            >
+              Add a venue requirement
+            </button>
           </fieldset>
 
           <fieldset className="card" disabled={isReadOnly}>
