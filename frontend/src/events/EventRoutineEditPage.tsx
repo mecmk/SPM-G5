@@ -9,9 +9,9 @@ import {
 } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PageHeader } from '../components/PageHeader'
-import { TERMINAL_STATUSES } from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import { eventPath } from '../routes'
+import { TERMINAL_STATUSES } from '../shared/eventStatus'
 import { useLoaded } from '../shared/useLoaded'
 
 interface RoutineForm {

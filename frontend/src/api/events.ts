@@ -29,9 +29,8 @@ export function listReviewQueue(query: ReviewQueueQuery): Promise<ReviewQueueEnt
 }
 
 /**
- * Mirrors `EventStatus` in backend/app/events/models.py. SUBMITTED and APPROVED were retired by
- * migration 002 (bug b6.1.1): submitting a draft now goes straight to UNDER_REVIEW, and approving
- * a request now goes straight to PLANNING, with no separate in-between status.
+ * Mirrors `EventStatus` in backend/app/events/models.py. Submitting a draft moves it to
+ * UNDER_REVIEW and approving a request moves it to PLANNING, with no status in between either.
  */
 export type EventStatus =
   | 'DRAFT'
@@ -405,8 +404,8 @@ const EVENT_DECISION_ERROR_CODES = {
   409: 'EVENT_NOT_AWAITING_DECISION',
 } as const
 
-/** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves
- *  straight to PLANNING - there is no separate APPROVED status (bug b6.1.1, migration 002). */
+/** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves it
+ *  to PLANNING. */
 export function approveEvent(eventId: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/approve`, {
     method: 'POST',
@@ -420,8 +419,7 @@ export function approveEvent(eventId: string, name: string): Promise<EventDetail
 }
 
 /** Story 4.5 AC1-AC3: reject a request with a mandatory reason. Offered from the same statuses
- *  as approving (see `AWAITING_DECISION_STATUSES` in `../events/eventStatus`) - bug b6.1.1's
- *  narrower reject rule has been reversed. */
+ *  as approving (see `AWAITING_DECISION_STATUSES` in `../shared/eventStatus`). */
 export function rejectEvent(eventId: string, reason: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/reject`, {
     method: 'POST',

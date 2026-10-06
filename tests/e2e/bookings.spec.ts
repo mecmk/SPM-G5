@@ -183,7 +183,7 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
     .fill('Budget was reallocated to another event.')
 
   // AC3: duplicate submission is prevented - hold the request in flight (same trick as
-  // booking-requests.spec.ts's b1.1.1 case) and confirm the button disables rather than
+  // booking-requests.spec.ts's f1.1.1 case) and confirm the button disables rather than
   // accepting a second click.
   await page.route(
     (url) => /\/bookings\/[^/]+\/reject$/.test(url.pathname),

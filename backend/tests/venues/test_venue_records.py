@@ -5,8 +5,7 @@ AC2 Existing venue characteristics can be edited and saved.
 AC3 Capacity accepts positive whole numbers only.
 AC4 Only Venue Staff can create or edit venue records.
 
-The team meeting of 17 Sep 2026 widened this to full CRUD: Venue Staff can also delete a venue,
-as long as no booking refers to it.
+Venue Staff have full CRUD: they can also delete a venue, as long as no booking refers to it.
 """
 
 from __future__ import annotations
@@ -270,7 +269,7 @@ def test_signed_out_visitors_cannot_create_or_edit_venues(client, db: Session):
     assert boardroom_capacity == 16
 
 
-# --- delete: Venue Staff have full CRUD (team decision, 17 Sep 2026) ------------------------
+# --- delete: Venue Staff have full CRUD -----------------------------------------------------
 @pytest.mark.story("8.3")
 def test_venue_staff_can_delete_an_unused_venue(venue_staff_client):
     created = venue_staff_client.post("/venues", json=venue_payload())

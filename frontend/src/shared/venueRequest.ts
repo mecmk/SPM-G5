@@ -48,7 +48,7 @@ export function venueRequestTermsFor(event: EventDetail): VenueRequestTerms {
  * hold bookings:request, are its assigned coordinator, and it can take a booking. These are the
  * rules `POST /bookings` enforces, so Find a venue, Request this venue and the request step offer
  * a request only when it would be accepted. One copy for all three pages, so a rule change cannot
- * reach one and miss another (review of PR #67).
+ * reach one and miss another.
  */
 export function canRequestVenueFor(
   event: EventDetail,

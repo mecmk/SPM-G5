@@ -116,7 +116,8 @@ also run them, but don't rely on CI to catch what you could catch locally.
   dictionary and ERD in `docs/database/` are **generated** from them (`npm run db:docs`) -
   never edit those two files by hand.
 - Never edit a migration once it has been applied. Change the schema with a new `NNN_*.sql`
-  file, the next free number. Full rules: `docs/database/README.md`.
+  file, the next free number. One that has not merged into `main` is still yours to edit,
+  followed by `npm run db:reset`. Full rules: `docs/database/README.md`.
 - Seed files are idempotent upserts with fixed UUIDs; mirror rows tests use in
   `backend/tests/support/seed.py`.
 - Statuses are `text` + named `CHECK` constraints, not ENUMs. Lists (facilities, layouts,
