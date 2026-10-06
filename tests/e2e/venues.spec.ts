@@ -554,23 +554,31 @@ test('8.3 AC5: pictures can be put in a new order while editing', async ({ page 
   expect(await sourcesIn(gallery)).toEqual([three, one, two])
 })
 
-test('8.3 AC5: a picture can be dragged to a new place', async ({ page }) => {
+/** The middle of `element` on the page. */
+async function centreOf(element: Locator) {
+  const box = await element.boundingBox()
+  if (box === null) throw new Error('The element is not on the page.')
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+}
+
+test('8.3 AC5: pictures shift aside as a picture is dragged across them', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venues/new')
   await choosePictures(page, pictureFile('a.png'), pictureFile('b.png'), pictureFile('c.png'))
   const previews = page.getByRole('list', { name: 'Pictures to save' })
   await expect(previews.getByRole('img')).toHaveCount(3)
   const [a, b, c] = await sourcesIn(previews)
+  const from = await centreOf(previews.getByRole('img', { name: 'Picture 3 preview' }))
+  const to = await centreOf(previews.getByRole('img', { name: 'Picture 1 preview' }))
 
-  await previews
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('img', { name: 'Picture 3 preview' }) })
-    .dragTo(
-      previews
-        .getByRole('listitem')
-        .filter({ has: page.getByRole('img', { name: 'Picture 1 preview' }) }),
-    )
+  // Pick the third picture up and carry it over the first, without letting go.
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 12 })
 
+  // The others have already moved aside for it, as apps do on a phone's home screen.
+  await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
+  await page.mouse.up()
   await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
 })
 
@@ -613,4 +621,48 @@ test('8.3 AC6: a picture opens in a carousel that steps through the pictures', a
   await page.keyboard.press('Escape')
   await expect(viewer).toHaveCount(0)
   await expect(gallery.getByRole('button', { name: 'Picture 2 of 3' })).toBeFocused()
+})
+
+test('8.3 AC6: the carousel moves by thumbnail and by swipe, and closes from outside the picture', async ({
+  page,
+}) => {
+  const name = uniqueName('Swipe')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await choosePictures(
+    page,
+    pictureFile('one.png'),
+    pictureFile('two.png'),
+    pictureFile('three.png'),
+  )
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name }).click()
+  const gallery = page.getByRole('region', { name: 'Pictures' })
+  await expect(gallery.getByRole('img')).toHaveCount(3)
+  const [, two, three] = await sourcesIn(gallery)
+  await gallery.getByRole('button', { name: 'Picture 1 of 3' }).click()
+  const viewer = page.getByRole('dialog', { name: `Pictures of ${name}` })
+  const shown = viewer.getByRole('img')
+
+  // Every picture is a thumbnail too; choosing one shows it.
+  await viewer.getByRole('button', { name: 'Show picture 3' }).click()
+  await expect(shown).toHaveAttribute('src', three!)
+  await expect(viewer.getByRole('button', { name: 'Show picture 3' })).toHaveAttribute(
+    'aria-current',
+    'true',
+  )
+
+  // Swiping the picture to the right goes back one.
+  const middle = await centreOf(shown)
+  await page.mouse.move(middle.x - 120, middle.y)
+  await page.mouse.down()
+  await page.mouse.move(middle.x + 120, middle.y, { steps: 8 })
+  await page.mouse.up()
+  await expect(shown).toHaveAttribute('src', two!)
+  await expect(viewer).toBeVisible()
+
+  // A click on the dark space around the picture closes it.
+  await page.mouse.click(8, Math.round(middle.y))
+  await expect(viewer).toHaveCount(0)
 })
