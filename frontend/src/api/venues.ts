@@ -166,6 +166,20 @@ export function removeVenueImage(venueId: string, imageId: string): Promise<Venu
   })
 }
 
+/**
+ * Story 8.3 AC5: put a venue's pictures in a new order, naming every one of them once; the first
+ * becomes the cover. Silent for the reason `addVenueImage` gives. AC10: refused (409) when the
+ * venue's pictures changed since the order was made.
+ */
+export function reorderVenueImages(venueId: string, imageIds: string[]): Promise<Venue> {
+  return api<Venue>(`/venues/${venueId}/images/order`, {
+    method: 'PUT',
+    body: { image_ids: imageIds },
+    errorCodes: { 404: 'VENUE_NOT_FOUND', 409: 'VENUE_PICTURES_CHANGED' },
+    notify: false,
+  })
+}
+
 /** Team decision, 17 Sep 2026: Venue Staff can delete a venue that has no bookings. */
 export function deleteVenue(venueId: string, venueName: string): Promise<void> {
   return api<void>(`/venues/${venueId}`, {

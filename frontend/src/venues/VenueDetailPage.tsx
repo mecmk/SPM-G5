@@ -19,6 +19,7 @@ import {
   toCalendarEntry,
 } from './venueCalendarDays'
 import { VenueDayPanel } from './VenueDayPanel'
+import { VenuePictureViewer } from './VenuePictureViewer'
 
 // Story 9.1 AC2: a pending request that holds the venue has a style of its own.
 const CALENDAR_LEGEND: CalendarLegendItem[] = [
@@ -57,8 +58,8 @@ const NOT_RECORDED = 'Not recorded'
  * coordinator can request the venue from here too, and the back link returns to that same search.
  *
  * Story 8.3 AC6 (bug f8.3.2): the venue's first picture fills the banner, and every picture shows
- * in a gallery, in order, each opening full size. Without pictures the banner keeps its icon and
- * there is no gallery.
+ * in a gallery, in order; selecting one opens a pop-up carousel at it. Without pictures the banner
+ * keeps its icon and there is no gallery.
  */
 export function VenueDetailPage() {
   const { venueId = '' } = useParams()
@@ -78,6 +79,8 @@ export function VenueDetailPage() {
   const [openDay, setOpenDay] = useState<string | null>(null)
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
+  /** Story 8.3 AC6: the gallery picture the carousel is open on, if it is open. */
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -137,6 +140,10 @@ export function VenueDetailPage() {
 
   function markCoverFailed() {
     setFailedCoverUrl(venue?.cover_image_url ?? null)
+  }
+
+  function closeViewer() {
+    setViewerIndex(null)
   }
 
   if (error) {
@@ -207,17 +214,28 @@ export function VenueDetailPage() {
               <ul className="picture-gallery">
                 {venue.images.map((image, index) => (
                   <li key={image.id}>
-                    <a href={mediaUrl(image.url) ?? undefined} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      className="picture-gallery-button"
+                      onClick={() => setViewerIndex(index)}
+                    >
                       <img
                         src={mediaUrl(image.url) ?? undefined}
                         alt={`Picture ${index + 1} of ${venue.images.length}`}
                       />
-                      <span className="visually-hidden"> (opens in a new tab)</span>
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>
             </section>
+          )}
+          {viewerIndex !== null && (
+            <VenuePictureViewer
+              venueName={venue.name}
+              pictures={venue.images}
+              startIndex={viewerIndex}
+              onClose={closeViewer}
+            />
           )}
 
           <section className="card stack" aria-labelledby="venue-capacity-heading">

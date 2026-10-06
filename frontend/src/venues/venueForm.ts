@@ -205,26 +205,32 @@ export function validateVenueImage(file: File): ErrorCode | null {
   return null
 }
 
-/** The files a venue can take from those chosen, and why the first of the others cannot. */
+/** A chosen file the venue could not take, by the name it was chosen under, and why. */
+export interface RefusedPicture {
+  name: string
+  problem: ErrorCode
+}
+
+/** The files a venue can take from those chosen, and each of the others with its reason. */
 export interface ChosenVenueImages {
   accepted: File[]
-  problem: ErrorCode | null
+  refused: RefusedPicture[]
 }
 
 /**
- * Story 8.3 AC7: which of `files`, in order, a venue already holding `count` pictures can take:
- * each must pass `validateVenueImage`, and the venue holds `MAX_VENUE_IMAGES` at most.
+ * Story 8.3 AC7: which of `files`, in order, a venue already holding `count` pictures can take.
+ * Each file is checked on its own - `validateVenueImage`, then room under `MAX_VENUE_IMAGES` - so
+ * one that does not fit never stops the rest, and every one refused is named with its reason
+ * (bug found on 6 Oct: a batch holding one file over 5 MB looked refused as a whole).
  */
 export function chooseVenueImages(files: File[], count: number): ChosenVenueImages {
   const accepted: File[] = []
-  let problem: ErrorCode | null = null
+  const refused: RefusedPicture[] = []
   for (const file of files) {
-    const fileProblem =
-      count + accepted.length >= MAX_VENUE_IMAGES
-        ? 'VENUE_PICTURES_TOO_MANY'
-        : validateVenueImage(file)
-    if (fileProblem === null) accepted.push(file)
-    else problem ??= fileProblem
+    const hasRoom = count + accepted.length < MAX_VENUE_IMAGES
+    const problem = validateVenueImage(file) ?? (hasRoom ? null : 'VENUE_PICTURES_TOO_MANY')
+    if (problem === null) accepted.push(file)
+    else refused.push({ name: file.name, problem })
   }
-  return { accepted, problem }
+  return { accepted, refused }
 }
