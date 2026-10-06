@@ -443,12 +443,18 @@ class AccessibilityNeedOut(BaseModel):
 
 
 class EquipmentLineOut(BaseModel):
+    """One equipment item on an event (story 2.1 AC6). Story 15.1 AC1: ``status`` says whether it
+    has been sent to Technical Support, and ``submitted_at`` / ``submitted_by_name`` when and by
+    which coordinator - both ``None`` until it is sent. No defaults (response schema)."""
+
     id: uuid.UUID
     equipment_type_code: str
     equipment_type_name: str
     quantity: int
     technical_notes: str | None
     status: str
+    submitted_at: datetime | None
+    submitted_by_name: str | None
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
@@ -459,6 +465,10 @@ class EquipmentLineOut(BaseModel):
             quantity=line.quantity,
             technical_notes=line.technical_notes,
             status=line.status,
+            submitted_at=line.submitted_at,
+            submitted_by_name=(
+                line.submitted_by.full_name if line.submitted_by is not None else None
+            ),
         )
 
 

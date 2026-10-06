@@ -380,6 +380,7 @@ def test_an_edit_moving_the_dates_into_a_busier_period_is_refused(organiser_clie
 
 # --- AC11: submitting soft-holds the equipment -----------------------------------------------
 @pytest.mark.story("2.1", ac=11)
+@pytest.mark.story("15.1", ac=2)
 def test_submitting_holds_the_equipment_for_the_event(login_as, db: Session):
     period = _period()
     created = _submittable(
@@ -389,7 +390,9 @@ def test_submitting_holds_the_equipment_for_the_event(login_as, db: Session):
     submitted = login_as(Users.ORGANISER).post(f"/events/{created['id']}/submit")
 
     assert submitted.status_code == 200, submitted.text
-    assert {line["status"] for line in submitted.json()["equipment"]} == {"RESERVED"}
+    # 15.1 AC1/AC2: held from now on, but not yet sent to Technical Support - the assigned
+    # coordinator reviews the list and submits it.
+    assert {line["status"] for line in submitted.json()["equipment"]} == {"REQUESTED"}
     holds = db.execute(
         text(
             "SELECT t.code, r.quantity, r.starts_at, r.ends_at, r.status, r.reserved_by_id,"

@@ -6,7 +6,8 @@
 --   ID prefixes:   1111.. users   2222.. venues   3333.. events
 --                  4444.. venue bookings   5555.. client organisations
 --                  6666.. equipment requests   7777.. equipment types (010)
---                  bbbb.. event clarifications
+--                  bbbb.. event clarifications   cccc.. equipment holds
+--                  dddd.. equipment out of service
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -194,7 +195,17 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- the same venue, and the hold it leaves on Seminar Room hides nothing another test looks for.
     ('33333333-0000-0000-0000-000000000018', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Quarterly Partner Briefing', 'Partner relations', 'Pricing and roadmap update for channel partners.', NULL, '2027-03-10 09:00+08', '2027-03-10 12:00+08', 60, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', NULL, 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..19 and 3333..20: in planning and assigned to Chloe; dedicated to story 15.1's e2e spec
+    -- (tests/e2e/equipment-requests.spec.ts). Dated May 2027, clear of the periods backend tests
+    -- build relative to today, so their equipment holds change no figure another test asserts.
+    -- 19's equipment is changed by that spec's flow; 20's is only read.
+    ('33333333-0000-0000-0000-000000000019', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Robotics Hands-on Workshop', 'Staff training', 'A day of building and programming small robots in teams.', NULL, '2027-05-12 09:00+08', '2027-05-12 17:00+08', 40, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    ('33333333-0000-0000-0000-000000000020', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Product Launch Showcase', 'Product launch', 'Demonstrations of the new product line for key customers.', NULL, '2027-05-19 09:00+08', '2027-05-19 17:00+08', 120, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-21 09:00+08', '2026-09-23 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -229,6 +240,39 @@ ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, created_by_id = EXCLUDED.created_by_id;
 
+-- Story 15.1's e2e items: the organiser's projectors on 3333..19, held since the request was
+-- submitted but not yet sent to Technical Support, and a speaker set on 3333..20 the coordinator
+-- has already sent. Each holds its units (equipment_reservations below), as every open item on a
+-- submitted event does. The older items above predate the hold and hold nothing.
+INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, created_by_id, submitted_by_id, submitted_at) VALUES
+    ('66666666-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000019', '77777777-0000-0000-0000-000000000001', 2, 'One for each breakout room', 'REQUESTED', '11111111-0000-0000-0000-000000000001', NULL, NULL),
+    ('66666666-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000020', '77777777-0000-0000-0000-000000000005', 1, 'For the demo stage', 'PENDING', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-24 10:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, created_by_id = EXCLUDED.created_by_id,
+    submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at;
+
+INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
+    ('cccccccc-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000019', '66666666-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000001', 2,
+     '2027-05-12 09:00+08', '2027-05-12 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000001', '2026-09-20 09:00+08', 'Held when the request was submitted.'),
+    ('cccccccc-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000020', '66666666-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000005', 1,
+     '2027-05-19 09:00+08', '2027-05-19 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-09-24 10:00+08', 'Held for the coordinator''s equipment request.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, status = EXCLUDED.status,
+    reserved_by_id = EXCLUDED.reserved_by_id, reserved_at = EXCLUDED.reserved_at,
+    released_at = NULL, released_quantity = 0, notes = EXCLUDED.notes;
+
+-- Every video camera is out of service over 3333..20's dates, so story 15.1's e2e spec finds a
+-- type with none available.
+INSERT INTO equipment_unavailability_periods (id, equipment_type_id, quantity, reason, starts_at, ends_at, notes, created_by_id) VALUES
+    ('dddddddd-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000006', 4, 'MAINTENANCE',
+     '2027-05-17 00:00+08', '2027-05-22 00:00+08', 'Sensor cleaning and firmware update', '11111111-0000-0000-0000-000000000006')
+ON CONFLICT (id) DO UPDATE SET
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity, reason = EXCLUDED.reason,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, notes = EXCLUDED.notes;
+
 -- Status history for the non-draft events (append-only in real use; idempotent here via fixed ids)
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000002', NULL, 'DRAFT', '11111111-0000-0000-0000-000000000001', '2026-09-08 10:00+08', NULL),
@@ -254,7 +298,9 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000019', '33333333-0000-0000-0000-000000000013', 'PLANNING', 'CONFIRMED', '11111111-0000-0000-0000-000000000003', '2026-09-15 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000020', '33333333-0000-0000-0000-000000000014', 'CONFIRMED', 'COMPLETED', '11111111-0000-0000-0000-000000000003', '2026-08-01 12:00+08', NULL),
     ('99999999-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000015', 'CONFIRMED', 'CANCELLED', '11111111-0000-0000-0000-000000000003', '2026-08-27 09:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000018', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-18 09:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000018', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-18 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000019', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-22 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000020', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-23 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -281,7 +327,10 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-10 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-11 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-12 09:00+08'),
-    ('aaaaaaaa-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000017', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-13 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000017', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-13 09:00+08'),
+    -- Story 15.1's e2e events, assigned automatically on submission: no human assigner.
+    ('aaaaaaaa-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000019', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000019', '33333333-0000-0000-0000-000000000020', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-21 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------

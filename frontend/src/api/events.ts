@@ -122,14 +122,27 @@ export interface AccessibilityNeed {
   notes: string | null
 }
 
-/** Mirrors `EquipmentLineOut`: one equipment item on a request. */
+/**
+ * Values of `EquipmentRequestStatus` (backend/app/events/models.py, story 15.1). REQUESTED is
+ * recorded but not yet sent to Technical Support; ACCEPTED and DECLINED are Technical Support's
+ * decisions (story 16.1); UNAVAILABLE is an item the event's new dates can no longer cover (AC8).
+ */
+export type EquipmentItemStatus =
+  'REQUESTED' | 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'UNAVAILABLE' | 'CANCELLED'
+
+/**
+ * Mirrors `EquipmentLineOut`: one equipment item on a request. Story 15.1 AC1: `submitted_at` and
+ * `submitted_by_name` say when, and by which coordinator, it was sent - both null until it is.
+ */
 export interface EquipmentLine {
   id: string
   equipment_type_code: string
   equipment_type_name: string
   quantity: number
   technical_notes: string | null
-  status: string
+  status: EquipmentItemStatus
+  submitted_at: string | null
+  submitted_by_name: string | null
 }
 
 /**

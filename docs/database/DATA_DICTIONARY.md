@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-09-30 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-06 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -37,13 +37,13 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
-| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.x, 16.4, 17.3 | One line per equipment type an event asks for, with quantity and technical notes |
+| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.1, 15.2, 16.1, 17.1 | One item per equipment type an event needs, with quantity and technical notes |
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date, time, attendance, venue or equipment requirements) after submission |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
-| Equipment | [`equipment_reservations`](#equipment_reservations) | 16.2, 17.x | A hold of N units of an equipment type for an event over a period |
+| Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
 | Registration | [`event_registrations`](#event_registrations) | 18.x | An attendee's registration for an event |
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
@@ -419,26 +419,28 @@ Accessibility features the event needs (many-to-many). See events.accessibility_
 
 ### event_equipment_requests
 
-**Stories:** 2.1 (AC6), 15.x, 16.4, 17.3
+**Stories:** 2.1 (AC6), 15.1, 15.2, 16.1, 17.1
 
-One line per equipment type an event asks for, with quantity and technical notes. Technical Support Staff move each line through statuses as they arrange it (story 15.4). Actual holds on stock are separate rows in equipment_reservations.
+One item per equipment type an event needs, with quantity and technical notes. The organiser records them on the request (2.1); the assigned coordinator adds, edits and removes them and submits them to Technical Support (15.1), who accept or decline each (16.1). The units an item holds are separate rows in equipment_reservations.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
-| `quantity` | `integer` | no | - | - | Units requested. Positive whole number (story 2.1 AC3, 15.1 AC3). |
-| `technical_notes` | `text` | yes | - | - | Technical requirements for this item (story 15.1 AC2). |
-| `status` | `text` | no | `'REQUESTED'` | - | Progress of the request line: REQUESTED, UNDER_REVIEW, RESERVED, PARTIALLY_RESERVED, UNAVAILABLE, CANCELLED (story 15.4 AC1). |
-| `status_notes` | `text` | yes | - | - | Note from Technical Support Staff when the item cannot be provided as requested (story 15.4 AC2). |
-| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who added the line (organiser or coordinator). |
+| `quantity` | `integer` | no | - | - | Units requested. Positive whole number (story 2.1 AC3, 15.1 AC4). |
+| `technical_notes` | `text` | yes | - | - | Technical requirements for this item. Optional; at most 1,000 characters when the coordinator records it (story 15.1 AC5). |
+| `status` | `text` | no | `'REQUESTED'` | - | REQUESTED: recorded, not yet sent to Technical Support. PENDING: sent, awaiting Technical Support. ACCEPTED or DECLINED: Technical Support's decision (story 16.1). UNAVAILABLE: the event's new dates can no longer cover it (story 15.1 AC8). CANCELLED: its event was cancelled (story 6.2). |
+| `status_notes` | `text` | yes | - | - | Technical Support's note on its decision, such as the reason for declining (story 16.1). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who recorded the item: the organiser (story 2.1) or the coordinator (story 15.1). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+| `submitted_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The coordinator who sent the item to Technical Support (story 15.1 AC1). NULL until it is sent. |
+| `submitted_at` | `timestamp with time zone` | yes | - | - | When the item was last sent to Technical Support: on submission, or again when the event's dates changed (story 15.1 AC1, AC8). NULL until it is sent. |
 
 Allowed values:
 
-- `status`: `REQUESTED`, `UNDER_REVIEW`, `RESERVED`, `PARTIALLY_RESERVED`, `UNAVAILABLE`, `CANCELLED`
+- `status`: `REQUESTED`, `PENDING`, `ACCEPTED`, `DECLINED`, `UNAVAILABLE`, `CANCELLED`
 
 Rules and indexes:
 
@@ -588,21 +590,21 @@ Rules and indexes:
 
 ### equipment_reservations
 
-**Stories:** 16.2, 17.x
+**Stories:** 2.1, 15.1, 16.1, 16.2, 17.1
 
-A hold of N units of an equipment type for an event over a period. Availability for a period = equipment_types.total_quantity - SUM(quantity - released_quantity) of overlapping RESERVED rows - overlapping out-of-service quantities. The "never over-commit" rule (story 17.2 AC3) is enforced in the service layer inside a transaction, because SQL constraints cannot sum across rows.
+A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1). Availability for a period = equipment_types.total_quantity - SUM(quantity - released_quantity) of overlapping RESERVED rows - overlapping out-of-service quantities. Never over-committing is enforced in the service layer under a row lock on the equipment type, because SQL constraints cannot sum across rows.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event the stock is held for (story 17.1 AC3). |
-| `equipment_request_id` | `uuid` | yes | - | FK → `event_equipment_requests.id` | FK -> event_equipment_requests.id. The request line this reservation satisfies (optional). |
+| `equipment_request_id` | `uuid` | yes | - | FK → `event_equipment_requests.id` | FK -> event_equipment_requests.id. The item this hold is for. NULL once the item is removed (its hold is released first, story 15.1 AC2). |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
 | `quantity` | `integer` | no | - | - | Units reserved. Positive. |
-| `starts_at` | `timestamp with time zone` | no | - | - | Start of the hold (normally the event start, story 17.1 AC1). |
+| `starts_at` | `timestamp with time zone` | no | - | - | Start of the hold: the event's start (story 15.1 AC2). |
 | `ends_at` | `timestamp with time zone` | no | - | - | End (exclusive) of the hold. |
-| `status` | `text` | no | `'RESERVED'` | - | RESERVED while any units are still held; RELEASED once released_quantity = quantity (story 17.4). |
-| `reserved_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Technical Support Staff member who reserved (story 17.1 AC3). |
+| `status` | `text` | no | `'RESERVED'` | - | RESERVED while any units are still held; RELEASED once released_quantity = quantity (an item removed, declined or moved to new dates, story 15.1 AC2/AC8). |
+| `reserved_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Who placed the hold: the organiser on submitting (story 2.1 AC11) or the coordinator (story 15.1). |
 | `reserved_at` | `timestamp with time zone` | no | `now()` | - | When the reservation was made. |
 | `released_at` | `timestamp with time zone` | yes | - | - | When the reservation was last (partly) released. |
 | `released_quantity` | `integer` | no | `0` | - | Units already released back to stock (supports partial release, story 17.4 AC1). |

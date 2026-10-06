@@ -28,19 +28,16 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'coordinator',
     email: ACCOUNTS.coordinator,
-    visible: [
-      'Events inbox',
-      'Change requests',
-      'Registrations',
-      'Venue catalogue',
-      'Equipment requests',
-    ],
+    visible: ['Events inbox', 'Change requests', 'Registrations', 'Venue catalogue'],
+    // Story 15.1 AC1 (CL-041): equipment is requested from the event page, so there is no
+    // separate Equipment requests section.
     hidden: [
       'Manage venues',
       'My events',
       'Bookings & schedule',
       'Equipment holds',
       'Request a venue',
+      'Equipment requests',
     ],
   },
   {
