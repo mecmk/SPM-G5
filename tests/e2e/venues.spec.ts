@@ -4,10 +4,10 @@
  * AC2 existing venue characteristics can be edited and saved.
  * AC3 capacity accepts positive whole numbers only (checked in the browser before sending).
  * AC4 only Venue Staff can create or edit venue records.
- * The team meeting of 17 Sep 2026 added delete (full CRUD), search and a capacity filter, and
- * asked for every save to appear in the notification centre.
+ * Beyond those ACs this spec also covers delete (Venue Staff have full CRUD), search and a
+ * capacity filter, and that every save appears in the notification centre.
  *
- * Story 8.1 AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from the venue catalogue,
+ * Story 8.1 AC12 (f8.1.1): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
  * venues, for venues:manage holders only. The separate Manage venues page is gone and its old
  * address opens the catalogue. The manage page's name search and capacity filter live on in the

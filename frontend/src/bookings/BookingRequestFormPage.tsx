@@ -42,11 +42,11 @@ interface RequestSubject {
  * an event that cannot take a booking. AC2: the period, attendance, layout and required facilities
  * are the event's - shown here, never entered, and copied by the backend. AC3: the outcome shows
  * the request pending. AC4: the backend refuses anyone but the event's assigned coordinator.
- * Nothing can be sent before both records have arrived (review of PR #42).
+ * Nothing can be sent before both records have arrived.
  *
  * The address can be reached without Request this venue (an old link, an edited one), so the
  * page checks it with the same rule as Find a venue and, for anyone that rule turns away, says why
- * instead of offering a request the backend would refuse (review of PR #67).
+ * instead of offering a request the backend would refuse.
  *
  * The address also carries the catalogue's own query, so the back link returns to the same search.
  *

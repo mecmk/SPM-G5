@@ -5,7 +5,7 @@ Design (see docs/database/README.md for the team-facing explanation):
 * ``backend/db/migrations/NNN_name.sql`` - applied once, in filename order, each inside its own
   transaction. Applied versions and a SHA-256 checksum are recorded in ``schema_migrations``.
   If an already-applied file changes on disk the tool reports *drift* and refuses to continue;
-  during Sprint 1 the fix is ``npm run db:reset``, later sprints add a new file instead.
+  the error itself names the two ways out.
 * ``backend/db/seed/NNN_name.sql`` - re-run on every ``seed``/``ready``. Seed files must be
   idempotent (UPSERTs), so re-running self-heals the canonical sample rows and never
   duplicates them.
@@ -120,8 +120,8 @@ def migrate(url: str, *, log=print) -> list[SqlFile]:
         names = ", ".join(m.name for m in current.drifted)
         raise MigrationDrift(
             f"Applied migration(s) changed on disk: {names}.\n"
-            "  - Sprint 1: run `npm run db:reset` to rebuild the local database from scratch.\n"
-            "  - Later sprints: do not edit applied migrations; add a new NNN_*.sql file instead."
+            "  - Rebuild the local database from scratch with `npm run db:reset`.\n"
+            "  - Or restore the file and put the change in a new NNN_*.sql migration instead."
         )
     applied: list[SqlFile] = []
     for migration in current.pending:
