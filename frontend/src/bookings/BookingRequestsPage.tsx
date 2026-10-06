@@ -38,15 +38,29 @@ function requirementsText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No requirements stated.'
 }
 
-/** Load the `page`th page (1-based) of a tab. */
-function loadQueuePage(tab: BookingStatusTabKey, page: number): Promise<BookingQueue> {
+/** One page of a tab, and which page (1-based) it is. */
+interface QueuePage extends BookingQueue {
+  page: number
+}
+
+function fetchQueuePage(tab: BookingStatusTabKey, page: number): Promise<BookingQueue> {
   return listBookingRequests(bookingTabStatus(tab), (page - 1) * QUEUE_PAGE_SIZE, QUEUE_PAGE_SIZE)
+}
+
+/** Load the `page`th page of a tab - or, when decisions made since have left that page past the
+ * end, the last page that has any requests, so the page never settles on an empty one. */
+async function loadQueuePage(tab: BookingStatusTabKey, page: number): Promise<QueuePage> {
+  const queue = await fetchQueuePage(tab, page)
+  const lastPage = Math.max(1, Math.ceil(queue.total / QUEUE_PAGE_SIZE))
+  if (page <= lastPage) return { ...queue, page }
+  return { ...(await fetchQueuePage(tab, lastPage)), page: lastPage }
 }
 
 /** Under All, `queue` once `decided` - the request it names - was decided on this page: the
  * entry stays where it is, showing the outcome, and the counts move it to its new status. */
-function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueue {
+function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
   return {
+    ...queue,
     items: queue.items.map((entry) =>
       entry.id === decided.id
         ? {
@@ -57,7 +71,6 @@ function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueu
           }
         : entry,
     ),
-    total: queue.total,
     counts: withBookingMoved(queue.counts, PENDING_BOOKING_STATUS, decided.status),
   }
 }
@@ -83,14 +96,15 @@ function withDecisionInPlace(queue: BookingQueue, decided: Booking): BookingQueu
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
   // even when the tab and page stay the same - which is how a decision refetches the page. The
-  // `cancelled` flag in `useLoaded` then drops an older load's answer if the tab changes first.
+  // `cancelled` flag in `useLoaded` then drops an older load's answer if the tab changes first,
+  // and `isStale` hides the old tab or page's requests until the new answer arrives.
   const [view, setView] = useState<{ tab: BookingStatusTabKey; page: number }>({
     tab: 'PENDING',
     page: 1,
   })
-  const { tab, page } = view
+  const { tab } = view
   const loadPage = useCallback(() => loadQueuePage(view.tab, view.page), [view])
-  const { data: queue, error, isLoading, setData: setQueue } = useLoaded(loadPage)
+  const { data: queue, error, isLoading, isStale, setData: setQueue } = useLoaded(loadPage)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -109,7 +123,7 @@ export function BookingRequestsPage() {
   )
 
   const pageCount = queue ? Math.ceil(queue.total / QUEUE_PAGE_SIZE) : 0
-  const firstShown = (page - 1) * QUEUE_PAGE_SIZE + 1
+  const firstShown = queue ? (queue.page - 1) * QUEUE_PAGE_SIZE + 1 : 0
 
   function changeTab(next: BookingStatusTabKey) {
     setView({ tab: next, page: 1 })
@@ -120,20 +134,14 @@ export function BookingRequestsPage() {
   }
 
   /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
-   * belongs, so the page is fetched again and the next request moves up - or, if it was the
-   * only one on the last page, the page before is shown instead. */
+   * belongs, so the page is fetched again and the next request moves up - `loadQueuePage` steps
+   * back a page if that one is now empty. */
   function recordDecision(decided: Booking) {
     if (tab === 'ALL') {
       setQueue((current) => current && withDecisionInPlace(current, decided))
       return
     }
-    setQueue(
-      (current) =>
-        current && { ...current, items: current.items.filter((entry) => entry.id !== decided.id) },
-    )
-    const remaining = (queue?.total ?? 0) - 1
-    const isPageNowEmpty = page > 1 && (page - 1) * QUEUE_PAGE_SIZE >= remaining
-    setView({ tab, page: isPageNowEmpty ? page - 1 : page })
+    setView({ tab, page: queue?.page ?? 1 })
   }
 
   function askToApprove(entry: BookingQueueEntry) {
@@ -204,13 +212,15 @@ export function BookingRequestsPage() {
           {error}
         </p>
       )}
-      {isLoading && <LoadingState label="Loading booking requests…" />}
+      {(isLoading || (isStale && error === null)) && (
+        <LoadingState label="Loading booking requests…" />
+      )}
 
       {queue !== null && (
         <div className="stack">
           <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
 
-          {queue.items.length === 0 && (
+          {!isStale && queue.items.length === 0 && (
             <EmptyState>
               {tab === PENDING_BOOKING_STATUS
                 ? 'No requests waiting. You are up to date.'
@@ -218,7 +228,7 @@ export function BookingRequestsPage() {
             </EmptyState>
           )}
 
-          {queue.items.length > 0 && (
+          {!isStale && queue.items.length > 0 && (
             <ul className="stack">
               {queue.items.map((entry) => (
                 <li key={entry.id} className="card stack">
@@ -312,12 +322,12 @@ export function BookingRequestsPage() {
             </ul>
           )}
 
-          {pageCount > 1 && (
+          {!isStale && pageCount > 1 && (
             <div className="pager-bar">
               <p className="small muted">
                 Showing {firstShown}–{firstShown + queue.items.length - 1} of {queue.total} requests
               </p>
-              <Pagination page={page} pageCount={pageCount} onChange={changePage} />
+              <Pagination page={queue.page} pageCount={pageCount} onChange={changePage} />
             </div>
           )}
         </div>

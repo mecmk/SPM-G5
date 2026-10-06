@@ -2,7 +2,6 @@ export interface PaginationProps {
   /** 1-based. */
   page: number
   pageCount: number
-  isDisabled?: boolean
   onChange: (page: number) => void
 }
 
@@ -30,13 +29,13 @@ function visiblePages(page: number, pageCount: number): (number | null)[] {
 }
 
 /** Story 13.1.2 AC4 - Previous, numbered pages and Next. The page owns which page is showing. */
-export function Pagination({ page, pageCount, isDisabled = false, onChange }: PaginationProps) {
+export function Pagination({ page, pageCount, onChange }: PaginationProps) {
   return (
     <nav className="pagination" aria-label="Pages">
       <button
         type="button"
         className="secondary button-sm"
-        disabled={isDisabled || page <= 1}
+        disabled={page <= 1}
         onClick={() => onChange(page - 1)}
       >
         Previous
@@ -52,7 +51,6 @@ export function Pagination({ page, pageCount, isDisabled = false, onChange }: Pa
             type="button"
             className={candidate === page ? 'brand button-sm' : 'secondary button-sm'}
             aria-current={candidate === page ? 'page' : undefined}
-            disabled={isDisabled}
             onClick={() => onChange(candidate)}
           >
             {candidate}
@@ -62,7 +60,7 @@ export function Pagination({ page, pageCount, isDisabled = false, onChange }: Pa
       <button
         type="button"
         className="secondary button-sm"
-        disabled={isDisabled || page >= pageCount}
+        disabled={page >= pageCount}
         onClick={() => onChange(page + 1)}
       >
         Next
