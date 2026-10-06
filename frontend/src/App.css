@@ -2865,13 +2865,18 @@ label select[aria-invalid='true'],
   list-style: none;
 }
 
+/* The glide is an unhurried ease-out, long enough to follow with the eye. */
 .picture-tile {
   position: relative;
   cursor: grab;
-  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
-  animation: picture-tile-in 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  transition: transform 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* A picture just added grows into place, once (see `appeared` in VenuePicturesField). */
+.picture-tile.is-new {
+  animation: picture-tile-in 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
 .picture-tile.is-lifted {

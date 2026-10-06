@@ -3,6 +3,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type AnimationEvent,
   type ChangeEvent,
   type DragEvent,
   type MouseEvent,
@@ -41,10 +42,11 @@ const TOUCH_HOLD_MS = 250
 const TOUCH_SLOP_PX = 8
 /** How much a picked-up picture grows, to show it is lifted off the others. */
 const LIFTED_SCALE = 1.06
-/** How a dropped picture settles into its place; the others glide with `.picture-tile`'s own. */
-const SETTLE_TRANSITION = 'transform 220ms cubic-bezier(0.2, 0, 0, 1)'
+/** How a dropped picture settles into its place: the same unhurried ease-out the others glide
+ *  with (`.picture-tile` in App.css), so nothing seems to jump. */
+const SETTLE_TRANSITION = 'transform 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
 /** When a settled picture's inline transition and pivot can go: just after it settles. */
-const SETTLED_AFTER_MS = 260
+const SETTLED_AFTER_MS = 360
 
 /** A press on a picture, which may become a drag once it moves (mouse) or rests (touch). */
 interface Press {
@@ -67,6 +69,11 @@ function isFileDrag(drag: DragEvent<HTMLElement>): boolean {
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function tileClassName(isNew: boolean, isLifted: boolean): string {
+  if (isLifted) return isNew ? 'picture-tile is-new is-lifted' : 'picture-tile is-lifted'
+  return isNew ? 'picture-tile is-new' : 'picture-tile'
 }
 
 /** Where each picture is on screen now, to glide from when the order changes. */
@@ -102,6 +109,10 @@ export function VenuePicturesField({
   const pointer = useRef({ x: 0, y: 0 })
   /** Where each picture was just before the order changed, if it has; read once, after it. */
   const before = useRef<Map<string, DOMRect> | null>(null)
+  /** Pictures whose entrance has played. It plays once: React moves a picture's element when
+   *  the order changes, moving an element restarts its CSS animation, and a running animation
+   *  would override the glide, so the picture would jump to its new place. */
+  const [appeared, setAppeared] = useState<ReadonlySet<string>>(() => new Set())
   // The latest props, for the window listeners set up once below.
   const latest = useRef({ pictures, onMove })
   useEffect(() => {
@@ -268,6 +279,15 @@ export function VenuePicturesField({
     if (!isTouch) event.preventDefault()
   }
 
+  /** A picture's entrance has played; it must not play again when its element moves. */
+  function handleAppeared(event: AnimationEvent<HTMLLIElement>) {
+    const key = event.currentTarget.dataset.key
+    if (event.target !== event.currentTarget || key === undefined) return
+    // Off at once, not at the next render: a move before then would replay it.
+    event.currentTarget.classList.remove('is-new')
+    setAppeared((current) => new Set(current).add(key))
+  }
+
   /** A long press would otherwise open the phone's menu for the picture. */
   function handleContextMenu(event: MouseEvent<HTMLLIElement>) {
     if (press.current?.isTouch) event.preventDefault()
@@ -331,10 +351,11 @@ export function VenuePicturesField({
                 tiles.current.delete(picture.key)
               }
             }}
-            className={picture.key === liftedKey ? 'picture-tile is-lifted' : 'picture-tile'}
+            className={tileClassName(!appeared.has(picture.key), picture.key === liftedKey)}
             data-key={picture.key}
             onPointerDown={handlePointerDown}
             onContextMenu={handleContextMenu}
+            onAnimationEnd={handleAppeared}
           >
             <div className="picture-tile-frame">
               <img src={picture.src} alt={`Picture ${index + 1} preview`} draggable={false} />
