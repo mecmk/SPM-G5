@@ -9,6 +9,7 @@ from app.coordination.router import router as coordination_router
 from app.equipment.router import router as equipment_router
 from app.events.router import router as events_router
 from app.events.router import uploads_router
+from app.notifications.router import router as notifications_router
 from app.venues.router import router as venues_router
 from app.venues.router import uploads_router as venue_uploads_router
 
@@ -30,6 +31,7 @@ app.include_router(bookings_router)
 app.include_router(coordination_router)
 app.include_router(equipment_router)
 app.include_router(events_router)
+app.include_router(notifications_router)
 app.include_router(uploads_router)
 app.include_router(venues_router)
 app.include_router(venue_uploads_router)

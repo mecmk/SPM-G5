@@ -2,8 +2,8 @@
 event review (story 4.1), requesting clarification from the organiser (story 4.2) and the
 organiser's response (story 4.3), the approve/reject decision (stories 4.4, 4.5), the decision /
 clarification history an organiser sees (story 4.6), routine information edits and corrections
-to a request awaiting a decision (story 7.2), and the coordinator's assigned events in any status
-(story 6.1).
+to a request awaiting a decision (story 7.2), the coordinator's assigned events in any status
+(story 6.1), and the notifications a submission and a decision send (story 20.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -28,7 +28,6 @@ from sqlalchemy.orm import Session, lazyload
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.audit import record_audit
-from app.common.notifications import notify
 from app.config import settings
 from app.coordination import service as coordination_service
 from app.events.models import (
@@ -62,6 +61,7 @@ from app.events.schemas import (
     ReviewQueueSort,
     VenueRequirementIn,
 )
+from app.notifications.service import NotificationType, notify
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
 _log = logging.getLogger(__name__)
@@ -1285,10 +1285,32 @@ def _record_transition(
     )
 
 
+def _notify_coordinator_of_submission(db: Session, event: Event, *, actor: User) -> None:
+    """Story 20.1 AC1: the coordinator the request was just assigned to (5.1) is told it waits for
+    their review. With nobody to assign (5.1 AC5) nobody is told; when story 5.4 replaces the
+    automatic assignment, the Lead is told here instead. The organiser submitted it, so they are
+    not (AC3)."""
+    if event.assigned_coordinator_id is None:
+        return
+    notify(
+        db,
+        recipient=db.get(User, event.assigned_coordinator_id),
+        actor=actor,
+        notification_type=NotificationType.EVENT_SUBMITTED,
+        event_id=event.id,
+        title=f'"{event.name}" is waiting for your review',
+        message=f'{actor.full_name} submitted "{event.name}", and it is assigned to you.',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+
+
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in.
     Story 5.1 AC1: submitting also auto-assigns the next coordinator in round robin, in this
-    same transaction - see ``coordination.service.auto_assign_next_coordinator``.
+    same transaction - see ``coordination.service.auto_assign_next_coordinator``. Story 20.1
+    AC1/AC4: that coordinator is notified, in the same transaction too.
     Story 2.7 AC12: the row is held from the moment it is read, so what is judged here is what
     an edit in another tab left, never what was there before it committed."""
     event = _get_own_event(db, event_id, actor, for_update=True)
@@ -1335,6 +1357,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         reason=None,
     )
     coordination_service.auto_assign_next_coordinator(db, event)
+    _notify_coordinator_of_submission(db, event, actor=actor)
     record_audit(
         db,
         actor=actor,
@@ -1568,6 +1591,33 @@ def _assert_awaiting_decision(
         raise EventNotAwaitingDecision(event, verb=verb)
 
 
+def _notify_organiser_of_decision(
+    db: Session, event: Event, *, actor: User, to_status: str, reason: str | None
+) -> None:
+    """Story 20.1 AC1: the organiser is told the outcome of the two decisions ``_decide`` makes,
+    4.5's rejection with its reason, or 4.4's approval."""
+    if to_status == EventStatus.REJECTED:
+        notification_type = NotificationType.EVENT_REJECTED
+        title = f'"{event.name}" was rejected'
+        message = f"{actor.full_name} rejected your request. Reason: {reason}"
+    else:
+        notification_type = NotificationType.EVENT_APPROVED
+        title = f'"{event.name}" was approved'
+        message = f"{actor.full_name} approved your request. It is now being planned."
+    notify(
+        db,
+        recipient=event.organiser,
+        actor=actor,
+        notification_type=notification_type,
+        event_id=event.id,
+        title=title,
+        message=message,
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+
+
 def _decide(
     db: Session,
     event: Event,
@@ -1588,6 +1638,8 @@ def _decide(
     racing double-submit. ``reason`` is written unconditionally, which is what clears a stale
     ``decision_reason`` left by an earlier rejection when a later approval reuses this path
     (relevant once 4.6's clarification round-trip can return a request here more than once).
+    Story 20.1: the organiser's notification is written in the same transaction, so a decision
+    that is refused or fails sends none (AC4), and the losing one of two at once sends none (AC6).
     """
     _assert_assigned_coordinator(event, actor, verb="decide")
     _assert_awaiting_decision(event, allowed_statuses, verb=verb)
@@ -1614,6 +1666,7 @@ def _decide(
         at=decided_at,
         reason=reason,
     )
+    _notify_organiser_of_decision(db, event, actor=actor, to_status=to_status, reason=reason)
     details: dict[str, Any] = {"from_status": from_status}
     if reason is not None:
         details["reason"] = reason
@@ -1737,7 +1790,8 @@ def request_clarification(
     notify(
         db,
         recipient=event.organiser,
-        notification_type="EVENT_CLARIFICATION_REQUESTED",
+        actor=actor,
+        notification_type=NotificationType.EVENT_CLARIFICATION_REQUESTED,
         event_id=event.id,
         title=f'Clarification requested on "{event.name}"',
         message=stripped,
@@ -1804,7 +1858,8 @@ def respond_to_clarification(
     notify(
         db,
         recipient=event.assigned_coordinator,
-        notification_type="EVENT_CLARIFICATION_RESPONDED",
+        actor=actor,
+        notification_type=NotificationType.EVENT_CLARIFICATION_RESPONDED,
         event_id=event.id,
         title=f'Organiser responded on "{event.name}"',
         message=stripped,
