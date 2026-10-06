@@ -1,12 +1,7 @@
 import type { EventStatus } from '../api/events'
 
-/**
- * Story 6.1 (revised, bug b6.1.1): the 8 backend statuses, each with its own label, colour and
- * tab. SUBMITTED, APPROVED and the muted/collapsed treatment they and CONFIRMED once had are
- * gone - migration 002 retired SUBMITTED and APPROVED outright, and the team decided CONFIRMED
- * is a fully normal status rather than a transitory one.
- */
-export const VISIBLE_EVENT_STATUSES = [
+/** Story 6.1: the 8 backend statuses, each with its own label, colour and tab. */
+const VISIBLE_EVENT_STATUSES = [
   'DRAFT',
   'UNDER_REVIEW',
   'CLARIFICATION_REQUESTED',
@@ -24,6 +19,19 @@ export const VISIBLE_EVENT_STATUSES = [
  * `./venueRequest.ts`), so no page offers what `POST /bookings` would refuse.
  */
 export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
+
+/** Story 7.2 AC3: routine editing (and the internal-notes view) closes at these statuses. */
+export const TERMINAL_STATUSES: readonly EventStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
+
+/**
+ * Stories 4.4 AC1 / 4.5 AC1: both approving and rejecting are allowed only while a request
+ * awaits a decision, mirroring the backend's `_AWAITING_DECISION_STATUSES`
+ * (backend/app/events/service.py).
+ */
+export const AWAITING_DECISION_STATUSES: readonly EventStatus[] = [
+  'UNDER_REVIEW',
+  'CLARIFICATION_REQUESTED',
+]
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   DRAFT: 'Draft',
@@ -60,7 +68,7 @@ export function eventBadgeStatus(status: EventStatus): string {
 
 export type EventStatusTabKey = 'ALL' | (typeof VISIBLE_EVENT_STATUSES)[number]
 
-/** Every status is its own tab now - there is no transitory status left to group into another. */
+/** Every status is its own tab: none is grouped into another. */
 export function eventStatusTab(status: EventStatus): EventStatusTabKey {
   return status
 }

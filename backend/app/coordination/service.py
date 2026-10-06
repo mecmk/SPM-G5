@@ -1,11 +1,10 @@
 """Business logic for coordinator assignment (story 5.1).
 
-Story 5.1 originally read "As an Event Coordinator, I want to assign a coordinator to a
-submitted event so that it has a clear internal owner" (manual assignment, ``assign_coordinator``
-below). The requirement was later extended: a submitted event now gets a coordinator
-automatically, in round-robin order, and manual assign/reassign becomes how a human overrides
-that choice. Both paths share ``_create_assignment`` so "close the old row, open the new one,
-update the denormalised pointer, write the audit entry" is written once.
+Story 5.1 gives a submitted event a clear internal owner by two paths. It gets a coordinator
+automatically on submission, in round-robin order (``auto_assign_next_coordinator``), and
+manual assign/reassign (``assign_coordinator`` below) is how a human overrides that choice.
+Both paths share ``_create_assignment`` so "close the old row, open the new one, update the
+denormalised pointer, write the audit entry" is written once.
 
 Manual assignment (``assign_coordinator``):
 
@@ -56,9 +55,7 @@ from app.events.models import Event, EventStatus
 
 # AC1 says a *submitted* event gets a coordinator: a DRAFT has not been handed over yet, and a
 # closed event (rejected / cancelled / completed) no longer needs an owner. Everything between
-# those two ends is assignable, which is also what story 5.2 (reassignment) needs. Bug b6.1.1:
-# SUBMITTED and APPROVED were retired (migration 002) - UNDER_REVIEW and PLANNING already cover
-# the ground they used to.
+# those two ends is assignable, which is also what story 5.2 (reassignment) needs.
 ASSIGNABLE_STATUSES = frozenset(
     {
         EventStatus.UNDER_REVIEW,

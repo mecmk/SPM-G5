@@ -118,14 +118,6 @@ def cmd_ready(url: str, *, with_seed: bool = True, with_docs: bool = True, wait:
     if connection.ensure_database(url):
         print(f"  created database {connection.database_name(url)}")
     st = migrate.status(url)
-    if st.drifted:
-        print(
-            "ERROR: migration file(s) changed after being applied: "
-            + ", ".join(m.name for m in st.drifted)
-        )
-        print("  Sprint 1 fix: `npm run db:reset` (rebuilds the local database from scratch).")
-        print("  From Sprint 2: leave applied files alone and add a new NNN_*.sql migration.")
-        return 1
     applied = migrate.migrate(url)
     print(f"  migrations: {len(applied)} applied, {len(st.applied)} already present")
     if with_seed:

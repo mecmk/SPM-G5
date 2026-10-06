@@ -29,12 +29,6 @@ import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
-import {
-  AWAITING_DECISION_STATUSES,
-  DETAILS_LOCKED_HINT,
-  DETAILS_LOCKED_STATUSES,
-  TERMINAL_STATUSES,
-} from './eventStatus'
 import { LoadingState } from '../layout/LoadingState'
 import {
   eventCoordinatorEditPath,
@@ -43,6 +37,12 @@ import {
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
+import {
+  AWAITING_DECISION_STATUSES,
+  DETAILS_LOCKED_HINT,
+  DETAILS_LOCKED_STATUSES,
+  TERMINAL_STATUSES,
+} from '../shared/eventStatus'
 import {
   formatDate,
   formatDateTime,
@@ -157,8 +157,9 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
  * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
  * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
- * always, the organiser's details only while under review or awaiting clarification (AC4). AC5: once approved, that
- * coordinator is also told here that further changes go through the change request process.
+ * always, the organiser's details only while under review or awaiting clarification (AC4). AC5:
+ * once approved, that coordinator is also told here that further changes go through the change
+ * request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
@@ -166,9 +167,8 @@ function formatHeroMeta(event: EventDetail): string {
  * once rejected, its reason.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
- * while the request awaits a decision. Approving moves it straight to PLANNING; rejecting
- * requires a reason and moves it to REJECTED - both are offered from the same set of statuses
- * (bug b6.1.1's narrower reject rule has been reversed).
+ * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
+ * reason and moves it to REJECTED. Both are offered from the same set of statuses.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
