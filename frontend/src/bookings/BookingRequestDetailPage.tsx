@@ -12,6 +12,7 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
 import { formatDate, formatTime } from '../shared/format'
+import { firstVenueRequirement } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 const PENDING_STATUS = 'PENDING'
@@ -134,6 +135,8 @@ export function BookingRequestDetailPage() {
     )
   }
   if (!booking || !venue || !event) return <LoadingState label="Loading the booking request…" />
+  // Story 2.7: the facilities of the venue requirement a request carries - the event's first.
+  const requiredFacilities = firstVenueRequirement(event)?.facilities ?? []
 
   return (
     <div className="page page-wide">
@@ -204,8 +207,8 @@ export function BookingRequestDetailPage() {
           <div>
             <p className="fact-label">Required facilities</p>
             <div className="cluster">
-              {event.required_facilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
-              {event.required_facilities.map((item) => (
+              {requiredFacilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
+              {requiredFacilities.map((item) => (
                 <Chip
                   key={item.code}
                   tone="info"
