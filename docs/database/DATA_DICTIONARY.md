@@ -34,7 +34,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_layouts`](#venue_layouts) | 8.2, 8.3, 10.3, 11.1 | Which room layouts each venue supports (many-to-many) |
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
-| Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order they were added |
+| Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
@@ -327,14 +327,14 @@ Rules and indexes:
 
 **Stories:** 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2
 
-The pictures of a venue, at most 10, in the order they were added. The first is the venue's cover on its catalogue card and record banner. Deleting a venue deletes its rows; the service deletes the files.
+The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last). The first is the venue's cover on its catalogue card and record banner. Deleting a venue deletes its rows; the service deletes the files.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `venue_id` | `uuid` | no | - | FK → `venues.id` | FK -> venues.id. |
 | `url` | `text` | no | - | - | Root-relative address the API serves the picture from: /uploads/venues/<name>, a name the server generated (a UUID and the extension of the format its bytes were read as). |
-| `position` | `integer` | no | - | - | Place in the venue's order, from 1. A new picture goes after the highest; removing one leaves a gap. Lowest = the cover (story 8.3 AC6). |
+| `position` | `integer` | no | - | - | Place in the venue's order, from 1. A new picture goes after the highest; removing one leaves a gap; arranging renumbers them from 1 (story 8.3 AC5). Lowest = the cover (story 8.3 AC6). |
 | `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who added the picture. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | When the picture was added. |
 
