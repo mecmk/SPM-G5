@@ -15,8 +15,9 @@
  *     a request nobody on staff decided (CANCELLED / WITHDRAWN): "Closed at" and "Note" rather
  *     than "Decided at" and "Reason".
  * AC4 the queue shows ten requests a page, with Previous / numbered pages / Next. The seed holds
- *     fewer than ten per tab, so the paging test fakes a longer queue; the limit/offset rules
- *     themselves are backend cases.
+ *     fewer than ten per tab, so the paging tests fake a longer queue; the limit/offset rules
+ *     themselves are backend cases. The old page is hidden while the next one loads, and a page
+ *     left past the end (requests decided elsewhere) gives way to the last page that has any.
  *
  * Story 13.2 - fe: an Approve action on the queue card and the detail page.
  * AC1 approving sets the request to Approved: it leaves the Pending tab and shows under
@@ -174,9 +175,11 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await page.getByRole('tab', { name: /^Rejected/ }).click()
   await expect(approvedGrandHallCard(page)).toHaveCount(0)
 
+  // A pending card first: only All's own answer holds one, so the approved card checked after it
+  // cannot be one left over from an earlier tab.
   await page.getByRole('tab', { name: /^All/ }).click()
-  await expect(approvedGrandHallCard(page)).toBeVisible()
   await expect(pendingCard(page, '00000002')).toBeVisible()
+  await expect(approvedGrandHallCard(page)).toBeVisible()
 })
 
 test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
@@ -210,7 +213,13 @@ test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff d
         body: JSON.stringify({
           items: [approved, cancelled],
           total: 2,
-          counts: { pending: 0, approved: 1, rejected: 0, withdrawn: 0, cancelled: 1 },
+          counts: {
+            pending: 0,
+            approved: 1,
+            rejected: 0,
+            withdrawn: 0,
+            cancelled: 1,
+          },
         }),
         headers: corsHeaders(request),
       })
@@ -291,6 +300,103 @@ test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', asy
   expect(last?.get('limit')).toBe(String(QUEUE_PAGE_SIZE))
   expect(last?.get('offset')).toBe(String(2 * QUEUE_PAGE_SIZE))
   expect(last?.get('status')).toBe('PENDING')
+})
+
+/** Answer the queue's GETs with `every` paged by limit/offset, `total` as the tab's size, and
+ * `hold` deciding whether one offset waits before it is answered. */
+async function fakeQueue(
+  page: Page,
+  every: ReturnType<typeof fakeQueueEntry>[],
+  total: (offset: number) => number,
+  hold: (offset: number) => Promise<void> = async () => {},
+) {
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      const params = new URL(request.url()).searchParams
+      const offset = Number(params.get('offset'))
+      const limit = Number(params.get('limit'))
+      await hold(offset)
+      const size = total(offset)
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: every.slice(0, size).slice(offset, offset + limit),
+          total: size,
+          counts: {
+            pending: size,
+            approved: 0,
+            rejected: 0,
+            withdrawn: 0,
+            cancelled: 0,
+          },
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+}
+
+test('13.1.2 AC4: while the next page loads, the previous page is not shown', async ({ page }) => {
+  let release = () => {}
+  const secondPageHeld = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) => fakeQueueEntry(index))
+  await fakeQueue(
+    page,
+    every,
+    () => FAKE_QUEUE_LENGTH,
+    (offset) => (offset === QUEUE_PAGE_SIZE ? secondPageHeld : Promise.resolve()),
+  )
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+
+  await page
+    .getByRole('navigation', { name: 'Pages' })
+    .getByRole('button', { name: '2', exact: true })
+    .click()
+  await expect(page.getByText('Loading booking requests…')).toBeVisible()
+  await expect(cards).toHaveCount(0)
+
+  release()
+  await expect(page.getByText('Showing 11–20 of 25 requests')).toBeVisible()
+  await expect(cards.filter({ hasText: 'Paged Request 11' })).toBeVisible()
+})
+
+test('13.1.2 AC4: a page emptied by decisions made elsewhere shows the last page instead', async ({
+  page,
+}) => {
+  // Twelve wait when the queue opens; by the time page 2 is asked for, two were decided elsewhere,
+  // so ten remain and page 2 is past the end.
+  let remaining = 12
+  const every = Array.from({ length: remaining }, (_, index) => fakeQueueEntry(index))
+  await fakeQueue(page, every, (offset) => {
+    if (offset === QUEUE_PAGE_SIZE) remaining = QUEUE_PAGE_SIZE
+    return remaining
+  })
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await expect(page.getByText('Showing 1–10 of 12 requests')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Pages' })
+    .getByRole('button', { name: '2', exact: true })
+    .click()
+
+  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+  await expect(cards.filter({ hasText: 'Paged Request 01' })).toBeVisible()
+  await expect(page.getByText('No requests waiting. You are up to date.')).toHaveCount(0)
 })
 
 test('13.1: a coordinator cannot open the booking requests queue', async ({ page }) => {
