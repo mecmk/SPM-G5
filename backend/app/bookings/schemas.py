@@ -153,7 +153,9 @@ class BookingQueueEntry(BaseModel):
 
 class BookingStatusCounts(BaseModel):
     """Story 13.1.2 AC1: how many requests hold each status, for the tab labels. No defaults
-    (response schema)."""
+    (response schema). ``extra="forbid"`` makes ``from_counts`` refuse a status with no field."""
+
+    model_config = ConfigDict(extra="forbid")
 
     pending: int
     approved: int

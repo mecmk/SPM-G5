@@ -229,6 +229,8 @@ test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff d
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
   await page.getByRole('tab', { name: /^All/ }).click()
+  // A cancelled request has no tab of its own, but still counts towards All.
+  await expect(page.getByRole('tab', { name: 'All (2)', exact: true })).toBeVisible()
 
   const approvedCard = page.getByRole('listitem').filter({ hasText: 'Staff Approved Request' })
   await expect(approvedCard.getByText('Decided at', { exact: true })).toBeVisible()
@@ -280,6 +282,7 @@ test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', asy
   const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
   await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
   await expect(page.getByText('Showing 1–10 of 25 requests')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Pending (25)', exact: true })).toBeVisible()
   await expect(pager.getByRole('button', { name: 'Previous' })).toBeDisabled()
   await expect(pager.getByRole('button', { name: '1', exact: true })).toHaveAttribute(
     'aria-current',

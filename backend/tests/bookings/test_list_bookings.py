@@ -7,11 +7,13 @@ AC3 Decided requests do not appear in the pending queue.
 
 Story 13.1.2 - be: booking status tabs and decision timing.
 
-AC1 The queue can be narrowed to Pending, Approved or Rejected requests, or show All, and says
-    how many requests each tab holds.
-AC2 Each entry shows when the coordinator raised the request.
-AC3 A decided entry shows when it was decided and, once rejected, why.
-AC4 The queue is sent a page at a time, with the total, so the page can number its pages.
+AC1 The queue opens on Pending. Approved, Rejected and All tabs show the rest, and every tab
+    shows how many requests it holds.
+AC2 Each request shows when the coordinator raised it.
+AC3 A decided request shows when it was decided and, once rejected, why. A withdrawn or
+    cancelled request, which nobody on Venue Staff decided, shows "Closed at" and "Note"
+    instead.
+AC4 The queue shows ten requests a page, with Previous, numbered pages and Next.
 
 The pending queue is ``?status=PENDING``: leaving ``status`` out lists every request, which is
 what 13.1.2's All tab asks for.
