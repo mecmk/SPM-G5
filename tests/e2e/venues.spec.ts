@@ -582,6 +582,47 @@ test('8.3 AC5: pictures shift aside as a picture is dragged across them', async 
   await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
 })
 
+test('8.3 AC5: a picture moved aside glides to its new place, never jumps there', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  await choosePictures(page, pictureFile('a.png'), pictureFile('b.png'), pictureFile('c.png'))
+  const previews = page.getByRole('list', { name: 'Pictures to save' })
+  await expect(previews.getByRole('img')).toHaveCount(3)
+  const second = await previews.getByRole('listitem').nth(1).elementHandle()
+  // Let the pictures' own entrance finish first.
+  await page.waitForTimeout(600)
+
+  // Moving the third picture earlier pushes the second one place along; follow the second, frame
+  // by frame, by how far it is drawn from the place it now belongs in.
+  const [offsets] = await Promise.all([
+    second!.evaluate(
+      (tile) =>
+        new Promise<number[]>((resolve) => {
+          const seen: number[] = []
+          const start = performance.now()
+          function frame() {
+            const box = tile.getBoundingClientRect()
+            const list = tile.parentElement!.getBoundingClientRect()
+            seen.push(box.left - (list.left + tile.offsetLeft))
+            if (performance.now() - start < 500) requestAnimationFrame(frame)
+            else resolve(seen)
+          }
+          requestAnimationFrame(frame)
+        }),
+    ),
+    page.getByRole('button', { name: 'Move picture 3 earlier' }).click(),
+  ])
+
+  // It starts a whole place back and passes through the places between, rather than appearing
+  // in its new place at once.
+  const step = Math.max(...offsets.map(Math.abs))
+  const between = offsets.filter((offset) => offset < -0.15 * step && offset > -0.85 * step)
+  expect(step).toBeGreaterThan(100)
+  expect(between.length).toBeGreaterThanOrEqual(3)
+})
+
 test('8.3 AC6: a picture opens in a carousel that steps through the pictures', async ({ page }) => {
   const name = uniqueName('Carousel')
   await signIn(page, ACCOUNTS.venueStaff)
