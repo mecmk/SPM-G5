@@ -4,9 +4,8 @@
  * filled in (2.1).
  * AC4 the coordinator edits the organiser-provided details and saves them without the organiser's
  *     approval; the status stays where it was, including while a clarification is open. The cover
- *     picture is replaced with the organiser's
- *     own controls, and details cannot be saved while a field marked * is empty (checked before
- *     anything is sent).
+ *     picture is replaced with the organiser's own controls, and details cannot be saved while a
+ *     field marked * is empty (checked before anything is sent).
  * AC5 once approved, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
  * AC6 an approval that lands while the editor is open makes the save fail, and a reload shows the

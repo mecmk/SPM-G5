@@ -165,8 +165,9 @@ def test_the_assigned_coordinator_corrects_details_under_review(coordinator_clie
 
 @pytest.mark.story("7.2", ac=4)
 def test_details_can_be_corrected_while_clarification_is_requested(coordinator_client):
-    """The organiser may answer by phone or e-mail while the question is open, so asking one does
-    not take the coordinator's edit away. The status stays where it was."""
+    """AC4 covers Clarification Requested too (added in the backlog's Change Log), so asking the
+    organiser a question does not take the coordinator's edit away. The status stays where it
+    was."""
     event = _read(coordinator_client, Events.CLARIFICATION_REQUESTED)
 
     response = _correct(coordinator_client, event, name="Renamed mid-clarification")

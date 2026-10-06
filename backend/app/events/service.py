@@ -128,8 +128,8 @@ _ROUTINE_FIELDS = ("internal_notes",)
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
 
-# Story 7.2 AC4: the organiser's details may be corrected directly only in these statuses. An open
-# clarification does not stop the coordinator: the organiser may answer it by phone or e-mail.
+# Story 7.2 AC4: the organiser's details may be corrected directly only in these statuses.
+# Clarification Requested was added to AC4 in the backlog's Change Log.
 _DETAILS_CORRECTABLE_STATUSES = (EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED)
 # Story 7.2 AC5: approved and still running - further changes go through a change request (19.1).
 _DETAILS_LOCKED_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)

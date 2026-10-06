@@ -25,6 +25,12 @@ import { useAuth } from '../auth/authContext'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_MINE_PATH, HOME_PATH, eventEditPath, eventPath } from '../routes'
+import {
+  DETAILS_CORRECTABLE_STATUSES,
+  DETAILS_LOCKED_HINT,
+  DETAILS_LOCKED_STATUSES,
+  TERMINAL_STATUSES,
+} from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
@@ -61,12 +67,6 @@ import {
   type NoteDraft,
 } from './eventRequestForm'
 import { readBackState } from './backState'
-import {
-  DETAILS_CORRECTABLE_STATUSES,
-  DETAILS_LOCKED_HINT,
-  DETAILS_LOCKED_STATUSES,
-  TERMINAL_STATUSES,
-} from './eventStatus'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
@@ -178,11 +178,11 @@ interface EventRequestFormPageProps {
  *
  * Story 7.2: with `isCoordinatorEdit`, serves /events/:eventId/coordinator-edit, where the assigned
  * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4: while it
- * is under review or awaiting clarification, the organiser's request too, cover picture included - the same fields, the
- * same controls and the same checks; and every field marked * must be filled to save them, as on
- * the backend. AC5: once approved, those fields are shown greyed out. AC7: equipment no longer free for
- * new dates is marked on its line, as 2.1 does. AC6/AC9: a save made against a copy that was
- * approved or changed meanwhile is refused, and the page offers a reload.
+ * is under review or awaiting clarification, the organiser's request too, cover picture included -
+ * the same fields, the same controls and the same checks; and every field marked * must be filled
+ * to save them, as on the backend. AC5: once approved, those fields are shown greyed out. AC7:
+ * equipment no longer free for new dates is marked on its line, as 2.1 does. AC6/AC9: a save made
+ * against a copy that was approved or changed meanwhile is refused, and the page offers a reload.
  */
 export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequestFormPageProps) {
   const { eventId } = useParams()

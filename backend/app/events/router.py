@@ -1,9 +1,9 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
 (coordinator review queue), story 4.2 (request clarification from the organiser), stories
 4.4/4.5 (approve / reject an event request), story 4.6 (the decision /clarification history an
-organiser sees), story 7.2 (routine information edits and correcting a request under review),
-story 6.1 (the coordinator's assigned events in any status), and story 2.1 AC14 (the cover
-picture)."""
+organiser sees), story 7.2 (routine information edits and correcting a request under review or
+awaiting clarification), story 6.1 (the coordinator's assigned events in any status), and story
+2.1 AC14 (the cover picture)."""
 
 from __future__ import annotations
 
