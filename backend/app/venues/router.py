@@ -79,13 +79,20 @@ def list_venues(
     ]
 
 
-@router.get("/search", response_model=VenueSearchResult, dependencies=[CanRead])
-def search_venues(db: DbSession, query: Annotated[VenueSearchQuery, Query()]) -> VenueSearchResult:
+@router.get("/search", response_model=VenueSearchResult)
+def search_venues(
+    db: DbSession,
+    query: Annotated[VenueSearchQuery, Query()],
+    actor: Annotated[CurrentUser, CanRead],
+) -> VenueSearchResult:
     """Story 8.1 AC3/AC4: the catalogue's filters, run on the server for any role that reads
     venues. AC8: a search that cannot be run is refused with a sentence saying why. Declared
-    above ``/{venue_id}`` so the literal path is not read as a venue id."""
+    above ``/{venue_id}`` so the literal path is not read as a venue id.
+
+    Story 11.1 AC1/AC6: with ``event``, each result says whether it suits that event, for its
+    assigned coordinator."""
     try:
-        return service.search_venues(db, query)
+        return service.search_venues(db, query, actor=actor)
     except service.InvalidVenueSearch as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.UnknownReferenceCode as exc:

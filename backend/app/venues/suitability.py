@@ -55,9 +55,9 @@ class RequiredFacility:
 @dataclass(frozen=True)
 class RequirementNeeds:
     """One venue requirement, as plain values. Only ``people`` for an event with "No venue
-    requirements" (AC5)."""
+    requirements" (AC5), which has no requirement to name, so ``name`` is None."""
 
-    name: str
+    name: str | None
     people: int
     layout: RequiredItem | None = None
     facilities: tuple[RequiredFacility, ...] = ()
@@ -99,7 +99,7 @@ class Suitability:
     """AC1: the verdict for one requirement against one venue. Suitable exactly when nothing
     failed; ``failures`` lists capacity, layout, facilities, then accessibility."""
 
-    requirement_name: str
+    requirement_name: str | None
     failures: tuple[FailedCriterion, ...]
 
     @property

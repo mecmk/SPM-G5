@@ -19,6 +19,7 @@ from pydantic import (
 )
 
 from app.venues.models import Venue
+from app.venues.suitability import Suitability
 
 # "Positive whole numbers only" (story 8.3 AC3): StrictInt rejects 12.5 and "12"; gt=0 rejects 0.
 PositiveWholeNumber = StrictInt
@@ -285,14 +286,71 @@ class VenueSearchQuery(BaseModel):
     facility: list[str] = Field(default_factory=list)
     accessibility: list[str] = Field(default_factory=list)
     include_withdrawn: bool = False
+    # Story 11.1 AC1: the event venues are being found for. Judges each result; filters nothing.
+    event: uuid.UUID | None = None
+
+
+class FailedCriterionOut(BaseModel):
+    """Story 11.1 AC1: one criterion a venue fails - ``app.venues.suitability.FailedCriterion``
+    as the catalogue reads it. ``outcome`` is NOT_MET or UNKNOWN (AC5)."""
+
+    criterion: str
+    outcome: str
+    code: str | None
+    name: str | None
+    required: int | None
+    venue_value: int | None
+
+
+class VenueSuitabilityOut(BaseModel):
+    """Story 11.1 AC1/AC3: whether a venue suits the venue requirement it was judged against,
+    and every criterion it fails. ``requirement_id`` and ``requirement_name`` are None for an
+    event with no venue requirements, judged on its attendance alone (AC5)."""
+
+    requirement_id: uuid.UUID | None
+    requirement_name: str | None
+    is_suitable: bool
+    failures: list[FailedCriterionOut]
+
+    @classmethod
+    def from_suitability(
+        cls, suitability: Suitability, *, requirement_id: uuid.UUID | None
+    ) -> VenueSuitabilityOut:
+        return cls(
+            requirement_id=requirement_id,
+            requirement_name=suitability.requirement_name,
+            is_suitable=suitability.is_suitable,
+            failures=[
+                FailedCriterionOut(
+                    criterion=failure.criterion,
+                    outcome=failure.outcome,
+                    code=failure.code,
+                    name=failure.name,
+                    required=failure.required,
+                    venue_value=failure.venue_value,
+                )
+                for failure in suitability.failures
+            ],
+        )
 
 
 class VenueSearchHit(VenueSummary):
     """Story 8.1 AC1/AC3: one venue a search found. Its opening hours let the catalogue say they
-    are not recorded when a period is searched, since such a venue is kept rather than refused."""
+    are not recorded when a period is searched, since such a venue is kept rather than refused.
+
+    Story 11.1 AC1/AC3: ``suitability`` judges it against the event searched for. None outside
+    event context (AC5) and for anyone but the event's assigned coordinator (AC6)."""
 
     operating_hours_start: time | None
     operating_hours_end: time | None
+    suitability: VenueSuitabilityOut | None
+
+    @classmethod
+    def from_venue(cls, venue: Venue, *, suitability: VenueSuitabilityOut | None) -> VenueSearchHit:
+        """Every field this model declares, read off ``venue`` by name, plus ``suitability`` - so
+        a field later added to ``VenueSummary`` is carried without being listed here."""
+        fields = {name: getattr(venue, name) for name in cls.model_fields if name != "suitability"}
+        return cls(**fields, suitability=suitability)
 
 
 class RelaxHint(BaseModel):

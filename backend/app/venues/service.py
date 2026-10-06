@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta, timezone
 from itertools import chain
 from pathlib import Path
@@ -22,10 +23,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.auth.permissions import Permission, role_has
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.config import settings
-from app.events.models import Event
+from app.events.models import Event, VenueRequirement
 from app.venues.models import (
     AccessibilityFeature,
     Facility,
@@ -47,8 +49,16 @@ from app.venues.schemas import (
     VenueSearchHit,
     VenueSearchQuery,
     VenueSearchResult,
+    VenueSuitabilityOut,
     VenueUnavailableWindowOut,
     VenueUpdate,
+)
+from app.venues.suitability import (
+    RequiredFacility,
+    RequiredItem,
+    RequirementNeeds,
+    VenueCharacteristics,
+    judge_suitability,
 )
 
 _log = logging.getLogger(__name__)
@@ -85,6 +95,8 @@ END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 SEARCH_NEEDS_BOTH_ENDS_MESSAGE = "Choose both a start and an end, or neither."
 SEARCH_IN_THE_PAST_MESSAGE = "Searches cannot start in the past."
 CAPACITY_RANGE_BACKWARDS_MESSAGE = "Capacity to must not be below capacity from."
+# Story 11.1 AC3: the event a search judges its results against must exist.
+SEARCH_EVENT_NOT_FOUND_MESSAGE = "The event these venues are being found for does not exist."
 
 
 class InvalidVenueSearch(ValueError):
@@ -248,7 +260,7 @@ def get_venue_calendar(
 
 
 # --- search (story 8.1, Sprint 2) --------------------------------------------------------
-def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
+def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> VenueSearchResult:
     """Story 8.1 AC1/AC3: the venues matching every filter, by name - in service only, unless
     ``include_withdrawn`` (AC12's Show withdrawn venues). With a period, only venues free for all
     of it: not booked or held, not blocked, and not closed at those hours (AC3, AC7).
@@ -256,6 +268,10 @@ def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
     AC8 refuses a search that cannot be run (``InvalidVenueSearch``, ``UnknownReferenceCode``).
     AC9: when nothing matches, ``relax`` names each filter group whose removal alone would give
     results, with the count, largest first.
+
+    Story 11.1 AC1/AC3: with ``event``, each venue found also carries its suitability for that
+    event's venue requirement, for the event's assigned coordinator only (AC6). It is judged
+    after the search, so it never changes which venues are found or their order.
     """
     period = _search_period(query)
     if (
@@ -265,6 +281,7 @@ def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
     ):
         raise InvalidVenueSearch(CAPACITY_RANGE_BACKWARDS_MESSAGE)
     _check_search_codes(db, query)
+    judged = _judged_requirement(db, query.event, actor=actor)
 
     scope = [] if query.include_withdrawn else [Venue.status == VenueStatus.ACTIVE]
     groups = _search_groups(query, period)
@@ -272,9 +289,116 @@ def search_venues(db: Session, query: VenueSearchQuery) -> VenueSearchResult:
         select(Venue).where(*scope, *chain.from_iterable(groups.values())).order_by(Venue.name)
     ).all()
     return VenueSearchResult(
-        venues=[VenueSearchHit.model_validate(venue) for venue in venues],
+        venues=[
+            VenueSearchHit.from_venue(venue, suitability=_suitability_of(venue, judged))
+            for venue in venues
+        ],
         total=_count_venues(db, scope),
         relax=[] if venues else _relax_hints(db, scope, query, period, active=groups),
+    )
+
+
+def first_venue_requirement(event: Event) -> VenueRequirement | None:
+    """Story 2.7 / 11.1: the requirement a booking request carries and the catalogue judges -
+    the event's first, by position - until story 8.4 lets the coordinator choose one."""
+    return event.venue_requirements[0] if event.venue_requirements else None
+
+
+def people_to_hold(event: Event, requirement: VenueRequirement | None) -> int:
+    """Story 12.1 AC2 / 11.1 AC1: how many people the venue must hold - the requirement's number,
+    else the event's expected attendance, which any event past DRAFT has
+    (``ck_events_submitted_fields_complete``). The booking request and the suitability indicator
+    both ask this, so they cannot disagree."""
+    if requirement is not None and requirement.capacity is not None:
+        return requirement.capacity
+    return event.expected_attendance
+
+
+def requirement_needs(event: Event, requirement: VenueRequirement | None) -> RequirementNeeds:
+    """Story 11.1: ``requirement`` of ``event`` as the plain values ``judge_suitability`` takes,
+    facilities and accessibility needs in their reference lists' order, so failures always come
+    out the same way. Accessibility needs are the event's: they are not recorded per requirement.
+
+    AC5: with no requirement - "No venue requirements", or never specified - only the people, so
+    neither a layout nor facilities nor the event's accessibility needs are judged."""
+    people = people_to_hold(event, requirement)
+    if requirement is None:
+        return RequirementNeeds(name=None, people=people)
+    facilities = sorted(
+        requirement.facilities, key=lambda each: (each.facility.sort_order, each.facility.name)
+    )
+    accessibility = sorted(
+        event.accessibility_needs, key=lambda each: (each.feature.sort_order, each.feature.name)
+    )
+    return RequirementNeeds(
+        name=requirement.name,
+        people=people,
+        layout=(
+            None
+            if requirement.layout is None
+            else RequiredItem(code=requirement.layout.code, name=requirement.layout.name)
+        ),
+        facilities=tuple(
+            RequiredFacility(
+                code=each.facility_code, name=each.facility.name, quantity=each.quantity
+            )
+            for each in facilities
+        ),
+        accessibility=tuple(
+            RequiredItem(code=each.feature_code, name=each.feature.name) for each in accessibility
+        ),
+    )
+
+
+def venue_characteristics(venue: Venue) -> VenueCharacteristics:
+    """Story 11.1: ``venue``'s recorded characteristics as the plain values ``judge_suitability``
+    takes."""
+    return VenueCharacteristics(
+        capacity=venue.capacity,
+        layouts={layout.layout_code: layout.layout_capacity for layout in venue.layouts},
+        facilities={facility.facility_code: facility.quantity for facility in venue.facilities},
+        accessibility=frozenset(feature.feature_code for feature in venue.accessibility_features),
+    )
+
+
+@dataclass(frozen=True)
+class _JudgedRequirement:
+    """What a search judges each venue against: the requirement's id (None when the event has
+    none) and its needs."""
+
+    requirement_id: uuid.UUID | None
+    needs: RequirementNeeds
+
+
+def _judged_requirement(
+    db: Session, event_id: uuid.UUID | None, *, actor: User
+) -> _JudgedRequirement | None:
+    """Story 11.1: the requirement a search in ``event_id``'s context judges against. AC3: an
+    event that does not exist is refused. None outside event context (AC5), and for anyone but
+    the event's assigned coordinator holding bookings:request (AC6) - whatever the event's
+    status."""
+    if event_id is None:
+        return None
+    event = db.get(Event, event_id)
+    if event is None:
+        raise InvalidVenueSearch(SEARCH_EVENT_NOT_FOUND_MESSAGE)
+    if not role_has(actor.role_code, Permission.BOOKINGS_REQUEST):
+        return None
+    if event.assigned_coordinator_id != actor.id:
+        return None
+    requirement = first_venue_requirement(event)
+    return _JudgedRequirement(
+        requirement_id=None if requirement is None else requirement.id,
+        needs=requirement_needs(event, requirement),
+    )
+
+
+def _suitability_of(venue: Venue, judged: _JudgedRequirement | None) -> VenueSuitabilityOut | None:
+    if judged is None:
+        return None
+    return VenueSuitabilityOut.from_suitability(
+        judge_suitability(judged.needs, venue_characteristics(venue)),
+        requirement_id=judged.requirement_id,
     )
 
 

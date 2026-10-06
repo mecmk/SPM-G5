@@ -1,16 +1,23 @@
-"""Story 11.1 - venue suitability with reasons and override: the suitability check itself.
+"""Story 11.1 - venue suitability with reasons and override: the suitability check itself, and the
+indicator on each catalogue search result.
 
 ``judge_suitability`` judges ONE venue requirement against ONE venue's recorded characteristics.
-It is pure - the catalogue search and the booking request will both call it with plain values -
-so these tests need no database.
+It is pure - the catalogue search and the booking request both call it with plain values - so
+the tests of the check itself need no database. The tests of ``GET /venues/search?event=`` below
+them do.
 
 AC1  Suitable or Unsuitable for one requirement, based only on that requirement and the venue's
      recorded characteristics. Each failed criterion carries the requirement's value and the
      venue's (e.g. "Capacity 80 < 120 people").
+AC3  Suitability is worked out on the server and returned with each search result.
 AC4  Capacity equal to the number of people counts as suitable; one less does not. A required
      facility quantity of 3 is met by 3 and not by 2.
 AC5  A characteristic the venue has not recorded is Unknown and never treated as met. An event
-     with "No venue requirements" is judged on capacity only.
+     with "No venue requirements" is judged on capacity only. No indicator outside event context.
+AC6  Only the event's assigned coordinator sees indicators.
+AC7  If the event's requirements change, indicators are recalculated on the next search.
+
+Until story 8.4 lets the coordinator choose one, the requirement judged is the event's first.
 
 AC8 is not covered here. The check judges one requirement at a time, which AC8 builds on, but
 each booking request carrying its own result and justification waits for story 12.5.
@@ -25,8 +32,14 @@ Decided for this story (6 Oct 2026):
 
 from __future__ import annotations
 
-import pytest
+import uuid
 
+import pytest
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.events.models import Event, EventStatus
+from app.venues import service as venue_service
 from app.venues.suitability import (
     Criterion,
     FailedCriterion,
@@ -37,6 +50,8 @@ from app.venues.suitability import (
     VenueCharacteristics,
     judge_suitability,
 )
+from tests.support.factories import make_event, make_venue, make_venue_requirement
+from tests.support.seed import Users
 
 THEATRE = RequiredItem(code="THEATRE", name="Theatre")
 BANQUET = RequiredItem(code="BANQUET", name="Banquet")
@@ -416,3 +431,343 @@ def test_a_list_the_venue_recorded_nothing_in_is_unknown(needs, venue, expected)
 
     assert result.is_suitable is False
     assert result.failures == (expected,)
+
+
+@pytest.mark.story("11.1", ac=5)
+def test_a_requirement_with_no_name_is_judged_and_names_none():
+    """An event with "No venue requirements" has no requirement to name, so its needs carry no
+    name and neither does the verdict."""
+    needs = RequirementNeeds(name=None, people=50)
+
+    result = judge_suitability(needs, _venue(capacity=50))
+
+    assert result.requirement_name is None
+    assert result.is_suitable is True
+
+
+# --- GET /venues/search?event= : the indicator on each result (AC1, AC3, AC5-AC7) -------------
+SEARCH_PATH = "/venues/search"
+
+
+def _tag() -> str:
+    """A name part no seed venue has, shared by the venues one test makes and searched for, so
+    the seed venues never appear in its results."""
+    return f"Suitability {uuid.uuid4().hex[:8]}"
+
+
+def _assigned_event(db: Session, *, coordinator=Users.COORDINATOR, **overrides) -> Event:
+    return make_event(
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=coordinator.id, **overrides
+    )
+
+
+def _need_accessibility(db: Session, event_id: uuid.UUID, *codes: str) -> None:
+    for code in codes:
+        db.execute(
+            text(
+                "INSERT INTO event_accessibility_needs (event_id, feature_code)"
+                " VALUES (:event_id, :code)"
+            ),
+            {"event_id": event_id, "code": code},
+        )
+    db.expire_all()
+
+
+def _search(client, **params) -> dict:
+    response = client.get(SEARCH_PATH, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _hits(client, **params) -> dict[str, dict]:
+    """The search's results by venue name."""
+    return {hit["name"]: hit for hit in _search(client, **params)["venues"]}
+
+
+def _capacity_failure(required: int, venue_value: int) -> dict:
+    return {
+        "criterion": "CAPACITY",
+        "outcome": "NOT_MET",
+        "code": None,
+        "name": None,
+        "required": required,
+        "venue_value": venue_value,
+    }
+
+
+@pytest.mark.story("11.1", ac=1)
+@pytest.mark.story("11.1", ac=3)
+def test_the_assigned_coordinator_gets_each_result_judged_against_the_requirement(
+    coordinator_client, db: Session
+):
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=120)
+    requirement_id = make_venue_requirement(db, event.id, name="Plenary hall", capacity=120)
+    make_venue(db, name=f"{tag} small", capacity=80)
+    make_venue(db, name=f"{tag} large", capacity=200)
+
+    hits = _hits(coordinator_client, search=tag, event=str(event.id))
+
+    assert hits[f"{tag} small"]["suitability"] == {
+        "requirement_id": str(requirement_id),
+        "requirement_name": "Plenary hall",
+        "is_suitable": False,
+        "failures": [_capacity_failure(required=120, venue_value=80)],
+    }
+    assert hits[f"{tag} large"]["suitability"] == {
+        "requirement_id": str(requirement_id),
+        "requirement_name": "Plenary hall",
+        "is_suitable": True,
+        "failures": [],
+    }
+
+
+@pytest.mark.story("11.1", ac=1)
+@pytest.mark.parametrize("has_requirement", [True, False], ids=["requirement", "no-requirement"])
+def test_people_come_from_the_requirement_else_the_attendance_as_for_the_booking_request(
+    coordinator_client, db: Session, has_requirement
+):
+    """With a requirement, the people to hold are its number (50), not the event's attendance
+    (120); with none, the attendance. The booking request carries the same number, from the same
+    helper, so the indicator and the request cannot disagree."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=120, venue_none_required=not has_requirement)
+    if has_requirement:
+        make_venue_requirement(db, event.id, capacity=50)
+    people = 50 if has_requirement else 120
+    make_venue(db, name=f"{tag} too small", capacity=40)
+    roomy = make_venue(db, name=f"{tag} roomy", capacity=400)
+
+    hits = _hits(coordinator_client, search=tag, event=str(event.id))
+    booking = coordinator_client.post(
+        "/bookings", json={"event_id": str(event.id), "venue_id": str(roomy.id)}
+    )
+
+    assert hits[f"{tag} too small"]["suitability"]["failures"] == [
+        _capacity_failure(required=people, venue_value=40)
+    ]
+    assert hits[f"{tag} roomy"]["suitability"]["is_suitable"] is True
+    assert booking.status_code == 201, booking.text
+    assert booking.json()["expected_attendance"] == people
+    db.expire_all()
+    requirement = venue_service.first_venue_requirement(event)
+    assert venue_service.people_to_hold(event, requirement) == people
+
+
+@pytest.mark.story("11.1", ac=1)
+def test_only_the_first_requirement_is_judged_until_one_can_be_chosen(
+    coordinator_client, db: Session
+):
+    """The breakout (40) would fit; the plenary (150), first by position, is the one judged. The
+    breakout is recorded first, so being first in the table does not make it the one."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=40)
+    make_venue_requirement(db, event.id, position=0, name="Plenary hall", capacity=150)
+    make_venue(db, name=tag, capacity=80)
+
+    suitability = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert suitability["requirement_name"] == "Plenary hall"
+    assert suitability["failures"] == [_capacity_failure(required=150, venue_value=80)]
+
+
+@pytest.mark.story("11.1", ac=1)
+def test_failures_come_out_in_reference_order_whatever_order_they_were_recorded(
+    coordinator_client, db: Session
+):
+    """Facilities and accessibility needs come out in the reference lists' own order (Projector
+    before Breakout rooms; Wheelchair access before Hearing loop) - not as recorded, and not by
+    code, either of which would put each pair the other way round."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=20)
+    make_venue_requirement(
+        db,
+        event.id,
+        capacity=20,
+        facilities=(("BREAKOUT_ROOMS", None, None), ("PROJECTOR", None, None)),
+    )
+    _need_accessibility(db, event.id, "HEARING_LOOP", "WHEELCHAIR_ACCESS")
+    make_venue(db, name=tag, capacity=50, facilities=("WIFI",), accessibility=("LIFT_ACCESS",))
+
+    suitability = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert [(failure["criterion"], failure["code"]) for failure in suitability["failures"]] == [
+        ("FACILITY", "PROJECTOR"),
+        ("FACILITY", "BREAKOUT_ROOMS"),
+        ("ACCESSIBILITY", "WHEELCHAIR_ACCESS"),
+        ("ACCESSIBILITY", "HEARING_LOOP"),
+    ]
+
+
+@pytest.mark.story("11.1", ac=1)
+def test_the_search_judges_the_requirements_layout_and_facility_quantities(
+    coordinator_client, db: Session
+):
+    """The venue holds 400 but only 240 in Banquet, and has 2 projectors: 250 people in Banquet
+    with 3 projectors fail on both. Each failure appears only if the search passes the check
+    everything it needs - the requirement's layout and quantity, and the venue's layout capacity
+    and quantity."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=250)
+    make_venue_requirement(
+        db,
+        event.id,
+        capacity=250,
+        layout_code="BANQUET",
+        facilities=(("PROJECTOR", 3, None),),
+    )
+    venue = make_venue(
+        db, name=tag, capacity=400, layouts={"BANQUET": 240}, facilities=("PROJECTOR",)
+    )
+    venue.facilities[0].quantity = 2
+    db.flush()
+
+    suitability = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert suitability["failures"] == [
+        {
+            "criterion": "CAPACITY",
+            "outcome": "NOT_MET",
+            "code": "BANQUET",
+            "name": "Banquet",
+            "required": 250,
+            "venue_value": 240,
+        },
+        {
+            "criterion": "FACILITY_QUANTITY",
+            "outcome": "NOT_MET",
+            "code": "PROJECTOR",
+            "name": "Projector & screen",
+            "required": 3,
+            "venue_value": 2,
+        },
+    ]
+
+
+@pytest.mark.story("11.1", ac=5)
+def test_no_suitability_outside_event_context(coordinator_client, db: Session):
+    tag = _tag()
+    make_venue(db, name=tag, capacity=10)
+
+    hits = _hits(coordinator_client, search=tag)
+
+    assert [hit.get("suitability", "no such field") for hit in hits.values()] == [None]
+
+
+@pytest.mark.story("11.1", ac=5)
+@pytest.mark.parametrize(
+    "venue_none_required", [True, False], ids=["no-venue-requirements", "never-specified"]
+)
+def test_an_event_without_requirements_is_judged_on_capacity_alone(
+    coordinator_client, db: Session, venue_none_required
+):
+    """No requirement rows, whether marked "No venue requirements" or never specified: only the
+    expected attendance is judged - not even the event's accessibility needs, which the venue
+    here lacks."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=100, venue_none_required=venue_none_required)
+    _need_accessibility(db, event.id, "HEARING_LOOP")
+    make_venue(db, name=f"{tag} fits", capacity=100)
+    make_venue(db, name=f"{tag} short", capacity=99, accessibility=("LIFT_ACCESS",))
+
+    hits = _hits(coordinator_client, search=tag, event=str(event.id))
+
+    assert hits[f"{tag} fits"]["suitability"]["is_suitable"] is True
+    assert hits[f"{tag} short"]["suitability"]["failures"] == [
+        _capacity_failure(required=100, venue_value=99)
+    ]
+
+
+@pytest.mark.story("11.1", ac=5)
+def test_a_result_judged_without_a_requirement_names_no_requirement(
+    coordinator_client, db: Session
+):
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=30, venue_none_required=True)
+    make_venue(db, name=tag, capacity=400)
+
+    suitability = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert suitability["requirement_id"] is None
+    assert suitability["requirement_name"] is None
+    assert suitability["is_suitable"] is True
+
+
+@pytest.mark.story("11.1", ac=6)
+@pytest.mark.parametrize(
+    "user", [Users.VENUE_STAFF, Users.TECH_SUPPORT], ids=["venue-staff", "tech-support"]
+)
+def test_other_roles_get_no_suitability_in_event_context(login_as, db: Session, user):
+    """Even named as the event's coordinator, a role without bookings:request sees no indicator:
+    the permission is checked, not only the assignment."""
+    tag = _tag()
+    event = _assigned_event(db, coordinator=user, expected_attendance=500)
+    make_venue(db, name=tag, capacity=10)
+
+    hits = _hits(login_as(user), search=tag, event=str(event.id))
+
+    assert hits[tag].get("suitability", "no such field") is None
+
+
+@pytest.mark.story("11.1", ac=6)
+def test_a_coordinator_not_assigned_to_the_event_gets_no_suitability(login_as, db: Session):
+    tag = _tag()
+    event = _assigned_event(db, coordinator=Users.COORDINATOR, expected_attendance=500)
+    make_venue(db, name=tag, capacity=10)
+
+    hits = _hits(login_as(Users.COORDINATOR_2), search=tag, event=str(event.id))
+
+    assert hits[tag].get("suitability", "no such field") is None
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_an_unknown_event_is_refused(coordinator_client):
+    response = coordinator_client.get(SEARCH_PATH, params={"event": str(uuid.uuid4())})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == venue_service.SEARCH_EVENT_NOT_FOUND_MESSAGE
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_event_context_changes_neither_which_venues_are_found_nor_their_order(
+    coordinator_client, db: Session
+):
+    """With and without the event: the same venues in the same order and the same total, and -
+    when nothing matches - the same suggestions of filters to remove. Only the judging differs."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=60)
+    make_venue_requirement(db, event.id, capacity=60)
+    for suffix, capacity in (("c", 30), ("a", 300), ("b", 60)):
+        make_venue(db, name=f"{tag} {suffix}", capacity=capacity)
+    in_context = {"event": str(event.id)}
+
+    for params in ({"search": tag, "capacity": 50}, {"search": tag, "capacity": 1000}):
+        plain = _search(coordinator_client, **params)
+        judged = _search(coordinator_client, **params, **in_context)
+        assert [hit["id"] for hit in judged["venues"]] == [hit["id"] for hit in plain["venues"]]
+        assert (judged["total"], judged["relax"]) == (plain["total"], plain["relax"])
+
+    found = _search(coordinator_client, search=tag, capacity=50, **in_context)["venues"]
+    assert [hit["name"] for hit in found] == [f"{tag} a", f"{tag} b"]
+    assert [hit.get("suitability") is not None for hit in found] == [True, True]
+    assert _search(coordinator_client, search=tag, capacity=1000, **in_context)["relax"] != []
+
+
+@pytest.mark.story("11.1", ac=7)
+def test_changed_requirements_change_the_next_searchs_indicator(coordinator_client, db: Session):
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=150)
+    requirement_id = make_venue_requirement(db, event.id, capacity=60)
+    make_venue(db, name=tag, capacity=80)
+
+    before = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+    db.execute(
+        text("UPDATE venue_requirements SET capacity = 120 WHERE id = :id"),
+        {"id": requirement_id},
+    )
+    db.expire_all()
+    after = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert before["is_suitable"] is True
+    assert after["failures"] == [_capacity_failure(required=120, venue_value=80)]
