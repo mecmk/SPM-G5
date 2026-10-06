@@ -3,15 +3,22 @@
  * AC1 the organiser adds more than one venue requirement, each with a name, how many people it
  *     must hold, a room layout, facilities (each optionally how many) and other requirements.
  * AC2 a new requirement's start and end default to the event's (Singapore time) and can be
- *     changed.
+ *     changed; while they still match the event they keep following it, before and after a save
+ *     (CL-087).
  * AC3 requirements are added, edited and removed on a draft; "No venue requirements" clears them.
- * AC4 every requirement, with its times, is shown to the reviewing coordinator on the event page.
- * AC6 the first requirement's number of people defaults to the expected attendance.
+ * AC4 every requirement, with its times, is shown to the reviewing coordinator on the event page,
+ *     with both dates when it runs over more than one day.
+ * AC5/AC9/AC10 a requirement outside the event, a repeated name, or an event moved past a
+ *     requirement's own times is said under the field as it is typed (a client-side check, the
+ *     AGENTS.md exception); the server's refusal of each is a backend case.
+ * AC6 the first requirement's number of people defaults to the expected attendance, and follows
+ *     it while it still matches.
  * AC8 an incomplete requirement is listed as still needed before submitting.
  * AC11 the requirement field to fix is marked and focused when a save is refused - in the browser,
  *     or by the server, which says which requirement and field in its refusal.
- * Rule detail, refusals (401/403/404/409/422), the migration (AC7), unique names (AC9), moving the
- * event (AC10) and the race with a submission (AC12) are backend cases:
+ * Rule detail, refusals (401/403/404/409/422), the migration (AC7), the server's refusal of a
+ * repeated name (AC9) or a moved event (AC10), the race with a submission (AC12) and what a booking
+ * request carries (AC13) are backend cases:
  * backend/tests/events/test_multiple_venue_requirements.py.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
@@ -19,6 +26,7 @@ import {
   ACCOUNTS,
   assignedCoordinator,
   corsHeaders,
+  EVENTS,
   inFuture,
   signIn,
   uniqueName,
@@ -53,6 +61,19 @@ async function addRequirement(page: Page, position: number, name: string, people
 async function saveDraft(page: Page) {
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
+}
+
+/** Save a draft that already has its own address. The URL does not change, so wait for the server
+ * to answer the edit instead, or a reload straight after could race it. */
+async function saveEdits(page: Page) {
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        /\/events\/[0-9a-f-]{36}$/.test(new URL(response.url()).pathname),
+    ),
+    page.getByRole('button', { name: 'Save draft' }).click(),
+  ])
 }
 
 test('2.7 AC1: the organiser adds two venue requirements, each with its own details', async ({
@@ -118,7 +139,7 @@ test('2.7 AC3: requirements are added, edited and removed on a draft, and "No ve
   await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Breakout')
   await expect(requirement(page, 2)).toHaveCount(0)
   await requirement(page, 1).getByLabel('Requirement name').fill('Breakout rooms')
-  await saveDraft(page)
+  await saveEdits(page)
   await page.reload()
   await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Breakout rooms')
   await expect(requirement(page, 2)).toHaveCount(0)
@@ -126,7 +147,7 @@ test('2.7 AC3: requirements are added, edited and removed on a draft, and "No ve
   // "No venue requirements" clears every requirement, and stays that way once saved.
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
   await expect(requirement(page, 1)).toHaveCount(0)
-  await saveDraft(page)
+  await saveEdits(page)
   await page.reload()
   await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).toBeChecked()
   await expect(requirement(page, 1)).toHaveCount(0)
@@ -300,16 +321,18 @@ test('2.7 AC5/AC9/AC10: a venue requirement problem is said next to its field as
   await breakout.getByLabel('Requirement name').fill('Breakout')
   await expect(breakout.getByText(duplicate)).toHaveCount(0)
 
-  // AC10: once saved, a requirement's times are the organiser's, so moving the event's start
-  // past them says so under the requirement at once.
+  // AC10: times the organiser chose are theirs, so moving the event's start past them says so
+  // under the requirement at once - before or after a save (CL-087: only times that still match
+  // the event follow it).
+  await requirement(page, 1).getByLabel('Needed from').fill(inFuture(30, 10))
   await saveDraft(page)
-  await page.getByLabel('Proposed start').fill(inFuture(30, 10))
+  await page.getByLabel('Proposed start').fill(inFuture(30, 11))
   await expect(requirement(page, 1).getByText(startsBefore)).toBeVisible()
   await expect(requirement(page, 1).getByLabel('Needed from')).toHaveAttribute(
     'aria-invalid',
     'true',
   )
-  await requirement(page, 1).getByLabel('Needed from').fill(inFuture(30, 10))
+  await requirement(page, 1).getByLabel('Needed from').fill(inFuture(30, 11))
   await expect(requirement(page, 1).getByText(startsBefore)).toHaveCount(0)
 })
 
@@ -370,4 +393,48 @@ test("2.7 AC3: each requirement's Remove button and facility quantities say whic
   await page.getByRole('button', { name: 'Remove venue requirement 2', exact: true }).click()
   await expect(requirement(page, 2)).toHaveCount(0)
   await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Plenary hall')
+})
+
+test('2.7 AC2/AC6: a saved requirement that still matches the event keeps following it', async ({
+  page,
+}) => {
+  // Review of PR #84: growing the event after a save must not leave an untouched requirement at
+  // the old size and dates, where 12.1 would book it.
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Grow after save'))
+  await addRequirement(page, 1, 'Main hall')
+  const breakout = await addRequirement(page, 2, 'Breakout', '20')
+  await breakout.getByLabel('Needed from').fill(inFuture(30, 13))
+  await saveDraft(page)
+  await page.reload()
+
+  await page.getByLabel('Proposed end').fill(inFuture(31, 17))
+  await page.getByLabel('Expected attendance').fill('200')
+
+  const mainHall = requirement(page, 1)
+  await expect(mainHall.getByLabel('Needed from')).toHaveValue(inFuture(30, 9))
+  await expect(mainHall.getByLabel('Needed until')).toHaveValue(inFuture(31, 17))
+  await expect(mainHall.getByLabel('Number of people')).toHaveValue('200')
+  // Breakout's times were the organiser's own, so they stay put.
+  await expect(requirement(page, 2).getByLabel('Needed from')).toHaveValue(inFuture(30, 13))
+  await expect(requirement(page, 2).getByLabel('Needed until')).toHaveValue(inFuture(30, 17))
+
+  await saveEdits(page)
+  await page.reload()
+  await expect(mainHall.getByLabel('Needed until')).toHaveValue(inFuture(31, 17))
+  await expect(mainHall.getByLabel('Number of people')).toHaveValue('200')
+})
+
+test('2.7 AC4: a requirement spanning two days shows both dates', async ({ page }) => {
+  // Review of PR #84: the seeded Regional Sales Summit's Main venue runs 15 Dec 09:00 to 16 Dec
+  // 17:00, so its line must say both days, not just the first.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+
+  const venue = page.getByRole('region', { name: 'Venue requirements' })
+  const mainVenue = venue.getByRole('listitem').filter({ hasText: 'Main venue' })
+  await expect(mainVenue).toContainText('15 Dec 2026')
+  await expect(mainVenue).toContainText('16 Dec 2026')
+  await expect(mainVenue).toContainText('09:00')
+  await expect(mainVenue).toContainText('17:00')
 })

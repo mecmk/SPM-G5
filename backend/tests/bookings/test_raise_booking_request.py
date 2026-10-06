@@ -336,10 +336,11 @@ def test_the_held_period_is_the_event_period_until_story_12_2(coordinator_client
     assert datetime.fromisoformat(body["held_until"]) == EVENT_ENDS_AT
 
 
-# --- AC2 after story 2.7: an event lists several venue requirements ---------------------------
+# --- Story 2.7 AC13 (CL-087): an event lists several venue requirements -------------------------
 # Until story 12.5 lets a booking name the requirement it is for, a request carries the event's
-# first requirement (PO decision, 2 Oct 2026). An event without one books its own period.
-@pytest.mark.story("12.1", ac=2)
+# first requirement. An event without one books its own period. Tagged to 2.7, not 12.1, because
+# 12.1 is Done and its criteria stay as written.
+@pytest.mark.story("2.7", ac=13)
 def test_the_request_carries_the_first_venue_requirement(coordinator_client, db: Session):
     event = make_event(
         db,
@@ -390,7 +391,7 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
     assert "Quiet corridor." not in body["requirement_notes"]
 
 
-@pytest.mark.story("12.1", ac=2)
+@pytest.mark.story("2.7", ac=13)
 def test_a_first_requirement_with_no_facilities_or_notes_states_none(
     coordinator_client, db: Session
 ):
@@ -406,7 +407,7 @@ def test_a_first_requirement_with_no_facilities_or_notes_states_none(
     assert response.json()["requirement_notes"] is None
 
 
-@pytest.mark.story("12.1", ac=2)
+@pytest.mark.story("2.7", ac=13)
 def test_an_event_without_venue_requirements_books_its_own_period_and_attendance(
     coordinator_client, db: Session
 ):
