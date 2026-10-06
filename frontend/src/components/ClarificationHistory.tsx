@@ -46,9 +46,8 @@ function initialsFor(name: string): string {
  * carries no reason. AC2 - the clarification conversation below it, oldest first, each with its
  * author and timestamp, laid out as a two-party chat thread with the viewer's own messages on
  * the right. AC3: entries are historical and cannot be edited or removed - this component
- * renders no button or input, so there is nothing here to change one with. Started as two cards
- * (`EventDecision` and this one); merged into one, since a decision and the clarification thread
- * behind it are one story, not two.
+ * renders no button or input, so there is nothing here to change one with. A decision and the
+ * clarification thread behind it are one story, so one card carries both.
  */
 export function ClarificationHistory({
   status,

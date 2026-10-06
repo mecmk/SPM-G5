@@ -86,7 +86,8 @@ the record in hand, so they belong in the feature's service, never in `permissio
 
 The SQL is the source of truth and the ORM mirrors it;
 `tests/test_schema.py::test_orm_models_match_database` fails when the two drift. Change the
-schema with a new `NNN_*.sql` file; never edit one that has been applied.
+schema with a new `NNN_*.sql` file; never edit one that has been applied. One that has not merged
+into `main` is still yours to edit, followed by `npm run db:reset`.
 
 ### `app/dbtool/` — tooling, not feature code
 

@@ -263,9 +263,9 @@ def test_the_request_states_the_events_required_facilities_to_venue_staff(coordi
 def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     coordinator_client, db: Session
 ):
-    """Review of PR #42: "3 breakout rooms with HDMI" has to reach Venue Staff as such. The name
-    alone understates what the venue must provide, and both columns already exist on
-    ``event_required_facilities``.
+    """A facility's quantity and note have to reach Venue Staff: "3 breakout rooms with HDMI"
+    understates what the venue must provide if only the name arrives, and both columns already
+    exist on ``event_required_facilities``.
     """
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
