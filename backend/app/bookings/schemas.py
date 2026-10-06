@@ -95,15 +95,13 @@ class BookingOut(BaseModel):
     updated_at: datetime
 
 
-class BookingQueueStatus(StrEnum):
-    """Story 13.1.2 AC1: the statuses the queue can be narrowed to - every value
-    ``ck_venue_bookings_status`` allows, so an unknown one is a 422 rather than an empty tab."""
-
-    PENDING = BookingStatus.PENDING
-    APPROVED = BookingStatus.APPROVED
-    REJECTED = BookingStatus.REJECTED
-    WITHDRAWN = BookingStatus.WITHDRAWN
-    CANCELLED = BookingStatus.CANCELLED
+# Story 13.1.2 AC1: the statuses the queue can be narrowed to - every value
+# ``ck_venue_bookings_status`` allows, so an unknown one is a 422 rather than an empty tab. Built
+# from ``BookingStatus`` so a status added there is a tab here without a second list to update.
+BookingQueueStatus = StrEnum(
+    "BookingQueueStatus",
+    {name: value for name, value in vars(BookingStatus).items() if name.isupper()},
+)
 
 
 class BookingQueueEntry(BaseModel):
@@ -165,13 +163,9 @@ class BookingStatusCounts(BaseModel):
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> BookingStatusCounts:
-        return cls(
-            pending=by_status.get(BookingStatus.PENDING, 0),
-            approved=by_status.get(BookingStatus.APPROVED, 0),
-            rejected=by_status.get(BookingStatus.REJECTED, 0),
-            withdrawn=by_status.get(BookingStatus.WITHDRAWN, 0),
-            cancelled=by_status.get(BookingStatus.CANCELLED, 0),
-        )
+        """A status with no field here fails validation, rather than dropping out of All's
+        total unnoticed."""
+        return cls(**{status.lower(): by_status.get(status, 0) for status in BookingQueueStatus})
 
 
 class BookingQueue(BaseModel):
