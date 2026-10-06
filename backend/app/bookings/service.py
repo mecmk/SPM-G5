@@ -675,7 +675,8 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     holding = find_holding_booking(db, venue.id, held_from, held_until)
     if holding is not None:
         raise VenueHeld(holding)
-    # The held period is the event's own until setup and teardown are recorded (12.1 AC1).
+    # The held period is the booking's own (story 2.7 AC13: the first venue requirement's times, or
+    # the event's when it has none) plus setup and teardown, which default to 0 (12.1 AC1).
     closure = venue_service.find_blocking_unavailability(
         db, venue.id, starts_at=held_from, ends_at=held_until
     )

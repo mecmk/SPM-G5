@@ -229,9 +229,9 @@ export function newVenueRequirementDraft(form: EventFormState): VenueRequirement
 /**
  * Story 2.7 AC2/AC6: bring each card's defaults in line with the event as it now stands, so the
  * order the form is filled in does not matter - a card added before the dates or attendance were
- * known picks them up when they arrive. Only defaults move: a value the organiser edited, or one
- * already saved (`formFromEvent` loads none as a default), is theirs and stays put, so moving the
- * event past it is refused instead (AC10).
+ * known picks them up when they arrive. Only defaults move: a value the organiser edited is theirs
+ * and stays put, so moving the event past it is refused instead (AC10). A saved value counts as a
+ * default while it still matches the event (`venueRequirementDraftFrom`).
  */
 export function withEventDefaults(form: EventFormState): EventFormState {
   return {
@@ -245,7 +245,25 @@ export function withEventDefaults(form: EventFormState): EventFormState {
   }
 }
 
-function venueRequirementDraftFrom(requirement: VenueRequirement): VenueRequirementDraft {
+/** The same moment, or both unset - compared as instants, never as strings. */
+function isSameInstant(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return left === right
+  return Date.parse(left) === Date.parse(right)
+}
+
+/**
+ * Story 2.7 AC2/AC6 (CL-087): a saved requirement keeps following the event while it still matches
+ * it - times equal to the event's (or not given yet), and for the first requirement a number equal
+ * to the expected attendance (or not given yet). So the form behaves the same before and after a
+ * save, and growing the event never leaves an untouched requirement behind (review of PR #84).
+ * Times or a number the organiser chose differ from the event's, so they stay put, and moving the
+ * event past them is refused (AC10).
+ */
+function venueRequirementDraftFrom(
+  requirement: VenueRequirement,
+  event: EventDetail,
+  isFirst: boolean,
+): VenueRequirementDraft {
   nextVenueRequirementKey += 1
   return {
     key: nextVenueRequirementKey,
@@ -265,9 +283,13 @@ function venueRequirementDraftFrom(requirement: VenueRequirement): VenueRequirem
       ]),
     ),
     notes: textOf(requirement.notes),
-    // Saved values are the organiser's: they never follow the event by themselves (AC10).
-    isCapacityDefault: false,
-    areTimesDefault: false,
+    isCapacityDefault:
+      isFirst &&
+      (requirement.capacity === null || requirement.capacity === event.expected_attendance),
+    areTimesDefault:
+      (requirement.starts_at === null && requirement.ends_at === null) ||
+      (isSameInstant(requirement.starts_at, event.starts_at) &&
+        isSameInstant(requirement.ends_at, event.ends_at)),
   }
 }
 
@@ -299,7 +321,9 @@ export function formFromEvent(event: EventDetail): EventFormState {
     contactEmail: textOf(event.contact_email),
     contactPhone: textOf(event.contact_phone),
     hasNoVenueRequirements: event.venue_none_required,
-    venueRequirements: event.venue_requirements.map(venueRequirementDraftFrom),
+    venueRequirements: event.venue_requirements.map((requirement, index) =>
+      venueRequirementDraftFrom(requirement, event, index === 0),
+    ),
     hasNoAccessibilityNeeds: event.accessibility_none_required,
     accessibility: Object.fromEntries(
       event.accessibility_needs.map((need) => [need.code, { notes: textOf(need.notes) }]),

@@ -132,12 +132,23 @@ function venueSearchFor(event: EventDetail): VenueSearch {
   }
 }
 
+/**
+ * Story 2.7 AC4: a requirement's times. Both dates when it runs over more than one day (review of
+ * PR #84) - `formatSchedule` gives only the first date, which would make a two-day requirement read
+ * as one.
+ */
+function describeVenueRequirementTimes(startsAt: string, endsAt: string): string {
+  return formatDate(startsAt) === formatDate(endsAt)
+    ? formatSchedule(startsAt, endsAt)
+    : `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`
+}
+
 /** Story 2.7 AC4: one requirement's number of people and times, as one line. */
 function describeVenueRequirementFacts(requirement: VenueRequirement): string {
   const facts = [
     requirement.capacity === null ? null : `${requirement.capacity} people`,
     requirement.starts_at && requirement.ends_at
-      ? formatSchedule(requirement.starts_at, requirement.ends_at)
+      ? describeVenueRequirementTimes(requirement.starts_at, requirement.ends_at)
       : null,
   ].filter((fact) => fact !== null)
   return facts.length > 0 ? facts.join(' · ') : NOT_RECORDED
