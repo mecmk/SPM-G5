@@ -165,8 +165,8 @@ class UnavailabilityReason:
 class VenueUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A block of time a venue cannot be booked for a reason other than an event booking
     (maintenance, renovation, safety, internal use). Read by story 9.1's calendar; managed by
-    story 9.3, not yet built. ``ends_at`` is required - every period is bounded, no open-ended
-    case (team decision, 21 Sep 2026)."""
+    story 9.3, not yet built. ``ends_at`` is required - every period is bounded, with no
+    open-ended case."""
 
     __tablename__ = "venue_unavailability_periods"
 

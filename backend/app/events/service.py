@@ -976,8 +976,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     _hold_equipment(db, event, actor)
     submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
-    # Goes straight to UNDER_REVIEW (migration 002, bug b6.1.1) - SUBMITTED is no longer a
-    # status an event can sit in.
+    # A submitted draft moves to UNDER_REVIEW; there is no status in between.
     submitted = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status == EventStatus.DRAFT)
@@ -1261,9 +1260,8 @@ def _decide(
 
 
 def approve_event(db: Session, event: Event, *, actor: User) -> None:
-    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time. Goes straight
-    to PLANNING (migration 002, bug b6.1.1) - APPROVED is no longer a status an event can sit
-    in."""
+    """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time. Moves it to
+    PLANNING; there is no status in between."""
     _decide(
         db,
         event,
@@ -1278,9 +1276,8 @@ def approve_event(db: Session, event: Event, *, actor: User) -> None:
 
 def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
     """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
-    time. Rejecting is now allowed from the same statuses as approving (bug b6.1.1's narrower
-    reject rule has been reversed): a request sent back for clarification may be rejected
-    outright, the same as approving it."""
+    time. Rejecting is allowed from the same statuses as approving: a request sent back for
+    clarification may be rejected outright, the same as approving it."""
     if not reason.strip():
         raise MissingDecisionReason()
     _decide(

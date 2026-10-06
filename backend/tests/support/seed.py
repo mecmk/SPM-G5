@@ -67,13 +67,21 @@ def _e(n: int) -> uuid.UUID:
 
 
 class Events:
+    """Sample events by fixture name.
+
+    A name identifies a row; it is not a promise about that row's status. Several of these
+    carry the same status, and the SUBMITTED* and APPROVED* names are not statuses an event can
+    hold at all (APPROVED_2 to APPROVED_7 are all PLANNING) - the status each row actually has
+    is asserted in tests/test_schema.py.
+    """
+
     DRAFT = _e(1)  # organiser 1, incomplete
-    SUBMITTED = _e(2)  # organiser 1, coordinator 1, awaiting decision
-    APPROVED = _e(3)  # organiser 2, coordinator 1, approved booking of Grand Hall
+    SUBMITTED = _e(2)  # organiser 1, coordinator 1, awaiting decision (UNDER_REVIEW)
+    APPROVED = _e(3)  # organiser 2, coordinator 1, approved booking of Grand Hall (PLANNING)
     REJECTED = _e(4)  # organiser 2, coordinator 2
     UNDER_REVIEW = _e(5)  # organiser 2, coordinator 1, awaiting decision
     CLARIFICATION_REQUESTED = _e(6)  # organiser 1, coordinator 1, awaiting decision
-    SUBMITTED_2 = _e(7)  # organiser 1, coordinator 1, awaiting decision
+    SUBMITTED_2 = _e(7)  # organiser 1, coordinator 1, awaiting decision (UNDER_REVIEW)
     APPROVED_2 = _e(8)  # organiser 1, coordinator 2, pending booking of Exhibition Foyer
     APPROVED_3 = _e(9)  # organiser 2, coordinator 1, pending booking of Grand Hall
     APPROVED_4 = _e(10)  # organiser 1, coordinator 1, pending booking dedicated to 13.2 e2e

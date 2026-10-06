@@ -71,7 +71,7 @@ function describeRelaxHint(hint: RelaxHint): string {
  * each venue offers Request this venue, for the event's assigned coordinator only (AC5). A
  * venue's link keeps the address's query, so its record knows the event and the search too.
  *
- * AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from this same page, not a separate
+ * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
  */

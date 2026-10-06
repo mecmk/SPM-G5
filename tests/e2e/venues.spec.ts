@@ -4,21 +4,22 @@
  * AC2 existing venue characteristics can be edited and saved.
  * AC3 capacity accepts positive whole numbers only (checked in the browser before sending).
  * AC4 only Venue Staff can create or edit venue records.
- * The team meeting of 17 Sep 2026 added delete (full CRUD), search and a capacity filter, and
- * asked for every save to appear in the notification centre.
+ * Beyond those ACs this spec also covers delete (Venue Staff have full CRUD), search and a
+ * capacity filter, and that every save appears in the notification centre.
  *
- * Story 8.3 AC5-AC8 (bug f8.3.2, Sprint 1 review): a venue's pictures.
+ * Story 8.3 AC5-AC8 (bug f8.3.2): a venue's pictures.
  * AC5 Venue Staff add pictures by choosing files or dragging them onto the form, preview them,
- *     and remove any of them; they are saved with the venue's details.
- * AC6 the record shows them as a gallery, the first also in its banner, and the catalogue card
- *     shows the first.
- * AC7 JPEG, PNG or WebP, at most 5 MB each, at most 10 a venue: the form refuses anything else
- *     before sending it.
+ *     arrange them (carrying one across the others, or with its arrows) and remove any of them;
+ *     they are saved with the venue's details, in that order.
+ * AC6 the record shows them as a gallery, the first also in its banner, and each opens a
+ *     carousel; the catalogue card shows the first.
+ * AC7 JPEG, PNG or WebP, at most 5 MB each, at most 10 a venue: the form checks each chosen file
+ *     on its own and names each one it refuses, before sending anything.
  * AC8 a picture the server refuses leaves the venue saved, and its edit page says why.
- * The server's own refusals, the files, AC9's permissions and AC10's simultaneous additions are
- * backend cases: backend/tests/venues/test_venue_pictures.py.
+ * The server's own refusals, the files, the order's rules, AC9's permissions and AC10's
+ * simultaneous changes are backend cases: backend/tests/venues/test_venue_pictures.py.
  *
- * Story 8.1 AC12 (f8.1.1, Sprint 1 review): Venue Staff manage venues from the venue catalogue,
+ * Story 8.1 AC12 (f8.1.1): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
  * venues, for venues:manage holders only. The separate Manage venues page is gone and its old
  * address opens the catalogue. The manage page's name search and capacity filter live on in the
