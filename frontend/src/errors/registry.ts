@@ -81,6 +81,9 @@ export type ErrorCode =
   | 'BOOKING_REJECT_REFUSED'
   | 'BOOKING_REASON_REQUIRED'
   | 'BOOKING_WITHDRAW_REFUSED'
+  | 'EQUIPMENT_REFUSED'
+  | 'EQUIPMENT_INVALID'
+  | 'EQUIPMENT_QUANTITY_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -445,6 +448,22 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_WITHDRAW_REFUSED: {
     title: 'Cannot withdraw this request',
     message: 'This request cannot be withdrawn in its current state.',
+  },
+  /** Story 15.1 AC4/AC6/AC7/AC9/AC10: the event, the item or the stock no longer allows the
+   *  change; the backend's own sentence says which. */
+  EQUIPMENT_REFUSED: {
+    title: 'Equipment not changed',
+    message: 'This equipment change could not be made.',
+  },
+  /** Story 15.1 AC4-AC6: the server refused what was sent, such as an unknown type. */
+  EQUIPMENT_INVALID: {
+    title: 'Check the equipment',
+    message: 'Check the equipment type, quantity and notes.',
+  },
+  /** Story 15.1 AC4: refused by the page itself, before anything is sent. */
+  EQUIPMENT_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'Enter a whole number from 1 to the number available.',
   },
 }
 

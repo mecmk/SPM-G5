@@ -144,15 +144,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Equipment',
     items: [
       {
-        to: '/equipment/requests',
-        label: 'Equipment requests',
-        description: 'Request equipment for your events. Available items are held straight away.',
-        icon: 'box',
-        permission: PERMISSIONS.EQUIPMENT_REQUEST,
-        story: '15.1',
-        isAvailable: false,
-      },
-      {
         to: '/equipment/holds',
         label: 'Equipment holds',
         description: 'Equipment held for upcoming events, releases and the waitlist.',
