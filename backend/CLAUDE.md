@@ -60,6 +60,10 @@ described in the generated [data dictionary](../docs/database/DATA_DICTIONARY.md
 - `roles` → `users` → `user_sessions`. `users.role_code` is the RBAC key; external users also
   belong to a `client_organisations` row.
 - `audit_log` — append-only, written only through `app/common/audit.py`.
+- `notifications` — one row per recipient, written only through
+  `app/notifications/service.py::notify`, inside the action's transaction and before its commit.
+  A new kind of notification is a new `NotificationType` member that names who receives it
+  (story 20.1).
 
 Statuses are `text` columns with named `CHECK` constraints, never PostgreSQL ENUMs. Pick-lists
 are reference *tables* seeded from `db/seed/010_reference_data.sql`, never Python constants.
