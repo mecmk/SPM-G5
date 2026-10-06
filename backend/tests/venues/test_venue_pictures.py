@@ -2,24 +2,29 @@
 raised at the Sprint 1 review).
 
 AC5  Venue Staff can add pictures to a venue while creating or editing it, by choosing files or
-     dragging them onto the form, and can remove any of them. New pictures are previewed, and are
-     saved with the venue's details.
-AC6  The venue's record shows its pictures as a gallery, in the order they were added; the first
-     also fills the record's banner and shows on the venue's catalogue card. A venue without
-     pictures shows a placeholder.
+     dragging them onto the form, remove any of them, and arrange their order by dragging them or
+     moving them earlier or later. New pictures are previewed, and are saved with the venue's
+     details in the order shown.
+AC6  The venue's record shows its pictures as a gallery, in their order; the first also fills the
+     record's banner and shows on the venue's catalogue card. Selecting a picture opens a pop-up
+     carousel that steps through the venue's pictures. A venue without pictures shows a
+     placeholder.
 AC7  Each picture is a JPEG, PNG or WebP of at most 5 MB, judged by its content, and a venue holds
-     at most 10. The form refuses anything else before sending it, and the server refuses it too.
+     at most 10. The form checks each chosen picture on its own: it keeps those that pass and
+     names each one it refuses, with the reason, before anything is sent. The server refuses them
+     too.
 AC8  If the details save but a picture is refused, the venue and its accepted pictures are kept,
      and the venue's edit page says why. Removing a picture or deleting a venue deletes the stored
      files; editing the details leaves the pictures as they are.
-AC9  Only Venue Staff can add or remove pictures (as AC4).
+AC9  Only Venue Staff can add, remove or reorder pictures (as AC4).
 AC10 Pictures added to one venue at the same moment are all kept, each in its own place in the
      order, and never more than 10. A venue deleted while its form is open refuses new pictures
-     with "Venue not found." and keeps no file.
+     with "Venue not found." and keeps no file. An order that does not list exactly the venue's
+     current pictures is refused, and the pictures keep their order.
 
-Choosing, previewing and dragging files, the browser's own checks, and the form keeping a new
-venue whose picture was refused are e2e cases: tests/e2e/venues.spec.ts. Files are written to a
-per-test temporary folder, never to the real upload folder.
+Choosing, previewing, dragging and arranging pictures, the browser's own checks, the carousel, and
+the form keeping a new venue whose picture was refused are e2e cases: tests/e2e/venues.spec.ts.
+Files are written to a per-test temporary folder, never to the real upload folder.
 """
 
 from __future__ import annotations
@@ -45,6 +50,10 @@ from tests.support.seed import Users, Venues
 MAX_BYTES = 5 * 1024 * 1024
 MAX_PICTURES = 10
 TOO_MANY_MESSAGE = "A venue can have at most 10 pictures."
+CHANGED_MESSAGE = (
+    "The venue's pictures have changed since this page was opened. Reload the page and arrange "
+    "them again."
+)
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 _JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 32
@@ -87,6 +96,22 @@ def _add_ok(client, venue_id, content: bytes = _PNG, name: str = "room.png", mim
 
 def _remove(client, venue_id, image_id):
     return client.delete(f"{_images_path(venue_id)}/{image_id}")
+
+
+def _reorder(client, venue_id, image_ids):
+    return client.put(
+        f"{_images_path(venue_id)}/order", json={"image_ids": [str(i) for i in image_ids]}
+    )
+
+
+def _reorder_audits(db: Session, venue_id) -> list:
+    return db.execute(
+        text(
+            "SELECT actor_id, details FROM audit_log"
+            " WHERE entity_id = :id AND action = 'VENUE_IMAGES_REORDERED'"
+        ),
+        {"id": str(venue_id)},
+    ).all()
 
 
 def _stored_urls(db: Session, venue_id) -> list[str]:
@@ -173,6 +198,38 @@ def test_adding_and_removing_pictures_are_audited(venue_staff_client, db: Sessio
         assert row.actor_id == Users.VENUE_STAFF.id
         assert row.entity_type == "venue"
         assert row.details == {"image_id": image["id"], "url": image["url"]}
+
+
+# --- AC5: arranging the order --------------------------------------------------------------
+@pytest.mark.story("8.3", ac=5)
+def test_pictures_can_be_put_in_a_new_order(venue_staff_client, db: Session):
+    first, second, third = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(3))
+
+    response = _reorder(
+        venue_staff_client, Venues.BOARDROOM, [third["id"], first["id"], second["id"]]
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["images"] == [third, first, second]
+    assert response.json()["cover_image_url"] == third["url"]
+    assert _stored_urls(db, Venues.BOARDROOM) == [third["url"], first["url"], second["url"]]
+    # A picture added afterwards still goes last.
+    added = _add_ok(venue_staff_client, Venues.BOARDROOM)
+    assert _stored_urls(db, Venues.BOARDROOM)[-1] == added["url"]
+
+
+@pytest.mark.story("8.3", ac=5)
+def test_reordering_is_audited(venue_staff_client, db: Session):
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+
+    assert _reorder(venue_staff_client, Venues.BOARDROOM, [second["id"], first["id"]]).is_success
+
+    (row,) = _reorder_audits(db, Venues.BOARDROOM)
+    assert row.actor_id == Users.VENUE_STAFF.id
+    assert row.details == {
+        "from": [first["id"], second["id"]],
+        "to": [second["id"], first["id"]],
+    }
 
 
 # --- AC6: the gallery and its cover ----------------------------------------------------------
@@ -458,27 +515,58 @@ def test_a_picture_already_removed_is_not_found(venue_staff_client):
     assert again.json()["detail"] == "Picture not found."
 
 
+@pytest.mark.story("8.3", ac=8)
+def test_the_same_order_changes_nothing(venue_staff_client, db: Session):
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+
+    response = _reorder(venue_staff_client, Venues.BOARDROOM, [first["id"], second["id"]])
+
+    assert response.status_code == 200, response.text
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
+    assert _reorder_audits(db, Venues.BOARDROOM) == []
+
+
+@pytest.mark.story("8.3", ac=8)
+def test_an_order_naming_a_picture_twice_is_refused(venue_staff_client, db: Session):
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+
+    response = _reorder(
+        venue_staff_client, Venues.BOARDROOM, [second["id"], first["id"], second["id"]]
+    )
+
+    assert response.status_code == 422
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
+
+
 # --- AC9: who can change them ---------------------------------------------------------------
 @pytest.mark.story("8.3", ac=9)
 @pytest.mark.parametrize("user", NOT_VENUE_STAFF)
-def test_only_venue_staff_can_add_or_remove_pictures(login_as, db: Session, upload_dir, user):
-    image = _add_ok(login_as(Users.VENUE_STAFF), Venues.BOARDROOM)
+def test_only_venue_staff_can_add_remove_or_reorder_pictures(
+    login_as, db: Session, upload_dir, user
+):
+    staff = login_as(Users.VENUE_STAFF)
+    first, second = (_add_ok(staff, Venues.BOARDROOM) for _ in range(2))
     other = login_as(user)
 
     assert _add(other, Venues.BOARDROOM).status_code == 403
-    assert _remove(other, Venues.BOARDROOM, image["id"]).status_code == 403
-    assert _stored_urls(db, Venues.BOARDROOM) == [image["url"]]
-    assert _file_names(upload_dir) == {_name_of(image["url"])}
+    assert _remove(other, Venues.BOARDROOM, first["id"]).status_code == 403
+    assert _reorder(other, Venues.BOARDROOM, [second["id"], first["id"]]).status_code == 403
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
+    assert _file_names(upload_dir) == {_name_of(first["url"]), _name_of(second["url"])}
 
 
 @pytest.mark.story("8.3", ac=9)
 def test_changing_pictures_requires_sign_in(venue_staff_client, db: Session):
-    image = _add_ok(venue_staff_client, Venues.BOARDROOM)
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
     venue_staff_client.logout()
 
     assert _add(venue_staff_client, Venues.BOARDROOM).status_code == 401
-    assert _remove(venue_staff_client, Venues.BOARDROOM, image["id"]).status_code == 401
-    assert _stored_urls(db, Venues.BOARDROOM) == [image["url"]]
+    assert _remove(venue_staff_client, Venues.BOARDROOM, first["id"]).status_code == 401
+    assert (
+        _reorder(venue_staff_client, Venues.BOARDROOM, [second["id"], first["id"]]).status_code
+        == 401
+    )
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
 
 
 # --- AC10: at the same moment, and a venue that is gone --------------------------------------
@@ -573,8 +661,33 @@ def test_a_venue_that_no_longer_exists_takes_no_pictures(venue_staff_client, upl
     for missing in (venue_id, str(uuid.uuid4())):
         added = _add(venue_staff_client, missing)
         removed = _remove(venue_staff_client, missing, uuid.uuid4())
+        reordered = _reorder(venue_staff_client, missing, [])
 
         assert added.status_code == 404
         assert added.json()["detail"] == "Venue not found."
         assert removed.status_code == 404
+        assert reordered.status_code == 404
     assert _files_in(upload_dir) == []
+
+
+@pytest.mark.story("8.3", ac=10)
+@pytest.mark.parametrize("change", ["one-missing", "one-unknown", "another-venues"])
+def test_an_order_that_is_not_the_venues_pictures_is_refused(
+    venue_staff_client, db: Session, change
+):
+    """The form sends the order last; if a picture was added or removed elsewhere since the form
+    was opened, its list no longer matches, and nothing is reordered."""
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+    elsewhere = _add_ok(venue_staff_client, Venues.SEMINAR_ROOM)
+    orders = {
+        "one-missing": [second["id"]],
+        "one-unknown": [second["id"], first["id"], str(uuid.uuid4())],
+        "another-venues": [second["id"], first["id"], elsewhere["id"]],
+    }
+
+    response = _reorder(venue_staff_client, Venues.BOARDROOM, orders[change])
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == CHANGED_MESSAGE
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
+    assert _reorder_audits(db, Venues.BOARDROOM) == []

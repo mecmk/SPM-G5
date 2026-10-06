@@ -488,3 +488,129 @@ test('8.3 AC8: a picture the server refuses leaves the new venue saved and says 
   await page.goto('/venues')
   await expect(venueCard(page, name)).toBeVisible()
 })
+
+test('8.3 AC7: a batch keeps the pictures that pass and names each one refused', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  await choosePictures(
+    page,
+    pictureFile('hall.png'),
+    pictureFile('stage-at-full-size.png', Buffer.alloc(MAX_PICTURE_BYTES + 1)),
+    pictureFile('foyer.png'),
+  )
+
+  // The two that fit are taken; the one that does not is named, with the reason.
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
+  await expect(page.getByText('These pictures were not added.')).toBeVisible()
+  await expect(
+    page.getByText('stage-at-full-size.png: The picture must be 5 MB or smaller.'),
+  ).toBeVisible()
+  await expect(page.getByText('hall.png')).toHaveCount(0)
+})
+
+/** Where each picture in `list` is loaded from, in the order shown. */
+function sourcesIn(list: Locator) {
+  return list
+    .getByRole('img')
+    .evaluateAll((pictures) => pictures.map((picture) => picture.getAttribute('src')))
+}
+
+test('8.3 AC5: pictures can be put in a new order while editing', async ({ page }) => {
+  const name = uniqueName('Arranged')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await choosePictures(
+    page,
+    pictureFile('one.png'),
+    pictureFile('two.png'),
+    pictureFile('three.png'),
+  )
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name }).click()
+  const gallery = page.getByRole('region', { name: 'Pictures' })
+  await expect(gallery.getByRole('img')).toHaveCount(3)
+  const [one, two, three] = await sourcesIn(gallery)
+
+  await page.goto('/venues')
+  await venueCard(page, name).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Move picture 1 earlier' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Move picture 3 later' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Move picture 3 earlier' }).click()
+  await page.getByRole('button', { name: 'Move picture 1 later' }).click()
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+
+  // Three, one, two: the third picture is now the cover.
+  await expect(
+    venueCard(page, name).getByRole('presentation', { includeHidden: true }),
+  ).toHaveAttribute('src', three!)
+  await venueCard(page, name).getByRole('link', { name }).click()
+  await expect(gallery.getByRole('img')).toHaveCount(3)
+  expect(await sourcesIn(gallery)).toEqual([three, one, two])
+})
+
+test('8.3 AC5: a picture can be dragged to a new place', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  await choosePictures(page, pictureFile('a.png'), pictureFile('b.png'), pictureFile('c.png'))
+  const previews = page.getByRole('list', { name: 'Pictures to save' })
+  await expect(previews.getByRole('img')).toHaveCount(3)
+  const [a, b, c] = await sourcesIn(previews)
+
+  await previews
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('img', { name: 'Picture 3 preview' }) })
+    .dragTo(
+      previews
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('img', { name: 'Picture 1 preview' }) }),
+    )
+
+  await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
+})
+
+test('8.3 AC6: a picture opens in a carousel that steps through the pictures', async ({ page }) => {
+  const name = uniqueName('Carousel')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await choosePictures(
+    page,
+    pictureFile('one.png'),
+    pictureFile('two.png'),
+    pictureFile('three.png'),
+  )
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name }).click()
+  const gallery = page.getByRole('region', { name: 'Pictures' })
+  await expect(gallery.getByRole('img')).toHaveCount(3)
+  const [one, two, three] = await sourcesIn(gallery)
+
+  await gallery.getByRole('button', { name: 'Picture 2 of 3' }).click()
+
+  const viewer = page.getByRole('dialog', { name: `Pictures of ${name}` })
+  const shown = viewer.getByRole('img')
+  await expect(viewer).toBeVisible()
+  await expect(shown).toHaveAccessibleName('Picture 2 of 3')
+  await expect(shown).toHaveAttribute('src', two!)
+  await expectLoaded(shown)
+  await viewer.getByRole('button', { name: 'Next picture' }).click()
+  await expect(shown).toHaveAttribute('src', three!)
+  // Past the last picture it comes round to the first.
+  await viewer.getByRole('button', { name: 'Next picture' }).click()
+  await expect(shown).toHaveAccessibleName('Picture 1 of 3')
+  await expect(shown).toHaveAttribute('src', one!)
+  await page.keyboard.press('ArrowLeft')
+  await expect(shown).toHaveAttribute('src', three!)
+  await viewer.getByRole('button', { name: 'Previous picture' }).click()
+  await expect(shown).toHaveAttribute('src', two!)
+
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+  await expect(gallery.getByRole('button', { name: 'Picture 2 of 3' })).toBeFocused()
+})
