@@ -804,6 +804,10 @@ def recheck_equipment_for_new_dates(
     flagged: list[EventEquipmentRequest] = []
     resent_at = datetime.now(UTC)
     for item in items:
+        # Story 16.1 AC3: a decision for the old dates no longer stands, whether the item goes back
+        # to Technical Support or is flagged.
+        item.decided_by_id = None
+        item.decided_at = None
         if item.quantity > available[item.equipment_type_id]:
             item.status = EquipmentRequestStatus.UNAVAILABLE
             flagged.append(item)
@@ -813,9 +817,6 @@ def recheck_equipment_for_new_dates(
         if item.status in _SENT_ITEM_STATUSES:
             item.status = EquipmentRequestStatus.PENDING
             item.submitted_at = resent_at
-            # Story 16.1 AC3: a decision for the old dates no longer stands.
-            item.decided_by_id = None
-            item.decided_at = None
         elif item.status == EquipmentRequestStatus.UNAVAILABLE:
             item.status = EquipmentRequestStatus.REQUESTED
     record_audit(
