@@ -309,6 +309,40 @@ def test_a_decision_is_audited(tech_client, db, outcome, action):
     assert entry.actor_id == Users.TECH_SUPPORT.id
 
 
+class _AuditFailed(RuntimeError):
+    """A failure after the hold has changed and before the decision is saved."""
+
+
+@pytest.mark.story("16.1", ac=3)
+@pytest.mark.parametrize("outcome", [ACCEPTED, DECLINED])
+def test_a_decision_that_fails_part_way_saves_neither_it_nor_the_hold(
+    tech_client, db, monkeypatch, outcome
+):
+    """AC3: if either the decision or the change to the hold fails, neither is saved - as 5.2 AC3
+    and 8.3 AC8 prove theirs, by making the audit entry, the last step before the commit, raise."""
+    # Accepting an item that holds nothing places a hold; declining one releases its hold.
+    item = _pending(db, quantity=2, is_held=outcome == DECLINED)
+    # Committed, so the item outlives the rollback of the failed request below.
+    db.commit()
+
+    def fail_to_record(*_args, **_kwargs):
+        raise _AuditFailed
+
+    monkeypatch.setattr(service, "record_audit", fail_to_record)
+
+    with pytest.raises(_AuditFailed):
+        _accept(tech_client, item.id) if outcome == ACCEPTED else _decline(tech_client, item.id)
+    # The request's session is rolled back when it closes; here the test shares that session.
+    db.rollback()
+
+    assert _status(db, item) == PENDING
+    holds = _holds(db, item)
+    if outcome == ACCEPTED:
+        assert holds == []
+    else:
+        assert [(hold.status, hold.released_quantity) for hold in holds] == [(RESERVED, 0)]
+
+
 @pytest.mark.story("16.1", ac=3)
 @pytest.mark.parametrize("outcome", [ACCEPTED, DECLINED])
 def test_the_coordinator_sees_when_and_by_whom_a_request_was_decided(login_as, db, outcome):
