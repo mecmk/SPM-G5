@@ -370,6 +370,33 @@ def test_a_decision_undone_by_new_event_dates_no_longer_names_who_made_it(tech_c
     assert row.decided_at is None
 
 
+@pytest.mark.story("16.1", ac=3)
+def test_a_decision_undone_by_new_dates_it_no_longer_fits_no_longer_names_who_made_it(
+    tech_client, db
+):
+    """15.1 AC8 flags an accepted item UNAVAILABLE when its event's new dates are short of units;
+    the decision for the old dates must not follow it there, or back to Pending once resent."""
+    kit = make_equipment_type(db, total_quantity=4)
+    event = _event(db)
+    item = _pending(db, quantity=4, event=event, equipment_type=kit)
+    assert _accept(tech_client, item.id).status_code == 201
+
+    new_start, new_end = START + timedelta(days=7), END + timedelta(days=7)
+    make_equipment_out_of_service(
+        db, type_code=kit.code, quantity=2, starts_at=new_start, ends_at=new_end
+    )
+    event.starts_at, event.ends_at = new_start, new_end
+    db.flush()
+    service.recheck_equipment_for_new_dates(db, event, actor=db.get(User, Users.COORDINATOR.id))
+
+    db.flush()
+    db.expire_all()
+    row = db.get(EventEquipmentRequest, item.id)
+    assert row.status == "UNAVAILABLE"
+    assert row.decided_by_id is None
+    assert row.decided_at is None
+
+
 # --- AC4: a decline reason is required ----------------------------------------------------------
 @pytest.mark.story("16.1", ac=4)
 @pytest.mark.parametrize(
