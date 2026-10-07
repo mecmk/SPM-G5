@@ -8,7 +8,9 @@ mapping ``events`` a second time - two declarative classes on one table raise
 
 Story 2.1 adds the request's child rows: accessibility needs, equipment lines (with the
 equipment catalogue they point at) and the append-only status history. Story 2.7 adds the venue
-requirements, each with its own facilities.
+requirements, each with its own facilities. Story 15.1 (``app/equipment/``) works on the
+same equipment tables, which stay mapped here because ``Event`` holds its equipment
+items.
 """
 
 from __future__ import annotations
@@ -111,8 +113,21 @@ class EventAccessibilityNeed(Base):
     feature: Mapped[AccessibilityFeature] = relationship(lazy="joined")
 
 
+class EquipmentRequestStatus:
+    """Values allowed by ``ck_event_equipment_requests_status`` (migration 014, story 15.1).
+    Whether an item holds stock is its ``EquipmentReservation``'s business, not its status's."""
+
+    REQUESTED = "REQUESTED"  # recorded, not yet sent to Technical Support
+    PENDING = "PENDING"  # sent, awaiting Technical Support's decision
+    ACCEPTED = "ACCEPTED"  # Technical Support reserved it (story 16.1)
+    DECLINED = "DECLINED"  # Technical Support declined it (story 16.1)
+    UNAVAILABLE = "UNAVAILABLE"  # the event's new dates can no longer cover it (15.1 AC8)
+    CANCELLED = "CANCELLED"  # its event was cancelled (story 6.2)
+
+
 class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One equipment line on a request: a type and a quantity (story 2.1 AC6)."""
+    """One equipment item on an event: a type and a quantity (story 2.1 AC6), which the assigned
+    coordinator submits to Technical Support (story 15.1)."""
 
     __tablename__ = "event_equipment_requests"
 
@@ -129,8 +144,13 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
+    submitted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
+    submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
 
 
 class EquipmentHoldStatus:

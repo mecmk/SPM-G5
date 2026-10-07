@@ -144,6 +144,7 @@ backend/
     auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
     bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
     coordination/       # assigning and reassigning an event's coordinator
+    equipment/          # an event's equipment requests: recording, holding, submitting to Technical Support
     events/             # event requests, review and decisions, event details, routine edits
     venues/             # the venue catalogue, its search and its availability calendar
     common/             # shared by feature areas: the audit log, in-app notifications
