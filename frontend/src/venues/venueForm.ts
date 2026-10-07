@@ -189,7 +189,8 @@ export function toggleEntry<T>(entries: Record<string, T>, code: string, empty: 
 /**
  * Story 8.3 AC7: what a venue's pictures may be, mirrored from the backend's service
  * (`MAX_VENUE_IMAGE_BYTES`, `MAX_VENUE_IMAGES` and `VENUE_IMAGE_MEDIA_TYPES` in
- * backend/app/venues/service.py).
+ * backend/app/venues/service.py). `VENUE_IMAGE_TYPES` repeats 2.1's `COVER_IMAGE_TYPES` until both
+ * move to `src/shared/` (frontend/STYLE.md, Standing divergences).
  */
 export const MAX_VENUE_IMAGE_BYTES = 5 * 1024 * 1024
 export const MAX_VENUE_IMAGES = 10
