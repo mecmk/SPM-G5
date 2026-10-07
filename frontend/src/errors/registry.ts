@@ -42,6 +42,7 @@ export type ErrorCode =
   | 'EVENT_REJECTION_REASON_REQUIRED'
   | 'EVENT_NOT_AWAITING_CLARIFICATION'
   | 'EVENT_CLARIFICATION_MESSAGE_REQUIRED'
+  | 'EVENT_NOT_AWAITING_RESPONSE'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -228,11 +229,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Cannot send message',
     message: 'This request has moved on, so the message was not sent.',
   },
-  /** Story 4.2 AC3: the form's own pre-check before calling the API - never wired into an
+  /** Story 4.2 AC3 / 4.3 AC4: the form's own pre-check before calling the API - never wired into an
    *  errorCodes map, same precedent as EVENT_REJECTION_REASON_REQUIRED. */
   EVENT_CLARIFICATION_MESSAGE_REQUIRED: {
     title: 'Message needed',
     message: 'Enter a message to send.',
+  },
+  /** Story 4.3 AC10/AC11: responding once the request is no longer CLARIFICATION_REQUESTED -
+   *  cancelled, approved or rejected, possibly while the response was being written. */
+  EVENT_NOT_AWAITING_RESPONSE: {
+    title: 'Cannot send response',
+    message: 'This request is no longer awaiting your response, so it was not sent.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.

@@ -48,7 +48,7 @@ class Permission(StrEnum):
     VENUE_CALENDAR_READ = "venue_calendar:read"  # availability calendar & search (9.x, 10.x)
 
     # --- Event requests (2.x, 3.x) ---
-    EVENTS_CREATE = "events:create"  # raise / draft / submit own requests (2.1, 3.x)
+    EVENTS_CREATE = "events:create"  # raise / submit requests, answer clarification (2.1, 3.x, 4.3)
     EVENTS_READ_OWN = "events:read_own"  # organiser sees own events (2.6, 7.1)
     EVENTS_READ_ALL = "events:read_all"  # internal staff see every event (7.1)
     EVENTS_REVIEW = "events:review"  # queue, clarify, approve, reject, assign (4.x, 5.x)
