@@ -195,7 +195,8 @@ class VenueImageOut(BaseModel):
 
 class VenueImageOrder(BaseModel):
     """Story 8.3 AC5: every one of a venue's pictures, by id, in the order wanted - the first
-    becomes the cover. AC8: each picture once; AC10: the service checks they are the venue's own."""
+    becomes the cover. AC10: each picture once, and the service checks they are exactly the venue's
+    own."""
 
     model_config = ConfigDict(extra="forbid")
 
