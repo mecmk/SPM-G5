@@ -280,7 +280,7 @@ def list_equipment_requests(
     for item, event in found:
         if event.id not in available_by_event:
             available_by_event[event.id] = events_service.available_by_type(
-                db, event.starts_at, event.ends_at, excluding_event_id=event.id
+                db, event.starts_at, event.ends_at, exclude_event_id=event.id
             )
         available = available_by_event[event.id][item.equipment_type_id]
         rows.append(EquipmentQueueRow(item=item, event=event, available=available))
