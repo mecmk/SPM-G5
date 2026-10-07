@@ -338,6 +338,28 @@ def test_venue_staff_read_the_justification_on_the_request(client, login_as, db:
 
 
 @pytest.mark.story("11.1", ac=6)
+@pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE], ids=["organiser", "attendee"])
+def test_an_organiser_or_attendee_cannot_read_a_request_that_carries_a_justification(
+    login_as, db: Session, user
+):
+    """The justification is for the coordinator and Venue Staff (AC6). External roles hold no
+    bookings permission, so ``GET /bookings/{id}`` refuses them - here for a request that carries
+    one."""
+    raised = _request(
+        login_as(Users.COORDINATOR),
+        event_id=Events.APPROVED,
+        venue_id=Venues.EXHIBITION_FOYER,
+        suitability_override_reason=JUSTIFICATION,
+    )
+    assert raised.status_code == 201, raised.text
+
+    response = login_as(user).get(f"{BOOKINGS_PATH}/{raised.json()['id']}")
+
+    assert response.status_code == 403
+    assert JUSTIFICATION not in response.text
+
+
+@pytest.mark.story("11.1", ac=6)
 def test_the_assigned_coordinator_reads_the_justification_on_the_events_bookings(
     coordinator_client, db: Session
 ):

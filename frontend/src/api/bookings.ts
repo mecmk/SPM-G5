@@ -27,13 +27,20 @@ export interface Booking {
   updated_at: string
 }
 
-/** Mirrors `BookingRequestIn`: one event, one venue. Everything else is copied server-side. */
+/** Story 11.1 AC2: the longest justification for requesting an unsuitable venue. Keep in step by
+ * hand with SUITABILITY_OVERRIDE_REASON_MAX_LENGTH in backend/app/bookings/schemas.py. */
+export const SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
+
+/** Mirrors `BookingRequestIn`: one event, one venue. Everything else is copied server-side.
+ * Story 11.1: `suitability_override_reason` is why a venue that does not suit is requested. */
 export interface BookingRequestInput {
   event_id: string
   venue_id: string
+  suitability_override_reason?: string
 }
 
-/** Story 12.1 AC1-AC4. */
+/** Story 12.1 AC1-AC4. Story 11.1 AC7: a venue that does not suit, sent without a justification,
+ * is refused with a 422 - for instance when it stopped suiting after the step loaded. */
 export function createBookingRequest(
   input: BookingRequestInput,
   venueName: string,
@@ -41,7 +48,7 @@ export function createBookingRequest(
   return api<Booking>('/bookings', {
     method: 'POST',
     body: input,
-    errorCodes: { 409: 'BOOKING_NOT_ALLOWED' },
+    errorCodes: { 409: 'BOOKING_NOT_ALLOWED', 422: 'BOOKING_JUSTIFICATION_REQUIRED' },
     notify: {
       title: 'Venue requested',
       message: `${venueName} was requested; it is with Venue Staff for review.`,
@@ -167,6 +174,8 @@ export interface BookingOutcome {
   status: BookingStatus
   decided_at: string | null
   decision_reason: string | null
+  /** Story 11.1 AC6: why a venue that did not suit was requested; null when it suited. */
+  suitability_override_reason: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a

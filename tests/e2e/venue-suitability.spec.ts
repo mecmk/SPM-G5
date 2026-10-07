@@ -279,3 +279,179 @@ test('11.1 AC5: a characteristic the venue has not recorded reads Unknown', asyn
   await expect(grandHall.getByText('Hearing loop: Unknown', { exact: true })).toBeVisible()
   await expect(grandHall.getByText('Projector & screen ×3: Unknown', { exact: true })).toBeVisible()
 })
+
+// --- The request step: the warning, the justification and the confirmation (AC2, AC3, AC6, AC7) -
+// Seeded venue ids. Exhibition Foyer is the one venue E5 really requests for Briefing; E7's real
+// send goes to Boardroom 3.4 instead, so E5's hold on Foyer can never turn it into a 409.
+const FOYER = { id: '22222222-0000-0000-0000-000000000004', name: 'Exhibition Foyer' }
+const SEMINAR_ROOM = { id: '22222222-0000-0000-0000-000000000002', name: 'Seminar Room 2.1' }
+const BOARDROOM = { id: '22222222-0000-0000-0000-000000000003', name: 'Boardroom 3.4' }
+const SUITABILITY_PATH = (venueId: string) => `/venues/${venueId}/suitability`
+const BOOKINGS_PATH = '/bookings'
+// As errors/registry.ts words BOOKING_JUSTIFICATION_REQUIRED (the request is never sent).
+const JUSTIFICATION_REQUIRED =
+  'Give a justification for requesting a venue that does not suit the event.'
+
+async function openRequestStep(page: Page, venue: { id: string; name: string }) {
+  await page.goto(`/events/${BRIEFING.id}/request-venue/${venue.id}`)
+  await expect(page.getByRole('heading', { name: `Request ${venue.name}`, level: 1 })).toBeVisible()
+}
+
+function suitabilityRegion(page: Page) {
+  return page.getByRole('region', { name: 'Suitability' })
+}
+
+/** Every POST /bookings the page sends, from now on. */
+function recordBookingSends(page: Page): Request[] {
+  const sends: Request[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === BOOKINGS_PATH) {
+      sends.push(request)
+    }
+  })
+  return sends
+}
+
+test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, which Venue Staff and the coordinator then read', async ({
+  page,
+}) => {
+  const justification = `E2E ${Date.now()}: the only free room that day with space for booths.`
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, FOYER)
+
+  // AC2: the warning lists every failure, and asks for a justification.
+  const suitability = suitabilityRegion(page)
+  await expect(suitability.getByText('Unsuitable', { exact: true })).toBeVisible()
+  await expect(suitability.getByText('Layout Classroom not offered', { exact: true })).toBeVisible()
+  await expect(
+    suitability.getByText('Projector & screen not offered', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('textbox', { name: 'Justification' }).fill(justification)
+
+  // AC2: sending asks for confirmation first.
+  await page.getByRole('button', { name: 'Send request' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText(FOYER.name)
+  await dialog.getByRole('button', { name: 'Send request' }).click()
+
+  const outcome = page.getByRole('region', { name: 'Request sent' })
+  await expect(outcome).toBeVisible()
+  await expect(outcome).toContainText(justification)
+
+  // AC6: the coordinator reads it on the event's bookings.
+  await outcome.getByRole('link', { name: 'Back to the event' }).click()
+  await expect(page.getByRole('region', { name: 'Venue booking' })).toContainText(justification)
+
+  // AC3: Venue Staff read it on the request.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  const card = page
+    .getByRole('listitem')
+    .filter({ hasText: BRIEFING.name })
+    .filter({ hasText: FOYER.name })
+  await card.getByRole('link', { name: 'View details' }).click()
+  await expect(page.getByRole('region', { name: 'Why this venue was requested' })).toContainText(
+    justification,
+  )
+})
+
+test('11.1 AC7: the request cannot be sent with an empty justification', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  const sends = recordBookingSends(page)
+  await openRequestStep(page, FOYER)
+  await expect(suitabilityRegion(page).getByText('Unsuitable', { exact: true })).toBeVisible()
+
+  for (const blank of ['', '   ']) {
+    await page.getByRole('textbox', { name: 'Justification' }).fill(blank)
+    await page.getByRole('button', { name: 'Send request' }).click()
+    await expect(page.getByRole('alert')).toContainText(JUSTIFICATION_REQUIRED)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  }
+  expect(sends).toHaveLength(0)
+})
+
+test('11.1 AC7: a send refused for a missing justification shows the warning again', async ({
+  page,
+}) => {
+  // The step's first read is the real answer with its values changed to "suits" - as if the
+  // requirement had changed after the page loaded. The real send is then refused (422), and the
+  // step reads again: this time the real answer, which does not suit.
+  let reads = 0
+  await page.route(
+    (url) => url.pathname === SUITABILITY_PATH(BOARDROOM.id),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      reads += 1
+      if (reads > 1) return route.fallback()
+      const response = await route.fetch()
+      const real = await response.json()
+      return route.fulfill({ response, json: { ...real, is_suitable: true, failures: [] } })
+    },
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, BOARDROOM)
+  await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('justification')
+  await expect(suitabilityRegion(page).getByText('Unsuitable', { exact: true })).toBeVisible()
+  await expect(
+    suitabilityRegion(page).getByText('Capacity 16 < 60 people', { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Justification' })).toBeVisible()
+  expect(reads).toBe(2)
+})
+
+test('11.1 AC2: a venue that suits is requested with no warning', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, SEMINAR_ROOM)
+
+  await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Justification' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
+})
+
+test('11.1 AC2: while the check loads the step says so and cannot send yet', async ({ page }) => {
+  // The real answer, held back until the test lets it through.
+  let release: () => void = () => {}
+  const released = new Promise<void>((resolve) => (release = resolve))
+  await page.route(
+    (url) => url.pathname === SUITABILITY_PATH(FOYER.id),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      await released
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, FOYER)
+
+  await expect(page.getByText('Checking whether this venue suits the event…')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeDisabled()
+
+  release()
+  await expect(suitabilityRegion(page).getByText('Unsuitable', { exact: true })).toBeVisible()
+  await expect(page.getByText('Checking whether this venue suits the event…')).toHaveCount(0)
+})
+
+test('11.1 AC2: if the check cannot be loaded the step says so and can still send', async ({
+  page,
+}) => {
+  // The real answer, its status changed to a server error.
+  await page.route(
+    (url) => url.pathname === SUITABILITY_PATH(FOYER.id),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, status: 500, json: { detail: 'Internal Server Error' } })
+    },
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, FOYER)
+
+  await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
+  await expect(page.getByText('Checking whether this venue suits the event…')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
+})

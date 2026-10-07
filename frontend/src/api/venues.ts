@@ -263,6 +263,14 @@ export interface VenueSearchResult {
   relax: RelaxHint[]
 }
 
+/** Story 11.1 AC2/AC3: whether one venue suits the event it is being requested for, with every
+ * criterion it fails - the request step's read. Only the event's assigned coordinator may ask; an
+ * event that cannot be judged is refused with a 422 whose sentence says why. */
+export function getVenueSuitability(venueId: string, eventId: string): Promise<VenueSuitability> {
+  const params = new URLSearchParams({ event: eventId })
+  return api<VenueSuitability>(`/venues/${venueId}/suitability?${params}`)
+}
+
 /** Story 8.1 AC3/AC4: the catalogue's search, run on the server. A search that cannot be run
  * (AC8) is refused with a 422 whose sentence says why. */
 export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult> {

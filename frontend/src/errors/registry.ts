@@ -88,6 +88,7 @@ export type ErrorCode =
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
   | 'BOOKING_REASON_REQUIRED'
+  | 'BOOKING_JUSTIFICATION_REQUIRED'
   | 'BOOKING_WITHDRAW_REFUSED'
   | 'EQUIPMENT_REFUSED'
   | 'EQUIPMENT_INVALID'
@@ -504,6 +505,13 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for rejecting this request.',
+  },
+  // Story 11.1 AC2/AC7: requesting a venue that does not suit the event needs a justification -
+  // shown by the request step before it sends one blank, and the code for the backend's 422 when
+  // the venue stopped suiting after the step loaded (the backend's own sentence is shown then).
+  BOOKING_JUSTIFICATION_REQUIRED: {
+    title: 'Justification needed',
+    message: 'Give a justification for requesting a venue that does not suit the event.',
   },
 
   // Story 12.2: withdrawing a venue booking request. Named for the withdraw endpoint
