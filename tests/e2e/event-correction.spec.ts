@@ -4,8 +4,9 @@
  * filled in (2.1).
  * AC4 the coordinator edits the organiser-provided details and saves them without the organiser's
  *     approval; the status stays where it was, including while a clarification is open. The cover
- *     picture is replaced with the organiser's own controls, and details cannot be saved while a
- *     field marked * is empty (checked before anything is sent).
+ *     picture is replaced with the organiser's own controls, a venue requirement is added with
+ *     story 2.7's editor, and details cannot be saved while a field marked * is empty (checked
+ *     before anything is sent).
  * AC5 once approved, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
  * AC6 an approval that lands while the editor is open makes the save fail, and a reload shows the
@@ -189,6 +190,29 @@ test('7.2 AC4: the coordinator still corrects a request after asking the organis
   await expect(coordinator).toHaveURL(DETAILS_PATH)
   await expect(coordinator.getByText('80', { exact: true })).toBeVisible()
   await expect(status).toBeVisible()
+})
+
+test('7.2 AC4: the coordinator adds a venue requirement and the details page shows it', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(TWO_USER_TIMEOUT)
+  const name = uniqueName('Venue')
+  await signIn(page, ACCOUNTS.organiser)
+  const request = await submittedRequest(page, name)
+  const coordinator = await signedInAs(browser, page, request.coordinator)
+
+  await openCorrection(coordinator, request.id, name)
+  await coordinator.getByRole('button', { name: 'Add a venue requirement' }).click()
+  const added = coordinator.getByRole('group', { name: 'Venue requirement 1' })
+  await added.getByLabel('Requirement name').fill('Main hall')
+  await added.getByLabel('Number of people').fill('50')
+  await saveCorrection(coordinator)
+  await expect(coordinator.getByRole('alert')).toHaveCount(0)
+
+  await coordinator.getByRole('link', { name: /^← / }).click()
+  await expect(coordinator).toHaveURL(DETAILS_PATH)
+  await expect(coordinator.getByText('Main hall')).toBeVisible()
 })
 
 test('7.2 AC7: the form leaves out the event’s own holds and marks equipment no longer free for new dates', async ({

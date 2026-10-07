@@ -346,14 +346,16 @@ def correct_event_under_review(
     """Story 7.2 AC4-AC9: the coordinator assigned to this event corrects the organiser's request
     while it is under review or awaiting clarification. 403 for anyone else (AC8); 409 once it is
     approved or closed (AC5, AC6) or when the copy being saved is stale (AC9); 422 for anything
-    the 2.1 checks refuse, including equipment no longer available for the new dates (AC4,
-    AC7)."""
+    the 2.1 and 2.7 checks refuse, including equipment no longer available for the new dates (AC4,
+    AC7), with a refused venue requirement located as on the organiser's edit."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     try:
         service.correct_event_under_review(db, event, payload, actor=actor)
+    except service.InvalidVenueRequirement as exc:
+        raise _requirement_refusal(exc) from None
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EventStateConflict as exc:

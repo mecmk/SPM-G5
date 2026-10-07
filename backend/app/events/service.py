@@ -886,6 +886,15 @@ def _replace_venue_requirements(db: Session, event: Event, items: list[VenueRequ
         ]
 
 
+def _fill_requirement_times(event: Event) -> None:
+    """2.7 AC2 (PO decision, 2 Oct 2026): a requirement never given times of its own is needed for
+    the whole event, so a submitted requirement always has a period a booking can copy - at
+    submission, and when story 7.2's coordinator corrects a submitted request."""
+    for requirement in event.venue_requirements:
+        if requirement.starts_at is None:
+            requirement.starts_at, requirement.ends_at = event.starts_at, event.ends_at
+
+
 def _replace_accessibility_needs(event: Event, items: list[EventAccessibilityNeedIn]) -> None:
     event.accessibility_needs = [
         EventAccessibilityNeed(feature_code=item.code, notes=item.notes) for item in items
@@ -1301,11 +1310,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         supplied_closes_at=event.registration_closes_at,
     )
 
-    # 2.7 AC2 (PO decision, 2 Oct 2026): a requirement never given times of its own is needed for
-    # the whole event, so a submitted requirement always has a period a booking can copy.
-    for requirement in event.venue_requirements:
-        if requirement.starts_at is None:
-            requirement.starts_at, requirement.ends_at = event.starts_at, event.ends_at
+    _fill_requirement_times(event)
     _hold_equipment(db, event, actor, notes=_SUBMITTED_HOLD_NOTE)
     submitted_at = datetime.now(UTC)
     # Conditional on still being a draft, so two submissions racing cannot both succeed.
@@ -1900,6 +1905,7 @@ def _apply_correction(
     before = _request_values(event)
     edit = _validate_request_edit(db, event, data, recheck_resent_equipment=False)
     _apply_request_edit(db, event, data, edit, actor=actor)
+    _fill_requirement_times(event)
     after = _request_values(event)
     changes = {
         field: {"from": before[field], "to": value}

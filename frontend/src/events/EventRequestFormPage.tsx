@@ -800,10 +800,9 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
         setInternalNotes(saved.internal_notes ?? '')
       }
     } catch (err) {
-      setSaveError(formatApiError(err))
+      // As on the organiser's save: a venue requirement the server refused is marked (2.7 AC11).
+      showSaveRefusal(err)
       setIsOutOfDate(err instanceof ApiError && OUT_OF_DATE_CODES.includes(err.code))
-      // The stock may be why it failed, so ask again how many are free.
-      setAvailabilityRefresh((count) => count + 1)
     } finally {
       setIsSaving(false)
     }

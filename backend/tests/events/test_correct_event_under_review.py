@@ -2,8 +2,9 @@
 review.
 
 AC4 While an event is Under Review or Clarification Requested, the assigned coordinator can edit
-    the organiser-provided event details, including the cover picture, using the same checks as
-    creating a request (2.1). Each saved change is recorded for the change history (7.4).
+    the organiser-provided event details, including the cover picture and the venue requirements,
+    using the same checks as creating a request (2.1, and 2.7 for the venue requirements). Each
+    saved change is recorded for the change history (7.4).
 AC5 Once the event is approved, organiser-provided details become read-only; internal notes stay
     editable.
 AC6 The lock begins at approval: a correction saved before approval applies, one that arrives
@@ -284,6 +285,130 @@ def test_the_2_1_rules_apply_to_a_correction(coordinator_client, changes, expect
     assert response.status_code == 422
     assert expected in response.text.lower()
     assert _read(coordinator_client, Events.SUBMITTED)["updated_at"] == event["updated_at"]
+
+
+@pytest.mark.story("7.2", ac=4)
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        pytest.param(
+            lambda main: {"venue_requirements": [{**main, "ends_at": "2026-11-18T18:00:00+08:00"}]},
+            "cannot end after the event ends",
+            id="ends-after-the-event",
+        ),
+        pytest.param(
+            lambda main: {"starts_at": "2026-11-18T10:00:00+08:00"},
+            "cannot start before the event starts",
+            id="event-moved-past-it",
+        ),
+        pytest.param(
+            lambda main: {"venue_requirements": [main, {"name": "main venue", "capacity": 10}]},
+            "cannot both be called",
+            id="duplicate-name",
+        ),
+        pytest.param(
+            lambda main: {"venue_requirements": [{**main, "id": str(uuid.uuid4())}]},
+            "does not belong to this request",
+            id="another-requests-requirement",
+        ),
+        pytest.param(
+            lambda main: {"venue_requirements": [{**main, "layout_code": "NOT_A_LAYOUT"}]},
+            "unknown room layout",
+            id="unknown-layout",
+        ),
+    ],
+)
+def test_the_2_7_rules_apply_to_a_correction(coordinator_client, changes, expected):
+    """Story 2.7's venue requirement checks are part of creating a request, so a correction runs
+    them too - AC10 included, where moving the event leaves a requirement outside it."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    main_venue = _requirement_in(event["venue_requirements"][0])
+
+    response = _correct(coordinator_client, event, **changes(main_venue))
+
+    assert response.status_code == 422
+    assert expected in response.text.lower()
+    assert _read(coordinator_client, Events.SUBMITTED)["updated_at"] == event["updated_at"]
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_refused_venue_requirement_names_the_field_to_fix(coordinator_client):
+    """Located as on the organiser's own edit (2.7 AC11), so the form can mark the field."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    (main_venue,) = event["venue_requirements"]
+    too_many = event["expected_attendance"] + 1
+
+    response = _correct(
+        coordinator_client,
+        event,
+        venue_requirements=[{**_requirement_in(main_venue), "capacity": too_many}],
+    )
+
+    assert response.status_code == 422
+    (issue,) = response.json()["detail"]
+    assert issue["loc"][-3:] == ["venue_requirements", 0, "capacity"]
+    assert "main venue" in issue["msg"].lower()
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_venue_requirement_correction_alone_is_saved_and_recorded(
+    coordinator_client, db: Session
+):
+    """Story 2.7's requirements are only replaced as an edit is written, so a correction to them
+    alone must still count as a change, not be rolled back as one that changed nothing."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    (main_venue,) = event["venue_requirements"]
+
+    response = _correct(
+        coordinator_client,
+        event,
+        venue_requirements=[{**_requirement_in(main_venue), "capacity": 40}],
+    )
+
+    assert response.status_code == 200, response.text
+    (saved,) = _read(coordinator_client, Events.SUBMITTED)["venue_requirements"]
+    assert (saved["id"], saved["capacity"]) == (main_venue["id"], 40)
+    details = db.execute(
+        text(
+            "SELECT details FROM audit_log"
+            " WHERE action = 'EVENT_DETAILS_CORRECTED' AND entity_id = :id"
+        ),
+        {"id": Events.SUBMITTED},
+    ).scalar_one()
+    assert set(details) == {"venue_requirements"}
+    assert [r["capacity"] for r in details["venue_requirements"]["from"]] == [60]
+    assert [r["capacity"] for r in details["venue_requirements"]["to"]] == [40]
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_requirement_added_without_times_is_needed_for_the_whole_event(coordinator_client):
+    """2.7 AC2, as at submission: every requirement of a submitted request has a period a booking
+    can copy, so one added without times takes the event's."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    (main_venue,) = event["venue_requirements"]
+
+    response = _correct(
+        coordinator_client,
+        event,
+        venue_requirements=[_requirement_in(main_venue), {"name": "Breakout room", "capacity": 20}],
+    )
+
+    assert response.status_code == 200, response.text
+    added = response.json()["venue_requirements"][1]
+    assert added["name"] == "Breakout room"
+    assert datetime.fromisoformat(added["starts_at"]) == datetime.fromisoformat(event["starts_at"])
+    assert datetime.fromisoformat(added["ends_at"]) == datetime.fromisoformat(event["ends_at"])
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_the_venue_requirements_cannot_all_be_removed_without_marking_none(coordinator_client):
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    response = _correct(coordinator_client, event, venue_requirements=[])
+
+    assert response.status_code == 422
+    assert "venue requirements (choose some, or mark none)" in response.text
+    assert len(_read(coordinator_client, Events.SUBMITTED)["venue_requirements"]) == 1
 
 
 @pytest.mark.story("7.2", ac=4)
