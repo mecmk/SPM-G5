@@ -152,13 +152,14 @@ class EquipmentItems:
     ROADSHOW_LAPEL_MICS = uuid.UUID("66666666-0000-0000-0000-000000000006")  # pending, short by 4
     ROADSHOW_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000007")  # accepted
     ROADSHOW_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000008")  # declined, no hold
-    # Story 16.1's e2e items on Events.EQUIPMENT_DECISIONS, dated December 2027, all pending.
+    # Story 16.1's e2e items on Events.EQUIPMENT_DECISIONS, 8-9 December 2027, all pending.
     OFFSITE_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000025")  # accepted by the spec
     OFFSITE_LED_SCREEN = uuid.UUID("66666666-0000-0000-0000-000000000026")  # declined by the spec
     OFFSITE_CONF_PHONES = uuid.UUID("66666666-0000-0000-0000-000000000027")  # double-clicked
     OFFSITE_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000028")  # never decided
     OFFSITE_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000029")  # accepted, own page
     OFFSITE_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000030")  # declined, own page
+    OFFSITE_CAMERAS = uuid.UUID("66666666-0000-0000-0000-000000000031")  # decided from 2 pages
 
 
 class EquipmentHolds:
@@ -172,6 +173,7 @@ class EquipmentHolds:
     OFFSITE_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000021")
     OFFSITE_PROJECTORS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000022")
     OFFSITE_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000023")
+    OFFSITE_CAMERAS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000024")
 
 
 class EquipmentOutOfService:

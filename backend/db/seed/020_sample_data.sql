@@ -231,10 +231,11 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      'Year-End Partner Gala', 'Partner relations', 'A dinner and awards evening for the year''s top partners.', NULL, '2027-11-26 18:00+08', '2027-11-26 23:00+08', 180, 'PLANNING',
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-30 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..27: in planning and assigned to Chloe; dedicated to story 16.1's e2e spec
-    -- (tests/e2e/equipment-decisions.spec.ts), which accepts and declines its items. Dated
-    -- December 2027, clear of every other seeded event and of the periods backend tests build.
+    -- (tests/e2e/equipment-decisions.spec.ts), which accepts and declines its items. Runs over two
+    -- days, 8-9 December 2027, so the spec sees a period over more than one day named in full; clear
+    -- of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Leadership Offsite', 'Staff conference', 'A day of strategy sessions for senior leaders.', NULL, '2027-12-08 09:00+08', '2027-12-08 17:00+08', 40, 'PLANNING',
+     'Leadership Offsite', 'Staff conference', 'Two days of strategy sessions for senior leaders.', NULL, '2027-12-08 09:00+08', '2027-12-09 17:00+08', 40, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
@@ -355,11 +356,13 @@ INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity,
     ('66666666-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000026', '77777777-0000-0000-0000-000000000002', 3, NULL, 'DECLINED', 'The venue''s own microphones cover the gala.', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-05 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-10-06 11:00+08'),
     -- Story 16.1's e2e items on 3333..27: all pending, one per spec case, each a different type
     -- so no decision changes another's figures. The laptops are never decided. The projectors and
-    -- wireless microphones are decided from the request's own page.
+    -- wireless microphones are decided from the request's own page. The video camera is accepted
+    -- from a second page while the first still offers a decision.
     ('66666666-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000001', 2, 'Both breakout rooms', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
     ('66666666-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000002', 4, 'Panel questions', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
     ('66666666-0000-0000-0000-000000000025', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000005', 2, 'Breakout sessions', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
     ('66666666-0000-0000-0000-000000000026', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000007', 1, 'For the strategy wall', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
+    ('66666666-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000006', 1, 'Recording the closing panel', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
     ('66666666-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000008', 2, 'Remote board members dial in', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL),
     ('66666666-0000-0000-0000-000000000028', '33333333-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000004', 2, 'Facilitator slides', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
@@ -404,17 +407,19 @@ INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipmen
     ('eeeeeeee-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000026', '66666666-0000-0000-0000-000000000023', '77777777-0000-0000-0000-000000000007', 2,
      '2027-11-26 18:00+08', '2027-11-26 23:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-05 10:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000025', '77777777-0000-0000-0000-000000000005', 2,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000019', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000026', '77777777-0000-0000-0000-000000000007', 1,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000020', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000027', '77777777-0000-0000-0000-000000000008', 2,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000028', '77777777-0000-0000-0000-000000000004', 2,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000029', '77777777-0000-0000-0000-000000000001', 2,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
     ('eeeeeeee-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000030', '77777777-0000-0000-0000-000000000002', 4,
-     '2027-12-08 09:00+08', '2027-12-08 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.')
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.'),
+    ('eeeeeeee-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000027', '66666666-0000-0000-0000-000000000031', '77777777-0000-0000-0000-000000000006', 1,
+     '2027-12-08 09:00+08', '2027-12-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-05 15:00+08', 'Held for the coordinator''s equipment request.')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
     equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
