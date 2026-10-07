@@ -29,6 +29,7 @@ from app.venues.schemas import (
     VenueReferenceData,
     VenueSearchQuery,
     VenueSearchResult,
+    VenueSuitabilityOut,
     VenueSummary,
     VenueUnavailableWindowOut,
     VenueUpdate,
@@ -42,6 +43,7 @@ uploads_router = APIRouter(prefix="/uploads/venues", tags=["uploads"])
 CanRead = Depends(require_permission(Permission.VENUES_READ))
 CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
 CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
+CanRequestBookings = Depends(require_permission(Permission.BOOKINGS_REQUEST))
 DbSession = Annotated[Session, Depends(get_db)]
 
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
@@ -97,6 +99,10 @@ def search_venues(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.UnknownReferenceCode as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.EventToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.EventNotJudgeable as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
 @router.get("/{venue_id}", response_model=VenueOut, dependencies=[CanRead])
@@ -126,6 +132,33 @@ def get_venue_calendar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.InvalidDateRange as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+
+@router.get("/{venue_id}/suitability", response_model=VenueSuitabilityOut)
+def get_venue_suitability(
+    venue_id: uuid.UUID,
+    db: DbSession,
+    event: Annotated[uuid.UUID, Query()],
+    actor: Annotated[CurrentUser, CanRequestBookings],
+) -> VenueSuitabilityOut:
+    """Story 11.1 AC2/AC3: the request step's read of whether one venue suits ``event``, with
+    every criterion it fails - the same check the catalogue search and ``POST /bookings`` make.
+    AC6: only the event's assigned coordinator (403 for anyone else). The venue is the resource
+    (404); an event that does not exist or has no number of people yet is refused as the search
+    refuses it (422)."""
+    try:
+        judged = service.get_venue_suitability(db, venue_id, event_id=event, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.EventToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.NotEventCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventNotJudgeable as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return VenueSuitabilityOut.from_suitability(
+        judged.suitability, requirement_id=judged.requirement_id
+    )
 
 
 @router.post("", response_model=VenueOut, status_code=status.HTTP_201_CREATED)

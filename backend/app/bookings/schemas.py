@@ -41,16 +41,36 @@ class BookingReferenceData(BaseModel):
     events: list[BookableEvent]
 
 
+# Story 11.1 AC2: the longest justification for requesting an unsuitable venue, as long as a
+# clarification message. Keep in step by hand with SUITABILITY_OVERRIDE_REASON_MAX_LENGTH in
+# frontend/src/api/bookings.ts, which the request step's textarea uses.
+SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
+
+
 class BookingRequestIn(BaseModel):
     """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
 
-    There is deliberately nothing else to send. AC2 requires the request to carry *the event's*
-    schedule, attendance, layout and required facilities, so the service copies those from the
-    event row; a client cannot book a period or an attendance the event was not approved for.
+    AC2 requires the request to carry *the event's* schedule, attendance, layout and required
+    facilities, so the service copies those from the event row; a client cannot book a period or
+    an attendance the event was not approved for.
+
+    The one other thing a client sends is story 11.1's ``suitability_override_reason``: why it is
+    requesting a venue that does not suit the event. Trimmed, and blank counts as not given; the
+    service decides whether one is needed.
     """
 
     event_id: uuid.UUID
     venue_id: uuid.UUID
+    suitability_override_reason: str | None = Field(
+        default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
+    )
+
+    @field_validator("suitability_override_reason", mode="before")
+    @classmethod
+    def _blank_reason_is_none(cls, value: object) -> object:
+        """Story 11.1 AC7: an empty or whitespace-only justification is no justification."""
+        stripped = _strip(value)
+        return None if stripped == "" else stripped
 
 
 class BookingRejection(BaseModel):
@@ -196,6 +216,9 @@ class BookingOutcome(BaseModel):
     status: str
     decided_at: datetime | None
     decision_reason: str | None
+    # Story 11.1 AC6: why the coordinator requested a venue that did not suit, for the assigned
+    # coordinator on the event page. None when the venue suited.
+    suitability_override_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -211,4 +234,5 @@ class BookingOutcome(BaseModel):
             status=booking.status,
             decided_at=booking.decided_at,
             decision_reason=booking.decision_reason,
+            suitability_override_reason=booking.suitability_override_reason,
         )

@@ -19,6 +19,10 @@ AC7  If the event's requirements change, indicators are recalculated on the next
 
 Until story 8.4 lets the coordinator choose one, the requirement judged is the event's first.
 
+``GET /venues/{id}/suitability?event=`` is the request step's read of one venue (AC2, AC3),
+for the event's assigned coordinator only (AC6). It and the search share one check, so they
+cannot disagree. An event with no expected attendance yet (a draft) cannot be judged, in either.
+
 AC8 is not covered here. The check judges one requirement at a time, which AC8 builds on, but
 each booking request carrying its own result and justification waits for story 12.5.
 
@@ -771,3 +775,166 @@ def test_changed_requirements_change_the_next_searchs_indicator(coordinator_clie
 
     assert before["is_suitable"] is True
     assert after["failures"] == [_capacity_failure(required=120, venue_value=80)]
+
+
+def _draft_without_attendance(db: Session) -> Event:
+    """A draft assigned to Chloe with no expected attendance and no venue requirement: there is no
+    number of people to judge a venue against. Drafts are not normally assigned, but nothing in
+    the schema stops it, and indicators are shown whatever the event's status."""
+    return make_event(
+        db,
+        status=EventStatus.DRAFT,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        expected_attendance=None,
+    )
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_an_event_with_no_attendance_yet_cannot_be_judged_by_the_search(
+    coordinator_client, db: Session
+):
+    """Refused whether or not any venue matches: the event is checked before any venue is
+    judged."""
+    tag = _tag()
+    event = _draft_without_attendance(db)
+    make_venue(db, name=tag, capacity=50)
+
+    matching = coordinator_client.get(SEARCH_PATH, params={"search": tag, "event": str(event.id)})
+    matching_none = coordinator_client.get(
+        SEARCH_PATH, params={"search": f"{tag} no such venue", "event": str(event.id)}
+    )
+
+    for response in (matching, matching_none):
+        assert response.status_code == 422
+        assert response.json()["detail"] == venue_service.EVENT_NOT_JUDGEABLE_MESSAGE
+
+
+# --- GET /venues/{id}/suitability?event= : the request step's read (AC2, AC3, AC6) -------------
+def _suitability_path(venue_id: uuid.UUID) -> str:
+    return f"/venues/{venue_id}/suitability"
+
+
+@pytest.mark.story("11.1", ac=2)
+@pytest.mark.story("11.1", ac=3)
+def test_the_request_step_reads_whether_one_venue_suits_the_event(coordinator_client, db: Session):
+    event = _assigned_event(db, expected_attendance=120)
+    requirement_id = make_venue_requirement(db, event.id, name="Plenary hall", capacity=120)
+    small = make_venue(db, capacity=80)
+    large = make_venue(db, capacity=200)
+
+    small_read = coordinator_client.get(
+        _suitability_path(small.id), params={"event": str(event.id)}
+    )
+    large_read = coordinator_client.get(
+        _suitability_path(large.id), params={"event": str(event.id)}
+    )
+
+    assert small_read.status_code == 200, small_read.text
+    assert small_read.json() == {
+        "requirement_id": str(requirement_id),
+        "requirement_name": "Plenary hall",
+        "is_suitable": False,
+        "failures": [_capacity_failure(required=120, venue_value=80)],
+    }
+    assert large_read.json()["is_suitable"] is True
+    assert large_read.json()["failures"] == []
+
+
+@pytest.mark.story("11.1", ac=6)
+@pytest.mark.parametrize(
+    "user",
+    [Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ORGANISER],
+    ids=["venue-staff", "tech-support", "organiser"],
+)
+def test_roles_that_cannot_request_a_venue_cannot_read_its_suitability(login_as, db: Session, user):
+    """Even named as the event's coordinator, a role without bookings:request is refused: the
+    permission is checked, not only the assignment."""
+    event = _assigned_event(db, coordinator=user, expected_attendance=50)
+    venue = make_venue(db)
+
+    response = login_as(user).get(_suitability_path(venue.id), params={"event": str(event.id)})
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("11.1", ac=6)
+def test_a_coordinator_not_assigned_to_the_event_cannot_read_its_suitability(login_as, db: Session):
+    event = _assigned_event(db, coordinator=Users.COORDINATOR, expected_attendance=50)
+    venue = make_venue(db)
+
+    response = login_as(Users.COORDINATOR_2).get(
+        _suitability_path(venue.id), params={"event": str(event.id)}
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == venue_service.SUITABILITY_NOT_ASSIGNED_MESSAGE
+
+
+@pytest.mark.story("11.1", ac=6)
+def test_signed_out_visitors_cannot_read_a_venues_suitability(client, db: Session):
+    event = _assigned_event(db, expected_attendance=50)
+    venue = make_venue(db)
+
+    response = client.get(_suitability_path(venue.id), params={"event": str(event.id)})
+
+    assert response.status_code == 401
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_an_unknown_venue_is_not_found_and_an_unknown_event_is_refused(
+    coordinator_client, db: Session
+):
+    """The venue is the resource read (404 when it does not exist); the event is a query value,
+    refused as the search refuses it (422)."""
+    event = _assigned_event(db, expected_attendance=50)
+    venue = make_venue(db)
+
+    unknown_venue = coordinator_client.get(
+        _suitability_path(uuid.uuid4()), params={"event": str(event.id)}
+    )
+    unknown_event = coordinator_client.get(
+        _suitability_path(venue.id), params={"event": str(uuid.uuid4())}
+    )
+
+    assert unknown_venue.status_code == 404
+    assert unknown_event.status_code == 422
+    assert unknown_event.json()["detail"] == venue_service.SEARCH_EVENT_NOT_FOUND_MESSAGE
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_an_event_with_no_attendance_yet_cannot_be_judged_by_the_read(
+    coordinator_client, db: Session
+):
+    event = _draft_without_attendance(db)
+    venue = make_venue(db, capacity=50)
+
+    response = coordinator_client.get(_suitability_path(venue.id), params={"event": str(event.id)})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == venue_service.EVENT_NOT_JUDGEABLE_MESSAGE
+
+
+@pytest.mark.story("11.1", ac=3)
+def test_the_read_and_the_search_judge_a_venue_the_same_way(coordinator_client, db: Session):
+    """The same pair through both: the request step and the catalogue give one answer."""
+    tag = _tag()
+    event = _assigned_event(db, expected_attendance=250)
+    make_venue_requirement(
+        db,
+        event.id,
+        capacity=250,
+        layout_code="BANQUET",
+        facilities=(("PROJECTOR", 3, None),),
+    )
+    venue = make_venue(
+        db, name=tag, capacity=400, layouts={"BANQUET": 240}, facilities=("PROJECTOR",)
+    )
+    venue.facilities[0].quantity = 2
+    db.flush()
+
+    read = coordinator_client.get(_suitability_path(venue.id), params={"event": str(event.id)})
+    searched = _hits(coordinator_client, search=tag, event=str(event.id))[tag]["suitability"]
+
+    assert read.status_code == 200, read.text
+    assert read.json() == searched
+    assert read.json()["is_suitable"] is False
