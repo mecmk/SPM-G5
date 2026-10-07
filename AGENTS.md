@@ -158,7 +158,7 @@ frontend/
   src/
     api/                # one <feature>.ts per backend feature area, plus the shared client
     auth/               # the sign-in page, the session, route guards, permission codes
-    bookings/, events/, venues/   # the pages of each feature area
+    bookings/, equipment/, events/, venues/   # the pages of each feature area
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the notification centre

@@ -95,6 +95,13 @@ class Events:
     PARTNER_BRIEFING = _e(18)  # organiser 2, coordinator 1, dedicated to 12.1's e2e request
     EQUIPMENT_WORKSHOP = _e(19)  # organiser 1, coordinator 1, dedicated to 15.1's e2e flow
     EQUIPMENT_SHOWCASE = _e(20)  # organiser 1, coordinator 1, dedicated to 15.1's e2e picker
+    EQUIPMENT_ROADSHOW = _e(21)  # organiser 2, coordinator 1, dedicated to 15.2's e2e queue
+    # More of 15.2's e2e queue, all organiser 2 and PLANNING, dated July-November 2027.
+    FINTECH_BREAKFAST = _e(22)  # coordinator 2; overlaps CUSTOMER_FORUM on 7 July 2027
+    CUSTOMER_FORUM = _e(23)  # coordinator 1
+    SALES_KICKOFF = _e(24)  # coordinator 2; video cameras short by one
+    RECRUITMENT_FAIR = _e(25)  # coordinator 1
+    PARTNER_GALA = _e(26)  # coordinator 2; accepted and declined items only
 
 
 class Bookings:
@@ -140,12 +147,19 @@ class EquipmentItems:
 
     WORKSHOP_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000004")  # not yet sent
     SHOWCASE_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000005")  # pending
+    # Story 15.2's e2e items on Events.EQUIPMENT_ROADSHOW, dated June 2027: one per tab.
+    ROADSHOW_LAPEL_MICS = uuid.UUID("66666666-0000-0000-0000-000000000006")  # pending, short by 4
+    ROADSHOW_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000007")  # accepted
+    ROADSHOW_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000008")  # declined, no hold
 
 
 class EquipmentHolds:
     WORKSHOP_PROJECTORS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
     SHOWCASE_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
+    ROADSHOW_LAPEL_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000003")
+    ROADSHOW_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000004")
 
 
 class EquipmentOutOfService:
     SHOWCASE_CAMERAS = uuid.UUID("dddddddd-0000-0000-0000-000000000001")  # every video camera
+    ROADSHOW_LAPEL_MICS = uuid.UUID("dddddddd-0000-0000-0000-000000000002")  # 4 lapel microphones

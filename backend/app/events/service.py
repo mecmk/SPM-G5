@@ -728,7 +728,9 @@ def available_by_type(
     Overlap is half-open, so a hold ending exactly as the period starts does not count. Story 15.1
     (``app/equipment/service.py``) uses the same calculation for the coordinator's items.
     Story 7.2 AC7: ``exclude_event_id`` leaves that event's own holds out, so an event being
-    corrected is not counted against itself."""
+    corrected is not counted against itself. Story 15.2 AC2 uses it the same way: the holds are
+    left out before the figure is floored at zero, so units lost after the event was held show as
+    a shortfall against it."""
     held_query = (
         select(
             EquipmentReservation.equipment_type_id,
