@@ -115,6 +115,22 @@ export interface RequiredFacility {
   notes: string | null
 }
 
+/**
+ * Mirrors `VenueRequirementOut`: one venue the event needs (story 2.7 AC1/AC2/AC4). Any field but
+ * the id may be null while the request is a draft (AC8).
+ */
+export interface VenueRequirement {
+  id: string
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  layout_name: string | null
+  facilities: RequiredFacility[]
+  notes: string | null
+}
+
 /** Mirrors `AccessibilityNeedOut`. */
 export interface AccessibilityNeed {
   code: string
@@ -122,14 +138,27 @@ export interface AccessibilityNeed {
   notes: string | null
 }
 
-/** Mirrors `EquipmentLineOut`: one equipment item on a request. */
+/**
+ * Values of `EquipmentRequestStatus` (backend/app/events/models.py, story 15.1). REQUESTED is
+ * recorded but not yet sent to Technical Support; ACCEPTED and DECLINED are Technical Support's
+ * decisions (story 16.1); UNAVAILABLE is an item the event's new dates can no longer cover (AC8).
+ */
+export type EquipmentItemStatus =
+  'REQUESTED' | 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'UNAVAILABLE' | 'CANCELLED'
+
+/**
+ * Mirrors `EquipmentLineOut`: one equipment item on a request. Story 15.1 AC1: `submitted_at` and
+ * `submitted_by_name` say when, and by which coordinator, it was sent - both null until it is.
+ */
 export interface EquipmentLine {
   id: string
   equipment_type_code: string
   equipment_type_name: string
   quantity: number
   technical_notes: string | null
-  status: string
+  status: EquipmentItemStatus
+  submitted_at: string | null
+  submitted_by_name: string | null
 }
 
 /**
@@ -161,10 +190,8 @@ export interface EventDetail {
   /** Story 2.6 AC12/AC15: rides alongside the name, restricted the same way. */
   assigned_coordinator_email: string | null
   submitted_at: string | null
-  required_layout_code: string | null
-  required_layout_name: string | null
-  required_facilities: RequiredFacility[]
-  venue_requirement_notes: string | null
+  /** Story 2.7: in the order the organiser listed them; empty when none, or not yet specified. */
+  venue_requirements: VenueRequirement[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: AccessibilityNeed[]
@@ -192,6 +219,21 @@ export interface EquipmentInput {
 }
 
 /**
+ * Mirrors `VenueRequirementIn` (story 2.7). An `id` keeps and edits an existing requirement, so a
+ * booking can keep pointing at it; without one it is new.
+ */
+export interface VenueRequirementInput {
+  id: string | null
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  facilities: { code: string; quantity: number | null; notes: string | null }[]
+  notes: string | null
+}
+
+/**
  * Mirrors `EventCreate` / `EventUpdate`. The form always sends every field, so on an edit each
  * list replaces the stored one and a null clears an optional field.
  */
@@ -205,9 +247,7 @@ export interface EventInput {
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
-  required_layout_code: string | null
-  venue_requirement_notes: string | null
-  required_facilities: { code: string; quantity: number | null; notes: string | null }[]
+  venue_requirements: VenueRequirementInput[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: { code: string; notes: string | null }[]
@@ -275,6 +315,31 @@ export function requestClarification(
     notify: {
       title: 'Clarification requested',
       message: `A clarification request was sent to the organiser of "${eventName}".`,
+      importance: 'important',
+    },
+  })
+}
+
+const EVENT_RESPONSE_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_NOT_AWAITING_RESPONSE',
+} as const
+
+/** Story 4.3 AC1-AC3: the owning organiser answers a clarification request while the event is
+ *  CLARIFICATION_REQUESTED. The status does not change, so the organiser may answer more than
+ *  once (AC6). */
+export function respondToClarification(
+  eventId: string,
+  message: string,
+  eventName: string,
+): Promise<Clarification> {
+  return api<Clarification>(`/events/${eventId}/clarifications/responses`, {
+    method: 'POST',
+    body: { message },
+    errorCodes: EVENT_RESPONSE_ERROR_CODES,
+    notify: {
+      title: 'Response sent',
+      message: `Your response on "${eventName}" was sent to the coordinator.`,
       importance: 'important',
     },
   })
@@ -413,9 +478,9 @@ export interface EventRoutineInput {
 }
 
 /**
- * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its routine information
- * directly. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event is completed,
- * cancelled or rejected.
+ * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its internal notes directly,
+ * from the coordinator's edit page. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event
+ * is completed, cancelled or rejected.
  */
 export function updateEventRoutineInformation(
   eventId: string,
@@ -425,7 +490,78 @@ export function updateEventRoutineInformation(
     method: 'PATCH',
     body: input,
     errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_ROUTINE_EDIT_CLOSED' },
-    notify: { title: 'Event updated', message: 'The routine event information was saved.' },
+    notify: { title: 'Internal notes saved', message: 'The internal notes were saved.' },
+  })
+}
+
+/**
+ * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
+ * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.
+ */
+export interface EventReviewCorrectionInput extends EventInput {
+  expected_updated_at: string
+}
+
+/**
+ * Story 7.2 AC4-AC9: the coordinator assigned to the event corrects the organiser's request while
+ * it is under review or awaiting clarification. Every 409 - approved meanwhile (AC6) or changed
+ * since it was opened (AC9) - means the copy on screen is out of date, so it is one code:
+ * EVENT_CORRECTION_CONFLICT, which the page answers with a reload. Equipment no longer free for
+ * the dates (AC7) is a 422, as in 2.1.
+ */
+export function correctEventUnderReview(
+  eventId: string,
+  input: EventInput,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body: EventReviewCorrectionInput = { ...input, expected_updated_at: expectedUpdatedAt }
+  return api<EventDetail>(`/events/${eventId}/review-details`, {
+    method: 'PATCH',
+    body,
+    errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_CORRECTION_CONFLICT' },
+    notify: { title: 'Event details corrected', message: `"${input.name}" was updated.` },
+  })
+}
+
+const CORRECTION_PICTURE_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_CORRECTION_CONFLICT',
+  413: 'EVENT_PICTURE_TOO_LARGE',
+} as const
+
+/**
+ * Story 7.2 AC4: the coordinator assigned to the event replaces its cover picture while it is
+ * under review or awaiting clarification. `expectedUpdatedAt` is AC9's token, as for
+ * `correctEventUnderReview`, and a 409 means the copy on screen is out of date.
+ */
+export function uploadCoverImageUnderReview(
+  eventId: string,
+  file: File,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body = new FormData()
+  body.append('file', file)
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'PUT',
+    body,
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture saved', message: 'The cover picture was saved.' },
+  })
+}
+
+/** Story 7.2 AC4: the coordinator assigned to the event takes its cover picture off while it is
+ *  under review or awaiting clarification. The same token and refusals as
+ *  `uploadCoverImageUnderReview`. */
+export function removeCoverImageUnderReview(
+  eventId: string,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'DELETE',
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture removed', message: 'The cover picture was removed.' },
   })
 }
 
@@ -435,11 +571,17 @@ export interface EquipmentAvailability {
   available: number
 }
 
-/** Story 2.1 AC6: how many of each equipment type are free for the proposed dates. */
+/**
+ * Story 2.1 AC6: how many of each equipment type are free for the proposed dates. Story 7.2 AC7:
+ * `excludeEventId` leaves out that event's own holds, so a request being corrected is not counted
+ * against itself.
+ */
 export function fetchEquipmentAvailability(
   startsAt: string,
   endsAt: string,
+  excludeEventId: string | null = null,
 ): Promise<EquipmentAvailability[]> {
   const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  if (excludeEventId !== null) params.set('exclude_event_id', excludeEventId)
   return api<EquipmentAvailability[]>(`/events/equipment-availability?${params.toString()}`)
 }

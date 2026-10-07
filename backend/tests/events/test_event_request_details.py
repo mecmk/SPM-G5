@@ -74,6 +74,12 @@ def _equipment(code: str, quantity: int = 1, **extra) -> dict:
     return {"equipment_type_code": code, "quantity": quantity, **extra}
 
 
+def _main_venue(**fields) -> dict:
+    """Story 2.7 AC1 moved the venue requirements of 2.1 AC4 into a list: one requirement, as a
+    request recorded before 2.7 keeps them (2.7 AC7)."""
+    return {"name": "Main venue", "capacity": 40, **fields}
+
+
 def _ids(items: list[dict]) -> dict[str, str]:
     return {item["equipment_type_code"]: item["id"] for item in items}
 
@@ -567,7 +573,9 @@ def test_equipment_quantity_accepts_the_boundary_values(organiser_client, quanti
 @pytest.mark.parametrize("quantity", NOT_WHOLE_POSITIVE)
 def test_facility_quantity_rejects_anything_but_a_positive_whole_number(organiser_client, quantity):
     payload = event_request_payload(
-        required_facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}]
+        venue_requirements=[
+            _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}])
+        ]
     )
 
     assert organiser_client.post("/events", json=payload).status_code == 422
@@ -577,10 +585,13 @@ def test_facility_quantity_rejects_anything_but_a_positive_whole_number(organise
 @pytest.mark.parametrize("quantity", [1, INT32_MAX], ids=["smallest", "largest"])
 def test_facility_quantity_accepts_the_boundary_values(organiser_client, quantity):
     created = create_event_request(
-        organiser_client, required_facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}]
+        organiser_client,
+        venue_requirements=[
+            _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}])
+        ],
     )
 
-    assert created["required_facilities"][0]["quantity"] == quantity
+    assert created["venue_requirements"][0]["facilities"][0]["quantity"] == quantity
 
 
 @pytest.mark.story("2.1", ac=3)
@@ -589,7 +600,11 @@ def test_an_edit_also_rejects_a_bad_facility_quantity(organiser_client):
 
     response = organiser_client.patch(
         f"/events/{created['id']}",
-        json={"required_facilities": [{"code": "BREAKOUT_ROOMS", "quantity": 0}]},
+        json={
+            "venue_requirements": [
+                _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": 0}])
+            ]
+        },
     )
 
     assert response.status_code == 422
@@ -600,23 +615,28 @@ def test_an_edit_also_rejects_a_bad_facility_quantity(organiser_client):
 def test_venue_requirements_are_recorded_with_their_names(organiser_client):
     created = create_event_request(
         organiser_client,
-        required_layout_code="THEATRE",
-        venue_requirement_notes="Close to the lifts",
         expected_attendance=120,
-        required_facilities=[
-            {"code": "PROJECTOR", "notes": "HDMI input"},
-            {"code": "BREAKOUT_ROOMS", "quantity": 3},
-            {"code": "WIFI"},
+        venue_requirements=[
+            _main_venue(
+                layout_code="THEATRE",
+                notes="Close to the lifts",
+                facilities=[
+                    {"code": "PROJECTOR", "notes": "HDMI input"},
+                    {"code": "BREAKOUT_ROOMS", "quantity": 3},
+                    {"code": "WIFI"},
+                ],
+            )
         ],
     )
 
-    assert created["required_layout_code"] == "THEATRE"
-    assert created["required_layout_name"] == "Theatre"
-    assert created["venue_requirement_notes"] == "Close to the lifts"
+    (requirement,) = created["venue_requirements"]
+    assert requirement["layout_code"] == "THEATRE"
+    assert requirement["layout_name"] == "Theatre"
+    assert requirement["notes"] == "Close to the lifts"
     assert created["venue_none_required"] is False
     assert created["expected_attendance"] == 120
     facilities = {
-        f["code"]: (f["name"], f["quantity"], f["notes"]) for f in created["required_facilities"]
+        f["code"]: (f["name"], f["quantity"], f["notes"]) for f in requirement["facilities"]
     }
     assert facilities == {
         "PROJECTOR": ("Projector & screen", None, "HDMI input"),
@@ -630,9 +650,7 @@ def test_leaving_venue_requirements_empty_is_stored_as_not_yet_specified(organis
     created = create_event_request(organiser_client)
 
     assert created["venue_none_required"] is False
-    assert created["required_layout_code"] is None and created["required_layout_name"] is None
-    assert created["required_facilities"] == []
-    assert created["venue_requirement_notes"] is None
+    assert created["venue_requirements"] == []
 
 
 @pytest.mark.story("2.1", ac=4)
@@ -641,9 +659,7 @@ def test_no_venue_requirements_is_stored_distinguishably_from_left_empty(organis
     none_required = create_event_request(organiser_client, venue_none_required=True)
 
     assert none_required["venue_none_required"] is True
-    assert none_required["required_layout_code"] is None
-    assert none_required["required_facilities"] == []
-    assert none_required["venue_requirement_notes"] is None
+    assert none_required["venue_requirements"] == []
     assert none_required["venue_none_required"] != unspecified["venue_none_required"]
     assert organiser_client.get(f"/events/{none_required['id']}").json() == none_required
 
@@ -652,14 +668,16 @@ def test_no_venue_requirements_is_stored_distinguishably_from_left_empty(organis
 @pytest.mark.parametrize(
     "extra",
     [
-        {"required_layout_code": "THEATRE"},
-        {"required_facilities": [{"code": "WIFI"}]},
-        {"venue_requirement_notes": "Near the lifts"},
+        {"layout_code": "THEATRE"},
+        {"facilities": [{"code": "WIFI"}]},
+        {"notes": "Near the lifts"},
     ],
     ids=["with-layout", "with-facility", "with-notes"],
 )
 def test_no_venue_requirements_contradicts_a_stated_requirement(organiser_client, extra):
-    payload = event_request_payload(venue_none_required=True, **extra)
+    payload = event_request_payload(
+        venue_none_required=True, venue_requirements=[_main_venue(**extra)]
+    )
 
     response = organiser_client.post("/events", json=payload)
 
@@ -672,11 +690,15 @@ def test_an_edit_is_checked_against_the_stored_venue_none_required(organiser_cli
     created = create_event_request(organiser_client, venue_none_required=True)
 
     contradiction = organiser_client.patch(
-        f"/events/{created['id']}", json={"required_layout_code": "THEATRE"}
+        f"/events/{created['id']}",
+        json={"venue_requirements": [_main_venue(layout_code="THEATRE")]},
     )
     consistent = organiser_client.patch(
         f"/events/{created['id']}",
-        json={"venue_none_required": False, "required_layout_code": "THEATRE"},
+        json={
+            "venue_none_required": False,
+            "venue_requirements": [_main_venue(layout_code="THEATRE")],
+        },
     )
 
     assert contradiction.status_code == 422
@@ -694,7 +716,7 @@ def test_venue_requirements_can_be_returned_to_not_yet_specified(organiser_clien
 
     assert response.status_code == 200, response.text
     assert response.json()["venue_none_required"] is False
-    assert response.json()["required_facilities"] == []
+    assert response.json()["venue_requirements"] == []
 
 
 @pytest.mark.story("2.1", ac=4)
@@ -717,14 +739,16 @@ def test_a_preferred_location_is_no_longer_accepted(organiser_client, via):
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"required_layout_code": "NO_SUCH_LAYOUT"},
-        {"required_facilities": [{"code": "NO_SUCH_FACILITY"}]},
-        {"required_facilities": [{"code": "WIFI"}, {"code": "WIFI"}]},
+        {"layout_code": "NO_SUCH_LAYOUT"},
+        {"facilities": [{"code": "NO_SUCH_FACILITY"}]},
+        {"facilities": [{"code": "WIFI"}, {"code": "WIFI"}]},
     ],
     ids=["unknown-layout", "unknown-facility", "duplicate-facility"],
 )
 def test_venue_requirements_must_name_real_options(organiser_client, overrides):
-    response = organiser_client.post("/events", json=event_request_payload(**overrides))
+    response = organiser_client.post(
+        "/events", json=event_request_payload(venue_requirements=[_main_venue(**overrides)])
+    )
 
     assert response.status_code == 422
 
@@ -744,8 +768,13 @@ def test_reference_data_lists_the_pick_lists_for_the_form(organiser_client):
 
 
 @pytest.mark.story("2.1", ac=4)
-@pytest.mark.parametrize("user", NON_ORGANISERS)
-def test_reference_data_is_for_organisers_only(login_as, user):
+@pytest.mark.parametrize(
+    "user",
+    # Story 7.2 AC4: the assigned coordinator corrects a request in the same form, so coordinators
+    # read the pick-lists too (tests/events/test_correct_event_under_review.py).
+    [param for param in NON_ORGANISERS if param.id != "coordinator"],
+)
+def test_reference_data_is_for_the_request_form_only(login_as, user):
     assert login_as(user).get("/events/reference-data").status_code == 403
 
 
@@ -961,7 +990,7 @@ def test_recorded_details_can_be_edited(organiser_client):
             "starts_at": start.isoformat(),
             "ends_at": (start + timedelta(hours=3)).isoformat(),
             "expected_attendance": 75,
-            "required_layout_code": "BOARDROOM",
+            "venue_requirements": [_main_venue(layout_code="BOARDROOM")],
         },
     )
 
@@ -973,7 +1002,7 @@ def test_recorded_details_can_be_edited(organiser_client):
         "New description",
     )
     assert body["expected_attendance"] == 75
-    assert body["required_layout_name"] == "Boardroom"
+    assert body["venue_requirements"][0]["layout_name"] == "Boardroom"
     assert datetime.fromisoformat(body["starts_at"]) == start
     assert organiser_client.get(f"/events/{created['id']}").json() == body
 
@@ -981,18 +1010,24 @@ def test_recorded_details_can_be_edited(organiser_client):
 @pytest.mark.story("2.1", ac=7)
 def test_an_optional_detail_can_be_removed_with_null(organiser_client):
     created = create_event_request(
-        organiser_client, venue_requirement_notes="Near the lifts", required_layout_code="THEATRE"
+        organiser_client,
+        venue_requirements=[_main_venue(notes="Near the lifts", layout_code="THEATRE")],
     )
+    requirement_id = created["venue_requirements"][0]["id"]
 
     response = organiser_client.patch(
         f"/events/{created['id']}",
-        json={"description": None, "venue_requirement_notes": None, "required_layout_code": None},
+        json={
+            "description": None,
+            "venue_requirements": [_main_venue(id=requirement_id, notes=None, layout_code=None)],
+        },
     )
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["description"] is None and body["venue_requirement_notes"] is None
-    assert body["required_layout_code"] is None and body["required_layout_name"] is None
+    (requirement,) = body["venue_requirements"]
+    assert body["description"] is None and requirement["notes"] is None
+    assert requirement["layout_code"] is None and requirement["layout_name"] is None
     assert body["purpose"] == created["purpose"]  # fields not sent are untouched
 
 
@@ -1058,16 +1093,20 @@ def test_an_equipment_line_of_another_request_cannot_be_claimed(organiser_client
 def test_facilities_and_accessibility_needs_can_be_replaced_or_cleared(organiser_client):
     created = create_event_request(
         organiser_client,
-        required_facilities=[{"code": "PROJECTOR"}, {"code": "WIFI"}],
+        venue_requirements=[_main_venue(facilities=[{"code": "PROJECTOR"}, {"code": "WIFI"}])],
         accessibility_needs=[{"code": "HEARING_LOOP"}],
     )
+    requirement_id = created["venue_requirements"][0]["id"]
 
     replaced = organiser_client.patch(
         f"/events/{created['id']}",
-        json={"required_facilities": [{"code": "STAGE"}], "accessibility_needs": []},
+        json={
+            "venue_requirements": [_main_venue(id=requirement_id, facilities=[{"code": "STAGE"}])],
+            "accessibility_needs": [],
+        },
     ).json()
 
-    assert [f["code"] for f in replaced["required_facilities"]] == ["STAGE"]
+    assert [f["code"] for f in replaced["venue_requirements"][0]["facilities"]] == ["STAGE"]
     assert replaced["accessibility_needs"] == []
 
 
@@ -1075,14 +1114,14 @@ def test_facilities_and_accessibility_needs_can_be_replaced_or_cleared(organiser
 def test_a_list_left_out_of_an_edit_is_untouched(organiser_client):
     created = create_event_request(
         organiser_client,
-        required_facilities=[{"code": "WIFI"}],
+        venue_requirements=[_main_venue(facilities=[{"code": "WIFI"}])],
         accessibility_needs=[{"code": "HEARING_LOOP"}],
         equipment=[_equipment("LAPTOP", 3)],
     )
 
     body = organiser_client.patch(f"/events/{created['id']}", json={"name": "Renamed"}).json()
 
-    assert body["required_facilities"] == created["required_facilities"]
+    assert body["venue_requirements"] == created["venue_requirements"]
     assert body["accessibility_needs"] == created["accessibility_needs"]
     assert body["equipment"] == created["equipment"]
 
@@ -1105,7 +1144,7 @@ def test_a_submitted_request_can_no_longer_be_edited(organiser_client):
 
     for change in (
         {"name": "Too late"},
-        {"required_facilities": [{"code": "WIFI"}]},
+        {"venue_requirements": [_main_venue(facilities=[{"code": "WIFI"}])]},
         {"equipment": []},
     ):
         response = organiser_client.patch(f"/events/{created['id']}", json=change)
@@ -1152,11 +1191,15 @@ def _full_request(client) -> dict:
         contact_name="Priya Nair",
         contact_email="priya.nair@example.com",
         contact_phone="+65 9123 4567",
-        required_layout_code="THEATRE",
-        venue_requirement_notes="Near the loading bay",
-        required_facilities=[
-            {"code": "STAGE", "notes": "Keynote riser"},
-            {"code": "BREAKOUT_ROOMS", "quantity": 3},
+        venue_requirements=[
+            _main_venue(
+                layout_code="THEATRE",
+                notes="Near the loading bay",
+                facilities=[
+                    {"code": "STAGE", "notes": "Keynote riser"},
+                    {"code": "BREAKOUT_ROOMS", "quantity": 3},
+                ],
+            )
         ],
         accessibility_needs=[{"code": "WHEELCHAIR_ACCESS", "notes": "Two users"}],
         accessibility_notes="Quiet room for one attendee",
@@ -1183,10 +1226,11 @@ def test_the_coordinator_sees_every_detail_requirement_and_equipment_item(login_
     assert datetime.fromisoformat(body["ends_at"]) == datetime.fromisoformat(created["ends_at"])
     assert body["status"] == "UNDER_REVIEW"
     assert body["organiser_name"] == Users.ORGANISER.full_name
-    assert body["required_layout_name"] == "Theatre"
-    assert body["venue_requirement_notes"] == "Near the loading bay"
+    (requirement,) = body["venue_requirements"]
+    assert requirement["layout_name"] == "Theatre"
+    assert requirement["notes"] == "Near the loading bay"
     assert body["venue_none_required"] is False
-    assert {(f["name"], f["quantity"], f["notes"]) for f in body["required_facilities"]} == {
+    assert {(f["name"], f["quantity"], f["notes"]) for f in requirement["facilities"]} == {
         ("Stage", None, "Keynote riser"),
         ("Breakout rooms", 3, None),
     }

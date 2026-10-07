@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -23,6 +23,7 @@ from app.events.models import (
     EquipmentUnavailabilityPeriod,
     Event,
     EventClarification,
+    EventEquipmentRequest,
     EventStatus,
 )
 from app.venues.models import (
@@ -77,6 +78,58 @@ def make_event(db: Session, *, status: str = EventStatus.UNDER_REVIEW, **overrid
     db.add(event)
     db.flush()
     return event
+
+
+def make_venue_requirement(
+    db: Session,
+    event_id: uuid.UUID,
+    *,
+    position: int = 0,
+    name: str | None = "Main venue",
+    capacity: int | None = 20,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+    layout_code: str | None = None,
+    notes: str | None = None,
+    facilities: tuple[tuple[str, int | None, str | None], ...] = (),
+) -> uuid.UUID:
+    """A venue requirement on an event (story 2.7), with its facilities as (code, quantity, notes).
+    Written in SQL rather than through the ORM so a test can place one on an event in any status,
+    the way the seed and migration 012 do. Returns the requirement's id."""
+    requirement_id = db.execute(
+        text(
+            "INSERT INTO venue_requirements"
+            " (event_id, position, name, capacity, starts_at, ends_at, layout_code, notes)"
+            " VALUES (:event_id, :position, :name, :capacity, :starts_at, :ends_at,"
+            " :layout_code, :notes) RETURNING id"
+        ),
+        {
+            "event_id": event_id,
+            "position": position,
+            "name": name,
+            "capacity": capacity,
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+            "layout_code": layout_code,
+            "notes": notes,
+        },
+    ).scalar_one()
+    for code, quantity, facility_notes in facilities:
+        db.execute(
+            text(
+                "INSERT INTO venue_requirement_facilities"
+                " (requirement_id, facility_code, quantity, notes)"
+                " VALUES (:requirement_id, :code, :quantity, :notes)"
+            ),
+            {
+                "requirement_id": requirement_id,
+                "code": code,
+                "quantity": quantity,
+                "notes": facility_notes,
+            },
+        )
+    db.expire_all()
+    return requirement_id
 
 
 def make_clarification(
@@ -290,3 +343,60 @@ def make_equipment_out_of_service(
     db.add(period)
     db.flush()
     return period
+
+
+def make_equipment_type(
+    db: Session, *, total_quantity: int = 5, is_active: bool = True, **overrides
+) -> EquipmentType:
+    """A fresh equipment type, so a test controls its whole stock and nothing else holds any."""
+    n = next(_counter)
+    equipment_type = EquipmentType(
+        code=overrides.pop("code", f"TEST_KIT_{n}"),
+        name=overrides.pop("name", f"Test kit {n}"),
+        total_quantity=total_quantity,
+        is_active=is_active,
+        **overrides,
+    )
+    db.add(equipment_type)
+    db.flush()
+    return equipment_type
+
+
+def make_equipment_item(
+    db: Session,
+    *,
+    event: Event,
+    equipment_type: EquipmentType,
+    quantity: int,
+    status: str = "REQUESTED",
+    is_held: bool = True,
+    **overrides,
+) -> EventEquipmentRequest:
+    """An equipment item on ``event`` (story 15.1). ``is_held`` also places the hold a recorded
+    item has on a submitted event, for the event's period; an item that was declined, cancelled
+    or flagged unavailable holds nothing, so pass ``is_held=False`` for those."""
+    item = EventEquipmentRequest(
+        event_id=event.id,
+        equipment_type_id=equipment_type.id,
+        quantity=quantity,
+        status=status,
+        created_by_id=overrides.pop("created_by_id", Users.COORDINATOR.id),
+        **overrides,
+    )
+    db.add(item)
+    db.flush()
+    if is_held:
+        db.add(
+            EquipmentReservation(
+                event_id=event.id,
+                equipment_request_id=item.id,
+                equipment_type_id=equipment_type.id,
+                quantity=quantity,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+                reserved_by_id=Users.COORDINATOR.id,
+            )
+        )
+        db.flush()
+    db.refresh(item)
+    return item

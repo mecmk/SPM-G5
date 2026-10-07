@@ -123,7 +123,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         to: BOOKING_REQUESTS_PATH,
         label: 'Booking Requests',
-        description: 'Incoming venue booking requests awaiting your review.',
+        description: 'Venue booking requests to decide, and the decisions already made.',
         icon: 'calendar-check',
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
@@ -143,15 +143,6 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Equipment',
     items: [
-      {
-        to: '/equipment/requests',
-        label: 'Equipment requests',
-        description: 'Request equipment for your events. Available items are held straight away.',
-        icon: 'box',
-        permission: PERMISSIONS.EQUIPMENT_REQUEST,
-        story: '15.1',
-        isAvailable: false,
-      },
       {
         to: '/equipment/holds',
         label: 'Equipment holds',

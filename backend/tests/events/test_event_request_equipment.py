@@ -227,13 +227,14 @@ def test_availability_needs_a_valid_period(organiser_client, params):
 @pytest.mark.story("2.1", ac=6)
 @pytest.mark.parametrize(
     "user",
+    # Story 7.2 AC7: the assigned coordinator correcting a request sees availability in the same
+    # form, so coordinators are allowed too (tests/events/test_correct_event_under_review.py).
     [
-        pytest.param(Users.COORDINATOR, id="coordinator"),
         pytest.param(Users.TECH_SUPPORT, id="tech-support"),
         pytest.param(Users.ATTENDEE, id="attendee"),
     ],
 )
-def test_only_an_organiser_can_see_availability_for_a_request(login_as, user):
+def test_only_the_request_form_can_see_availability_for_a_request(login_as, user):
     start, end = _period()
     response = login_as(user).get(
         "/events/equipment-availability",
@@ -380,6 +381,7 @@ def test_an_edit_moving_the_dates_into_a_busier_period_is_refused(organiser_clie
 
 # --- AC11: submitting soft-holds the equipment -----------------------------------------------
 @pytest.mark.story("2.1", ac=11)
+@pytest.mark.story("15.1", ac=2)
 def test_submitting_holds_the_equipment_for_the_event(login_as, db: Session):
     period = _period()
     created = _submittable(
@@ -389,7 +391,9 @@ def test_submitting_holds_the_equipment_for_the_event(login_as, db: Session):
     submitted = login_as(Users.ORGANISER).post(f"/events/{created['id']}/submit")
 
     assert submitted.status_code == 200, submitted.text
-    assert {line["status"] for line in submitted.json()["equipment"]} == {"RESERVED"}
+    # 15.1 AC1/AC2: held from now on, but not yet sent to Technical Support - the assigned
+    # coordinator reviews the list and submits it.
+    assert {line["status"] for line in submitted.json()["equipment"]} == {"REQUESTED"}
     holds = db.execute(
         text(
             "SELECT t.code, r.quantity, r.starts_at, r.ends_at, r.status, r.reserved_by_id,"

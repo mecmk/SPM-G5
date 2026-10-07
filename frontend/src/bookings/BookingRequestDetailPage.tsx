@@ -1,24 +1,58 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { approveBooking, getBooking, rejectBooking, type Booking } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail } from '../api/events'
-import { getVenue, type Venue } from '../api/venues'
+import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
+import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import { formatDate, formatTime } from '../shared/format'
+import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
+import { firstVenueRequirement } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
-const PENDING_STATUS = 'PENDING'
+
+const DAY_PANEL_ID = 'booking-venue-calendar-day-panel'
 
 function layoutName(venue: Venue, layoutCode: string | null): string {
   if (layoutCode === null) return 'Any'
   return venue.layouts.find((layout) => layout.code === layoutCode)?.name ?? layoutCode
+}
+
+/**
+ * Story 13.1.3: the requested venue's calendar, so Venue Staff can see what else holds it before
+ * deciding. AC2: it opens on the month the request starts in, with that day's list open. Mounted
+ * only once the booking has loaded, so the month it opens on is known from the start.
+ */
+function BookingVenueAvailability({ booking }: { booking: Booking }) {
+  const loadWindows = useCallback(
+    (startsAt: string, endsAt: string) => getVenueCalendar(booking.venue_id, startsAt, endsAt),
+    [booking.venue_id],
+  )
+  // AC4: a decision made on the page changes the status, which loads the month on screen again,
+  // so the request's day shows it booked, or no longer there once rejected.
+  const calendar = useVenueCalendar(loadWindows, startOfMonthOf(booking.starts_at), booking.status)
+  return (
+    <section className="card stack" aria-labelledby="booking-availability-heading">
+      <h2 id="booking-availability-heading">Venue availability</h2>
+      <VenueAvailabilityCalendar
+        month={calendar.month}
+        onMonthChange={calendar.setMonth}
+        windows={calendar.windows}
+        error={calendar.error}
+        isLoading={calendar.isLoading}
+        dayPanelId={DAY_PANEL_ID}
+        initialOpenDay={singaporeDateOf(booking.starts_at)}
+      />
+    </section>
+  )
 }
 
 /**
@@ -34,6 +68,10 @@ function layoutName(venue: Venue, layoutCode: string | null): string {
  * still PENDING.
  *
  * Story 13.2.1: a Reject action alongside it, requiring a reason.
+ *
+ * Story 13.1.3: the requested venue's calendar beside the details, so on a wide screen it sits
+ * just under Approve and Reject and the decision does not mean scrolling back up; on a narrow one
+ * it stacks below the details.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -134,6 +172,8 @@ export function BookingRequestDetailPage() {
     )
   }
   if (!booking || !venue || !event) return <LoadingState label="Loading the booking request…" />
+  // Story 2.7: the facilities of the venue requirement a request carries - the event's first.
+  const requiredFacilities = firstVenueRequirement(event)?.facilities ?? []
 
   return (
     <div className="page page-wide">
@@ -146,7 +186,7 @@ export function BookingRequestDetailPage() {
           <h1>{event.name}</h1>
           <StatusBadge status={booking.status} />
         </div>
-        {booking.status === PENDING_STATUS && (
+        {booking.status === PENDING_BOOKING_STATUS && (
           <div className="cluster">
             <button type="button" className="brand button-sm" onClick={askToApprove}>
               Approve
@@ -160,7 +200,7 @@ export function BookingRequestDetailPage() {
 
       {booking.decision_reason !== null && (
         <p className="subtle-block">
-          <span className="fact-label">Reason</span>
+          <span className="fact-label">{bookingOutcomeLabels(booking.status).why}</span>
           <br />
           {booking.decision_reason}
         </p>
@@ -195,63 +235,69 @@ export function BookingRequestDetailPage() {
           </div>
         </section>
 
-        <section className="card stack" aria-labelledby="booking-requirements-heading">
-          <h2 id="booking-requirements-heading">Venue requirements</h2>
-          <div>
-            <p className="fact-label">Room layout</p>
-            <p className="fact-value">{layoutName(venue, booking.required_layout_code)}</p>
-          </div>
-          <div>
-            <p className="fact-label">Required facilities</p>
-            <div className="cluster">
-              {event.required_facilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
-              {event.required_facilities.map((item) => (
-                <Chip
-                  key={item.code}
-                  tone="info"
-                  label={`${item.name}${item.quantity ? ` × ${item.quantity}` : ''}`}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="fact-label">Accessibility requirements</p>
-            <div className="cluster">
-              {event.accessibility_needs.length === 0 && (
-                <p className="muted">
-                  {event.accessibility_none_required ? 'None required.' : NOT_RECORDED}
-                </p>
-              )}
-              {event.accessibility_needs.map((item) => (
-                <Chip key={item.code} tone="success" label={item.name} />
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="fact-label">Other requirements</p>
-            <p>{booking.requirement_notes ?? NOT_RECORDED}</p>
-          </div>
-        </section>
+        <div className="booking-detail-split">
+          <div className="stack">
+            <section className="card stack" aria-labelledby="booking-requirements-heading">
+              <h2 id="booking-requirements-heading">Venue requirements</h2>
+              <div>
+                <p className="fact-label">Room layout</p>
+                <p className="fact-value">{layoutName(venue, booking.required_layout_code)}</p>
+              </div>
+              <div>
+                <p className="fact-label">Required facilities</p>
+                <div className="cluster">
+                  {requiredFacilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
+                  {requiredFacilities.map((item) => (
+                    <Chip
+                      key={item.code}
+                      tone="info"
+                      label={`${item.name}${item.quantity ? ` × ${item.quantity}` : ''}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="fact-label">Accessibility requirements</p>
+                <div className="cluster">
+                  {event.accessibility_needs.length === 0 && (
+                    <p className="muted">
+                      {event.accessibility_none_required ? 'None required.' : NOT_RECORDED}
+                    </p>
+                  )}
+                  {event.accessibility_needs.map((item) => (
+                    <Chip key={item.code} tone="success" label={item.name} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="fact-label">Other requirements</p>
+                <p>{booking.requirement_notes ?? NOT_RECORDED}</p>
+              </div>
+            </section>
 
-        <section className="card stack" aria-labelledby="booking-event-heading">
-          <h2 id="booking-event-heading">Event details</h2>
-          <div>
-            <p className="fact-label">Event name</p>
-            <p>{event.name}</p>
+            <section className="card stack" aria-labelledby="booking-event-heading">
+              <h2 id="booking-event-heading">Event details</h2>
+              <div>
+                <p className="fact-label">Event name</p>
+                <p>{event.name}</p>
+              </div>
+              <div>
+                <p className="fact-label">Organiser</p>
+                <p>{event.organiser_name}</p>
+              </div>
+              <div>
+                <p className="fact-label">Purpose</p>
+                <p>{event.purpose ?? NOT_RECORDED}</p>
+              </div>
+              <div>
+                <p className="fact-label">Description</p>
+                <p>{event.description ?? NOT_RECORDED}</p>
+              </div>
+            </section>
           </div>
-          <div>
-            <p className="fact-label">Organiser</p>
-            <p>{event.organiser_name}</p>
-          </div>
-          <div>
-            <p className="fact-label">Purpose</p>
-            <p>{event.purpose ?? NOT_RECORDED}</p>
-          </div>
-          <div>
-            <p className="fact-label">Description</p>
-            <p>{event.description ?? NOT_RECORDED}</p>
-          </div>
-        </section>
+
+          <BookingVenueAvailability booking={booking} />
+        </div>
       </div>
 
       {isConfirmingApprove && (

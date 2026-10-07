@@ -1,8 +1,8 @@
 /**
- * Story 7.2 - fe: the assigned Event Coordinator edits an event's routine information from the
- * event detail page.
- * AC1 the coordinator assigned to the event opens the edit page and saves its internal notes;
- *     the description and contact details are not offered for editing.
+ * Story 7.2 - fe: the assigned Event Coordinator edits an event's internal notes from its details
+ * page, through the one "Edit event" action (the same page also corrects the organiser's request
+ * while it is under review - see event-correction.spec.ts).
+ * AC1 the coordinator assigned to the event saves its internal notes.
  * AC2 the change takes effect immediately: the event detail page shows it on return.
  * AC3 the edit entry point is not offered once the event is completed, cancelled or rejected.
  * Who may call the PATCH itself, the routine-field allow-list, and the 403/409 refusals are
@@ -19,15 +19,10 @@ test('7.2 AC1/AC2: the assigned coordinator edits internal notes and they are st
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.submitted}`)
 
-  await page.getByRole('link', { name: 'Edit routine information' }).click()
+  await page.getByRole('link', { name: 'Edit event' }).click()
   await expect(
-    page.getByRole('heading', { name: 'Edit routine information', level: 1 }),
+    page.getByRole('heading', { name: 'Data Literacy Workshop', level: 1 }),
   ).toBeVisible()
-
-  await expect(page.getByLabel('Description')).toHaveCount(0)
-  await expect(page.getByLabel('Contact name')).toHaveCount(0)
-  await expect(page.getByLabel('Contact email')).toHaveCount(0)
-  await expect(page.getByLabel('Contact phone')).toHaveCount(0)
 
   const internalNotes = `E2E coordinator note ${Date.now()}`
   await page.getByLabel('Internal notes').fill(internalNotes)
@@ -59,5 +54,5 @@ test('7.2 AC3: a rejected event offers no edit entry point, even to its assigned
   await expect(
     page.getByRole('heading', { name: 'Rooftop Networking Night', level: 1 }),
   ).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Edit routine information' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Edit event' })).toHaveCount(0)
 })

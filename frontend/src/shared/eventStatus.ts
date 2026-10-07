@@ -20,6 +20,17 @@ const VISIBLE_EVENT_STATUSES = [
  */
 export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
 
+/**
+ * Story 15.1 AC9: the statuses in which the assigned coordinator may change an event's equipment,
+ * mirroring `_OPEN_EVENT_STATUSES` in backend/app/equipment/service.py. Once the event is
+ * Confirmed, or closed, its equipment is read-only.
+ */
+export const EQUIPMENT_OPEN_STATUSES: readonly EventStatus[] = [
+  'UNDER_REVIEW',
+  'CLARIFICATION_REQUESTED',
+  'PLANNING',
+]
+
 /** Story 7.2 AC3: routine editing (and the internal-notes view) closes at these statuses. */
 export const TERMINAL_STATUSES: readonly EventStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
 
@@ -32,6 +43,29 @@ export const AWAITING_DECISION_STATUSES: readonly EventStatus[] = [
   'UNDER_REVIEW',
   'CLARIFICATION_REQUESTED',
 ]
+
+/**
+ * Story 7.2 AC4: the statuses in which the assigned coordinator corrects the organiser's details,
+ * mirroring the backend's `_DETAILS_CORRECTABLE_STATUSES`. Clarification Requested was added to
+ * AC4 in the backlog's Change Log.
+ */
+export const DETAILS_CORRECTABLE_STATUSES: readonly EventStatus[] = [
+  'UNDER_REVIEW',
+  'CLARIFICATION_REQUESTED',
+]
+
+/**
+ * Story 7.2 AC5: approved and still running - the organiser's details are read-only and further
+ * changes go through a change request (19.1). Mirrors `_DETAILS_LOCKED_STATUSES`.
+ */
+export const DETAILS_LOCKED_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
+
+/**
+ * Story 7.2 AC5: why the organiser's details cannot be edited once the event is approved, said to
+ * the assigned coordinator on the event details page and on the coordinator's edit page.
+ */
+export const DETAILS_LOCKED_HINT =
+  'Event details can no longer be edited directly after approval. Further changes must go through the change request process.'
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   DRAFT: 'Draft',

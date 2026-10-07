@@ -43,10 +43,13 @@ export type ErrorCode =
   | 'EVENT_NOT_FOUND'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
+  | 'EVENT_CORRECTION_CONFLICT'
+  | 'EVENT_REQUIRED_DETAIL_CLEARED'
   | 'EVENT_NOT_AWAITING_DECISION'
   | 'EVENT_REJECTION_REASON_REQUIRED'
   | 'EVENT_NOT_AWAITING_CLARIFICATION'
   | 'EVENT_CLARIFICATION_MESSAGE_REQUIRED'
+  | 'EVENT_NOT_AWAITING_RESPONSE'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -56,6 +59,14 @@ export type ErrorCode =
   | 'EVENT_TOO_LONG'
   | 'EVENT_ATTENDANCE_INVALID'
   | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'VENUE_REQUIREMENT_CAPACITY_INVALID'
+  | 'VENUE_REQUIREMENT_OVER_ATTENDANCE'
+  | 'VENUE_REQUIREMENT_TIMES_INCOMPLETE'
+  | 'VENUE_REQUIREMENT_DATE_INVALID'
+  | 'VENUE_REQUIREMENT_END_BEFORE_START'
+  | 'VENUE_REQUIREMENT_STARTS_BEFORE_EVENT'
+  | 'VENUE_REQUIREMENT_ENDS_AFTER_EVENT'
+  | 'VENUE_REQUIREMENT_NAME_DUPLICATE'
   | 'EVENT_EQUIPMENT_TYPE_REQUIRED'
   | 'EVENT_EQUIPMENT_DUPLICATE'
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
@@ -78,6 +89,9 @@ export type ErrorCode =
   | 'BOOKING_REJECT_REFUSED'
   | 'BOOKING_REASON_REQUIRED'
   | 'BOOKING_WITHDRAW_REFUSED'
+  | 'EQUIPMENT_REFUSED'
+  | 'EQUIPMENT_INVALID'
+  | 'EQUIPMENT_QUANTITY_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -227,6 +241,19 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'No longer editable',
     message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
   },
+  /** Story 7.2 AC4: a corrected request must keep everything it needed to be submitted. */
+  EVENT_REQUIRED_DETAIL_CLEARED: {
+    title: 'Required detail missing',
+    message: 'Fill in every field marked * before saving - a submitted request needs them all.',
+  },
+  /**
+   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
+   * backend's detail sentence says which; either way the page offers a reload.
+   */
+  EVENT_CORRECTION_CONFLICT: {
+    title: 'Event changed',
+    message: 'This event changed after you opened it. Reload it to see its latest details.',
+  },
   /**
    * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is
    * still a draft. One code for both actions, same precedent as BOOKING_CONFLICT: the backend
@@ -254,11 +281,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Cannot send message',
     message: 'This request has moved on, so the message was not sent.',
   },
-  /** Story 4.2 AC3: the form's own pre-check before calling the API - never wired into an
+  /** Story 4.2 AC3 / 4.3 AC4: the form's own pre-check before calling the API - never wired into an
    *  errorCodes map, same precedent as EVENT_REJECTION_REASON_REQUIRED. */
   EVENT_CLARIFICATION_MESSAGE_REQUIRED: {
     title: 'Message needed',
     message: 'Enter a message to send.',
+  },
+  /** Story 4.3 AC10/AC11: responding once the request is no longer CLARIFICATION_REQUESTED -
+   *  cancelled, approved or rejected, possibly while the response was being written. */
+  EVENT_NOT_AWAITING_RESPONSE: {
+    title: 'Cannot send response',
+    message: 'This request is no longer awaiting your response, so it was not sent.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.
@@ -306,6 +339,42 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_FACILITY_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  /** Story 2.7 AC6, worded as the backend words it where it has its own sentence. */
+  VENUE_REQUIREMENT_CAPACITY_INVALID: {
+    title: 'Check the number of people',
+    message: 'The number of people must be a positive whole number, or left empty on a draft.',
+  },
+  VENUE_REQUIREMENT_OVER_ATTENDANCE: {
+    title: 'Check the number of people',
+    message: 'A venue requirement cannot need room for more people than the expected attendance.',
+  },
+  /** Story 2.7 AC2. */
+  VENUE_REQUIREMENT_TIMES_INCOMPLETE: {
+    title: 'Check the times',
+    message: 'Give a venue requirement both a start and an end, or leave both empty.',
+  },
+  VENUE_REQUIREMENT_DATE_INVALID: {
+    title: 'Check the times',
+    message: 'Enter a complete date and time for the venue requirement.',
+  },
+  /** Story 2.7 AC5/AC10. */
+  VENUE_REQUIREMENT_END_BEFORE_START: {
+    title: 'Check the times',
+    message: 'A venue requirement must end after it starts.',
+  },
+  VENUE_REQUIREMENT_STARTS_BEFORE_EVENT: {
+    title: 'Check the times',
+    message: 'A venue requirement cannot start before the event starts.',
+  },
+  VENUE_REQUIREMENT_ENDS_AFTER_EVENT: {
+    title: 'Check the times',
+    message: 'A venue requirement cannot end after the event ends.',
+  },
+  /** Story 2.7 AC9. */
+  VENUE_REQUIREMENT_NAME_DUPLICATE: {
+    title: 'Check the names',
+    message: 'Two venue requirements cannot have the same name.',
   },
   EVENT_EQUIPMENT_TYPE_REQUIRED: {
     title: 'Choose the equipment',
@@ -435,6 +504,22 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_WITHDRAW_REFUSED: {
     title: 'Cannot withdraw this request',
     message: 'This request cannot be withdrawn in its current state.',
+  },
+  /** Story 15.1 AC4/AC6/AC7/AC9/AC10: the event, the item or the stock no longer allows the
+   *  change; the backend's own sentence says which. */
+  EQUIPMENT_REFUSED: {
+    title: 'Equipment not changed',
+    message: 'This equipment change could not be made.',
+  },
+  /** Story 15.1 AC4-AC6: the server refused what was sent, such as an unknown type. */
+  EQUIPMENT_INVALID: {
+    title: 'Check the equipment',
+    message: 'Check the equipment type, quantity and notes.',
+  },
+  /** Story 15.1 AC4: refused by the page itself, before anything is sent. */
+  EQUIPMENT_QUANTITY_INVALID: {
+    title: 'Check the quantity',
+    message: 'Enter a whole number from 1 to the number available.',
   },
 }
 

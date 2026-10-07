@@ -1,4 +1,4 @@
-import type { EventDetail, EventInput } from '../api/events'
+import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
 
@@ -14,6 +14,28 @@ export interface FacilityDraft {
   /** Optional: how many are needed, for example 3 breakout rooms. */
   quantity: string
   notes: string
+}
+
+/**
+ * Story 2.7 AC1/AC2: one venue the event needs, as the form holds it. Every field may stay empty on
+ * a draft (AC8). `id` is null until the server has saved it; then it is sent back so the
+ * requirement is edited in place rather than replaced.
+ */
+export interface VenueRequirementDraft {
+  /** React key, and the stem of each field's id. */
+  key: number
+  id: string | null
+  name: string
+  capacity: string
+  startsAt: string
+  endsAt: string
+  layoutCode: string
+  facilities: Record<string, FacilityDraft>
+  notes: string
+  /** AC6: the number still follows the expected attendance - the first card, until it is edited. */
+  isCapacityDefault: boolean
+  /** AC2: the times still follow the event's - a new card, until either time is edited. */
+  areTimesDefault: boolean
 }
 
 export interface EquipmentDraft {
@@ -38,11 +60,10 @@ export interface EventFormState {
   contactName: string
   contactEmail: string
   contactPhone: string
-  /** Story 2.1 AC4: true is "no venue requirements"; false with nothing chosen is "not specified". */
+  /** Story 2.1 AC4: true is "no venue requirements"; false with none listed is "not specified". */
   hasNoVenueRequirements: boolean
-  layoutCode: string
-  facilities: Record<string, FacilityDraft>
-  venueNotes: string
+  /** Story 2.7: each venue the event needs, in order. */
+  venueRequirements: VenueRequirementDraft[]
   /** Story 2.1 AC5: true is "none required"; false with nothing selected is "not specified". */
   hasNoAccessibilityNeeds: boolean
   accessibility: Record<string, NoteDraft>
@@ -75,6 +96,10 @@ const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
 // The largest value the backend's INTEGER columns hold.
 const MAX_WHOLE_NUMBER = 2_147_483_647
 const NO_EQUIPMENT_TYPE = ''
+/** Story 2.7, mirrored from the backend's schemas: a requirement's name is short, and a request
+ * lists a bounded number of requirements. */
+export const VENUE_REQUIREMENT_NAME_MAX_LENGTH = 100
+export const MAX_VENUE_REQUIREMENTS = 20
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 /** How far ahead an event may start and how long it may run (story 2.1 AC2), mirrored from the
  * backend's service. */
@@ -94,9 +119,7 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   contactEmail: '',
   contactPhone: '',
   hasNoVenueRequirements: false,
-  layoutCode: '',
-  facilities: {},
-  venueNotes: '',
+  venueRequirements: [],
   hasNoAccessibilityNeeds: false,
   accessibility: {},
   accessibilityNotes: '',
@@ -132,8 +155,15 @@ export const REGISTRATION_DATE_FIELD_IDS: readonly string[] = [
   FIELD_ID.registrationClosesAt,
 ]
 
-export function getFacilityQuantityId(code: string): string {
-  return `facility-${code}-quantity`
+/** Story 2.7: the fields of one venue requirement, so a problem can mark and focus the right one. */
+export type VenueRequirementField = 'name' | 'capacity' | 'starts' | 'ends'
+
+export function getVenueRequirementFieldId(key: number, field: VenueRequirementField): string {
+  return `venue-requirement-${key}-${field}`
+}
+
+export function getFacilityQuantityId(key: number, code: string): string {
+  return `venue-requirement-${key}-facility-${code}-quantity`
 }
 
 export function getEquipmentTypeId(key: number): string {
@@ -170,6 +200,98 @@ export function isEquipmentTypeTaken(
 }
 
 let nextEquipmentKey = 0
+let nextVenueRequirementKey = 0
+
+/**
+ * Story 2.7: a new venue requirement. AC2: its times start as the event's proposed start and end.
+ * AC6: the first one's number of people starts as the expected attendance; a later room is rarely
+ * the whole audience, so its number is left for the organiser. Both keep following the event
+ * until the organiser edits them - see `withEventDefaults`.
+ */
+export function newVenueRequirementDraft(form: EventFormState): VenueRequirementDraft {
+  nextVenueRequirementKey += 1
+  const isFirst = form.venueRequirements.length === 0
+  return {
+    key: nextVenueRequirementKey,
+    id: null,
+    name: '',
+    capacity: isFirst ? form.attendance.trim() : '',
+    startsAt: form.startsAt,
+    endsAt: form.endsAt,
+    layoutCode: '',
+    facilities: {},
+    notes: '',
+    isCapacityDefault: isFirst,
+    areTimesDefault: true,
+  }
+}
+
+/**
+ * Story 2.7 AC2/AC6: bring each card's defaults in line with the event as it now stands, so the
+ * order the form is filled in does not matter - a card added before the dates or attendance were
+ * known picks them up when they arrive. Only defaults move: a value the organiser edited is theirs
+ * and stays put, so moving the event past it is refused instead (AC10). A saved value counts as a
+ * default while it still matches the event (`venueRequirementDraftFrom`).
+ */
+export function withEventDefaults(form: EventFormState): EventFormState {
+  return {
+    ...form,
+    venueRequirements: form.venueRequirements.map((requirement) => ({
+      ...requirement,
+      capacity: requirement.isCapacityDefault ? form.attendance.trim() : requirement.capacity,
+      startsAt: requirement.areTimesDefault ? form.startsAt : requirement.startsAt,
+      endsAt: requirement.areTimesDefault ? form.endsAt : requirement.endsAt,
+    })),
+  }
+}
+
+/** The same moment, or both unset - compared as instants, never as strings. */
+function isSameInstant(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return left === right
+  return Date.parse(left) === Date.parse(right)
+}
+
+/**
+ * Story 2.7 AC2/AC6 (CL-087): a saved requirement keeps following the event while it still matches
+ * it - times equal to the event's (or not given yet), and for the first requirement a number equal
+ * to the expected attendance (or not given yet). So the form behaves the same before and after a
+ * save, and growing the event never leaves an untouched requirement behind (review of PR #84).
+ * Times or a number the organiser chose differ from the event's, so they stay put, and moving the
+ * event past them is refused (AC10).
+ */
+function venueRequirementDraftFrom(
+  requirement: VenueRequirement,
+  event: EventDetail,
+  isFirst: boolean,
+): VenueRequirementDraft {
+  nextVenueRequirementKey += 1
+  return {
+    key: nextVenueRequirementKey,
+    id: requirement.id,
+    name: textOf(requirement.name),
+    capacity: requirement.capacity === null ? '' : String(requirement.capacity),
+    startsAt: requirement.starts_at ? instantToInput(requirement.starts_at) : '',
+    endsAt: requirement.ends_at ? instantToInput(requirement.ends_at) : '',
+    layoutCode: textOf(requirement.layout_code),
+    facilities: Object.fromEntries(
+      requirement.facilities.map((facility) => [
+        facility.code,
+        {
+          quantity: facility.quantity === null ? '' : String(facility.quantity),
+          notes: textOf(facility.notes),
+        },
+      ]),
+    ),
+    notes: textOf(requirement.notes),
+    isCapacityDefault:
+      isFirst &&
+      (requirement.capacity === null || requirement.capacity === event.expected_attendance),
+    areTimesDefault:
+      (requirement.starts_at === null && requirement.ends_at === null) ||
+      (isSameInstant(requirement.starts_at, event.starts_at) &&
+        isSameInstant(requirement.ends_at, event.ends_at)),
+  }
+}
 
 export function newEquipmentDraft(): EquipmentDraft {
   nextEquipmentKey += 1
@@ -199,17 +321,9 @@ export function formFromEvent(event: EventDetail): EventFormState {
     contactEmail: textOf(event.contact_email),
     contactPhone: textOf(event.contact_phone),
     hasNoVenueRequirements: event.venue_none_required,
-    layoutCode: textOf(event.required_layout_code),
-    facilities: Object.fromEntries(
-      event.required_facilities.map((facility) => [
-        facility.code,
-        {
-          quantity: facility.quantity === null ? '' : String(facility.quantity),
-          notes: textOf(facility.notes),
-        },
-      ]),
+    venueRequirements: event.venue_requirements.map((requirement, index) =>
+      venueRequirementDraftFrom(requirement, event, index === 0),
     ),
-    venueNotes: textOf(event.venue_requirement_notes),
     hasNoAccessibilityNeeds: event.accessibility_none_required,
     accessibility: Object.fromEntries(
       event.accessibility_needs.map((need) => [need.code, { notes: textOf(need.notes) }]),
@@ -310,7 +424,7 @@ function isReadableDateTime(inputValue: string): boolean {
 }
 
 /**
- * Story 2.1 AC2/AC3/AC6: the first problem with the form (an error-registry code and the field to
+ * Story 2.1 AC2/AC3/AC6 and story 2.7: the first problem with the form (an error-registry code and the field to
  * fix), or null. The backend checks the same rules again; this only saves a round trip. A date
  * already saved on the draft is not judged again unless it was changed, as on the backend. What a
  * request needs before it can be submitted (AC10) is left to the backend, which names anything
@@ -452,10 +566,10 @@ export function getLiveProblems(
   if (!isBlankOrPhoneNumber(form.contactPhone)) {
     problems[FIELD_ID.contactPhone] = 'EVENT_CONTACT_PHONE_INVALID'
   }
-  for (const [code, facility] of Object.entries(form.facilities)) {
-    if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
-      problems[getFacilityQuantityId(code)] = 'EVENT_FACILITY_QUANTITY_INVALID'
-    }
+  // Story 2.7: every venue requirement problem, said next to its field as it is typed (AC5, AC6,
+  // AC9, AC10) - the same rules a save is refused for.
+  for (const problem of getVenueRequirementProblems(form)) {
+    problems[problem.fieldId] ??= problem.code
   }
   for (const line of form.equipment) {
     if (!isPositiveWholeNumber(line.quantity)) {
@@ -482,12 +596,17 @@ export function getMissingForSubmission(form: EventFormState): string[] {
   if (!form.contactName.trim()) missing.push('point of contact name')
   if (!form.contactEmail.trim()) missing.push('point of contact email')
   if (!form.contactPhone.trim()) missing.push('point of contact phone number')
-  const hasVenueAnswer =
-    form.hasNoVenueRequirements ||
-    form.layoutCode !== '' ||
-    Object.keys(form.facilities).length > 0 ||
-    form.venueNotes.trim() !== ''
-  if (!hasVenueAnswer) missing.push('venue requirements (choose some, or mark none)')
+  // Story 2.7 AC8: at least one requirement, or "none"; each listed one needs a name and a number
+  // of people, pointed out by its place in the list.
+  if (!form.hasNoVenueRequirements && form.venueRequirements.length === 0) {
+    missing.push('venue requirements (choose some, or mark none)')
+  }
+  form.venueRequirements.forEach((requirement, index) => {
+    if (!requirement.name.trim()) missing.push(`venue requirement ${index + 1}: name`)
+    if (!isPositiveWholeNumber(requirement.capacity)) {
+      missing.push(`venue requirement ${index + 1}: number of people`)
+    }
+  })
   const hasAccessibilityAnswer =
     form.hasNoAccessibilityNeeds ||
     Object.keys(form.accessibility).length > 0 ||
@@ -499,20 +618,140 @@ export function getMissingForSubmission(form: EventFormState): string[] {
   return missing
 }
 
-/** The first problem with the facilities and equipment, or null. */
+/** Story 2.7 AC6: what is wrong with a requirement's number of people, or null. Blank is fine on a
+ * draft; anything typed is a positive whole number, no more than the expected attendance. */
+function getCapacityProblem(
+  requirement: VenueRequirementDraft,
+  form: EventFormState,
+): ErrorCode | null {
+  if (!isBlankOrPositiveWholeNumber(requirement.capacity)) {
+    return 'VENUE_REQUIREMENT_CAPACITY_INVALID'
+  }
+  if (
+    requirement.capacity.trim() !== '' &&
+    isPositiveWholeNumber(form.attendance) &&
+    Number(requirement.capacity) > Number(form.attendance)
+  ) {
+    return 'VENUE_REQUIREMENT_OVER_ATTENDANCE'
+  }
+  return null
+}
+
+/** Story 2.7 AC2/AC5/AC10: the problem with one requirement's times, or null. */
+function getTimesProblem(
+  requirement: VenueRequirementDraft,
+  form: EventFormState,
+): { code: ErrorCode; field: VenueRequirementField } | null {
+  const { startsAt, endsAt } = requirement
+  if (startsAt && !isReadableDateTime(startsAt)) {
+    return { code: 'VENUE_REQUIREMENT_DATE_INVALID', field: 'starts' }
+  }
+  if (endsAt && !isReadableDateTime(endsAt)) {
+    return { code: 'VENUE_REQUIREMENT_DATE_INVALID', field: 'ends' }
+  }
+  if ((startsAt === '') !== (endsAt === '')) {
+    return {
+      code: 'VENUE_REQUIREMENT_TIMES_INCOMPLETE',
+      field: startsAt === '' ? 'starts' : 'ends',
+    }
+  }
+  if (!startsAt || !endsAt) return null
+  if (endsAt <= startsAt) return { code: 'VENUE_REQUIREMENT_END_BEFORE_START', field: 'ends' }
+  if (form.startsAt && startsAt < form.startsAt) {
+    return { code: 'VENUE_REQUIREMENT_STARTS_BEFORE_EVENT', field: 'starts' }
+  }
+  if (form.endsAt && endsAt > form.endsAt) {
+    return { code: 'VENUE_REQUIREMENT_ENDS_AFTER_EVENT', field: 'ends' }
+  }
+  return null
+}
+
+/**
+ * Story 2.7: every problem with the venue requirements, in list order and at most one per field -
+ * the rules the backend's `_check_venue_requirement_rules` applies. AC2: both times or neither.
+ * AC5/AC10: within the event's proposed start and end, inclusive, and ending after starting -
+ * judged against the event's times as they stand on the form, so moving the event flags a
+ * requirement left outside it. AC6: the number of people. AC9: no two share a name, trimmed and
+ * case-insensitive (the later one is the one marked). The page says each next to its field as it
+ * is typed; a save is refused for the first.
+ */
+export function getVenueRequirementProblems(form: EventFormState): FormProblem[] {
+  const problems: FormProblem[] = []
+  const seenNames = new Set<string>()
+  for (const requirement of form.venueRequirements) {
+    const fieldId = (field: VenueRequirementField) =>
+      getVenueRequirementFieldId(requirement.key, field)
+    const name = requirement.name.trim().toLowerCase()
+    if (name !== '' && seenNames.has(name)) {
+      problems.push({ code: 'VENUE_REQUIREMENT_NAME_DUPLICATE', fieldId: fieldId('name') })
+    }
+    if (name !== '') seenNames.add(name)
+    const capacityProblem = getCapacityProblem(requirement, form)
+    if (capacityProblem) problems.push({ code: capacityProblem, fieldId: fieldId('capacity') })
+    const timesProblem = getTimesProblem(requirement, form)
+    if (timesProblem)
+      problems.push({ code: timesProblem.code, fieldId: fieldId(timesProblem.field) })
+    for (const [code, facility] of Object.entries(requirement.facilities)) {
+      if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
+        problems.push({
+          code: 'EVENT_FACILITY_QUANTITY_INVALID',
+          fieldId: getFacilityQuantityId(requirement.key, code),
+        })
+      }
+    }
+  }
+  return problems
+}
+
+/** The field names the backend uses in a refused venue requirement's `loc`, and the form's own. */
+const SERVER_REQUIREMENT_FIELDS: Record<string, VenueRequirementField> = {
+  name: 'name',
+  capacity: 'capacity',
+  starts_at: 'starts',
+  ends_at: 'ends',
+}
+
+/** A refusal from the server that points at one field of the form. */
+export interface ServerFieldProblem {
+  fieldId: string
+  message: string
+}
+
+/**
+ * Story 2.7 AC11: the field a server refusal names, so the page can mark and focus it even when
+ * only the server could tell (say, the form was stale). The backend locates a refused venue
+ * requirement the way FastAPI locates a validation error: `loc` is
+ * `['body', 'venue_requirements', <place in the list>, <field>]`. Null when the refusal names no
+ * field the form shows.
+ */
+export function findServerProblemField(
+  form: EventFormState,
+  detail: unknown,
+): ServerFieldProblem | null {
+  if (!Array.isArray(detail)) return null
+  for (const issue of detail) {
+    const loc: unknown = issue?.loc
+    if (!Array.isArray(loc) || loc.length !== 4 || loc[1] !== 'venue_requirements') continue
+    const [, , index, serverField] = loc
+    const requirement = typeof index === 'number' ? form.venueRequirements[index] : undefined
+    const field =
+      typeof serverField === 'string' ? SERVER_REQUIREMENT_FIELDS[serverField] : undefined
+    if (requirement === undefined || field === undefined) continue
+    return {
+      fieldId: getVenueRequirementFieldId(requirement.key, field),
+      message: typeof issue.msg === 'string' ? issue.msg : '',
+    }
+  }
+  return null
+}
+
+/** The first problem with the venue requirements and equipment, or null. */
 function validateRequirements(
   form: EventFormState,
   availability: Record<string, number> | null,
 ): FormProblem | null {
-  const badFacility = Object.entries(form.facilities).find(
-    ([, facility]) => !isBlankOrPositiveWholeNumber(facility.quantity),
-  )
-  if (badFacility) {
-    return {
-      code: 'EVENT_FACILITY_QUANTITY_INVALID',
-      fieldId: getFacilityQuantityId(badFacility[0]),
-    }
-  }
+  const [venueProblem] = getVenueRequirementProblems(form)
+  if (venueProblem) return venueProblem
   const untypedLine = form.equipment.find((line) => line.typeCode === NO_EQUIPMENT_TYPE)
   if (untypedLine) {
     return { code: 'EVENT_EQUIPMENT_TYPE_REQUIRED', fieldId: getEquipmentTypeId(untypedLine.key) }
@@ -556,14 +795,21 @@ export function eventInputFrom(form: EventFormState): EventInput {
     contact_name: textOrNull(form.contactName),
     contact_email: textOrNull(form.contactEmail),
     contact_phone: textOrNull(form.contactPhone),
-    required_layout_code: hasNoVenueNeeds ? null : textOrNull(form.layoutCode),
-    venue_requirement_notes: hasNoVenueNeeds ? null : textOrNull(form.venueNotes),
-    required_facilities: hasNoVenueNeeds
+    venue_requirements: hasNoVenueNeeds
       ? []
-      : Object.entries(form.facilities).map(([code, facility]) => ({
-          code,
-          quantity: facility.quantity.trim() === '' ? null : Number(facility.quantity),
-          notes: textOrNull(facility.notes),
+      : form.venueRequirements.map((requirement) => ({
+          id: requirement.id,
+          name: textOrNull(requirement.name),
+          capacity: requirement.capacity.trim() === '' ? null : Number(requirement.capacity),
+          starts_at: requirement.startsAt ? inputToInstant(requirement.startsAt) : null,
+          ends_at: requirement.endsAt ? inputToInstant(requirement.endsAt) : null,
+          layout_code: textOrNull(requirement.layoutCode),
+          facilities: Object.entries(requirement.facilities).map(([code, facility]) => ({
+            code,
+            quantity: facility.quantity.trim() === '' ? null : Number(facility.quantity),
+            notes: textOrNull(facility.notes),
+          })),
+          notes: textOrNull(requirement.notes),
         })),
     venue_none_required: hasNoVenueNeeds,
     accessibility_none_required: hasNoAccessibilityNeeds,

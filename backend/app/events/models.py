@@ -6,8 +6,11 @@ later stories in the 2.x / 3.x / 4.x / 5.x / 6.x / 7.x epics **extend this class
 mapping ``events`` a second time - two declarative classes on one table raise
 ``InvalidRequestError``.
 
-Story 2.1 adds the request's child rows: required facilities, accessibility needs, equipment
-lines (with the equipment catalogue they point at) and the append-only status history.
+Story 2.1 adds the request's child rows: accessibility needs, equipment lines (with the
+equipment catalogue they point at) and the append-only status history. Story 2.7 adds the venue
+requirements, each with its own facilities. Story 15.1 (``app/equipment/``) works on the
+same equipment tables, which stay mapped here because ``Event`` holds its equipment
+items.
 """
 
 from __future__ import annotations
@@ -50,13 +53,15 @@ class EquipmentType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
 
-class EventRequiredFacility(Base):
-    """A facility the event requires of its venue (story 2.1 AC4)."""
+class VenueRequirementFacility(Base):
+    """A facility one venue requirement needs, optionally how many (story 2.7 AC1)."""
 
-    __tablename__ = "event_required_facilities"
+    __tablename__ = "venue_requirement_facilities"
 
-    event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), primary_key=True
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("venue_requirements.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     facility_code: Mapped[str] = mapped_column(
         Text, ForeignKey("facilities.code"), primary_key=True
@@ -65,6 +70,31 @@ class EventRequiredFacility(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     facility: Mapped[Facility] = relationship(lazy="joined")
+
+
+class VenueRequirement(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One venue an event needs: a name, how many people, when, and what the room must offer
+    (story 2.7 AC1, AC2). Every column but the event and position may be empty on a draft
+    (AC8). The id stays the same when the requirement is edited, so a booking can later point at
+    it (stories 8.4, 12.5)."""
+
+    __tablename__ = "venue_requirements"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
+    capacity: Mapped[int | None] = mapped_column(Integer)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    layout_code: Mapped[str | None] = mapped_column(Text, ForeignKey("room_layouts.code"))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    layout: Mapped[RoomLayout | None] = relationship(lazy="joined")
+    facilities: Mapped[list[VenueRequirementFacility]] = relationship(
+        cascade="all, delete-orphan", order_by=VenueRequirementFacility.facility_code
+    )
 
 
 class EventAccessibilityNeed(Base):
@@ -83,8 +113,21 @@ class EventAccessibilityNeed(Base):
     feature: Mapped[AccessibilityFeature] = relationship(lazy="joined")
 
 
+class EquipmentRequestStatus:
+    """Values allowed by ``ck_event_equipment_requests_status`` (migration 014, story 15.1).
+    Whether an item holds stock is its ``EquipmentReservation``'s business, not its status's."""
+
+    REQUESTED = "REQUESTED"  # recorded, not yet sent to Technical Support
+    PENDING = "PENDING"  # sent, awaiting Technical Support's decision
+    ACCEPTED = "ACCEPTED"  # Technical Support reserved it (story 16.1)
+    DECLINED = "DECLINED"  # Technical Support declined it (story 16.1)
+    UNAVAILABLE = "UNAVAILABLE"  # the event's new dates can no longer cover it (15.1 AC8)
+    CANCELLED = "CANCELLED"  # its event was cancelled (story 6.2)
+
+
 class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One equipment line on a request: a type and a quantity (story 2.1 AC6)."""
+    """One equipment item on an event: a type and a quantity (story 2.1 AC6), which the assigned
+    coordinator submits to Technical Support (story 15.1)."""
 
     __tablename__ = "event_equipment_requests"
 
@@ -101,8 +144,13 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
+    submitted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
+    submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
 
 
 class EquipmentHoldStatus:
@@ -234,10 +282,9 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
 
-    # venue requirements captured on the request (story 2.1 AC4)
+    # venue requirements (story 2.1 AC4): each one is a VenueRequirement row (story 2.7), or the
+    # organiser marks none required
     preferred_location: Mapped[str | None] = mapped_column(Text)
-    required_layout_code: Mapped[str | None] = mapped_column(Text, ForeignKey("room_layouts.code"))
-    venue_requirement_notes: Mapped[str | None] = mapped_column(Text)
     venue_none_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -280,9 +327,8 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     assigned_coordinator: Mapped[User | None] = relationship(
         lazy="joined", foreign_keys=[assigned_coordinator_id]
     )
-    required_layout: Mapped[RoomLayout | None] = relationship(foreign_keys=[required_layout_code])
-    required_facilities: Mapped[list[EventRequiredFacility]] = relationship(
-        cascade="all, delete-orphan", order_by=EventRequiredFacility.facility_code
+    venue_requirements: Mapped[list[VenueRequirement]] = relationship(
+        cascade="all, delete-orphan", order_by=VenueRequirement.position
     )
     accessibility_needs: Mapped[list[EventAccessibilityNeed]] = relationship(
         cascade="all, delete-orphan", order_by=EventAccessibilityNeed.feature_code

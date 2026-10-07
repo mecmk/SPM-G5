@@ -141,7 +141,7 @@ C4Component
         Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject, coordinator assignment and reassignment")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout")
         Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period")
-        Component(equipment, "Equipment service", "epics 15, 16, 17", "Equipment requests, availability for a period, reservations and releases. The equipment an event request asks for, and its hold on submission, are handled in app/events")
+        Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
         Component(changes, "Change request service", "epic 19", "Requested changes after submission, and the arrangements each one affects")
         Component(notifications, "Notification service", "epic 20, writer in app/common", "One notification per significant action, delivered only to related users")
@@ -280,7 +280,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | # | Core feature | Component | Main tables | Code |
 | --- | --- | --- | --- | --- |
 | 1 | User authorisation and authentication | Auth endpoints, Authentication service, Access control | `roles`, `users`, `user_sessions` | `app/auth` |
-| 2 | Event request creation | Event request service | `events`, `event_required_facilities`, `event_accessibility_needs`, `event_equipment_requests` | `app/events` |
+| 2 | Event request creation | Event request service | `events`, `venue_requirements`, `venue_requirement_facilities`, `event_accessibility_needs`, `event_equipment_requests` | `app/events` |
 | 3 | Draft event requests | Event request service | `events` with status `DRAFT` | `app/events` |
 | 4 | Event review and approval | Review and assignment service | `events`, `event_status_history`, `event_clarifications` | `app/events` |
 | 5 | Coordinator assignment | Review and assignment service | `event_coordinator_assignments`, `events.assigned_coordinator_id` | `app/coordination` |
@@ -293,9 +293,9 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 12 | Venue booking request | Venue booking service | `venue_bookings` | `app/bookings` |
 | 13 | Venue booking approval | Venue booking service | `venue_bookings` decision columns | `app/bookings` |
 | 14 | Booking conflict detection | Venue booking service, plus a database exclusion constraint | `venue_bookings.held_from` and `held_until` | `app/bookings`, and the constraint |
-| 15 | Equipment request management | Equipment service | `event_equipment_requests`, `equipment_types` | `app/events`, for requests made with an event |
-| 16 | Equipment availability checking | Equipment service | `equipment_types.total_quantity`, `equipment_reservations`, `equipment_unavailability_periods` | `app/events`, for an event's dates |
-| 17 | Equipment reservation | Equipment service | `equipment_reservations` | `app/events`, for the hold made on submission |
+| 15 | Equipment request management | Equipment service | `event_equipment_requests`, `equipment_types` | `app/equipment`; `app/events` for requests made with an event |
+| 16 | Equipment availability checking | Equipment service | `equipment_types.total_quantity`, `equipment_reservations`, `equipment_unavailability_periods` | `app/events` for any dates; `app/equipment` for an event, counting what it holds |
+| 17 | Equipment reservation | Equipment service | `equipment_reservations` | `app/events` for the hold made on submission; `app/equipment` for the coordinator's holds |
 | 18 | Attendee registration | Registration service | `event_registrations`, registration columns on `events` | — (an event's registration settings are in `app/events`) |
 | 19 | Event change requests | Change request service | `event_change_requests` | — |
 | 20 | Notification system | Notification service | `notifications` | `app/common/notifications.py`, writing only |

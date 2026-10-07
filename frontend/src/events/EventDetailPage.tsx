@@ -15,9 +15,11 @@ import {
   listClarifications,
   rejectEvent,
   requestClarification,
+  respondToClarification,
   type Clarification,
   type EventDetail,
   type RequiredFacility,
+  type VenueRequirement,
 } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -31,13 +33,20 @@ import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
-  eventEditRoutinePath,
+  eventCoordinatorEditPath,
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
-import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from '../shared/eventStatus'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
+import {
+  AWAITING_DECISION_STATUSES,
+  DETAILS_LOCKED_HINT,
+  DETAILS_LOCKED_STATUSES,
+  EQUIPMENT_OPEN_STATUSES,
+  TERMINAL_STATUSES,
+} from '../shared/eventStatus'
 import {
   formatDate,
   formatDateTime,
@@ -45,12 +54,12 @@ import {
   formatTime,
   instantToInput,
 } from '../shared/format'
-import { canRequestVenueFor } from '../shared/venueRequest'
+import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
+import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
-const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
@@ -113,22 +122,44 @@ function formatMinutesDuration(minutes: number): string {
 }
 
 /**
- * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens - the event's dates, its
- * expected attendance as the minimum capacity, and its layout, facilities and accessibility
- * needs, holding only what the event recorded. "No venue requirements" has already cleared the
- * layout and facilities (story 2.1 AC4), so such an event searches by its dates, capacity and
- * accessibility needs.
+ * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens, holding only what the event
+ * recorded. Story 2.7: for the event's first venue requirement, the one a request carries - its
+ * times, number of people as the minimum capacity, layout and facilities - plus the event's
+ * accessibility needs. An event with no requirements searches by its own dates and attendance.
  */
 function venueSearchFor(event: EventDetail): VenueSearch {
+  const terms = venueRequestTermsFor(event)
   return {
     eventId: event.id,
-    capacity: event.expected_attendance ?? undefined,
-    from: event.starts_at ? instantToInput(event.starts_at) : undefined,
-    to: event.ends_at ? instantToInput(event.ends_at) : undefined,
-    layout: event.required_layout_code ?? undefined,
-    facilities: event.required_facilities.map((facility) => facility.code),
+    capacity: terms.capacity ?? undefined,
+    from: terms.startsAt ? instantToInput(terms.startsAt) : undefined,
+    to: terms.endsAt ? instantToInput(terms.endsAt) : undefined,
+    layout: terms.layoutCode ?? undefined,
+    facilities: terms.facilities.map((facility) => facility.code),
     accessibilityFeatures: event.accessibility_needs.map((need) => need.code),
   }
+}
+
+/**
+ * Story 2.7 AC4: a requirement's times. Both dates when it runs over more than one day (review of
+ * PR #84) - `formatSchedule` gives only the first date, which would make a two-day requirement read
+ * as one.
+ */
+function describeVenueRequirementTimes(startsAt: string, endsAt: string): string {
+  return formatDate(startsAt) === formatDate(endsAt)
+    ? formatSchedule(startsAt, endsAt)
+    : `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`
+}
+
+/** Story 2.7 AC4: one requirement's number of people and times, as one line. */
+function describeVenueRequirementFacts(requirement: VenueRequirement): string {
+  const facts = [
+    requirement.capacity === null ? null : `${requirement.capacity} people`,
+    requirement.starts_at && requirement.ends_at
+      ? describeVenueRequirementTimes(requirement.starts_at, requirement.ends_at)
+      : null,
+  ].filter((fact) => fact !== null)
+  return facts.length > 0 ? facts.join(' · ') : NOT_RECORDED
 }
 
 function formatHeroMeta(event: EventDetail): string {
@@ -149,18 +180,28 @@ function formatHeroMeta(event: EventDetail): string {
  * AC3: this page only ever renders fields, it never edits them, so every field the viewer's role
  * cannot change is simply shown, never hidden.
  *
- * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
- * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
- * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
+ * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
+ * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
+ * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
+ * always, the organiser's details only while under review or awaiting clarification (AC4). AC5:
+ * once approved, that coordinator is also told here that further changes go through the change
+ * request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
  * every venue booking ever raised for the event, most recent first, each with its status and,
  * once rejected, its reason.
  *
+ * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
+ * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
+ * booking queue words it.
+ *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
  * reason and moves it to REJECTED. Both are offered from the same set of statuses.
+ *
+ * Story 15.1: the Equipment requirements section is where the assigned coordinator records the
+ * event's equipment and submits it to Technical Support (`EquipmentRequestsSection`).
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -184,6 +225,9 @@ export function EventDetailPage() {
   const [clarificationMessage, setClarificationMessage] = useState('')
   const [isRequestingClarification, setIsRequestingClarification] = useState(false)
   const [clarificationRequestError, setClarificationRequestError] = useState<string | null>(null)
+  const [responseMessage, setResponseMessage] = useState('')
+  const [isResponding, setIsResponding] = useState(false)
+  const [responseError, setResponseError] = useState<string | null>(null)
   const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
@@ -274,6 +318,12 @@ export function EventDetailPage() {
     setHasImageFailed(true)
   }
 
+  /** Story 15.1: after an equipment change, show every item's new status. A failed reload keeps
+   *  the page as it was rather than replacing it with an error. */
+  function reloadEvent(): Promise<void> {
+    return getEvent(eventId).then(setEvent, () => {})
+  }
+
   function askToApprove() {
     setApproveError(null)
     setIsConfirmingApprove(true)
@@ -350,6 +400,28 @@ export function EventDetailPage() {
     }
   }
 
+  async function confirmRespondToClarification() {
+    if (!event) return
+    if (!responseMessage.trim()) {
+      setResponseError(ERROR_REGISTRY.EVENT_CLARIFICATION_MESSAGE_REQUIRED.message)
+      return
+    }
+    setIsResponding(true)
+    setResponseError(null)
+    try {
+      const entry = await respondToClarification(event.id, responseMessage, event.name)
+      setClarifications((current) => (current ?? []).concat(entry))
+      setResponseMessage('')
+    } catch (err) {
+      setResponseError(formatApiError(err))
+      // A 409 means the request moved on (story 4.3 AC11): reload it so the form goes away with
+      // the state it belonged to. Ignore a failed reload - it must not lose the message.
+      getEvent(event.id).then(setEvent, () => {})
+    } finally {
+      setIsResponding(false)
+    }
+  }
+
   function askToWithdraw(booking: BookingOutcome) {
     setWithdrawError(null)
     setPendingWithdraw(booking)
@@ -423,10 +495,18 @@ export function EventDetailPage() {
   const backLabel = backState?.fromLabel ?? 'Home'
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
-  const canEditRoutineInformation =
+  /** Story 7.2 AC1/AC3/AC8: the assigned coordinator edits the event until it is closed - its
+   *  internal notes always, the organiser's details only while it is under review or awaiting
+   *  clarification. */
+  const canEditEvent =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 7.2 AC5: the details are locked, which the assigned coordinator is told. */
+  const isDetailsLockHintShown =
+    can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
+    isAssignedCoordinator &&
+    DETAILS_LOCKED_STATUSES.includes(event.status)
   /** Story 4.4/4.5: only the assigned coordinator, holding events:review, may decide a request
    *  that is still awaiting one - mirroring the backend's own record-level and status checks. */
   const canApprove =
@@ -439,13 +519,17 @@ export function EventDetailPage() {
     AWAITING_DECISION_STATUSES.includes(event.status)
   /** Story 4.2 AC4/AC5/AC6: only the assigned coordinator, holding events:review, may ask the
    *  organiser a question, while the request is Under Review or already awaits a response to an
-   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing until
-   *  story 4.3 moves the event back to Under Review) - mirroring the backend's own
-   *  `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
+   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing -
+   *  not even story 4.3's response - moves the event back to Under Review) - mirroring the
+   *  backend's own `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
   const canRequestClarification =
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
+  /** Story 4.3 AC1/AC10: only the organiser who owns the request may respond, and only while it
+   *  awaits a response - mirroring the backend's `respond_to_clarification`. */
+  const canRespondToClarification =
+    user !== null && event.organiser_id === user.id && event.status === 'CLARIFICATION_REQUESTED'
   /** Story 5.2 AC1/AC6: only the currently assigned coordinator may reassign, and only on an
    *  event that is not completed, cancelled or rejected - mirroring the backend's
    *  `ASSIGNABLE_STATUSES` (a draft never reaches this: it has no coordinator to be one of). */
@@ -453,6 +537,13 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
+   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
+   *  mirroring the backend's own checks. Everyone else sees the list alone. */
+  const canChangeEquipment =
+    can(PERMISSIONS.EQUIPMENT_REQUEST) &&
+    isAssignedCoordinator &&
+    EQUIPMENT_OPEN_STATUSES.includes(event.status)
   /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
    *  its assigned coordinator, while it can take a booking. */
   const canFindVenue = canRequestVenueFor(event, user, can)
@@ -478,14 +569,18 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {(canEditRoutineInformation || canApprove || canReject || canReassign) && (
+      {(canEditEvent || canApprove || canReject || canReassign) && (
         <div className="page-header actions-only">
+          {/* Story 7.2: editing sits apart, on the left; the decisions stay on the right. */}
+          {canEditEvent && (
+            <Link
+              to={eventCoordinatorEditPath(event.id)}
+              className="button button-with-icon page-header-lead"
+            >
+              <Icon name="pencil" size={20} /> Edit event
+            </Link>
+          )}
           <div className="page-actions">
-            {canEditRoutineInformation && (
-              <Link to={eventEditRoutinePath(event.id)} className="button">
-                Edit routine information
-              </Link>
-            )}
             {canApprove && (
               <button type="button" className="brand" onClick={askToApprove}>
                 Approve
@@ -576,6 +671,7 @@ export function EventDetailPage() {
 
         <section className="card stack" aria-labelledby="event-info-heading">
           <h2 id="event-info-heading">Event information</h2>
+          {isDetailsLockHintShown && <p className="form-hint">{DETAILS_LOCKED_HINT}</p>}
           <div className="row">
             <div>
               <p className="eyebrow">Purpose</p>
@@ -664,33 +760,51 @@ export function EventDetailPage() {
                 </Link>
               )}
             </div>
-            {event.venue_none_required ? (
+            {event.venue_none_required && (
               <p className="muted">No venue is required for this event.</p>
-            ) : (
-              <>
-                <div>
-                  <p className="eyebrow">Room layout</p>
-                  <p>{event.required_layout_name ?? NOT_RECORDED}</p>
-                </div>
-                <div>
-                  <p className="eyebrow">Required facilities</p>
-                  {event.required_facilities.length === 0 ? (
-                    <p className="muted">{NOT_RECORDED}</p>
-                  ) : (
-                    <div className="cluster">
-                      {event.required_facilities.map((facility) => (
-                        <Chip key={facility.code} tone="info" label={describeFacility(facility)} />
-                      ))}
+            )}
+            {!event.venue_none_required && event.venue_requirements.length === 0 && (
+              <p className="muted">{NOT_RECORDED}</p>
+            )}
+            {event.venue_requirements.length > 0 && (
+              <ul className="venue-requirement-list">
+                {event.venue_requirements.map((requirement, index) => (
+                  <li key={requirement.id} className="stack">
+                    <div>
+                      <p>
+                        <strong>{requirement.name ?? `Venue requirement ${index + 1}`}</strong>
+                      </p>
+                      <p className="small muted">{describeVenueRequirementFacts(requirement)}</p>
                     </div>
-                  )}
-                </div>
-                {event.venue_requirement_notes && (
-                  <div>
-                    <p className="eyebrow">Other requirements</p>
-                    <p>{event.venue_requirement_notes}</p>
-                  </div>
-                )}
-              </>
+                    <div>
+                      <p className="eyebrow">Room layout</p>
+                      <p>{requirement.layout_name ?? NOT_RECORDED}</p>
+                    </div>
+                    <div>
+                      <p className="eyebrow">Required facilities</p>
+                      {requirement.facilities.length === 0 ? (
+                        <p className="muted">{NOT_RECORDED}</p>
+                      ) : (
+                        <div className="cluster">
+                          {requirement.facilities.map((facility) => (
+                            <Chip
+                              key={facility.code}
+                              tone="info"
+                              label={describeFacility(facility)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {requirement.notes && (
+                      <div>
+                        <p className="eyebrow">Other requirements</p>
+                        <p>{requirement.notes}</p>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 
@@ -739,6 +853,7 @@ export function EventDetailPage() {
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
+              const outcomeLabels = bookingOutcomeLabels(booking.status)
               return (
                 <div
                   key={booking.id}
@@ -782,9 +897,16 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
+                      {booking.decided_at !== null && (
+                        <p>
+                          <span className="fact-label">{outcomeLabels.when}</span>
+                          <br />
+                          {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
                       {booking.decision_reason !== null && (
                         <p>
-                          <span className="fact-label">Reason</span>
+                          <span className="fact-label">{outcomeLabels.why}</span>
                           <br />
                           {booking.decision_reason}
                         </p>
@@ -820,29 +942,12 @@ export function EventDetailPage() {
           </EmptyState>
         )}
 
-        <section className="card stack" aria-labelledby="equipment-heading">
-          <h2 id="equipment-heading">Equipment requirements</h2>
-          {event.equipment.length === 0 ? (
-            <p className="muted">No equipment requested.</p>
-          ) : (
-            <ul className="check-list">
-              {event.equipment.map((item) => (
-                <li key={item.id}>
-                  <span className="grow-text">
-                    {item.equipment_type_name}
-                    {item.technical_notes && (
-                      <>
-                        <br />
-                        <span className="small muted">{item.technical_notes}</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="mono">×{item.quantity}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <EquipmentRequestsSection
+          eventId={event.id}
+          equipment={event.equipment}
+          canChange={canChangeEquipment}
+          onChanged={reloadEvent}
+        />
 
         {canViewClarifications && (
           <ClarificationHistory
@@ -884,6 +989,39 @@ export function EventDetailPage() {
                 onClick={confirmRequestClarification}
               >
                 {isRequestingClarification ? 'Sending…' : 'Send clarification request'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {canRespondToClarification && (
+          <section className="card stack" aria-labelledby="respond-clarification-heading">
+            <p className="eyebrow" id="respond-clarification-heading">
+              Respond to the coordinator
+            </p>
+            <label>
+              Message
+              <textarea
+                rows={3}
+                maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
+                placeholder="Answer the coordinator's question."
+                value={responseMessage}
+                onChange={(e) => setResponseMessage(e.target.value)}
+              />
+            </label>
+            {responseError && (
+              <p role="alert" className="error">
+                {responseError}
+              </p>
+            )}
+            <div className="page-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={isResponding}
+                onClick={confirmRespondToClarification}
+              >
+                {isResponding ? 'Sending…' : 'Send response'}
               </button>
             </div>
           </section>

@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-06 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-07 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -36,15 +36,16 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
 | Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
-| Event details & history | [`event_required_facilities`](#event_required_facilities) | 2.1, 10.3, 11.1, 12.1 | Facilities the event requires of its venue (many-to-many), optionally how many |
+| Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
+| Event details & history | [`venue_requirement_facilities`](#venue_requirement_facilities) | 2.7, 10.3, 11.1, 12.1 | Facilities one venue requirement needs, optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
-| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.x, 16.4, 17.3 | One line per equipment type an event asks for, with quantity and technical notes |
+| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.1, 15.2, 16.1, 17.1 | One item per equipment type an event needs, with quantity and technical notes |
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date, time, attendance, venue or equipment requirements) after submission |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
-| Equipment | [`equipment_reservations`](#equipment_reservations) | 16.2, 17.x | A hold of N units of an equipment type for an event over a period |
+| Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
 | Registration | [`event_registrations`](#event_registrations) | 18.x | An attendee's registration for an event |
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
@@ -367,9 +368,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
-| `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Venue requirement: required room layout (story 2.1 AC4). |
-| `venue_requirement_notes` | `text` | yes | - | - | Free-text venue requirements not captured elsewhere. |
-| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no venue requirements (no layout, facilities or notes). FALSE with none of those recorded = not yet specified (story 2.1 AC4). A request cannot be submitted until one or the other is given (story 2.1 AC10). |
+| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated the event needs no venue, and it has no venue_requirements rows. FALSE with no rows = not yet specified. A request cannot be submitted until one or the other is given (story 2.1 AC10, story 2.7 AC8). |
 | `accessibility_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable). |
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
 | `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.1 AC17). |
@@ -410,22 +409,52 @@ Rules and indexes:
 
 ## Event details & history
 
-### event_required_facilities
+### venue_requirements
 
-**Stories:** 2.1, 10.3, 11.1, 12.1
+**Stories:** 2.7, 7.1, 12.1, 8.4, 12.5
 
-Facilities the event requires of its venue (many-to-many), optionally how many.
+One venue an event needs: a name, how many people it must hold, when, and what the room must offer. An event has none (venue_none_required, or not yet specified) or several, in position order. Drafts may hold incomplete rows; submission needs a name and a number of people on each (story 2.7 AC8). Each row has a stable id a booking can later point at.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
-| `event_id` | `uuid` | no | - | PK FK → `events.id` | FK -> events.id. |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event that needs this venue. |
+| `position` | `integer` | no | - | - | Order on the request, from 0. The first requirement (0) is what a booking request copies until story 12.5 lets a booking name its requirement. |
+| `name` | `text` | yes | - | - | Short name, e.g. "Plenary hall" (story 2.7 AC1). Unique per event, trimmed and case-insensitive (AC9). NULL only while the request is a draft. |
+| `capacity` | `integer` | yes | - | - | How many people the venue must hold: a positive whole number, at most the event's expected attendance (story 2.7 AC6). NULL only while the request is a draft. |
+| `starts_at` | `timestamp with time zone` | yes | - | - | When the venue is needed from, within the event's proposed period (story 2.7 AC2, AC5). Set together with ends_at; NULL on a draft takes the event's times on submission. |
+| `ends_at` | `timestamp with time zone` | yes | - | - | When the venue is needed until. After starts_at, and no later than the event's end (story 2.7 AC5). |
+| `layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Required room layout; NULL = no preference. |
+| `notes` | `text` | yes | - | - | Other requirements in free text (story 2.7 AC1). |
+| `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
+| `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+
+Rules and indexes:
+
+- unique `uq_venue_requirements_event_position`: `UNIQUE (event_id, "position") DEFERRABLE INITIALLY DEFERRED`
+- check `ck_venue_requirements_capacity`: `CHECK (((capacity IS NULL) OR (capacity > 0)))`
+- check `ck_venue_requirements_name`: `CHECK (((name IS NULL) OR ((btrim(name) <> ''::text) AND (char_length(name) <= 100))))`
+- check `ck_venue_requirements_period`: `CHECK (((starts_at IS NULL) OR (ends_at > starts_at)))`
+- check `ck_venue_requirements_position`: `CHECK (("position" >= 0))`
+- check `ck_venue_requirements_times_together`: `CHECK (((starts_at IS NULL) = (ends_at IS NULL)))`
+- unique index `uq_venue_requirements_event_name`: `btree (event_id, lower(btrim(name))) WHERE (name IS NOT NULL)`
+
+### venue_requirement_facilities
+
+**Stories:** 2.7, 10.3, 11.1, 12.1
+
+Facilities one venue requirement needs, optionally how many. Replaces event_required_facilities (migration 012).
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `requirement_id` | `uuid` | no | - | PK FK → `venue_requirements.id` | FK -> venue_requirements.id. |
 | `facility_code` | `text` | no | - | PK FK → `facilities.code` | FK -> facilities.code. |
-| `quantity` | `integer` | yes | - | - | How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number (story 2.1 AC3). |
+| `quantity` | `integer` | yes | - | - | How many are needed, e.g. 3 breakout rooms. NULL = not stated. Positive whole number. |
 | `notes` | `text` | yes | - | - | Free text, e.g. "needs HDMI input". |
 
 Rules and indexes:
 
-- check `ck_event_required_facilities_quantity`: `CHECK (((quantity IS NULL) OR (quantity > 0)))`
+- check `ck_venue_requirement_facilities_quantity`: `CHECK (((quantity IS NULL) OR (quantity > 0)))`
 
 ### event_accessibility_needs
 
@@ -441,26 +470,28 @@ Accessibility features the event needs (many-to-many). See events.accessibility_
 
 ### event_equipment_requests
 
-**Stories:** 2.1 (AC6), 15.x, 16.4, 17.3
+**Stories:** 2.1 (AC6), 15.1, 15.2, 16.1, 17.1
 
-One line per equipment type an event asks for, with quantity and technical notes. Technical Support Staff move each line through statuses as they arrange it (story 15.4). Actual holds on stock are separate rows in equipment_reservations.
+One item per equipment type an event needs, with quantity and technical notes. The organiser records them on the request (2.1); the assigned coordinator adds, edits and removes them and submits them to Technical Support (15.1), who accept or decline each (16.1). The units an item holds are separate rows in equipment_reservations.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
-| `quantity` | `integer` | no | - | - | Units requested. Positive whole number (story 2.1 AC3, 15.1 AC3). |
-| `technical_notes` | `text` | yes | - | - | Technical requirements for this item (story 15.1 AC2). |
-| `status` | `text` | no | `'REQUESTED'` | - | Progress of the request line: REQUESTED, UNDER_REVIEW, RESERVED, PARTIALLY_RESERVED, UNAVAILABLE, CANCELLED (story 15.4 AC1). |
-| `status_notes` | `text` | yes | - | - | Note from Technical Support Staff when the item cannot be provided as requested (story 15.4 AC2). |
-| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who added the line (organiser or coordinator). |
+| `quantity` | `integer` | no | - | - | Units requested. Positive whole number (story 2.1 AC3, 15.1 AC4). |
+| `technical_notes` | `text` | yes | - | - | Technical requirements for this item. Optional; at most 1,000 characters when the coordinator records it (story 15.1 AC5). |
+| `status` | `text` | no | `'REQUESTED'` | - | REQUESTED: recorded, not yet sent to Technical Support. PENDING: sent, awaiting Technical Support. ACCEPTED or DECLINED: Technical Support's decision (story 16.1). UNAVAILABLE: the event's new dates can no longer cover it (story 15.1 AC8). CANCELLED: its event was cancelled (story 6.2). |
+| `status_notes` | `text` | yes | - | - | Technical Support's note on its decision, such as the reason for declining (story 16.1). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who recorded the item: the organiser (story 2.1) or the coordinator (story 15.1). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+| `submitted_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The coordinator who sent the item to Technical Support (story 15.1 AC1). NULL until it is sent. |
+| `submitted_at` | `timestamp with time zone` | yes | - | - | When the item was last sent to Technical Support: on submission, or again when the event's dates changed (story 15.1 AC1, AC8). NULL until it is sent. |
 
 Allowed values:
 
-- `status`: `REQUESTED`, `UNDER_REVIEW`, `RESERVED`, `PARTIALLY_RESERVED`, `UNAVAILABLE`, `CANCELLED`
+- `status`: `REQUESTED`, `PENDING`, `ACCEPTED`, `DECLINED`, `UNAVAILABLE`, `CANCELLED`
 
 Rules and indexes:
 
@@ -610,21 +641,21 @@ Rules and indexes:
 
 ### equipment_reservations
 
-**Stories:** 16.2, 17.x
+**Stories:** 2.1, 15.1, 16.1, 16.2, 17.1
 
-A hold of N units of an equipment type for an event over a period. Availability for a period = equipment_types.total_quantity - SUM(quantity - released_quantity) of overlapping RESERVED rows - overlapping out-of-service quantities. The "never over-commit" rule (story 17.2 AC3) is enforced in the service layer inside a transaction, because SQL constraints cannot sum across rows.
+A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1). Availability for a period = equipment_types.total_quantity - SUM(quantity - released_quantity) of overlapping RESERVED rows - overlapping out-of-service quantities. Never over-committing is enforced in the service layer under a row lock on the equipment type, because SQL constraints cannot sum across rows.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event the stock is held for (story 17.1 AC3). |
-| `equipment_request_id` | `uuid` | yes | - | FK → `event_equipment_requests.id` | FK -> event_equipment_requests.id. The request line this reservation satisfies (optional). |
+| `equipment_request_id` | `uuid` | yes | - | FK → `event_equipment_requests.id` | FK -> event_equipment_requests.id. The item this hold is for. NULL once the item is removed (its hold is released first, story 15.1 AC2). |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
 | `quantity` | `integer` | no | - | - | Units reserved. Positive. |
-| `starts_at` | `timestamp with time zone` | no | - | - | Start of the hold (normally the event start, story 17.1 AC1). |
+| `starts_at` | `timestamp with time zone` | no | - | - | Start of the hold: the event's start (story 15.1 AC2). |
 | `ends_at` | `timestamp with time zone` | no | - | - | End (exclusive) of the hold. |
-| `status` | `text` | no | `'RESERVED'` | - | RESERVED while any units are still held; RELEASED once released_quantity = quantity (story 17.4). |
-| `reserved_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Technical Support Staff member who reserved (story 17.1 AC3). |
+| `status` | `text` | no | `'RESERVED'` | - | RESERVED while any units are still held; RELEASED once released_quantity = quantity (an item removed, declined or moved to new dates, story 15.1 AC2/AC8). |
+| `reserved_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Who placed the hold: the organiser on submitting (story 2.1 AC11) or the coordinator (story 15.1). |
 | `reserved_at` | `timestamp with time zone` | no | `now()` | - | When the reservation was made. |
 | `released_at` | `timestamp with time zone` | yes | - | - | When the reservation was last (partly) released. |
 | `released_quantity` | `integer` | no | `0` | - | Units already released back to stock (supports partial release, story 17.4 AC1). |
