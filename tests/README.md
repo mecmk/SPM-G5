@@ -52,6 +52,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.1.2 AC1, AC3, AC4; 13.1.3 AC1–AC4; 13.2 AC1; 13.2.1 AC2–AC4; 13.2.2 AC1 | Venue Staff's queue, Pending / All / Approved / Rejected tabs, cancellation timing, pagination, the requested venue's calendar on the request detail page, approving and rejecting, and when a decision was made |
 | `e2e/equipment-requests.spec.ts` | 15.1 AC1–AC4, AC6, AC9 | recording an event's equipment and submitting it to Technical Support |
 | `e2e/equipment-queue.spec.ts` | 15.2 AC1–AC3, AC5, AC6 | Technical Support's equipment request queue, its figures, its All / Pending / Accepted / Declined tabs, and View details to the event and back |
+| `e2e/equipment-decisions.spec.ts` | 16.1 AC1, AC2, AC4, AC9 | Technical Support accepting and declining equipment requests from the queue, a blank decline reason blocked in the browser, a double-click deciding once, and the coordinator seeing each outcome on the event page |
 
 Every case, by story and AC, without starting anything:
 
