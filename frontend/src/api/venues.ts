@@ -201,13 +201,46 @@ export interface VenueSearchQuery {
   facility?: readonly string[]
   accessibility?: readonly string[]
   include_withdrawn?: boolean
+  /** Story 11.1 AC1: the event to judge each result against. The catalogue sends it only once the
+   * event in its address is one the user may request a venue for. */
+  event?: string
+}
+
+/** Mirrors `Criterion` in backend/app/venues/suitability.py: what a failed criterion is about. */
+export type SuitabilityCriterion =
+  'CAPACITY' | 'LAYOUT' | 'FACILITY' | 'FACILITY_QUANTITY' | 'ACCESSIBILITY'
+
+/** Mirrors `Outcome`: UNKNOWN when the venue has not recorded it - never treated as met (AC5). */
+export type SuitabilityOutcome = 'NOT_MET' | 'UNKNOWN'
+
+/** Mirrors `FailedCriterionOut`: one criterion a venue fails, with the requirement's value
+ * (`required`) and the venue's (`venue_value`) where it has numbers. For CAPACITY, `code` and
+ * `name` are the layout whose capacity was compared, or null for the venue's maximum. */
+export interface FailedCriterion {
+  criterion: SuitabilityCriterion
+  outcome: SuitabilityOutcome
+  code: string | null
+  name: string | null
+  required: number | null
+  venue_value: number | null
+}
+
+/** Mirrors `VenueSuitabilityOut` (story 11.1 AC1/AC3): whether a venue suits the venue
+ * requirement it was judged against. The requirement is null for an event with none. */
+export interface VenueSuitability {
+  requirement_id: string | null
+  requirement_name: string | null
+  is_suitable: boolean
+  failures: FailedCriterion[]
 }
 
 /** Mirrors `VenueSearchHit`: a venue the search found. Its hours are "HH:MM:SS", or null when
- * not recorded - such a venue is kept when a period is searched (story 8.1 AC3). */
+ * not recorded - such a venue is kept when a period is searched (story 8.1 AC3). Story 11.1:
+ * `suitability` is null outside event context and for anyone but the event's coordinator. */
 export interface VenueSearchHit extends VenueSummary {
   operating_hours_start: string | null
   operating_hours_end: string | null
+  suitability: VenueSuitability | null
 }
 
 /** The filter groups a search can relax (story 8.1 AC9); `SEARCH_GROUP_LABELS` in
@@ -243,6 +276,7 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
   for (const code of query.facility ?? []) params.append('facility', code)
   for (const code of query.accessibility ?? []) params.append('accessibility', code)
   if (query.include_withdrawn) params.set('include_withdrawn', 'true')
+  if (query.event) params.set('event', query.event)
   return api<VenueSearchResult>(`/venues/search?${params}`)
 }
 

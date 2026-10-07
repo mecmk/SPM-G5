@@ -12,6 +12,10 @@ export interface RequestingEventState {
   requestingEvent: EventDetail | null
   /** Why the event in the address could not be loaded, otherwise null. */
   error: string | null
+  /** Story 11.1: the address names an event that has not loaded or failed yet, so it is not known
+   * whether the user may request a venue for it. The catalogue waits for this before searching,
+   * so it searches once - with the event, or without it. */
+  isResolving: boolean
 }
 
 /**
@@ -33,5 +37,6 @@ export function useRequestingEvent(): RequestingEventState {
   // `useLoaded` keeps the last event while a changed address loads, so check it is this one.
   const isRequestable =
     event !== null && event.id === eventId && canRequestVenueFor(event, user, can)
-  return { requestingEvent: isRequestable ? event : null, error }
+  const isResolving = eventId !== null && error === null && event?.id !== eventId
+  return { requestingEvent: isRequestable ? event : null, error, isResolving }
 }
