@@ -16,7 +16,8 @@ AC6 Actions in quick succession produce notifications in the right order, withou
 AC1 is tested for every action that exists today and notified nobody before this story:
 submission (2.1, with 5.1's automatic assignment), approval and rejection (4.4, 4.5), the booking
 request (12.1) and the booking decisions (13.2, 13.2.1). The actions that already notified keep
-their own tests: 4.2's ``test_the_organiser_is_notified`` and 12.2's
+their own tests: 4.2's ``test_the_organiser_is_notified``, 4.3's
+``test_the_assigned_coordinator_is_notified`` and 12.2's
 ``test_withdrawing_notifies_every_active_venue_staff_member`` pin their recipients exactly, and
 5.2's reassignment is tested here under AC3. Change decisions (19.2), registration changes
 (18.x), cancellation (6.2) and the Week 7 triggers belong to stories not built yet, which send

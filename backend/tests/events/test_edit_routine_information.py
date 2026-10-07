@@ -8,7 +8,7 @@ AC3 Editing is blocked once the event is completed, cancelled or rejected.
 Excluded, with reason:
 * Change history / audit UI - out of scope for 7.2 (story 7.4). ``record_audit`` is called the
   same way every other write in this service calls it; there is no viewer for it yet.
-* Notifications - no notification application code exists anywhere in the backend (epic 20).
+* Notifications - a routine edit is not one of the actions story 20.1 notifies of (20.1 AC1).
 """
 
 from __future__ import annotations
