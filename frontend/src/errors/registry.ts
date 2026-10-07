@@ -96,6 +96,7 @@ export type ErrorCode =
   | 'CHANGE_REQUEST_INVALID'
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
   | 'CHANGE_REQUEST_REASON_REQUIRED'
+  | 'CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID'
   | 'EVENT_CONTACT_EDIT_CLOSED'
 
 export interface ErrorEntry {
@@ -550,6 +551,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   CHANGE_REQUEST_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for the change.',
+  },
+  /** AC4: the form's own pre-check. Unlike a draft's (VENUE_REQUIREMENT_CAPACITY_INVALID), a
+   *  proposed requirement must say how many people it holds - never wired into an errorCodes map. */
+  CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID: {
+    title: 'Check the number of people',
+    message: 'Give every venue requirement a number of people, as a whole number from 1.',
   },
   /** AC2: the point of contact is updated directly only while the event is Planning or Confirmed. */
   EVENT_CONTACT_EDIT_CLOSED: {

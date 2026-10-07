@@ -206,3 +206,46 @@ test('19.1 AC4: the reason message clears once a reason is typed', async ({ page
   await expect(changeRequests(page).getByText('Enter a reason for the change.')).toHaveCount(0)
   await expect(reason).not.toHaveAttribute('aria-invalid', 'true')
 })
+
+test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not sent', async ({
+  page,
+}) => {
+  // Nothing is sent: Olivia's Regional Sales Summit is only looked at here, never changed.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  let raiseCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/change-requests')) raiseCalls += 1
+  })
+  const section = changeRequests(page)
+
+  await openChangeForm(page, 'Equipment')
+  const existingItems = await section.getByLabel(/^Item \d+ type$/).count()
+  await section.getByRole('button', { name: 'Add equipment' }).click()
+  await section.getByRole('button', { name: 'Add equipment' }).click()
+  for (const position of [existingItems + 1, existingItems + 2]) {
+    await section
+      .getByLabel(`Item ${position} type`)
+      .selectOption({ label: 'Wireless microphone' })
+    await section.getByLabel(`Item ${position} quantity`).fill('1')
+  }
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    section.getByText('Each equipment type can appear only once on a request.'),
+  ).toBeVisible()
+
+  await section.getByLabel('What to change').selectOption({ label: 'Venue requirements' })
+  const existingRequirements = await section
+    .getByLabel(/^Requirement \d+ number of people$/)
+    .count()
+  await section.getByRole('button', { name: 'Add a venue requirement' }).click()
+  const added = existingRequirements + 1
+  await section.getByLabel(`Requirement ${added} name`).fill('Breakout')
+  await section.getByLabel(`Requirement ${added} number of people`).fill('0')
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    section.getByText('Give every venue requirement a number of people, as a whole number from 1.'),
+  ).toBeVisible()
+  expect(raiseCalls).toBe(0)
+})

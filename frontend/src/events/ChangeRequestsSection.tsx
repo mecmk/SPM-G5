@@ -357,9 +357,22 @@ export function ChangeRequestsSection({
     if (field === 'expected_attendance' && !isPositiveWholeNumber(attendance)) {
       return { target: 'value', message: ERROR_REGISTRY.EVENT_ATTENDANCE_INVALID.message }
     }
+    if (
+      field === 'venue_requirements' &&
+      requirements.some((row) => !isPositiveWholeNumber(row.capacity))
+    ) {
+      return {
+        target: 'value',
+        message: ERROR_REGISTRY.CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID.message,
+      }
+    }
     if (field === 'equipment') {
       if (equipment.some((row) => row.code === '')) {
         return { target: 'value', message: ERROR_REGISTRY.EVENT_EQUIPMENT_TYPE_REQUIRED.message }
+      }
+      const codes = equipment.map((row) => row.code)
+      if (new Set(codes).size !== codes.length) {
+        return { target: 'value', message: ERROR_REGISTRY.EVENT_EQUIPMENT_DUPLICATE.message }
       }
       if (equipment.some((row) => !isPositiveWholeNumber(row.quantity))) {
         return { target: 'value', message: ERROR_REGISTRY.EVENT_QUANTITY_INVALID.message }

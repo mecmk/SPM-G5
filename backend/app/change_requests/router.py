@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_any_permission, require_permission
@@ -47,7 +47,9 @@ def _requirement_refusal(exc: service.InvalidVenueRequirement) -> HTTPException:
 )
 def raise_change_request(
     event_id: uuid.UUID,
-    payload: Annotated[ChangeRequestIn, Body()],
+    # Not wrapped in Body(): FastAPI keeps only the last field info, which would drop the
+    # union's discriminator and report every kind of request's errors (PR #94 review).
+    payload: ChangeRequestIn,
     db: DbSession,
     actor: Annotated[CurrentUser, CanRequestChanges],
 ) -> ChangeRequestOut:

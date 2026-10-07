@@ -720,6 +720,36 @@ def test_unknown_field_is_refused(organiser_client, db: Session, field):
     assert _change_requests(db, event.id) == []
 
 
+@pytest.mark.story("19.1", ac=4)
+@pytest.mark.parametrize(
+    ("field", "proposed"),
+    [
+        (
+            "equipment",
+            [
+                {"equipment_type_code": "WIRELESS_MIC", "quantity": 1},
+                {"equipment_type_code": "WIRELESS_MIC", "quantity": 2},
+            ],
+        ),
+        ("expected_attendance", 0),
+        ("venue_requirements", [{"name": "Hall", "capacity": 0}]),
+    ],
+    ids=["duplicate-type", "zero-attendance", "zero-people"],
+)
+def test_a_refused_value_reports_only_its_own_problem(
+    organiser_client, db: Session, field, proposed
+):
+    """Review of PR #94: the body is judged only as the field it names, so a refused value comes
+    back as one problem located under that field, not one per kind of change request."""
+    event = _planning_event(db)
+
+    response = _raise(organiser_client, event.id, field, proposed)
+
+    assert response.status_code == 422, response.text
+    [problem] = response.json()["detail"]
+    assert problem["loc"][:2] == ["body", field]
+
+
 # --- AC5 / AC6: one pending request per field, only while Planning --------------------------
 @pytest.mark.story("19.1", ac=6)
 def test_second_pending_request_for_the_same_field_is_refused(organiser_client, db: Session):
