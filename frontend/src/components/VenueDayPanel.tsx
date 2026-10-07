@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { Chip } from '../components/Chip'
 import { formatDate, inputToInstant } from '../shared/format'
+import { Chip } from './Chip'
 import type { DayItem } from './venueCalendarDays'
 
 export interface VenueDayPanelProps {
@@ -9,6 +9,9 @@ export interface VenueDayPanelProps {
   /** `YYYY-MM-DD`, Singapore time. */
   date: string
   items: DayItem[]
+  /** Whether opening (or switching to) a day brings the list into view. Off for a day open on
+   *  arrival, which the user has not asked to see yet. */
+  scrollIntoView?: boolean
 }
 
 /**
@@ -23,12 +26,12 @@ export interface VenueDayPanelProps {
  * switching to) a day scrolls it into view - only as far as needed. Focus is left on the day's
  * button, so pressing it again still closes the list.
  */
-export function VenueDayPanel({ id, date, items }: VenueDayPanelProps) {
+export function VenueDayPanel({ id, date, items, scrollIntoView = true }: VenueDayPanelProps) {
   const headingId = `${id}-heading`
   const panelRef = useRef<HTMLElement>(null)
   useEffect(() => {
-    panelRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [date])
+    if (scrollIntoView) panelRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [date, scrollIntoView])
   return (
     <section ref={panelRef} id={id} className="calendar-day-panel" aria-labelledby={headingId}>
       <h3 id={headingId} className="calendar-day-panel-title">
