@@ -72,6 +72,9 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  * Story 13.1.3: the requested venue's calendar beside the details, so on a wide screen it sits
  * just under Approve and Reject and the decision does not mean scrolling back up; on a narrow one
  * it stacks below the details.
+ *
+ * Story 11.1 AC3: a request for a venue that did not suit the event shows the coordinator's
+ * justification, from the booking already loaded here.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -204,6 +207,17 @@ export function BookingRequestDetailPage() {
           <br />
           {booking.decision_reason}
         </p>
+      )}
+
+      {/* Story 11.1 AC3: the coordinator's justification for requesting a venue that does not
+       *  suit the event, for Venue Staff to weigh. Only a request that overrode the check has one. */}
+      {booking.suitability_override_reason !== null && (
+        <section className="subtle-block" aria-labelledby="booking-override-heading">
+          <h2 id="booking-override-heading" className="fact-label">
+            Why this venue was requested
+          </h2>
+          <p>{booking.suitability_override_reason}</p>
+        </section>
       )}
 
       <div className="stack">

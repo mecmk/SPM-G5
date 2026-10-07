@@ -226,9 +226,10 @@ test('12.1 AC1/AC3: a coordinator raises a venue booking request for their appro
   await findVenueFor(page, BRIEFING)
 
   // The one request really sent is Quarterly Partner Briefing's, to Seminar Room 2.1, which fits
-  // everything it records. No other test uses that event, so the hold the request leaves on the
-  // room hides nothing another test looks for; and not Nimbus's, whose seeded request story
-  // 13.1's queue tests find by its event name.
+  // everything it records. The only other spec to use that event, venue-suitability.spec.ts (11.1),
+  // requests Exhibition Foyer for it and never asserts on Seminar Room's availability, so the hold
+  // this request leaves on the room hides nothing another test looks for; and not Nimbus's, whose
+  // seeded request story 13.1's queue tests find by its event name.
   await venueCard(page, BRIEFING_VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
   await expect(
     page.getByRole('heading', { name: `Request ${BRIEFING_VENUE}`, level: 1 }),

@@ -155,6 +155,12 @@ REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
 FACILITY_QUANTITY_SUFFIX = " ×{quantity}"
 FACILITY_NOTES_SUFFIX = " ({notes})"
 
+# Story 11.1 AC2/AC7: requesting a venue that does not suit the event needs a reason.
+JUSTIFICATION_REQUIRED_MESSAGE = (
+    "This venue does not suit the event's venue requirement. Give a justification to request it "
+    "anyway."
+)
+
 # AC1 is worded "an approved event"; the schema's rule is approved *or later* (see the
 # venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
 # planning or confirmed may still need a further venue booked. An approved request is in
@@ -257,6 +263,13 @@ class VenueClosed(ValueError):
             )
         )
         self.venue = venue
+
+
+class JustificationRequired(ValueError):
+    """Story 11.1 AC2/AC7: the venue does not suit the event and no justification was given."""
+
+    def __init__(self) -> None:
+        super().__init__(JUSTIFICATION_REQUIRED_MESSAGE)
 
 
 class BookingConflict(ValueError):
@@ -753,6 +766,12 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     the search's other two rules are checked again after the hold - a closure overlapping the
     period (``VenueBlocked``) and opening hours that leave part of it out (``VenueClosed``).
 
+    Story 11.1 AC2/AC7: then, after availability, whether the venue suits the event - judged as
+    the venue and the event's requirement stand now, with the catalogue's own check. One that
+    does not is refused without a justification (``JustificationRequired``); with one, the
+    justification is stored. For a venue that suits, nothing is stored, even if one was sent
+    (Q9). The audit entry records whether the check was overridden, never the text.
+
     Story 20.1 AC1: Venue Staff are told the request is waiting, once it is written - a refused
     request tells nobody (AC4).
     """
@@ -762,7 +781,7 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     # Story 2.7: the first venue requirement, if the event lists any. Each value falls back to
     # the event's own, which a submitted event always has (ck_events_submitted_fields_complete),
     # so the booking's NOT NULL period and attendance are always filled.
-    requirement = event.venue_requirements[0] if event.venue_requirements else None
+    requirement = venue_service.first_venue_requirement(event)
     has_own_times = requirement is not None and requirement.starts_at is not None
     booking = VenueBooking(
         event_id=event.id,
@@ -770,8 +789,7 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         requested_by_id=actor.id,
         starts_at=requirement.starts_at if has_own_times else event.starts_at,
         ends_at=requirement.ends_at if has_own_times else event.ends_at,
-        expected_attendance=(requirement.capacity if requirement else None)
-        or event.expected_attendance,
+        expected_attendance=venue_service.people_to_hold(event, requirement),
         required_layout_code=requirement.layout_code if requirement else None,
         requirement_notes=_requirement_notes(db, requirement),
         status=BookingStatus.PENDING,
@@ -791,6 +809,13 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         raise VenueBlocked(venue, closure)
     if venue_service.closed_for(venue, starts_at=held_from, ends_at=held_until):
         raise VenueClosed(venue, starts_at=held_from, ends_at=held_until)
+    # No EventNotJudgeable: only PLANNING/CONFIRMED events book, and the DB requires attendance.
+    judged = venue_service.judge_venue_for_event(event, venue)
+    if not judged.suitability.is_suitable and data.suitability_override_reason is None:
+        raise JustificationRequired()
+    booking.suitability_override_reason = (
+        None if judged.suitability.is_suitable else data.suitability_override_reason
+    )
 
     venue_id = venue.id
     db.add(booking)
@@ -813,7 +838,11 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         action="BOOKING_REQUESTED",
         entity_type="venue_booking",
         entity_id=booking.id,
-        details={"event_id": str(event.id), "venue_id": str(venue.id)},
+        details={
+            "event_id": str(event.id),
+            "venue_id": str(venue.id),
+            "suitability_overridden": booking.suitability_override_reason is not None,
+        },
         commit=False,
     )
     db.commit()

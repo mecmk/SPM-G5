@@ -35,7 +35,7 @@ Excluded, with reason:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -43,8 +43,30 @@ from sqlalchemy.orm import Session
 
 import app.bookings.service as bookings_service
 from app.bookings.models import BookingStatus
-from tests.support.factories import make_booking
-from tests.support.seed import Bookings, Events, Users, Venues
+from app.events.models import Event, EventStatus
+from tests.support.factories import make_booking, make_event, make_venue_requirement
+from tests.support.seed import Bookings, Users, Venues
+
+_SGT = timezone(timedelta(hours=8))
+
+
+def _event_seminar_room_suits(db: Session) -> Event:
+    """Chloe's event that Seminar Room 2.1 suits (story 11.1: 60 people, Classroom, a projector),
+    at the time the seeded pending request holds the room (25 Nov 2026, 13:00-18:00, held
+    12:30-18:15). Nimbus itself does not fit the room, and story 11.1 refuses a venue that does
+    not suit unless the request carries a justification."""
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        starts_at=datetime(2026, 11, 25, 13, 0, tzinfo=_SGT),
+        ends_at=datetime(2026, 11, 25, 18, 0, tzinfo=_SGT),
+        expected_attendance=60,
+    )
+    make_venue_requirement(
+        db, event.id, capacity=60, layout_code="CLASSROOM", facilities=(("PROJECTOR", None, None),)
+    )
+    return event
 
 
 # --- AC2/AC3: withdrawal records the coordinator and time, releases the hold, notifies -------
@@ -116,15 +138,18 @@ def test_withdrawing_releases_the_hold_and_a_new_request_can_be_raised(
     coordinator_client, db: Session
 ):
     """Since s12.1 a pending request holds its venue, so a fresh request for the same slot is
-    refused while it stands. Withdrawing frees Seminar Room for Nimbus's day at once - the same
+    refused while it stands. Withdrawing frees Seminar Room for that slot at once - the same
     proof ``test_rejecting_a_held_request_releases_the_venue`` uses for rejection (AC5's "a new
-    request can be raised" is the same underlying guarantee, shown from the coordinator's side)."""
+    request can be raised" is the same underlying guarantee, shown from the coordinator's side).
+    The new request comes from an event the room suits (story 11.1), at a time the withdrawn
+    request held."""
+    event = _event_seminar_room_suits(db)
     withdrawn = coordinator_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/withdraw")
     assert withdrawn.status_code == 200
 
     raised = coordinator_client.post(
         "/bookings",
-        json={"event_id": str(Events.APPROVED), "venue_id": str(Venues.SEMINAR_ROOM)},
+        json={"event_id": str(event.id), "venue_id": str(Venues.SEMINAR_ROOM)},
     )
     assert raised.status_code == 201
 

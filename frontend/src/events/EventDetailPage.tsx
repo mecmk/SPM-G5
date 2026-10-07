@@ -924,6 +924,14 @@ export function EventDetailPage() {
                           {booking.decision_reason}
                         </p>
                       )}
+                      {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
+                      {booking.suitability_override_reason !== null && (
+                        <p>
+                          <span className="fact-label">Justification</span>
+                          <br />
+                          {booking.suitability_override_reason}
+                        </p>
+                      )}
                     </div>
                   </div>
 

@@ -82,6 +82,7 @@ def test_no_filters_lists_every_venue_in_service(coordinator_client):
         "cover_image_url": None,
         "operating_hours_start": "08:00:00",
         "operating_hours_end": "22:00:00",
+        "suitability": None,
     }
 
     with_withdrawn = _search(coordinator_client, include_withdrawn=True)

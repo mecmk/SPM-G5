@@ -1,12 +1,18 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { createBookingRequest, type Booking } from '../api/bookings'
+import {
+  createBookingRequest,
+  SUITABILITY_OVERRIDE_REASON_MAX_LENGTH,
+  type Booking,
+} from '../api/bookings'
 import { ApiError, formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
-import { getVenue, type Venue } from '../api/venues'
+import { getVenue, getVenueSuitability, type Venue, type VenueSuitability } from '../api/venues'
 import { useAuth } from '../auth/authContext'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { SuitabilityNote } from '../components/SuitabilityNote'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { eventPath, VENUE_CATALOGUE_PATH, venueSearchPath } from '../routes'
@@ -53,6 +59,16 @@ interface RequestSubject {
  * Story 12.1 AC14: the venue may have stopped being available since the search. The backend
  * re-checks and refuses with its reason, and the step then offers Back to the results: the same
  * search, which runs again, so the venue has gone from it.
+ *
+ * Story 11.1 AC2: once the step knows the coordinator may request the venue, it reads whether the
+ * venue suits the event - "Checking…" meanwhile, with Send held back. A venue that suits shows
+ * "Suitable". One that does not shows a warning listing every failure and a required
+ * justification (AC7: never sent blank), and Send asks for confirmation before sending it. If the
+ * read fails the step says so and Send stays open, since the backend judges again on send. AC7:
+ * when the backend refuses the send for want of a justification - the venue stopped suiting after
+ * the step loaded - the step reads again and shows the warning. That refusal is itself enough to
+ * ask for the justification, so a read that fails again still leaves the coordinator able to give
+ * one; and only the latest read's failure is shown, never an earlier one beside a read that worked.
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -66,10 +82,30 @@ export function BookingRequestFormPage() {
     [eventId, venueId],
   )
   const { data: subject, error } = useLoaded(loadSubject)
+  const isRequestable = subject !== null && canRequestVenueFor(subject.event, user, can)
+  const loadSuitability = useCallback(
+    () =>
+      isRequestable
+        ? getVenueSuitability(venueId, eventId)
+        : Promise.resolve<VenueSuitability | null>(null),
+    [isRequestable, venueId, eventId],
+  )
+  const {
+    data: suitability,
+    error: suitabilityError,
+    setData: setSuitability,
+  } = useLoaded(loadSuitability)
   const [sent, setSent] = useState<Booking | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [justification, setJustification] = useState('')
+  const [isConfirming, setIsConfirming] = useState(false)
+  // The latest read after a refused send: null until there is one, then how it ended. It takes
+  // over from the first read's failure (suitabilityError), which useLoaded never clears itself.
+  const [reread, setReread] = useState<{ error: string | null } | null>(null)
+  // The backend refused a send for want of a justification, and no later read has said otherwise.
+  const [serverAskedForJustification, setServerAskedForJustification] = useState(false)
 
   if (error) {
     return (
@@ -103,20 +139,67 @@ export function BookingRequestFormPage() {
   const backTo = location.search
     ? `${VENUE_CATALOGUE_PATH}${location.search}`
     : venueSearchPath({ eventId: event.id })
+  const isChecking = suitability === null && suitabilityError === null
+  const isUnsuitable = suitability !== null && !suitability.is_suitable
+  const requiresJustification = isUnsuitable || serverAskedForJustification
+  const checkError = reread === null ? suitabilityError : reread.error
+
+  /** AC7: the backend judged the venue unsuitable on send, so read it again for the warning. */
+  async function rereadSuitability() {
+    try {
+      setSuitability(await getVenueSuitability(venue.id, event.id))
+      setReread({ error: null })
+      // The read is now the latest word on whether the venue suits, so it decides.
+      setServerAskedForJustification(false)
+    } catch (err: unknown) {
+      setReread({ error: formatApiError(err) })
+    }
+  }
+
+  async function send(reason: string | null) {
+    setIsSending(true)
+    try {
+      const input = { event_id: event.id, venue_id: venue.id }
+      setSent(
+        await createBookingRequest(
+          reason === null ? input : { ...input, suitability_override_reason: reason },
+          venue.name,
+        ),
+      )
+    } catch (err: unknown) {
+      setSendError(formatApiError(err))
+      setCanReturnToResults(err instanceof ApiError && err.code === 'BOOKING_NOT_ALLOWED')
+      if (err instanceof ApiError && err.code === 'BOOKING_JUSTIFICATION_REQUIRED') {
+        setServerAskedForJustification(true)
+        await rereadSuitability()
+      }
+    } finally {
+      setIsSending(false)
+      setIsConfirming(false)
+    }
+  }
 
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
     setSendError(null)
     setCanReturnToResults(false)
-    setIsSending(true)
-    try {
-      setSent(await createBookingRequest({ event_id: event.id, venue_id: venue.id }, venue.name))
-    } catch (err: unknown) {
-      setSendError(formatApiError(err))
-      setCanReturnToResults(err instanceof ApiError && err.code === 'BOOKING_NOT_ALLOWED')
-    } finally {
-      setIsSending(false)
+    if (!requiresJustification) {
+      await send(null)
+      return
     }
+    if (justification.trim() === '') {
+      setSendError(ERROR_REGISTRY.BOOKING_JUSTIFICATION_REQUIRED.message)
+      return
+    }
+    setIsConfirming(true)
+  }
+
+  function confirmSend() {
+    void send(justification.trim())
+  }
+
+  function cancelSend() {
+    setIsConfirming(false)
   }
 
   return (
@@ -148,6 +231,12 @@ export function BookingRequestFormPage() {
               <span className="grow-text">Expected attendance</span>
               <span className="mono">{sent.expected_attendance}</span>
             </li>
+            {sent.suitability_override_reason !== null && (
+              <li>
+                <span className="grow-text">Justification</span>
+                <span>{sent.suitability_override_reason}</span>
+              </li>
+            )}
           </ul>
           <div className="form-actions">
             <Link to={eventPath(event.id)} className="button secondary">
@@ -202,6 +291,36 @@ export function BookingRequestFormPage() {
             </ul>
           </section>
 
+          <section aria-labelledby="booking-suitability-heading" className="stack">
+            <h2 id="booking-suitability-heading">Suitability</h2>
+            {isChecking && <p className="muted">Checking whether this venue suits the event…</p>}
+            {checkError !== null && (
+              <p role="alert" className="error">
+                {checkError}
+              </p>
+            )}
+            {suitability !== null && (
+              <SuitabilityNote
+                suitability={suitability}
+                requirementCount={event.venue_requirements.length}
+              />
+            )}
+            {requiresJustification && (
+              <label>
+                Justification
+                <textarea
+                  value={justification}
+                  onChange={(changeEvent) => setJustification(changeEvent.target.value)}
+                  maxLength={SUITABILITY_OVERRIDE_REASON_MAX_LENGTH}
+                  rows={4}
+                />
+                <span className="small muted">
+                  Why request it anyway? Venue Staff read this with the request.
+                </span>
+              </label>
+            )}
+          </section>
+
           <div className="form-actions">
             {sendError && (
               <p role="alert" className="error">
@@ -213,11 +332,28 @@ export function BookingRequestFormPage() {
                 Back to the results
               </Link>
             )}
-            <button type="submit" disabled={isSending}>
+            <button type="submit" disabled={isSending || isChecking}>
               {isSending ? 'Sending…' : 'Send request'}
             </button>
           </div>
         </form>
+      )}
+
+      {isConfirming && (
+        <ConfirmDialog
+          title={`Request ${venue.name} anyway?`}
+          confirmLabel="Send request"
+          tone="primary"
+          isBusy={isSending}
+          error={null}
+          onConfirm={confirmSend}
+          onCancel={cancelSend}
+        >
+          <p>
+            {venue.name} does not suit the event&apos;s venue requirement. Your justification goes
+            to Venue Staff with the request.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   )

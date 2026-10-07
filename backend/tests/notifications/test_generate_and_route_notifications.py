@@ -46,6 +46,7 @@ from app.events import service as events_service
 from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
 from app.notifications.service import NotificationType, notify
+from app.venues.models import Venue, VenueAccessibilityFeature, VenueFacility, VenueLayout
 from tests.support.factories import (
     create_submittable_event_request,
     make_booking,
@@ -131,6 +132,29 @@ def _delete_committed_event(
         session.commit()
 
 
+@pytest.fixture
+def foyer_suits_nimbus(db: Session) -> None:
+    """Why it exists: story 11.1 refuses a request for a venue that does not suit the event unless
+    it carries a justification, and Exhibition Foyer does not suit Nimbus (250 < 350 people, no
+    Theatre layout, no projector, sound system or stage, no hearing loop). This gives the foyer
+    what Nimbus's venue requirement and accessibility needs ask for, so ``FOYER_FOR_NIMBUS`` stays
+    a plain request these tests expect to be accepted, and what they assert about Exhibition
+    Foyer is unchanged. Only this test's transaction sees it; it is rolled back afterwards.
+
+    The two parametrised tests that use it run it for every one of their cases, not only the
+    booking-request one: pytest cannot attach a fixture to a single case. Their other cases
+    (event approval, booking approval, sending equipment) never read a venue's capacity, layouts,
+    facilities or accessibility, so it changes nothing for them."""
+    foyer = db.get(Venue, Venues.EXHIBITION_FOYER)
+    foyer.capacity = 350
+    foyer.layouts.append(VenueLayout(layout_code="THEATRE", layout_capacity=None))
+    foyer.facilities.extend(
+        VenueFacility(facility_code=code) for code in ("PROJECTOR", "SOUND_SYSTEM", "STAGE")
+    )
+    foyer.accessibility_features.append(VenueAccessibilityFeature(feature_code="HEARING_LOOP"))
+    db.flush()
+
+
 # --- AC1/AC5: each action notifies its related users, and nobody else ----------------------
 @pytest.mark.story("20.1", ac=1)
 @pytest.mark.story("20.1", ac=5)
@@ -197,6 +221,7 @@ def test_rejecting_a_request_notifies_its_organiser_with_the_reason(
 
 @pytest.mark.story("20.1", ac=1)
 @pytest.mark.story("20.1", ac=5)
+@pytest.mark.usefixtures("foyer_suits_nimbus")
 def test_raising_a_booking_request_notifies_active_venue_staff(coordinator_client, db: Session):
     """Vera is told; Ian, also Venue Staff but inactive, is not, and neither is Chloe, who asked.
     With no setup or teardown the held period is the event's own, 09:00 to 18:00."""
@@ -547,6 +572,7 @@ class _FailsAtAudit(NamedTuple):
         ),
     ],
 )
+@pytest.mark.usefixtures("foyer_suits_nimbus")
 def test_an_action_that_fails_part_way_leaves_no_notification(
     login_as, db: Session, monkeypatch: pytest.MonkeyPatch, failing: _FailsAtAudit
 ):
@@ -743,6 +769,7 @@ class _Twice(NamedTuple):
         ),
     ],
 )
+@pytest.mark.usefixtures("foyer_suits_nimbus")
 def test_a_repeated_action_notifies_once(login_as, db: Session, twice: _Twice):
     """The second of two identical requests (a double-click) is refused, so it tells nobody."""
     client = login_as(twice.actor)

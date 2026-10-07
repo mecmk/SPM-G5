@@ -29,6 +29,7 @@ from app.venues.schemas import (
     VenueReferenceData,
     VenueSearchQuery,
     VenueSearchResult,
+    VenueSuitabilityOut,
     VenueSummary,
     VenueUnavailableWindowOut,
     VenueUpdate,
@@ -42,6 +43,7 @@ uploads_router = APIRouter(prefix="/uploads/venues", tags=["uploads"])
 CanRead = Depends(require_permission(Permission.VENUES_READ))
 CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
 CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
+CanRequestBookings = Depends(require_permission(Permission.BOOKINGS_REQUEST))
 DbSession = Annotated[Session, Depends(get_db)]
 
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
@@ -79,16 +81,27 @@ def list_venues(
     ]
 
 
-@router.get("/search", response_model=VenueSearchResult, dependencies=[CanRead])
-def search_venues(db: DbSession, query: Annotated[VenueSearchQuery, Query()]) -> VenueSearchResult:
+@router.get("/search", response_model=VenueSearchResult)
+def search_venues(
+    db: DbSession,
+    query: Annotated[VenueSearchQuery, Query()],
+    actor: Annotated[CurrentUser, CanRead],
+) -> VenueSearchResult:
     """Story 8.1 AC3/AC4: the catalogue's filters, run on the server for any role that reads
     venues. AC8: a search that cannot be run is refused with a sentence saying why. Declared
-    above ``/{venue_id}`` so the literal path is not read as a venue id."""
+    above ``/{venue_id}`` so the literal path is not read as a venue id.
+
+    Story 11.1 AC1/AC6: with ``event``, each result says whether it suits that event, for its
+    assigned coordinator."""
     try:
-        return service.search_venues(db, query)
+        return service.search_venues(db, query, actor=actor)
     except service.InvalidVenueSearch as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.UnknownReferenceCode as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.EventToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.EventNotJudgeable as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
@@ -119,6 +132,33 @@ def get_venue_calendar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.InvalidDateRange as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+
+@router.get("/{venue_id}/suitability", response_model=VenueSuitabilityOut)
+def get_venue_suitability(
+    venue_id: uuid.UUID,
+    db: DbSession,
+    event: Annotated[uuid.UUID, Query()],
+    actor: Annotated[CurrentUser, CanRequestBookings],
+) -> VenueSuitabilityOut:
+    """Story 11.1 AC2/AC3: the request step's read of whether one venue suits ``event``, with
+    every criterion it fails - the same check the catalogue search and ``POST /bookings`` make.
+    AC6: only the event's assigned coordinator (403 for anyone else). The venue is the resource
+    (404); an event that does not exist or has no number of people yet is refused as the search
+    refuses it (422)."""
+    try:
+        judged = service.get_venue_suitability(db, venue_id, event_id=event, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.EventToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.NotEventCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventNotJudgeable as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return VenueSuitabilityOut.from_suitability(
+        judged.suitability, requirement_id=judged.requirement_id
+    )
 
 
 @router.post("", response_model=VenueOut, status_code=status.HTTP_201_CREATED)

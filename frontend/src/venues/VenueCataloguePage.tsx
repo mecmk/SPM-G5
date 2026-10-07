@@ -5,6 +5,7 @@ import {
   type RelaxHint,
   type VenueSearchHit,
   type VenueSearchQuery,
+  type VenueSearchResult,
   type VenueSummary,
 } from '../api/venues'
 import { useAuth } from '../auth/authContext'
@@ -12,6 +13,7 @@ import { PERMISSIONS } from '../auth/permissions'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { SuitabilityNote } from '../components/SuitabilityNote'
 import { LoadingState } from '../layout/LoadingState'
 import {
   VENUE_NEW_PATH,
@@ -31,9 +33,11 @@ import { hasFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
 
 /**
  * Story 8.1 AC3/AC8: the server query for the address's search. The period goes only once both
- * ends are filled in, as Singapore instants.
+ * ends are filled in, as Singapore instants. Story 11.1 AC1: `judgedEventId` - the event a venue
+ * is being requested for, once it has resolved to one the user may request a venue for - asks
+ * for each result's suitability; a fake or someone else's event in the address is never sent.
  */
-function searchQueryFor(search: VenueSearch): VenueSearchQuery {
+function searchQueryFor(search: VenueSearch, judgedEventId: string | undefined): VenueSearchQuery {
   const hasPeriod = Boolean(search.from && search.to)
   return {
     search: search.search,
@@ -45,12 +49,22 @@ function searchQueryFor(search: VenueSearch): VenueSearchQuery {
     facility: search.facilities,
     accessibility: search.accessibilityFeatures,
     include_withdrawn: search.includeWithdrawn,
+    event: judgedEventId,
   }
 }
 
 /** What the list is loaded with. A fresh object, even for the same search, loads it again. */
 interface VenueListRequest {
   query: VenueSearchQuery
+}
+
+/**
+ * Story 11.1: the list's load while the event in the address is still resolving - one that never
+ * settles, so the page shows its loading state and searches once the event is known, rather than
+ * searching without it and again with it.
+ */
+function untilTheEventResolves(): Promise<VenueSearchResult> {
+  return new Promise(() => {})
 }
 
 /** Story 8.1 AC9: one suggested filter to remove, as its button reads. */
@@ -71,6 +85,10 @@ function describeRelaxHint(hint: RelaxHint): string {
  * each venue offers Request this venue, for the event's assigned coordinator only (AC5). A
  * venue's link keeps the address's query, so its record knows the event and the search too.
  *
+ * Story 11.1 AC1/AC5: for that coordinator, each card also says whether the venue suits the event
+ * and why not. The search waits for the event in the address to resolve and carries it only when
+ * Request this venue would show (AC6), so arriving sends one search and a fake event none.
+ *
  * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
@@ -79,14 +97,20 @@ export function VenueCataloguePage() {
   const location = useLocation()
   const { can } = useAuth()
   const canManageVenues = can(PERMISSIONS.VENUES_MANAGE)
-  const { requestingEvent, error: eventError } = useRequestingEvent()
+  const { requestingEvent, error: eventError, isResolving } = useRequestingEvent()
   const { search, updateSearch, clearFilters } = useVenueSearch()
-  const query = useMemo(() => searchQueryFor(search), [search])
-  const [listRequest, setListRequest] = useState<VenueListRequest>({ query })
-  if (listRequest.query !== query) setListRequest({ query })
+  const judgedEventId = requestingEvent?.id
+  const query = useMemo(() => searchQueryFor(search, judgedEventId), [search, judgedEventId])
+  const [listRequest, setListRequest] = useState<VenueListRequest | null>(
+    isResolving ? null : { query },
+  )
+  if (!isResolving && listRequest?.query !== query) setListRequest({ query })
   const [pendingDelete, setPendingDelete] = useState<VenueSummary | null>(null)
 
-  const loadVenues = useCallback(() => searchVenues(listRequest.query), [listRequest])
+  const loadVenues = useCallback(
+    () => (listRequest === null ? untilTheEventResolves() : searchVenues(listRequest.query)),
+    [listRequest],
+  )
   const { data: result, error, setData: setResult } = useLoaded(loadVenues)
   const isPeriodSearched = query.starts_at !== undefined
 
@@ -113,16 +137,29 @@ export function VenueCataloguePage() {
 
   /** The list is out of date: a venue it shows was deleted elsewhere. */
   function reloadVenues() {
-    setListRequest((current) => ({ ...current }))
+    setListRequest((current) => current && { ...current })
   }
 
   function removeFilter(hint: RelaxHint) {
     updateSearch(RELAX_CHANGES[hint.filter])
   }
 
+  /** Story 8.1 AC3's "Opening hours not recorded", and story 11.1 AC1's suitability, when the
+   *  search carried the event. */
   function venueNotes(venue: VenueSearchHit) {
-    if (!isPeriodSearched || venue.operating_hours_start !== null) return undefined
-    return <p className="small muted">Opening hours not recorded</p>
+    const isHoursNoteShown = isPeriodSearched && venue.operating_hours_start === null
+    if (!isHoursNoteShown && venue.suitability === null) return undefined
+    return (
+      <>
+        {isHoursNoteShown && <p className="small muted">Opening hours not recorded</p>}
+        {venue.suitability !== null && (
+          <SuitabilityNote
+            suitability={venue.suitability}
+            requirementCount={requestingEvent?.venue_requirements.length ?? 0}
+          />
+        )}
+      </>
+    )
   }
 
   function venueActions(venue: VenueSummary) {
