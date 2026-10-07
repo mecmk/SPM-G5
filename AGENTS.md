@@ -146,8 +146,9 @@ backend/
     coordination/       # assigning and reassigning an event's coordinator
     equipment/          # an event's equipment requests: recording, holding, submitting to Technical Support
     events/             # event requests, review and decisions, event details, routine edits
+    notifications/      # who is told of each action, and each user's own notifications
     venues/             # the venue catalogue, its search and its availability calendar
-    common/             # shared by feature areas: the audit log, in-app notifications
+    common/             # shared by feature areas: the audit log
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
   db/
     migrations/         # NNN_*.sql schema, applied once in order

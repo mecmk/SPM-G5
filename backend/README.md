@@ -25,7 +25,7 @@ app/
   config.py        settings (DATABASE_URL, session cookie, ...) read from .env
   db.py            SQLAlchemy engine/session + Base + shared mixins
   <feature>/       one package per feature area (auth, bookings, events, ...), listed below
-  common/          shared by feature areas: the audit log, in-app notifications
+  common/          shared by feature areas: the audit log
   dbtool/          migrate / seed / reset / ready / docs  (python -m app.dbtool --help)
 db/
   migrations/      schema DDL, applied once in order (source of truth)
