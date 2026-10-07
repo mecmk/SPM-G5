@@ -1,7 +1,7 @@
 import { BOOKING_REASON, HELD_REASON, type VenueUnavailableWindow } from '../api/venues'
-import type { CalendarEntry, CalendarEntryTone } from '../components/Calendar'
-import { eachDate } from '../components/calendarGrid'
 import { inputToInstant } from '../shared/format'
+import type { CalendarEntry, CalendarEntryTone } from './Calendar'
+import { eachDate } from './calendarGrid'
 
 /** Story 9.1 AC2: what a confirmed booking, and a pending request that holds the venue, are
  *  called - in words as well as colour. */
