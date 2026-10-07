@@ -32,7 +32,7 @@ roles ──< users >── client_organisations
             │
             ├──< user_sessions
             │
-            ├──< events (organiser) ──< event_required_facilities >── facilities
+            ├──< events (organiser) ──< venue_requirements ──< venue_requirement_facilities >── facilities
             │        │                ──< event_accessibility_needs >── accessibility_features
             │        │                ──< event_equipment_requests >── equipment_types
             │        │                ──< event_status_history / event_clarifications

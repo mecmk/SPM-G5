@@ -12,7 +12,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { eventPath, VENUE_CATALOGUE_PATH, venueSearchPath } from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { canRequestVenueFor } from '../shared/venueRequest'
+import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -83,6 +83,9 @@ export function BookingRequestFormPage() {
   if (!subject) return <LoadingState label="Loading the request…" />
 
   const { event, venue } = subject
+  // Story 2.7: what the request carries - the event's first venue requirement, or the event's own.
+  const { requirement, startsAt, endsAt, capacity, layoutName, facilities } =
+    venueRequestTermsFor(event)
   if (!canRequestVenueFor(event, user, can)) {
     return (
       <div className="page stack">
@@ -171,32 +174,29 @@ export function BookingRequestFormPage() {
           <section aria-labelledby="booking-carries-heading" className="stack">
             <h2 id="booking-carries-heading">What this request will carry</h2>
             <p className="muted">
-              Taken from the event, so Venue Staff assess the same requirements it was approved
-              with.
+              Taken from the event
+              {requirement?.name ? `’s first venue requirement, ${requirement.name},` : ','} so
+              Venue Staff assess the same requirements it was approved with.
             </p>
             <ul className="check-list">
               <li>
                 <span className="grow-text">Date and time</span>
-                <span>
-                  {event.starts_at && event.ends_at
-                    ? formatSchedule(event.starts_at, event.ends_at)
-                    : NOT_RECORDED}
-                </span>
+                <span>{startsAt && endsAt ? formatSchedule(startsAt, endsAt) : NOT_RECORDED}</span>
               </li>
               <li>
                 <span className="grow-text">Expected attendance</span>
-                <span className="mono">{event.expected_attendance ?? NOT_RECORDED}</span>
+                <span className="mono">{capacity ?? NOT_RECORDED}</span>
               </li>
               <li>
                 <span className="grow-text">Room layout</span>
-                <span>{event.required_layout_name ?? NOT_RECORDED}</span>
+                <span>{layoutName ?? NOT_RECORDED}</span>
               </li>
               <li>
                 <span className="grow-text">Required facilities</span>
                 <span>
-                  {event.required_facilities.length === 0
+                  {facilities.length === 0
                     ? NOT_RECORDED
-                    : event.required_facilities.map(describeFacility).join(', ')}
+                    : facilities.map(describeFacility).join(', ')}
                 </span>
               </li>
             </ul>

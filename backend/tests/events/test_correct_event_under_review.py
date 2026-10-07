@@ -103,6 +103,23 @@ def _equipment(code: str, quantity: int) -> dict:
     return {"equipment_type_code": code, "quantity": quantity}
 
 
+def _requirement_in(requirement: dict) -> dict:
+    """A venue requirement as the event returns it, as a correction sends it back (story 2.7)."""
+    return {
+        "id": requirement["id"],
+        "name": requirement["name"],
+        "capacity": requirement["capacity"],
+        "starts_at": requirement["starts_at"],
+        "ends_at": requirement["ends_at"],
+        "layout_code": requirement["layout_code"],
+        "facilities": [
+            {"code": f["code"], "quantity": f["quantity"], "notes": f["notes"]}
+            for f in requirement["facilities"]
+        ],
+        "notes": requirement["notes"],
+    }
+
+
 def _submitted_with_equipment(login_as, db: Session, period, *lines) -> dict:
     """An event the organiser submitted (so 2.1 AC11 holds its equipment), assigned to
     ``Users.COORDINATOR``, as the coordinator reads it."""
@@ -193,12 +210,18 @@ def test_correcting_details_does_not_change_the_status(coordinator_client):
 def test_requirements_registration_and_visibility_can_be_corrected(coordinator_client):
     event = _read(coordinator_client, Events.SUBMITTED)
     starts_at = datetime.fromisoformat(event["starts_at"])
+    (main_venue,) = event["venue_requirements"]
 
     response = _correct(
         coordinator_client,
         event,
-        required_layout_code="THEATRE",
-        required_facilities=[{"code": "PROJECTOR"}],
+        venue_requirements=[
+            {
+                **_requirement_in(main_venue),
+                "layout_code": "THEATRE",
+                "facilities": [{"code": "PROJECTOR"}],
+            }
+        ],
         accessibility_none_required=False,
         accessibility_needs=[{"code": "WHEELCHAIR_ACCESS"}],
         registration_required=True,
@@ -208,8 +231,10 @@ def test_requirements_registration_and_visibility_can_be_corrected(coordinator_c
 
     assert response.status_code == 200, response.text
     after = response.json()
-    assert after["required_layout_code"] == "THEATRE"
-    assert [f["code"] for f in after["required_facilities"]] == ["PROJECTOR"]
+    (corrected,) = after["venue_requirements"]
+    assert corrected["id"] == main_venue["id"]
+    assert corrected["layout_code"] == "THEATRE"
+    assert [f["code"] for f in corrected["facilities"]] == ["PROJECTOR"]
     assert [n["code"] for n in after["accessibility_needs"]] == ["WHEELCHAIR_ACCESS"]
     assert after["registration_required"] is True
     assert after["is_public"] is True
@@ -243,10 +268,7 @@ def test_equipment_lines_can_be_corrected(coordinator_client):
         ({"ends_at": "2026-12-18T17:00:00+08:00"}, "more than 14 days"),
         ({"contact_email": "not-an-email"}, "email address like"),
         ({"contact_phone": "12"}, "8 to 15 digits"),
-        (
-            {"venue_none_required": True, "required_layout_code": "THEATRE"},
-            "venue requirements cannot be marked none required",
-        ),
+        ({"venue_none_required": True}, "venue requirements cannot be marked none required"),
         (
             {"registration_required": True, "registration_closes_at": "2026-11-19T09:00:00+08:00"},
             "registration must close no later than the proposed start",
@@ -753,8 +775,12 @@ def test_a_seeded_event_with_equipment_but_no_hold_is_held_when_its_dates_move(
     assert _holds(db, Events.SUBMITTED) == []
     event = _read(coordinator_client, Events.SUBMITTED)
     new = _period(60)
+    # Its venue requirement moves with it, as the form moves one that kept the event's times
+    # (story 2.7 AC10 refuses an event moved away from its requirement).
+    (main_venue,) = event["venue_requirements"]
+    moved_venue = {**_requirement_in(main_venue), **_dates(new)}
 
-    response = _correct(coordinator_client, event, **_dates(new))
+    response = _correct(coordinator_client, event, **_dates(new), venue_requirements=[moved_venue])
 
     assert response.status_code == 200, response.text
     assert _held(db, Events.SUBMITTED) == {("PROJECTOR_PORTABLE", 1, new[0], new[1])}

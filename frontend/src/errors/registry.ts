@@ -53,6 +53,14 @@ export type ErrorCode =
   | 'EVENT_TOO_LONG'
   | 'EVENT_ATTENDANCE_INVALID'
   | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'VENUE_REQUIREMENT_CAPACITY_INVALID'
+  | 'VENUE_REQUIREMENT_OVER_ATTENDANCE'
+  | 'VENUE_REQUIREMENT_TIMES_INCOMPLETE'
+  | 'VENUE_REQUIREMENT_DATE_INVALID'
+  | 'VENUE_REQUIREMENT_END_BEFORE_START'
+  | 'VENUE_REQUIREMENT_STARTS_BEFORE_EVENT'
+  | 'VENUE_REQUIREMENT_ENDS_AFTER_EVENT'
+  | 'VENUE_REQUIREMENT_NAME_DUPLICATE'
   | 'EVENT_EQUIPMENT_TYPE_REQUIRED'
   | 'EVENT_EQUIPMENT_DUPLICATE'
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
@@ -287,6 +295,42 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_FACILITY_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  /** Story 2.7 AC6, worded as the backend words it where it has its own sentence. */
+  VENUE_REQUIREMENT_CAPACITY_INVALID: {
+    title: 'Check the number of people',
+    message: 'The number of people must be a positive whole number, or left empty on a draft.',
+  },
+  VENUE_REQUIREMENT_OVER_ATTENDANCE: {
+    title: 'Check the number of people',
+    message: 'A venue requirement cannot need room for more people than the expected attendance.',
+  },
+  /** Story 2.7 AC2. */
+  VENUE_REQUIREMENT_TIMES_INCOMPLETE: {
+    title: 'Check the times',
+    message: 'Give a venue requirement both a start and an end, or leave both empty.',
+  },
+  VENUE_REQUIREMENT_DATE_INVALID: {
+    title: 'Check the times',
+    message: 'Enter a complete date and time for the venue requirement.',
+  },
+  /** Story 2.7 AC5/AC10. */
+  VENUE_REQUIREMENT_END_BEFORE_START: {
+    title: 'Check the times',
+    message: 'A venue requirement must end after it starts.',
+  },
+  VENUE_REQUIREMENT_STARTS_BEFORE_EVENT: {
+    title: 'Check the times',
+    message: 'A venue requirement cannot start before the event starts.',
+  },
+  VENUE_REQUIREMENT_ENDS_AFTER_EVENT: {
+    title: 'Check the times',
+    message: 'A venue requirement cannot end after the event ends.',
+  },
+  /** Story 2.7 AC9. */
+  VENUE_REQUIREMENT_NAME_DUPLICATE: {
+    title: 'Check the names',
+    message: 'Two venue requirements cannot have the same name.',
   },
   EVENT_EQUIPMENT_TYPE_REQUIRED: {
     title: 'Choose the equipment',

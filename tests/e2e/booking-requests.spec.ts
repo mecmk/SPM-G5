@@ -281,10 +281,8 @@ test('12.1 AC15: an event with no venue requirements still finds a venue by date
       json: {
         ...event,
         venue_none_required: true,
-        required_layout_code: null,
-        required_layout_name: null,
-        required_facilities: [],
-        venue_requirement_notes: null,
+        // Story 2.7: "No venue requirements" lists none.
+        venue_requirements: [],
       },
     })
   })

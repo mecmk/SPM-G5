@@ -18,6 +18,7 @@ import {
   type Clarification,
   type EventDetail,
   type RequiredFacility,
+  type VenueRequirement,
 } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -50,7 +51,7 @@ import {
   formatTime,
   instantToInput,
 } from '../shared/format'
-import { canRequestVenueFor } from '../shared/venueRequest'
+import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -118,22 +119,44 @@ function formatMinutesDuration(minutes: number): string {
 }
 
 /**
- * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens - the event's dates, its
- * expected attendance as the minimum capacity, and its layout, facilities and accessibility
- * needs, holding only what the event recorded. "No venue requirements" has already cleared the
- * layout and facilities (story 2.1 AC4), so such an event searches by its dates, capacity and
- * accessibility needs.
+ * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens, holding only what the event
+ * recorded. Story 2.7: for the event's first venue requirement, the one a request carries - its
+ * times, number of people as the minimum capacity, layout and facilities - plus the event's
+ * accessibility needs. An event with no requirements searches by its own dates and attendance.
  */
 function venueSearchFor(event: EventDetail): VenueSearch {
+  const terms = venueRequestTermsFor(event)
   return {
     eventId: event.id,
-    capacity: event.expected_attendance ?? undefined,
-    from: event.starts_at ? instantToInput(event.starts_at) : undefined,
-    to: event.ends_at ? instantToInput(event.ends_at) : undefined,
-    layout: event.required_layout_code ?? undefined,
-    facilities: event.required_facilities.map((facility) => facility.code),
+    capacity: terms.capacity ?? undefined,
+    from: terms.startsAt ? instantToInput(terms.startsAt) : undefined,
+    to: terms.endsAt ? instantToInput(terms.endsAt) : undefined,
+    layout: terms.layoutCode ?? undefined,
+    facilities: terms.facilities.map((facility) => facility.code),
     accessibilityFeatures: event.accessibility_needs.map((need) => need.code),
   }
+}
+
+/**
+ * Story 2.7 AC4: a requirement's times. Both dates when it runs over more than one day (review of
+ * PR #84) - `formatSchedule` gives only the first date, which would make a two-day requirement read
+ * as one.
+ */
+function describeVenueRequirementTimes(startsAt: string, endsAt: string): string {
+  return formatDate(startsAt) === formatDate(endsAt)
+    ? formatSchedule(startsAt, endsAt)
+    : `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`
+}
+
+/** Story 2.7 AC4: one requirement's number of people and times, as one line. */
+function describeVenueRequirementFacts(requirement: VenueRequirement): string {
+  const facts = [
+    requirement.capacity === null ? null : `${requirement.capacity} people`,
+    requirement.starts_at && requirement.ends_at
+      ? describeVenueRequirementTimes(requirement.starts_at, requirement.ends_at)
+      : null,
+  ].filter((fact) => fact !== null)
+  return facts.length > 0 ? facts.join(' · ') : NOT_RECORDED
 }
 
 function formatHeroMeta(event: EventDetail): string {
@@ -685,33 +708,51 @@ export function EventDetailPage() {
                 </Link>
               )}
             </div>
-            {event.venue_none_required ? (
+            {event.venue_none_required && (
               <p className="muted">No venue is required for this event.</p>
-            ) : (
-              <>
-                <div>
-                  <p className="eyebrow">Room layout</p>
-                  <p>{event.required_layout_name ?? NOT_RECORDED}</p>
-                </div>
-                <div>
-                  <p className="eyebrow">Required facilities</p>
-                  {event.required_facilities.length === 0 ? (
-                    <p className="muted">{NOT_RECORDED}</p>
-                  ) : (
-                    <div className="cluster">
-                      {event.required_facilities.map((facility) => (
-                        <Chip key={facility.code} tone="info" label={describeFacility(facility)} />
-                      ))}
+            )}
+            {!event.venue_none_required && event.venue_requirements.length === 0 && (
+              <p className="muted">{NOT_RECORDED}</p>
+            )}
+            {event.venue_requirements.length > 0 && (
+              <ul className="venue-requirement-list">
+                {event.venue_requirements.map((requirement, index) => (
+                  <li key={requirement.id} className="stack">
+                    <div>
+                      <p>
+                        <strong>{requirement.name ?? `Venue requirement ${index + 1}`}</strong>
+                      </p>
+                      <p className="small muted">{describeVenueRequirementFacts(requirement)}</p>
                     </div>
-                  )}
-                </div>
-                {event.venue_requirement_notes && (
-                  <div>
-                    <p className="eyebrow">Other requirements</p>
-                    <p>{event.venue_requirement_notes}</p>
-                  </div>
-                )}
-              </>
+                    <div>
+                      <p className="eyebrow">Room layout</p>
+                      <p>{requirement.layout_name ?? NOT_RECORDED}</p>
+                    </div>
+                    <div>
+                      <p className="eyebrow">Required facilities</p>
+                      {requirement.facilities.length === 0 ? (
+                        <p className="muted">{NOT_RECORDED}</p>
+                      ) : (
+                        <div className="cluster">
+                          {requirement.facilities.map((facility) => (
+                            <Chip
+                              key={facility.code}
+                              tone="info"
+                              label={describeFacility(facility)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {requirement.notes && (
+                      <div>
+                        <p className="eyebrow">Other requirements</p>
+                        <p>{requirement.notes}</p>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 

@@ -23,7 +23,7 @@ from pydantic import (
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
-from app.events.models import Event, EventClarification, EventEquipmentRequest
+from app.events.models import Event, EventClarification, EventEquipmentRequest, VenueRequirement
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
 # rejects 0 and below; the ceiling is the largest value the INTEGER columns can hold.
@@ -34,8 +34,7 @@ ACCESSIBILITY_CONTRADICTION_MESSAGE = (
     "Accessibility cannot be marked none required while needs or notes are recorded."
 )
 VENUE_CONTRADICTION_MESSAGE = (
-    "Venue requirements cannot be marked none required while a layout, facilities or notes are "
-    "recorded."
+    "Venue requirements cannot be marked none required while a venue requirement is listed."
 )
 # Story 2.1 AC17: neither registration date can be recorded unless registration is required.
 REGISTRATION_CONTRADICTION_MESSAGE = (
@@ -43,6 +42,14 @@ REGISTRATION_CONTRADICTION_MESSAGE = (
 )
 DUPLICATE_EQUIPMENT_MESSAGE = "Each equipment type can appear only once on a request."
 DUPLICATE_ENTRY_MESSAGE = "Each option can be chosen only once."
+# Story 2.7: a requirement's times are both given or both left out (AC2), its name is short (PO
+# decision, 2 Oct 2026), and a request lists a bounded number of them. Mirrored by the form in
+# frontend/src/events/eventRequestForm.ts - keep the limits in step.
+VENUE_REQUIREMENT_NAME_MAX_LENGTH = 100
+MAX_VENUE_REQUIREMENTS = 20
+VENUE_REQUIREMENT_TIMES_TOGETHER_MESSAGE = (
+    "Give a venue requirement both a start and an end, or leave both empty."
+)
 CANNOT_BE_REMOVED_MESSAGE = "This field cannot be removed; send a value or leave it out."
 
 # Story 2.1 AC13: the point of contact. Bounds mirror the form's own maxLength and the checks in
@@ -220,7 +227,8 @@ def _has_duplicates(values: list[str] | list[uuid.UUID]) -> bool:
 
 
 class EventFacilityIn(BaseModel):
-    """AC4: a facility the venue must have, optionally how many (3 breakout rooms)."""
+    """2.1 AC4 / 2.7 AC1: a facility the venue must have, optionally how many (3 breakout
+    rooms). Used inside each venue requirement."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -232,6 +240,37 @@ class EventFacilityIn(BaseModel):
     @classmethod
     def _normalize_notes(cls, value):
         return _blank_to_none(value)
+
+
+class VenueRequirementIn(BaseModel):
+    """Story 2.7 AC1/AC2: one venue the event needs. Every field may be left empty on a draft
+    (AC8); ``id`` names an existing requirement to keep and edit (AC3). The rules that compare a
+    requirement with the event, or with the others, are checked in the service, which knows the
+    stored values and can point at the field to fix (AC5, AC6, AC9, AC10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=VENUE_REQUIREMENT_NAME_MAX_LENGTH)
+    capacity: PositiveWholeNumber | None = None
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
+    layout_code: str | None = None
+    facilities: list[EventFacilityIn] = Field(default_factory=list)
+    notes: str | None = None
+
+    @field_validator("name", "layout_code", "notes", mode="before")
+    @classmethod
+    def _normalize_text(cls, value):
+        return _blank_to_none(value)
+
+    @model_validator(mode="after")
+    def _check_requirement(self):
+        if (self.starts_at is None) != (self.ends_at is None):
+            raise ValueError(VENUE_REQUIREMENT_TIMES_TOGETHER_MESSAGE)
+        if _has_duplicates([f.code for f in self.facilities]):
+            raise ValueError(DUPLICATE_ENTRY_MESSAGE)
+        return self
 
 
 class EventAccessibilityNeedIn(BaseModel):
@@ -271,7 +310,6 @@ class _EventRequestRules(BaseModel):
     @field_validator(
         "purpose",
         "description",
-        "venue_requirement_notes",
         "accessibility_notes",
         mode="before",
         check_fields=False,
@@ -325,12 +363,12 @@ class _EventRequestRules(BaseModel):
 
     @model_validator(mode="after")
     def _check_lists(self):
-        facilities = getattr(self, "required_facilities", None) or []
         needs = getattr(self, "accessibility_needs", None) or []
         equipment = getattr(self, "equipment", None) or []
-        if _has_duplicates([f.code for f in facilities]) or _has_duplicates(
-            [n.code for n in needs]
-        ):
+        requirements = getattr(self, "venue_requirements", None) or []
+        if _has_duplicates([n.code for n in needs]):
+            raise ValueError(DUPLICATE_ENTRY_MESSAGE)
+        if _has_duplicates([r.id for r in requirements if r.id is not None]):
             raise ValueError(DUPLICATE_ENTRY_MESSAGE)
         if _has_duplicates([e.equipment_type_code for e in equipment]):
             raise ValueError(DUPLICATE_EQUIPMENT_MESSAGE)
@@ -353,9 +391,9 @@ class EventCreate(_EventRequestRules):
     contact_name: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
-    required_layout_code: str | None = None
-    venue_requirement_notes: str | None = None
-    required_facilities: list[EventFacilityIn] = Field(default_factory=list)
+    venue_requirements: list[VenueRequirementIn] = Field(
+        default_factory=list, max_length=MAX_VENUE_REQUIREMENTS
+    )
     venue_none_required: bool = False
     accessibility_none_required: bool = False
     accessibility_needs: list[EventAccessibilityNeedIn] = Field(default_factory=list)
@@ -368,9 +406,7 @@ class EventCreate(_EventRequestRules):
 
     @model_validator(mode="after")
     def _check_none_required(self):
-        if self.venue_none_required and (
-            self.required_layout_code or self.required_facilities or self.venue_requirement_notes
-        ):
+        if self.venue_none_required and self.venue_requirements:
             raise ValueError(VENUE_CONTRADICTION_MESSAGE)
         if self.accessibility_none_required and (
             self.accessibility_needs or self.accessibility_notes
@@ -397,9 +433,9 @@ class EventUpdate(_EventRequestRules):
     contact_name: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
-    required_layout_code: str | None = None
-    venue_requirement_notes: str | None = None
-    required_facilities: list[EventFacilityIn] | None = None
+    venue_requirements: list[VenueRequirementIn] | None = Field(
+        default=None, max_length=MAX_VENUE_REQUIREMENTS
+    )
     venue_none_required: bool | None = None
     accessibility_none_required: bool | None = None
     accessibility_needs: list[EventAccessibilityNeedIn] | None = None
@@ -412,7 +448,7 @@ class EventUpdate(_EventRequestRules):
 
     @field_validator(
         "name",
-        "required_facilities",
+        "venue_requirements",
         "venue_none_required",
         "accessibility_none_required",
         "accessibility_needs",
@@ -444,6 +480,41 @@ class RequiredFacilityOut(BaseModel):
     name: str
     quantity: int | None
     notes: str | None
+
+
+class VenueRequirementOut(BaseModel):
+    """Story 2.7 AC4: one venue requirement, with its times, as the organiser and internal roles
+    see it. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str | None
+    capacity: int | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+    layout_code: str | None
+    layout_name: str | None
+    facilities: list[RequiredFacilityOut]
+    notes: str | None
+
+    @classmethod
+    def from_requirement(cls, requirement: VenueRequirement) -> VenueRequirementOut:
+        layout = requirement.layout
+        return cls(
+            id=requirement.id,
+            name=requirement.name,
+            capacity=requirement.capacity,
+            starts_at=requirement.starts_at,
+            ends_at=requirement.ends_at,
+            layout_code=requirement.layout_code,
+            layout_name=layout.name if layout else None,
+            facilities=[
+                RequiredFacilityOut(
+                    code=f.facility_code, name=f.facility.name, quantity=f.quantity, notes=f.notes
+                )
+                for f in requirement.facilities
+            ],
+            notes=requirement.notes,
+        )
 
 
 class AccessibilityNeedOut(BaseModel):
@@ -511,10 +582,7 @@ class EventDetailOut(BaseModel):
     assigned_coordinator_name: str | None
     assigned_coordinator_email: str | None
     submitted_at: datetime | None
-    required_layout_code: str | None
-    required_layout_name: str | None
-    required_facilities: list[RequiredFacilityOut]
-    venue_requirement_notes: str | None
+    venue_requirements: list[VenueRequirementOut]
     venue_none_required: bool
     accessibility_none_required: bool
     accessibility_needs: list[AccessibilityNeedOut]
@@ -533,7 +601,6 @@ class EventDetailOut(BaseModel):
     @classmethod
     def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
-        layout = event.required_layout
         can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
         return cls(
             id=event.id,
@@ -555,15 +622,9 @@ class EventDetailOut(BaseModel):
             assigned_coordinator_name=coordinator.full_name if coordinator else None,
             assigned_coordinator_email=coordinator.email if coordinator else None,
             submitted_at=event.submitted_at,
-            required_layout_code=event.required_layout_code,
-            required_layout_name=layout.name if layout else None,
-            required_facilities=[
-                RequiredFacilityOut(
-                    code=f.facility_code, name=f.facility.name, quantity=f.quantity, notes=f.notes
-                )
-                for f in event.required_facilities
+            venue_requirements=[
+                VenueRequirementOut.from_requirement(each) for each in event.venue_requirements
             ],
-            venue_requirement_notes=event.venue_requirement_notes,
             venue_none_required=event.venue_none_required,
             accessibility_none_required=event.accessibility_none_required,
             accessibility_needs=[

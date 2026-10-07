@@ -117,3 +117,16 @@ class Unavailability:
 class Clarifications:
     REQUEST = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
     RESPONSE = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")
+
+
+def _r(n: int) -> uuid.UUID:
+    return uuid.UUID(f"cccccccc-0000-0000-0000-{n:012d}")
+
+
+class VenueRequirements:
+    """Story 2.7: each sample event's "Main venue" is numbered like its event (3333..NN ->
+    cccc..NN). These three are the ones that also require facilities."""
+
+    DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
+    NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
+    PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60

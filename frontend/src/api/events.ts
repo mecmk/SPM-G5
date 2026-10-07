@@ -115,6 +115,22 @@ export interface RequiredFacility {
   notes: string | null
 }
 
+/**
+ * Mirrors `VenueRequirementOut`: one venue the event needs (story 2.7 AC1/AC2/AC4). Any field but
+ * the id may be null while the request is a draft (AC8).
+ */
+export interface VenueRequirement {
+  id: string
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  layout_name: string | null
+  facilities: RequiredFacility[]
+  notes: string | null
+}
+
 /** Mirrors `AccessibilityNeedOut`. */
 export interface AccessibilityNeed {
   code: string
@@ -161,10 +177,8 @@ export interface EventDetail {
   /** Story 2.6 AC12/AC15: rides alongside the name, restricted the same way. */
   assigned_coordinator_email: string | null
   submitted_at: string | null
-  required_layout_code: string | null
-  required_layout_name: string | null
-  required_facilities: RequiredFacility[]
-  venue_requirement_notes: string | null
+  /** Story 2.7: in the order the organiser listed them; empty when none, or not yet specified. */
+  venue_requirements: VenueRequirement[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: AccessibilityNeed[]
@@ -192,6 +206,21 @@ export interface EquipmentInput {
 }
 
 /**
+ * Mirrors `VenueRequirementIn` (story 2.7). An `id` keeps and edits an existing requirement, so a
+ * booking can keep pointing at it; without one it is new.
+ */
+export interface VenueRequirementInput {
+  id: string | null
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  facilities: { code: string; quantity: number | null; notes: string | null }[]
+  notes: string | null
+}
+
+/**
  * Mirrors `EventCreate` / `EventUpdate`. The form always sends every field, so on an edit each
  * list replaces the stored one and a null clears an optional field.
  */
@@ -205,9 +234,7 @@ export interface EventInput {
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
-  required_layout_code: string | null
-  venue_requirement_notes: string | null
-  required_facilities: { code: string; quantity: number | null; notes: string | null }[]
+  venue_requirements: VenueRequirementInput[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: { code: string; notes: string | null }[]

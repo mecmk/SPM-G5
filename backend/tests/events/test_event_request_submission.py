@@ -149,9 +149,11 @@ def test_a_detail_of_only_spaces_counts_as_missing(organiser_client, field):
     "answer",
     [
         pytest.param({"venue_none_required": True}, id="marked-none"),
-        pytest.param({"required_layout_code": "THEATRE"}, id="layout"),
-        pytest.param({"required_facilities": [{"code": "WIFI"}]}, id="facility"),
-        pytest.param({"venue_requirement_notes": "Near the lifts"}, id="notes"),
+        # Story 2.7 AC8: a requirement with a name and a number of people is the answer now; a
+        # layout, facility or note on its own no longer is (2.7's own tests cover that).
+        pytest.param(
+            {"venue_requirements": [{"name": "Main venue", "capacity": 40}]}, id="requirement"
+        ),
     ],
 )
 def test_venue_requirements_count_as_answered_by_choosing_something_or_marking_none(
@@ -229,12 +231,25 @@ def test_submission_sets_the_status_and_records_when(organiser_client, db: Sessi
 
 @pytest.mark.story("2.1", ac=11)
 def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
+    starts_at = datetime.now(UTC).replace(microsecond=0) + timedelta(days=30)
+    ends_at = starts_at + timedelta(hours=8)
     created = create_event_request(
         organiser_client,
+        starts_at=starts_at.isoformat(),
+        ends_at=ends_at.isoformat(),
         contact_name="Priya Nair",
         contact_email="priya.nair@example.com",
         contact_phone="+65 9123 4567",
-        required_facilities=[{"code": "BREAKOUT_ROOMS", "quantity": 3}],
+        # Given its own times (story 2.7 AC2), so submission has nothing to fill in for it.
+        venue_requirements=[
+            {
+                "name": "Main venue",
+                "capacity": 40,
+                "starts_at": starts_at.isoformat(),
+                "ends_at": ends_at.isoformat(),
+                "facilities": [{"code": "BREAKOUT_ROOMS", "quantity": 3}],
+            }
+        ],
         accessibility_needs=[{"code": "LIFT_ACCESS"}],
         equipment=[{"equipment_type_code": "LAPTOP", "quantity": 2}],
     )
