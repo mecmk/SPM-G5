@@ -102,6 +102,7 @@ class Events:
     SALES_KICKOFF = _e(24)  # coordinator 2; video cameras short by one
     RECRUITMENT_FAIR = _e(25)  # coordinator 1
     PARTNER_GALA = _e(26)  # coordinator 2; accepted and declined items only
+    EQUIPMENT_DECISIONS = _e(27)  # organiser 2, coordinator 1, dedicated to 16.1's e2e decisions
 
 
 class Bookings:
@@ -151,6 +152,11 @@ class EquipmentItems:
     ROADSHOW_LAPEL_MICS = uuid.UUID("66666666-0000-0000-0000-000000000006")  # pending, short by 4
     ROADSHOW_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000007")  # accepted
     ROADSHOW_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000008")  # declined, no hold
+    # Story 16.1's e2e items on Events.EQUIPMENT_DECISIONS, dated December 2027, all pending.
+    OFFSITE_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000025")  # accepted by the spec
+    OFFSITE_LED_SCREEN = uuid.UUID("66666666-0000-0000-0000-000000000026")  # declined by the spec
+    OFFSITE_CONF_PHONES = uuid.UUID("66666666-0000-0000-0000-000000000027")  # double-clicked
+    OFFSITE_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000028")  # never decided
 
 
 class EquipmentHolds:
@@ -158,6 +164,10 @@ class EquipmentHolds:
     SHOWCASE_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
     ROADSHOW_LAPEL_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000003")
     ROADSHOW_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000004")
+    OFFSITE_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000018")
+    OFFSITE_LED_SCREEN = uuid.UUID("eeeeeeee-0000-0000-0000-000000000019")
+    OFFSITE_CONF_PHONES = uuid.UUID("eeeeeeee-0000-0000-0000-000000000020")
+    OFFSITE_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000021")
 
 
 class EquipmentOutOfService:
