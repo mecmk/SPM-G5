@@ -488,6 +488,8 @@ One item per equipment type an event needs, with quantity and technical notes. T
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 | `submitted_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The coordinator who sent the item to Technical Support (story 15.1 AC1). NULL until it is sent. |
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the item was last sent to Technical Support: on submission, or again when the event's dates changed (story 15.1 AC1, AC8). NULL until it is sent. |
+| `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who accepted or declined the item (story 16.1 AC3). NULL until it is decided. |
+| `decided_at` | `timestamp with time zone` | yes | - | - | When the item was accepted or declined (story 16.1 AC3). NULL until it is decided. |
 
 Allowed values:
 

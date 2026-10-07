@@ -148,9 +148,14 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
     submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
+    decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])
 
 
 class EquipmentHoldStatus:
