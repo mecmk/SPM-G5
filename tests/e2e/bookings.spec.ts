@@ -7,8 +7,21 @@
  * Entry shape across several rows, malformed input and 401/403 refusals are backend cases:
  * backend/tests/bookings/test_list_bookings.py.
  *
+ * Story 13.1.2 - fe/be: booking status tabs and decision timing.
+ * AC1 the queue opens on Pending, and All / Approved / Rejected tabs show the rest, each with
+ *     how many requests it holds (the same tab pattern as the coordinator's Events inbox, story
+ *     6.1). Which statuses each tab returns, and the counts, are backend cases.
+ * AC2/AC3 (when a request was raised and decided) are backend cases, except how a card labels
+ *     a request nobody on staff decided (CANCELLED / WITHDRAWN): "Closed at" and "Note" rather
+ *     than "Decided at" and "Reason".
+ * AC4 the queue shows ten requests a page, with Previous / numbered pages / Next. The seed holds
+ *     fewer than ten per tab, so the paging tests fake a longer queue; the limit/offset rules
+ *     themselves are backend cases. The old page is hidden while the next one loads, and a page
+ *     left past the end (requests decided elsewhere) gives way to the last page that has any.
+ *
  * Story 13.2 - fe: an Approve action on the queue card and the detail page.
- * AC1 approving sets the request to Approved and it stops appearing as pending.
+ * AC1 approving sets the request to Approved: it leaves the Pending tab and shows under
+ *     Approved.
  * The approve/conflict rules themselves (already-decided, double-booking) are backend cases,
  * proven end to end in backend/tests/bookings/test_approve_booking.py; these two tests only
  * prove the button correctly drives that endpoint and the page reflects the result. Each uses
@@ -19,8 +32,8 @@
  * requesting coordinator's read access to the outcome.
  * AC2 an empty/whitespace-only reason blocks submission client-side (no request fires).
  * AC3 the reject dialog names the booking, can be cancelled, prevents duplicate submission,
- *     preserves a typed reason on failure, and removing the card / showing the outcome mirrors
- *     Approve.
+ *     preserves a typed reason on failure, and the card leaves the Pending tab the way Approve's
+ *     does, showing under Rejected with its reason.
  * AC4 the requesting coordinator reaches the outcome through normal navigation (Events inbox ->
  *     event -> its venue booking) and the same page hides decide actions from them; the booking
  *     card there reads as a history (every booking ever raised, most recent first), not just the
@@ -33,6 +46,33 @@
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, corsHeaders, signIn, venueCard } from './support'
+
+const QUEUE_PAGE_SIZE = 10
+const FAKE_QUEUE_LENGTH = 25
+
+/** One fake queue entry, numbered so each page's rows can be told apart. */
+function fakeQueueEntry(index: number) {
+  const number = String(index + 1).padStart(2, '0')
+  return {
+    id: `00000000-0000-0000-0000-0000000000${number}`,
+    event_id: '33333333-0000-0000-0000-000000000003',
+    event_name: `Paged Request ${number}`,
+    venue_id: '22222222-0000-0000-0000-000000000001',
+    venue_name: 'Grand Hall',
+    venue_location: 'Tower A',
+    starts_at: '2027-03-01T01:00:00Z',
+    ends_at: '2027-03-01T03:00:00Z',
+    expected_attendance: 10,
+    required_layout_code: null,
+    required_layout_name: null,
+    requirement_notes: null,
+    requested_by_name: 'Chloe Coordinator',
+    status: 'PENDING',
+    decision_reason: null,
+    created_at: '2026-09-20T01:00:00Z',
+    decided_at: null,
+  }
+}
 
 /**
  * A pending request's card, by the short id shown on it (the seeded row's last 8 hex characters,
@@ -96,18 +136,270 @@ test('13.1 AC1: the queue shows requests across different events, venues and dat
   ).toBeVisible()
 })
 
+/** The seeded APPROVED Nimbus/Grand Hall booking. A different, PENDING request (Product
+ * Roadmap Townhall) also books Grand Hall, so the venue alone does not identify it. */
+function approvedGrandHallCard(page: Page) {
+  return page
+    .getByRole('listitem')
+    .filter({ hasText: 'Nimbus Developer Conference' })
+    .filter({ hasText: 'Grand Hall' })
+}
+
 test('13.1 AC3: an approved booking does not appear in the pending queue', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 
-  await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
-  // The APPROVED Nimbus/Grand Hall booking must not appear, even though a different, PENDING
-  // request (Product Roadmap Townhall) also books Grand Hall.
-  const decidedCard = page
-    .getByRole('listitem')
-    .filter({ hasText: 'Nimbus Developer Conference' })
-    .filter({ hasText: 'Grand Hall' })
-  await expect(decidedCard).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: /^Pending/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(
+    page.getByRole('listitem').filter({ hasText: 'Product Roadmap Townhall' }),
+  ).toBeVisible()
+  await expect(approvedGrandHallCard(page)).toHaveCount(0)
+})
+
+test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decided booking', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  await expect(page.getByRole('tab', { name: /^Pending/ })).toHaveAttribute('aria-selected', 'true')
+
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  await expect(approvedGrandHallCard(page)).toBeVisible()
+  await expect(approvedGrandHallCard(page).getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  // Fewer than ten requests: one page, so no page controls. Checked on Approved, not All: All
+  // gains a request from every spec that sends one, so it can reach ten in a full run, while
+  // Approved holds the one seeded booking plus at most the two 13.2's tests approve.
+  await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: /^Rejected/ }).click()
+  await expect(approvedGrandHallCard(page)).toHaveCount(0)
+
+  // A pending card first: only All's own answer holds one, so the approved card checked after it
+  // cannot be one left over from an earlier tab.
+  await page.getByRole('tab', { name: /^All/ }).click()
+  await expect(pendingCard(page, '00000002')).toBeVisible()
+  await expect(approvedGrandHallCard(page)).toBeVisible()
+})
+
+test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
+  page,
+}) => {
+  // Migration 010 cancelled some pending requests itself, stamping decided_at and a system note.
+  // The seed holds no cancelled booking, so fake one next to a staff-approved one.
+  const approved = {
+    ...fakeQueueEntry(0),
+    event_name: 'Staff Approved Request',
+    status: 'APPROVED',
+    decided_at: '2026-09-21T02:00:00Z',
+  }
+  const cancelled = {
+    ...fakeQueueEntry(1),
+    event_name: 'System Cancelled Request',
+    status: 'CANCELLED',
+    decided_at: '2026-09-22T02:00:00Z',
+    decision_reason: 'Cancelled when pending requests began to hold their venue.',
+  }
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [approved, cancelled],
+          total: 2,
+          counts: {
+            pending: 0,
+            approved: 1,
+            rejected: 0,
+            withdrawn: 0,
+            cancelled: 1,
+          },
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await page.getByRole('tab', { name: /^All/ }).click()
+  // A cancelled request has no tab of its own, but still counts towards All.
+  await expect(page.getByRole('tab', { name: 'All (2)', exact: true })).toBeVisible()
+
+  const approvedCard = page.getByRole('listitem').filter({ hasText: 'Staff Approved Request' })
+  await expect(approvedCard.getByText('Decided at', { exact: true })).toBeVisible()
+
+  const cancelledCard = page.getByRole('listitem').filter({ hasText: 'System Cancelled Request' })
+  await expect(cancelledCard.getByText('Closed at', { exact: true })).toBeVisible()
+  await expect(cancelledCard.getByText('Note', { exact: true })).toBeVisible()
+  await expect(cancelledCard.getByText('Decided at', { exact: true })).toHaveCount(0)
+  await expect(cancelledCard.getByText('Reason', { exact: true })).toHaveCount(0)
+})
+
+test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', async ({ page }) => {
+  const askedFor: URLSearchParams[] = []
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      const params = new URL(request.url()).searchParams
+      askedFor.push(params)
+      const offset = Number(params.get('offset'))
+      const limit = Number(params.get('limit'))
+      const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) => fakeQueueEntry(index))
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: every.slice(offset, offset + limit),
+          total: FAKE_QUEUE_LENGTH,
+          counts: {
+            pending: FAKE_QUEUE_LENGTH,
+            approved: 0,
+            rejected: 0,
+            withdrawn: 0,
+            cancelled: 0,
+          },
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  const pager = page.getByRole('navigation', { name: 'Pages' })
+  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+  await expect(page.getByText('Showing 1–10 of 25 requests')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Pending (25)', exact: true })).toBeVisible()
+  await expect(pager.getByRole('button', { name: 'Previous' })).toBeDisabled()
+  await expect(pager.getByRole('button', { name: '1', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  await pager.getByRole('button', { name: '2', exact: true }).click()
+  await expect(page.getByText('Showing 11–20 of 25 requests')).toBeVisible()
+  await expect(cards.filter({ hasText: 'Paged Request 11' })).toBeVisible()
+  await expect(cards.filter({ hasText: 'Paged Request 01' })).toHaveCount(0)
+
+  await pager.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByText('Showing 21–25 of 25 requests')).toBeVisible()
+  await expect(cards).toHaveCount(FAKE_QUEUE_LENGTH - 2 * QUEUE_PAGE_SIZE)
+  await expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+  const last = askedFor.at(-1)
+  expect(last?.get('limit')).toBe(String(QUEUE_PAGE_SIZE))
+  expect(last?.get('offset')).toBe(String(2 * QUEUE_PAGE_SIZE))
+  expect(last?.get('status')).toBe('PENDING')
+})
+
+/** Answer the queue's GETs with `every` paged by limit/offset, `total` as the tab's size, and
+ * `hold` deciding whether one offset waits before it is answered. */
+async function fakeQueue(
+  page: Page,
+  every: ReturnType<typeof fakeQueueEntry>[],
+  total: (offset: number) => number,
+  hold: (offset: number) => Promise<void> = async () => {},
+) {
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      const params = new URL(request.url()).searchParams
+      const offset = Number(params.get('offset'))
+      const limit = Number(params.get('limit'))
+      await hold(offset)
+      const size = total(offset)
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: every.slice(0, size).slice(offset, offset + limit),
+          total: size,
+          counts: {
+            pending: size,
+            approved: 0,
+            rejected: 0,
+            withdrawn: 0,
+            cancelled: 0,
+          },
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+}
+
+test('13.1.2 AC4: while the next page loads, the previous page is not shown', async ({ page }) => {
+  let release = () => {}
+  const secondPageHeld = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) => fakeQueueEntry(index))
+  await fakeQueue(
+    page,
+    every,
+    () => FAKE_QUEUE_LENGTH,
+    (offset) => (offset === QUEUE_PAGE_SIZE ? secondPageHeld : Promise.resolve()),
+  )
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+
+  await page
+    .getByRole('navigation', { name: 'Pages' })
+    .getByRole('button', { name: '2', exact: true })
+    .click()
+  await expect(page.getByText('Loading booking requests…')).toBeVisible()
+  await expect(cards).toHaveCount(0)
+
+  release()
+  await expect(page.getByText('Showing 11–20 of 25 requests')).toBeVisible()
+  await expect(cards.filter({ hasText: 'Paged Request 11' })).toBeVisible()
+})
+
+test('13.1.2 AC4: a page emptied by decisions made elsewhere shows the last page instead', async ({
+  page,
+}) => {
+  // Twelve wait when the queue opens; by the time page 2 is asked for, two were decided elsewhere,
+  // so ten remain and page 2 is past the end.
+  let remaining = 12
+  const every = Array.from({ length: remaining }, (_, index) => fakeQueueEntry(index))
+  await fakeQueue(page, every, (offset) => {
+    if (offset === QUEUE_PAGE_SIZE) remaining = QUEUE_PAGE_SIZE
+    return remaining
+  })
+
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await expect(page.getByText('Showing 1–10 of 12 requests')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Pages' })
+    .getByRole('button', { name: '2', exact: true })
+    .click()
+
+  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+  await expect(cards.filter({ hasText: 'Paged Request 01' })).toBeVisible()
+  await expect(page.getByText('No requests waiting. You are up to date.')).toHaveCount(0)
 })
 
 test('13.1: a coordinator cannot open the booking requests queue', async ({ page }) => {
@@ -117,7 +409,7 @@ test('13.1: a coordinator cannot open the booking requests queue', async ({ page
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
 })
 
-test('13.2 AC1: approving from the queue card removes it from the pending list', async ({
+test('13.2 AC1: approving from the queue card moves it from Pending to Approved', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -131,6 +423,11 @@ test('13.2 AC1: approving from the queue card removes it from the pending list',
 
   await expect(dialog).not.toBeVisible()
   await expect(card).toHaveCount(0)
+
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  await expect(card.getByText('Approved', { exact: true })).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
 })
 
 test('13.2 AC1: approving from the detail page shows the request as approved', async ({ page }) => {
@@ -154,7 +451,7 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
 })
 
-test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting removes the card from the queue', async ({
+test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting moves the card to Rejected with its reason', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -177,7 +474,9 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
   await expect(card).toBeVisible()
 
   await card.getByRole('button', { name: 'Reject' }).click()
-  const reopenedDialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  const reopenedDialog = page.getByRole('dialog', {
+    name: 'Reject this booking?',
+  })
   await reopenedDialog
     .getByLabel('Reason for rejecting')
     .fill('Budget was reallocated to another event.')
@@ -198,6 +497,12 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
 
   await expect(reopenedDialog).not.toBeVisible()
   await expect(card).toHaveCount(0)
+
+  await page.getByRole('tab', { name: /^Rejected/ }).click()
+  await expect(card.getByText('Rejected', { exact: true })).toBeVisible()
+  await expect(card).toContainText('Budget was reallocated to another event.')
+  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
+  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
 })
 
 test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page }) => {
