@@ -67,6 +67,30 @@ export const DETAILS_LOCKED_STATUSES: readonly EventStatus[] = ['PLANNING', 'CON
 export const DETAILS_LOCKED_HINT =
   'Event details can no longer be edited directly after approval. Further changes must go through the change request process.'
 
+/**
+ * Story 19.1 AC5: the one status a change request can be raised in, mirroring the backend's
+ * `_REQUESTABLE_STATUS` (backend/app/change_requests/service.py). Before approval, changes go
+ * through clarification; once Confirmed or closed, none are taken.
+ */
+export const CHANGE_REQUESTABLE_STATUS: EventStatus = 'PLANNING'
+
+/**
+ * Story 19.1 AC1: the statuses an event can hold change requests in - approved, whether still
+ * running or over - so the organiser and coordinator can still read what was asked.
+ */
+export const CHANGE_REQUESTS_VISIBLE_STATUSES: readonly EventStatus[] = [
+  'PLANNING',
+  'CONFIRMED',
+  'COMPLETED',
+  'CANCELLED',
+]
+
+/**
+ * Story 19.1 AC2: the statuses the organiser updates the point of contact directly in, mirroring
+ * the backend's `_CONTACT_EDITABLE_STATUSES` (backend/app/events/service.py).
+ */
+export const CONTACT_EDITABLE_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
+
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   DRAFT: 'Draft',
   UNDER_REVIEW: 'Under review',

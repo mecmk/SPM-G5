@@ -3427,3 +3427,11 @@ label select[aria-invalid='true'],
 .requesting-event {
   margin-bottom: 1.5rem;
 }
+
+/* Story 19.1: on a phone a change request's text takes the whole row, with its status and
+   Withdraw beneath it, rather than being squeezed into a narrow column beside them. */
+@media (max-width: 640px) {
+  .change-request-text {
+    flex-basis: 100%;
+  }
+}

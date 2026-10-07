@@ -78,7 +78,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         to: '/change-requests',
         label: 'Change requests',
-        description: 'Ask for changes to a confirmed event and follow each decision.',
+        description: 'Ask for changes to an event in planning and follow each decision.',
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE,
         story: '19.1',
