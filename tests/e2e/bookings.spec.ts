@@ -43,8 +43,21 @@
  * The reject validation matrix, permission refusals, 409s and audit behaviour are backend cases:
  * backend/tests/bookings/test_reject_booking.py. Each mutating test here uses its own dedicated
  * seeded booking, same reasoning as 13.2's.
+ *
+ * Story 13.1.3 - fe: the requested venue's availability calendar on the request detail page.
+ * AC1 the detail page shows the venue's availability calendar - story 9.1's, with its legend,
+ *     Previous / Next and day list.
+ * AC2 it opens on the month the request starts in, with that day's list already open, so staff
+ *     see what else is on that day.
+ * AC3 a calendar that fails to load shows availability as unknown, and the request can still be
+ *     decided.
+ * AC4 a decision made on the page reloads the calendar, so the request's day shows it booked (or
+ *     gone, once rejected). The approve call is faked, so the seeded request stays pending for
+ *     the other tests that read it in a fullyParallel run.
+ * What the calendar returns, and who may read it, are story 9.1's backend cases:
+ * backend/tests/venues/test_venue_calendar.py.
  */
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 import { ACCOUNTS, corsHeaders, signIn, venueCard } from './support'
 
 const QUEUE_PAGE_SIZE = 10
@@ -604,4 +617,182 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
   await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
+})
+
+/** Nimbus Developer Conference's pending request for Seminar Room 2.1, 25 Nov 2026 13:00-18:00. */
+const NIMBUS_SEMINAR_REQUEST_ID = '44444444-0000-0000-0000-000000000002'
+
+/** The request detail page's calendar card - a region via its `aria-labelledby`. */
+function venueAvailability(page: Page) {
+  return page.getByRole('region', { name: 'Venue availability' })
+}
+
+/** Stubs every `/calendar` fetch the page makes (tests/CLAUDE.md's exception for a state the
+ *  seed cannot reach), leaving its own navigation and every other call on the real network. */
+async function stubCalendar(page: Page, fulfill: (route: Route) => Promise<void>) {
+  await page.route(
+    (url) => /\/venues\/[^/]+\/calendar$/.test(url.pathname),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      await fulfill(route)
+    },
+  )
+}
+
+test("13.1.3 AC1/AC2: the request detail page opens the venue calendar on the request's own day", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
+
+  const calendar = venueAvailability(page)
+  // AC2: the request's month, not today's.
+  await expect(calendar.getByText('November 2026')).toBeVisible()
+  await expect(calendar.getByText('Loading availability…')).toHaveCount(0)
+  // AC1: story 9.1's legend, and the rest of the month - here, the room's seeded closure.
+  await expect(calendar.getByText('Unavailable', { exact: true })).toBeVisible()
+  await expect(
+    calendar.getByRole('button', { name: /^2 November 2026.*Annual air-con servicing/ }),
+  ).toBeVisible()
+
+  // AC2: the request's own day is already open, listing the request as a hold.
+  await expect(calendar.getByRole('button', { name: /25 November 2026/ })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  const dayList = calendar.getByRole('region', { name: /25 Nov 2026/ })
+  await expect(dayList).toContainText('Nimbus Developer Conference')
+  await expect(dayList).toContainText('13:00–18:00')
+  await expect(dayList).toContainText('Held – pending')
+
+  // AC1: Next moves on a month and keeps the calendar.
+  await calendar.getByRole('button', { name: 'Next →' }).click()
+  await expect(calendar.getByText('December 2026')).toBeVisible()
+  await expect(calendar.getByRole('button', { name: '← Prev' })).toBeVisible()
+})
+
+test("13.1.3 AC2: another booking on the request's day is listed beside it", async ({ page }) => {
+  // The seed has nothing else in Seminar Room 2.1 on 25 Nov, so the calendar answer is faked.
+  await stubCalendar(page, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: corsHeaders(route.request()),
+      body: JSON.stringify([
+        {
+          starts_at: '2026-11-25T00:30:00Z',
+          ends_at: '2026-11-25T04:15:00Z',
+          booking_starts_at: '2026-11-25T01:00:00Z',
+          booking_ends_at: '2026-11-25T04:00:00Z',
+          reason: 'BOOKED',
+          label: 'Morning Leadership Workshop',
+        },
+        {
+          starts_at: '2026-11-25T04:30:00Z',
+          ends_at: '2026-11-25T10:15:00Z',
+          booking_starts_at: '2026-11-25T05:00:00Z',
+          booking_ends_at: '2026-11-25T10:00:00Z',
+          reason: 'HELD',
+          label: 'Nimbus Developer Conference',
+        },
+      ]),
+    }),
+  )
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
+
+  const dayList = venueAvailability(page).getByRole('region', { name: /25 Nov 2026/ })
+  await expect(dayList).toContainText('Morning Leadership Workshop')
+  await expect(dayList).toContainText('09:00–12:00')
+  await expect(dayList).toContainText('Booked')
+  await expect(dayList).toContainText(
+    /Morning Leadership Workshop[\s\S]*Nimbus Developer Conference/,
+  )
+})
+
+test('13.1.3 AC3: a calendar that fails to load shows availability as unknown, and the request can still be decided', async ({
+  page,
+}) => {
+  await stubCalendar(page, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      headers: corsHeaders(route.request()),
+      body: JSON.stringify({ detail: null }),
+    }),
+  )
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
+
+  const calendar = venueAvailability(page)
+  await expect(calendar.getByRole('status')).toHaveText(/Availability unknown/)
+  await expect(calendar.getByRole('alert')).toContainText('The server hit a problem')
+  await expect(page.getByRole('heading', { name: 'Nimbus Developer Conference' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Reject' })).toBeEnabled()
+})
+
+test('13.1.3 AC4: approving on the detail page reloads the calendar, showing the request booked', async ({
+  page,
+}) => {
+  const requestPath = `/bookings/${NIMBUS_SEMINAR_REQUEST_ID}`
+  let pendingBooking: Record<string, unknown> = {}
+  let isApproved = false
+  // The page's own read of the request goes through, and is kept to answer the faked approval.
+  await page.route(
+    (url) => url.pathname === requestPath,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      pendingBooking = await response.json()
+      await route.fulfill({ response })
+    },
+  )
+  await page.route(
+    (url) => url.pathname === `${requestPath}/approve`,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      isApproved = true
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: corsHeaders(route.request()),
+        body: JSON.stringify({
+          ...pendingBooking,
+          status: 'APPROVED',
+          decided_at: '2026-10-07T02:00:00Z',
+        }),
+      })
+    },
+  )
+  await stubCalendar(page, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: corsHeaders(route.request()),
+      body: JSON.stringify([
+        {
+          starts_at: '2026-11-25T04:30:00Z',
+          ends_at: '2026-11-25T10:15:00Z',
+          booking_starts_at: '2026-11-25T05:00:00Z',
+          booking_ends_at: '2026-11-25T10:00:00Z',
+          reason: isApproved ? 'BOOKED' : 'HELD',
+          label: 'Nimbus Developer Conference',
+        },
+      ]),
+    }),
+  )
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
+
+  const dayList = venueAvailability(page).getByRole('region', { name: /25 Nov 2026/ })
+  await expect(dayList).toContainText('Held – pending')
+
+  await page.getByRole('button', { name: 'Approve' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await dialog.getByRole('button', { name: 'Approve' }).click()
+  await expect(dialog).not.toBeVisible()
+
+  await expect(dayList).toContainText('Booked')
+  await expect(dayList).not.toContainText('Held – pending')
 })
