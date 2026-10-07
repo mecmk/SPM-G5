@@ -715,6 +715,24 @@ def test_other_roles_get_no_suitability_in_event_context(login_as, db: Session, 
 
 
 @pytest.mark.story("11.1", ac=6)
+@pytest.mark.parametrize(
+    "user", [Users.VENUE_STAFF, Users.TECH_SUPPORT], ids=["venue-staff", "tech-support"]
+)
+def test_a_role_that_cannot_request_a_venue_is_not_told_whether_an_event_exists(
+    login_as, db: Session, user
+):
+    """The event matters only to a coordinator, who is judged against it. For anyone else it is
+    ignored, so an id that does not exist is no more an error than one that does, and the search
+    does not confirm which ids are events."""
+    tag = _tag()
+    make_venue(db, name=tag, capacity=10)
+
+    hits = _hits(login_as(user), search=tag, event=str(uuid.uuid4()))
+
+    assert hits[tag].get("suitability", "no such field") is None
+
+
+@pytest.mark.story("11.1", ac=6)
 def test_a_coordinator_not_assigned_to_the_event_gets_no_suitability(login_as, db: Session):
     tag = _tag()
     event = _assigned_event(db, coordinator=Users.COORDINATOR, expected_attendance=500)

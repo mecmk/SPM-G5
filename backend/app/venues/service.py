@@ -451,12 +451,11 @@ def _event_judged_by_search(
     """Story 11.1: the event a search in ``event_id``'s context judges its results against. None
     outside event context (AC5), and for anyone but the event's assigned coordinator holding
     bookings:request (AC6) - whatever the event's status. AC3: an event that does not exist, or
-    has no number of people yet, is refused here, whether or not any venue matches."""
-    if event_id is None:
+    has no number of people yet, is refused here, whether or not any venue matches - but only for
+    a caller who could be judged against it: anyone else is not told whether the event exists."""
+    if event_id is None or not role_has(actor.role_code, Permission.BOOKINGS_REQUEST):
         return None
     event = _event_to_judge(db, event_id)
-    if not role_has(actor.role_code, Permission.BOOKINGS_REQUEST):
-        return None
     if event.assigned_coordinator_id != actor.id:
         return None
     _check_judgeable(event, first_venue_requirement(event))
