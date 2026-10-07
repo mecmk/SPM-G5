@@ -172,9 +172,10 @@ export function eventPath(eventId: string): string {
   return EVENT_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
 
-// Story 7.2: the assigned Event Coordinator edits an event's routine information.
-export const EVENT_EDIT_ROUTINE_PATH = '/events/:eventId/routine-information'
+// Story 7.2: the assigned Event Coordinator edits an event - its internal notes until it is
+// closed, and the organiser's request too while it is under review or awaiting clarification.
+export const EVENT_COORDINATOR_EDIT_PATH = '/events/:eventId/coordinator-edit'
 
-export function eventEditRoutinePath(eventId: string): string {
-  return EVENT_EDIT_ROUTINE_PATH.replace(':eventId', encodeURIComponent(eventId))
+export function eventCoordinatorEditPath(eventId: string): string {
+  return EVENT_COORDINATOR_EDIT_PATH.replace(':eventId', encodeURIComponent(eventId))
 }

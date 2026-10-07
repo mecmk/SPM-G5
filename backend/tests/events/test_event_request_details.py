@@ -768,8 +768,13 @@ def test_reference_data_lists_the_pick_lists_for_the_form(organiser_client):
 
 
 @pytest.mark.story("2.1", ac=4)
-@pytest.mark.parametrize("user", NON_ORGANISERS)
-def test_reference_data_is_for_organisers_only(login_as, user):
+@pytest.mark.parametrize(
+    "user",
+    # Story 7.2 AC4: the assigned coordinator corrects a request in the same form, so coordinators
+    # read the pick-lists too (tests/events/test_correct_event_under_review.py).
+    [param for param in NON_ORGANISERS if param.id != "coordinator"],
+)
+def test_reference_data_is_for_the_request_form_only(login_as, user):
     assert login_as(user).get("/events/reference-data").status_code == 403
 
 

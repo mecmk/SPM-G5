@@ -186,6 +186,12 @@
   color: var(--text-muted);
 }
 
+/* A sentence on its own line under a subtitle's status badge (story 7.2's coordinator edit page). */
+.page-subtitle-note {
+  display: block;
+  margin-top: 0.5rem;
+}
+
 .page-actions {
   display: flex;
   gap: 0.5rem;
@@ -195,6 +201,12 @@
 /* A page-header with only an action slot (its title lives elsewhere, e.g. a hero banner). */
 .page-header.actions-only {
   justify-content: flex-end;
+}
+
+/* An action set apart on the left of an actions-only header (story 7.2's Edit event), while the
+   rest stay right-aligned whether it is there or not. */
+.page-header-lead {
+  margin-right: auto;
 }
 
 .back-link {
@@ -972,6 +984,37 @@ label select:focus,
 label textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* A form section that can no longer be changed - a submitted request, or story 7.2's organiser
+   details once the event is approved - is greyed out, so it reads as read-only rather than as
+   fields that simply do not respond. */
+fieldset:disabled label input,
+fieldset:disabled label select,
+fieldset:disabled label textarea {
+  color: var(--text-muted);
+  background: transparent;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+fieldset:disabled legend {
+  color: var(--text-muted);
+}
+
+fieldset:disabled label,
+fieldset:disabled .form-hint {
+  color: var(--text-faint);
+}
+
+fieldset:disabled .picture-drop {
+  opacity: 0.6;
+}
+
+fieldset:disabled .button,
+fieldset:disabled button {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 label.checkbox {
