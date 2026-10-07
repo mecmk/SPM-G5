@@ -3,7 +3,8 @@
 (the organiser's response), stories 4.4/4.5 (approve / reject an event request), story 4.6 (the
 decision /clarification history an organiser sees), story 7.2 (routine information edits and
 correcting a request under review or awaiting clarification), story 6.1 (the coordinator's
-assigned events in any status), and story 2.1 AC14 (the cover picture)."""
+assigned events in any status), story 2.1 AC14 (the cover picture), and story 19.1 AC2 (the
+organiser's point of contact on an approved event)."""
 
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ from app.events.schemas import (
     EventUpdate,
     MyEventEntry,
     MyEventList,
+    PointOfContactUpdate,
     ReviewQueueEntry,
     ReviewQueueSort,
 )
@@ -355,6 +357,24 @@ def update_routine_information(
         service.update_routine_information(db, event, payload, actor=actor)
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.patch("/{event_id}/point-of-contact", response_model=EventDetailOut)
+def update_point_of_contact(
+    event_id: uuid.UUID,
+    payload: PointOfContactUpdate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanCreate],
+) -> EventDetailOut:
+    """Story 19.1 AC2: the organiser updates their approved event's point of contact directly,
+    while it is in Planning or Confirmed."""
+    try:
+        event = service.update_point_of_contact(db, event_id, payload, actor=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return EventDetailOut.from_event(event, viewer=actor)

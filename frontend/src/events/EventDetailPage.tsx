@@ -42,6 +42,9 @@ import {
 import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
+  CHANGE_REQUESTABLE_STATUS,
+  CHANGE_REQUESTS_VISIBLE_STATUSES,
+  CONTACT_EDITABLE_STATUSES,
   DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
   EQUIPMENT_OPEN_STATUSES,
@@ -55,7 +58,9 @@ import {
   instantToInput,
 } from '../shared/format'
 import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
+import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
+import { PointOfContactEditor } from './PointOfContactEditor'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -540,6 +545,24 @@ export function EventDetailPage() {
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
     user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+  const isOrganiser = user !== null && event.organiser_id === user.id
+  /** Story 19.1 AC1/AC5/AC7: only the owning organiser, holding event_change_requests:create, asks
+   *  for a change, and only while the event is in Planning - mirroring the backend's checks. */
+  const canRequestChanges =
+    can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
+    isOrganiser &&
+    event.status === CHANGE_REQUESTABLE_STATUS
+  /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
+   *  approved event, mirroring the backend's `list_change_requests`. */
+  const canViewChangeRequests =
+    (isOrganiser || isAssignedCoordinator) &&
+    CHANGE_REQUESTS_VISIBLE_STATUSES.includes(event.status)
+  /** Story 19.1 AC2: the owning organiser updates the point of contact directly while the event
+   *  is Planning or Confirmed, mirroring the backend's `update_point_of_contact`. */
+  const canUpdatePointOfContact =
+    can(PERMISSIONS.EVENTS_CREATE) &&
+    isOrganiser &&
+    CONTACT_EDITABLE_STATUSES.includes(event.status)
 
   const clarificationEntries: ClarificationEntry[] | null =
     clarifications === null
@@ -686,6 +709,7 @@ export function EventDetailPage() {
               <p>{event.contact_phone ?? NOT_RECORDED}</p>
             </div>
           </div>
+          {canUpdatePointOfContact && <PointOfContactEditor event={event} onSaved={setEvent} />}
           {canSeeInternalNotes && (
             <div>
               <p className="eyebrow">Internal notes</p>
@@ -937,6 +961,14 @@ export function EventDetailPage() {
           canChange={canChangeEquipment}
           onChanged={reloadEvent}
         />
+
+        {canViewChangeRequests && (
+          <ChangeRequestsSection
+            event={event}
+            canRaise={canRequestChanges}
+            canWithdraw={isOrganiser}
+          />
+        )}
 
         {canViewClarifications && (
           <ClarificationHistory

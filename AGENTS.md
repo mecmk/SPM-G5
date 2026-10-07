@@ -143,6 +143,7 @@ backend/
   app/                  # one package per feature area: router.py, service.py, schemas.py, models.py
     auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
     bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
+    change_requests/    # an organiser's requested changes to an approved event, and withdrawals
     coordination/       # assigning and reassigning an event's coordinator
     equipment/          # an event's equipment requests: recording, holding, submitting to Technical Support
     events/             # event requests, review and decisions, event details, routine edits

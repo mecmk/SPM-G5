@@ -361,7 +361,7 @@ function isBlankOrPositiveWholeNumber(value: string): boolean {
 }
 
 /** Story 2.1 AC13: blank is fine on a draft; anything typed must look like an email address. */
-function isBlankOrEmailAddress(value: string): boolean {
+export function isBlankOrEmailAddress(value: string): boolean {
   const trimmed = value.trim()
   return (
     trimmed === '' || (trimmed.length <= CONTACT_EMAIL_MAX_LENGTH && EMAIL_ADDRESS.test(trimmed))
@@ -369,7 +369,7 @@ function isBlankOrEmailAddress(value: string): boolean {
 }
 
 /** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. */
-function isBlankOrPhoneNumber(value: string): boolean {
+export function isBlankOrPhoneNumber(value: string): boolean {
   const trimmed = value.trim()
   if (trimmed === '') return true
   const digitCount = trimmed.replace(/\D/g, '').length
