@@ -36,7 +36,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19, AC20 | raising and submitting an event request |
 | `e2e/venue-requirements.spec.ts` | 2.7 AC1–AC6, AC8–AC11 | listing several venue requirements, each with its own times |
 | `e2e/my-event-requests.spec.ts` | 2.6 AC1–AC5, AC7–AC9, AC11, AC12 | an organiser's own list of requests |
-| `e2e/review-queue.spec.ts` | 4.1 AC1–AC4; 6.1 | the coordinator's review queue and status tabs |
+| `e2e/review-queue.spec.ts` | 4.1 AC1–AC4; 6.1 AC2 | the coordinator's review queue, its status tabs, and each event's dates |
 | `e2e/request-clarification.spec.ts` | 4.2 AC1, AC3, AC4, AC7 | asking the organiser for clarification, and a follow-up while awaiting a response |
 | `e2e/respond-to-clarification.spec.ts` | 4.3 AC1, AC2, AC4, AC6 | the organiser answering a clarification request, more than once |
 | `e2e/decision-history.spec.ts` | 4.6 AC1, AC2 | the decision and the clarification thread |
