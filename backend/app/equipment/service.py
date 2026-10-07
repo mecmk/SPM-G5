@@ -1,6 +1,6 @@
 """Business rules for an event's equipment items (story 15.1): the assigned coordinator records
 them, starting from what the organiser asked for (story 2.1), and submits them to Technical
-Support.
+Support, who are told of each submission (story 20.1).
 
 Story 15.1 - "As an Event Coordinator I want to record the equipment an event needs, starting from
 what the organiser asked for, and submit it to Technical Support, with each item held for the
@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 from app.auth.models import User
+from app.auth.permissions import RoleCode
 from app.common.audit import record_audit
 from app.equipment.schemas import (
     EquipmentItemIn,
@@ -59,6 +60,7 @@ from app.events.models import (
     EventEquipmentRequest,
     EventStatus,
 )
+from app.notifications.service import NotificationType, active_members, notify
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can change its equipment."
@@ -427,13 +429,42 @@ def remove_equipment_item(
     db.commit()
 
 
+def _describe_items(items: Iterable[EventEquipmentRequest]) -> str:
+    """The items as one phrase, in the order given: "Wireless microphone ×6, Presentation
+    laptop ×2", as the event page shows a quantity."""
+    return ", ".join(f"{item.equipment_type.name} ×{item.quantity}" for item in items)
+
+
+def _notify_technical_support(
+    db: Session, event: Event, items: Iterable[EventEquipmentRequest], *, actor: User
+) -> None:
+    """Story 20.1 AC1: the items now wait for Technical Support (15.2's queue), so every active
+    Technical Support member is told which event they are for, what they are and who sent them -
+    as Venue Staff are told of a new booking request."""
+    message = f'{actor.full_name} requested equipment for "{event.name}": {_describe_items(items)}.'
+    for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.EQUIPMENT_SUBMITTED,
+            event_id=event.id,
+            title=f'New equipment request for "{event.name}"',
+            message=message,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
 def submit_equipment(
     db: Session, event_id: uuid.UUID, *, actor: User
 ) -> list[EventEquipmentRequest]:
     """AC1: send every item not yet sent to Technical Support as Pending, recording who sent it
     and when. An item without a hold yet (recorded before holds existed) is held first, and if any
     no longer fits, nothing is sent (AC3). AC10: with nothing waiting - a second click - it is
-    refused."""
+    refused. Story 20.1 AC1/AC4: Technical Support are notified in the same transaction, so a
+    refused or failed send tells nobody."""
     event = _event_for_change(db, event_id, actor=actor)
     waiting = db.scalars(
         select(EventEquipmentRequest)
@@ -469,6 +500,7 @@ def submit_equipment(
         item.status = EquipmentRequestStatus.PENDING
         item.submitted_at = submitted_at
         item.submitted_by_id = actor.id
+    _notify_technical_support(db, event, waiting, actor=actor)
     record_audit(
         db,
         actor=actor,

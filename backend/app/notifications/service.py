@@ -19,7 +19,8 @@ Story 20.1:
 * AC4 written in the action's transaction, so an action that fails or is refused leaves none,
   and the services work the recipient out when they send it, so after a reassignment "the
   coordinator" is the new one;
-* AC5 ``NotificationType`` names who receives each type, and ``notify`` refuses any other type;
+* AC5 ``NotificationType`` names who receives each type, ``active_members`` is a role's audience,
+  and ``notify`` refuses any other type;
 * AC6 ``created_at`` is stamped from the clock and the list is newest first, so actions in quick
   succession keep their order. A repeated action is refused by the action's own guard, so it
   notifies once.
@@ -47,7 +48,7 @@ class NotificationType(StrEnum):
     """AC5: every kind of notification, and who receives it. ``notify`` refuses any other type,
     so a story that sends a new kind adds it here, with its recipients, in the same change.
     "The coordinator" is always the event's coordinator when the notification is sent (AC4), and
-    "Venue Staff" every active Venue Staff member."""
+    "Venue Staff" and "Technical Support" every active member of that role (``active_members``)."""
 
     EVENT_SUBMITTED = "EVENT_SUBMITTED"  # 2.1: the coordinator 5.1 assigned the request to
     EVENT_CLARIFICATION_REQUESTED = "EVENT_CLARIFICATION_REQUESTED"  # 4.2: the organiser
@@ -61,6 +62,7 @@ class NotificationType(StrEnum):
     BOOKING_WITHDRAWN = "BOOKING_WITHDRAWN"  # 12.2: Venue Staff
     BOOKING_APPROVED = "BOOKING_APPROVED"  # 13.2: the coordinator
     BOOKING_REJECTED = "BOOKING_REJECTED"  # 13.2.1: the coordinator
+    EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
 
 
 def notify(
@@ -103,6 +105,16 @@ def notify(
     else:
         db.flush()
     return entry
+
+
+def active_members(db: Session, *, role_code: str) -> list[User]:
+    """AC5: a whole role as an audience - its active members, the people who can act on the
+    notification now, as 12.2's withdrawal first told Venue Staff. A named person (the organiser,
+    the coordinator) is told whatever their state; a role is never told through an inactive
+    account."""
+    return list(
+        db.scalars(select(User).where(User.role_code == role_code, User.is_active.is_(True)))
+    )
 
 
 def list_notifications(db: Session, *, recipient: User) -> list[Notification]:

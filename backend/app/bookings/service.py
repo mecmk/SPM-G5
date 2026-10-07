@@ -83,7 +83,7 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
-from app.notifications.service import NotificationType, notify
+from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
 from app.venues.models import (
     Facility,
@@ -514,16 +514,6 @@ def reject_booking(
     db.refresh(booking)
 
 
-def _active_venue_staff(db: Session) -> list[User]:
-    """12.2 AC2, 20.1 AC5: Venue Staff as an audience - every active member, the same role-wide
-    audience ``list_booking_requests`` already serves the queue to."""
-    return list(
-        db.scalars(
-            select(User).where(User.role_code == RoleCode.VENUE_STAFF, User.is_active.is_(True))
-        )
-    )
-
-
 def _notify_venue_staff_of_request(
     db: Session,
     booking: VenueBooking,
@@ -540,7 +530,7 @@ def _notify_venue_staff_of_request(
         f'{actor.full_name} requested {venue_name} for "{booking.event.name}" '
         f"{_describe_held_period(held_from, held_until)}."
     )
-    for member in _active_venue_staff(db):
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
             recipient=member,
@@ -558,7 +548,7 @@ def _notify_venue_staff_of_request(
 def _notify_venue_staff_of_withdrawal(db: Session, booking: VenueBooking, *, actor: User) -> None:
     """12.2 AC2: every active Venue Staff member is told - the same role-wide, active-only
     audience ``list_booking_requests`` already serves for the queue itself."""
-    for member in _active_venue_staff(db):
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
             recipient=member,
