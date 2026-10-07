@@ -83,6 +83,20 @@ function isSameOrder(first: string[], second: string[]): boolean {
   return first.length === second.length && first.every((id, index) => id === second[index])
 }
 
+/**
+ * Story 8.3 AC10 (bug f8.3.3): whether `wanted` puts the pictures it shares with `saved` in another
+ * order. A picture only one of them has - added or removed elsewhere since the page opened - does
+ * not count, so a save that arranged nothing sends no order for the server to refuse.
+ */
+function isRearranged(wanted: string[], saved: string[]): boolean {
+  const savedIds = new Set(saved)
+  const wantedIds = new Set(wanted)
+  return !isSameOrder(
+    wanted.filter((id) => savedIds.has(id)),
+    saved.filter((id) => wantedIds.has(id)),
+  )
+}
+
 /** Story 8.3 AC8: why a new venue's pictures were not all saved, passed to its edit page. */
 function noticeFrom(state: unknown): string | null {
   if (state && typeof state === 'object' && 'notice' in state && typeof state.notice === 'string') {
@@ -256,8 +270,9 @@ export function VenueFormPage() {
 
   /**
    * Story 8.3 AC5/AC8: apply the picture changes to the saved venue - the removals, then the new
-   * pictures (each goes last on the server), then the order shown, when the server's differs.
-   * Each step is tried even after one is refused, so every picture the venue can take is kept.
+   * pictures (each goes last on the server), then the order shown, if it moves pictures the server
+   * holds in another order (AC10). Each step is tried even after one is refused, so every picture
+   * the venue can take is kept.
    */
   async function savePictures(saved: Venue): Promise<SavedPictures> {
     let venue = saved
@@ -286,7 +301,7 @@ export function VenueFormPage() {
     }
     const wanted = pictures.flatMap((picture) => idByKey.get(picture.key) ?? [])
     const savedOrder = venue.images.map((image) => image.id)
-    if (!isSameOrder(wanted, savedOrder)) {
+    if (isRearranged(wanted, savedOrder)) {
       try {
         venue = await reorderVenueImages(saved.id, wanted)
       } catch (err) {
