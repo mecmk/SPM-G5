@@ -20,6 +20,17 @@ const VISIBLE_EVENT_STATUSES = [
  */
 export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
 
+/**
+ * Story 15.1 AC9: the statuses in which the assigned coordinator may change an event's equipment,
+ * mirroring `_OPEN_EVENT_STATUSES` in backend/app/equipment/service.py. Once the event is
+ * Confirmed, or closed, its equipment is read-only.
+ */
+export const EQUIPMENT_OPEN_STATUSES: readonly EventStatus[] = [
+  'UNDER_REVIEW',
+  'CLARIFICATION_REQUESTED',
+  'PLANNING',
+]
+
 /** Story 7.2 AC3: routine editing (and the internal-notes view) closes at these statuses. */
 export const TERMINAL_STATUSES: readonly EventStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
 

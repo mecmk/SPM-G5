@@ -23,6 +23,7 @@ from app.events.models import (
     EquipmentUnavailabilityPeriod,
     Event,
     EventClarification,
+    EventEquipmentRequest,
     EventStatus,
 )
 from app.venues.models import (
@@ -342,3 +343,60 @@ def make_equipment_out_of_service(
     db.add(period)
     db.flush()
     return period
+
+
+def make_equipment_type(
+    db: Session, *, total_quantity: int = 5, is_active: bool = True, **overrides
+) -> EquipmentType:
+    """A fresh equipment type, so a test controls its whole stock and nothing else holds any."""
+    n = next(_counter)
+    equipment_type = EquipmentType(
+        code=overrides.pop("code", f"TEST_KIT_{n}"),
+        name=overrides.pop("name", f"Test kit {n}"),
+        total_quantity=total_quantity,
+        is_active=is_active,
+        **overrides,
+    )
+    db.add(equipment_type)
+    db.flush()
+    return equipment_type
+
+
+def make_equipment_item(
+    db: Session,
+    *,
+    event: Event,
+    equipment_type: EquipmentType,
+    quantity: int,
+    status: str = "REQUESTED",
+    is_held: bool = True,
+    **overrides,
+) -> EventEquipmentRequest:
+    """An equipment item on ``event`` (story 15.1). ``is_held`` also places the hold a recorded
+    item has on a submitted event, for the event's period; an item that was declined, cancelled
+    or flagged unavailable holds nothing, so pass ``is_held=False`` for those."""
+    item = EventEquipmentRequest(
+        event_id=event.id,
+        equipment_type_id=equipment_type.id,
+        quantity=quantity,
+        status=status,
+        created_by_id=overrides.pop("created_by_id", Users.COORDINATOR.id),
+        **overrides,
+    )
+    db.add(item)
+    db.flush()
+    if is_held:
+        db.add(
+            EquipmentReservation(
+                event_id=event.id,
+                equipment_request_id=item.id,
+                equipment_type_id=equipment_type.id,
+                quantity=quantity,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+                reserved_by_id=Users.COORDINATOR.id,
+            )
+        )
+        db.flush()
+    db.refresh(item)
+    return item

@@ -105,9 +105,6 @@ ROUTINE_EDIT_CLOSED_MESSAGE = (
     "This event is {status}, so its routine information can no longer be edited."
 )
 
-# ``event_equipment_requests.status`` once the units are held for the event.
-_LINE_RESERVED = "RESERVED"
-
 # AC20: the partial unique index a duplicate name+dates violates (db/migrations/008_*.sql).
 DUPLICATE_REQUEST_INDEX = "uq_events_organiser_name_dates"
 DUPLICATE_REQUIREMENT_NAME_INDEX = "uq_venue_requirements_event_name"
@@ -652,12 +649,13 @@ def _known(
 # --- writes --------------------------------------------------------------------------------
 
 
-def _available_by_type(
+def available_by_type(
     db: Session, period_start: datetime, period_end: datetime
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
     events over the period (a hold's quantity less what was released), less units out of service.
-    Overlap is half-open, so a hold ending exactly as the period starts does not count."""
+    Overlap is half-open, so a hold ending exactly as the period starts does not count. Story 15.1
+    (``app/equipment/service.py``) uses the same calculation for the coordinator's items."""
     held = dict(
         db.execute(
             select(
@@ -701,7 +699,7 @@ def list_equipment_availability(
     """AC6: how many of each active equipment type are free for the proposed dates."""
     if ends_at <= starts_at:
         raise InvalidSchedule(END_NOT_AFTER_START_MESSAGE)
-    available = _available_by_type(db, starts_at, ends_at)
+    available = available_by_type(db, starts_at, ends_at)
     active_types = db.scalars(
         select(EquipmentType).where(EquipmentType.is_active.is_(True)).order_by(EquipmentType.name)
     ).all()
@@ -721,7 +719,7 @@ def _check_equipment_available(
     period to check, and submission needs them anyway, where it is checked again."""
     if starts_at is None or ends_at is None or not lines:
         return
-    available = _available_by_type(db, starts_at, ends_at)
+    available = available_by_type(db, starts_at, ends_at)
     short = [t.name for t, quantity in lines if quantity > available[t.id]]
     if short:
         raise EquipmentNotAvailable(short)
@@ -729,7 +727,9 @@ def _check_equipment_available(
 
 def _hold_equipment(db: Session, event: Event, actor: User) -> None:
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
-    requests for the last units cannot both be held; the loser is refused and nothing is held."""
+    requests for the last units cannot both be held; the loser is refused and nothing is held.
+    Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
+    which is the assigned coordinator's step."""
     lines = list(event.equipment_requests)
     if not lines or event.starts_at is None or event.ends_at is None:
         return
@@ -740,7 +740,7 @@ def _hold_equipment(db: Session, event: Event, actor: User) -> None:
         .order_by(EquipmentType.id)
         .with_for_update()
     )
-    available = _available_by_type(db, event.starts_at, event.ends_at)
+    available = available_by_type(db, event.starts_at, event.ends_at)
     short = [
         line.equipment_type.name
         for line in lines
@@ -762,7 +762,6 @@ def _hold_equipment(db: Session, event: Event, actor: User) -> None:
                 notes="Held when the request was submitted.",
             )
         )
-        line.status = _LINE_RESERVED
 
 
 def _replace_venue_requirements(db: Session, event: Event, items: list[VenueRequirementIn]) -> None:

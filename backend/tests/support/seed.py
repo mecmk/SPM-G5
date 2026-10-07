@@ -93,6 +93,8 @@ class Events:
     APPROVED_6 = _e(16)  # organiser 1, coordinator 1, pending booking dedicated to 13.2.1 e2e
     APPROVED_7 = _e(17)  # organiser 2, coordinator 2, pending booking dedicated to 13.2.1 e2e
     PARTNER_BRIEFING = _e(18)  # organiser 2, coordinator 1, dedicated to 12.1's e2e request
+    EQUIPMENT_WORKSHOP = _e(19)  # organiser 1, coordinator 1, dedicated to 15.1's e2e flow
+    EQUIPMENT_SHOWCASE = _e(20)  # organiser 1, coordinator 1, dedicated to 15.1's e2e picker
 
 
 class Bookings:
@@ -130,3 +132,20 @@ class VenueRequirements:
     DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
     NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
     PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60
+
+
+class EquipmentItems:
+    """Story 15.1's e2e items. Their events are dated May 2027, clear of the periods backend tests
+    build relative to today, so the holds below never change a figure another test asserts."""
+
+    WORKSHOP_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000004")  # not yet sent
+    SHOWCASE_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000005")  # pending
+
+
+class EquipmentHolds:
+    WORKSHOP_PROJECTORS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
+    SHOWCASE_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
+
+
+class EquipmentOutOfService:
+    SHOWCASE_CAMERAS = uuid.UUID("dddddddd-0000-0000-0000-000000000001")  # every video camera
