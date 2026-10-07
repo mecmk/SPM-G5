@@ -101,8 +101,13 @@ export function VenuePictureViewer({
   }, [showing.index])
 
   function show(index: number, direction: Direction) {
+    // Without the slide nothing reports that the picture has arrived (`handleArrived`), so the
+    // one going out is not kept for it.
+    const isSliding = !prefersReducedMotion()
     setShowing((current) =>
-      current.index === index ? current : { index, leaving: current.index, direction },
+      current.index === index
+        ? current
+        : { index, leaving: isSliding ? current.index : null, direction },
     )
   }
 

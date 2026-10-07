@@ -3390,13 +3390,22 @@ label select[aria-invalid='true'],
   }
 }
 
-/* Someone who has asked for less motion gets the same steps without the movement. */
+/* Someone who has asked for less motion gets the same steps without the movement. The states that
+   start a movement are named too: two classes outweigh one, and a media query adds no weight. */
 @media (prefers-reduced-motion: reduce) {
   .picture-tile,
+  .picture-tile.is-new,
   .picture-tile-frame,
   .picture-gallery-button img,
   .picture-viewer,
-  .picture-viewer-picture {
+  .picture-viewer.is-closing,
+  .picture-viewer-close,
+  .picture-viewer-nav,
+  .picture-viewer-picture,
+  .picture-viewer-picture.is-entering-next,
+  .picture-viewer-picture.is-entering-previous,
+  .picture-viewer-picture.is-leaving-next,
+  .picture-viewer-picture.is-leaving-previous {
     transition: none;
     animation: none;
   }
