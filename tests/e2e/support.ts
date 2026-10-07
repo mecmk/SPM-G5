@@ -36,7 +36,7 @@ export const EVENTS = {
   // Story 15.2, Planning, organiser: organiser2, coordinator, dated June 2027. One equipment item
   // per Technical Support tab; nothing changes them.
   equipmentRoadshow: '33333333-0000-0000-0000-000000000021',
-  // Story 16.1, Planning, organiser: organiser2, coordinator, dated December 2027. Four pending
+  // Story 16.1, Planning, organiser: organiser2, coordinator, dated December 2027. Six pending
   // equipment items; the 16.1 spec accepts and declines them.
   equipmentDecisions: '33333333-0000-0000-0000-000000000027',
 } as const

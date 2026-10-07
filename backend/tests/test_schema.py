@@ -186,6 +186,8 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentItems.OFFSITE_LED_SCREEN, "PENDING"),
         (EquipmentItems.OFFSITE_CONF_PHONES, "PENDING"),
         (EquipmentItems.OFFSITE_LAPTOPS, "PENDING"),
+        (EquipmentItems.OFFSITE_PROJECTORS, "PENDING"),
+        (EquipmentItems.OFFSITE_WIRELESS_MICS, "PENDING"),
     ):
         assert (
             db.execute(
@@ -202,6 +204,8 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentHolds.OFFSITE_LED_SCREEN, EquipmentItems.OFFSITE_LED_SCREEN),
         (EquipmentHolds.OFFSITE_CONF_PHONES, EquipmentItems.OFFSITE_CONF_PHONES),
         (EquipmentHolds.OFFSITE_LAPTOPS, EquipmentItems.OFFSITE_LAPTOPS),
+        (EquipmentHolds.OFFSITE_PROJECTORS, EquipmentItems.OFFSITE_PROJECTORS),
+        (EquipmentHolds.OFFSITE_WIRELESS_MICS, EquipmentItems.OFFSITE_WIRELESS_MICS),
     ):
         assert (
             db.execute(
