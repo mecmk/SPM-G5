@@ -7,7 +7,10 @@ that Venue Staff can assess and confirm it":
 * AC1 ``create_booking_request`` refuses an event that is not APPROVED or later, and takes
   exactly one ``venue_id``, so one request is one venue;
 * AC2 the schedule, attendance, layout and required facilities are copied from the event
-  row rather than taken from the request body - see ``_requirement_notes``;
+  rather than taken from the request body - see ``_requirement_notes``. Since story 2.7 an event
+  lists several venue requirements; until story 12.5 lets a request name the one it is for, it
+  carries the first (PO decision, 2 Oct 2026), and an event with none carries its own period
+  and attendance;
 * AC3 the row is written PENDING with no decision, which is what story 13.1's queue and
   story 13.2's ``approve_booking`` below both read;
 * AC4 refused unless the actor is the event's ``assigned_coordinator_id``.
@@ -62,9 +65,10 @@ same mechanism, not a new one.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -74,7 +78,7 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
 from app.common.notifications import notify
-from app.events.models import Event, EventRequiredFacility, EventStatus
+from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
 from app.venues import service as venue_service
 from app.venues.models import (
     Facility,
@@ -148,10 +152,14 @@ FACILITY_NOTES_SUFFIX = " ({notes})"
 
 # AC1 is worded "an approved event"; the schema's rule is approved *or later* (see the
 # venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
-# planning or confirmed may still need a further venue booked. Bug b6.1.1: APPROVED itself was
-# retired (migration 002) - approving now goes straight to PLANNING, so that status alone covers
-# what used to be "APPROVED or PLANNING".
+# planning or confirmed may still need a further venue booked. An approved request is in
+# PLANNING, so PLANNING and CONFIRMED are the two statuses that qualify.
 _BOOKABLE_EVENT_STATUSES = frozenset({EventStatus.PLANNING, EventStatus.CONFIRMED})
+
+# Story 13.1.2 AC4: the queue's page size, and the furthest it can be paged - the same bounds as
+# the Events inbox (``app.events.service.MY_EVENTS_MAX_LIMIT`` / ``MY_EVENTS_MAX_OFFSET``).
+BOOKING_QUEUE_MAX_LIMIT = 100
+BOOKING_QUEUE_MAX_OFFSET = 2_147_483_647
 
 
 class BookingNotFound(LookupError):
@@ -272,22 +280,51 @@ class BookingNotPending(ValueError):
         self.booking = booking
 
 
-def list_booking_requests(db: Session) -> list[VenueBooking]:
-    """Story 13.1 AC1/AC3: every pending request, soonest first. AC1's "responsible for" is
-    every venue: there is no per-venue staff responsibility table in the schema, and
-    BOOKINGS_DECIDE is a role-wide permission today, same as VENUES_MANAGE."""
-    return list(
-        db.scalars(
-            select(VenueBooking)
-            .options(
-                joinedload(VenueBooking.event),
-                joinedload(VenueBooking.venue),
-                joinedload(VenueBooking.requested_by),
-                joinedload(VenueBooking.required_layout),
-            )
-            .where(VenueBooking.status == BookingStatus.PENDING)
-            .order_by(VenueBooking.starts_at, VenueBooking.id)
-        ).all()
+@dataclass(frozen=True)
+class BookingQueueListing:
+    """One page of the queue, how many requests its tab holds, and how many hold each status."""
+
+    bookings: list[VenueBooking]
+    total: int
+    counts_by_status: dict[str, int]
+
+
+def list_booking_requests(
+    db: Session,
+    *,
+    status: str | None = None,
+    limit: int = BOOKING_QUEUE_MAX_LIMIT,
+    offset: int = 0,
+) -> BookingQueueListing:
+    """Story 13.1 AC1/AC3: ``status=PENDING`` is the pending queue, so a decided request never
+    appears in it. AC1's "responsible for" is every venue: there is no per-venue staff
+    responsibility table in the schema, and BOOKINGS_DECIDE is a role-wide permission today,
+    same as VENUES_MANAGE.
+
+    Story 13.1.2 AC1: ``status`` narrows the queue to one tab; ``None`` is the All tab.
+    ``counts_by_status`` ignores both the tab and the page, so every tab label stays right.
+    AC4: soonest first, ties broken by id so the pages cut from it are stable. The tab's total
+    comes from the same per-status count, so it costs no query of its own."""
+    page = (
+        select(VenueBooking)
+        .options(
+            joinedload(VenueBooking.event),
+            joinedload(VenueBooking.venue),
+            joinedload(VenueBooking.requested_by),
+            joinedload(VenueBooking.required_layout),
+        )
+        .order_by(VenueBooking.starts_at, VenueBooking.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    if status is not None:
+        page = page.where(VenueBooking.status == status)
+    counts_by_status = dict(
+        db.execute(select(VenueBooking.status, func.count()).group_by(VenueBooking.status)).all()
+    )
+    total = sum(counts_by_status.values()) if status is None else counts_by_status.get(status, 0)
+    return BookingQueueListing(
+        bookings=list(db.scalars(page).all()), total=total, counts_by_status=counts_by_status
     )
 
 
@@ -326,8 +363,9 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     id up front. An event may accumulate more than one row over time (a rejected request
     followed by a fresh one, possibly for a different venue), so this is a history, not a single
     outcome; deciding a booking updates that same row in place, it never creates a new one.
-    ``id`` breaks a tie on ``created_at`` - seed rows inserted by the same statement share one
-    transaction timestamp, so ``created_at`` alone leaves their relative order undefined."""
+    ``id`` breaks a tie on ``created_at`` - two bookings inserted in the same statement or
+    transaction (seed data, or two rapid test factory calls) can share one timestamp, which
+    would otherwise leave their relative order undefined."""
     return list(
         db.scalars(
             select(VenueBooking)
@@ -549,7 +587,7 @@ def _bookable_venue(db: Session, venue_id: uuid.UUID) -> Venue:
     return venue
 
 
-def _describe_facility(required: EventRequiredFacility) -> str:
+def _describe_facility(required: VenueRequirementFacility) -> str:
     """One facility as Venue Staff should read it: name, how many, and its own note.
 
     The quantity and note are the difference between "Breakout rooms" and "Breakout rooms ×3
@@ -564,18 +602,20 @@ def _describe_facility(required: EventRequiredFacility) -> str:
     return described
 
 
-def _requirement_notes(db: Session, event: Event) -> str | None:
-    """12.1 AC2: the event's required facilities, stated to Venue Staff by name rather than
-    by code and with the quantity and note recorded against each, followed by whatever the event
-    recorded as its own venue requirements.
+def _requirement_notes(db: Session, requirement: VenueRequirement | None) -> str | None:
+    """12.1 AC2: the venue requirement's facilities, stated to Venue Staff by name rather than
+    by code and with the quantity and note recorded against each, followed by its other
+    requirements in free text.
 
     ``venue_bookings.requirement_notes`` is the field Venue Staff read ("required facilities and
     other requirements, as stated to Venue Staff"), and story 13.1 AC2 shows it on the queue.
     """
+    if requirement is None:
+        return None
     required_facilities = db.scalars(
-        select(EventRequiredFacility)
-        .join(Facility, Facility.code == EventRequiredFacility.facility_code)
-        .where(EventRequiredFacility.event_id == event.id)
+        select(VenueRequirementFacility)
+        .join(Facility, Facility.code == VenueRequirementFacility.facility_code)
+        .where(VenueRequirementFacility.requirement_id == requirement.id)
         .order_by(Facility.sort_order, Facility.name)
     ).all()
     sentences = []
@@ -585,9 +625,9 @@ def _requirement_notes(db: Session, event: Event) -> str | None:
                 facilities=", ".join(_describe_facility(each) for each in required_facilities)
             )
         )
-    event_notes = (event.venue_requirement_notes or "").strip()
-    if event_notes:
-        sentences.append(event_notes)
+    other_requirements = (requirement.notes or "").strip()
+    if other_requirements:
+        sentences.append(other_requirements)
     if not sentences:
         return None
     return "\n".join(sentences)
@@ -647,15 +687,21 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     event = _bookable_event(db, data.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
 
+    # Story 2.7: the first venue requirement, if the event lists any. Each value falls back to
+    # the event's own, which a submitted event always has (ck_events_submitted_fields_complete),
+    # so the booking's NOT NULL period and attendance are always filled.
+    requirement = event.venue_requirements[0] if event.venue_requirements else None
+    has_own_times = requirement is not None and requirement.starts_at is not None
     booking = VenueBooking(
         event_id=event.id,
         venue_id=venue.id,
         requested_by_id=actor.id,
-        starts_at=event.starts_at,
-        ends_at=event.ends_at,
-        expected_attendance=event.expected_attendance,
-        required_layout_code=event.required_layout_code,
-        requirement_notes=_requirement_notes(db, event),
+        starts_at=requirement.starts_at if has_own_times else event.starts_at,
+        ends_at=requirement.ends_at if has_own_times else event.ends_at,
+        expected_attendance=(requirement.capacity if requirement else None)
+        or event.expected_attendance,
+        required_layout_code=requirement.layout_code if requirement else None,
+        requirement_notes=_requirement_notes(db, requirement),
         status=BookingStatus.PENDING,
     )
     # The held period as the database trigger will compute it (setup and teardown default to 0).
@@ -664,7 +710,8 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     holding = find_holding_booking(db, venue.id, held_from, held_until)
     if holding is not None:
         raise VenueHeld(holding)
-    # The held period is the event's own until setup and teardown are recorded (12.1 AC1).
+    # The held period is the booking's own (story 2.7 AC13: the first venue requirement's times, or
+    # the event's when it has none) plus setup and teardown, which default to 0 (12.1 AC1).
     closure = venue_service.find_blocking_unavailability(
         db, venue.id, starts_at=held_from, ends_at=held_until
     )

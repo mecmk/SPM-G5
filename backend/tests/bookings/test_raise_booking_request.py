@@ -46,8 +46,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
-from app.events.models import EventRequiredFacility, EventStatus
-from tests.support.factories import make_event, make_venue
+from app.events.models import EventStatus
+from tests.support.factories import make_event, make_venue, make_venue_requirement
 from tests.support.seed import Events, Users, Venues
 
 # The seeded APPROVED event (Nimbus Developer Conference): 2026-11-25 09:00-18:00 +08, 350
@@ -66,22 +66,6 @@ def request_body(**overrides) -> dict:
     body = {"event_id": str(Events.APPROVED), "venue_id": str(REQUESTED_VENUE)}
     body.update(overrides)
     return body
-
-
-def _require_facility(
-    db: Session,
-    event_id: uuid.UUID,
-    code: str,
-    *,
-    quantity: int | None = None,
-    notes: str | None = None,
-) -> None:
-    """Record a facility an event requires. The seed rows carry neither a quantity nor a note, so
-    a test that is about those has to add its own."""
-    db.add(
-        EventRequiredFacility(event_id=event_id, facility_code=code, quantity=quantity, notes=notes)
-    )
-    db.flush()
 
 
 def _booking_count(db: Session, event_id: uuid.UUID) -> int:
@@ -263,15 +247,20 @@ def test_the_request_states_the_events_required_facilities_to_venue_staff(coordi
 def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     coordinator_client, db: Session
 ):
-    """Review of PR #42: "3 breakout rooms with HDMI" has to reach Venue Staff as such. The name
-    alone understates what the venue must provide, and both columns already exist on
-    ``event_required_facilities``.
+    """A facility's quantity and note have to reach Venue Staff: "3 breakout rooms with HDMI"
+    understates what the venue must provide if only the name arrives, and both columns exist on
+    ``venue_requirement_facilities`` (``event_required_facilities`` until migration 012).
     """
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
-    _require_facility(db, event.id, "BREAKOUT_ROOMS", quantity=3, notes="HDMI input needed")
-    _require_facility(db, event.id, "PROJECTOR")
+    # The seed rows carry neither a quantity nor a note, so this test adds its own (story 2.7:
+    # on the event's venue requirement).
+    make_venue_requirement(
+        db,
+        event.id,
+        facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
+    )
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
 
@@ -284,11 +273,9 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
 @pytest.mark.story("12.1", ac=2)
 def test_the_events_own_venue_requirement_notes_are_carried_too(coordinator_client, db: Session):
     event = make_event(
-        db,
-        status=EventStatus.PLANNING,
-        assigned_coordinator_id=Users.COORDINATOR.id,
-        venue_requirement_notes="Must be step-free from the drop-off point.",
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
+    make_venue_requirement(db, event.id, notes="Must be step-free from the drop-off point.")
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
 
@@ -300,10 +287,7 @@ def test_an_event_with_no_layout_or_facilities_recorded_carries_neither(
     coordinator_client, db: Session
 ):
     event = make_event(
-        db,
-        status=EventStatus.PLANNING,
-        assigned_coordinator_id=Users.COORDINATOR.id,
-        required_layout_code=None,
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
 
     response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
@@ -350,6 +334,99 @@ def test_the_held_period_is_the_event_period_until_story_12_2(coordinator_client
     assert (body["setup_minutes"], body["teardown_minutes"]) == (0, 0)
     assert datetime.fromisoformat(body["held_from"]) == EVENT_STARTS_AT
     assert datetime.fromisoformat(body["held_until"]) == EVENT_ENDS_AT
+
+
+# --- Story 2.7 AC13 (CL-087): an event lists several venue requirements -------------------------
+# Until story 12.5 lets a booking name the requirement it is for, a request carries the event's
+# first requirement. An event without one books its own period. Tagged to 2.7, not 12.1, because
+# 12.1 is Done and its criteria stay as written.
+@pytest.mark.story("2.7", ac=13)
+def test_the_request_carries_the_first_venue_requirement(coordinator_client, db: Session):
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        expected_attendance=200,
+    )
+    # Starts an hour into the event, so the request's start can only have come from the
+    # requirement, never from the event.
+    plenary_starts = event.starts_at + timedelta(hours=1)
+    plenary_ends = event.starts_at + timedelta(hours=3)
+    make_venue_requirement(
+        db,
+        event.id,
+        position=0,
+        name="Plenary hall",
+        capacity=150,
+        starts_at=plenary_starts,
+        ends_at=plenary_ends,
+        layout_code="THEATRE",
+        notes="Step-free from the drop-off point.",
+        facilities=(("PROJECTOR", 2, "HDMI input needed"),),
+    )
+    make_venue_requirement(
+        db,
+        event.id,
+        position=1,
+        name="Breakout",
+        capacity=40,
+        starts_at=plenary_ends,
+        ends_at=event.ends_at,
+        layout_code="CLASSROOM",
+        notes="Quiet corridor.",
+        facilities=(("WIFI", None, None),),
+    )
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert datetime.fromisoformat(body["starts_at"]) == plenary_starts
+    assert datetime.fromisoformat(body["ends_at"]) == plenary_ends
+    assert body["expected_attendance"] == 150
+    assert body["required_layout_code"] == "THEATRE"
+    assert "Projector & screen ×2 (HDMI input needed)" in body["requirement_notes"]
+    assert "Step-free from the drop-off point." in body["requirement_notes"]
+    assert "Wi-Fi" not in body["requirement_notes"]
+    assert "Quiet corridor." not in body["requirement_notes"]
+
+
+@pytest.mark.story("2.7", ac=13)
+def test_a_first_requirement_with_no_facilities_or_notes_states_none(
+    coordinator_client, db: Session
+):
+    event = make_event(
+        db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
+    )
+    make_venue_requirement(db, event.id, name="Main venue", capacity=20, layout_code="THEATRE")
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["required_layout_code"] == "THEATRE"
+    assert response.json()["requirement_notes"] is None
+
+
+@pytest.mark.story("2.7", ac=13)
+def test_an_event_without_venue_requirements_books_its_own_period_and_attendance(
+    coordinator_client, db: Session
+):
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        venue_none_required=True,
+    )
+
+    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert datetime.fromisoformat(body["starts_at"]) == event.starts_at
+    assert datetime.fromisoformat(body["ends_at"]) == event.ends_at
+    assert body["expected_attendance"] == event.expected_attendance
+    assert body["required_layout_code"] is None
+    assert body["requirement_notes"] is None
 
 
 # --- AC3: the request is pending and visible to Venue Staff ---------------------------------

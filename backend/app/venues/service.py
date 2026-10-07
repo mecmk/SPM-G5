@@ -603,7 +603,7 @@ def update_venue(db: Session, venue_id: uuid.UUID, data: VenueUpdate, *, actor: 
 
 
 def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
-    """Remove a venue nothing refers to (team decision, 17 Sep 2026: Venue Staff have full CRUD).
+    """Remove a venue nothing refers to (Venue Staff have full CRUD).
 
     Facilities, layouts, accessibility features and unavailability periods go with it. A venue
     with booking rows is refused by the database's foreign key, translated to VenueInUse.

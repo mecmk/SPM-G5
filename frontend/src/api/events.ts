@@ -29,9 +29,8 @@ export function listReviewQueue(query: ReviewQueueQuery): Promise<ReviewQueueEnt
 }
 
 /**
- * Mirrors `EventStatus` in backend/app/events/models.py. SUBMITTED and APPROVED were retired by
- * migration 002 (bug b6.1.1): submitting a draft now goes straight to UNDER_REVIEW, and approving
- * a request now goes straight to PLANNING, with no separate in-between status.
+ * Mirrors `EventStatus` in backend/app/events/models.py. Submitting a draft moves it to
+ * UNDER_REVIEW and approving a request moves it to PLANNING, with no status in between either.
  */
 export type EventStatus =
   | 'DRAFT'
@@ -116,6 +115,22 @@ export interface RequiredFacility {
   notes: string | null
 }
 
+/**
+ * Mirrors `VenueRequirementOut`: one venue the event needs (story 2.7 AC1/AC2/AC4). Any field but
+ * the id may be null while the request is a draft (AC8).
+ */
+export interface VenueRequirement {
+  id: string
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  layout_name: string | null
+  facilities: RequiredFacility[]
+  notes: string | null
+}
+
 /** Mirrors `AccessibilityNeedOut`. */
 export interface AccessibilityNeed {
   code: string
@@ -162,10 +177,8 @@ export interface EventDetail {
   /** Story 2.6 AC12/AC15: rides alongside the name, restricted the same way. */
   assigned_coordinator_email: string | null
   submitted_at: string | null
-  required_layout_code: string | null
-  required_layout_name: string | null
-  required_facilities: RequiredFacility[]
-  venue_requirement_notes: string | null
+  /** Story 2.7: in the order the organiser listed them; empty when none, or not yet specified. */
+  venue_requirements: VenueRequirement[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: AccessibilityNeed[]
@@ -193,6 +206,21 @@ export interface EquipmentInput {
 }
 
 /**
+ * Mirrors `VenueRequirementIn` (story 2.7). An `id` keeps and edits an existing requirement, so a
+ * booking can keep pointing at it; without one it is new.
+ */
+export interface VenueRequirementInput {
+  id: string | null
+  name: string | null
+  capacity: number | null
+  starts_at: string | null
+  ends_at: string | null
+  layout_code: string | null
+  facilities: { code: string; quantity: number | null; notes: string | null }[]
+  notes: string | null
+}
+
+/**
  * Mirrors `EventCreate` / `EventUpdate`. The form always sends every field, so on an edit each
  * list replaces the stored one and a null clears an optional field.
  */
@@ -206,9 +234,7 @@ export interface EventInput {
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
-  required_layout_code: string | null
-  venue_requirement_notes: string | null
-  required_facilities: { code: string; quantity: number | null; notes: string | null }[]
+  venue_requirements: VenueRequirementInput[]
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: { code: string; notes: string | null }[]
@@ -378,8 +404,8 @@ const EVENT_DECISION_ERROR_CODES = {
   409: 'EVENT_NOT_AWAITING_DECISION',
 } as const
 
-/** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves
- *  straight to PLANNING - there is no separate APPROVED status (bug b6.1.1, migration 002). */
+/** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves it
+ *  to PLANNING. */
 export function approveEvent(eventId: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/approve`, {
     method: 'POST',
@@ -393,8 +419,7 @@ export function approveEvent(eventId: string, name: string): Promise<EventDetail
 }
 
 /** Story 4.5 AC1-AC3: reject a request with a mandatory reason. Offered from the same statuses
- *  as approving (see `AWAITING_DECISION_STATUSES` in `../events/eventStatus`) - bug b6.1.1's
- *  narrower reject rule has been reversed. */
+ *  as approving (see `AWAITING_DECISION_STATUSES` in `../shared/eventStatus`). */
 export function rejectEvent(eventId: string, reason: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/reject`, {
     method: 'POST',

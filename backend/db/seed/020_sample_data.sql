@@ -6,7 +6,7 @@
 --   ID prefixes:   1111.. users   2222.. venues   3333.. events
 --                  4444.. venue bookings   5555.. client organisations
 --                  6666.. equipment requests   7777.. equipment types (010)
---                  bbbb.. event clarifications
+--                  bbbb.. event clarifications   cccc.. venue requirements
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -108,112 +108,154 @@ ON CONFLICT (id) DO UPDATE SET
 -- Events in several lifecycle stages
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, cover_image_url, starts_at, ends_at, expected_attendance, status,
-                    assigned_coordinator_id, preferred_location, required_layout_code, accessibility_none_required,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
                     registration_required, registration_capacity, registration_closes_at,
                     contact_name, contact_email, submitted_at, decided_at, decided_by_id, decision_reason) VALUES
     -- 3333..01: a draft, deliberately incomplete
     ('33333333-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Q1 Sales Kick-off (draft)', NULL, 'Still gathering requirements.', NULL, NULL, NULL, NULL, 'DRAFT',
-     NULL, NULL, NULL, FALSE, FALSE, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+     NULL, NULL, FALSE, FALSE, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     -- 3333..02: under review, assigned to Chloe, waiting for her decision
     ('33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-08 10:15+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-08 10:15+08', NULL, NULL, NULL),
     -- 3333..03: in planning and assigned; has an approved venue booking
     ('33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', NULL, '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..04: rejected with a reason
     ('33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Rooftop Networking Night', 'Networking', NULL, NULL, '2026-10-30 19:00+08', '2026-10-30 23:00+08', 120, 'REJECTED',
-     '11111111-0000-0000-0000-000000000004', 'Rooftop', 'STANDING', TRUE, FALSE, NULL, NULL, NULL, NULL, '2026-09-05 16:00+08', '2026-09-07 11:00+08', '11111111-0000-0000-0000-000000000004', 'No outdoor venues are available after 22:00.'),
+     '11111111-0000-0000-0000-000000000004', 'Rooftop', TRUE, FALSE, NULL, NULL, NULL, NULL, '2026-09-05 16:00+08', '2026-09-07 11:00+08', '11111111-0000-0000-0000-000000000004', 'No outdoor venues are available after 22:00.'),
     -- 3333..05: under review, assigned to Chloe (more review-queue test data)
     ('33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Nimbus Leadership Offsite', 'Internal meeting', 'Quarterly leadership planning session.', NULL, '2026-12-02 09:00+08', '2026-12-02 16:00+08', 25, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', 'BOARDROOM', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-10 08:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-10 08:00+08', NULL, NULL, NULL),
     -- 3333..06: sent back for clarification, assigned to Chloe
     ('33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Diversity & Inclusion Forum', 'Community outreach', 'Panel discussion and workshops on workplace inclusion.', NULL, '2026-11-05 09:30+08', '2026-11-05 15:00+08', 150, 'CLARIFICATION_REQUESTED',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-03 09:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-03 09:00+08', NULL, NULL, NULL),
     -- 3333..07: under review, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
     ('33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', 'STANDING', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-15 14:00+08', NULL, NULL, NULL),
     -- 3333..08: in planning and assigned to Carl; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Annual Wellness Summit', 'Company-wide wellness and mental health awareness day', 'Talks, workshops and screening booths for staff wellbeing.', NULL, '2026-12-03 09:00+08', '2026-12-03 17:00+08', 180, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..09: in planning and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-10-01 09:00+08', '2026-10-03 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-14 09:00+08', '2026-09-16 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..10: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (queue card) - no other test/assertion reads this row, since the
     -- e2e run's fullyParallel database is shared and approving it would break story 13.1's
     -- queue assertions if it were one of their rows.
     ('33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Founders Day Fireside Chat', 'A conversation with the founders', 'Casual fireside chat and Q&A for all staff.', NULL, '2027-06-01 15:00+08', '2027-06-01 17:00+08', 200, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..11: in planning and assigned to Carl; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (detail page) - see 3333..10's note.
     ('33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Investor Demo Day', 'Quarterly investor product demo', 'Live product walkthrough for the board and investors.', NULL, '2027-07-01 09:00+08', '2027-07-01 12:00+08', 100, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..16: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2.1 reject e2e test (queue card) - see 3333..10's note above for why this needs its
     -- own row rather than reusing an existing PENDING booking.
     ('33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Winter Charity Gala', 'Annual fundraising dinner', 'Formal dinner and silent auction for the winter appeal.', NULL, '2027-08-01 18:00+08', '2027-08-01 22:00+08', 220, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'BANQUET', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..17: in planning and assigned to Carl; pending venue booking dedicated to the story
     -- 13.2.1 reject e2e test (detail page) - see 3333..16's note.
     ('33333333-0000-0000-0000-000000000017', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Alumni Homecoming Weekend', 'Alumni relations', 'Campus tours and an evening showcase for returning alumni.', NULL, '2027-09-01 09:00+08', '2027-09-01 17:00+08', 100, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', 'EXHIBITION', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..12-15: one event in each of the four statuses story 6.1 adds to the visible/status
     -- model (PLANNING, CONFIRMED, COMPLETED, CANCELLED) - none were seeded before, so the
     -- coordinator's assigned-events list had nothing to show for them.
     ('33333333-0000-0000-0000-000000000012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Regional Sales Summit', 'Sales enablement', 'Two-day summit for the regional sales teams.', NULL, '2026-12-15 09:00+08', '2026-12-16 17:00+08', 220, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..13: confirmed - venue and equipment arranged, event still in the future
     ('33333333-0000-0000-0000-000000000013', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Partner Appreciation Dinner', 'Partner relations', 'A formal dinner thanking key channel partners.', NULL, '2027-02-10 18:30+08', '2027-02-10 22:00+08', 90, 'CONFIRMED',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', 'BANQUET', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..14: completed - its date has already passed relative to "today" in this dataset
     ('33333333-0000-0000-0000-000000000014', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'New Year Town Hall', 'All-hands briefing', 'Company-wide briefing on the year ahead.', NULL, '2026-08-01 09:00+08', '2026-08-01 11:00+08', 300, 'COMPLETED',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', 'THEATRE', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-06-20 09:00+08', '2026-06-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '2026-06-20 09:00+08', '2026-06-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..15: cancelled after being arranged
     ('33333333-0000-0000-0000-000000000015', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Summer Rooftop Mixer', 'Team social', 'An evening social mixer on the rooftop terrace.', NULL, '2026-10-05 18:00+08', '2026-10-05 21:00+08', 60, 'CANCELLED',
-     '11111111-0000-0000-0000-000000000003', 'Rooftop', 'STANDING', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..18: in planning and assigned to Chloe; dedicated to story 12.1's e2e request that is
     -- really sent, to Seminar Room 2.1, which fits every requirement it records (story 8.1's
     -- search lists it). No other test sends a request for it, so parallel specs never race for
     -- the same venue, and the hold it leaves on Seminar Room hides nothing another test looks for.
     ('33333333-0000-0000-0000-000000000018', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Quarterly Partner Briefing', 'Partner relations', 'Pricing and roadmap update for channel partners.', NULL, '2027-03-10 09:00+08', '2027-03-10 12:00+08', 60, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, 'CLASSROOM', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
-    required_layout_code = EXCLUDED.required_layout_code, accessibility_none_required = EXCLUDED.accessibility_none_required,
+    accessibility_none_required = EXCLUDED.accessibility_none_required,
     registration_required = EXCLUDED.registration_required, registration_capacity = EXCLUDED.registration_capacity,
     registration_closes_at = EXCLUDED.registration_closes_at, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason;
 
-INSERT INTO event_required_facilities (event_id, facility_code) VALUES
-    ('33333333-0000-0000-0000-000000000002', 'PROJECTOR'),
-    ('33333333-0000-0000-0000-000000000002', 'WIFI'),
-    ('33333333-0000-0000-0000-000000000003', 'PROJECTOR'),
-    ('33333333-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
-    ('33333333-0000-0000-0000-000000000003', 'STAGE'),
-    ('33333333-0000-0000-0000-000000000018', 'PROJECTOR')
+-- Venue requirements (story 2.7). Each sample event that records venue requirements keeps them
+-- as one "Main venue" (story 2.7 AC7), with the event's own times and expected attendance - read
+-- from the events rows above, so the two cannot drift apart. The draft 3333..01 records none.
+-- These sample events' requirements belong to the seed: any other requirement on them is removed
+-- first, so a database migrated by 012 (which gave them a Main venue with a random id) heals to
+-- these fixed ids instead of colliding with them on the name or position.
+DROP TABLE IF EXISTS pg_temp.sample_venue_requirements;
+CREATE TEMP TABLE sample_venue_requirements (id UUID PRIMARY KEY, event_id UUID NOT NULL, layout_code TEXT);
+INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000002', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000003', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000004', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000005', 'BOARDROOM'),
+    ('cccccccc-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000006', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000007', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000008', 'EXHIBITION'),
+    ('cccccccc-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000009', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000010', '33333333-0000-0000-0000-000000000010', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000011', '33333333-0000-0000-0000-000000000011', 'EXHIBITION'),
+    ('cccccccc-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000016', 'BANQUET'),
+    ('cccccccc-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000017', 'EXHIBITION'),
+    ('cccccccc-0000-0000-0000-000000000012', '33333333-0000-0000-0000-000000000012', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000013', 'BANQUET'),
+    ('cccccccc-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000014', 'THEATRE'),
+    ('cccccccc-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000015', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM');
+
+DELETE FROM venue_requirements AS r
+USING sample_venue_requirements AS sample
+WHERE r.event_id = sample.event_id AND r.id <> sample.id;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code)
+SELECT sample.id, e.id, 0, 'Main venue', e.expected_attendance, e.starts_at, e.ends_at, sample.layout_code
+FROM sample_venue_requirements AS sample
+JOIN events AS e ON e.id = sample.event_id
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
+
+DROP TABLE sample_venue_requirements;
+
+INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
+    ('cccccccc-0000-0000-0000-000000000002', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0000-000000000002', 'WIFI'),
+    ('cccccccc-0000-0000-0000-000000000003', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
+    ('cccccccc-0000-0000-0000-000000000003', 'STAGE'),
+    ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO event_accessibility_needs (event_id, feature_code, notes) VALUES
@@ -260,7 +302,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
     ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-02 09:30+08'),
     ('aaaaaaaa-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-06 09:00+08'),
-    -- Assigned automatically on submission (team decision, 17 Sep 2026): no human assigner.
+    -- Assigned automatically on submission: no human assigner.
     ('aaaaaaaa-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-08 10:15+08'),
     ('aaaaaaaa-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-10 08:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000003', NULL, '2026-09-03 09:00+08'),
@@ -277,7 +319,7 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     -- shape (assigned_by = coordinator, assigned_at = the event's own submitted_at) already used
     -- for 03/12/13/14/15/18 above.
     ('aaaaaaaa-0000-0000-0000-000000000012', '33333333-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-10 09:00+08'),
-    ('aaaaaaaa-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-01 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-14 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-10 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-11 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-12 09:00+08'),
@@ -300,44 +342,48 @@ ON CONFLICT (id) DO NOTHING;
 -- alike), plus two more PENDING rows dedicated to the story 13.2 approve e2e test and two more
 -- again dedicated to the story 13.2.1 reject e2e test (see their own notes below). Never
 -- Boardroom 3.4 - test_venue_records.py::test_deleting_a_venue_removes_its_characteristics
--- deletes it on the assumption that it carries no bookings.
+-- deletes it on the assumption that it carries no bookings. ``created_at`` is given an explicit,
+-- staggered value per row (each after its event was approved, as story 12.1 AC1 requires, and
+-- before its own ``starts_at``) rather than left to the column's
+-- ``now()`` default, so the queue's "Requested" timestamp (story 13.1 AC2) doesn't show every
+-- seed row landing in the same instant a bulk insert would otherwise give them.
 -- ---------------------------------------------------------------------
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
-                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason) VALUES
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at) VALUES
     ('44444444-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 09:00+08', '2026-11-25 18:00+08', 60, 60,
-     350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08', NULL),
+     350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08', NULL, '2026-09-03 16:00+08'),
     ('44444444-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 13:00+08', '2026-11-25 18:00+08', 30, 15,
-     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL),
+     60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL, '2026-09-03 16:47+08'),
     ('44444444-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2026-12-03 09:00+08', '2026-12-03 17:00+08', 45, 45,
-     180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL),
+     180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL, '2026-09-12 11:03+08'),
     ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
-     300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL, NULL),
+     300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL, NULL, '2026-09-18 16:30+08'),
     -- Dedicated to the story 13.2 approve e2e test - see 3333..10/11's note above. Distinct
     -- venues, dates and events from every other booking, so approving them cannot conflict
     -- with anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000010', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-06-01 15:00+08', '2027-06-01 17:00+08', 30, 30,
-     200, 'THEATRE', 'Stage mics and a roaming mic for Q&A.', 'PENDING', NULL, NULL, NULL),
+     200, 'THEATRE', 'Stage mics and a roaming mic for Q&A.', 'PENDING', NULL, NULL, NULL, '2026-09-20 08:00+08'),
     ('44444444-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000011', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-07-01 09:00+08', '2027-07-01 12:00+08', 45, 30,
-     100, 'EXHIBITION', 'Demo booths and a screen for the product walkthrough.', 'PENDING', NULL, NULL, NULL),
+     100, 'EXHIBITION', 'Demo booths and a screen for the product walkthrough.', 'PENDING', NULL, NULL, NULL, '2026-09-21 08:00+08'),
     -- Dedicated to the story 13.2.1 reject e2e test - see 3333..16/17's note above. Distinct
     -- venues, dates and events from every other booking, so rejecting them cannot conflict with
     -- anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000016', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-08-01 18:00+08', '2027-08-01 22:00+08', 45, 45,
-     220, 'BANQUET', 'Stage, PA system and a dance floor.', 'PENDING', NULL, NULL, NULL),
+     220, 'BANQUET', 'Stage, PA system and a dance floor.', 'PENDING', NULL, NULL, NULL, '2026-09-22 08:00+08'),
     ('44444444-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000017', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-09-01 09:00+08', '2027-09-01 17:00+08', 45, 30,
-     100, 'EXHIBITION', 'Registration desk and campus tour meeting point.', 'PENDING', NULL, NULL, NULL)
+     100, 'EXHIBITION', 'Registration desk and campus tour meeting point.', 'PENDING', NULL, NULL, NULL, '2026-09-23 08:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
     teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
     required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    decision_reason = EXCLUDED.decision_reason;
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at;

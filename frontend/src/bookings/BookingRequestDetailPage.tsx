@@ -11,10 +11,11 @@ import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import { formatDate, formatTime } from '../shared/format'
+import { firstVenueRequirement } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
-const PENDING_STATUS = 'PENDING'
 
 function layoutName(venue: Venue, layoutCode: string | null): string {
   if (layoutCode === null) return 'Any'
@@ -134,6 +135,8 @@ export function BookingRequestDetailPage() {
     )
   }
   if (!booking || !venue || !event) return <LoadingState label="Loading the booking request…" />
+  // Story 2.7: the facilities of the venue requirement a request carries - the event's first.
+  const requiredFacilities = firstVenueRequirement(event)?.facilities ?? []
 
   return (
     <div className="page page-wide">
@@ -146,7 +149,7 @@ export function BookingRequestDetailPage() {
           <h1>{event.name}</h1>
           <StatusBadge status={booking.status} />
         </div>
-        {booking.status === PENDING_STATUS && (
+        {booking.status === PENDING_BOOKING_STATUS && (
           <div className="cluster">
             <button type="button" className="brand button-sm" onClick={askToApprove}>
               Approve
@@ -160,7 +163,7 @@ export function BookingRequestDetailPage() {
 
       {booking.decision_reason !== null && (
         <p className="subtle-block">
-          <span className="fact-label">Reason</span>
+          <span className="fact-label">{bookingOutcomeLabels(booking.status).why}</span>
           <br />
           {booking.decision_reason}
         </p>
@@ -204,8 +207,8 @@ export function BookingRequestDetailPage() {
           <div>
             <p className="fact-label">Required facilities</p>
             <div className="cluster">
-              {event.required_facilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
-              {event.required_facilities.map((item) => (
+              {requiredFacilities.length === 0 && <p className="muted">{NOT_RECORDED}</p>}
+              {requiredFacilities.map((item) => (
                 <Chip
                   key={item.code}
                   tone="info"

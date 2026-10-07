@@ -293,8 +293,8 @@ def test_organiser_sees_the_coordinator_of_their_own_event(coordinator_client, l
 
 @pytest.mark.story("5.1", ac=4)
 def test_event_without_a_coordinator_reports_none(coordinator_client, db: Session):
-    """Events.SUBMITTED now auto-gets a coordinator on submission (team decision, 17 Sep
-    2026), so this test uses a fresh event that genuinely has no coordinator yet."""
+    """Every seeded submitted event already has a coordinator, because submission assigns one,
+    so this test uses a fresh event that genuinely has none yet."""
     event = make_event(db)
 
     response = coordinator_client.get(f"/events/{event.id}/coordinator")

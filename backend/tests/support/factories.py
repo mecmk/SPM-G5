@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -77,6 +77,58 @@ def make_event(db: Session, *, status: str = EventStatus.UNDER_REVIEW, **overrid
     db.add(event)
     db.flush()
     return event
+
+
+def make_venue_requirement(
+    db: Session,
+    event_id: uuid.UUID,
+    *,
+    position: int = 0,
+    name: str | None = "Main venue",
+    capacity: int | None = 20,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+    layout_code: str | None = None,
+    notes: str | None = None,
+    facilities: tuple[tuple[str, int | None, str | None], ...] = (),
+) -> uuid.UUID:
+    """A venue requirement on an event (story 2.7), with its facilities as (code, quantity, notes).
+    Written in SQL rather than through the ORM so a test can place one on an event in any status,
+    the way the seed and migration 012 do. Returns the requirement's id."""
+    requirement_id = db.execute(
+        text(
+            "INSERT INTO venue_requirements"
+            " (event_id, position, name, capacity, starts_at, ends_at, layout_code, notes)"
+            " VALUES (:event_id, :position, :name, :capacity, :starts_at, :ends_at,"
+            " :layout_code, :notes) RETURNING id"
+        ),
+        {
+            "event_id": event_id,
+            "position": position,
+            "name": name,
+            "capacity": capacity,
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+            "layout_code": layout_code,
+            "notes": notes,
+        },
+    ).scalar_one()
+    for code, quantity, facility_notes in facilities:
+        db.execute(
+            text(
+                "INSERT INTO venue_requirement_facilities"
+                " (requirement_id, facility_code, quantity, notes)"
+                " VALUES (:requirement_id, :code, :quantity, :notes)"
+            ),
+            {
+                "requirement_id": requirement_id,
+                "code": code,
+                "quantity": quantity,
+                "notes": facility_notes,
+            },
+        )
+    db.expire_all()
+    return requirement_id
 
 
 def make_clarification(

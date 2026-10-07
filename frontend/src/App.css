@@ -2362,6 +2362,30 @@ td.num {
   margin-top: 1rem;
 }
 
+/* story 13.1.2 AC4: "Showing X-Y of Z" on the left, the page buttons at the right edge. The
+   left inset matches the browser's default list indent, so the row lines up with the queue's
+   cards above it. */
+.pager-bar {
+  padding-inline-start: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.pager-bar p {
+  margin: 0;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .event-card-details {
   display: grid;
   gap: 0.125rem;
@@ -2758,6 +2782,22 @@ tbody tr:hover td {
 
 .equipment-item > button {
   margin-top: 0.75rem;
+}
+
+/* Story 2.7 AC4: each venue requirement on the event page, set apart like an equipment item. */
+.venue-requirement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.venue-requirement-list > li {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 /* Story 2.1: the field the last save was refused for. */

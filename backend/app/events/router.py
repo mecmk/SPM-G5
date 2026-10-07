@@ -132,15 +132,27 @@ def list_equipment_availability(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
+def _requirement_refusal(exc: service.InvalidVenueRequirement) -> HTTPException:
+    """Story 2.7 AC11: a refused venue requirement, located the way FastAPI locates a validation
+    error, so the form can mark the field to fix."""
+    return HTTPException(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        [{"loc": exc.location, "msg": str(exc), "type": "value_error"}],
+    )
+
+
 @router.post("", response_model=EventDetailOut, status_code=status.HTTP_201_CREATED)
 def create_event(
     payload: EventCreate,
     db: DbSession,
     actor: Annotated[CurrentUser, CanCreate],
 ) -> EventDetailOut:
-    """Story 2.1 AC1-AC6: an organiser records a request; it starts as a draft."""
+    """Story 2.1 AC1-AC6: an organiser records a request; it starts as a draft. Story 2.7:
+    with any number of venue requirements, each checked as it would be on an edit."""
     try:
         event = service.create_event(db, payload, actor=actor)
+    except service.InvalidVenueRequirement as exc:
+        raise _requirement_refusal(exc) from None
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return EventDetailOut.from_event(event, viewer=actor)
@@ -218,6 +230,8 @@ def update_event(
     """Story 2.1 AC7: an organiser edits their own request until it is submitted."""
     try:
         event = service.update_event(db, event_id, payload, actor=actor)
+    except service.InvalidVenueRequirement as exc:
+        raise _requirement_refusal(exc) from None
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.EventStateConflict as exc:
