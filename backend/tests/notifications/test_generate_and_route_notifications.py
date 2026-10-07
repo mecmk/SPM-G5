@@ -15,7 +15,8 @@ AC6 Actions in quick succession produce notifications in the right order, withou
 
 AC1 is tested for every action that exists today and notified nobody before this story:
 submission (2.1, with 5.1's automatic assignment), approval and rejection (4.4, 4.5), the booking
-request (12.1) and the booking decisions (13.2, 13.2.1). The actions that already notified keep
+request (12.1), the booking decisions (13.2, 13.2.1) and the equipment sent to Technical Support
+(15.1). The actions that already notified keep
 their own tests: 4.2's ``test_the_organiser_is_notified``, 4.3's
 ``test_the_assigned_coordinator_is_notified`` and 12.2's
 ``test_withdrawing_notifies_every_active_venue_staff_member`` pin their recipients exactly, and
@@ -38,12 +39,21 @@ from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.auth.permissions import RoleCode
 from app.bookings import service as bookings_service
+from app.equipment import service as equipment_service
 from app.events import service as events_service
 from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
 from app.notifications.service import NotificationType, notify
-from tests.support.factories import create_submittable_event_request, make_booking, make_event
+from tests.support.factories import (
+    create_submittable_event_request,
+    make_booking,
+    make_equipment_item,
+    make_equipment_type,
+    make_event,
+    make_user,
+)
 from tests.support.seed import Bookings, Events, SeedUser, Users, Venues
 
 REJECTION_REASON = "The dates clash with the board retreat."
@@ -51,6 +61,9 @@ BOOKING_REJECTION_REASON = "Grand Hall is closed for repairs that week."
 # Nimbus Developer Conference (Events.APPROVED, Chloe's) asking for Exhibition Foyer, which holds
 # nothing on 25 Nov 2026 - the request 12.1's own tests raise.
 FOYER_FOR_NIMBUS = {"event_id": str(Events.APPROVED), "venue_id": str(Venues.EXHIBITION_FOYER)}
+# Sending Nimbus Developer Conference's equipment to Technical Support (15.1). Its two items, six
+# wireless microphones and two presentation laptops, are recorded but not yet sent.
+SEND_NIMBUS_EQUIPMENT = f"/events/{Events.APPROVED}/equipment-submissions"
 
 
 def _recipients(db: Session, notification_type: str, *, event_id: uuid.UUID) -> list[uuid.UUID]:
@@ -96,16 +109,25 @@ def _fail_audit_of(monkeypatch: pytest.MonkeyPatch, module: Any, failing_action:
     monkeypatch.setattr(module, "record_audit", record_audit)
 
 
-def _delete_committed_event(engine: Engine, event_id: uuid.UUID, *entity_ids: uuid.UUID) -> None:
-    """Remove what a concurrency test committed: the event, whose bookings, status history and
-    notifications go with it (ON DELETE CASCADE), and the audit entries, which have no foreign
-    key."""
+def _delete_committed_event(
+    engine: Engine,
+    event_id: uuid.UUID,
+    *entity_ids: uuid.UUID,
+    equipment_type_id: uuid.UUID | None = None,
+) -> None:
+    """Remove what a concurrency test committed: the event, whose bookings, equipment items and
+    holds, status history and notifications go with it (ON DELETE CASCADE), the audit entries,
+    which have no foreign key, and the equipment type made for the test, if any."""
     with Session(engine) as session:
         session.execute(
             text("DELETE FROM audit_log WHERE entity_id = ANY(:ids)"),
             {"ids": [event_id, *entity_ids]},
         )
         session.execute(text("DELETE FROM events WHERE id = :id"), {"id": event_id})
+        if equipment_type_id is not None:
+            session.execute(
+                text("DELETE FROM equipment_types WHERE id = :id"), {"id": equipment_type_id}
+            )
         session.commit()
 
 
@@ -242,6 +264,30 @@ def test_rejecting_a_booking_notifies_the_events_coordinator_with_the_reason(
     assert "Grand Hall" in row.title
     assert "Product Roadmap Townhall" in row.title
     assert BOOKING_REJECTION_REASON in row.message
+    assert before <= row.created_at <= after
+
+
+@pytest.mark.story("20.1", ac=1)
+@pytest.mark.story("20.1", ac=5)
+def test_sending_equipment_notifies_active_technical_support(coordinator_client, db: Session):
+    """Theo is told which event's equipment is waiting, what it is and who sent it. A second
+    Technical Support member who is inactive is not, and neither is Chloe, who sent it, nor Omar,
+    whose event it is."""
+    make_user(db, role=RoleCode.TECH_SUPPORT_STAFF, is_active=False)
+
+    before = datetime.now(UTC)
+    response = coordinator_client.post(SEND_NIMBUS_EQUIPMENT)
+    after = datetime.now(UTC)
+
+    assert response.status_code == 201, response.text
+    assert _recipients(db, "EQUIPMENT_SUBMITTED", event_id=Events.APPROVED) == [
+        Users.TECH_SUPPORT.id
+    ]
+    row = _only_notification(db, "EQUIPMENT_SUBMITTED", event_id=Events.APPROVED)
+    assert (row.related_entity_type, row.related_entity_id) == ("event", Events.APPROVED)
+    assert "Nimbus Developer Conference" in row.title
+    assert "Chloe Coordinator" in row.message
+    assert "Wireless microphone ×6, Presentation laptop ×2" in row.message
     assert before <= row.created_at <= after
 
 
@@ -417,6 +463,22 @@ class _Refused(NamedTuple):
             ),
             id="reject-a-booking-already-decided",
         ),
+        pytest.param(
+            _Refused(
+                Users.COORDINATOR, f"/events/{Events.PLANNING}/equipment-submissions", None, 409
+            ),
+            id="send-equipment-with-nothing-waiting",
+        ),
+        pytest.param(
+            _Refused(Users.COORDINATOR_2, SEND_NIMBUS_EQUIPMENT, None, 403),
+            id="send-equipment-for-someone-elses-event",
+        ),
+        pytest.param(
+            _Refused(
+                Users.COORDINATOR, f"/events/{Events.CONFIRMED}/equipment-submissions", None, 409
+            ),
+            id="send-equipment-once-the-event-is-confirmed",
+        ),
     ],
 )
 def test_a_refused_action_notifies_nobody(login_as, db: Session, refused: _Refused):
@@ -471,6 +533,17 @@ class _FailsAtAudit(NamedTuple):
                 Events.APPROVED_2,
             ),
             id="booking-approval",
+        ),
+        pytest.param(
+            _FailsAtAudit(
+                Users.COORDINATOR,
+                SEND_NIMBUS_EQUIPMENT,
+                None,
+                equipment_service,
+                "EQUIPMENT_SUBMITTED",
+                Events.APPROVED,
+            ),
+            id="equipment-sent",
         ),
     ],
 )
@@ -657,6 +730,17 @@ class _Twice(NamedTuple):
             ),
             id="request-a-venue",
         ),
+        pytest.param(
+            _Twice(
+                Users.COORDINATOR,
+                SEND_NIMBUS_EQUIPMENT,
+                None,
+                "EQUIPMENT_SUBMITTED",
+                Events.APPROVED,
+                [Users.TECH_SUPPORT.id],
+            ),
+            id="send-equipment",
+        ),
     ],
 )
 def test_a_repeated_action_notifies_once(login_as, db: Session, twice: _Twice):
@@ -760,3 +844,42 @@ def test_simultaneous_event_decisions_notify_once(engine: Engine):
             assert _recipients(session, "EVENT_APPROVED", event_id=event_id) == [Users.ORGANISER.id]
     finally:
         _delete_committed_event(engine, event_id)
+
+
+@pytest.mark.story("20.1", ac=6)
+def test_simultaneous_equipment_sends_notify_once(engine: Engine):
+    """Two sends of one event's equipment at the same moment (a double-click on Send): the event's
+    row lock lets one through, the other then finds nothing waiting, and only the first
+    notifies."""
+    with Session(engine) as session:
+        event = make_event(
+            session, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
+        )
+        kit = make_equipment_type(session)
+        make_equipment_item(session, event=event, equipment_type=kit, quantity=1)
+        session.commit()
+        event_id, kit_id = event.id, kit.id
+    start = threading.Barrier(2)
+
+    def send() -> str:
+        with Session(engine) as session:
+            actor = session.get(User, Users.COORDINATOR.id)
+            start.wait()
+            try:
+                equipment_service.submit_equipment(session, event_id, actor=actor)
+            except equipment_service.NothingToSubmit:
+                return "refused"
+            return "sent"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = [pool.submit(send) for _ in range(2)]
+            outcomes = sorted(future.result(timeout=30) for future in results)
+
+        assert outcomes == ["refused", "sent"]
+        with Session(engine) as session:
+            assert _recipients(session, "EQUIPMENT_SUBMITTED", event_id=event_id) == [
+                Users.TECH_SUPPORT.id
+            ]
+    finally:
+        _delete_committed_event(engine, event_id, equipment_type_id=kit_id)
