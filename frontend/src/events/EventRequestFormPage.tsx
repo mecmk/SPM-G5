@@ -2,14 +2,18 @@ import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent }
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
+  correctEventUnderReview,
   createEvent,
   fetchEquipmentAvailability,
   fetchEventReferenceData,
   getEvent,
   removeCoverImage,
+  removeCoverImageUnderReview,
   submitEvent,
   updateEvent,
+  updateEventRoutineInformation,
   uploadCoverImage,
+  uploadCoverImageUnderReview,
   type EventDetail,
   type EventReferenceData,
 } from '../api/events'
@@ -17,9 +21,16 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { useAuth } from '../auth/authContext'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { EVENTS_MINE_PATH, HOME_PATH, eventEditPath } from '../routes'
+import { EVENTS_MINE_PATH, HOME_PATH, eventEditPath, eventPath } from '../routes'
+import {
+  DETAILS_CORRECTABLE_STATUSES,
+  DETAILS_LOCKED_HINT,
+  DETAILS_LOCKED_STATUSES,
+  TERMINAL_STATUSES,
+} from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
@@ -109,6 +120,51 @@ function noticeFrom(state: unknown): string | null {
   return null
 }
 
+/** Story 7.2 AC6/AC9: refusals meaning the copy on screen is out of date, answered with a reload. */
+const OUT_OF_DATE_CODES: readonly ErrorCode[] = [
+  'EVENT_CORRECTION_CONFLICT',
+  'EVENT_ROUTINE_EDIT_CLOSED',
+]
+
+/**
+ * Story 7.2 AC1/AC3-AC5/AC8: what the coordinator's edit page says above the form - what can be
+ * edited at this stage, and why the rest cannot.
+ */
+function coordinatorEditNotice(event: EventDetail, userId: string | undefined): string {
+  if (event.assigned_coordinator_id !== userId) {
+    return 'Only the Event Coordinator assigned to this event can edit it.'
+  }
+  if (TERMINAL_STATUSES.includes(event.status)) {
+    return ERROR_REGISTRY.EVENT_ROUTINE_EDIT_CLOSED.message
+  }
+  if (DETAILS_LOCKED_STATUSES.includes(event.status)) {
+    return `${DETAILS_LOCKED_HINT} Internal notes can still be edited.`
+  }
+  if (!DETAILS_CORRECTABLE_STATUSES.includes(event.status)) {
+    return 'Event details can only be corrected while the event is under review or awaiting clarification. Internal notes can still be edited.'
+  }
+  return "You are correcting the organiser's request before it is decided. Saved changes apply straight away; the organiser does not need to approve them."
+}
+
+/**
+ * Story 7.2 AC7: the dates and the equipment lines (id, type and quantity) of a form, the only part
+ * a correction's equipment holds depend on - comparable with the same part of the saved request.
+ * The line id counts because a hold belongs to one line, matching the backend's `_is_hold_changed`.
+ */
+function holdKeyOf(form: EventFormState): string {
+  const input = eventInputFrom(form)
+  const lines = input.equipment
+    .map((line) => `${line.id}:${line.equipment_type_code}:${line.quantity}`)
+    .sort()
+  return JSON.stringify([input.starts_at, input.ends_at, lines])
+}
+
+interface EventRequestFormPageProps {
+  /** Story 7.2: the assigned coordinator editing a submitted event - its details while under
+   *  review, its internal notes until it is closed. */
+  isCoordinatorEdit?: boolean
+}
+
 /**
  * Story 2.1 - an Event Organiser records a request and sends it for review.
  * AC1: name, purpose, description, proposed start and end, expected attendance. All of them are
@@ -126,8 +182,16 @@ function noticeFrom(state: unknown): string | null {
  * AC9-AC11: a request is submitted from this page, new or saved; the details are saved first, so
  * a refused submission never loses them. Once submitted the request is read-only.
  * Serves /events/new (creates a draft) and /events/:eventId/edit (edits it).
+ *
+ * Story 7.2: with `isCoordinatorEdit`, serves /events/:eventId/coordinator-edit, where the assigned
+ * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4: while it
+ * is under review or awaiting clarification, the organiser's request too, cover picture included -
+ * the same fields, the same controls and the same checks; and every field marked * must be filled
+ * to save them, as on the backend. AC5: once approved, those fields are shown greyed out. AC7:
+ * equipment no longer free for new dates is marked on its line, as 2.1 does. AC6/AC9: a save made
+ * against a copy that was approved or changed meanwhile is refused, and the page offers a reload.
  */
-export function EventRequestFormPage() {
+export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequestFormPageProps) {
   const { eventId } = useParams()
   const isEditing = eventId !== undefined
   const navigate = useNavigate()
@@ -164,6 +228,13 @@ export function EventRequestFormPage() {
   // Story 2.1 AC17: confirms clearing saved registration dates when switching Registration
   // required off.
   const [isConfirmingClearRegistration, setIsConfirmingClearRegistration] = useState(false)
+  // Story 7.2 AC1: the coordinator's internal notes, as typed.
+  const [internalNotes, setInternalNotes] = useState('')
+  // Story 7.2 AC6/AC9: a save was refused because the copy on screen is out of date.
+  const [isOutOfDate, setIsOutOfDate] = useState(false)
+  // Bumped to load the request again, after a refused correction.
+  const [loadCount, setLoadCount] = useState(0)
+  const { user } = useAuth()
 
   useEffect(() => {
     let cancelled = false
@@ -175,6 +246,7 @@ export function EventRequestFormPage() {
         if (loaded) {
           setEvent(loaded)
           setForm(formFromEvent(loaded))
+          setInternalNotes(loaded.internal_notes ?? '')
         }
       })
       .catch((err) => {
@@ -183,7 +255,7 @@ export function EventRequestFormPage() {
     return () => {
       cancelled = true
     }
-  }, [eventId])
+  }, [eventId, loadCount])
 
   useEffect(() => {
     return () => {
@@ -191,7 +263,21 @@ export function EventRequestFormPage() {
     }
   }, [picture])
 
-  const isReadOnly = event !== null && event.status !== 'DRAFT'
+  /** Story 7.2 AC1/AC3/AC8: the assigned coordinator, on an event that is not closed. */
+  const canEditNotes =
+    isCoordinatorEdit &&
+    event !== null &&
+    event.assigned_coordinator_id === user?.id &&
+    !TERMINAL_STATUSES.includes(event.status)
+  /** Story 7.2 AC4/AC5: and the organiser's details too, only while the event is under review or
+   *  awaiting clarification. */
+  const canCorrectDetails =
+    canEditNotes && event !== null && DETAILS_CORRECTABLE_STATUSES.includes(event.status)
+  const isReadOnly = isCoordinatorEdit
+    ? !canCorrectDetails
+    : event !== null && event.status !== 'DRAFT'
+  // Story 7.2 AC7: an event being corrected is not counted against its own equipment holds.
+  const excludedEventId = isCoordinatorEdit && eventId !== undefined ? eventId : null
   const savedPictureUrl = isPictureRemoved ? null : mediaUrl(event?.cover_image_url ?? null)
   const shownPictureUrl = picture ? picture.previewUrl : savedPictureUrl
 
@@ -244,12 +330,23 @@ export function EventRequestFormPage() {
       : null
   const availabilityByType =
     availability !== null && availability.key === datesKey ? availability.byType : null
+  /**
+   * Story 7.2 AC7: a correction that leaves the dates and equipment as they were saved is not
+   * judged against the stock - the event already holds its own, and the backend does not re-check
+   * it either. Availability is still shown on each line.
+   */
+  const isHoldUnchanged =
+    isCoordinatorEdit &&
+    form !== null &&
+    event !== null &&
+    holdKeyOf(form) === holdKeyOf(formFromEvent(event))
+  const judgedAvailability = isHoldUnchanged ? null : availabilityByType
 
   useEffect(() => {
     if (datesKey === null) return
     const [startsAt, endsAt] = datesKey.split('|')
     let cancelled = false
-    fetchEquipmentAvailability(inputToInstant(startsAt), inputToInstant(endsAt))
+    fetchEquipmentAvailability(inputToInstant(startsAt), inputToInstant(endsAt), excludedEventId)
       .then((rows) => {
         if (cancelled) return
         const byType = Object.fromEntries(rows.map((r) => [r.equipment_type_code, r.available]))
@@ -261,16 +358,23 @@ export function EventRequestFormPage() {
     return () => {
       cancelled = true
     }
-  }, [datesKey])
+  }, [datesKey, excludedEventId])
 
   // Problems with the name and the numbers, said next to each field as it is typed.
   const liveProblems: Record<string, ErrorCode> = {
-    ...(form ? getLiveProblems(form, availabilityByType) : {}),
+    ...(form ? getLiveProblems(form, judgedAvailability) : {}),
     ...(form && isNameTouched && !form.name.trim()
       ? { [FIELD_ID.name]: 'EVENT_NAME_REQUIRED' as ErrorCode }
       : {}),
   }
   const missingForSubmission = form ? getMissingForSubmission(form) : []
+  const isDetailsChanged =
+    form !== null &&
+    event !== null &&
+    JSON.stringify(eventInputFrom(form)) !== JSON.stringify(eventInputFrom(formFromEvent(event)))
+  const isNotesChanged = event !== null && internalNotes !== (event.internal_notes ?? '')
+  const isPictureChanged =
+    picture !== null || (isPictureRemoved && event !== null && event.cover_image_url !== null)
 
   /** What the row says about stock: how many are free. */
   function equipmentAvailabilityNote(line: EquipmentDraft) {
@@ -522,12 +626,10 @@ export function EventRequestFormPage() {
   }
 
   /**
-   * Validate, then create the draft or save the edits, then its picture. Null when nothing was
-   * saved. A picture that fails leaves the draft saved, and says so, rather than losing the draft.
-   * `shouldNotify` is false when submitting, which says only that the request was submitted.
+   * AC2/AC3/AC6/AC17: check the form before anything is sent. On a problem, say it, mark the field
+   * and move to it. Shared by saving a draft and by story 7.2's correction.
    */
-  async function saveDraft(shouldNotify: boolean): Promise<SavedDraft | null> {
-    if (!form) return null
+  function isFormValid(current: EventFormState): boolean {
     const incompleteFieldId = findIncompleteDateField()
     const problem: FormProblem | null = incompleteFieldId
       ? {
@@ -536,14 +638,24 @@ export function EventRequestFormPage() {
             : 'EVENT_DATE_INCOMPLETE',
           fieldId: incompleteFieldId,
         }
-      : validateEventForm(form, event, availabilityByType)
+      : validateEventForm(current, event, judgedAvailability)
     if (problem) {
       setSaveError(ERROR_REGISTRY[problem.code].message)
-      setInvalidField({ id: problem.fieldId, form })
+      setInvalidField({ id: problem.fieldId, form: current })
       document.getElementById(problem.fieldId)?.focus()
-      return null
+      return false
     }
     setSaveError(null)
+    return true
+  }
+
+  /**
+   * Validate, then create the draft or save the edits, then its picture. Null when nothing was
+   * saved. A picture that fails leaves the draft saved, and says so, rather than losing the draft.
+   * `shouldNotify` is false when submitting, which says only that the request was submitted.
+   */
+  async function saveDraft(shouldNotify: boolean): Promise<SavedDraft | null> {
+    if (!form || !isFormValid(form)) return null
     const input = eventInputFrom(form)
     const saved = eventId
       ? await updateEvent(eventId, input, { shouldNotify })
@@ -645,6 +757,69 @@ export function EventRequestFormPage() {
     }
   }
 
+  /**
+   * Story 7.2: save what the coordinator changed - the details (AC4, with the `updated_at` of the
+   * copy on screen for AC9), then the cover picture, then the internal notes (AC1), each only when
+   * it changed. Each step sends the `updated_at` the step before it returned, so the coordinator's
+   * own saves never look stale to each other; the notes go last because their endpoint takes no
+   * token. A refusal because the copy is out of date offers a reload, not a retry.
+   */
+  async function handleSaveCoordinatorEdit(submission: FormEvent<HTMLFormElement>) {
+    submission.preventDefault()
+    if (!form || !event) return
+    const isSavingDetails = canCorrectDetails && isDetailsChanged
+    if (isSavingDetails && !isFormValid(form)) return
+    // Story 7.2 AC4: a submitted request keeps everything submission needed - even a detail it
+    // was submitted without - so every field marked * must be filled to save details.
+    if (isSavingDetails && missingForSubmission.length > 0) {
+      setSaveError(ERROR_REGISTRY.EVENT_REQUIRED_DETAIL_CLEARED.message)
+      return
+    }
+    setSaveError(null)
+    setIsSaving(true)
+    try {
+      let latest = event
+      if (isSavingDetails) {
+        latest = await correctEventUnderReview(latest.id, eventInputFrom(form), latest.updated_at)
+        setEvent(latest)
+        setForm(formFromEvent(latest))
+      }
+      if (canCorrectDetails && isPictureChanged) {
+        latest = picture
+          ? await uploadCoverImageUnderReview(latest.id, picture.file, latest.updated_at)
+          : await removeCoverImageUnderReview(latest.id, latest.updated_at)
+        setEvent(latest)
+        setPicture(null)
+        setIsPictureRemoved(false)
+      }
+      if (isNotesChanged) {
+        const saved = await updateEventRoutineInformation(event.id, {
+          internal_notes: internalNotes.trim() || null,
+        })
+        setEvent(saved)
+        setInternalNotes(saved.internal_notes ?? '')
+      }
+    } catch (err) {
+      // As on the organiser's save: a venue requirement the server refused is marked (2.7 AC11).
+      showSaveRefusal(err)
+      setIsOutOfDate(err instanceof ApiError && OUT_OF_DATE_CODES.includes(err.code))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  /** Story 7.2 AC6/AC9: load the request as it now stands, after a refused correction. */
+  function reloadEvent() {
+    setSaveError(null)
+    setIsOutOfDate(false)
+    // The picture is not part of the loaded event, so an unsaved one is dropped here too.
+    setPicture(null)
+    setIsPictureRemoved(false)
+    setPictureProblem(null)
+    setInvalidField(null)
+    setLoadCount((count) => count + 1)
+  }
+
   // A type can be on a request once, so there is nothing to add when a line exists for each type.
   const hasEveryEquipmentType =
     reference !== null &&
@@ -653,8 +828,16 @@ export function EventRequestFormPage() {
     form.equipment.length >= reference.equipment_types.length
 
   const title = isEditing ? (event?.name ?? 'Event request') : 'New event request'
+  const backTo = backState?.from ?? (excludedEventId ? eventPath(excludedEventId) : HOME_PATH)
+  const backLabel =
+    backState?.fromLabel ?? (isCoordinatorEdit ? (event?.name ?? 'Event') : 'Main page')
   const subtitle =
-    event && isReadOnly ? (
+    isCoordinatorEdit && event ? (
+      <>
+        <EventStatusBadge status={event.status} />
+        <span className="page-subtitle-note">{coordinatorEditNotice(event, user?.id)}</span>
+      </>
+    ) : event && isReadOnly ? (
       <>
         <EventStatusBadge status={event.status} />{' '}
         {event.submitted_at && <span>Submitted on {formatDateTime(event.submitted_at)}</span>}
@@ -671,12 +854,7 @@ export function EventRequestFormPage() {
 
   return (
     <div className="page">
-      <PageHeader
-        backTo={backState?.from ?? HOME_PATH}
-        backLabel={backState?.fromLabel ?? 'Main page'}
-        title={title}
-        subtitle={subtitle}
-      />
+      <PageHeader backTo={backTo} backLabel={backLabel} title={title} subtitle={subtitle} />
 
       {loadError && (
         <p role="alert" className="error">
@@ -686,7 +864,29 @@ export function EventRequestFormPage() {
       {!loadError && (!form || !reference) && <LoadingState label="Loading request…" />}
 
       {form && reference && (
-        <form className="stack venue-form" onSubmit={handleSaveDraft} noValidate>
+        <form
+          className="stack venue-form"
+          onSubmit={isCoordinatorEdit ? handleSaveCoordinatorEdit : handleSaveDraft}
+          noValidate
+        >
+          {isCoordinatorEdit && (
+            <fieldset className="card" disabled={!canEditNotes}>
+              <legend>Coordinator notes</legend>
+              <p className="form-hint">
+                Only Event Coordinators see these. They can be edited until the event is completed,
+                cancelled or rejected.
+              </p>
+              <label>
+                Internal notes
+                <textarea
+                  rows={3}
+                  value={internalNotes}
+                  onChange={(e) => setInternalNotes(e.target.value)}
+                />
+              </label>
+            </fieldset>
+          )}
+
           <fieldset className="card" disabled={isReadOnly}>
             <legend>Event details</legend>
             <div className="form-grid">
@@ -1272,7 +1472,34 @@ export function EventRequestFormPage() {
             )}
           </fieldset>
 
-          {!isReadOnly && (
+          {canEditNotes && (
+            <div className="form-actions">
+              {canCorrectDetails && missingForSubmission.length > 0 && (
+                <p className="form-hint">Still needed: {missingForSubmission.join(', ')}.</p>
+              )}
+              {saveError && (
+                <p role="alert" className="error">
+                  {saveError}
+                </p>
+              )}
+              {isOutOfDate && (
+                <button type="button" className="secondary" onClick={reloadEvent}>
+                  Reload event
+                </button>
+              )}
+              <Link to={backTo} className="button secondary">
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={isSaving || (!isDetailsChanged && !isNotesChanged && !isPictureChanged)}
+              >
+                {isSaving && <span className="spinner button-spinner" aria-hidden="true" />}
+                Save changes
+              </button>
+            </div>
+          )}
+          {!isReadOnly && !isCoordinatorEdit && (
             <div className="form-actions">
               {missingForSubmission.length > 0 && (
                 <p className="form-hint">

@@ -46,6 +46,18 @@ def test_assigned_coordinator_can_update_internal_notes(coordinator_client, db: 
 
 
 @pytest.mark.story("7.2", ac=1)
+@pytest.mark.parametrize("event_id", [Events.SUBMITTED, Events.PLANNING])
+def test_saving_internal_notes_leaves_the_status_unchanged(coordinator_client, event_id):
+    before = coordinator_client.get(f"/events/{event_id}").json()
+
+    response = _patch(coordinator_client, event_id, internal_notes="Venue walk-through booked.")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == before["status"]
+    assert coordinator_client.get(f"/events/{event_id}").json()["status"] == before["status"]
+
+
+@pytest.mark.story("7.2", ac=1)
 def test_internal_notes_can_be_cleared_with_null(coordinator_client):
     _patch(coordinator_client, Events.SUBMITTED, internal_notes="Temporary note.")
 
@@ -170,6 +182,19 @@ def test_internal_notes_are_never_returned_to_venue_staff_or_tech_support(
     assert venue_response.json()["internal_notes"] is None
     assert tech_response.status_code == 200
     assert tech_response.json()["internal_notes"] is None
+
+
+@pytest.mark.story("7.2", ac=2)
+def test_an_attendee_cannot_read_the_event_or_its_internal_notes(login_as):
+    saved = _patch(
+        login_as(Users.COORDINATOR), Events.SUBMITTED, internal_notes="Coordinator eyes only."
+    )
+    assert saved.status_code == 200, saved.text
+
+    response = login_as(Users.ATTENDEE).get(f"/events/{Events.SUBMITTED}")
+
+    assert response.status_code == 403
+    assert "Coordinator eyes only." not in response.text
 
 
 # --- AC3: blocked once the event is completed, cancelled or rejected --------------------------

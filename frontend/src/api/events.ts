@@ -478,9 +478,9 @@ export interface EventRoutineInput {
 }
 
 /**
- * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its routine information
- * directly. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event is completed,
- * cancelled or rejected.
+ * Story 7.2 AC1-AC3: the coordinator assigned to the event edits its internal notes directly,
+ * from the coordinator's edit page. Rejected with an EVENT_ROUTINE_EDIT_CLOSED 409 once the event
+ * is completed, cancelled or rejected.
  */
 export function updateEventRoutineInformation(
   eventId: string,
@@ -490,7 +490,78 @@ export function updateEventRoutineInformation(
     method: 'PATCH',
     body: input,
     errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_ROUTINE_EDIT_CLOSED' },
-    notify: { title: 'Event updated', message: 'The routine event information was saved.' },
+    notify: { title: 'Internal notes saved', message: 'The internal notes were saved.' },
+  })
+}
+
+/**
+ * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
+ * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.
+ */
+export interface EventReviewCorrectionInput extends EventInput {
+  expected_updated_at: string
+}
+
+/**
+ * Story 7.2 AC4-AC9: the coordinator assigned to the event corrects the organiser's request while
+ * it is under review or awaiting clarification. Every 409 - approved meanwhile (AC6) or changed
+ * since it was opened (AC9) - means the copy on screen is out of date, so it is one code:
+ * EVENT_CORRECTION_CONFLICT, which the page answers with a reload. Equipment no longer free for
+ * the dates (AC7) is a 422, as in 2.1.
+ */
+export function correctEventUnderReview(
+  eventId: string,
+  input: EventInput,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body: EventReviewCorrectionInput = { ...input, expected_updated_at: expectedUpdatedAt }
+  return api<EventDetail>(`/events/${eventId}/review-details`, {
+    method: 'PATCH',
+    body,
+    errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_CORRECTION_CONFLICT' },
+    notify: { title: 'Event details corrected', message: `"${input.name}" was updated.` },
+  })
+}
+
+const CORRECTION_PICTURE_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_CORRECTION_CONFLICT',
+  413: 'EVENT_PICTURE_TOO_LARGE',
+} as const
+
+/**
+ * Story 7.2 AC4: the coordinator assigned to the event replaces its cover picture while it is
+ * under review or awaiting clarification. `expectedUpdatedAt` is AC9's token, as for
+ * `correctEventUnderReview`, and a 409 means the copy on screen is out of date.
+ */
+export function uploadCoverImageUnderReview(
+  eventId: string,
+  file: File,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const body = new FormData()
+  body.append('file', file)
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'PUT',
+    body,
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture saved', message: 'The cover picture was saved.' },
+  })
+}
+
+/** Story 7.2 AC4: the coordinator assigned to the event takes its cover picture off while it is
+ *  under review or awaiting clarification. The same token and refusals as
+ *  `uploadCoverImageUnderReview`. */
+export function removeCoverImageUnderReview(
+  eventId: string,
+  expectedUpdatedAt: string,
+): Promise<EventDetail> {
+  const params = new URLSearchParams({ expected_updated_at: expectedUpdatedAt })
+  return api<EventDetail>(`/events/${eventId}/review-details/cover-image?${params.toString()}`, {
+    method: 'DELETE',
+    errorCodes: CORRECTION_PICTURE_ERROR_CODES,
+    notify: { title: 'Picture removed', message: 'The cover picture was removed.' },
   })
 }
 
@@ -500,11 +571,17 @@ export interface EquipmentAvailability {
   available: number
 }
 
-/** Story 2.1 AC6: how many of each equipment type are free for the proposed dates. */
+/**
+ * Story 2.1 AC6: how many of each equipment type are free for the proposed dates. Story 7.2 AC7:
+ * `excludeEventId` leaves out that event's own holds, so a request being corrected is not counted
+ * against itself.
+ */
 export function fetchEquipmentAvailability(
   startsAt: string,
   endsAt: string,
+  excludeEventId: string | null = null,
 ): Promise<EquipmentAvailability[]> {
   const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  if (excludeEventId !== null) params.set('exclude_event_id', excludeEventId)
   return api<EquipmentAvailability[]>(`/events/equipment-availability?${params.toString()}`)
 }

@@ -1,8 +1,9 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
 (coordinator review queue), story 4.2 (request clarification from the organiser), story 4.3
 (the organiser's response), stories 4.4/4.5 (approve / reject an event request), story 4.6 (the
-decision /clarification history an organiser sees), story 7.2 (routine information edits), story
-6.1 (the coordinator's assigned events in any status), and story 2.1 AC14 (the cover picture)."""
+decision /clarification history an organiser sees), story 7.2 (routine information edits and
+correcting a request under review or awaiting clarification), story 6.1 (the coordinator's
+assigned events in any status), and story 2.1 AC14 (the cover picture)."""
 
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from app.events.schemas import (
     EventDetailOut,
     EventReferenceData,
     EventRejection,
+    EventReviewCorrection,
     EventRoutineUpdate,
     EventUpdate,
     MyEventEntry,
@@ -47,6 +49,11 @@ CanCreate = Depends(require_permission(Permission.EVENTS_CREATE))
 CanEditRoutine = Depends(require_permission(Permission.EVENTS_EDIT_ROUTINE))
 CanReadOwn = Depends(require_permission(Permission.EVENTS_READ_OWN))
 CanRead = Depends(require_any_permission(Permission.EVENTS_READ_OWN, Permission.EVENTS_READ_ALL))
+# Story 7.2 AC4: the request form's own reads, for the organiser filling it in and the coordinator
+# correcting it under review.
+CanFillRequestForm = Depends(
+    require_any_permission(Permission.EVENTS_CREATE, Permission.EVENTS_EDIT_ROUTINE)
+)
 DbSession = Annotated[Session, Depends(get_db)]
 
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
@@ -109,25 +116,33 @@ def list_assigned_events(
     )
 
 
-@router.get("/reference-data", response_model=EventReferenceData, dependencies=[CanCreate])
+@router.get("/reference-data", response_model=EventReferenceData, dependencies=[CanFillRequestForm])
 def list_reference_data(db: DbSession) -> EventReferenceData:
-    """Story 2.1 AC4-AC6: the pick-lists for the request form."""
+    """Story 2.1 AC4-AC6: the pick-lists for the request form, also used by story 7.2 AC4."""
     return service.list_reference_data(db)
 
 
-@router.get(
-    "/equipment-availability",
-    response_model=list[EquipmentAvailabilityOut],
-    dependencies=[CanCreate],
-)
+@router.get("/equipment-availability", response_model=list[EquipmentAvailabilityOut])
 def list_equipment_availability(
     db: DbSession,
+    viewer: Annotated[CurrentUser, CanFillRequestForm],
     starts_at: Annotated[AwareDatetime, Query()],
     ends_at: Annotated[AwareDatetime, Query()],
+    exclude_event_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[EquipmentAvailabilityOut]:
-    """Story 2.1 AC6: how many of each equipment type are free for the proposed dates."""
+    """Story 2.1 AC6: how many of each equipment type are free for the proposed dates. Story 7.2
+    AC7: ``exclude_event_id`` leaves out that event's own holds; naming an event the viewer cannot
+    see is a 404."""
     try:
-        return service.list_equipment_availability(db, starts_at=starts_at, ends_at=ends_at)
+        return service.list_equipment_availability(
+            db,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            exclude_event_id=exclude_event_id,
+            viewer=viewer,
+        )
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
@@ -338,6 +353,94 @@ def update_routine_information(
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     try:
         service.update_routine_information(db, event, payload, actor=actor)
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.patch("/{event_id}/review-details", response_model=EventDetailOut)
+def correct_event_under_review(
+    event_id: uuid.UUID,
+    payload: EventReviewCorrection,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanEditRoutine],
+) -> EventDetailOut:
+    """Story 7.2 AC4-AC9: the coordinator assigned to this event corrects the organiser's request
+    while it is under review or awaiting clarification. 403 for anyone else (AC8); 409 once it is
+    approved or closed (AC5, AC6) or when the copy being saved is stale (AC9); 422 for anything
+    the 2.1 and 2.7 checks refuse, including equipment no longer available for the new dates (AC4,
+    AC7), with a refused venue requirement located as on the organiser's edit."""
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.correct_event_under_review(db, event, payload, actor=actor)
+    except service.InvalidVenueRequirement as exc:
+        raise _requirement_refusal(exc) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.put("/{event_id}/review-details/cover-image", response_model=EventDetailOut)
+def set_cover_image_under_review(
+    event_id: uuid.UUID,
+    file: UploadFile,
+    expected_updated_at: Annotated[AwareDatetime, Query()],
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanEditRoutine],
+) -> EventDetailOut:
+    """Story 7.2 AC4: the coordinator assigned to this event replaces its cover picture while it is
+    under review or awaiting clarification. The same refusals as the JSON correction (403/409),
+    plus 2.1 AC14's file checks (413/422)."""
+    # As set_cover_image: bounds what is read into memory; one byte past the limit is enough.
+    content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, EMPTY_PICTURE_MESSAGE)
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.set_cover_image_under_review(
+            db, event, content, actor=actor, expected_updated_at=expected_updated_at
+        )
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.CoverImageTooLarge as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from None
+    except service.UnsupportedCoverImage as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EventDetailOut.from_event(event, viewer=actor)
+
+
+@router.delete("/{event_id}/review-details/cover-image", response_model=EventDetailOut)
+def remove_cover_image_under_review(
+    event_id: uuid.UUID,
+    expected_updated_at: Annotated[AwareDatetime, Query()],
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanEditRoutine],
+) -> EventDetailOut:
+    """Story 7.2 AC4: the coordinator assigned to this event takes its cover picture off while it
+    is under review or awaiting clarification. The same refusals as the JSON correction
+    (403/409)."""
+    try:
+        event = service.get_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    try:
+        service.remove_cover_image_under_review(
+            db, event, actor=actor, expected_updated_at=expected_updated_at
+        )
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EventStateConflict as exc:
