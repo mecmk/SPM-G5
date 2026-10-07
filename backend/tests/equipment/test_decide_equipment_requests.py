@@ -309,6 +309,67 @@ def test_a_decision_is_audited(tech_client, db, outcome, action):
     assert entry.actor_id == Users.TECH_SUPPORT.id
 
 
+@pytest.mark.story("16.1", ac=3)
+@pytest.mark.parametrize("outcome", [ACCEPTED, DECLINED])
+def test_the_coordinator_sees_when_and_by_whom_a_request_was_decided(login_as, db, outcome):
+    event = _event(db)
+    item = _pending(db, event=event)
+    tech = login_as(Users.TECH_SUPPORT)
+    decided = _accept(tech, item.id) if outcome == ACCEPTED else _decline(tech, item.id)
+    assert decided.status_code == 201
+
+    lines = login_as(Users.COORDINATOR).get(f"/events/{event.id}").json()["equipment"]
+
+    [line] = [line for line in lines if line["id"] == str(item.id)]
+    assert line["status"] == outcome
+    assert line["decided_by_name"] == Users.TECH_SUPPORT.full_name
+    assert line["decided_at"] == decided.json()["decided_at"]
+
+
+@pytest.mark.story("16.1", ac=3)
+def test_a_pending_request_on_the_event_page_names_no_decision(coordinator_client, db):
+    event = _event(db)
+    item = _pending(db, event=event)
+
+    [line] = [
+        line
+        for line in coordinator_client.get(f"/events/{event.id}").json()["equipment"]
+        if line["id"] == str(item.id)
+    ]
+
+    assert (line["decided_at"], line["decided_by_name"]) == (None, None)
+
+
+@pytest.mark.story("16.1", ac=1)
+def test_technical_support_sees_when_the_coordinator_sent_a_request(tech_client, db):
+    """As Venue Staff see when a booking was requested, each request says when it was sent."""
+    item = _pending(db)
+
+    body = tech_client.get(f"/equipment-requests/{item.id}").json()
+
+    assert datetime.fromisoformat(body["submitted_at"]) == datetime(2026, 10, 1, 9, 0, tzinfo=SGT)
+
+
+@pytest.mark.story("16.1", ac=3)
+def test_a_decision_undone_by_new_event_dates_no_longer_names_who_made_it(tech_client, db):
+    """15.1 AC8 sends an accepted item back to Technical Support as Pending when its event's dates
+    change, so the old decision must not stay recorded against it."""
+    event = _event(db)
+    item = _pending(db, event=event)
+    assert _accept(tech_client, item.id).status_code == 201
+
+    event.starts_at, event.ends_at = START + timedelta(days=7), END + timedelta(days=7)
+    db.flush()
+    service.recheck_equipment_for_new_dates(db, event, actor=db.get(User, Users.COORDINATOR.id))
+
+    db.flush()
+    db.expire_all()
+    row = db.get(EventEquipmentRequest, item.id)
+    assert row.status == PENDING
+    assert row.decided_by_id is None
+    assert row.decided_at is None
+
+
 # --- AC4: a decline reason is required ----------------------------------------------------------
 @pytest.mark.story("16.1", ac=4)
 @pytest.mark.parametrize(
@@ -555,6 +616,98 @@ def test_a_second_decision_is_refused_with_the_current_status(client, db, first,
     assert response.status_code == 409
     assert response.json()["detail"] == message
     assert _status(db, item) == first
+
+
+# --- one request's own page, where it can be decided too ----------------------------------------
+def _request_path(item_id: uuid.UUID) -> str:
+    return f"/equipment-requests/{item_id}"
+
+
+@pytest.mark.story("16.1", ac=1)
+def test_technical_support_opens_a_pending_request_with_its_figures(tech_client, db):
+    kit = make_equipment_type(db, total_quantity=5, name="Stage monitor")
+    event = _event(db, name="Harbour Gala Dinner")
+    item = _pending(db, quantity=4, event=event, equipment_type=kit, technical_notes="Stage left")
+    make_equipment_out_of_service(db, type_code=kit.code, quantity=3, starts_at=START, ends_at=END)
+
+    response = tech_client.get(_request_path(item.id))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["id"] == str(item.id)
+    assert body["event_id"] == str(event.id)
+    assert body["event_name"] == "Harbour Gala Dinner"
+    assert body["equipment_type_name"] == "Stage monitor"
+    assert body["quantity"] == 4
+    assert body["technical_notes"] == "Stage left"
+    assert body["requested_by_name"] == Users.COORDINATOR.full_name
+    assert body["status"] == PENDING
+    assert (body["available"], body["shortfall"]) == (2, 2)
+    assert (body["decided_by_name"], body["decided_at"], body["decision_reason"]) == (
+        None,
+        None,
+        None,
+    )
+
+
+@pytest.mark.story("16.1", ac=3)
+def test_a_decided_request_shows_who_decided_it_when_and_why(tech_client, db):
+    item = _pending(db)
+    assert _decline(tech_client, item.id).status_code == 201
+
+    body = tech_client.get(_request_path(item.id)).json()
+
+    assert body["status"] == DECLINED
+    assert body["decided_by_name"] == Users.TECH_SUPPORT.full_name
+    assert body["decided_at"] is not None
+    assert body["decision_reason"] == REASON
+
+
+@pytest.mark.story("16.1", ac=7)
+@pytest.mark.parametrize(
+    ("item_status", "event_status"),
+    [
+        ("REQUESTED", EventStatus.PLANNING),
+        ("UNAVAILABLE", EventStatus.PLANNING),
+        ("CANCELLED", EventStatus.PLANNING),
+        (PENDING, EventStatus.CANCELLED),
+        (PENDING, EventStatus.REJECTED),
+    ],
+)
+def test_a_request_outside_the_queue_is_not_found(tech_client, db, item_status, event_status):
+    """Only what the queue lists (15.2 AC3/AC5) has a page of its own."""
+    item = _pending(
+        db,
+        status=item_status,
+        is_held=item_status in ("REQUESTED", PENDING),
+        event=_event(db, status=event_status),
+    )
+
+    response = tech_client.get(_request_path(item.id))
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == NOT_FOUND_MESSAGE
+
+
+@pytest.mark.story("16.1", ac=7)
+def test_an_unknown_request_has_no_page(tech_client):
+    assert tech_client.get(_request_path(uuid.uuid4())).status_code == 404
+
+
+@pytest.mark.story("16.1", ac=8)
+@pytest.mark.parametrize(
+    "user", [Users.ORGANISER, Users.COORDINATOR, Users.VENUE_STAFF, Users.ATTENDEE]
+)
+def test_other_roles_cannot_open_a_request(client, db, user):
+    item = _pending(db)
+    client.login(user)
+
+    assert client.get(_request_path(item.id)).status_code == 403
+
+
+@pytest.mark.story("16.1", ac=8)
+def test_a_signed_out_user_cannot_open_a_request(client, db):
+    assert client.get(_request_path(_pending(db).id)).status_code == 401
 
 
 # --- real races ----------------------------------------------------------------------------------
