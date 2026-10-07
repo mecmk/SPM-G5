@@ -9,6 +9,10 @@ export interface LoadedState<T> {
   error: string | null
   /** True until the first load has either succeeded or failed. */
   isLoading: boolean
+  /** True while `data` came from an earlier `load` than the current one: the changed `load` is
+   * still running, or it failed. A page that must not show one view's rows under another's
+   * heading - another tab, another page - hides `data` while this is set. */
+  isStale: boolean
   /** For a page that changes what it loaded: removing a deleted row, adding a further page. */
   setData: Dispatch<SetStateAction<T | null>>
 }
@@ -22,6 +26,8 @@ export interface LoadedState<T> {
 export function useLoaded<T>(load: () => Promise<T>): LoadedState<T> {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Wrapped in an arrow: a function handed to a state setter would be called as an updater.
+  const [loadedBy, setLoadedBy] = useState<() => Promise<T>>(() => load)
 
   useEffect(() => {
     let cancelled = false
@@ -29,6 +35,7 @@ export function useLoaded<T>(load: () => Promise<T>): LoadedState<T> {
       .then((result) => {
         if (cancelled) return
         setData(result)
+        setLoadedBy(() => load)
         setError(null)
       })
       .catch((err) => {
@@ -39,5 +46,11 @@ export function useLoaded<T>(load: () => Promise<T>): LoadedState<T> {
     }
   }, [load])
 
-  return { data, error, isLoading: data === null && error === null, setData }
+  return {
+    data,
+    error,
+    isLoading: data === null && error === null,
+    isStale: data !== null && loadedBy !== load,
+    setData,
+  }
 }

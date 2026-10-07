@@ -38,6 +38,7 @@ import {
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
+import { PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import { AWAITING_DECISION_STATUSES, TERMINAL_STATUSES } from '../shared/eventStatus'
 import {
   formatDate,
@@ -51,7 +52,6 @@ import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
-const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
