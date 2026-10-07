@@ -208,6 +208,9 @@ def test_coordinator_records_an_item_which_waits_to_be_sent(coordinator_client, 
         "status": "REQUESTED",
         "submitted_at": None,
         "submitted_by_name": None,
+        "decision_reason": None,
+        "decided_at": None,
+        "decided_by_name": None,
     }
     assert _lines(coordinator_client, event.id) == [body]
 

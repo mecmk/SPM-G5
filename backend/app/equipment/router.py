@@ -6,6 +6,8 @@ The items are a sub-resource of the event, so the paths sit under ``/events/{eve
 is returned as ``EquipmentLineOut``, the shape the event page already reads. Submitting creates an
 equipment submission rather than calling an action on the event (backend/STYLE.md: a URL names a
 resource). The queue spans every event, so it has a path of its own, ``/equipment-requests``.
+Technical Support's decision on a request is likewise a resource of its own (story 16.1),
+``/equipment-requests/{item_id}/decision``, created once.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.equipment import service
 from app.equipment.schemas import (
+    EquipmentDecisionIn,
     EquipmentItemIn,
     EquipmentItemUpdate,
     EquipmentQueue,
@@ -43,6 +46,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
 ITEM_NOT_FOUND_MESSAGE = "Equipment item not found."
+REQUEST_NOT_FOUND_MESSAGE = "Equipment request not found."
 
 
 @router.get(
@@ -167,3 +171,44 @@ def list_equipment_requests(
         ],
         counts=EquipmentQueueCounts.from_counts(listing.counts_by_status),
     )
+
+
+@queue_router.get("/{item_id}", response_model=EquipmentQueueEntry, dependencies=[CanManage])
+def get_equipment_request(item_id: uuid.UUID, db: DbSession) -> EquipmentQueueEntry:
+    """Story 16.1: one request as the queue shows it, for its own page. AC7: one the queue does
+    not list is not found. AC8: Technical Support only."""
+    try:
+        row = service.get_equipment_request(db, item_id)
+    except service.EquipmentRequestNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, REQUEST_NOT_FOUND_MESSAGE) from None
+    return EquipmentQueueEntry.from_item(row.item, row.event, available=row.available)
+
+
+@queue_router.post(
+    "/{item_id}/decision",
+    response_model=EquipmentQueueEntry,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[CanManage],
+)
+def decide_equipment_request(
+    item_id: uuid.UUID,
+    payload: EquipmentDecisionIn,
+    db: DbSession,
+    actor: CurrentUser,
+) -> EquipmentQueueEntry:
+    """Story 16.1 AC1/AC2: accept a Pending request, or decline it with a reason (AC4); returns
+    the request as the queue shows it. AC6: a shortfall is refused with its figures beside the
+    sentence. AC7/AC9: a request that is not Pending, or whose event was cancelled or rejected, is
+    refused with why. AC8: Technical Support only."""
+    try:
+        row = service.decide_equipment_request(db, item_id, payload, actor=actor)
+    except service.EquipmentRequestNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, REQUEST_NOT_FOUND_MESSAGE) from None
+    except service.NotEnoughToAccept as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": str(exc), "available": exc.available, "shortfall": exc.shortfall},
+        ) from None
+    except service.EquipmentConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EquipmentQueueEntry.from_item(row.item, row.event, available=row.available)
