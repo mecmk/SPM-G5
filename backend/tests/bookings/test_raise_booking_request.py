@@ -27,9 +27,10 @@ Excluded, with reason:
   ``tests/bookings/test_venue_hold.py``. Here it only means the default venue below is one that
   is free on Nimbus's day, and that an identical second request is refused
   (``test_the_same_venue_cannot_be_requested_twice_for_the_same_period``).
-* Refusing a venue that is too small or lacks a required facility - stories 11.2 / 11.3. 11.3
-  AC1 wants a warning the coordinator can override, not a block, so refusing it here would
-  pre-empt a decision that story reverses.
+* Whether the venue suits the event - story 11.1. A venue that does not suit the event's venue
+  requirement is refused unless the request carries a justification, so every test here that
+  expects a request to be accepted asks for a venue that suits its event (``nimbus_venue``, or
+  one made for the test's own event); the override itself is story 11.1's to test.
 * The flow a coordinator clicks through - that is ``tests/e2e/booking-requests.spec.ts``. Every
   case here is a rule, boundary, permission or conflict case, which AGENTS.md assigns to
   ``backend/tests/``, and neither layer repeats the other.
@@ -47,6 +48,7 @@ from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
 from app.events.models import EventStatus
+from app.venues.models import Venue
 from tests.support.factories import make_event, make_venue, make_venue_requirement
 from tests.support.seed import Events, Users, Venues
 
@@ -57,7 +59,10 @@ EVENT_ENDS_AT = datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc)
 EVENT_ATTENDANCE = 350
 EVENT_LAYOUT = "THEATRE"
 # Free on that day. Grand Hall is not: Bookings.APPROVED_GRAND_HALL already holds it for this
-# event, and a held venue cannot be requested (test_venue_hold.py).
+# event, and a held venue cannot be requested (test_venue_hold.py). It does not suit Nimbus
+# (too small, no Theatre layout), so story 11.1 would refuse it without a justification: it stays
+# the default only for requests refused before suitability is judged. A request a test expects to
+# be accepted names a venue that suits its event instead (``nimbus_venue``).
 REQUESTED_VENUE = Venues.EXHIBITION_FOYER
 
 
@@ -66,6 +71,33 @@ def request_body(**overrides) -> dict:
     body = {"event_id": str(Events.APPROVED), "venue_id": str(REQUESTED_VENUE)}
     body.update(overrides)
     return body
+
+
+def _venue_suited_to_nimbus(db: Session, **overrides) -> Venue:
+    """A venue that suits Nimbus's venue requirement (story 11.1): room for 350 in Theatre, a
+    projector, sound system and stage, wheelchair access and a hearing loop. No opening hours are
+    recorded, so it is open whenever Nimbus runs, and its status is left to the database. No seeded
+    venue will do: Grand Hall, the only one that suits Nimbus, is already booked for it."""
+    return make_venue(
+        db,
+        layouts={EVENT_LAYOUT: None},
+        facilities=("PROJECTOR", "SOUND_SYSTEM", "STAGE"),
+        accessibility=("WHEELCHAIR_ACCESS", "HEARING_LOOP"),
+        **{"capacity": EVENT_ATTENDANCE, **overrides},
+    )
+
+
+@pytest.fixture
+def nimbus_venue(db: Session) -> Venue:
+    """A free venue that suits Nimbus, for a request a test expects to be accepted."""
+    return _venue_suited_to_nimbus(db)
+
+
+def _with_quantity(db: Session, venue: Venue, code: str, quantity: int) -> Venue:
+    """``venue``, recording ``quantity`` of the facility ``code``, which make_venue leaves blank."""
+    next(each for each in venue.facilities if each.facility_code == code).quantity = quantity
+    db.flush()
+    return venue
 
 
 def _booking_count(db: Session, event_id: uuid.UUID) -> int:
@@ -77,21 +109,23 @@ def _booking_count(db: Session, event_id: uuid.UUID) -> int:
 # --- AC1: only from an approved event, against one venue ------------------------------------
 @pytest.mark.story("12.1", ac=1)
 def test_assigned_coordinator_can_raise_a_request_for_an_approved_event(
-    coordinator_client, db: Session
+    coordinator_client, db: Session, nimbus_venue: Venue
 ):
-    response = coordinator_client.post("/bookings", json=request_body())
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     assert response.status_code == 201
     body = response.json()
     assert body["event_id"] == str(Events.APPROVED)
-    assert body["venue_id"] == str(REQUESTED_VENUE)
+    assert body["venue_id"] == str(nimbus_venue.id)
 
     row = db.execute(
         text("SELECT event_id, venue_id, status FROM venue_bookings WHERE id = :id"),
         {"id": body["id"]},
     ).one()
     assert row.event_id == Events.APPROVED
-    assert row.venue_id == REQUESTED_VENUE
+    assert row.venue_id == nimbus_venue.id
     assert row.status == BookingStatus.PENDING
 
 
@@ -174,8 +208,9 @@ def test_a_venue_created_without_a_status_defaults_to_active_and_is_bookable(
     coordinator_client, db: Session
 ):
     """Guards the withdrawn-venue check against being written as ``status != 'WITHDRAWN'`` on a
-    column that is only defaulted by the database."""
-    venue = make_venue(db, capacity=500)
+    column that is only defaulted by the database. The venue suits Nimbus (story 11.1), so only
+    its status could refuse it; it is still created without one."""
+    venue = _venue_suited_to_nimbus(db, capacity=500)
 
     response = coordinator_client.post("/bookings", json=request_body(venue_id=str(venue.id)))
 
@@ -207,21 +242,25 @@ def test_a_bookable_event_always_has_a_schedule_to_copy(db: Session):
 def test_two_venues_for_one_event_are_two_separate_requests(coordinator_client, db: Session):
     """ "Against one venue" is per request, not per event: a conference needing a hall and a
     breakout room raises one request each, which is how the seed data models it."""
-    first = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
-    second = coordinator_client.post(
-        "/bookings", json=request_body(venue_id=str(Venues.EXHIBITION_FOYER))
-    )
+    hall, other_hall = _venue_suited_to_nimbus(db), _venue_suited_to_nimbus(db)
+
+    first = coordinator_client.post("/bookings", json=request_body(venue_id=str(hall.id)))
+    second = coordinator_client.post("/bookings", json=request_body(venue_id=str(other_hall.id)))
 
     assert (first.status_code, second.status_code) == (201, 201)
     assert first.json()["id"] != second.json()["id"]
-    assert first.json()["venue_id"] == str(Venues.BOARDROOM)
-    assert second.json()["venue_id"] == str(Venues.EXHIBITION_FOYER)
+    assert first.json()["venue_id"] == str(hall.id)
+    assert second.json()["venue_id"] == str(other_hall.id)
 
 
 # --- AC2: the request carries the event's details -------------------------------------------
 @pytest.mark.story("12.1", ac=2)
-def test_the_request_carries_the_events_schedule_attendance_and_layout(coordinator_client):
-    response = coordinator_client.post("/bookings", json=request_body())
+def test_the_request_carries_the_events_schedule_attendance_and_layout(
+    coordinator_client, nimbus_venue: Venue
+):
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -232,10 +271,14 @@ def test_the_request_carries_the_events_schedule_attendance_and_layout(coordinat
 
 
 @pytest.mark.story("12.1", ac=2)
-def test_the_request_states_the_events_required_facilities_to_venue_staff(coordinator_client):
+def test_the_request_states_the_events_required_facilities_to_venue_staff(
+    coordinator_client, nimbus_venue: Venue
+):
     """The seeded event requires PROJECTOR, SOUND_SYSTEM and STAGE. Venue Staff read
     ``requirement_notes``, so the facilities are stated there by name, not by code."""
-    response = coordinator_client.post("/bookings", json=request_body())
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     notes = response.json()["requirement_notes"]
     assert "Projector & screen" in notes
@@ -261,8 +304,13 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
         event.id,
         facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
     )
+    venue = _with_quantity(
+        db, make_venue(db, facilities=("BREAKOUT_ROOMS", "PROJECTOR")), "BREAKOUT_ROOMS", 3
+    )
 
-    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+    response = coordinator_client.post(
+        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(venue.id))
+    )
 
     notes = response.json()["requirement_notes"]
     assert "Breakout rooms ×3 (HDMI input needed)" in notes
@@ -300,7 +348,7 @@ def test_an_event_with_no_layout_or_facilities_recorded_carries_neither(
 
 @pytest.mark.story("12.1", ac=2)
 def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
-    coordinator_client,
+    coordinator_client, nimbus_venue: Venue
 ):
     """AC2 says the request carries *the event's* details, so these are read from the event row,
     never from the request body - a coordinator cannot book a different period or a larger
@@ -308,6 +356,7 @@ def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
     response = coordinator_client.post(
         "/bookings",
         json=request_body(
+            venue_id=str(nimbus_venue.id),
             starts_at="2030-01-01T00:00:00+00:00",
             ends_at="2030-01-02T00:00:00+00:00",
             expected_attendance=1,
@@ -325,11 +374,15 @@ def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
 
 
 @pytest.mark.story("12.1", ac=2)
-def test_the_held_period_is_the_event_period_until_story_12_2(coordinator_client):
+def test_the_held_period_is_the_event_period_until_story_12_2(
+    coordinator_client, nimbus_venue: Venue
+):
     """Story 12.2 is what records setup and teardown time; this story leaves both at the column
     default of 0, so the held period the conflict checks use is exactly the event period. When
     12.2 lands, this test is the one to change."""
-    body = coordinator_client.post("/bookings", json=request_body()).json()
+    body = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    ).json()
 
     assert (body["setup_minutes"], body["teardown_minutes"]) == (0, 0)
     assert datetime.fromisoformat(body["held_from"]) == EVENT_STARTS_AT
@@ -376,8 +429,17 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
         notes="Quiet corridor.",
         facilities=(("WIFI", None, None),),
     )
+    # Suits the plenary hall, the requirement a request carries (story 11.1).
+    hall = _with_quantity(
+        db,
+        make_venue(db, capacity=150, layouts={"THEATRE": None}, facilities=("PROJECTOR",)),
+        "PROJECTOR",
+        2,
+    )
 
-    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+    response = coordinator_client.post(
+        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(hall.id))
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -399,8 +461,11 @@ def test_a_first_requirement_with_no_facilities_or_notes_states_none(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
     make_venue_requirement(db, event.id, name="Main venue", capacity=20, layout_code="THEATRE")
+    venue = make_venue(db, layouts={"THEATRE": None})
 
-    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+    response = coordinator_client.post(
+        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(venue.id))
+    )
 
     assert response.status_code == 201, response.text
     assert response.json()["required_layout_code"] == "THEATRE"
@@ -431,8 +496,10 @@ def test_an_event_without_venue_requirements_books_its_own_period_and_attendance
 
 # --- AC3: the request is pending and visible to Venue Staff ---------------------------------
 @pytest.mark.story("12.1", ac=3)
-def test_a_new_request_is_pending_and_carries_no_decision(coordinator_client):
-    response = coordinator_client.post("/bookings", json=request_body())
+def test_a_new_request_is_pending_and_carries_no_decision(coordinator_client, nimbus_venue: Venue):
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     body = response.json()
     assert body["status"] == BookingStatus.PENDING
@@ -443,10 +510,12 @@ def test_a_new_request_is_pending_and_carries_no_decision(coordinator_client):
 
 
 @pytest.mark.story("12.1", ac=3)
-def test_venue_staff_can_read_a_newly_raised_request(client, login_as):
+def test_venue_staff_can_read_a_newly_raised_request(client, login_as, nimbus_venue: Venue):
     """The pending queue itself is story 13.1; what this story owes it is a row Venue Staff can
     already fetch, through the read endpoint story 13.2 built."""
-    raised = login_as(Users.COORDINATOR).post("/bookings", json=request_body())
+    raised = login_as(Users.COORDINATOR).post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
     assert raised.status_code == 201
 
     response = login_as(Users.VENUE_STAFF).get(f"/bookings/{raised.json()['id']}")
@@ -457,11 +526,13 @@ def test_venue_staff_can_read_a_newly_raised_request(client, login_as):
 
 
 @pytest.mark.story("12.1", ac=3)
-def test_a_raised_request_can_then_be_approved_by_venue_staff(client, login_as, db: Session):
+def test_a_raised_request_can_then_be_approved_by_venue_staff(
+    client, login_as, db: Session, nimbus_venue: Venue
+):
     """End of the chain this story starts: the row it writes is one story 13.2 can decide on.
     Booked against a venue with no seeded booking, so the approval is not refused by 14.2."""
     raised = login_as(Users.COORDINATOR).post(
-        "/bookings", json=request_body(venue_id=str(Venues.BOARDROOM))
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
     )
     assert raised.status_code == 201
 
@@ -473,13 +544,13 @@ def test_a_raised_request_can_then_be_approved_by_venue_staff(client, login_as, 
 
 @pytest.mark.story("12.1", ac=13)
 def test_the_same_venue_cannot_be_requested_twice_for_the_same_period(
-    coordinator_client, db: Session
+    coordinator_client, db: Session, nimbus_venue: Venue
 ):
     """Sprint 2's AC13: a double submit creates one request. AC2 copies the period from the
     event, so a second request for the same venue is for the same period, and the first one
     already holds the venue (s12.1). It used to be accepted and then fail at approval."""
-    first = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
-    second = coordinator_client.post("/bookings", json=request_body(venue_id=str(Venues.BOARDROOM)))
+    first = coordinator_client.post("/bookings", json=request_body(venue_id=str(nimbus_venue.id)))
+    second = coordinator_client.post("/bookings", json=request_body(venue_id=str(nimbus_venue.id)))
 
     assert (first.status_code, second.status_code) == (201, 409)
     assert _booking_count(db, Events.APPROVED) == 3  # the two seeded rows plus the first
@@ -487,8 +558,10 @@ def test_the_same_venue_cannot_be_requested_twice_for_the_same_period(
 
 # --- AC4: only the assigned coordinator ------------------------------------------------------
 @pytest.mark.story("12.1", ac=4)
-def test_the_request_records_the_coordinator_who_raised_it(coordinator_client):
-    response = coordinator_client.post("/bookings", json=request_body())
+def test_the_request_records_the_coordinator_who_raised_it(coordinator_client, nimbus_venue: Venue):
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     assert response.json()["requested_by_id"] == str(Users.COORDINATOR.id)
 
@@ -519,10 +592,15 @@ def test_an_event_with_no_coordinator_assigned_cannot_raise_a_request(
 
 
 @pytest.mark.story("12.1", ac=4)
-def test_a_coordinator_cannot_raise_a_request_in_another_coordinators_name(coordinator_client):
+def test_a_coordinator_cannot_raise_a_request_in_another_coordinators_name(
+    coordinator_client, nimbus_venue: Venue
+):
     """The requester is the signed-in actor, never a client-supplied field."""
     response = coordinator_client.post(
-        "/bookings", json=request_body(requested_by_id=str(Users.COORDINATOR_2.id))
+        "/bookings",
+        json=request_body(
+            venue_id=str(nimbus_venue.id), requested_by_id=str(Users.COORDINATOR_2.id)
+        ),
     )
 
     assert response.status_code == 201
@@ -567,8 +645,10 @@ def test_an_incomplete_request_body_is_rejected(coordinator_client, body):
 
 
 @pytest.mark.story("12.1")
-def test_raising_a_request_is_recorded_in_the_audit_log(coordinator_client, db: Session):
-    raised = coordinator_client.post("/bookings", json=request_body())
+def test_raising_a_request_is_recorded_in_the_audit_log(
+    coordinator_client, db: Session, nimbus_venue: Venue
+):
+    raised = coordinator_client.post("/bookings", json=request_body(venue_id=str(nimbus_venue.id)))
 
     row = db.execute(
         text(
@@ -579,14 +659,16 @@ def test_raising_a_request_is_recorded_in_the_audit_log(coordinator_client, db: 
     ).one()
     assert row.actor_id == Users.COORDINATOR.id
     assert row.details["event_id"] == str(Events.APPROVED)
-    assert row.details["venue_id"] == str(REQUESTED_VENUE)
+    assert row.details["venue_id"] == str(nimbus_venue.id)
 
 
 @pytest.mark.story("12.1", ac=3)
-def test_the_request_records_when_it_was_raised(coordinator_client):
+def test_the_request_records_when_it_was_raised(coordinator_client, nimbus_venue: Venue):
     before = datetime.now(timezone.utc)
 
-    response = coordinator_client.post("/bookings", json=request_body())
+    response = coordinator_client.post(
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+    )
 
     created_at = datetime.fromisoformat(response.json()["created_at"])
     assert (

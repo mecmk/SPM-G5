@@ -34,8 +34,30 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
-from tests.support.factories import make_booking
+from app.events.models import Event, EventStatus
+from tests.support.factories import make_booking, make_event, make_venue_requirement
 from tests.support.seed import Bookings, Events, Users, Venues
+
+_SGT = timezone(timedelta(hours=8))
+
+
+def _event_seminar_room_suits(db: Session) -> Event:
+    """Chloe's event that Seminar Room 2.1 suits (story 11.1: 60 people, Classroom, a projector),
+    at the time the seeded pending request holds the room (25 Nov 2026, 13:00-18:00, held
+    12:30-18:15). Nimbus itself does not fit the room, and story 11.1 refuses a venue that does
+    not suit unless the request carries a justification."""
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        starts_at=datetime(2026, 11, 25, 13, 0, tzinfo=_SGT),
+        ends_at=datetime(2026, 11, 25, 18, 0, tzinfo=_SGT),
+        expected_attendance=60,
+    )
+    make_venue_requirement(
+        db, event.id, capacity=60, layout_code="CLASSROOM", facilities=(("PROJECTOR", None, None),)
+    )
+    return event
 
 
 # --- AC1: rejection records the rejecter, time and reason -------------------------------------
@@ -308,7 +330,9 @@ def test_rejecting_a_held_request_releases_the_venue(client, login_as, db: Sessi
     """Rejection never runs the venue-conflict check: it only releases the hold. Since s12.1
     a pending request holds its venue, so it can no longer overlap an approved booking, and AC6
     is shown the other way round: rejecting the seeded breakout request frees Seminar Room for
-    Nimbus's day at once, and a new request for it is accepted."""
+    that slot at once, and a new request for it is accepted - from an event the room suits
+    (story 11.1), at a time the rejected request held."""
+    event = _event_seminar_room_suits(db)
     rejected = login_as(Users.VENUE_STAFF).post(
         f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/reject",
         json={"decision_reason": "No longer needed."},
@@ -318,6 +342,6 @@ def test_rejecting_a_held_request_releases_the_venue(client, login_as, db: Sessi
 
     raised = login_as(Users.COORDINATOR).post(
         "/bookings",
-        json={"event_id": str(Events.APPROVED), "venue_id": str(Venues.SEMINAR_ROOM)},
+        json={"event_id": str(event.id), "venue_id": str(Venues.SEMINAR_ROOM)},
     )
     assert raised.status_code == 201
