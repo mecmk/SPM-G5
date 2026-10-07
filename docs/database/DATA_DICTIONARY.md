@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-06 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-07 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -34,6 +34,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_layouts`](#venue_layouts) | 8.2, 8.3, 10.3, 11.1 | Which room layouts each venue supports (many-to-many) |
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
 | Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
+| Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
 | Event details & history | [`venue_requirement_facilities`](#venue_requirement_facilities) | 2.7, 10.3, 11.1, 12.1 | Facilities one venue requirement needs, optionally how many |
@@ -322,6 +323,27 @@ Rules and indexes:
 
 - check `ck_venue_unavailability_period`: `CHECK ((ends_at > starts_at))`
 - index `ix_venue_unavailability_venue_period`: `btree (venue_id, starts_at, ends_at)`
+
+### venue_images
+
+**Stories:** 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2
+
+The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last). The first is the venue's cover on its catalogue card and record banner. Deleting a venue deletes its rows; the service deletes the files.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `venue_id` | `uuid` | no | - | FK → `venues.id` | FK -> venues.id. |
+| `url` | `text` | no | - | - | Root-relative address the API serves the picture from: /uploads/venues/<name>, a name the server generated (a UUID and the extension of the format its bytes were read as). |
+| `position` | `integer` | no | - | - | Place in the venue's order, from 1. A new picture goes after the highest; removing one leaves a gap; arranging renumbers them from 1 (story 8.3 AC5). Lowest = the cover (story 8.3 AC6). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who added the picture. |
+| `created_at` | `timestamp with time zone` | no | `now()` | - | When the picture was added. |
+
+Rules and indexes:
+
+- unique `uq_venue_images_position`: `UNIQUE (venue_id, "position")`
+- unique `uq_venue_images_url`: `UNIQUE (url)`
+- check `ck_venue_images_position_positive`: `CHECK (("position" > 0))`
 
 ## Events
 

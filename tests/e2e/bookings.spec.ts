@@ -57,9 +57,15 @@
  *     fullyParallel run.
  * What the calendar returns, and who may read it, are story 9.1's backend cases:
  * backend/tests/venues/test_venue_calendar.py.
+ *
+ * Story 13.2.2 - fe: the event page shows when Venue Staff decided a booking.
+ * AC1 an approved or rejected booking's card shows its decision time; a pending one shows none;
+ *     a withdrawn or cancelled one shows when it was closed, with the queue's "Closed at" / "Note".
+ * That the API returns `decided_at` at all (null while pending, set once decided) is a backend
+ * case: backend/tests/bookings/test_booking_decided_at.py.
  */
 import { expect, test, type Page, type Route } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn, venueCard } from './support'
+import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 
 const QUEUE_PAGE_SIZE = 10
 const FAKE_QUEUE_LENGTH = 25
@@ -451,10 +457,10 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   const card = page.getByRole('listitem').filter({ hasText: 'Investor Demo Day' })
   await card.getByRole('link', { name: 'View details' }).click()
 
-  // The queue card's own event name is also a heading, so wait for the URL - the only
-  // unambiguous sign navigation to the detail page actually finished.
+  // The URL changes before the detail page renders, and the queue card's event name is an h3, so
+  // only the detail page's level-1 title shows the queue's Approve buttons are gone.
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Investor Demo Day' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Investor Demo Day', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
@@ -576,7 +582,11 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await card.getByRole('link', { name: 'View details' }).click()
 
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
+  // level 1 is the detail page's own title; the queue card it came from carries the same name as
+  // an h3, so without it this passes before the detail page has rendered.
+  await expect(
+    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Reject' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
@@ -618,6 +628,92 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
   await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
+})
+
+test('13.2.2 AC1: the event page shows when Venue Staff decided a booking', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  // The seeded Grand Hall booking was approved at 2026-09-04 10:00+08; format.ts pins en-SG and
+  // Asia/Singapore, so the rendered time is fixed. The seeded Seminar Room 2.1 booking, and any
+  // request booking-requests.spec.ts raises on this event in parallel, are still pending, so
+  // the approved card is the only one with the line.
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Approved', { exact: true })).toBeVisible()
+  await expect(bookingSection.getByText('Decided at')).toHaveCount(1)
+  await expect(bookingSection.getByText('Fri, 4 Sept 2026, 10:00')).toBeVisible()
+})
+
+test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, not decided', async ({
+  page,
+}) => {
+  // No seeded event has a withdrawn and a cancelled booking side by side, so stub the one call
+  // the card list reads. A withdrawal and a system cancellation both stamp `decided_at`, but
+  // nobody on Venue Staff decided them, so they take the booking queue's "Closed at" / "Note".
+  const booking = {
+    venue_id: '00000000-0000-0000-0000-000000000000',
+    venue_location: 'Level 1',
+    starts_at: '2026-11-20T01:00:00Z',
+    ends_at: '2026-11-20T09:00:00Z',
+    setup_minutes: 60,
+    teardown_minutes: 60,
+  }
+  const outcomes = [
+    {
+      ...booking,
+      id: 'rejected',
+      venue_name: 'Rejected Hall',
+      status: 'REJECTED',
+      decided_at: '2026-09-01T02:00:00Z',
+      decision_reason: 'The hall is closed for maintenance.',
+    },
+    {
+      ...booking,
+      id: 'withdrawn',
+      venue_name: 'Withdrawn Hall',
+      status: 'WITHDRAWN',
+      decided_at: '2026-09-02T02:00:00Z',
+      decision_reason: null,
+    },
+    {
+      ...booking,
+      id: 'cancelled',
+      venue_name: 'Cancelled Hall',
+      status: 'CANCELLED',
+      decided_at: '2026-09-03T02:00:00Z',
+      decision_reason: 'Cancelled when pending requests began to hold their venue.',
+    },
+  ]
+  await page.route(
+    (url) => url.pathname === `/bookings/for-event/${EVENTS.approved}`,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(outcomes),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Cancelled Hall', { exact: true })).toBeVisible()
+
+  // Only the rejected booking was decided; the other two were closed, each with its own time.
+  await expect(bookingSection.getByText('Decided at', { exact: true })).toHaveCount(1)
+  await expect(bookingSection.getByText('Closed at', { exact: true })).toHaveCount(2)
+  await expect(bookingSection.getByText('Tue, 1 Sept 2026, 10:00')).toBeVisible()
+  await expect(bookingSection.getByText('Wed, 2 Sept 2026, 10:00')).toBeVisible()
+  await expect(bookingSection.getByText('Thu, 3 Sept 2026, 10:00')).toBeVisible()
+
+  // The system's cancellation note is not a Venue Staff reason.
+  await expect(bookingSection.getByText('Reason', { exact: true })).toHaveCount(1)
+  await expect(bookingSection.getByText('Note', { exact: true })).toHaveCount(1)
 })
 
 /** Nimbus Developer Conference's pending request for Seminar Room 2.1, 25 Nov 2026 13:00-18:00. */

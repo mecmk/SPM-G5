@@ -1,5 +1,6 @@
-"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2), its
-search (story 8.1, Sprint 2) and its availability calendar (story 9.1)."""
+"""Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2), a
+venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2) and its availability
+calendar (story 9.1)."""
 
 from __future__ import annotations
 
@@ -172,7 +173,8 @@ class VenueUpdate(_OperatingHoursMixin):
 
 
 class VenueSummary(BaseModel):
-    """List entry (story 8.1 AC1: name, location, capacity)."""
+    """List entry (story 8.1 AC1: name, location, capacity). Story 8.3 AC6: ``cover_image_url`` is
+    the venue's first picture, for its catalogue card; None shows the placeholder."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -181,10 +183,35 @@ class VenueSummary(BaseModel):
     location: str
     capacity: int
     status: str
+    cover_image_url: str | None
+
+
+class VenueImageOut(BaseModel):
+    """Story 8.3 AC5/AC6: one of a venue's pictures, and where it is served from."""
+
+    id: uuid.UUID
+    url: str
+
+
+class VenueImageOrder(BaseModel):
+    """Story 8.3 AC5: every one of a venue's pictures, by id, in the order wanted - the first
+    becomes the cover. AC8: each picture once; AC10: the service checks they are the venue's own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_ids: list[uuid.UUID]
+
+    @field_validator("image_ids")
+    @classmethod
+    def _each_picture_once(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("Name each picture once.")
+        return value
 
 
 class VenueOut(VenueSummary):
-    """Full record (story 8.2 AC1). NULL means "not recorded" - show it as unknown, not absent."""
+    """Full record (story 8.2 AC1). NULL means "not recorded" - show it as unknown, not absent.
+    Story 8.3 AC6: ``images`` are the venue's pictures in their order, the first being the cover."""
 
     description: str | None
     floor_area_sqm: Decimal | None
@@ -196,6 +223,7 @@ class VenueOut(VenueSummary):
     facilities: list[VenueFacilityOut]
     layouts: list[VenueLayoutOut]
     accessibility_features: list[VenueAccessibilityFeatureOut]
+    images: list[VenueImageOut]
     created_by_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
@@ -208,6 +236,7 @@ class VenueOut(VenueSummary):
             location=venue.location,
             capacity=venue.capacity,
             status=venue.status,
+            cover_image_url=venue.cover_image_url,
             description=venue.description,
             floor_area_sqm=venue.floor_area_sqm,
             operating_hours_start=venue.operating_hours_start,
@@ -233,6 +262,7 @@ class VenueOut(VenueSummary):
                 )
                 for a in venue.accessibility_features
             ],
+            images=[VenueImageOut(id=image.id, url=image.url) for image in venue.images],
             created_by_id=venue.created_by_id,
             created_at=venue.created_at,
             updated_at=venue.updated_at,

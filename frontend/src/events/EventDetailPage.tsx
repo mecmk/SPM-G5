@@ -33,15 +33,17 @@ import { Icon, type IconName } from '../components/Icon'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
-  eventEditRoutinePath,
+  eventCoordinatorEditPath,
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
-import { PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
+  DETAILS_LOCKED_HINT,
+  DETAILS_LOCKED_STATUSES,
   EQUIPMENT_OPEN_STATUSES,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
@@ -178,14 +180,21 @@ function formatHeroMeta(event: EventDetail): string {
  * AC3: this page only ever renders fields, it never edits them, so every field the viewer's role
  * cannot change is simply shown, never hidden.
  *
- * Story 7.2: also renders the contact details and internal notes and, for the assigned Event
- * Coordinator on a non-terminal event, an "Edit routine information" action (internal notes only).
- * Internal notes are coordinator-only (never shown to the organiser), matching the backend.
+ * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
+ * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
+ * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
+ * always, the organiser's details only while under review or awaiting clarification (AC4). AC5:
+ * once approved, that coordinator is also told here that further changes go through the change
+ * request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
  * every venue booking ever raised for the event, most recent first, each with its status and,
  * once rejected, its reason.
+ *
+ * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
+ * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
+ * booking queue words it.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
@@ -486,10 +495,18 @@ export function EventDetailPage() {
   const backLabel = backState?.fromLabel ?? 'Home'
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
-  const canEditRoutineInformation =
+  /** Story 7.2 AC1/AC3/AC8: the assigned coordinator edits the event until it is closed - its
+   *  internal notes always, the organiser's details only while it is under review or awaiting
+   *  clarification. */
+  const canEditEvent =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 7.2 AC5: the details are locked, which the assigned coordinator is told. */
+  const isDetailsLockHintShown =
+    can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
+    isAssignedCoordinator &&
+    DETAILS_LOCKED_STATUSES.includes(event.status)
   /** Story 4.4/4.5: only the assigned coordinator, holding events:review, may decide a request
    *  that is still awaiting one - mirroring the backend's own record-level and status checks. */
   const canApprove =
@@ -552,14 +569,18 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {(canEditRoutineInformation || canApprove || canReject || canReassign) && (
+      {(canEditEvent || canApprove || canReject || canReassign) && (
         <div className="page-header actions-only">
+          {/* Story 7.2: editing sits apart, on the left; the decisions stay on the right. */}
+          {canEditEvent && (
+            <Link
+              to={eventCoordinatorEditPath(event.id)}
+              className="button button-with-icon page-header-lead"
+            >
+              <Icon name="pencil" size={20} /> Edit event
+            </Link>
+          )}
           <div className="page-actions">
-            {canEditRoutineInformation && (
-              <Link to={eventEditRoutinePath(event.id)} className="button">
-                Edit routine information
-              </Link>
-            )}
             {canApprove && (
               <button type="button" className="brand" onClick={askToApprove}>
                 Approve
@@ -650,6 +671,7 @@ export function EventDetailPage() {
 
         <section className="card stack" aria-labelledby="event-info-heading">
           <h2 id="event-info-heading">Event information</h2>
+          {isDetailsLockHintShown && <p className="form-hint">{DETAILS_LOCKED_HINT}</p>}
           <div className="row">
             <div>
               <p className="eyebrow">Purpose</p>
@@ -831,6 +853,7 @@ export function EventDetailPage() {
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
+              const outcomeLabels = bookingOutcomeLabels(booking.status)
               return (
                 <div
                   key={booking.id}
@@ -874,9 +897,16 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
+                      {booking.decided_at !== null && (
+                        <p>
+                          <span className="fact-label">{outcomeLabels.when}</span>
+                          <br />
+                          {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
                       {booking.decision_reason !== null && (
                         <p>
-                          <span className="fact-label">Reason</span>
+                          <span className="fact-label">{outcomeLabels.why}</span>
                           <br />
                           {booking.decision_reason}
                         </p>

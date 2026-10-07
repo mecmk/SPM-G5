@@ -185,3 +185,53 @@ export function toggleEntry<T>(entries: Record<string, T>, code: string, empty: 
   else next[code] = empty
   return next
 }
+
+/**
+ * Story 8.3 AC7: what a venue's pictures may be, mirrored from the backend's service
+ * (`MAX_VENUE_IMAGE_BYTES`, `MAX_VENUE_IMAGES` and `VENUE_IMAGE_MEDIA_TYPES` in
+ * backend/app/venues/service.py). `VENUE_IMAGE_TYPES` repeats 2.1's `COVER_IMAGE_TYPES` until both
+ * move to `src/shared/` (frontend/STYLE.md, Standing divergences).
+ */
+export const MAX_VENUE_IMAGE_BYTES = 5 * 1024 * 1024
+export const MAX_VENUE_IMAGES = 10
+export const VENUE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+/**
+ * Story 8.3 AC7: what is wrong with a chosen picture, or null. The backend checks the bytes again;
+ * this only spares sending a file that is certain to be refused.
+ */
+export function validateVenueImage(file: File): ErrorCode | null {
+  if (!VENUE_IMAGE_TYPES.includes(file.type)) return 'VENUE_PICTURE_TYPE_INVALID'
+  if (file.size > MAX_VENUE_IMAGE_BYTES) return 'VENUE_PICTURE_TOO_LARGE'
+  return null
+}
+
+/** A chosen file the venue could not take, by the name it was chosen under, and why. */
+export interface RefusedPicture {
+  name: string
+  problem: ErrorCode
+}
+
+/** The files a venue can take from those chosen, and each of the others with its reason. */
+export interface ChosenVenueImages {
+  accepted: File[]
+  refused: RefusedPicture[]
+}
+
+/**
+ * Story 8.3 AC7: which of `files`, in order, a venue already holding `count` pictures can take.
+ * Each file is checked on its own - `validateVenueImage`, then room under `MAX_VENUE_IMAGES` - so
+ * one that does not fit never stops the rest, and every one refused is named with its reason
+ * (bug found on 6 Oct: a batch holding one file over 5 MB looked refused as a whole).
+ */
+export function chooseVenueImages(files: File[], count: number): ChosenVenueImages {
+  const accepted: File[] = []
+  const refused: RefusedPicture[] = []
+  for (const file of files) {
+    const hasRoom = count + accepted.length < MAX_VENUE_IMAGES
+    const problem = validateVenueImage(file) ?? (hasRoom ? null : 'VENUE_PICTURES_TOO_MANY')
+    if (problem === null) accepted.push(file)
+    else refused.push({ name: file.name, problem })
+  }
+  return { accepted, refused }
+}

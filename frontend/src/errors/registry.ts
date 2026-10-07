@@ -35,9 +35,16 @@ export type ErrorCode =
   | 'VENUE_TURNAROUND_INVALID'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
+  | 'VENUE_PICTURE_TYPE_INVALID'
+  | 'VENUE_PICTURE_TOO_LARGE'
+  | 'VENUE_PICTURES_TOO_MANY'
+  | 'VENUE_PICTURES_NOT_ADDED'
+  | 'VENUE_PICTURES_CHANGED'
   | 'EVENT_NOT_FOUND'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
+  | 'EVENT_CORRECTION_CONFLICT'
+  | 'EVENT_REQUIRED_DETAIL_CLEARED'
   | 'EVENT_NOT_AWAITING_DECISION'
   | 'EVENT_REJECTION_REASON_REQUIRED'
   | 'EVENT_NOT_AWAITING_CLARIFICATION'
@@ -190,6 +197,35 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check layout capacities',
     message: 'A layout capacity must be a positive whole number, or left empty.',
   },
+  /** Story 8.3 AC7: checked on choosing a picture; the backend answers 422 to the same rule. */
+  VENUE_PICTURE_TYPE_INVALID: {
+    title: 'Check the picture',
+    message: 'Choose a JPEG, PNG or WebP picture.',
+  },
+  /** Story 8.3 AC7: checked on choosing a picture; the backend answers 413 to the same limit. */
+  VENUE_PICTURE_TOO_LARGE: {
+    title: 'Check the picture',
+    message: 'The picture must be 5 MB or smaller.',
+  },
+  /** Story 8.3 AC7: checked on choosing pictures; the backend answers 409 to the same limit. */
+  VENUE_PICTURES_TOO_MANY: {
+    title: 'Too many pictures',
+    message: 'A venue can have at most 10 pictures.',
+  },
+  /** Story 8.3 AC7: heads the list of chosen files the form did not take, each named with its
+   * own reason, so one file that does not fit never hides that the others were taken. */
+  VENUE_PICTURES_NOT_ADDED: {
+    title: 'Some pictures were not added',
+    message: 'These pictures were not added.',
+  },
+  /** Story 8.3 AC10: the backend answers 409 to an order made before a picture was added or
+   * removed elsewhere. */
+  VENUE_PICTURES_CHANGED: {
+    title: 'Pictures changed',
+    message:
+      "The venue's pictures have changed since this page was opened. Reload the page and " +
+      'arrange them again.',
+  },
 
   // Story 2.1: event requests. These API codes usually arrive with the backend's own sentence.
   EVENT_NOT_FOUND: {
@@ -204,6 +240,19 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_ROUTINE_EDIT_CLOSED: {
     title: 'No longer editable',
     message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
+  },
+  /** Story 7.2 AC4: a corrected request must keep everything it needed to be submitted. */
+  EVENT_REQUIRED_DETAIL_CLEARED: {
+    title: 'Required detail missing',
+    message: 'Fill in every field marked * before saving - a submitted request needs them all.',
+  },
+  /**
+   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
+   * backend's detail sentence says which; either way the page offers a reload.
+   */
+  EVENT_CORRECTION_CONFLICT: {
+    title: 'Event changed',
+    message: 'This event changed after you opened it. Reload it to see its latest details.',
   },
   /**
    * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is

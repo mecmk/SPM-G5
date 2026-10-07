@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     login_failure_window_minutes: int = 15
     login_lock_minutes: int = 15
 
-    # --- uploaded event pictures (story 2.1 AC14) ---
-    # Where cover pictures are written. Git-ignored; tests point it at a temporary folder.
+    # --- uploaded pictures (story 2.1 AC14 for events, story 8.3 AC5 for venues) ---
+    # Where event cover pictures (events/) and venue pictures (venues/) are written. Git-ignored;
+    # tests point it at a temporary folder.
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
 
     @property
