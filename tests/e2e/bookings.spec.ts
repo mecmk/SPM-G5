@@ -51,9 +51,10 @@
  *     see what else is on that day.
  * AC3 a calendar that fails to load shows availability as unknown, and the request can still be
  *     decided.
- * AC4 a decision made on the page reloads the calendar, so the request's day shows it booked (or
- *     gone, once rejected). The approve call is faked, so the seeded request stays pending for
- *     the other tests that read it in a fullyParallel run.
+ * AC4 a decision made on the page reloads the calendar in place, keeping its month and open day,
+ *     so the request's day shows it booked (or gone, once rejected). The approve and reject calls
+ *     are faked, so the seeded request stays pending for the other tests that read it in a
+ *     fullyParallel run.
  * What the calendar returns, and who may read it, are story 9.1's backend cases:
  * backend/tests/venues/test_venue_calendar.py.
  */
@@ -732,13 +733,38 @@ test('13.1.3 AC3: a calendar that fails to load shows availability as unknown, a
   await expect(page.getByRole('button', { name: 'Reject' })).toBeEnabled()
 })
 
-test('13.1.3 AC4: approving on the detail page reloads the calendar, showing the request booked', async ({
-  page,
-}) => {
+/** The request under review on the calendar: 13:00-18:00 with its setup and teardown. */
+function nimbusWindow(reason: 'HELD' | 'BOOKED') {
+  return {
+    starts_at: '2026-11-25T04:30:00Z',
+    ends_at: '2026-11-25T10:15:00Z',
+    booking_starts_at: '2026-11-25T05:00:00Z',
+    booking_ends_at: '2026-11-25T10:00:00Z',
+    reason,
+    label: 'Nimbus Developer Conference',
+  }
+}
+
+/** Another event booked in the room that morning, so the day still has a row once Nimbus goes. */
+const MORNING_WORKSHOP_WINDOW = {
+  starts_at: '2026-11-25T00:30:00Z',
+  ends_at: '2026-11-25T04:15:00Z',
+  booking_starts_at: '2026-11-25T01:00:00Z',
+  booking_ends_at: '2026-11-25T04:00:00Z',
+  reason: 'BOOKED',
+  label: 'Morning Leadership Workshop',
+}
+
+/**
+ * Story 13.1.3 AC4: fakes the request's approve or reject call, answering with the request as the
+ * page read it but decided, so the seeded request stays pending for the other tests in a
+ * fullyParallel run. `isDecided` says whether the decision has been sent.
+ */
+async function fakeDecision(page: Page, action: 'approve' | 'reject', decided: object) {
   const requestPath = `/bookings/${NIMBUS_SEMINAR_REQUEST_ID}`
-  let pendingBooking: Record<string, unknown> = {}
-  let isApproved = false
-  // The page's own read of the request goes through, and is kept to answer the faked approval.
+  let pendingBooking: object = {}
+  let hasDecided = false
+  // The page's own read of the request goes through, and is kept to answer the faked decision.
   await page.route(
     (url) => url.pathname === requestPath,
     async (route) => {
@@ -749,43 +775,49 @@ test('13.1.3 AC4: approving on the detail page reloads the calendar, showing the
     },
   )
   await page.route(
-    (url) => url.pathname === `${requestPath}/approve`,
+    (url) => url.pathname === `${requestPath}/${action}`,
     async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.fallback()
-      isApproved = true
+      hasDecided = true
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         headers: corsHeaders(route.request()),
-        body: JSON.stringify({
-          ...pendingBooking,
-          status: 'APPROVED',
-          decided_at: '2026-10-07T02:00:00Z',
-        }),
+        body: JSON.stringify({ ...pendingBooking, decided_at: '2026-10-07T02:00:00Z', ...decided }),
       })
     },
   )
-  await stubCalendar(page, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: corsHeaders(route.request()),
-      body: JSON.stringify([
-        {
-          starts_at: '2026-11-25T04:30:00Z',
-          ends_at: '2026-11-25T10:15:00Z',
-          booking_starts_at: '2026-11-25T05:00:00Z',
-          booking_ends_at: '2026-11-25T10:00:00Z',
-          reason: isApproved ? 'BOOKED' : 'HELD',
-          label: 'Nimbus Developer Conference',
-        },
-      ]),
-    }),
-  )
+  return { isDecided: () => hasDecided }
+}
+
+function calendarAnswer(route: Route, windows: object[]) {
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: corsHeaders(route.request()),
+    body: JSON.stringify(windows),
+  })
+}
+
+test('13.1.3 AC4: approving on the detail page reloads the calendar in place, showing the request booked', async ({
+  page,
+}) => {
+  const decision = await fakeDecision(page, 'approve', { status: 'APPROVED' })
+  // The answer after the approval is held back, so the test can see the calendar while it reloads.
+  let releaseReload: () => void = () => {}
+  const reloadGate = new Promise<void>((resolve) => {
+    releaseReload = resolve
+  })
+  await stubCalendar(page, async (route) => {
+    if (!decision.isDecided()) return calendarAnswer(route, [nimbusWindow('HELD')])
+    await reloadGate
+    return calendarAnswer(route, [nimbusWindow('BOOKED')])
+  })
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
 
-  const dayList = venueAvailability(page).getByRole('region', { name: /25 Nov 2026/ })
+  const calendar = venueAvailability(page)
+  const dayList = calendar.getByRole('region', { name: /25 Nov 2026/ })
   await expect(dayList).toContainText('Held – pending')
 
   await page.getByRole('button', { name: 'Approve' }).click()
@@ -793,6 +825,45 @@ test('13.1.3 AC4: approving on the detail page reloads the calendar, showing the
   await dialog.getByRole('button', { name: 'Approve' }).click()
   await expect(dialog).not.toBeVisible()
 
+  // Reloaded in place: the month and the open day stay on screen while the new answer comes.
+  await expect(calendar.getByText('Loading availability…')).toBeVisible()
+  await expect(calendar.getByText('November 2026')).toBeVisible()
+  await expect(dayList).toContainText('Nimbus Developer Conference')
+
+  releaseReload()
   await expect(dayList).toContainText('Booked')
   await expect(dayList).not.toContainText('Held – pending')
+})
+
+test('13.1.3 AC4: rejecting on the detail page reloads the calendar, and the request leaves its day', async ({
+  page,
+}) => {
+  const decision = await fakeDecision(page, 'reject', {
+    status: 'REJECTED',
+    decision_reason: 'The room is needed for the morning workshop overrun.',
+  })
+  await stubCalendar(page, (route) =>
+    calendarAnswer(
+      route,
+      decision.isDecided()
+        ? [MORNING_WORKSHOP_WINDOW]
+        : [MORNING_WORKSHOP_WINDOW, nimbusWindow('HELD')],
+    ),
+  )
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto(`/venue-staff/booking-requests/${NIMBUS_SEMINAR_REQUEST_ID}`)
+
+  const dayList = venueAvailability(page).getByRole('region', { name: /25 Nov 2026/ })
+  await expect(dayList).toContainText('Nimbus Developer Conference')
+
+  await page.getByRole('button', { name: 'Reject' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
+  await dialog
+    .getByLabel('Reason for rejecting')
+    .fill('The room is needed for the morning workshop overrun.')
+  await dialog.getByRole('button', { name: 'Reject' }).click()
+  await expect(dialog).not.toBeVisible()
+
+  await expect(dayList).not.toContainText('Nimbus Developer Conference')
+  await expect(dayList).toContainText('Morning Leadership Workshop')
 })
