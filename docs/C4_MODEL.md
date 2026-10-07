@@ -136,7 +136,7 @@ C4Component
     title Level 3 - Feature areas of the first release
 
     Container_Boundary(api, "API application") {
-        Component(shared, "Shared services", "app/auth, app/common, app/db.py", "Sign-in and access control, the audit log writer, the notification writer, the database session")
+        Component(shared, "Shared services", "app/auth, app/common, app/db.py", "Sign-in and access control, the audit log writer, the database session")
         Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits")
         Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject, coordinator assignment and reassignment")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout")
@@ -144,7 +144,7 @@ C4Component
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
         Component(changes, "Change request service", "epic 19", "Requested changes after submission, and the arrangements each one affects")
-        Component(notifications, "Notification service", "epic 20, writer in app/common", "One notification per significant action, delivered only to related users")
+        Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
 
@@ -155,7 +155,9 @@ C4Component
     Rel(changes, bookings, "Flags affected bookings in")
     Rel(changes, equipment, "Flags affected reservations in")
     Rel(events, registration, "Opens registration for")
-    Rel(bookings, notifications, "Raises decisions through")
+    Rel(events, notifications, "Raises submissions through")
+    Rel(bookings, notifications, "Raises requests, withdrawals and decisions through")
+    Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
     Rel(registration, notifications, "Raises confirmations through")
     Rel(shared, db, "Reads and writes")
@@ -166,7 +168,7 @@ C4Component
     Rel(equipment, db, "Reads and writes")
     Rel(registration, db, "Reads and writes")
     Rel(changes, db, "Reads and writes")
-    Rel(notifications, db, "Writes")
+    Rel(notifications, db, "Reads and writes")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
@@ -298,7 +300,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 17 | Equipment reservation | Equipment service | `equipment_reservations` | `app/events` for the hold made on submission; `app/equipment` for the coordinator's holds |
 | 18 | Attendee registration | Registration service | `event_registrations`, registration columns on `events` | — (an event's registration settings are in `app/events`) |
 | 19 | Event change requests | Change request service | `event_change_requests` | — |
-| 20 | Notification system | Notification service | `notifications` | `app/common/notifications.py`, writing only |
+| 20 | Notification system | Notification service | `notifications` | `app/notifications` |
 
 Auditability runs across all of them. Every significant action appends to `audit_log` through one
 writer, so no feature has to invent its own history.

@@ -60,6 +60,11 @@ its hold on the venue and notifying every active Venue Staff member, together in
 AC3). AC6 restricts it to the event's own assigned coordinator. AC8: it shares approve/reject's
 row lock, so a withdrawal racing a Venue Staff decision on the same request is serialized by the
 same mechanism, not a new one.
+
+Story 20.1 - notifications: a new request tells every active Venue Staff member, and a decision
+tells the event's coordinator - whoever holds the event now, not necessarily who asked (AC4).
+Each is written before the action's audit entry and commit, so a refused or failed action sends
+none, and a decision that loses the row lock to another sends none (AC6).
 """
 
 from __future__ import annotations
@@ -77,8 +82,8 @@ from app.auth.permissions import RoleCode
 from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn
 from app.common.audit import record_audit
-from app.common.notifications import notify
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
+from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
 from app.venues.models import (
     Facility,
@@ -397,6 +402,37 @@ def assert_no_conflict(db: Session, booking: VenueBooking) -> None:
         raise BookingConflict(conflict)
 
 
+def _notify_coordinator_of_decision(db: Session, booking: VenueBooking, *, actor: User) -> None:
+    """Story 20.1 AC1/AC4: the event's coordinator - whoever holds the event now, not necessarily
+    who asked - is told 13.2's approval with the held period, or 13.2.1's rejection with its
+    reason."""
+    venue_name, event = booking.venue.name, booking.event
+    if booking.status == BookingStatus.REJECTED:
+        notification_type = NotificationType.BOOKING_REJECTED
+        title = f'{venue_name} rejected for "{event.name}"'
+        message = (
+            f"{actor.full_name} rejected the request for {venue_name}. "
+            f"Reason: {booking.decision_reason}"
+        )
+    else:
+        notification_type = NotificationType.BOOKING_APPROVED
+        title = f'{venue_name} approved for "{event.name}"'
+        period = _describe_held_period(booking.held_from, booking.held_until)
+        message = f"{actor.full_name} approved the request for {venue_name} {period}."
+    notify(
+        db,
+        recipient=event.assigned_coordinator,
+        actor=actor,
+        notification_type=notification_type,
+        event_id=event.id,
+        title=title,
+        message=message,
+        related_entity_type="venue_booking",
+        related_entity_id=booking.id,
+        commit=False,
+    )
+
+
 def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) -> None:
     """13.2 AC1: approve ``booking``, recording the approver and time. Refuses a request that
     is not PENDING (``BookingNotPending``) or whose period would double-book its venue
@@ -424,9 +460,11 @@ def approve_booking(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) 
             raise
         raise BookingConflict(conflict) from exc
 
+    actor = db.get(User, actor_id)
+    _notify_coordinator_of_decision(db, booking, actor=actor)
     record_audit(
         db,
-        actor=db.get(User, actor_id),
+        actor=actor,
         action="BOOKING_APPROVED",
         entity_type="venue_booking",
         entity_id=booking.id,
@@ -457,9 +495,11 @@ def reject_booking(
     booking.decision_reason = decision_reason
     db.flush()
 
+    actor = db.get(User, actor_id)
+    _notify_coordinator_of_decision(db, booking, actor=actor)
     record_audit(
         db,
-        actor=db.get(User, actor_id),
+        actor=actor,
         action="BOOKING_REJECTED",
         entity_type="venue_booking",
         entity_id=booking.id,
@@ -474,17 +514,46 @@ def reject_booking(
     db.refresh(booking)
 
 
-def _notify_venue_staff_of_withdrawal(db: Session, booking: VenueBooking) -> None:
-    """12.2 AC2: every active Venue Staff member is told - the same role-wide, active-only
-    audience ``list_booking_requests`` already serves for the queue itself."""
-    venue_staff = db.scalars(
-        select(User).where(User.role_code == RoleCode.VENUE_STAFF, User.is_active.is_(True))
-    ).all()
-    for member in venue_staff:
+def _notify_venue_staff_of_request(
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor: User,
+    held_from: datetime,
+    held_until: datetime,
+) -> None:
+    """Story 20.1 AC1: a new request waits in the queue, so every active Venue Staff member is
+    told the venue, the event and the held period - the audience 12.2's withdrawal tells. The held
+    period is passed in, because the database trigger sets it on the row only."""
+    venue_name = booking.venue.name
+    message = (
+        f'{actor.full_name} requested {venue_name} for "{booking.event.name}" '
+        f"{_describe_held_period(held_from, held_until)}."
+    )
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
             recipient=member,
-            notification_type="BOOKING_WITHDRAWN",
+            actor=actor,
+            notification_type=NotificationType.BOOKING_REQUESTED,
+            event_id=booking.event_id,
+            title=f"New booking request for {venue_name}",
+            message=message,
+            related_entity_type="venue_booking",
+            related_entity_id=booking.id,
+            commit=False,
+        )
+
+
+def _notify_venue_staff_of_withdrawal(db: Session, booking: VenueBooking, *, actor: User) -> None:
+    """12.2 AC2: every active Venue Staff member is told - the same role-wide, active-only
+    audience ``list_booking_requests`` already serves for the queue itself."""
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_WITHDRAWN,
             event_id=booking.event_id,
             title="A venue booking request was withdrawn",
             message=f"The request for {booking.venue.name} was withdrawn and its hold released.",
@@ -530,7 +599,7 @@ def withdraw_booking(db: Session, booking: VenueBooking, *, actor: User) -> None
         details={"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)},
         commit=False,
     )
-    _notify_venue_staff_of_withdrawal(db, booking)
+    _notify_venue_staff_of_withdrawal(db, booking, actor=actor)
     db.commit()
     db.refresh(booking)
 
@@ -683,6 +752,9 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     Story 12.1 AC14: the venue may have stopped being available since the catalogue search, so
     the search's other two rules are checked again after the hold - a closure overlapping the
     period (``VenueBlocked``) and opening hours that leave part of it out (``VenueClosed``).
+
+    Story 20.1 AC1: Venue Staff are told the request is waiting, once it is written - a refused
+    request tells nobody (AC4).
     """
     event = _bookable_event(db, data.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
@@ -732,6 +804,9 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         if holding is None:
             raise
         raise VenueHeld(holding) from exc
+    _notify_venue_staff_of_request(
+        db, booking, actor=actor, held_from=held_from, held_until=held_until
+    )
     record_audit(
         db,
         actor=actor,

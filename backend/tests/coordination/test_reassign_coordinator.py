@@ -82,7 +82,12 @@ def test_reassignment_updates_pointer_and_records_who_and_when(coordinator_clien
 
 
 @pytest.mark.story("5.2", ac=1)
-def test_reassignment_notifies_both_coordinators_and_the_organiser(coordinator_client, db: Session):
+def test_reassignment_notifies_the_new_coordinator_and_the_organiser(
+    coordinator_client, db: Session
+):
+    """Only the current coordinator may reassign (AC6), so the previous coordinator is always
+    the one making the change, and story 20.1 AC3 tells nobody of their own action. Both
+    coordinators are told when someone else reassigns, as the Lead will (story 5.6)."""
     response = coordinator_client.put(
         f"/events/{Events.APPROVED}/coordinator",
         json={"coordinator_id": str(Users.COORDINATOR_2.id)},
@@ -93,7 +98,7 @@ def test_reassignment_notifies_both_coordinators_and_the_organiser(coordinator_c
         text("SELECT organiser_id FROM events WHERE id = :e"), {"e": Events.APPROVED}
     ).scalar()
     recipients = _notification_recipients(db, Events.APPROVED)
-    assert recipients == {Users.COORDINATOR.id, Users.COORDINATOR_2.id, event_organiser_id}
+    assert recipients == {Users.COORDINATOR_2.id, event_organiser_id}
 
 
 # --- AC2: history is kept, not deleted --------------------------------------------------------
