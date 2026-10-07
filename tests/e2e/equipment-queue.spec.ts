@@ -9,8 +9,8 @@
  * AC3 Pending, Accepted and Declined tabs, and an All tab (a team request beyond the AC) that
  *     shows the three together. Which statuses each tab returns, and the counts, are backend
  *     cases.
- * Each card's View details opens its event, and the event page's back link returns to the queue
- * (story 7.1's back link), as Venue Staff's booking cards do.
+ * Each card's View details opens the request's own page (story 16.1), and its event name opens the
+ * event; both pages' back links return to the queue, as Venue Staff's booking cards do.
  * AC5 an empty queue shows a message. No seeded tab is empty, so the list call is stubbed. That a
  *     removed item or a cancelled event's item leaves the queue is a backend case.
  * AC6 other roles cannot reach the queue page. The API's 401/403 refusals are backend cases, and
@@ -60,7 +60,7 @@ test('15.2 AC1/AC2: Technical Support open the queue and see a request with its 
   await expect(card).toContainText('One per panel speaker')
   await expect(card).toContainText('Chloe Coordinator')
   await expect(card.getByText('Requested', { exact: true })).toBeVisible()
-  await expect(card.getByText('Available for this event', { exact: true })).toBeVisible()
+  await expect(card.getByText('Available', { exact: true })).toBeVisible()
   await expect(card.getByText('Short by 4')).toBeVisible()
 })
 
@@ -108,17 +108,24 @@ test('15.2 AC3: the All tab shows pending, accepted and declined requests togeth
   )
 })
 
-test('15.2 AC1: View details opens the event, and its back link returns to the queue', async ({
+test('15.2 AC1: View details opens the request and the event name opens the event, each leading back', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
   await page.goto(QUEUE_PATH)
 
+  // Story 16.1 gives each request a page of its own, as Venue Staff's booking requests have.
   await roadshowCard(page).getByRole('link', { name: 'View details' }).click()
-
-  await expect(page).toHaveURL(new RegExp(`/events/${EVENTS.equipmentRoadshow}$`))
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}/[^/]+$`))
   await expect(page.getByRole('heading', { name: ROADSHOW, level: 1 })).toBeVisible()
   await expect(page.getByText('One per panel speaker')).toBeVisible()
+
+  await page.getByRole('link', { name: '← Equipment Requests' }).click()
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`))
+
+  await roadshowCard(page).getByRole('link', { name: ROADSHOW }).click()
+  await expect(page).toHaveURL(new RegExp(`/events/${EVENTS.equipmentRoadshow}$`))
+  await expect(page.getByRole('heading', { name: ROADSHOW, level: 1 })).toBeVisible()
 
   await page.getByRole('link', { name: '← Equipment Requests' }).click()
   await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`))
