@@ -66,7 +66,9 @@ interface RequestSubject {
  * justification (AC7: never sent blank), and Send asks for confirmation before sending it. If the
  * read fails the step says so and Send stays open, since the backend judges again on send. AC7:
  * when the backend refuses the send for want of a justification - the venue stopped suiting after
- * the step loaded - the step reads again and shows the warning.
+ * the step loaded - the step reads again and shows the warning. That refusal is itself enough to
+ * ask for the justification, so a read that fails again still leaves the coordinator able to give
+ * one; and only the latest read's failure is shown, never an earlier one beside a read that worked.
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -99,7 +101,11 @@ export function BookingRequestFormPage() {
   const [isSending, setIsSending] = useState(false)
   const [justification, setJustification] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
-  const [rereadError, setRereadError] = useState<string | null>(null)
+  // The latest read after a refused send: null until there is one, then how it ended. It takes
+  // over from the first read's failure (suitabilityError), which useLoaded never clears itself.
+  const [reread, setReread] = useState<{ error: string | null } | null>(null)
+  // The backend refused a send for want of a justification, and no later read has said otherwise.
+  const [serverAskedForJustification, setServerAskedForJustification] = useState(false)
 
   if (error) {
     return (
@@ -135,15 +141,18 @@ export function BookingRequestFormPage() {
     : venueSearchPath({ eventId: event.id })
   const isChecking = suitability === null && suitabilityError === null
   const isUnsuitable = suitability !== null && !suitability.is_suitable
-  const checkError = rereadError ?? suitabilityError
+  const requiresJustification = isUnsuitable || serverAskedForJustification
+  const checkError = reread === null ? suitabilityError : reread.error
 
   /** AC7: the backend judged the venue unsuitable on send, so read it again for the warning. */
   async function rereadSuitability() {
     try {
       setSuitability(await getVenueSuitability(venue.id, event.id))
-      setRereadError(null)
+      setReread({ error: null })
+      // The read is now the latest word on whether the venue suits, so it decides.
+      setServerAskedForJustification(false)
     } catch (err: unknown) {
-      setRereadError(formatApiError(err))
+      setReread({ error: formatApiError(err) })
     }
   }
 
@@ -161,6 +170,7 @@ export function BookingRequestFormPage() {
       setSendError(formatApiError(err))
       setCanReturnToResults(err instanceof ApiError && err.code === 'BOOKING_NOT_ALLOWED')
       if (err instanceof ApiError && err.code === 'BOOKING_JUSTIFICATION_REQUIRED') {
+        setServerAskedForJustification(true)
         await rereadSuitability()
       }
     } finally {
@@ -173,7 +183,7 @@ export function BookingRequestFormPage() {
     submitEvent.preventDefault()
     setSendError(null)
     setCanReturnToResults(false)
-    if (!isUnsuitable) {
+    if (!requiresJustification) {
       await send(null)
       return
     }
@@ -295,7 +305,7 @@ export function BookingRequestFormPage() {
                 requirementCount={event.venue_requirements.length}
               />
             )}
-            {isUnsuitable && (
+            {requiresJustification && (
               <label>
                 Justification
                 <textarea

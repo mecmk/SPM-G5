@@ -40,7 +40,9 @@ export interface BookingRequestInput {
 }
 
 /** Story 12.1 AC1-AC4. Story 11.1 AC7: a venue that does not suit, sent without a justification,
- * is refused with a 422 - for instance when it stopped suiting after the step loaded. */
+ * is refused with a 422 - for instance when it stopped suiting after the step loaded. The code is
+ * mapped by status alone, so it assumes `JustificationRequired` is this endpoint's only 422: give
+ * any other 422 here its own code first, or it will be read as a missing justification. */
 export function createBookingRequest(
   input: BookingRequestInput,
   venueName: string,

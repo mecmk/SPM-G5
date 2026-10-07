@@ -455,3 +455,100 @@ test('11.1 AC2: if the check cannot be loaded the step says so and can still sen
   await expect(page.getByText('Checking whether this venue suits the event…')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
 })
+
+/** The suitability read answers with a server error while `state.failing` is set. */
+async function failSuitabilityReadsWhile(
+  page: Page,
+  venue: { id: string },
+  state: { failing: boolean },
+) {
+  await page.route(
+    (url) => url.pathname === SUITABILITY_PATH(venue.id),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch' || !state.failing) return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, status: 500, json: { detail: 'Internal Server Error' } })
+    },
+  )
+}
+
+test('11.1 AC7: a send refused for a missing justification replaces an earlier failed check', async ({
+  page,
+}) => {
+  // The step's first read fails, so it cannot say Boardroom does not suit. Send is pressed anyway,
+  // the real send is refused (422), and the read that follows is the real answer.
+  const state = { failing: true }
+  await failSuitabilityReadsWhile(page, BOARDROOM, state)
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, BOARDROOM)
+  await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
+
+  state.failing = false
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  await expect(suitabilityRegion(page).getByText('Unsuitable', { exact: true })).toBeVisible()
+  await expect(
+    suitabilityRegion(page).getByText('Capacity 16 < 60 people', { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Justification' })).toBeVisible()
+  // The answer that failed to load is no longer on screen beside the one that did.
+  await expect(suitabilityRegion(page).getByRole('alert')).toHaveCount(0)
+})
+
+test('11.1 AC7: with the check down, a send refused for a missing justification still asks for one', async ({
+  page,
+}) => {
+  // Every read of the venue's suitability fails, so the page only learns from the refused send
+  // that a justification is needed. It must still let the coordinator give one.
+  const state = { failing: true }
+  await failSuitabilityReadsWhile(page, BOARDROOM, state)
+  await signIn(page, ACCOUNTS.coordinator)
+  const sends = recordBookingSends(page)
+  await openRequestStep(page, BOARDROOM)
+  await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  const justification = page.getByRole('textbox', { name: 'Justification' })
+  await expect(justification).toBeVisible()
+  // The read that followed the refusal failed too, and the step still says the check failed.
+  await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
+  await justification.fill('The only room free that morning.')
+  await page.getByRole('button', { name: 'Send request' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText(BOARDROOM.name)
+  // Stopped here: the real send with a justification is proven by the AC2/AC3/AC6 test above,
+  // and a request left pending would crowd the first page of Venue Staff's queue.
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(sends).toHaveLength(1) // only the refused first send
+})
+
+test('11.1 AC7: a read after a refused send that says the venue suits asks for no justification', async ({
+  page,
+}) => {
+  // Both of the step's reads are the real answer changed to "suits", as if the requirement had
+  // changed back: the real send is still refused (422), but the latest read decides what to ask.
+  let reads = 0
+  await page.route(
+    (url) => url.pathname === SUITABILITY_PATH(BOARDROOM.id),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      reads += 1
+      const response = await route.fetch()
+      const real = await response.json()
+      return route.fulfill({ response, json: { ...real, is_suitable: true, failures: [] } })
+    },
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await openRequestStep(page, BOARDROOM)
+  await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
+  const readsOnArrival = reads
+
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  await expect.poll(() => reads).toBeGreaterThan(readsOnArrival)
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
+  await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Justification' })).toHaveCount(0)
+})
