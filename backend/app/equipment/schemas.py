@@ -131,7 +131,7 @@ class EquipmentQueueEntry(BaseModel):
     AC2: ``available`` for the event's period, not counting the event's own hold, and
     ``shortfall``, how many more were requested than that. Story 16.1 AC2/AC3: who decided it and
     when, and the reason for declining - each ``None`` until decided, and for items decided
-    before migration 015. No defaults (response schema)."""
+    before migration 016. No defaults (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
