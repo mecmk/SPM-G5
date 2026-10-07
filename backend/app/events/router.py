@@ -1,8 +1,8 @@
 """HTTP endpoints for story 2.1 (event requests), story 2.6 (list my event requests), story 4.1
-(coordinator review queue), story 4.2 (request clarification from the organiser), stories
-4.4/4.5 (approve / reject an event request), story 4.6 (the decision /clarification history an
-organiser sees), story 7.2 (routine information edits), story 6.1 (the coordinator's assigned
-events in any status), and story 2.1 AC14 (the cover picture)."""
+(coordinator review queue), story 4.2 (request clarification from the organiser), story 4.3
+(the organiser's response), stories 4.4/4.5 (approve / reject an event request), story 4.6 (the
+decision /clarification history an organiser sees), story 7.2 (routine information edits), story
+6.1 (the coordinator's assigned events in any status), and story 2.1 AC14 (the cover picture)."""
 
 from __future__ import annotations
 
@@ -215,6 +215,30 @@ def request_clarification(
         entry = service.request_clarification(db, event, actor=actor, message=payload.message)
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return ClarificationOut.from_clarification(entry)
+
+
+@router.post(
+    "/{event_id}/clarifications/responses",
+    response_model=ClarificationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def respond_to_clarification(
+    event_id: uuid.UUID,
+    payload: ClarificationRequest,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanCreate],
+) -> ClarificationOut:
+    """4.3 AC1-AC3/AC6-AC11: the owning organiser answers a clarification request while the event
+    is CLARIFICATION_REQUESTED. AC10: gated on events:create, which only an organiser holds, and
+    an organiser who does not own the event gets 404. AC4/AC5 (mandatory, trimmed, capped) are
+    enforced by ``ClarificationRequest`` - a 422 before this function runs."""
+    try:
+        entry = service.respond_to_clarification(db, event_id, actor=actor, message=payload.message)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return ClarificationOut.from_clarification(entry)
