@@ -43,7 +43,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
-| Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date, time, attendance, venue or equipment requirements) after submission |
+| Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
@@ -565,18 +565,18 @@ Rules and indexes:
 
 **Stories:** 7.3, 19.x
 
-A request by the organiser to change an important field (date, time, attendance, venue or equipment requirements) after submission. The event row is only updated when the coordinator approves (story 19.4 AC1). Values are stored as text so any field can be requested without schema changes.
+A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1). The event row is only updated when the coordinator approves (story 19.4 AC1). Values are stored as canonical JSON text, so 19.2 can show them before and after without a column per field.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
 | `requested_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Organiser raising the change. |
-| `field_name` | `text` | no | - | - | Name of the event field to change, e.g. starts_at, expected_attendance (story 19.1 AC2). |
-| `current_value` | `text` | yes | - | - | Value at the time of the request, as text, for display (story 19.2 AC2). |
-| `proposed_value` | `text` | no | - | - | Requested new value, as text. |
+| `field_name` | `text` | no | - | - | Which part of the event the request would change: schedule (starts_at and ends_at together), expected_attendance, venue_requirements or equipment (story 19.1 AC1). |
+| `current_value` | `text` | yes | - | - | The value when the request was raised, as canonical JSON text, for display (story 19.2 AC2). |
+| `proposed_value` | `text` | no | - | - | The requested new value, as canonical JSON text, validated by the creation rules (story 19.1 AC3/AC4). |
 | `reason` | `text` | no | - | - | Why the change is needed (mandatory). |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED or WITHDRAWN. |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED or WITHDRAWN. The organiser may withdraw a PENDING request (story 19.1 AC9). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Coordinator who decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | Decision time (story 19.4 AC2). |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 19.5 AC1). |
@@ -585,10 +585,12 @@ A request by the organiser to change an important field (date, time, attendance,
 
 Allowed values:
 
+- `field_name`: `schedule`, `expected_attendance`, `venue_requirements`, `equipment`
 - `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`
 
 Rules and indexes:
 
+- unique index `uq_event_change_requests_pending_field`: `btree (event_id, field_name) WHERE (status = 'PENDING'::text)`
 - index `ix_event_change_requests_event`: `btree (event_id, status)`
 
 ## Venue bookings

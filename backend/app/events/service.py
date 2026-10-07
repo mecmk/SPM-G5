@@ -57,6 +57,7 @@ from app.events.schemas import (
     EventReviewCorrection,
     EventRoutineUpdate,
     EventUpdate,
+    PointOfContactUpdate,
     ReferenceItemOut,
     ReviewQueueSort,
     VenueRequirementIn,
@@ -2140,3 +2141,118 @@ def remove_cover_image_under_review(
         db.rollback()  # gives back the claim, which only stamped updated_at
         return
     _clear_cover_image(db, event, actor=actor, action="EVENT_DETAILS_CORRECTED")
+
+
+# --- story 19.1: what a change request may propose, and the point of contact ----------------
+# Change requests themselves live in app/change_requests/. These are the event's own rules it
+# reuses, made public here so that package never reaches into this module's private helpers.
+
+REQUIREMENT_NAME_REQUIRED_MESSAGE = "{requirement} needs a name."
+REQUIREMENT_CAPACITY_REQUIRED_MESSAGE = "{requirement} needs a number of people."
+CONTACT_EDIT_CLOSED_MESSAGE = (
+    "This event is {status}, so its point of contact cannot be updated directly."
+)
+
+# Story 19.1 AC2 (PO decision, Checkpoint 1): approved and not yet over. Before approval the
+# organiser's request is edited as a draft or corrected through clarification instead.
+_CONTACT_EDITABLE_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
+_CONTACT_FIELDS = ("contact_email", "contact_phone")
+
+
+class PointOfContactClosed(EventStateConflict):
+    """19.1 AC2: the point of contact is updated directly only once approved and until over."""
+
+    def __init__(self, status: str):
+        super().__init__(CONTACT_EDIT_CLOSED_MESSAGE.format(status=status))
+
+
+def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """``actor``'s own event, its row held until the transaction ends, so a status change racing
+    a story 19.1 write waits for it (AC8) - the lock story 2.7 AC12 already relies on."""
+    return _get_own_event(db, event_id, actor, for_update=True)
+
+
+def check_proposed_schedule(starts_at: datetime, ends_at: datetime) -> None:
+    """Story 19.1 AC4: a proposed date and time follows 2.1 AC2's rules - end after start, not in
+    the past, at most 2 years ahead, at most 14 days long."""
+    _check_schedule(starts_at, ends_at, supplied_start=starts_at, supplied_end=ends_at)
+
+
+def check_proposed_venue_requirements(
+    db: Session, event: Event, items: list[VenueRequirementIn]
+) -> None:
+    """Story 19.1 AC3/AC4: proposed venue requirements are complete, as a submitted request's must
+    be (2.7 AC8), and follow 2.7's rules judged against the event as it stands (PO decision,
+    Checkpoint 1: the effect of other pending changes is story 19.3's)."""
+    for index, item in enumerate(items):
+        label = _describe_requirement(item.name, index)
+        if item.name is None:
+            raise InvalidVenueRequirement(
+                REQUIREMENT_NAME_REQUIRED_MESSAGE.format(requirement=label),
+                index=index,
+                field="name",
+            )
+        if item.capacity is None:
+            raise InvalidVenueRequirement(
+                REQUIREMENT_CAPACITY_REQUIRED_MESSAGE.format(requirement=label),
+                index=index,
+                field="capacity",
+            )
+    _check_venue_requirement_references(
+        db, items, owned_ids={requirement.id for requirement in event.venue_requirements}
+    )
+    _check_venue_requirement_rules(
+        items,
+        event_starts_at=event.starts_at,
+        event_ends_at=event.ends_at,
+        attendance=event.expected_attendance,
+    )
+
+
+def check_proposed_equipment(db: Session, event: Event, items: list[EventEquipmentIn]) -> None:
+    """Story 19.1 AC4: proposed equipment names active types and only this event's own lines
+    (2.1 AC6/AC7). Availability is not judged here - stock can change before a coordinator
+    decides, so it belongs to the impact view and the decision (stories 19.3, 19.4)."""
+    _known(
+        db,
+        EquipmentType,
+        [item.equipment_type_code for item in items],
+        label="equipment type",
+        is_active_only=True,
+    )
+    _check_equipment_lines(items, owned_line_ids={line.id for line in event.equipment_requests})
+
+
+def update_point_of_contact(
+    db: Session, event_id: uuid.UUID, data: PointOfContactUpdate, *, actor: User
+) -> Event:
+    """Story 19.1 AC2: the organiser updates their approved event's point of contact directly,
+    with no change request. Only the fields sent and actually different change; each change is
+    logged with its old and new value for the change history (7.4 is not built yet, so the
+    audit log holds it). Sending the current values is a no-op: no write, no audit entry."""
+    event = get_own_event_for_update(db, event_id, actor=actor)
+    if event.status not in _CONTACT_EDITABLE_STATUSES:
+        raise PointOfContactClosed(event.status)
+
+    sent = data.model_fields_set
+    changes = {
+        field: {"from": getattr(event, field), "to": getattr(data, field)}
+        for field in _CONTACT_FIELDS
+        if field in sent and getattr(data, field) != getattr(event, field)
+    }
+    if not changes:
+        return event  # nothing to write; the row lock ends with the request's session
+    for field, change in changes.items():
+        setattr(event, field, change["to"])
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_CONTACT_UPDATED",
+        entity_type="event",
+        entity_id=event.id,
+        details=changes,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(event)
+    return event
