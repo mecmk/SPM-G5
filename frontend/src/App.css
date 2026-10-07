@@ -417,6 +417,11 @@
   gap: 0.75rem;
 }
 
+/* A footer with nothing to its left but a link, kept on the right as on cards with actions. */
+.item-card-footer-end {
+  justify-content: flex-end;
+}
+
 .item-card-title {
   font-size: 0.875rem;
   font-weight: 600;

@@ -6,6 +6,7 @@ import { RequireAuth, RequirePermission } from './auth/RequireAuth'
 import { BookingRequestDetailPage } from './bookings/BookingRequestDetailPage'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
+import { EquipmentRequestsPage } from './equipment/EquipmentRequestsPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { EventRoutineEditPage } from './events/EventRoutineEditPage'
@@ -22,6 +23,7 @@ import {
   BOOKING_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
+  EQUIPMENT_REQUESTS_PATH,
   EVENT_EDIT_PATH,
   EVENT_EDIT_ROUTINE_PATH,
   EVENT_NEW_PATH,
@@ -121,6 +123,11 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_DECIDE} />}>
                 <Route path={BOOKING_REQUESTS_PATH} element={<BookingRequestsPage />} />
                 <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
+              </Route>
+
+              {/* Story 15.2: Technical Support's equipment request queue. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EQUIPMENT_MANAGE} />}>
+                <Route path={EQUIPMENT_REQUESTS_PATH} element={<EquipmentRequestsPage />} />
               </Route>
 
               {/*

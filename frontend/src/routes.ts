@@ -154,6 +154,9 @@ export function bookingRequestPath(bookingId: string): string {
   return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
 }
 
+// Story 15.2: Technical Support's queue of the equipment requests sent to it.
+export const EQUIPMENT_REQUESTS_PATH = '/equipment/requests'
+
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'
 
