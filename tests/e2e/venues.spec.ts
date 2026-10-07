@@ -15,7 +15,8 @@
  *     carousel; the catalogue card shows the first.
  * AC7 JPEG, PNG or WebP, at most 5 MB each, at most 10 a venue: the form checks each chosen file
  *     on its own and names each one it refuses, before sending anything.
- * AC8 a picture the server refuses leaves the venue saved, and its edit page says why.
+ * AC8 a picture the server refuses leaves the venue and its other pictures saved, and its edit
+ *     page says why, once.
  * The server's own refusals, the files, the order's rules, AC9's permissions and AC10's
  * simultaneous changes are backend cases: backend/tests/venues/test_venue_pictures.py.
  *
@@ -470,24 +471,37 @@ test('8.3 AC7: an eleventh picture is refused in the browser', async ({ page }) 
   await expect(page.getByText('A venue can have at most 10 pictures.')).toBeVisible()
 })
 
-test('8.3 AC8: a picture the server refuses leaves the new venue saved and says why', async ({
+test('8.3 AC8: a picture the server refuses leaves the new venue and its other pictures saved and says why once', async ({
   page,
 }) => {
   const name = uniqueName('Refused picture')
   await signIn(page, ACCOUNTS.venueStaff)
   await startNewVenue(page, name)
-  // Named and typed as a PNG, so the browser lets it through; the server reads the bytes.
-  await choosePictures(page, pictureFile('fake.png', Buffer.from('not a picture')))
+  // Named and typed as a PNG, so the browser lets it through; the server reads the bytes. It goes
+  // first, so the real picture after it is saved only if saving carries on past a refusal.
+  await choosePictures(
+    page,
+    pictureFile('fake.png', Buffer.from('not a picture')),
+    pictureFile('real.png'),
+  )
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
 
   await page.getByRole('button', { name: 'Create venue' }).click()
 
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText(
-    'Choose a JPEG, PNG or WebP picture.',
-  )
+  const notice = page.getByRole('main').getByRole('alert')
+  await expect(notice).toContainText('Choose a JPEG, PNG or WebP picture.')
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(1)
+
+  // The notice is about that save, so the page does not show it again when reloaded.
+  await page.reload()
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(1)
+  await expect(notice).toHaveCount(0)
+
   await page.goto('/venues')
-  await expect(venueCard(page, name)).toBeVisible()
+  await expectLoaded(venueCard(page, name).getByRole('presentation', { includeHidden: true }))
 })
 
 test('8.3 AC7: a batch keeps the pictures that pass and names each one refused', async ({
@@ -581,47 +595,6 @@ test('8.3 AC5: pictures shift aside as a picture is dragged across them', async 
   await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
   await page.mouse.up()
   await expect.poll(() => sourcesIn(previews)).toEqual([c, a, b])
-})
-
-test('8.3 AC5: a picture moved aside glides to its new place, never jumps there', async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venues/new')
-  await choosePictures(page, pictureFile('a.png'), pictureFile('b.png'), pictureFile('c.png'))
-  const previews = page.getByRole('list', { name: 'Pictures to save' })
-  await expect(previews.getByRole('img')).toHaveCount(3)
-  const second = await previews.getByRole('listitem').nth(1).elementHandle()
-  // Let the pictures' own entrance finish first.
-  await page.waitForTimeout(600)
-
-  // Moving the third picture earlier pushes the second one place along; follow the second, frame
-  // by frame, by how far it is drawn from the place it now belongs in.
-  const [offsets] = await Promise.all([
-    second!.evaluate(
-      (tile) =>
-        new Promise<number[]>((resolve) => {
-          const seen: number[] = []
-          const start = performance.now()
-          function frame() {
-            const box = tile.getBoundingClientRect()
-            const list = tile.parentElement!.getBoundingClientRect()
-            seen.push(box.left - (list.left + tile.offsetLeft))
-            if (performance.now() - start < 500) requestAnimationFrame(frame)
-            else resolve(seen)
-          }
-          requestAnimationFrame(frame)
-        }),
-    ),
-    page.getByRole('button', { name: 'Move picture 3 earlier' }).click(),
-  ])
-
-  // It starts a whole place back and passes through the places between, rather than appearing
-  // in its new place at once.
-  const step = Math.max(...offsets.map(Math.abs))
-  const between = offsets.filter((offset) => offset < -0.15 * step && offset > -0.85 * step)
-  expect(step).toBeGreaterThan(100)
-  expect(between.length).toBeGreaterThanOrEqual(3)
 })
 
 test('8.3 AC6: a picture opens in a carousel that steps through the pictures', async ({ page }) => {

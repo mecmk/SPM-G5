@@ -14,8 +14,10 @@ AC7  Each picture is a JPEG, PNG or WebP of at most 5 MB, judged by its content,
      names each one it refuses, with the reason, before anything is sent. The server refuses them
      too.
 AC8  If the details save but a picture is refused, the venue and its accepted pictures are kept,
-     and the venue's edit page says why. Removing a picture or deleting a venue deletes the stored
-     files; editing the details leaves the pictures as they are.
+     and the venue's edit page says why. Editing the details leaves the pictures as they are. Each
+     picture's file is stored and served only under a name the server generates, and lasts exactly
+     as long as the picture: removing the picture or deleting the venue deletes it, a refused
+     deletion keeps it, and a picture that fails to save leaves none.
 AC9  Only Venue Staff can add, remove or reorder pictures (as AC4).
 AC10 Pictures added to one venue at the same moment are all kept, each in its own place in the
      order, and never more than 10. A venue deleted while its form is open refuses new pictures
@@ -200,6 +202,29 @@ def test_adding_and_removing_pictures_are_audited(venue_staff_client, db: Sessio
         assert row.details == {"image_id": image["id"], "url": image["url"]}
 
 
+@pytest.mark.story("8.3", ac=5)
+def test_another_venues_picture_cannot_be_removed_through_this_one(venue_staff_client, db: Session):
+    image = _add_ok(venue_staff_client, Venues.BOARDROOM)
+
+    response = _remove(venue_staff_client, Venues.SEMINAR_ROOM, image["id"])
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Picture not found."
+    assert _stored_urls(db, Venues.BOARDROOM) == [image["url"]]
+    assert venue_staff_client.get(image["url"]).status_code == 200
+
+
+@pytest.mark.story("8.3", ac=5)
+def test_a_picture_already_removed_is_not_found(venue_staff_client):
+    image = _add_ok(venue_staff_client, Venues.BOARDROOM)
+    assert _remove(venue_staff_client, Venues.BOARDROOM, image["id"]).status_code == 200
+
+    again = _remove(venue_staff_client, Venues.BOARDROOM, image["id"])
+
+    assert again.status_code == 404
+    assert again.json()["detail"] == "Picture not found."
+
+
 # --- AC5: arranging the order --------------------------------------------------------------
 @pytest.mark.story("8.3", ac=5)
 def test_pictures_can_be_put_in_a_new_order(venue_staff_client, db: Session):
@@ -230,6 +255,17 @@ def test_reordering_is_audited(venue_staff_client, db: Session):
         "from": [first["id"], second["id"]],
         "to": [second["id"], first["id"]],
     }
+
+
+@pytest.mark.story("8.3", ac=5)
+def test_the_same_order_changes_nothing(venue_staff_client, db: Session):
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+
+    response = _reorder(venue_staff_client, Venues.BOARDROOM, [first["id"], second["id"]])
+
+    assert response.status_code == 200, response.text
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
+    assert _reorder_audits(db, Venues.BOARDROOM) == []
 
 
 # --- AC6: the gallery and its cover ----------------------------------------------------------
@@ -396,12 +432,21 @@ def test_the_stored_name_is_generated_by_the_server(venue_staff_client, upload_d
 
 
 @pytest.mark.story("8.3", ac=8)
-def test_a_path_outside_the_upload_folder_is_not_served(venue_staff_client):
-    # The folder is served, so the refusals below are the name rule, not a missing route.
-    assert venue_staff_client.get(_add_ok(venue_staff_client, Venues.BOARDROOM)["url"]).is_success
+def test_only_names_the_server_generated_are_served(venue_staff_client, upload_dir):
+    url = _add_ok(venue_staff_client, Venues.BOARDROOM)["url"]
+    assert venue_staff_client.get(url).is_success
+    # Two files the server never named: one beside the venues folder, one inside it.
+    (upload_dir / "outside.png").write_bytes(_PNG)
+    (upload_dir / "venues" / "planted.png").write_bytes(_PNG)
+
+    # A backslash (%5C) separates folders on Windows, so without the name rule the first would
+    # serve outside.png; the last is a generated name with no file behind it.
+    for name in ("..%5Coutside.png", "planted.png", f"{uuid.uuid4()}.png"):
+        response = venue_staff_client.get(f"/uploads/venues/{name}")
+        assert response.status_code == 404, name
+        assert response.json()["detail"] == "Picture not found."
+    # A name holding a slash never reaches the endpoint: routing refuses it first.
     assert venue_staff_client.get("/uploads/venues/..%2F..%2Fpyproject.toml").status_code == 404
-    assert venue_staff_client.get("/uploads/venues/missing.png").status_code == 404
-    assert venue_staff_client.get(f"/uploads/venues/{uuid.uuid4()}.png").status_code == 404
 
 
 @pytest.mark.story("8.3", ac=8)
@@ -469,6 +514,43 @@ def test_deleting_a_venue_deletes_its_picture_files(venue_staff_client, db: Sess
 
 
 @pytest.mark.story("8.3", ac=8)
+def test_a_venue_whose_deletion_is_refused_keeps_its_picture_files(
+    venue_staff_client, db: Session, upload_dir
+):
+    """The Grand Hall has a booking, so deleting it is refused, and its pictures still load."""
+    url = _add_ok(venue_staff_client, Venues.GRAND_HALL)["url"]
+
+    response = venue_staff_client.delete(f"/venues/{Venues.GRAND_HALL}")
+
+    assert response.status_code == 409, response.text
+    assert _stored_urls(db, Venues.GRAND_HALL) == [url]
+    assert _file_names(upload_dir) == {_name_of(url)}
+    assert venue_staff_client.get(url).status_code == 200
+
+
+class _SaveFailed(RuntimeError):
+    """A failure after a picture's file is written and before its row is saved."""
+
+
+@pytest.mark.story("8.3", ac=8)
+def test_a_picture_that_fails_to_save_leaves_no_file(
+    venue_staff_client, db: Session, upload_dir, monkeypatch
+):
+    def fail_to_record(*_args, **_kwargs):
+        raise _SaveFailed
+
+    monkeypatch.setattr(service, "record_audit", fail_to_record)
+
+    with pytest.raises(_SaveFailed):
+        _add(venue_staff_client, Venues.BOARDROOM)
+    # The request's session is rolled back when it closes; here the test shares that session.
+    db.rollback()
+
+    assert _stored_urls(db, Venues.BOARDROOM) == []
+    assert _files_in(upload_dir) == []
+
+
+@pytest.mark.story("8.3", ac=8)
 def test_a_file_that_cannot_be_deleted_does_not_fail_a_change_that_worked(
     venue_staff_client, db: Session, monkeypatch
 ):
@@ -490,52 +572,6 @@ def test_a_file_that_cannot_be_deleted_does_not_fail_a_change_that_worked(
     assert removed.json()["images"] == []
     assert _stored_urls(db, Venues.BOARDROOM) == []
     assert deleted.status_code == 204, deleted.text
-
-
-@pytest.mark.story("8.3", ac=8)
-def test_another_venues_picture_cannot_be_removed_through_this_one(venue_staff_client, db: Session):
-    image = _add_ok(venue_staff_client, Venues.BOARDROOM)
-
-    response = _remove(venue_staff_client, Venues.SEMINAR_ROOM, image["id"])
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Picture not found."
-    assert _stored_urls(db, Venues.BOARDROOM) == [image["url"]]
-    assert venue_staff_client.get(image["url"]).status_code == 200
-
-
-@pytest.mark.story("8.3", ac=8)
-def test_a_picture_already_removed_is_not_found(venue_staff_client):
-    image = _add_ok(venue_staff_client, Venues.BOARDROOM)
-    assert _remove(venue_staff_client, Venues.BOARDROOM, image["id"]).status_code == 200
-
-    again = _remove(venue_staff_client, Venues.BOARDROOM, image["id"])
-
-    assert again.status_code == 404
-    assert again.json()["detail"] == "Picture not found."
-
-
-@pytest.mark.story("8.3", ac=8)
-def test_the_same_order_changes_nothing(venue_staff_client, db: Session):
-    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
-
-    response = _reorder(venue_staff_client, Venues.BOARDROOM, [first["id"], second["id"]])
-
-    assert response.status_code == 200, response.text
-    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
-    assert _reorder_audits(db, Venues.BOARDROOM) == []
-
-
-@pytest.mark.story("8.3", ac=8)
-def test_an_order_naming_a_picture_twice_is_refused(venue_staff_client, db: Session):
-    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
-
-    response = _reorder(
-        venue_staff_client, Venues.BOARDROOM, [second["id"], first["id"], second["id"]]
-    )
-
-    assert response.status_code == 422
-    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
 
 
 # --- AC9: who can change them ---------------------------------------------------------------
@@ -691,3 +727,15 @@ def test_an_order_that_is_not_the_venues_pictures_is_refused(
     assert response.json()["detail"] == CHANGED_MESSAGE
     assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
     assert _reorder_audits(db, Venues.BOARDROOM) == []
+
+
+@pytest.mark.story("8.3", ac=10)
+def test_an_order_naming_a_picture_twice_is_refused(venue_staff_client, db: Session):
+    first, second = (_add_ok(venue_staff_client, Venues.BOARDROOM) for _ in range(2))
+
+    response = _reorder(
+        venue_staff_client, Venues.BOARDROOM, [second["id"], first["id"], second["id"]]
+    )
+
+    assert response.status_code == 422
+    assert _stored_urls(db, Venues.BOARDROOM) == [first["url"], second["url"]]
