@@ -958,7 +958,16 @@ def test_a_line_replaced_by_an_identical_one_is_held_again(login_as, db: Session
     )
 
     assert response.status_code == 200, response.text
-    assert {line["status"] for line in response.json()["equipment"]} == {"REQUESTED"}
+    # Since 15.1 a held line stays REQUESTED, so it is the hold that must point at the new line.
+    (line,) = response.json()["equipment"]
+    held_for = db.scalars(
+        text(
+            "SELECT equipment_request_id FROM equipment_reservations"
+            " WHERE event_id = :id AND status = 'RESERVED'"
+        ),
+        {"id": event["id"]},
+    ).all()
+    assert held_for == [uuid.UUID(line["id"])]
 
 
 # --- AC8: only the assigned coordinator, enforced by the API ----------------------------------
