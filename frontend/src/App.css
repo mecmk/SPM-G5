@@ -828,7 +828,8 @@ label.choice-chip:has(input:checked)::before {
  * so centring within it needs no sidebar-width math - it just has to stop being flush left.
  */
 .event-detail-page,
-.event-routine-edit-page {
+.event-routine-edit-page,
+.equipment-request-page {
   margin-inline: auto;
 }
 

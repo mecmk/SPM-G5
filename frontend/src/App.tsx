@@ -6,6 +6,7 @@ import { RequireAuth, RequirePermission } from './auth/RequireAuth'
 import { BookingRequestDetailPage } from './bookings/BookingRequestDetailPage'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
+import { EquipmentRequestDetailPage } from './equipment/EquipmentRequestDetailPage'
 import { EquipmentRequestsPage } from './equipment/EquipmentRequestsPage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
@@ -22,6 +23,7 @@ import {
   BOOKING_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
+  EQUIPMENT_REQUEST_PATH,
   EQUIPMENT_REQUESTS_PATH,
   EVENT_EDIT_PATH,
   EVENT_COORDINATOR_EDIT_PATH,
@@ -124,9 +126,11 @@ function App() {
                 <Route path={BOOKING_REQUEST_PATH} element={<BookingRequestDetailPage />} />
               </Route>
 
-              {/* Story 15.2: Technical Support's equipment request queue. */}
+              {/* Story 15.2: Technical Support's equipment request queue. Story 16.1: a request's
+                  own page, where it is accepted or declined. */}
               <Route element={<RequirePermission permission={PERMISSIONS.EQUIPMENT_MANAGE} />}>
                 <Route path={EQUIPMENT_REQUESTS_PATH} element={<EquipmentRequestsPage />} />
+                <Route path={EQUIPMENT_REQUEST_PATH} element={<EquipmentRequestDetailPage />} />
               </Route>
 
               {/*

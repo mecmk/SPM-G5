@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, ApiError } from './client'
 import type { EquipmentLine } from './events'
 
 /** Story 15.1 AC5: the longest technical note. Keep in step with the backend's
@@ -107,8 +107,10 @@ export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED'
 
 /**
  * Mirrors `EquipmentQueueEntry`: story 15.2 AC1, a request with its event's name and dates, the
- * item's type, quantity and notes, and who sent it (`null` when that was never recorded). AC2:
- * `available` for the event's period, not counting the event's own hold, and `shortfall`.
+ * item's type, quantity and notes, and who sent it and when (`null` when never recorded). AC2:
+ * `available` for the event's period, not counting the event's own hold, and `shortfall`. Story
+ * 16.1 AC2/AC3: who decided it and when, and the reason for declining - each `null` until it is
+ * decided, and for requests decided before those were recorded.
  */
 export interface EquipmentQueueEntry {
   id: string
@@ -121,9 +123,13 @@ export interface EquipmentQueueEntry {
   quantity: number
   technical_notes: string | null
   requested_by_name: string | null
+  submitted_at: string | null
   status: EquipmentQueueStatus
   available: number
   shortfall: number
+  decided_by_name: string | null
+  decided_at: string | null
+  decision_reason: string | null
 }
 
 /** Mirrors `EquipmentQueueCounts`: story 15.2 AC3, how many requests each tab holds. */
@@ -146,4 +152,59 @@ export function listEquipmentRequests(
 ): Promise<EquipmentQueue> {
   if (status === null) return api<EquipmentQueue>('/equipment-requests')
   return api<EquipmentQueue>(`/equipment-requests?${new URLSearchParams({ status })}`)
+}
+
+/** Story 16.1: what Technical Support may decide. Mirrors `EquipmentDecisionOutcome`. */
+export type EquipmentDecisionOutcome = 'ACCEPTED' | 'DECLINED'
+
+/** Mirrors `EquipmentDecisionIn`: story 16.1, a decision. AC4: a decline carries a reason, and an
+ * accept carries none. */
+export type EquipmentDecision = { outcome: 'ACCEPTED' } | { outcome: 'DECLINED'; reason: string }
+
+/** Story 16.1 AC6: the figures an accept refused for a shortfall carries beside its sentence. */
+export interface EquipmentShortfall {
+  available: number
+  shortfall: number
+}
+
+/** The figures of an accept refused for a shortfall (story 16.1 AC6), or `null` for any other
+ * failure. */
+export function shortfallOf(error: unknown): EquipmentShortfall | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null
+  const { detail } = error
+  if (!detail || typeof detail !== 'object') return null
+  if (!('available' in detail) || !('shortfall' in detail)) return null
+  const { available, shortfall } = detail
+  if (typeof available !== 'number' || typeof shortfall !== 'number') return null
+  return { available, shortfall }
+}
+
+/** Story 16.1 AC1/AC2: accept a pending request, or decline it with a reason; returns the request
+ * as the queue shows it. 409 (`EQUIPMENT_DECISION_REFUSED`) when it is no longer pending, its
+ * event will not go ahead, or the units are no longer there - each with the backend's sentence. */
+export function decideEquipmentRequest(
+  entry: EquipmentQueueEntry,
+  decision: EquipmentDecision,
+): Promise<EquipmentQueueEntry> {
+  const isAccepted = decision.outcome === 'ACCEPTED'
+  return api<EquipmentQueueEntry>(`/equipment-requests/${entry.id}/decision`, {
+    method: 'POST',
+    body: decision,
+    errorCodes: { 404: 'NOT_FOUND', 409: 'EQUIPMENT_DECISION_REFUSED', 422: 'EQUIPMENT_INVALID' },
+    notify: {
+      title: isAccepted ? 'Equipment request accepted' : 'Equipment request declined',
+      message: `${entry.equipment_type_name} ×${entry.quantity} for ${entry.event_name} was ${
+        isAccepted ? 'accepted and reserved' : 'declined'
+      }.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 16.1: one request as the queue shows it, for its own page. 404 once the queue would no
+ * longer list it. */
+export function getEquipmentRequest(itemId: string): Promise<EquipmentQueueEntry> {
+  return api<EquipmentQueueEntry>(`/equipment-requests/${itemId}`, {
+    errorCodes: { 404: 'NOT_FOUND' },
+  })
 }

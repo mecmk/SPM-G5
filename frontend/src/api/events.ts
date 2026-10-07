@@ -159,6 +159,11 @@ export interface EquipmentLine {
   status: EquipmentItemStatus
   submitted_at: string | null
   submitted_by_name: string | null
+  /** Story 16.1 AC2: Technical Support's reason for declining; `null` otherwise. */
+  decision_reason: string | null
+  /** Story 16.1 AC3: when Technical Support accepted or declined it, and who; `null` until then. */
+  decided_at: string | null
+  decided_by_name: string | null
 }
 
 /**

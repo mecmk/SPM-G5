@@ -34,6 +34,8 @@ const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'AC
 const WHOLE_NUMBER = /^\d+$/
 const UNAVAILABLE_SENTENCE =
   "The event's dates changed and not enough are free. Lower the quantity or remove it."
+/** Story 16.1 AC2: a declined item always shows a reason, or that none was recorded. */
+const NO_REASON_RECORDED = 'Not recorded'
 
 /** AC4: a typed quantity must be a whole number from 1 to the number available. */
 function isQuantityAllowed(value: string, available: number | undefined): boolean {
@@ -70,6 +72,9 @@ export interface EquipmentRequestsSectionProps {
  * AC7), and sends what is waiting to Technical Support (AC1). The quantity is checked here before
  * anything is sent (AC4), and the server re-checks every change; after a refusal the figures are
  * reloaded, so the form shows what is free now (AC4, AC10).
+ * Story 16.1 AC1/AC2: an item Technical Support accepted reads Accepted, and one it declined shows
+ * the reason, so the coordinator knows whether to plan for something else. AC3: a decided item
+ * says when, and by whom.
  */
 export function EquipmentRequestsSection({
   eventId,
@@ -320,10 +325,27 @@ export function EquipmentRequestsSection({
                       </span>
                     </>
                   )}
+                  {item.decided_at !== null && (
+                    <>
+                      <br />
+                      <span className="small muted">
+                        Decided {formatDateTime(item.decided_at)}
+                        {item.decided_by_name !== null && ` by ${item.decided_by_name}`}
+                      </span>
+                    </>
+                  )}
                   {item.status === 'UNAVAILABLE' && (
                     <>
                       <br />
                       <span className="small">{UNAVAILABLE_SENTENCE}</span>
+                    </>
+                  )}
+                  {item.status === 'DECLINED' && (
+                    <>
+                      <br />
+                      <span className="small">
+                        Reason: {item.decision_reason ?? NO_REASON_RECORDED}
+                      </span>
                     </>
                   )}
                 </span>
