@@ -15,6 +15,8 @@
  * AC10 the status badge is the same wherever it renders (this list, the draft editor, the event
  *      details page) - see the status text asserted below and in EventRequestFormPage's own spec.
  * AC11 a status tab (All plus each visible status) filters the list; each tab shows a live count.
+ * f7.1.1 (AC1): a proposed date that runs over more than one day names both dates. The days are
+ * Singapore days, wherever the browser is.
  * Ordering, the empty list as the API returns it, every status, the 401/403 refusals and
  * other-organiser leaks (the same organisation, a query parameter) are backend cases:
  * backend/tests/events/test_my_event_requests.py. AC10/12-16's backend cases (status agreeing
@@ -101,6 +103,41 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   await expect(requestCard(page, 'Q1 Sales Kick-off (draft)')).toContainText('Draft')
   for (const name of OLIVIA_REQUESTS) await expect(requestCard(page, name)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+})
+
+test('2.6 AC1: a request over two days shows both dates', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await openMyEvents(page)
+
+  // The seeded Regional Sales Summit runs 15 Dec 09:00 to 16 Dec 17:00.
+  await expect(requestCard(page, 'Regional Sales Summit')).toContainText(
+    'Proposed date: Tue, 15 Dec 2026, 09:00 – Wed, 16 Dec 2026, 17:00',
+  )
+})
+
+test.describe('with the browser in New York', () => {
+  test.use({ timezoneId: 'America/New_York' })
+
+  test('2.6 AC1: a request running past midnight in Singapore shows both dates wherever the browser is', async ({
+    page,
+  }) => {
+    const name = uniqueName('Overnight')
+    await signIn(page, ACCOUNTS.organiser)
+    await page.goto('/events/new')
+    await page.getByLabel('Event name').fill(name)
+    // 20:00 to 02:00 in Singapore is 07:00 to 13:00 of one day in New York (and 12:00 to 18:00 of
+    // one day in UTC), so only days counted in Singapore time give two dates.
+    await page.getByLabel('Proposed start').fill('2027-12-15T20:00')
+    await page.getByLabel('Proposed end').fill('2027-12-16T02:00')
+    await page.getByRole('button', { name: 'Save draft' }).click()
+    await expect(page).toHaveURL(EDIT_PATH)
+
+    await openMyEvents(page)
+
+    await expect(requestCard(page, name)).toContainText(
+      'Proposed date: Wed, 15 Dec 2027, 20:00 – Thu, 16 Dec 2027, 02:00',
+    )
+  })
 })
 
 test('2.6 AC11: a status tab shows only requests in that status', async ({ page }) => {
