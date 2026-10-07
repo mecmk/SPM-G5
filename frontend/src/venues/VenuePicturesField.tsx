@@ -256,6 +256,24 @@ export function VenuePicturesField({
     }
   }, [])
 
+  // Story 8.3 AC5 (bug f8.3.3): a browser opens a file dropped where the page does not cancel the
+  // drop, in place of the page and its unsaved form. Outside the drop area, which has already
+  // taken its own drop by the time the event reaches the window, a file is refused instead.
+  useEffect(() => {
+    function refuseStrayFile(event: globalThis.DragEvent) {
+      if (event.defaultPrevented || !event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'none'
+    }
+
+    window.addEventListener('dragover', refuseStrayFile)
+    window.addEventListener('drop', refuseStrayFile)
+    return () => {
+      window.removeEventListener('dragover', refuseStrayFile)
+      window.removeEventListener('drop', refuseStrayFile)
+    }
+  }, [])
+
   function handlePointerDown(event: PointerEvent<HTMLLIElement>) {
     if (isDisabled || press.current !== null || !event.isPrimary || event.button !== 0) return
     if (event.target instanceof Element && event.target.closest('button') !== null) return

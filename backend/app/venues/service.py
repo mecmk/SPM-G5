@@ -614,9 +614,11 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
 
     Facilities, layouts, accessibility features and unavailability periods go with it. A venue
     with booking rows is refused by the database's foreign key, translated to VenueInUse. Story
-    8.3 AC8: its pictures go too, rows and files, the files once the deletion is saved.
+    8.3 AC8: its pictures go too, rows and files, the files once the deletion is saved. AC10: the
+    venue's row is locked as when its pictures change (bug f8.3.3), so a picture added meanwhile
+    waits, then finds no venue, rather than going with it and leaving its file behind.
     """
-    venue = get_venue(db, venue_id)
+    venue = _lock_venue(db, venue_id)
     name = venue.name
     image_urls = [image.url for image in venue.images]
     db.delete(venue)
