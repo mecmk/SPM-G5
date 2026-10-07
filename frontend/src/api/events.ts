@@ -307,6 +307,31 @@ export function requestClarification(
   })
 }
 
+const EVENT_RESPONSE_ERROR_CODES = {
+  404: 'EVENT_NOT_FOUND',
+  409: 'EVENT_NOT_AWAITING_RESPONSE',
+} as const
+
+/** Story 4.3 AC1-AC3: the owning organiser answers a clarification request while the event is
+ *  CLARIFICATION_REQUESTED. The status does not change, so the organiser may answer more than
+ *  once (AC6). */
+export function respondToClarification(
+  eventId: string,
+  message: string,
+  eventName: string,
+): Promise<Clarification> {
+  return api<Clarification>(`/events/${eventId}/clarifications/responses`, {
+    method: 'POST',
+    body: { message },
+    errorCodes: EVENT_RESPONSE_ERROR_CODES,
+    notify: {
+      title: 'Response sent',
+      message: `Your response on "${eventName}" was sent to the coordinator.`,
+      importance: 'important',
+    },
+  })
+}
+
 /**
  * Story 2.1 AC15: whether saving the draft says so in the notification centre. Submitting saves the
  * details first, and must say only that the request was submitted, not that a draft was saved.
