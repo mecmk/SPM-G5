@@ -156,6 +156,12 @@ def test_seed_constants_match_database(db: Session):
         (Events.PARTNER_BRIEFING, "PLANNING"),
         (Events.EQUIPMENT_WORKSHOP, "PLANNING"),
         (Events.EQUIPMENT_SHOWCASE, "PLANNING"),
+        (Events.EQUIPMENT_ROADSHOW, "PLANNING"),
+        (Events.FINTECH_BREAKFAST, "PLANNING"),
+        (Events.CUSTOMER_FORUM, "PLANNING"),
+        (Events.SALES_KICKOFF, "PLANNING"),
+        (Events.RECRUITMENT_FAIR, "PLANNING"),
+        (Events.PARTNER_GALA, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -166,10 +172,15 @@ def test_seed_constants_match_database(db: Session):
             text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}
         ).scalar()
     # Story 15.1's e2e rows: an item not yet sent and a pending one, each with its hold, and the
-    # out-of-service record that leaves no video camera free for the showcase.
+    # out-of-service record that leaves no video camera free for the showcase. Story 15.2's: one
+    # item per Technical Support tab, and the out-of-service record that leaves the pending one
+    # short.
     for item_id, status in (
         (EquipmentItems.WORKSHOP_PROJECTORS, "REQUESTED"),
         (EquipmentItems.SHOWCASE_SPEAKERS, "PENDING"),
+        (EquipmentItems.ROADSHOW_LAPEL_MICS, "PENDING"),
+        (EquipmentItems.ROADSHOW_WIRELESS_MICS, "ACCEPTED"),
+        (EquipmentItems.ROADSHOW_PROJECTORS, "DECLINED"),
     ):
         assert (
             db.execute(
@@ -180,6 +191,8 @@ def test_seed_constants_match_database(db: Session):
     for hold_id, item_id in (
         (EquipmentHolds.WORKSHOP_PROJECTORS, EquipmentItems.WORKSHOP_PROJECTORS),
         (EquipmentHolds.SHOWCASE_SPEAKERS, EquipmentItems.SHOWCASE_SPEAKERS),
+        (EquipmentHolds.ROADSHOW_LAPEL_MICS, EquipmentItems.ROADSHOW_LAPEL_MICS),
+        (EquipmentHolds.ROADSHOW_WIRELESS_MICS, EquipmentItems.ROADSHOW_WIRELESS_MICS),
     ):
         assert (
             db.execute(
@@ -191,10 +204,14 @@ def test_seed_constants_match_database(db: Session):
             ).scalar()
             == item_id
         )
-    assert db.execute(
-        text("SELECT 1 FROM equipment_unavailability_periods WHERE id = :id"),
-        {"id": EquipmentOutOfService.SHOWCASE_CAMERAS},
-    ).scalar()
+    for period_id in (
+        EquipmentOutOfService.SHOWCASE_CAMERAS,
+        EquipmentOutOfService.ROADSHOW_LAPEL_MICS,
+    ):
+        assert db.execute(
+            text("SELECT 1 FROM equipment_unavailability_periods WHERE id = :id"),
+            {"id": period_id},
+        ).scalar()
 
 
 @pytest.mark.story("1")

@@ -33,6 +33,9 @@ export const EVENTS = {
   // equipment flow changes the workshop's equipment; nothing changes the showcase's.
   equipmentWorkshop: '33333333-0000-0000-0000-000000000019',
   equipmentShowcase: '33333333-0000-0000-0000-000000000020',
+  // Story 15.2, Planning, organiser: organiser2, coordinator, dated June 2027. One equipment item
+  // per Technical Support tab; nothing changes them.
+  equipmentRoadshow: '33333333-0000-0000-0000-000000000021',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
