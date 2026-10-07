@@ -144,6 +144,13 @@ export function VenueFormPage() {
   }, [pictures])
   useEffect(() => () => revokePreviews(picturesRef.current), [])
 
+  // Story 8.3 AC8: a notice handed over by a new venue's save is about that save, so it leaves the
+  // page's history entry once read, and reloading the page does not show it again.
+  useEffect(() => {
+    if (noticeFrom(location.state) === null) return
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location, navigate])
+
   function updateField<K extends keyof VenueFormState>(key: K, value: VenueFormState[K]) {
     setForm((current) => current && { ...current, [key]: value })
   }
