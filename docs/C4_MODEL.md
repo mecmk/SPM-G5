@@ -157,6 +157,7 @@ C4Component
     Rel(events, registration, "Opens registration for")
     Rel(events, notifications, "Raises submissions through")
     Rel(bookings, notifications, "Raises requests, withdrawals and decisions through")
+    Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
     Rel(registration, notifications, "Raises confirmations through")
     Rel(shared, db, "Reads and writes")
