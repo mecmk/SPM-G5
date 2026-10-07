@@ -29,15 +29,16 @@ function layoutName(venue: Venue, layoutCode: string | null): string {
 /**
  * Story 13.1.3: the requested venue's calendar, so Venue Staff can see what else holds it before
  * deciding. AC2: it opens on the month the request starts in, with that day's list open. Mounted
- * only once the booking has loaded, so the month it opens on is known from the start - and again
- * after a decision (AC4), back on the request's day so its outcome is in view.
+ * only once the booking has loaded, so the month it opens on is known from the start.
  */
 function BookingVenueAvailability({ booking }: { booking: Booking }) {
   const loadWindows = useCallback(
     (startsAt: string, endsAt: string) => getVenueCalendar(booking.venue_id, startsAt, endsAt),
     [booking.venue_id],
   )
-  const calendar = useVenueCalendar(loadWindows, startOfMonthOf(booking.starts_at))
+  // AC4: a decision made on the page changes the status, which loads the month on screen again,
+  // so the request's day shows it booked, or no longer there once rejected.
+  const calendar = useVenueCalendar(loadWindows, startOfMonthOf(booking.starts_at), booking.status)
   return (
     <section className="card stack" aria-labelledby="booking-availability-heading">
       <h2 id="booking-availability-heading">Venue availability</h2>
@@ -295,9 +296,7 @@ export function BookingRequestDetailPage() {
             </section>
           </div>
 
-          {/* AC4: keyed on the status, so a decision made here loads the calendar afresh and
-              the request's day shows it booked, or no longer there once rejected. */}
-          <BookingVenueAvailability key={booking.status} booking={booking} />
+          <BookingVenueAvailability booking={booking} />
         </div>
       </div>
 

@@ -49,6 +49,10 @@ function monthBoundary(month: Date): string {
  * `loadWindows` changes. `loadWindows` must keep its identity between renders unless the venue
  * changed - a `useCallback` over the venue's id - or the calendar would load on every render.
  *
+ * Story 13.1.3 AC4: `reloadKey` is anything whose change means the venue's bookings have changed
+ * - a booking request's status, once it is decided on the page. The month on screen loads again
+ * in place: the month, and the windows already shown, stay until the new answer arrives.
+ *
  * Windows are not cleared when `loadWindows` changes: no page swaps one venue's calendar for
  * another's today, so this can't be observed yet. If that ever becomes possible, this needs to go
  * back to clearing them (or the page keying the calendar on the venue) so a new venue never shows
@@ -57,6 +61,7 @@ function monthBoundary(month: Date): string {
 export function useVenueCalendar(
   loadWindows: VenueCalendarLoader,
   initialMonth: Date,
+  reloadKey?: string,
 ): VenueCalendarState {
   const [month, setMonth] = useState(() => startOfMonth(initialMonth))
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
@@ -89,7 +94,8 @@ export function useVenueCalendar(
     return () => {
       cancelled = true
     }
-  }, [loadWindows, month])
+    // reloadKey is not read above: it is listed only so that its change loads the month again.
+  }, [loadWindows, month, reloadKey])
 
   return { month, setMonth, windows, error, isLoading }
 }
