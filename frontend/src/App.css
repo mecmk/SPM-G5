@@ -778,6 +778,21 @@ label.choice-chip:has(input:checked)::before {
   }
 }
 
+/* Story 13.1.3: a booking request's details beside its venue's calendar, which needs about half
+   the width for a readable month, so the two stack sooner than .layout-split does. */
+.booking-detail-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .booking-detail-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
 
 /*
