@@ -16,12 +16,11 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { formatDate, formatDateTime, formatTime } from '../shared/format'
+import { NOT_RECORDED, formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
 const SHORT_ID_LENGTH = 8
-const NOT_RECORDED = 'Not recorded'
 
 type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
@@ -110,7 +109,8 @@ interface OpenDecision {
  * details opens that page. AC1/AC2: a decided request moves to its outcome's tab, with the reason
  * if declined. AC3: a decided card says when, and by whom, as Venue Staff's booking cards say
  * when they were decided. View details stays on the right of every card. AC6: a refused accept
- * leaves the card showing the shortfall it reported.
+ * leaves the card showing the shortfall it reported. AC7/AC9: any other refusal loads the tab
+ * again, so a decision made elsewhere meanwhile shows.
  */
 export function EquipmentRequestsPage() {
   const [tab, setTab] = useState<EquipmentQueueTabKey>('PENDING')
@@ -140,6 +140,16 @@ export function EquipmentRequestsPage() {
     if (openDecision === null) return
     const { id } = openDecision.entry
     setQueue((current) => current && withFigures(current, id, figures))
+  }
+
+  /** Story 16.1 AC7/AC9: a decision refused for the request's state - load the tab again, so its
+   * cards and counts show what happened meanwhile. */
+  async function reloadQueue() {
+    try {
+      setQueue(await loadTab())
+    } catch {
+      // The dialog already shows the refusal; the tab keeps what it last loaded.
+    }
   }
 
   return (
@@ -297,6 +307,7 @@ export function EquipmentRequestsPage() {
           onCancel={closeDecision}
           onDecided={recordDecision}
           onShortfall={recordShortfall}
+          onRefused={reloadQueue}
         />
       )}
     </div>

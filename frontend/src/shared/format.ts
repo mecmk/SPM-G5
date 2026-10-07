@@ -7,6 +7,10 @@
 const LOCALE = 'en-SG'
 const TIME_ZONE = 'Asia/Singapore'
 
+/** What a page shows in place of a value that was never recorded, such as a request's sender or
+ * a reason for declining given before reasons were required. */
+export const NOT_RECORDED = 'Not recorded'
+
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {
     weekday: 'short',

@@ -14,7 +14,7 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { formatDateTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime } from '../shared/format'
 
 /** Story 15.1 AC1: how each item status reads on the event page. */
 const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
@@ -34,8 +34,6 @@ const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'AC
 const WHOLE_NUMBER = /^\d+$/
 const UNAVAILABLE_SENTENCE =
   "The event's dates changed and not enough are free. Lower the quantity or remove it."
-/** Story 16.1 AC2: a declined item always shows a reason, or that none was recorded. */
-const NO_REASON_RECORDED = 'Not recorded'
 
 /** AC4: a typed quantity must be a whole number from 1 to the number available. */
 function isQuantityAllowed(value: string, available: number | undefined): boolean {
@@ -366,7 +364,7 @@ export function EquipmentRequestsSection({
                 {item.status === 'DECLINED' && (
                   <span className="decline-reason">
                     <span className="fact-label">Reason for declining</span>
-                    {item.decision_reason ?? NO_REASON_RECORDED}
+                    {item.decision_reason ?? NOT_RECORDED}
                   </span>
                 )}
               </li>

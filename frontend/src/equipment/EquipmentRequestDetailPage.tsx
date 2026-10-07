@@ -11,11 +11,9 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { formatDate, formatDateTime, formatTime } from '../shared/format'
+import { NOT_RECORDED, formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
-
-const NOT_RECORDED = 'Not recorded'
 
 /** The event page's back link returns to this request's page (story 7.1's back state). */
 function backToRequest(itemId: string): EventCardBackState {
@@ -31,7 +29,8 @@ function backToRequest(itemId: string): EventCardBackState {
  * dialogs the queue uses; the page then shows the outcome and the actions go.
  * AC3: a decided request says who decided and when, and a declined one always shows its reason,
  * or that none was recorded (a request declined before reasons were required).
- * AC6: a refused accept leaves the page showing the shortfall it reported.
+ * AC6: a refused accept leaves the page showing the shortfall it reported. AC7/AC9: any other
+ * refusal loads the request again, so a decision made elsewhere meanwhile shows.
  * View event details opens the event (story 7.1), whose back link returns to this page.
  */
 export function EquipmentRequestDetailPage() {
@@ -51,6 +50,16 @@ export function EquipmentRequestDetailPage() {
 
   function recordShortfall(figures: EquipmentShortfall) {
     setEntry((current) => current && { ...current, ...figures })
+  }
+
+  /** Story 16.1 AC7/AC9: a decision refused for the request's state - load it again, so the page
+   * shows what happened meanwhile. */
+  async function reloadRequest() {
+    try {
+      setEntry(await loadRequest())
+    } catch {
+      // The dialog already shows the refusal; the page keeps what it last loaded.
+    }
   }
 
   function askToAccept() {
@@ -186,6 +195,7 @@ export function EquipmentRequestDetailPage() {
           onCancel={closeDecision}
           onDecided={recordDecision}
           onShortfall={recordShortfall}
+          onRefused={reloadRequest}
         />
       )}
     </div>

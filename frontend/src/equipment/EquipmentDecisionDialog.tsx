@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import {
   decideEquipmentRequest,
   shortfallOf,
@@ -19,6 +19,9 @@ export interface EquipmentDecisionDialogProps {
   onDecided: (decided: EquipmentQueueEntry) => void
   /** Story 16.1 AC6: an accept was refused for a shortfall, with the figures it reported. */
   onShortfall: (figures: EquipmentShortfall) => void
+  /** Story 16.1 AC7/AC9: any other refusal - decided by someone else meanwhile, its event closed,
+   * or the request removed - so the page loads it again. */
+  onRefused: () => void
 }
 
 /**
@@ -27,6 +30,8 @@ export interface EquipmentDecisionDialogProps {
  * spaces-only one before anything is sent. AC6/AC7/AC9: a refusal stays in the dialog with the
  * backend's sentence. AC9: the confirm button is disabled while the decision is saved, and a
  * click that lands meanwhile is ignored, so a double-click decides once.
+ * AC7/AC9: a refusal other than a shortfall, or a request gone meanwhile, has the page load it
+ * again behind the dialog, so it stops offering a decision that can no longer be made.
  * AC6: when the request is short - as its card showed, or as a refused accept reported - Accept
  * warns that it will be refused and suggests declining instead. Accept stays enabled: the server
  * decides, and the figures on screen may be out of date either way.
@@ -37,6 +42,7 @@ export function EquipmentDecisionDialog({
   onCancel,
   onDecided,
   onShortfall,
+  onRefused,
 }: EquipmentDecisionDialogProps) {
   const [reason, setReason] = useState('')
   const [isDeciding, setIsDeciding] = useState(false)
@@ -58,6 +64,8 @@ export function EquipmentDecisionDialog({
       if (figures !== null) {
         setRefusedFigures(figures)
         onShortfall(figures)
+      } else if (err instanceof ApiError && (err.status === 409 || err.status === 404)) {
+        onRefused()
       }
     } finally {
       setIsDeciding(false)
