@@ -47,7 +47,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC4 | creating, editing and deleting venues |
 | `e2e/venue-calendar.spec.ts` | 9.1 AC1–AC3, AC5, AC7–AC10, AC12, AC13 | a venue's availability calendar |
 | `e2e/booking-requests.spec.ts` | 12.1 AC1–AC4, AC14, AC15; 12.2 AC1, AC2, AC4 | requesting a venue for an event, and withdrawing the request |
-| `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.2 AC1; 13.2.1 AC2–AC4 | Venue Staff's queue, approving and rejecting |
+| `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.1.2 AC1, AC3, AC4; 13.2 AC1; 13.2.1 AC2–AC4 | Venue Staff's queue, Pending / All / Approved / Rejected tabs, cancellation timing, pagination, approving and rejecting |
 | `e2e/equipment-requests.spec.ts` | 15.1 AC1–AC4, AC6, AC9 | recording an event's equipment and submitting it to Technical Support |
 
 Every case, by story and AC, without starting anything:
