@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -704,6 +705,70 @@ def test_a_venue_that_no_longer_exists_takes_no_pictures(venue_staff_client, upl
         assert removed.status_code == 404
         assert reordered.status_code == 404
     assert _files_in(upload_dir) == []
+
+
+def _waiting_on_a_lock(engine) -> bool:
+    """Whether a transaction in the test database is waiting for a lock another one holds."""
+    with engine.connect() as connection:
+        waiting = connection.scalar(
+            text(
+                "SELECT count(*) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND wait_event_type = 'Lock'"
+            )
+        )
+    return waiting > 0
+
+
+@pytest.mark.story("8.3", ac=10)
+def test_a_picture_added_while_its_venue_is_deleted_leaves_no_file(engine, upload_dir):
+    """Real concurrent transactions, so this test commits and cleans up after itself. The deletion
+    reads the venue's pictures, then waits until the picture being added is saved or is waiting
+    for the venue's row. Had the new picture been saved, its row would go with the venue but its
+    file would stay, served at its address with no venue behind it."""
+    venue_id = _committed_venue(engine)
+    has_read = threading.Event()
+    is_added_or_refused = threading.Event()
+
+    class SessionPausingBeforeDelete(Session):
+        def delete(self, instance: object) -> None:
+            has_read.set()
+            deadline = time.monotonic() + 10
+            while not (is_added_or_refused.is_set() or _waiting_on_a_lock(engine)):
+                if time.monotonic() > deadline:
+                    break
+                time.sleep(0.01)
+            super().delete(instance)
+
+    def delete() -> None:
+        with SessionPausingBeforeDelete(engine) as session:
+            actor = session.get(User, Users.VENUE_STAFF.id)
+            service.delete_venue(session, venue_id, actor=actor)
+
+    def add() -> str:
+        has_read.wait(timeout=10)
+        try:
+            with Session(engine) as session:
+                actor = session.get(User, Users.VENUE_STAFF.id)
+                try:
+                    service.add_venue_image(session, venue_id, _PNG, actor=actor)
+                except service.VenueNotFound:
+                    return "venue not found"
+                return "added"
+        finally:
+            is_added_or_refused.set()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            deleting = pool.submit(delete)
+            adding = pool.submit(add)
+            deleting.result(timeout=30)
+            outcome = adding.result(timeout=30)
+
+        assert outcome == "venue not found"
+        assert _files_in(upload_dir) == []
+        assert _positions(engine, venue_id) == []
+    finally:
+        _drop_committed_venue(engine, venue_id)
 
 
 @pytest.mark.story("8.3", ac=10)
