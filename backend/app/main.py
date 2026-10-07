@@ -6,6 +6,7 @@ from app.auth.router import router as auth_router
 from app.bookings.router import router as bookings_router
 from app.config import settings
 from app.coordination.router import router as coordination_router
+from app.equipment.router import queue_router as equipment_queue_router
 from app.equipment.router import router as equipment_router
 from app.events.router import router as events_router
 from app.events.router import uploads_router
@@ -29,6 +30,7 @@ app.include_router(auth_router)
 app.include_router(bookings_router)
 app.include_router(coordination_router)
 app.include_router(equipment_router)
+app.include_router(equipment_queue_router)
 app.include_router(events_router)
 app.include_router(uploads_router)
 app.include_router(venues_router)

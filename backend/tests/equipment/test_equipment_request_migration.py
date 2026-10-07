@@ -66,9 +66,14 @@ def test_migration_014_moves_existing_lines_to_the_new_statuses(db: Session):
     conn.exec_driver_sql(
         "ALTER TABLE event_equipment_requests DROP COLUMN submitted_by_id, DROP COLUMN submitted_at"
     )
-    # The seed's one PENDING item stands for a line pre-014 code would have left UNDER_REVIEW.
+    # The seed's PENDING items stand for lines pre-014 code would have left UNDER_REVIEW. Its
+    # ACCEPTED and DECLINED items (story 15.2's e2e rows) are Technical Support's decisions, which
+    # pre-014 rows could not hold, so they go.
     conn.exec_driver_sql(
         "UPDATE event_equipment_requests SET status = 'UNDER_REVIEW' WHERE status = 'PENDING'"
+    )
+    conn.exec_driver_sql(
+        "DELETE FROM event_equipment_requests WHERE status IN ('ACCEPTED', 'DECLINED')"
     )
     conn.exec_driver_sql(
         "ALTER TABLE event_equipment_requests ADD CONSTRAINT ck_event_equipment_requests_status"

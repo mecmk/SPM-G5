@@ -30,12 +30,17 @@ Who and when (AC9): only the event's assigned coordinator, and only while the ev
 Review, Clarification Requested or Planning. A draft is private to its organiser (2.1 AC8), so it
 is not found. Item statuses are ``EquipmentRequestStatus``; ACCEPTED and DECLINED are Technical
 Support's to set (story 16.1), and an item in either is locked (AC7).
+
+Story 15.2 - "As a Technical Support Staff member I want to see the equipment requests waiting for
+me, with what is available for each, so that I can work through them in a sensible order." The
+queue (``list_equipment_requests``) only reads: deciding a request is story 16.1.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
@@ -47,6 +52,7 @@ from app.common.audit import record_audit
 from app.equipment.schemas import (
     EquipmentItemIn,
     EquipmentItemUpdate,
+    EquipmentQueueStatus,
     EventEquipmentAvailabilityOut,
 )
 from app.events import service as events_service
@@ -86,6 +92,9 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
+# Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
+# the queue leaves them out by the event's status rather than the item's.
+_CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
 # Why each hold was placed, in ``equipment_reservations.notes``.
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
@@ -215,6 +224,70 @@ def list_event_equipment_availability(
         )
         for equipment_type in active_types
     ]
+
+
+@dataclass(frozen=True)
+class EquipmentQueueRow:
+    """Story 15.2 AC1/AC2: one request in Technical Support's queue, its event, and how many of its
+    type the event's period has for it."""
+
+    item: EventEquipmentRequest
+    event: Event
+    available: int
+
+
+@dataclass(frozen=True)
+class EquipmentQueueListing:
+    """Story 15.2 AC3: one tab's requests, and how many requests each tab holds."""
+
+    rows: list[EquipmentQueueRow]
+    counts_by_status: dict[str, int]
+
+
+def list_equipment_requests(
+    db: Session, *, status: EquipmentQueueStatus | None = None
+) -> EquipmentQueueListing:
+    """Story 15.2 AC1/AC3: the requests in one tab, or in all three when ``status`` is ``None`` (the
+    All tab), soonest event first; ties fall back to the order the items were recorded in, then
+    id, so the list is stable. AC5: an item the coordinator removed is gone, and every item on a
+    cancelled or rejected event is left out, whatever its own status.
+    Items in a status with no tab (not yet sent, flagged unavailable, cancelled) are left out too.
+
+    AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
+    own holds left out, since a Pending item already holds its units (15.1 AC2). AC7: worked out
+    afresh on every call, once per event in the tab."""
+    in_queue = (
+        EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
+        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
+    )
+    tab = (
+        select(EventEquipmentRequest, Event)
+        .join(Event, Event.id == EventEquipmentRequest.event_id)
+        .where(*in_queue)
+        .order_by(Event.starts_at, EventEquipmentRequest.created_at, EventEquipmentRequest.id)
+    )
+    if status is not None:
+        tab = tab.where(EventEquipmentRequest.status == status)
+    found = db.execute(tab).all()
+    counts_by_status = dict(
+        db.execute(
+            select(EventEquipmentRequest.status, func.count())
+            .join(Event, Event.id == EventEquipmentRequest.event_id)
+            .where(*in_queue)
+            .group_by(EventEquipmentRequest.status)
+        ).all()
+    )
+
+    available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
+    rows = []
+    for item, event in found:
+        if event.id not in available_by_event:
+            available_by_event[event.id] = events_service.available_by_type(
+                db, event.starts_at, event.ends_at, exclude_event_id=event.id
+            )
+        available = available_by_event[event.id][item.equipment_type_id]
+        rows.append(EquipmentQueueRow(item=item, event=event, available=available))
+    return EquipmentQueueListing(rows=rows, counts_by_status=counts_by_status)
 
 
 # --- writes --------------------------------------------------------------------------------------
