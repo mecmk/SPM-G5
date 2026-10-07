@@ -1150,6 +1150,36 @@ label.checkbox input {
   min-width: 0;
 }
 
+/* Story 15.1 AC1 / 16.1 AC3: when an equipment item was sent or decided, set in the mono face so
+   it reads as a record of what happened, apart from the technical notes above it. */
+.item-timing {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+/* Story 16.1 AC2: Technical Support's reason for declining an equipment item, on a line of its own
+   under the item's row on the event page (flex-basis: 100% wraps it in .check-list li), so the
+   coordinator does not miss it and the quantity and badge stay level with the item's name. The
+   edge matches the Declined badge. */
+.decline-reason {
+  display: block;
+  flex-basis: 100%;
+  margin-bottom: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--text-h);
+  font-size: 0.875rem;
+}
+
+.decline-reason .fact-label {
+  display: block;
+  margin-bottom: 0.125rem;
+  color: var(--danger-deep);
+}
+
 .inline-fields {
   display: flex;
   flex-wrap: wrap;
