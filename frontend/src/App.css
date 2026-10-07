@@ -464,6 +464,13 @@
   text-align: right;
 }
 
+/* Story 16.1: an equipment request's event period, which names both dates when it runs over more
+   than one day (f7.1.1), so it may wrap rather than push the card wider than a phone. */
+.item-card-period {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 .item-card-capacity-value {
   font-family: var(--font-mono);
   font-size: 1.125rem;

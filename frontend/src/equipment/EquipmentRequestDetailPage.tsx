@@ -11,7 +11,7 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { NOT_RECORDED, formatDate, formatDateTime, formatTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -24,7 +24,8 @@ function backToRequest(itemId: string): EventCardBackState {
  * Story 16.1 - one equipment request's own page, opened from View details in the queue, as Venue
  * Staff open a booking request (story 13.1). It shows what the queue card shows (15.2 AC1/AC2):
  * the event and its dates, the item, its quantity and technical notes, who sent it, and what the
- * event's period has for it, with any shortfall.
+ * event's period has for it, with any shortfall. The period names both dates when it runs over
+ * more than one day (f7.1.1).
  * AC1/AC2: Accept and Decline next to the status while the request is Pending, through the
  * dialogs the queue uses; the page then shows the outcome and the actions go.
  * AC3: a decided request says who decided and when, and a declined one always shows its reason,
@@ -123,15 +124,8 @@ export function EquipmentRequestDetailPage() {
               </h2>
               <div className="stat-card">
                 <Icon name="calendar" size={20} />
-                <p className="stat-card-value">{formatDate(entry.starts_at)}</p>
-                <p className="fact-label">Date</p>
-              </div>
-              <div className="stat-card">
-                <Icon name="calendar-check" size={20} />
-                <p className="stat-card-value">
-                  {formatTime(entry.starts_at)} – {formatTime(entry.ends_at)}
-                </p>
-                <p className="fact-label">Time</p>
+                <p className="stat-card-value">{formatSchedule(entry.starts_at, entry.ends_at)}</p>
+                <p className="fact-label">Date and time</p>
               </div>
             </section>
 

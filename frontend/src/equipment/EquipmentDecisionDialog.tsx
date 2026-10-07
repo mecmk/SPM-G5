@@ -10,7 +10,7 @@ import {
 } from '../api/equipment'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { formatDate, formatTime } from '../shared/format'
+import { formatSchedule } from '../shared/format'
 
 export interface EquipmentDecisionDialogProps {
   entry: EquipmentQueueEntry
@@ -26,7 +26,7 @@ export interface EquipmentDecisionDialogProps {
 
 /**
  * Story 16.1 - the Accept and Decline dialogs, shared by the queue and a request's own page.
- * AC1: Accept asks before reserving. AC2/AC4: Decline asks for a reason and refuses a blank or
+ * AC1: Accept asks before reserving, naming the event's whole period, which the hold covers. AC2/AC4: Decline asks for a reason and refuses a blank or
  * spaces-only one before anything is sent. AC6/AC7/AC9: a refusal stays in the dialog with the
  * backend's sentence. AC9: the confirm button is disabled while the decision is saved, and a
  * click that lands meanwhile is ignored, so a double-click decides once.
@@ -99,7 +99,7 @@ export function EquipmentDecisionDialog({
       >
         <p>
           {entry.equipment_type_name} ×{entry.quantity} will be reserved for {entry.event_name} on{' '}
-          {formatDate(entry.starts_at)}, {formatTime(entry.starts_at)}–{formatTime(entry.ends_at)}.
+          {formatSchedule(entry.starts_at, entry.ends_at)}.
         </p>
         {shortFigures !== null && (
           <p className="warning">

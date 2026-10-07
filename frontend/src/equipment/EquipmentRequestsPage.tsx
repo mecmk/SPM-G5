@@ -16,7 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { NOT_RECORDED, formatDate, formatDateTime, formatTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -191,11 +191,8 @@ export function EquipmentRequestsPage() {
                         #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
                       </span>
                     </div>
-                    <div className="item-card-capacity">
-                      <div>{formatDate(entry.starts_at)}</div>
-                      <div className="small muted">
-                        {formatTime(entry.starts_at)}–{formatTime(entry.ends_at)}
-                      </div>
+                    <div className="item-card-capacity item-card-period">
+                      <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>
                     </div>
                   </div>
 
