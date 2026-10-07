@@ -650,26 +650,34 @@ def _known(
 
 
 def available_by_type(
-    db: Session, period_start: datetime, period_end: datetime
+    db: Session,
+    period_start: datetime,
+    period_end: datetime,
+    *,
+    excluding_event_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
     events over the period (a hold's quantity less what was released), less units out of service.
     Overlap is half-open, so a hold ending exactly as the period starts does not count. Story 15.1
-    (``app/equipment/service.py``) uses the same calculation for the coordinator's items."""
-    held = dict(
-        db.execute(
-            select(
-                EquipmentReservation.equipment_type_id,
-                func.sum(EquipmentReservation.quantity - EquipmentReservation.released_quantity),
-            )
-            .where(
-                EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
-                EquipmentReservation.starts_at < period_end,
-                EquipmentReservation.ends_at > period_start,
-            )
-            .group_by(EquipmentReservation.equipment_type_id)
-        ).all()
+    (``app/equipment/service.py``) uses the same calculation for the coordinator's items.
+
+    Story 15.2 AC2: ``excluding_event_id`` leaves that event's own holds out before the figure is
+    floored at zero, so units lost after the event was held show as a shortfall against it."""
+    held_query = (
+        select(
+            EquipmentReservation.equipment_type_id,
+            func.sum(EquipmentReservation.quantity - EquipmentReservation.released_quantity),
+        )
+        .where(
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+            EquipmentReservation.starts_at < period_end,
+            EquipmentReservation.ends_at > period_start,
+        )
+        .group_by(EquipmentReservation.equipment_type_id)
     )
+    if excluding_event_id is not None:
+        held_query = held_query.where(EquipmentReservation.event_id != excluding_event_id)
+    held = dict(db.execute(held_query).all())
     out_of_service = dict(
         db.execute(
             select(
