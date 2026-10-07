@@ -12,7 +12,8 @@ AC3 Tabs show Pending, Accepted and Declined requests. A decided request leaves 
     Team request, beyond the AC: an All tab - leaving ``status`` out - lists the three together.
 AC4 A request exactly equal to the available quantity shows no shortfall. Holds and reservations
     whose periods only touch the event's period at a boundary are not deducted.
-AC5 An item the coordinator removes, or any item on a cancelled event, disappears from the queue.
+AC5 An item the coordinator removes, or any item on a cancelled or rejected event, disappears from
+    the queue.
     An empty queue shows a message (tests/e2e/equipment-queue.spec.ts).
 AC6 Only Technical Support Staff can see the queue. Other roles are refused, including through
     the API.
@@ -445,10 +446,13 @@ def test_an_item_the_coordinator_removes_disappears(login_as, db):
 
 
 @pytest.mark.story("15.2", ac=5)
+@pytest.mark.parametrize("event_status", [EventStatus.CANCELLED, EventStatus.REJECTED])
 @pytest.mark.parametrize("status", TAB_STATUSES)
-def test_any_item_on_a_cancelled_event_disappears(tech_client, db, status):
+def test_any_item_on_a_cancelled_or_rejected_event_disappears(
+    tech_client, db, status, event_status
+):
     before = _queue(tech_client, status)["counts"]
-    event = _event(db, status=EventStatus.CANCELLED)
+    event = _event(db, status=event_status)
     item = _sent(db, event=event, equipment_type=make_equipment_type(db), quantity=1, status=status)
 
     assert str(item.id) not in _ids(tech_client, status)

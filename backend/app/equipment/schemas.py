@@ -106,7 +106,7 @@ class EquipmentQueueEntry(BaseModel):
     quantity: int
     technical_notes: str | None
     requested_by_name: str | None
-    status: str
+    status: EquipmentQueueStatus
     available: int
     shortfall: int
 
@@ -125,7 +125,7 @@ class EquipmentQueueEntry(BaseModel):
             quantity=item.quantity,
             technical_notes=item.technical_notes,
             requested_by_name=None if item.submitted_by is None else item.submitted_by.full_name,
-            status=item.status,
+            status=EquipmentQueueStatus(item.status),
             available=available,
             shortfall=max(0, item.quantity - available),
         )

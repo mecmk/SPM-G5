@@ -92,6 +92,9 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
+# Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
+# the queue leaves them out by the event's status rather than the item's.
+_CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
 # Why each hold was placed, in ``equipment_reservations.notes``.
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
@@ -246,8 +249,8 @@ def list_equipment_requests(
 ) -> EquipmentQueueListing:
     """Story 15.2 AC1/AC3: the requests in one tab, or in all three when ``status`` is ``None`` (the
     All tab), soonest event first; ties fall back to the order the items were recorded in, then
-    id, so the list is stable. AC5: an item the coordinator
-    removed is gone, and every item on a cancelled event is left out, whatever its own status.
+    id, so the list is stable. AC5: an item the coordinator removed is gone, and every item on a
+    cancelled or rejected event is left out, whatever its own status.
     Items in a status with no tab (not yet sent, flagged unavailable, cancelled) are left out too.
 
     AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
@@ -255,7 +258,7 @@ def list_equipment_requests(
     afresh on every call, once per event in the tab."""
     in_queue = (
         EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
-        Event.status != EventStatus.CANCELLED,
+        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
     )
     tab = (
         select(EventEquipmentRequest, Event)
