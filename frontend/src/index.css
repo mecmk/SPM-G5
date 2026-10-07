@@ -79,6 +79,17 @@
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
   --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 
+  /* a venue's pictures (story 8.3 AC5/AC6): the controls drawn over a picture, and the picture
+     viewer, which stays dark in both themes, as photo viewers do */
+  --picture-control: rgba(17, 20, 28, 0.62);
+  --picture-control-hover: rgba(17, 20, 28, 0.85);
+  --on-picture-control: #ffffff;
+  --viewer-backdrop: rgba(12, 12, 14, 0.96);
+  --viewer-control: rgba(255, 255, 255, 0.14);
+  --viewer-control-hover: rgba(255, 255, 255, 0.26);
+  --viewer-text: #f5f4f0;
+  --viewer-text-muted: rgba(245, 244, 240, 0.7);
+
   /* shape and type. --radius-sm is 0 on purpose: the prototype's `rounded-sm` resolves to 0px. */
   --radius: 4px;
   --radius-sm: 0;
@@ -161,6 +172,15 @@
     --hero-shade: rgba(0, 0, 0, 0.78);
     --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
     --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+
+    --picture-control: rgba(0, 0, 0, 0.62);
+    --picture-control-hover: rgba(0, 0, 0, 0.85);
+    --on-picture-control: #ffffff;
+    --viewer-backdrop: rgba(8, 8, 8, 0.96);
+    --viewer-control: rgba(255, 255, 255, 0.14);
+    --viewer-control-hover: rgba(255, 255, 255, 0.26);
+    --viewer-text: #f4f2ed;
+    --viewer-text-muted: rgba(244, 242, 237, 0.7);
   }
 }
 

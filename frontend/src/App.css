@@ -401,11 +401,22 @@
 }
 
 .item-card-picture {
+  position: relative;
   display: grid;
   place-items: center;
   height: 6rem;
   background: var(--surface-alt);
   color: var(--text-muted);
+}
+
+/* Story 8.3 AC6: a venue's first picture, filling the card's band. Placed over the band rather
+   than in its grid, so the picture's own height cannot stretch past it over the card. */
+.item-card-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .item-card-body {
@@ -904,7 +915,8 @@ label.choice-chip:has(input:checked)::before {
   color: var(--on-brand-panel-muted);
 }
 
-/* Story 7.1: a real photo filling the hero, for pages that have one (venues never do). */
+/* A real photo filling the hero: an event's cover picture (story 7.1), or a venue's first picture
+   (story 8.3 AC6). */
 .venue-hero-picture {
   position: absolute;
   inset: 0;
@@ -2934,6 +2946,469 @@ label select[aria-invalid='true'],
 .picture-drop-actions label:focus-within {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* ---------- a venue's pictures (story 8.3 AC5-AC7, f8.3.2) ---------- */
+
+/* The venue form's pictures in their order, above the drop area it shares with the event cover
+   picture. A picture is carried to a new place and the others glide aside (FLIP, in
+   VenuePicturesField); its × removes it, and its arrows, shown on hover or focus, move it one
+   place for the keyboard. */
+.picture-tiles {
+  position: relative;
+  display: grid;
+  /* Two to a row on a phone, where 9rem would leave one. */
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 40%), 1fr));
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* The glide is an unhurried ease-out, long enough to follow with the eye. */
+.picture-tile {
+  position: relative;
+  cursor: grab;
+  transition: transform 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* A picture just added grows into place, once (see `appeared` in VenuePicturesField). */
+.picture-tile.is-new {
+  animation: picture-tile-in 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
+}
+
+.picture-tile.is-lifted {
+  z-index: 2;
+  cursor: grabbing;
+  transition: none;
+}
+
+.picture-tile-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  transition: box-shadow 220ms ease;
+}
+
+.picture-tile.is-lifted .picture-tile-frame {
+  box-shadow: var(--shadow);
+}
+
+.picture-tile img,
+.picture-gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  object-fit: cover;
+}
+
+.picture-tile img {
+  pointer-events: none;
+}
+
+/* Story 8.3 AC6: the first picture is the venue's cover. */
+.picture-tile-cover {
+  position: absolute;
+  top: 0.375rem;
+  left: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--picture-control);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  color: var(--on-picture-control);
+}
+
+.picture-tile-remove,
+.picture-tile-move {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--picture-control);
+  color: var(--on-picture-control);
+  transition:
+    background 150ms ease,
+    opacity 150ms ease;
+}
+
+.picture-tile-remove:hover,
+.picture-tile-move:hover,
+.picture-tile-move:disabled:hover {
+  border: 0;
+  background: var(--picture-control-hover);
+}
+
+.picture-tile-remove:hover {
+  background: var(--danger);
+}
+
+.picture-tile-remove {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.375rem;
+}
+
+.picture-tile-moves {
+  position: absolute;
+  right: 0.375rem;
+  bottom: 0.375rem;
+  left: 0.375rem;
+  display: flex;
+  justify-content: space-between;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.picture-tile:hover .picture-tile-moves,
+.picture-tile:focus-within .picture-tile-moves {
+  opacity: 1;
+}
+
+.picture-tile.is-lifted .picture-tile-moves {
+  opacity: 0;
+}
+
+/* No hover on a touch screen, so the arrows are always there. */
+@media (hover: none) {
+  .picture-tile-moves {
+    opacity: 1;
+  }
+}
+
+.picture-tile-move:disabled {
+  opacity: 0.35;
+}
+
+.picture-tile-remove:focus-visible,
+.picture-tile-move:focus-visible {
+  outline: 2px solid var(--on-picture-control);
+  outline-offset: -3px;
+}
+
+@keyframes picture-tile-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+/* Story 8.3 AC7: the files the last choice did not take, each with its reason. */
+.picture-refusals:empty {
+  display: none;
+}
+
+.picture-refusals p,
+.picture-refusals ul {
+  margin: 0;
+}
+
+.picture-refusals ul {
+  padding-left: 1.25rem;
+}
+
+/* The venue record's gallery: every picture in order, each opening the viewer. */
+.picture-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 40%), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.picture-gallery-button,
+.picture-gallery-button:hover {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.picture-gallery-button img {
+  transition:
+    transform 200ms ease,
+    filter 200ms ease;
+}
+
+.picture-gallery-button:hover img {
+  filter: brightness(1.06);
+  transform: translateY(-2px);
+}
+
+.picture-gallery-button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Story 8.3 AC6: the viewer, a dark screen over the page holding one picture at a time, with the
+   way through them along the bottom. */
+.picture-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--viewer-backdrop);
+  color: var(--viewer-text);
+  /* The page behind is blurred away rather than half read through the dark. */
+  backdrop-filter: blur(10px);
+  animation: picture-viewer-in 200ms ease backwards;
+}
+
+.picture-viewer.is-closing {
+  animation: picture-viewer-out 180ms ease forwards;
+}
+
+.picture-viewer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+
+.picture-viewer-count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: var(--viewer-text-muted);
+}
+
+.picture-viewer-close,
+.picture-viewer-nav {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--viewer-control);
+  color: var(--viewer-text);
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.picture-viewer-close:hover,
+.picture-viewer-nav:hover {
+  border: 0;
+  background: var(--viewer-control-hover);
+}
+
+.picture-viewer-close:active,
+.picture-viewer-nav:active {
+  transform: scale(0.94);
+}
+
+.picture-viewer-close {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.picture-viewer-stage {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.picture-viewer-picture {
+  position: absolute;
+  inset: 0;
+  max-width: calc(100% - 8rem);
+  max-height: calc(100% - 1rem);
+  margin: auto;
+  border-radius: var(--radius);
+  object-fit: contain;
+  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
+  animation: picture-viewer-zoom-in 260ms cubic-bezier(0.2, 0, 0, 1) backwards;
+}
+
+.picture-viewer-picture.is-entering-next {
+  animation: picture-viewer-from-right 280ms cubic-bezier(0.2, 0, 0, 1) backwards;
+}
+
+.picture-viewer-picture.is-entering-previous {
+  animation: picture-viewer-from-left 280ms cubic-bezier(0.2, 0, 0, 1) backwards;
+}
+
+.picture-viewer-picture.is-leaving-next {
+  animation: picture-viewer-to-left 280ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.picture-viewer-picture.is-leaving-previous {
+  animation: picture-viewer-to-right 280ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.picture-viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 3rem;
+  height: 3rem;
+  margin-top: -1.5rem;
+}
+
+.picture-viewer-nav.is-previous {
+  left: 1rem;
+}
+
+.picture-viewer-nav.is-next {
+  right: 1rem;
+}
+
+.picture-viewer-thumbs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.75rem 1rem 1.25rem;
+}
+
+.picture-viewer-thumb,
+.picture-viewer-thumb:hover {
+  flex: 0 0 auto;
+  width: 3.75rem;
+  height: 2.75rem;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+}
+
+.picture-viewer-thumb {
+  opacity: 0.5;
+  transition:
+    opacity 150ms ease,
+    border-color 150ms ease;
+}
+
+.picture-viewer-thumb:hover {
+  opacity: 0.85;
+}
+
+.picture-viewer-thumb[aria-current='true'] {
+  border-color: var(--viewer-text);
+  opacity: 1;
+}
+
+.picture-viewer-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.picture-viewer-close:focus-visible,
+.picture-viewer-nav:focus-visible,
+.picture-viewer-thumb:focus-visible {
+  outline: 2px solid var(--viewer-text);
+  outline-offset: 2px;
+}
+
+/* On a phone the picture uses the whole width; the side buttons sit over it. */
+@media (max-width: 640px) {
+  .picture-viewer-picture {
+    max-width: 100%;
+  }
+
+  .picture-viewer-nav {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-top: -1.25rem;
+  }
+
+  .picture-viewer-nav.is-previous {
+    left: 0.5rem;
+  }
+
+  .picture-viewer-nav.is-next {
+    right: 0.5rem;
+  }
+
+  .picture-viewer-thumbs {
+    justify-content: flex-start;
+  }
+}
+
+@keyframes picture-viewer-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes picture-viewer-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes picture-viewer-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes picture-viewer-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(10%);
+  }
+}
+
+@keyframes picture-viewer-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-10%);
+  }
+}
+
+@keyframes picture-viewer-to-left {
+  to {
+    opacity: 0;
+    transform: translateX(-10%);
+  }
+}
+
+@keyframes picture-viewer-to-right {
+  to {
+    opacity: 0;
+    transform: translateX(10%);
+  }
+}
+
+/* Someone who has asked for less motion gets the same steps without the movement. The states that
+   start a movement are named too: two classes outweigh one, and a media query adds no weight. */
+@media (prefers-reduced-motion: reduce) {
+  .picture-tile,
+  .picture-tile.is-new,
+  .picture-tile-frame,
+  .picture-gallery-button img,
+  .picture-viewer,
+  .picture-viewer.is-closing,
+  .picture-viewer-close,
+  .picture-viewer-nav,
+  .picture-viewer-picture,
+  .picture-viewer-picture.is-entering-next,
+  .picture-viewer-picture.is-entering-previous,
+  .picture-viewer-picture.is-leaving-next,
+  .picture-viewer-picture.is-leaving-previous {
+    transition: none;
+    animation: none;
+  }
 }
 
 /* ---------- finding a venue for an event (f12.1.1) ---------- */

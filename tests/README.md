@@ -46,7 +46,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/event-correction.spec.ts` | 7.2 AC4–AC9 | the assigned coordinator correcting a request under review or awaiting clarification: the save, replacing the cover picture, adding a venue requirement, a required field that cannot be emptied, equipment marked unavailable for new dates, a stale save and an approval landing mid-edit, details greyed out after approval with notes still saving, and who is offered the edit |
 | `e2e/venue-catalogue.spec.ts` | 8.1 AC1–AC6, AC8, AC9, AC11 | browsing and filtering the venue catalogue |
 | `e2e/venue-detail.spec.ts` | 8.2 AC1–AC3 | a venue's record |
-| `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC4 | creating, editing and deleting venues |
+| `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC8 | creating, editing and deleting venues, and their pictures |
 | `e2e/venue-calendar.spec.ts` | 9.1 AC1–AC3, AC5, AC7–AC10, AC12, AC13 | a venue's availability calendar |
 | `e2e/booking-requests.spec.ts` | 12.1 AC1–AC4, AC14, AC15; 12.2 AC1, AC2, AC4 | requesting a venue for an event, and withdrawing the request |
 | `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.1.2 AC1, AC3, AC4; 13.1.3 AC1–AC4; 13.2 AC1; 13.2.1 AC2–AC4; 13.2.2 AC1 | Venue Staff's queue, Pending / All / Approved / Rejected tabs, cancellation timing, pagination, the requested venue's calendar on the request detail page, approving and rejecting, and when a decision was made |
