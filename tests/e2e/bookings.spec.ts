@@ -45,38 +45,39 @@
  * seeded booking, same reasoning as 13.2's.
  *
  * Story 13.2.2 - fe: the event page shows when Venue Staff decided a booking.
- * AC1 an approved or rejected booking's card shows its decision time; a pending one shows none.
+ * AC1 an approved or rejected booking's card shows its decision time; a pending one shows none;
+ *     a withdrawn or cancelled one shows when it was closed, with the queue's "Closed at" / "Note".
  * That the API returns `decided_at` at all (null while pending, set once decided) is a backend
  * case: backend/tests/bookings/test_booking_decided_at.py.
  */
-import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
+import { expect, test, type Page } from "@playwright/test";
+import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from "./support";
 
-const QUEUE_PAGE_SIZE = 10
-const FAKE_QUEUE_LENGTH = 25
+const QUEUE_PAGE_SIZE = 10;
+const FAKE_QUEUE_LENGTH = 25;
 
 /** One fake queue entry, numbered so each page's rows can be told apart. */
 function fakeQueueEntry(index: number) {
-  const number = String(index + 1).padStart(2, '0')
+  const number = String(index + 1).padStart(2, "0");
   return {
     id: `00000000-0000-0000-0000-0000000000${number}`,
-    event_id: '33333333-0000-0000-0000-000000000003',
+    event_id: "33333333-0000-0000-0000-000000000003",
     event_name: `Paged Request ${number}`,
-    venue_id: '22222222-0000-0000-0000-000000000001',
-    venue_name: 'Grand Hall',
-    venue_location: 'Tower A',
-    starts_at: '2027-03-01T01:00:00Z',
-    ends_at: '2027-03-01T03:00:00Z',
+    venue_id: "22222222-0000-0000-0000-000000000001",
+    venue_name: "Grand Hall",
+    venue_location: "Tower A",
+    starts_at: "2027-03-01T01:00:00Z",
+    ends_at: "2027-03-01T03:00:00Z",
     expected_attendance: 10,
     required_layout_code: null,
     required_layout_name: null,
     requirement_notes: null,
-    requested_by_name: 'Chloe Coordinator',
-    status: 'PENDING',
+    requested_by_name: "Chloe Coordinator",
+    status: "PENDING",
     decision_reason: null,
-    created_at: '2026-09-20T01:00:00Z',
+    created_at: "2026-09-20T01:00:00Z",
     decided_at: null,
-  }
+  };
 }
 
 /**
@@ -89,132 +90,149 @@ function fakeQueueEntry(index: number) {
  * match is not interchangeable the way a plain `.first()` would assume.
  */
 function pendingCard(page: Page, shortId: string) {
-  return page.getByRole('listitem').filter({ hasText: `#${shortId}` })
+  return page.getByRole("listitem").filter({ hasText: `#${shortId}` });
 }
 
-test('13.1 AC1/AC2: venue staff see a pending request with its summary', async ({ page }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-
-  await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
-  const card = pendingCard(page, '00000002')
-  await expect(card).toContainText('Nimbus Developer Conference')
-  await expect(card).toContainText('Seminar Room 2.1')
-  await expect(card).toContainText('60')
-  await expect(card).toContainText('Breakout track B.')
-})
-
-test('13.1 AC2: the request detail page shows the event, booking and requirements', async ({
+test("13.1 AC1/AC2: venue staff see a pending request with its summary", async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  const card = pendingCard(page, '00000002')
-  await card.getByRole('link', { name: 'View details' }).click()
+  await expect(
+    page.getByRole("heading", { name: "Booking Requests" }),
+  ).toBeVisible();
+  const card = pendingCard(page, "00000002");
+  await expect(card).toContainText("Nimbus Developer Conference");
+  await expect(card).toContainText("Seminar Room 2.1");
+  await expect(card).toContainText("60");
+  await expect(card).toContainText("Breakout track B.");
+});
+
+test("13.1 AC2: the request detail page shows the event, booking and requirements", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+
+  const card = pendingCard(page, "00000002");
+  await card.getByRole("link", { name: "View details" }).click();
 
   // The queue card's own event name is also a heading, so wait for the URL - the only
   // unambiguous sign navigation to the detail page actually finished.
-  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Nimbus Developer Conference' })).toBeVisible()
-  await expect(page.getByText('Omar Organiser')).toBeVisible()
-  await expect(page.getByText('Annual customer conference')).toBeVisible()
-  await expect(page.getByText('Seminar Room 2.1')).toBeVisible()
-  await expect(page.getByText('Classroom')).toBeVisible()
-  await expect(page.getByText('Breakout track B.')).toBeVisible()
-  await expect(page.getByText('Projector & screen')).toBeVisible()
-  await expect(page.getByText('Wheelchair access')).toBeVisible()
-})
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Nimbus Developer Conference" }),
+  ).toBeVisible();
+  await expect(page.getByText("Omar Organiser")).toBeVisible();
+  await expect(page.getByText("Annual customer conference")).toBeVisible();
+  await expect(page.getByText("Seminar Room 2.1")).toBeVisible();
+  await expect(page.getByText("Classroom")).toBeVisible();
+  await expect(page.getByText("Breakout track B.")).toBeVisible();
+  await expect(page.getByText("Projector & screen")).toBeVisible();
+  await expect(page.getByText("Wheelchair access")).toBeVisible();
+});
 
-test('13.1 AC1: the queue shows requests across different events, venues and dates', async ({
+test("13.1 AC1: the queue shows requests across different events, venues and dates", async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  await expect(pendingCard(page, '00000002')).toBeVisible()
+  await expect(pendingCard(page, "00000002")).toBeVisible();
   await expect(
-    page.getByRole('listitem').filter({ hasText: 'Annual Wellness Summit' }),
-  ).toBeVisible()
+    page.getByRole("listitem").filter({ hasText: "Annual Wellness Summit" }),
+  ).toBeVisible();
   await expect(
-    page.getByRole('listitem').filter({ hasText: 'Product Roadmap Townhall' }),
-  ).toBeVisible()
-})
+    page.getByRole("listitem").filter({ hasText: "Product Roadmap Townhall" }),
+  ).toBeVisible();
+});
 
 /** The seeded APPROVED Nimbus/Grand Hall booking. A different, PENDING request (Product
  * Roadmap Townhall) also books Grand Hall, so the venue alone does not identify it. */
 function approvedGrandHallCard(page: Page) {
   return page
-    .getByRole('listitem')
-    .filter({ hasText: 'Nimbus Developer Conference' })
-    .filter({ hasText: 'Grand Hall' })
+    .getByRole("listitem")
+    .filter({ hasText: "Nimbus Developer Conference" })
+    .filter({ hasText: "Grand Hall" });
 }
 
-test('13.1 AC3: an approved booking does not appear in the pending queue', async ({ page }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-
-  await expect(page.getByRole('tab', { name: /^Pending/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(
-    page.getByRole('listitem').filter({ hasText: 'Product Roadmap Townhall' }),
-  ).toBeVisible()
-  await expect(approvedGrandHallCard(page)).toHaveCount(0)
-})
-
-test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decided booking', async ({
+test("13.1 AC3: an approved booking does not appear in the pending queue", async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  await expect(page.getByRole('tab', { name: /^Pending/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole("tab", { name: /^Pending/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Product Roadmap Townhall" }),
+  ).toBeVisible();
+  await expect(approvedGrandHallCard(page)).toHaveCount(0);
+});
 
-  await page.getByRole('tab', { name: /^Approved/ }).click()
-  await expect(approvedGrandHallCard(page)).toBeVisible()
-  await expect(approvedGrandHallCard(page).getByRole('button', { name: 'Approve' })).toHaveCount(0)
+test("13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decided booking", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+
+  await expect(page.getByRole("tab", { name: /^Pending/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await page.getByRole("tab", { name: /^Approved/ }).click();
+  await expect(approvedGrandHallCard(page)).toBeVisible();
+  await expect(
+    approvedGrandHallCard(page).getByRole("button", { name: "Approve" }),
+  ).toHaveCount(0);
   // Fewer than ten requests: one page, so no page controls. Checked on Approved, not All: All
   // gains a request from every spec that sends one, so it can reach ten in a full run, while
   // Approved holds the one seeded booking plus at most the two 13.2's tests approve.
-  await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
+  await expect(page.getByRole("navigation", { name: "Pages" })).toHaveCount(0);
 
-  await page.getByRole('tab', { name: /^Rejected/ }).click()
-  await expect(approvedGrandHallCard(page)).toHaveCount(0)
+  await page.getByRole("tab", { name: /^Rejected/ }).click();
+  await expect(approvedGrandHallCard(page)).toHaveCount(0);
 
   // A pending card first: only All's own answer holds one, so the approved card checked after it
   // cannot be one left over from an earlier tab.
-  await page.getByRole('tab', { name: /^All/ }).click()
-  await expect(pendingCard(page, '00000002')).toBeVisible()
-  await expect(approvedGrandHallCard(page)).toBeVisible()
-})
+  await page.getByRole("tab", { name: /^All/ }).click();
+  await expect(pendingCard(page, "00000002")).toBeVisible();
+  await expect(approvedGrandHallCard(page)).toBeVisible();
+});
 
-test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
+test("13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it", async ({
   page,
 }) => {
   // Migration 010 cancelled some pending requests itself, stamping decided_at and a system note.
   // The seed holds no cancelled booking, so fake one next to a staff-approved one.
   const approved = {
     ...fakeQueueEntry(0),
-    event_name: 'Staff Approved Request',
-    status: 'APPROVED',
-    decided_at: '2026-09-21T02:00:00Z',
-  }
+    event_name: "Staff Approved Request",
+    status: "APPROVED",
+    decided_at: "2026-09-21T02:00:00Z",
+  };
   const cancelled = {
     ...fakeQueueEntry(1),
-    event_name: 'System Cancelled Request',
-    status: 'CANCELLED',
-    decided_at: '2026-09-22T02:00:00Z',
-    decision_reason: 'Cancelled when pending requests began to hold their venue.',
-  }
+    event_name: "System Cancelled Request",
+    status: "CANCELLED",
+    decided_at: "2026-09-22T02:00:00Z",
+    decision_reason:
+      "Cancelled when pending requests began to hold their venue.",
+  };
   await page.route(
-    (url) => url.pathname === '/bookings',
+    (url) => url.pathname === "/bookings",
     async (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
-        return route.fallback()
+      const request = route.request();
+      if (request.resourceType() !== "fetch" || request.method() !== "GET") {
+        return route.fallback();
       }
       return route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
           items: [approved, cancelled],
           total: 2,
@@ -227,43 +245,61 @@ test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff d
           },
         }),
         headers: corsHeaders(request),
-      })
+      });
     },
-  )
+  );
 
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-  await page.getByRole('tab', { name: /^All/ }).click()
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+  await page.getByRole("tab", { name: /^All/ }).click();
   // A cancelled request has no tab of its own, but still counts towards All.
-  await expect(page.getByRole('tab', { name: 'All (2)', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("tab", { name: "All (2)", exact: true }),
+  ).toBeVisible();
 
-  const approvedCard = page.getByRole('listitem').filter({ hasText: 'Staff Approved Request' })
-  await expect(approvedCard.getByText('Decided at', { exact: true })).toBeVisible()
+  const approvedCard = page
+    .getByRole("listitem")
+    .filter({ hasText: "Staff Approved Request" });
+  await expect(
+    approvedCard.getByText("Decided at", { exact: true }),
+  ).toBeVisible();
 
-  const cancelledCard = page.getByRole('listitem').filter({ hasText: 'System Cancelled Request' })
-  await expect(cancelledCard.getByText('Closed at', { exact: true })).toBeVisible()
-  await expect(cancelledCard.getByText('Note', { exact: true })).toBeVisible()
-  await expect(cancelledCard.getByText('Decided at', { exact: true })).toHaveCount(0)
-  await expect(cancelledCard.getByText('Reason', { exact: true })).toHaveCount(0)
-})
+  const cancelledCard = page
+    .getByRole("listitem")
+    .filter({ hasText: "System Cancelled Request" });
+  await expect(
+    cancelledCard.getByText("Closed at", { exact: true }),
+  ).toBeVisible();
+  await expect(cancelledCard.getByText("Note", { exact: true })).toBeVisible();
+  await expect(
+    cancelledCard.getByText("Decided at", { exact: true }),
+  ).toHaveCount(0);
+  await expect(cancelledCard.getByText("Reason", { exact: true })).toHaveCount(
+    0,
+  );
+});
 
-test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', async ({ page }) => {
-  const askedFor: URLSearchParams[] = []
+test("13.1.2 AC4: the queue shows ten requests a page, with numbered pages", async ({
+  page,
+}) => {
+  const askedFor: URLSearchParams[] = [];
   await page.route(
-    (url) => url.pathname === '/bookings',
+    (url) => url.pathname === "/bookings",
     async (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
-        return route.fallback()
+      const request = route.request();
+      if (request.resourceType() !== "fetch" || request.method() !== "GET") {
+        return route.fallback();
       }
-      const params = new URL(request.url()).searchParams
-      askedFor.push(params)
-      const offset = Number(params.get('offset'))
-      const limit = Number(params.get('limit'))
-      const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) => fakeQueueEntry(index))
+      const params = new URL(request.url()).searchParams;
+      askedFor.push(params);
+      const offset = Number(params.get("offset"));
+      const limit = Number(params.get("limit"));
+      const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) =>
+        fakeQueueEntry(index),
+      );
       return route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
           items: every.slice(offset, offset + limit),
           total: FAKE_QUEUE_LENGTH,
@@ -276,39 +312,40 @@ test('13.1.2 AC4: the queue shows ten requests a page, with numbered pages', asy
           },
         }),
         headers: corsHeaders(request),
-      })
+      });
     },
-  )
+  );
 
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  const pager = page.getByRole('navigation', { name: 'Pages' })
-  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
-  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
-  await expect(page.getByText('Showing 1–10 of 25 requests')).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'Pending (25)', exact: true })).toBeVisible()
-  await expect(pager.getByRole('button', { name: 'Previous' })).toBeDisabled()
-  await expect(pager.getByRole('button', { name: '1', exact: true })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  const pager = page.getByRole("navigation", { name: "Pages" });
+  const cards = page.getByRole("listitem").filter({ hasText: "Paged Request" });
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE);
+  await expect(page.getByText("Showing 1–10 of 25 requests")).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Pending (25)", exact: true }),
+  ).toBeVisible();
+  await expect(pager.getByRole("button", { name: "Previous" })).toBeDisabled();
+  await expect(
+    pager.getByRole("button", { name: "1", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 
-  await pager.getByRole('button', { name: '2', exact: true }).click()
-  await expect(page.getByText('Showing 11–20 of 25 requests')).toBeVisible()
-  await expect(cards.filter({ hasText: 'Paged Request 11' })).toBeVisible()
-  await expect(cards.filter({ hasText: 'Paged Request 01' })).toHaveCount(0)
+  await pager.getByRole("button", { name: "2", exact: true }).click();
+  await expect(page.getByText("Showing 11–20 of 25 requests")).toBeVisible();
+  await expect(cards.filter({ hasText: "Paged Request 11" })).toBeVisible();
+  await expect(cards.filter({ hasText: "Paged Request 01" })).toHaveCount(0);
 
-  await pager.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByText('Showing 21–25 of 25 requests')).toBeVisible()
-  await expect(cards).toHaveCount(FAKE_QUEUE_LENGTH - 2 * QUEUE_PAGE_SIZE)
-  await expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled()
+  await pager.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByText("Showing 21–25 of 25 requests")).toBeVisible();
+  await expect(cards).toHaveCount(FAKE_QUEUE_LENGTH - 2 * QUEUE_PAGE_SIZE);
+  await expect(pager.getByRole("button", { name: "Next" })).toBeDisabled();
 
-  const last = askedFor.at(-1)
-  expect(last?.get('limit')).toBe(String(QUEUE_PAGE_SIZE))
-  expect(last?.get('offset')).toBe(String(2 * QUEUE_PAGE_SIZE))
-  expect(last?.get('status')).toBe('PENDING')
-})
+  const last = askedFor.at(-1);
+  expect(last?.get("limit")).toBe(String(QUEUE_PAGE_SIZE));
+  expect(last?.get("offset")).toBe(String(2 * QUEUE_PAGE_SIZE));
+  expect(last?.get("status")).toBe("PENDING");
+});
 
 /** Answer the queue's GETs with `every` paged by limit/offset, `total` as the tab's size, and
  * `hold` deciding whether one offset waits before it is answered. */
@@ -319,20 +356,20 @@ async function fakeQueue(
   hold: (offset: number) => Promise<void> = async () => {},
 ) {
   await page.route(
-    (url) => url.pathname === '/bookings',
+    (url) => url.pathname === "/bookings",
     async (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
-        return route.fallback()
+      const request = route.request();
+      if (request.resourceType() !== "fetch" || request.method() !== "GET") {
+        return route.fallback();
       }
-      const params = new URL(request.url()).searchParams
-      const offset = Number(params.get('offset'))
-      const limit = Number(params.get('limit'))
-      await hold(offset)
-      const size = total(offset)
+      const params = new URL(request.url()).searchParams;
+      const offset = Number(params.get("offset"));
+      const limit = Number(params.get("limit"));
+      await hold(offset);
+      const size = total(offset);
       return route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
           items: every.slice(0, size).slice(offset, offset + limit),
           total: size,
@@ -345,146 +382,171 @@ async function fakeQueue(
           },
         }),
         headers: corsHeaders(request),
-      })
+      });
     },
-  )
+  );
 }
 
-test('13.1.2 AC4: while the next page loads, the previous page is not shown', async ({ page }) => {
-  let release = () => {}
+test("13.1.2 AC4: while the next page loads, the previous page is not shown", async ({
+  page,
+}) => {
+  let release = () => {};
   const secondPageHeld = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) => fakeQueueEntry(index))
+    release = resolve;
+  });
+  const every = Array.from({ length: FAKE_QUEUE_LENGTH }, (_, index) =>
+    fakeQueueEntry(index),
+  );
   await fakeQueue(
     page,
     every,
     () => FAKE_QUEUE_LENGTH,
-    (offset) => (offset === QUEUE_PAGE_SIZE ? secondPageHeld : Promise.resolve()),
-  )
+    (offset) =>
+      offset === QUEUE_PAGE_SIZE ? secondPageHeld : Promise.resolve(),
+  );
 
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
-  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+  const cards = page.getByRole("listitem").filter({ hasText: "Paged Request" });
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE);
 
   await page
-    .getByRole('navigation', { name: 'Pages' })
-    .getByRole('button', { name: '2', exact: true })
-    .click()
-  await expect(page.getByText('Loading booking requests…')).toBeVisible()
-  await expect(cards).toHaveCount(0)
+    .getByRole("navigation", { name: "Pages" })
+    .getByRole("button", { name: "2", exact: true })
+    .click();
+  await expect(page.getByText("Loading booking requests…")).toBeVisible();
+  await expect(cards).toHaveCount(0);
 
-  release()
-  await expect(page.getByText('Showing 11–20 of 25 requests')).toBeVisible()
-  await expect(cards.filter({ hasText: 'Paged Request 11' })).toBeVisible()
-})
+  release();
+  await expect(page.getByText("Showing 11–20 of 25 requests")).toBeVisible();
+  await expect(cards.filter({ hasText: "Paged Request 11" })).toBeVisible();
+});
 
-test('13.1.2 AC4: a page emptied by decisions made elsewhere shows the last page instead', async ({
+test("13.1.2 AC4: a page emptied by decisions made elsewhere shows the last page instead", async ({
   page,
 }) => {
   // Twelve wait when the queue opens; by the time page 2 is asked for, two were decided elsewhere,
   // so ten remain and page 2 is past the end.
-  let remaining = 12
-  const every = Array.from({ length: remaining }, (_, index) => fakeQueueEntry(index))
+  let remaining = 12;
+  const every = Array.from({ length: remaining }, (_, index) =>
+    fakeQueueEntry(index),
+  );
   await fakeQueue(page, every, (offset) => {
-    if (offset === QUEUE_PAGE_SIZE) remaining = QUEUE_PAGE_SIZE
-    return remaining
-  })
+    if (offset === QUEUE_PAGE_SIZE) remaining = QUEUE_PAGE_SIZE;
+    return remaining;
+  });
 
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-  await expect(page.getByText('Showing 1–10 of 12 requests')).toBeVisible()
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+  await expect(page.getByText("Showing 1–10 of 12 requests")).toBeVisible();
 
   await page
-    .getByRole('navigation', { name: 'Pages' })
-    .getByRole('button', { name: '2', exact: true })
-    .click()
+    .getByRole("navigation", { name: "Pages" })
+    .getByRole("button", { name: "2", exact: true })
+    .click();
 
-  const cards = page.getByRole('listitem').filter({ hasText: 'Paged Request' })
-  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE)
-  await expect(cards.filter({ hasText: 'Paged Request 01' })).toBeVisible()
-  await expect(page.getByText('No requests waiting. You are up to date.')).toHaveCount(0)
-})
+  const cards = page.getByRole("listitem").filter({ hasText: "Paged Request" });
+  await expect(cards).toHaveCount(QUEUE_PAGE_SIZE);
+  await expect(cards.filter({ hasText: "Paged Request 01" })).toBeVisible();
+  await expect(
+    page.getByText("No requests waiting. You are up to date."),
+  ).toHaveCount(0);
+});
 
-test('13.1: a coordinator cannot open the booking requests queue', async ({ page }) => {
-  await signIn(page, ACCOUNTS.coordinator)
-  await page.goto('/venue-staff/booking-requests')
-
-  await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
-})
-
-test('13.2 AC1: approving from the queue card moves it from Pending to Approved', async ({
+test("13.1: a coordinator cannot open the booking requests queue", async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.coordinator);
+  await page.goto("/venue-staff/booking-requests");
 
-  const card = page.getByRole('listitem').filter({ hasText: 'Founders Day Fireside Chat' })
-  await card.getByRole('button', { name: 'Approve' }).click()
+  await expect(
+    page.getByRole("heading", { name: "Not permitted" }),
+  ).toBeVisible();
+});
 
-  const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
-  await dialog.getByRole('button', { name: 'Approve' }).click()
+test("13.2 AC1: approving from the queue card moves it from Pending to Approved", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  await expect(dialog).not.toBeVisible()
-  await expect(card).toHaveCount(0)
+  const card = page
+    .getByRole("listitem")
+    .filter({ hasText: "Founders Day Fireside Chat" });
+  await card.getByRole("button", { name: "Approve" }).click();
 
-  await page.getByRole('tab', { name: /^Approved/ }).click()
-  await expect(card.getByText('Approved', { exact: true })).toBeVisible()
-  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
-  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
-})
+  const dialog = page.getByRole("dialog", { name: "Approve this booking?" });
+  await dialog.getByRole("button", { name: "Approve" }).click();
 
-test('13.2 AC1: approving from the detail page shows the request as approved', async ({ page }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await expect(dialog).not.toBeVisible();
+  await expect(card).toHaveCount(0);
 
-  const card = page.getByRole('listitem').filter({ hasText: 'Investor Demo Day' })
-  await card.getByRole('link', { name: 'View details' }).click()
+  await page.getByRole("tab", { name: /^Approved/ }).click();
+  await expect(card.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Reject" })).toHaveCount(0);
+});
+
+test("13.2 AC1: approving from the detail page shows the request as approved", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+
+  const card = page
+    .getByRole("listitem")
+    .filter({ hasText: "Investor Demo Day" });
+  await card.getByRole("link", { name: "View details" }).click();
 
   // The URL changes before the detail page renders, and the queue card's event name is an h3, so
   // only the detail page's level-1 title shows the queue's Approve buttons are gone.
-  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByRole('heading', { name: 'Investor Demo Day', level: 1 })).toBeVisible()
-  await page.getByRole('button', { name: 'Approve' }).click()
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Investor Demo Day", level: 1 }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Approve" }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
-  await dialog.getByRole('button', { name: 'Approve' }).click()
+  const dialog = page.getByRole("dialog", { name: "Approve this booking?" });
+  await dialog.getByRole("button", { name: "Approve" }).click();
 
-  await expect(dialog).not.toBeVisible()
-  await expect(page.getByText('Approved', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
-})
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+});
 
-test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting moves the card to Rejected with its reason', async ({
+test("13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and rejecting moves the card to Rejected with its reason", async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
-  const card = page.getByRole('listitem').filter({ hasText: 'Winter Charity Gala' })
-  await card.getByRole('button', { name: 'Reject' }).click()
+  const card = page
+    .getByRole("listitem")
+    .filter({ hasText: "Winter Charity Gala" });
+  await card.getByRole("button", { name: "Reject" }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
-  await expect(dialog).toContainText('Winter Charity Gala')
+  const dialog = page.getByRole("dialog", { name: "Reject this booking?" });
+  await expect(dialog).toContainText("Winter Charity Gala");
 
   // AC2: an empty reason blocks submission client-side - no request fires, dialog stays open.
-  await dialog.getByRole('button', { name: 'Reject' }).click()
-  await expect(dialog.getByRole('alert')).toHaveText('Enter a reason for rejecting this request.')
-  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name: "Reject" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Enter a reason for rejecting this request.",
+  );
+  await expect(dialog).toBeVisible();
 
   // AC3: Cancel makes no change - the card is still there, still pending.
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialog).not.toBeVisible()
-  await expect(card).toBeVisible()
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(card).toBeVisible();
 
-  await card.getByRole('button', { name: 'Reject' }).click()
-  const reopenedDialog = page.getByRole('dialog', {
-    name: 'Reject this booking?',
-  })
+  await card.getByRole("button", { name: "Reject" }).click();
+  const reopenedDialog = page.getByRole("dialog", {
+    name: "Reject this booking?",
+  });
   await reopenedDialog
-    .getByLabel('Reason for rejecting')
-    .fill('Budget was reallocated to another event.')
+    .getByLabel("Reason for rejecting")
+    .fill("Budget was reallocated to another event.");
 
   // AC3: duplicate submission is prevented - hold the request in flight (same trick as
   // booking-requests.spec.ts's f1.1.1 case) and confirm the button disables rather than
@@ -492,139 +554,256 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
   await page.route(
     (url) => /\/bookings\/[^/]+\/reject$/.test(url.pathname),
     async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      await route.continue()
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await route.continue();
     },
-  )
-  const confirmButton = reopenedDialog.getByRole('button', { name: 'Reject' })
-  await confirmButton.click()
-  await expect(confirmButton).toBeDisabled()
+  );
+  const confirmButton = reopenedDialog.getByRole("button", { name: "Reject" });
+  await confirmButton.click();
+  await expect(confirmButton).toBeDisabled();
 
-  await expect(reopenedDialog).not.toBeVisible()
-  await expect(card).toHaveCount(0)
+  await expect(reopenedDialog).not.toBeVisible();
+  await expect(card).toHaveCount(0);
 
-  await page.getByRole('tab', { name: /^Rejected/ }).click()
-  await expect(card.getByText('Rejected', { exact: true })).toBeVisible()
-  await expect(card).toContainText('Budget was reallocated to another event.')
-  await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)
-  await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
-})
+  await page.getByRole("tab", { name: /^Rejected/ }).click();
+  await expect(card.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(card).toContainText("Budget was reallocated to another event.");
+  await expect(card.getByRole("button", { name: "Reject" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Approve" })).toHaveCount(0);
+});
 
-test('13.2.1 AC3: a failed rejection preserves the typed reason', async ({ page }) => {
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
+test("13.2.1 AC3: a failed rejection preserves the typed reason", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
 
   await page.route(
     (url) => /\/bookings\/[^/]+\/reject$/.test(url.pathname),
     async (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch') return route.fallback()
+      const request = route.request();
+      if (request.resourceType() !== "fetch") return route.fallback();
       return route.fulfill({
         status: 409,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
-          detail: 'This request is already APPROVED, so it cannot be rejected.',
+          detail: "This request is already APPROVED, so it cannot be rejected.",
         }),
         headers: corsHeaders(request),
-      })
+      });
     },
-  )
+  );
 
-  const card = pendingCard(page, '00000002')
-  await card.getByRole('button', { name: 'Reject' }).click()
+  const card = pendingCard(page, "00000002");
+  await card.getByRole("button", { name: "Reject" }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
-  const reason = 'Double booked in error.'
-  await dialog.getByLabel('Reason for rejecting').fill(reason)
-  await dialog.getByRole('button', { name: 'Reject' }).click()
+  const dialog = page.getByRole("dialog", { name: "Reject this booking?" });
+  const reason = "Double booked in error.";
+  await dialog.getByLabel("Reason for rejecting").fill(reason);
+  await dialog.getByRole("button", { name: "Reject" }).click();
 
-  await expect(dialog.getByRole('alert')).toContainText('cannot be rejected')
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByLabel('Reason for rejecting')).toHaveValue(reason)
-})
+  await expect(dialog.getByRole("alert")).toContainText("cannot be rejected");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Reason for rejecting")).toHaveValue(reason);
+});
 
-test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue staff and the requesting coordinator', async ({
+test("13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue staff and the requesting coordinator", async ({
   page,
 }) => {
   // Three full sign-in cycles (coordinator, venue staff, coordinator again), plus raising a
   // second request afterward, genuinely take longer than the default per-test budget.
-  test.setTimeout(75_000)
+  test.setTimeout(75_000);
 
   // Before any decision: the requesting coordinator can already reach the booking's outcome
   // through normal navigation - the event page itself, no click-through needed.
-  await signIn(page, ACCOUNTS.coordinator2)
-  await page.goto('/events/inbox')
-  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  await expect(page.getByRole('heading', { name: 'Alumni Homecoming Weekend' })).toBeVisible()
-  await expect(page.getByText('Pending', { exact: true })).toBeVisible()
-  await expect(page.getByText('Awaiting review by Venue Staff.')).toBeVisible()
+  await signIn(page, ACCOUNTS.coordinator2);
+  await page.goto("/events/inbox");
+  await page.getByRole("link", { name: "Alumni Homecoming Weekend" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Alumni Homecoming Weekend" }),
+  ).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
+  await expect(page.getByText("Awaiting review by Venue Staff.")).toBeVisible();
 
   // Venue staff rejects it from the detail page.
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, ACCOUNTS.venueStaff)
-  await page.goto('/venue-staff/booking-requests')
-  const card = page.getByRole('listitem').filter({ hasText: 'Alumni Homecoming Weekend' })
-  await card.getByRole('link', { name: 'View details' }).click()
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, ACCOUNTS.venueStaff);
+  await page.goto("/venue-staff/booking-requests");
+  const card = page
+    .getByRole("listitem")
+    .filter({ hasText: "Alumni Homecoming Weekend" });
+  await card.getByRole("link", { name: "View details" }).click();
 
-  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/);
   // level 1 is the detail page's own title; the queue card it came from carries the same name as
   // an h3, so without it this passes before the detail page has rendered.
   await expect(
-    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Reject' }).click()
+    page.getByRole("heading", { name: "Alumni Homecoming Weekend", level: 1 }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Reject" }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Reject this booking?' })
-  await dialog.getByLabel('Reason for rejecting').fill('The venue is unavailable that weekend.')
-  await dialog.getByRole('button', { name: 'Reject' }).click()
+  const dialog = page.getByRole("dialog", { name: "Reject this booking?" });
+  await dialog
+    .getByLabel("Reason for rejecting")
+    .fill("The venue is unavailable that weekend.");
+  await dialog.getByRole("button", { name: "Reject" }).click();
 
-  await expect(dialog).not.toBeVisible()
-  await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
-  await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("The venue is unavailable that weekend."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
 
   // The requesting coordinator revisits and reads the persisted outcome.
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, ACCOUNTS.coordinator2)
-  await page.goto('/events/inbox')
-  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
-  await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, ACCOUNTS.coordinator2);
+  await page.goto("/events/inbox");
+  await page.getByRole("link", { name: "Alumni Homecoming Weekend" }).click();
+  await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("The venue is unavailable that weekend."),
+  ).toBeVisible();
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
   // - both show up on the event page's history, the new request first. Since f12.1.1 a request
   // starts from the event: Find a venue, then Request this venue in the catalogue. Since s8.1 the
   // catalogue lists only venues that fit the event and are free, so the fresh request goes to
   // Exhibition Foyer, which the rejection above has just freed.
-  await page.getByRole('link', { name: 'Find a venue' }).click()
-  await venueCard(page, 'Exhibition Foyer')
-    .getByRole('link', { name: 'Request this venue' })
-    .click()
-  await page.getByRole('button', { name: 'Send request' }).click()
-  await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()
+  await page.getByRole("link", { name: "Find a venue" }).click();
+  await venueCard(page, "Exhibition Foyer")
+    .getByRole("link", { name: "Request this venue" })
+    .click();
+  await page.getByRole("button", { name: "Send request" }).click();
+  await expect(
+    page.getByRole("region", { name: "Request sent" }),
+  ).toBeVisible();
 
-  await page.goto('/events/inbox')
-  await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await page.goto("/events/inbox");
+  await page.getByRole("link", { name: "Alumni Homecoming Weekend" }).click();
+  const bookingSection = page.getByRole("region", { name: "Venue booking" });
   // The rejected request and the fresh one are both for Exhibition Foyer.
-  await expect(bookingSection.getByText('Exhibition Foyer', { exact: true })).toHaveCount(2)
-  await expect(bookingSection.getByText('Pending', { exact: true })).toBeVisible()
-  await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
-  await expect(bookingSection.getByText('The venue is unavailable that weekend.')).toBeVisible()
-  await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/)
-})
+  await expect(
+    bookingSection.getByText("Exhibition Foyer", { exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    bookingSection.getByText("Pending", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    bookingSection.getByText("Rejected", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    bookingSection.getByText("The venue is unavailable that weekend."),
+  ).toBeVisible();
+  await expect(bookingSection).toContainText(/Pending[\s\S]*Rejected/);
+});
 
-test('13.2.2 AC1: the event page shows when Venue Staff decided a booking', async ({ page }) => {
-  await signIn(page, ACCOUNTS.coordinator)
-  await page.goto(`/events/${EVENTS.approved}`)
+test("13.2.2 AC1: the event page shows when Venue Staff decided a booking", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator);
+  await page.goto(`/events/${EVENTS.approved}`);
 
   // The seeded Grand Hall booking was approved at 2026-09-04 10:00+08; format.ts pins en-SG and
   // Asia/Singapore, so the rendered time is fixed. The seeded Seminar Room 2.1 booking, and any
   // request booking-requests.spec.ts raises on this event in parallel, are still pending, so
   // the approved card is the only one with the line.
-  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
-  await expect(bookingSection.getByText('Approved', { exact: true })).toBeVisible()
-  await expect(bookingSection.getByText('Decided at')).toHaveCount(1)
-  await expect(bookingSection.getByText('Fri, 4 Sept 2026, 10:00')).toBeVisible()
-})
+  const bookingSection = page.getByRole("region", { name: "Venue booking" });
+  await expect(
+    bookingSection.getByText("Approved", { exact: true }),
+  ).toBeVisible();
+  await expect(bookingSection.getByText("Decided at")).toHaveCount(1);
+  await expect(
+    bookingSection.getByText("Fri, 4 Sept 2026, 10:00"),
+  ).toBeVisible();
+});
+
+test("13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, not decided", async ({
+  page,
+}) => {
+  // No seeded event has a withdrawn and a cancelled booking side by side, so stub the one call
+  // the card list reads. A withdrawal and a system cancellation both stamp `decided_at`, but
+  // nobody on Venue Staff decided them, so they take the booking queue's "Closed at" / "Note".
+  const booking = {
+    venue_id: "00000000-0000-0000-0000-000000000000",
+    venue_location: "Level 1",
+    starts_at: "2026-11-20T01:00:00Z",
+    ends_at: "2026-11-20T09:00:00Z",
+    setup_minutes: 60,
+    teardown_minutes: 60,
+  };
+  const outcomes = [
+    {
+      ...booking,
+      id: "rejected",
+      venue_name: "Rejected Hall",
+      status: "REJECTED",
+      decided_at: "2026-09-01T02:00:00Z",
+      decision_reason: "The hall is closed for maintenance.",
+    },
+    {
+      ...booking,
+      id: "withdrawn",
+      venue_name: "Withdrawn Hall",
+      status: "WITHDRAWN",
+      decided_at: "2026-09-02T02:00:00Z",
+      decision_reason: null,
+    },
+    {
+      ...booking,
+      id: "cancelled",
+      venue_name: "Cancelled Hall",
+      status: "CANCELLED",
+      decided_at: "2026-09-03T02:00:00Z",
+      decision_reason:
+        "Cancelled when pending requests began to hold their venue.",
+    },
+  ];
+  await page.route(
+    (url) => url.pathname === `/bookings/for-event/${EVENTS.approved}`,
+    async (route) => {
+      const request = route.request();
+      if (request.resourceType() !== "fetch") return route.fallback();
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(outcomes),
+        headers: corsHeaders(request),
+      });
+    },
+  );
+
+  await signIn(page, ACCOUNTS.coordinator);
+  await page.goto(`/events/${EVENTS.approved}`);
+
+  const bookingSection = page.getByRole("region", { name: "Venue booking" });
+  await expect(
+    bookingSection.getByText("Cancelled Hall", { exact: true }),
+  ).toBeVisible();
+
+  // Only the rejected booking was decided; the other two were closed, each with its own time.
+  await expect(
+    bookingSection.getByText("Decided at", { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    bookingSection.getByText("Closed at", { exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    bookingSection.getByText("Tue, 1 Sept 2026, 10:00"),
+  ).toBeVisible();
+  await expect(
+    bookingSection.getByText("Wed, 2 Sept 2026, 10:00"),
+  ).toBeVisible();
+  await expect(
+    bookingSection.getByText("Thu, 3 Sept 2026, 10:00"),
+  ).toBeVisible();
+
+  // The system's cancellation note is not a Venue Staff reason.
+  await expect(bookingSection.getByText("Reason", { exact: true })).toHaveCount(
+    1,
+  );
+  await expect(bookingSection.getByText("Note", { exact: true })).toHaveCount(
+    1,
+  );
+});
