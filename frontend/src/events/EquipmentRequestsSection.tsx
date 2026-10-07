@@ -14,7 +14,7 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { formatDateTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime } from '../shared/format'
 
 /** Story 15.1 AC1: how each item status reads on the event page. */
 const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
@@ -70,6 +70,9 @@ export interface EquipmentRequestsSectionProps {
  * AC7), and sends what is waiting to Technical Support (AC1). The quantity is checked here before
  * anything is sent (AC4), and the server re-checks every change; after a refusal the figures are
  * reloaded, so the form shows what is free now (AC4, AC10).
+ * Story 16.1 AC1/AC2: an item Technical Support accepted reads Accepted, and one it declined shows
+ * the reason in a callout on its own line under the item, so the coordinator knows whether to
+ * plan for something else. AC3: a decided item says when, and by whom.
  */
 export function EquipmentRequestsSection({
   eventId,
@@ -314,9 +317,18 @@ export function EquipmentRequestsSection({
                   {item.status === 'PENDING' && item.submitted_at !== null && (
                     <>
                       <br />
-                      <span className="small muted">
+                      <span className="item-timing">
                         Sent {formatDateTime(item.submitted_at)}
                         {item.submitted_by_name !== null && ` by ${item.submitted_by_name}`}
+                      </span>
+                    </>
+                  )}
+                  {item.decided_at !== null && (
+                    <>
+                      <br />
+                      <span className="item-timing">
+                        Decided {formatDateTime(item.decided_at)}
+                        {item.decided_by_name !== null && ` by ${item.decided_by_name}`}
                       </span>
                     </>
                   )}
@@ -347,6 +359,12 @@ export function EquipmentRequestsSection({
                     >
                       Remove
                     </button>
+                  </span>
+                )}
+                {item.status === 'DECLINED' && (
+                  <span className="decline-reason">
+                    <span className="fact-label">Reason for declining</span>
+                    {item.decision_reason ?? NOT_RECORDED}
                   </span>
                 )}
               </li>

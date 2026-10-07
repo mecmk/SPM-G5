@@ -162,6 +162,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.SALES_KICKOFF, "PLANNING"),
         (Events.RECRUITMENT_FAIR, "PLANNING"),
         (Events.PARTNER_GALA, "PLANNING"),
+        (Events.EQUIPMENT_DECISIONS, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -181,6 +182,13 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentItems.ROADSHOW_LAPEL_MICS, "PENDING"),
         (EquipmentItems.ROADSHOW_WIRELESS_MICS, "ACCEPTED"),
         (EquipmentItems.ROADSHOW_PROJECTORS, "DECLINED"),
+        (EquipmentItems.OFFSITE_SPEAKERS, "PENDING"),
+        (EquipmentItems.OFFSITE_LED_SCREEN, "PENDING"),
+        (EquipmentItems.OFFSITE_CONF_PHONES, "PENDING"),
+        (EquipmentItems.OFFSITE_LAPTOPS, "PENDING"),
+        (EquipmentItems.OFFSITE_PROJECTORS, "PENDING"),
+        (EquipmentItems.OFFSITE_WIRELESS_MICS, "PENDING"),
+        (EquipmentItems.OFFSITE_CAMERAS, "PENDING"),
     ):
         assert (
             db.execute(
@@ -193,6 +201,13 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentHolds.SHOWCASE_SPEAKERS, EquipmentItems.SHOWCASE_SPEAKERS),
         (EquipmentHolds.ROADSHOW_LAPEL_MICS, EquipmentItems.ROADSHOW_LAPEL_MICS),
         (EquipmentHolds.ROADSHOW_WIRELESS_MICS, EquipmentItems.ROADSHOW_WIRELESS_MICS),
+        (EquipmentHolds.OFFSITE_SPEAKERS, EquipmentItems.OFFSITE_SPEAKERS),
+        (EquipmentHolds.OFFSITE_LED_SCREEN, EquipmentItems.OFFSITE_LED_SCREEN),
+        (EquipmentHolds.OFFSITE_CONF_PHONES, EquipmentItems.OFFSITE_CONF_PHONES),
+        (EquipmentHolds.OFFSITE_LAPTOPS, EquipmentItems.OFFSITE_LAPTOPS),
+        (EquipmentHolds.OFFSITE_PROJECTORS, EquipmentItems.OFFSITE_PROJECTORS),
+        (EquipmentHolds.OFFSITE_WIRELESS_MICS, EquipmentItems.OFFSITE_WIRELESS_MICS),
+        (EquipmentHolds.OFFSITE_CAMERAS, EquipmentItems.OFFSITE_CAMERAS),
     ):
         assert (
             db.execute(

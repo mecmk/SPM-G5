@@ -92,6 +92,8 @@ export type ErrorCode =
   | 'EQUIPMENT_REFUSED'
   | 'EQUIPMENT_INVALID'
   | 'EQUIPMENT_QUANTITY_INVALID'
+  | 'EQUIPMENT_DECISION_REFUSED'
+  | 'EQUIPMENT_REASON_REQUIRED'
   | 'CHANGE_REQUEST_REFUSED'
   | 'CHANGE_REQUEST_INVALID'
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
@@ -526,6 +528,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EQUIPMENT_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'Enter a whole number from 1 to the number available.',
+  },
+  /** Story 16.1 AC6/AC7/AC9: the request is no longer pending, its event will not go ahead, or
+   * the units are no longer there. The backend's own sentence says which. */
+  EQUIPMENT_DECISION_REFUSED: {
+    title: 'Cannot decide this request',
+    message: 'This request cannot be accepted or declined in its current state.',
+  },
+  /** Story 16.1 AC4: checked by the decline dialog before anything is sent. Keep in step with the
+   * backend's DECLINE_REASON_REQUIRED_MESSAGE. */
+  EQUIPMENT_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for declining this request.',
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.

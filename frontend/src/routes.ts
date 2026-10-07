@@ -154,8 +154,14 @@ export function bookingRequestPath(bookingId: string): string {
   return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
 }
 
-// Story 15.2: Technical Support's queue of the equipment requests sent to it.
+// Story 15.2: Technical Support's queue of the equipment requests sent to it. Story 16.1: each
+// request's own page, where it can be accepted or declined.
 export const EQUIPMENT_REQUESTS_PATH = '/equipment/requests'
+export const EQUIPMENT_REQUEST_PATH = '/equipment/requests/:itemId'
+
+export function equipmentRequestPath(itemId: string): string {
+  return EQUIPMENT_REQUEST_PATH.replace(':itemId', encodeURIComponent(itemId))
+}
 
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'

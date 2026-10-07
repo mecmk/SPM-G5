@@ -34,6 +34,14 @@ Support's to set (story 16.1), and an item in either is locked (AC7).
 Story 15.2 - "As a Technical Support Staff member I want to see the equipment requests waiting for
 me, with what is available for each, so that I can work through them in a sensible order." The
 queue (``list_equipment_requests``) only reads: deciding a request is story 16.1.
+
+Story 16.1 - "As a Technical Support Staff member I want to accept an equipment request, reserving
+the equipment, or decline it with a reason, so that the coordinator knows whether the equipment is
+secured or another plan is needed." ``decide_equipment_request`` keeps a Pending item's hold as its
+reservation on accepting, or releases it on declining, in the same transaction as the decision.
+It takes the event's row lock first, as every write above does, so a decision is serialised with
+the coordinator's edits and with another decision on the same request (AC9), and the lock order -
+the event, then the types - still holds.
 """
 
 from __future__ import annotations
@@ -51,6 +59,8 @@ from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.common.audit import record_audit
 from app.equipment.schemas import (
+    EquipmentDecisionIn,
+    EquipmentDecisionOutcome,
     EquipmentItemIn,
     EquipmentItemUpdate,
     EquipmentQueueStatus,
@@ -77,6 +87,26 @@ TYPE_ALREADY_REQUESTED_MESSAGE = "This event already has an open request for {na
 NOT_ENOUGH_AVAILABLE_MESSAGE = "Not enough {name} available for this event's dates."
 NOTHING_TO_SUBMIT_MESSAGE = "There is no equipment waiting to be sent to Technical Support."
 UNKNOWN_EQUIPMENT_TYPE_MESSAGE = "Unknown equipment type: {code}."
+# Story 16.1 AC6. The shortfall's figures go beside the sentence, never in it (backend/STYLE.md).
+NOT_ENOUGH_TO_ACCEPT_MESSAGE = (
+    "Not enough {name} is available for this event's dates to accept this request."
+)
+DECISION_CLOSED_MESSAGE = (
+    "This event is {status}, so its equipment requests can no longer be decided."
+)
+# AC7/AC9: why a request that is not Pending cannot be decided, one sentence per status.
+NOT_PENDING_MESSAGES = {
+    EquipmentRequestStatus.REQUESTED: (
+        "This equipment request has not been sent to Technical Support yet."
+    ),
+    EquipmentRequestStatus.ACCEPTED: "This equipment request has already been accepted.",
+    EquipmentRequestStatus.DECLINED: "This equipment request has already been declined.",
+    EquipmentRequestStatus.UNAVAILABLE: (
+        "This equipment request no longer fits its event's dates and is waiting for the "
+        "coordinator."
+    ),
+    EquipmentRequestStatus.CANCELLED: "This equipment request was cancelled with its event.",
+}
 
 # AC9: the event statuses in which the assigned coordinator may change its equipment.
 _OPEN_EVENT_STATUSES = frozenset(
@@ -97,9 +127,13 @@ _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentReques
 # Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
 # the queue leaves them out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
+# Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
+# leaves out (15.2 AC5).
+_DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
 # Why each hold was placed, in ``equipment_reservations.notes``.
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
+_ACCEPTED_HOLD_NOTE = "Reserved when Technical Support accepted the request."
 
 
 def _as_words(status: str) -> str:
@@ -168,6 +202,35 @@ class NothingToSubmit(EquipmentConflict):
 
     def __init__(self) -> None:
         super().__init__(NOTHING_TO_SUBMIT_MESSAGE)
+
+
+class EquipmentRequestNotFound(LookupError):
+    """Story 16.1: no such equipment request."""
+
+
+class DecisionClosed(EquipmentConflict):
+    """Story 16.1 AC7: the request's event was cancelled or rejected."""
+
+    def __init__(self, event: Event) -> None:
+        super().__init__(DECISION_CLOSED_MESSAGE.format(status=_as_words(event.status)))
+
+
+class RequestNotPending(EquipmentConflict):
+    """Story 16.1 AC7/AC9: only a Pending request can be decided - a second decision, a
+    double-click included, is told the status the first one left."""
+
+    def __init__(self, item: EventEquipmentRequest) -> None:
+        super().__init__(NOT_PENDING_MESSAGES[item.status])
+
+
+class NotEnoughToAccept(EquipmentConflict):
+    """Story 16.1 AC6: the event's period no longer has the units, such as after some went out of
+    service. Carries ``available`` and ``shortfall`` for the refusal to show."""
+
+    def __init__(self, item: EventEquipmentRequest, *, available: int) -> None:
+        super().__init__(NOT_ENOUGH_TO_ACCEPT_MESSAGE.format(name=item.equipment_type.name))
+        self.available = available
+        self.shortfall = item.quantity - available
 
 
 # --- reads ---------------------------------------------------------------------------------------
@@ -290,6 +353,27 @@ def list_equipment_requests(
         available = available_by_event[event.id][item.equipment_type_id]
         rows.append(EquipmentQueueRow(item=item, event=event, available=available))
     return EquipmentQueueListing(rows=rows, counts_by_status=counts_by_status)
+
+
+def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
+    """Story 16.1: one request as the queue shows it, for its own page, where it can be decided as
+    from the queue. AC7: only what the queue lists (15.2 AC3/AC5) - a request not yet sent,
+    flagged, cancelled or on a cancelled or rejected event is not found."""
+    found = db.execute(
+        select(EventEquipmentRequest, Event)
+        .join(Event, Event.id == EventEquipmentRequest.event_id)
+        .where(
+            EventEquipmentRequest.id == item_id,
+            EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
+            Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
+        )
+    ).first()
+    if found is None:
+        raise EquipmentRequestNotFound(item_id)
+    item, event = found
+    return EquipmentQueueRow(
+        item=item, event=event, available=_available_to_accept(db, event, item)
+    )
 
 
 # --- writes --------------------------------------------------------------------------------------
@@ -589,6 +673,108 @@ def submit_equipment(
     return list(waiting)
 
 
+def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
+    """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends."""
+    event_id = db.scalar(
+        select(EventEquipmentRequest.event_id).where(EventEquipmentRequest.id == item_id)
+    )
+    if event_id is None:
+        raise EquipmentRequestNotFound(item_id)
+    return db.scalar(
+        select(Event)
+        .where(Event.id == event_id)
+        .with_for_update(of=Event)
+        .execution_options(populate_existing=True)
+    )
+
+
+def _fresh_item(db: Session, item_id: uuid.UUID) -> EventEquipmentRequest:
+    """Story 16.1 AC9: the item as it stands now, so a decision made while this one waited on the
+    event's lock is seen."""
+    item = db.scalar(
+        select(EventEquipmentRequest)
+        .where(EventEquipmentRequest.id == item_id)
+        .execution_options(populate_existing=True)
+    )
+    if item is None:
+        raise EquipmentRequestNotFound(item_id)
+    return item
+
+
+def _available_to_accept(db: Session, event: Event, item: EventEquipmentRequest) -> int:
+    """Story 16.1 AC5/AC6: the units of the item's type the event's period has for it, leaving the
+    event's own holds out - the queue's figure (15.2 AC2). Adding the own hold back to an
+    already-floored free count, as ``available_for_event`` does, would hide a shortfall."""
+    available = events_service.available_by_type(
+        db, event.starts_at, event.ends_at, exclude_event_id=event.id
+    )
+    return available[item.equipment_type_id]
+
+
+def _reserve(db: Session, event: Event, item: EventEquipmentRequest, *, actor: User) -> None:
+    """Story 16.1 AC1: keep the item's hold as its reservation, placing one if it holds nothing (an
+    item sent before holds existed)."""
+    hold = db.scalar(
+        select(EquipmentReservation).where(
+            EquipmentReservation.equipment_request_id == item.id,
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        )
+    )
+    if hold is None:
+        db.add(_new_hold(event, item, actor=actor, notes=_ACCEPTED_HOLD_NOTE))
+
+
+def decide_equipment_request(
+    db: Session, item_id: uuid.UUID, data: EquipmentDecisionIn, *, actor: User
+) -> EquipmentQueueRow:
+    """Story 16.1 AC1: accept a Pending request, keeping its hold as the reservation. AC2: decline
+    it with a reason, releasing its hold at once. AC3: who decided and when, saved with the hold in
+    one transaction. AC5/AC6: accepting is refused, changing nothing, when the event's period no
+    longer has the units. AC7: only a Pending request on an event still going ahead. AC9: the
+    event's row lock serialises two decisions, so the second sees the first's status."""
+    event = _locked_event_of(db, item_id)
+    item = _fresh_item(db, item_id)
+    if event.status in _DECISION_CLOSED_EVENT_STATUSES:
+        raise DecisionClosed(event)
+    if item.status != EquipmentRequestStatus.PENDING:
+        raise RequestNotPending(item)
+
+    if data.outcome == EquipmentDecisionOutcome.ACCEPTED:
+        _lock_types(db, [item.equipment_type_id])
+        available = _available_to_accept(db, event, item)
+        if item.quantity > available:
+            raise NotEnoughToAccept(item, available=available)
+        _reserve(db, event, item, actor=actor)
+        item.status_notes = None
+        action = "EQUIPMENT_ACCEPTED"
+    else:
+        _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+        item.status_notes = data.reason
+        action = "EQUIPMENT_DECLINED"
+    item.status = data.outcome
+    item.decided_by_id = actor.id
+    item.decided_at = datetime.now(UTC)
+    record_audit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type="event",
+        entity_id=event.id,
+        details={
+            "item_id": str(item.id),
+            "equipment_type_code": item.equipment_type.code,
+            "quantity": item.quantity,
+            "reason": data.reason,
+        },
+        commit=False,
+    )
+    db.commit()
+    db.refresh(item)
+    return EquipmentQueueRow(
+        item=item, event=event, available=_available_to_accept(db, event, item)
+    )
+
+
 def recheck_equipment_for_new_dates(
     db: Session, event: Event, *, actor: User
 ) -> list[EventEquipmentRequest]:
@@ -618,6 +804,10 @@ def recheck_equipment_for_new_dates(
     flagged: list[EventEquipmentRequest] = []
     resent_at = datetime.now(UTC)
     for item in items:
+        # Story 16.1 AC3: a decision for the old dates no longer stands, whether the item goes back
+        # to Technical Support or is flagged.
+        item.decided_by_id = None
+        item.decided_at = None
         if item.quantity > available[item.equipment_type_id]:
             item.status = EquipmentRequestStatus.UNAVAILABLE
             flagged.append(item)

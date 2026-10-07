@@ -2,8 +2,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import {
   listEquipmentRequests,
+  type EquipmentDecisionOutcome,
+  type EquipmentQueue,
   type EquipmentQueueCounts,
+  type EquipmentQueueEntry,
   type EquipmentQueueStatus,
+  type EquipmentShortfall,
 } from '../api/equipment'
 import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
@@ -11,9 +15,10 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
-import { EQUIPMENT_REQUESTS_PATH, eventPath } from '../routes'
-import { formatDate, formatTime } from '../shared/format'
+import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
+import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
 const SHORT_ID_LENGTH = 8
 
@@ -52,21 +57,66 @@ function notesText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No technical notes.'
 }
 
+/** Story 16.1: the queue after a decision, without loading it again. Under All the request stays,
+ * showing its outcome; under Pending it no longer belongs, so it leaves. Pending loses one and the
+ * outcome's tab gains one. */
+function withDecision(
+  queue: EquipmentQueue,
+  decided: EquipmentQueueEntry,
+  tab: EquipmentQueueTabKey,
+): EquipmentQueue {
+  const isKept = tab === 'ALL' || tab === decided.status
+  const items = isKept
+    ? queue.items.map((entry) => (entry.id === decided.id ? decided : entry))
+    : queue.items.filter((entry) => entry.id !== decided.id)
+  const counts = { ...queue.counts, pending: queue.counts.pending - 1 }
+  if (decided.status === 'ACCEPTED') counts.accepted += 1
+  if (decided.status === 'DECLINED') counts.declined += 1
+  return { items, counts }
+}
+
+/** Story 16.1 AC6: the request's figures as an accept refused for a shortfall reported them, so
+ * its card shows the shortfall at once. */
+function withFigures(
+  queue: EquipmentQueue,
+  entryId: string,
+  figures: EquipmentShortfall,
+): EquipmentQueue {
+  return {
+    ...queue,
+    items: queue.items.map((entry) => (entry.id === entryId ? { ...entry, ...figures } : entry)),
+  }
+}
+
+/** Story 16.1: the request whose Accept or Decline dialog is open. */
+interface OpenDecision {
+  entry: EquipmentQueueEntry
+  outcome: EquipmentDecisionOutcome
+}
+
 /**
  * Story 15.2 - Technical Support's equipment request queue, laid out like Venue Staff's booking
  * queue (story 13.1).
  * AC1: each request shows its event's name and dates, the item's type, quantity and technical
- * notes, and the coordinator who sent it, soonest event first (the backend's order).
+ * notes, and the coordinator who sent it and when, soonest event first (the backend's order).
  * AC2: how many of the type the event's period has for it, and any shortfall.
  * AC3: Pending, Accepted and Declined tabs, and All, each labelled with how many requests it
- * holds. View details opens the event (story 7.1), whose back link returns here.
+ * holds. The event's name opens the event (story 7.1), whose back link returns here.
  * AC5: an empty tab says so. AC7: every visit and every tab change loads the figures afresh.
- * Deciding a request is story 16.1, so the cards carry no actions.
+ *
+ * Story 16.1 - Accept and Decline on each pending request, as Approve and Reject are on Venue
+ * Staff's booking cards (story 13.2), through the dialogs a request's own page uses too; View
+ * details opens that page. AC1/AC2: a decided request moves to its outcome's tab, with the reason
+ * if declined. AC3: a decided card says when, and by whom, as Venue Staff's booking cards say
+ * when they were decided. View details stays on the right of every card. AC6: a refused accept
+ * leaves the card showing the shortfall it reported. AC7/AC9: any other refusal loads the tab
+ * again, so a decision made elsewhere meanwhile shows.
  */
 export function EquipmentRequestsPage() {
   const [tab, setTab] = useState<EquipmentQueueTabKey>('PENDING')
   const loadTab = useCallback(() => listEquipmentRequests(tab === 'ALL' ? null : tab), [tab])
-  const { data: queue, error, isLoading, isStale } = useLoaded(loadTab)
+  const { data: queue, error, isLoading, isStale, setData: setQueue } = useLoaded(loadTab)
+  const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
 
   const tabs = useMemo(
     () =>
@@ -76,6 +126,31 @@ export function EquipmentRequestsPage() {
       })),
     [queue],
   )
+
+  function closeDecision() {
+    setOpenDecision(null)
+  }
+
+  function recordDecision(decided: EquipmentQueueEntry) {
+    setOpenDecision(null)
+    setQueue((current) => current && withDecision(current, decided, tab))
+  }
+
+  function recordShortfall(figures: EquipmentShortfall) {
+    if (openDecision === null) return
+    const { id } = openDecision.entry
+    setQueue((current) => current && withFigures(current, id, figures))
+  }
+
+  /** Story 16.1 AC7/AC9: a decision refused for the request's state - load the tab again, so its
+   * cards and counts show what happened meanwhile. */
+  async function reloadQueue() {
+    try {
+      setQueue(await loadTab())
+    } catch {
+      // The dialog already shows the refusal; the tab keeps what it last loaded.
+    }
+  }
 
   return (
     <div className="page page-wide">
@@ -116,11 +191,8 @@ export function EquipmentRequestsPage() {
                         #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
                       </span>
                     </div>
-                    <div className="item-card-capacity">
-                      <div>{formatDate(entry.starts_at)}</div>
-                      <div className="small muted">
-                        {formatTime(entry.starts_at)}–{formatTime(entry.ends_at)}
-                      </div>
+                    <div className="item-card-capacity item-card-period">
+                      <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>
                     </div>
                   </div>
 
@@ -139,7 +211,7 @@ export function EquipmentRequestsPage() {
                       <p className="fact-value">{entry.quantity}</p>
                     </div>
                     <div className="subtle-block">
-                      <p className="fact-label">Available for this event</p>
+                      <p className="fact-label">Available</p>
                       <p className="fact-value">{entry.available}</p>
                     </div>
                     <div className="subtle-block">
@@ -154,7 +226,15 @@ export function EquipmentRequestsPage() {
                     </div>
                     <div className="subtle-block">
                       <p className="fact-label">Requested by</p>
-                      <p className="fact-value">{entry.requested_by_name ?? 'Not recorded'}</p>
+                      <p className="fact-value">{entry.requested_by_name ?? NOT_RECORDED}</p>
+                    </div>
+                    <div className="subtle-block">
+                      <p className="fact-label">Requested at</p>
+                      <p className="fact-value">
+                        {entry.submitted_at === null
+                          ? NOT_RECORDED
+                          : formatDateTime(entry.submitted_at)}
+                      </p>
                     </div>
                   </div>
 
@@ -163,8 +243,49 @@ export function EquipmentRequestsPage() {
                     <p>{notesText(entry.technical_notes)}</p>
                   </div>
 
-                  <div className="item-card-footer item-card-footer-end">
-                    <Link to={eventPath(entry.event_id)} state={BACK_TO_QUEUE} className="link">
+                  {entry.decided_at !== null && (
+                    <div className="subtle-block">
+                      <p className="fact-label">Decided at</p>
+                      <p>
+                        {formatDateTime(entry.decided_at)}
+                        {entry.decided_by_name !== null && ` by ${entry.decided_by_name}`}
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.status === 'DECLINED' && (
+                    <div className="subtle-block">
+                      <p className="fact-label">Reason</p>
+                      <p>{entry.decision_reason ?? NOT_RECORDED}</p>
+                    </div>
+                  )}
+
+                  <div
+                    className={
+                      entry.status === 'PENDING'
+                        ? 'item-card-footer'
+                        : 'item-card-footer item-card-footer-end'
+                    }
+                  >
+                    {entry.status === 'PENDING' && (
+                      <div className="cluster">
+                        <button
+                          type="button"
+                          className="brand button-sm"
+                          onClick={() => setOpenDecision({ entry, outcome: 'ACCEPTED' })}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-solid button-sm"
+                          onClick={() => setOpenDecision({ entry, outcome: 'DECLINED' })}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    )}
+                    <Link to={equipmentRequestPath(entry.id)} className="link">
                       View details →
                     </Link>
                   </div>
@@ -173,6 +294,18 @@ export function EquipmentRequestsPage() {
             </ul>
           )}
         </div>
+      )}
+
+      {openDecision && (
+        <EquipmentDecisionDialog
+          key={`${openDecision.entry.id}-${openDecision.outcome}`}
+          entry={openDecision.entry}
+          outcome={openDecision.outcome}
+          onCancel={closeDecision}
+          onDecided={recordDecision}
+          onShortfall={recordShortfall}
+          onRefused={reloadQueue}
+        />
       )}
     </div>
   )

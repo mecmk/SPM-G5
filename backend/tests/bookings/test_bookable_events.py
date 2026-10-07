@@ -63,6 +63,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.CUSTOMER_FORUM),
         str(Events.APPROVED_6),
         str(Events.RECRUITMENT_FAIR),
+        str(Events.EQUIPMENT_DECISIONS),
     ]
 
 

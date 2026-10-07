@@ -145,7 +145,7 @@ backend/
     bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
     change_requests/    # an organiser's requested changes to an approved event, and withdrawals
     coordination/       # assigning and reassigning an event's coordinator
-    equipment/          # an event's equipment requests: recording, holding, submitting to Technical Support
+    equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
     venues/             # the venue catalogue, its search and its availability calendar

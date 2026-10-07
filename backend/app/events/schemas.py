@@ -537,6 +537,11 @@ class EquipmentLineOut(BaseModel):
     status: str
     submitted_at: datetime | None
     submitted_by_name: str | None
+    # Story 16.1 AC2/AC3: Technical Support's reason for declining, and who decided and when, so
+    # the coordinator sees them. Each None until decided.
+    decision_reason: str | None
+    decided_at: datetime | None
+    decided_by_name: str | None
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
@@ -551,6 +556,9 @@ class EquipmentLineOut(BaseModel):
             submitted_by_name=(
                 line.submitted_by.full_name if line.submitted_by is not None else None
             ),
+            decision_reason=line.status_notes,
+            decided_at=line.decided_at,
+            decided_by_name=line.decided_by.full_name if line.decided_by is not None else None,
         )
 
 
