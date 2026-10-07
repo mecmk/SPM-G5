@@ -1,41 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { formatApiError } from '../api/client'
-import { getVenue, getVenueCalendar, type Venue, type VenueUnavailableWindow } from '../api/venues'
-import { Calendar, type CalendarLegendItem } from '../components/Calendar'
-import { isoDate } from '../components/calendarGrid'
+import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
+import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH, venueRequestPath } from '../routes'
-import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { useVenueCalendar } from '../shared/useVenueCalendar'
 import { useRequestingEvent } from './useRequestingEvent'
-import {
-  buildDayItems,
-  groupDayItemsByDate,
-  HELD_LABEL,
-  toCalendarEntry,
-} from './venueCalendarDays'
-import { VenueDayPanel } from './VenueDayPanel'
-
-// Story 9.1 AC2: a pending request that holds the venue has a style of its own.
-const CALENDAR_LEGEND: CalendarLegendItem[] = [
-  { tone: 'danger', label: 'Unavailable' },
-  { tone: 'warning', label: HELD_LABEL },
-]
 
 const DAY_PANEL_ID = 'venue-calendar-day-panel'
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-/** Singapore-midnight instant for the first day of `month` (see shared/format.ts). */
-function monthBoundary(month: Date): string {
-  return inputToInstant(`${isoDate(month.getFullYear(), month.getMonth(), 1)}T00:00`)
-}
 
 const STATUS_LABELS: Record<Venue['status'], string> = {
   ACTIVE: 'In service',
@@ -62,72 +38,11 @@ export function VenueDetailPage() {
   const loadVenue = useCallback(() => getVenue(venueId), [venueId])
   const { data: venue, error } = useLoaded(loadVenue)
   const { requestingEvent, error: eventError } = useRequestingEvent()
-  const [month, setMonth] = useState(() => startOfMonth(new Date()))
-  // Not reset when venueId changes - nothing links from one venue's page straight to another's
-  // today, so this can't be observed yet. If that ever becomes possible, this needs to go back
-  // to clearing windows (or keying the calendar on venueId) so a new venue never shows a moment
-  // of the previous one's availability.
-  const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
-  const [calendarError, setCalendarError] = useState<string | null>(null)
-  const [isCalendarLoading, setIsCalendarLoading] = useState(true)
-  /** Story 9.1 AC5: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
-  const [openDay, setOpenDay] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setIsCalendarLoading(true)
-    // Clears a previous month's failure immediately, so it cannot sit on screen describing a
-    // month that is no longer the one being loaded.
-    setCalendarError(null)
-    const rangeStart = monthBoundary(month)
-    const rangeEnd = monthBoundary(new Date(month.getFullYear(), month.getMonth() + 1, 1))
-    getVenueCalendar(venueId, rangeStart, rangeEnd)
-      .then((data) => {
-        if (cancelled) return
-        setWindows(data)
-        setCalendarError(null)
-        setIsCalendarLoading(false)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        // Falls back to "everything available" rather than leaving stale data on screen or
-        // hiding the calendar - a deliberate choice, not a neutral default (see f9.1.1 PR notes).
-        setWindows([])
-        setCalendarError(formatApiError(err))
-        setIsCalendarLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [venueId, month])
-
-  /** f9.1.1 AC2: an empty grid can mean loading, genuinely free, or failed - `entries` alone
-   *  cannot tell those apart, so this drives a visibly distinct treatment for the two that are
-   *  not "genuinely free" instead of rendering all three identically. */
-  const calendarStatus: 'loading' | 'unknown' | 'ready' = isCalendarLoading
-    ? 'loading'
-    : calendarError
-      ? 'unknown'
-      : 'ready'
-
-  /** Story 9.1 AC5/AC9: each window split into the part on every day it covers. */
-  const dayItems = useMemo(() => buildDayItems(windows), [windows])
-  const itemsByDate = useMemo(() => groupDayItemsByDate(dayItems), [dayItems])
-  const calendarEntries = useMemo(() => dayItems.map(toCalendarEntry), [dayItems])
-  // A day stays open only while it has items, so one whose booking is gone closes.
-  const openDayItems = openDay === null ? [] : (itemsByDate.get(openDay) ?? [])
-  const isDayOpen = openDay !== null && openDayItems.length > 0
-
-  function handleOpenDay(date: string) {
-    setOpenDay((current) => (current === date ? null : date))
-  }
-
-  // An open day belongs to the month it was opened in, so changing month closes it - done here
-  // rather than in the fetch effect, so it is not tied to every refetch (e.g. venueId changing).
-  function handleMonthChange(nextMonth: Date) {
-    setOpenDay(null)
-    setMonth(nextMonth)
-  }
+  const loadWindows = useCallback(
+    (startsAt: string, endsAt: string) => getVenueCalendar(venueId, startsAt, endsAt),
+    [venueId],
+  )
+  const calendar = useVenueCalendar(loadWindows, new Date())
 
   if (error) {
     return (
@@ -265,30 +180,14 @@ export function VenueDetailPage() {
             <p className="eyebrow" id="venue-availability-heading">
               Availability
             </p>
-            {calendarError && (
-              <p role="alert" className="error">
-                {calendarError}
-              </p>
-            )}
-            {/* Always rendered - only the text inside changes - so this can never itself cause
-                the calendar below it to shift (f9.1.1). role="status" announces the change to
-                assistive tech the way the LoadingState it replaced did. */}
-            <p className="muted calendar-status-line" role="status">
-              {calendarStatus === 'loading' && 'Loading availability…'}
-              {calendarStatus === 'unknown' &&
-                'Availability unknown - showing every day as available may not be accurate.'}
-            </p>
-            <Calendar
-              month={month}
-              onMonthChange={handleMonthChange}
-              entries={calendarEntries}
-              legend={CALENDAR_LEGEND}
-              gridStatus={calendarStatus === 'ready' ? undefined : calendarStatus}
-              onOpenDay={handleOpenDay}
-              openDay={isDayOpen ? openDay : null}
-              openDayPanelId={DAY_PANEL_ID}
+            <VenueAvailabilityCalendar
+              month={calendar.month}
+              onMonthChange={calendar.setMonth}
+              windows={calendar.windows}
+              error={calendar.error}
+              isLoading={calendar.isLoading}
+              dayPanelId={DAY_PANEL_ID}
             />
-            {isDayOpen && <VenueDayPanel id={DAY_PANEL_ID} date={openDay} items={openDayItems} />}
           </section>
         </div>
 
