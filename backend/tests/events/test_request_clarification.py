@@ -27,8 +27,8 @@ Excluded, with reason:
 * AC7's double-click is a page behaviour - the Send button disables while the request is in
   flight - so it is proven in tests/e2e/request-clarification.spec.ts. The server-side half of
   the same criterion is here: two overlapping requests record one transition, not two.
-* Story 4.3 (the organiser's response to a clarification request) is out of scope until that
-  story, which is why nothing returns the event to Under Review on its own.
+* The organiser's response is story 4.3 (test_respond_to_clarification.py). It leaves the event
+  at CLARIFICATION_REQUESTED, so nothing returns the event to Under Review.
 """
 
 from __future__ import annotations
@@ -303,8 +303,8 @@ def test_a_message_at_the_length_limit_is_accepted(coordinator_client):
 def test_a_second_round_of_clarification_is_recorded_while_still_awaiting_a_response(
     coordinator_client, db: Session
 ):
-    # This branch implements only story 4.2, so nothing ever moves the event back to Under
-    # Review - a second round has to work directly from CLARIFICATION_REQUESTED.
+    # Nothing ever moves the event back to Under Review (story 4.3's response leaves the status
+    # alone) - a second round has to work directly from CLARIFICATION_REQUESTED.
     first = coordinator_client.post(
         f"/events/{Events.SUBMITTED}/clarifications", json={"message": "First question."}
     )

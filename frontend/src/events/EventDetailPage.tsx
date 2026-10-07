@@ -15,6 +15,7 @@ import {
   listClarifications,
   rejectEvent,
   requestClarification,
+  respondToClarification,
   type Clarification,
   type EventDetail,
   type RequiredFacility,
@@ -215,6 +216,9 @@ export function EventDetailPage() {
   const [clarificationMessage, setClarificationMessage] = useState('')
   const [isRequestingClarification, setIsRequestingClarification] = useState(false)
   const [clarificationRequestError, setClarificationRequestError] = useState<string | null>(null)
+  const [responseMessage, setResponseMessage] = useState('')
+  const [isResponding, setIsResponding] = useState(false)
+  const [responseError, setResponseError] = useState<string | null>(null)
   const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
@@ -387,6 +391,28 @@ export function EventDetailPage() {
     }
   }
 
+  async function confirmRespondToClarification() {
+    if (!event) return
+    if (!responseMessage.trim()) {
+      setResponseError(ERROR_REGISTRY.EVENT_CLARIFICATION_MESSAGE_REQUIRED.message)
+      return
+    }
+    setIsResponding(true)
+    setResponseError(null)
+    try {
+      const entry = await respondToClarification(event.id, responseMessage, event.name)
+      setClarifications((current) => (current ?? []).concat(entry))
+      setResponseMessage('')
+    } catch (err) {
+      setResponseError(formatApiError(err))
+      // A 409 means the request moved on (story 4.3 AC11): reload it so the form goes away with
+      // the state it belonged to. Ignore a failed reload - it must not lose the message.
+      getEvent(event.id).then(setEvent, () => {})
+    } finally {
+      setIsResponding(false)
+    }
+  }
+
   function askToWithdraw(booking: BookingOutcome) {
     setWithdrawError(null)
     setPendingWithdraw(booking)
@@ -476,13 +502,17 @@ export function EventDetailPage() {
     AWAITING_DECISION_STATUSES.includes(event.status)
   /** Story 4.2 AC4/AC5/AC6: only the assigned coordinator, holding events:review, may ask the
    *  organiser a question, while the request is Under Review or already awaits a response to an
-   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing until
-   *  story 4.3 moves the event back to Under Review) - mirroring the backend's own
-   *  `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
+   *  earlier round (a follow-up has to work from CLARIFICATION_REQUESTED too, since nothing -
+   *  not even story 4.3's response - moves the event back to Under Review) - mirroring the
+   *  backend's own `_AWAITING_DECISION_STATUSES` gate on `request_clarification`. */
   const canRequestClarification =
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     AWAITING_DECISION_STATUSES.includes(event.status)
+  /** Story 4.3 AC1/AC10: only the organiser who owns the request may respond, and only while it
+   *  awaits a response - mirroring the backend's `respond_to_clarification`. */
+  const canRespondToClarification =
+    user !== null && event.organiser_id === user.id && event.status === 'CLARIFICATION_REQUESTED'
   /** Story 5.2 AC1/AC6: only the currently assigned coordinator may reassign, and only on an
    *  event that is not completed, cancelled or rejected - mirroring the backend's
    *  `ASSIGNABLE_STATUSES` (a draft never reaches this: it has no coordinator to be one of). */
@@ -929,6 +959,39 @@ export function EventDetailPage() {
                 onClick={confirmRequestClarification}
               >
                 {isRequestingClarification ? 'Sending…' : 'Send clarification request'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {canRespondToClarification && (
+          <section className="card stack" aria-labelledby="respond-clarification-heading">
+            <p className="eyebrow" id="respond-clarification-heading">
+              Respond to the coordinator
+            </p>
+            <label>
+              Message
+              <textarea
+                rows={3}
+                maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
+                placeholder="Answer the coordinator's question."
+                value={responseMessage}
+                onChange={(e) => setResponseMessage(e.target.value)}
+              />
+            </label>
+            {responseError && (
+              <p role="alert" className="error">
+                {responseError}
+              </p>
+            )}
+            <div className="page-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={isResponding}
+                onClick={confirmRespondToClarification}
+              >
+                {isResponding ? 'Sending…' : 'Send response'}
               </button>
             </div>
           </section>
