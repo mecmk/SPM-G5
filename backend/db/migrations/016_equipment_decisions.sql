@@ -3,7 +3,7 @@
 --
 -- Migration 014 already allows ACCEPTED and DECLINED, and status_notes holds the reason for
 -- declining. This adds who made the decision and when (16.1 AC3). Items decided before this
--- migration, such as the seeded ones, have neither.
+-- migration have neither.
 -- =====================================================================
 
 ALTER TABLE event_equipment_requests
