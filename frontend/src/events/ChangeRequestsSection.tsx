@@ -236,7 +236,7 @@ export function ChangeRequestsSection({
   const [requirements, setRequirements] = useState<RequirementDraft[]>([])
   const [equipment, setEquipment] = useState<EquipmentDraft[]>([])
   const [reason, setReason] = useState('')
-  const [problem, setProblem] = useState<FormProblem | null>(null)
+  const [isChecked, setIsChecked] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [pendingWithdraw, setPendingWithdraw] = useState<ChangeRequest | null>(null)
@@ -284,7 +284,7 @@ export function ChangeRequestsSection({
   function openForm() {
     setField('')
     setReason('')
-    setProblem(null)
+    setIsChecked(false)
     setSendError(null)
     setIsFormOpen(true)
   }
@@ -296,7 +296,6 @@ export function ChangeRequestsSection({
   /** AC1: choosing a field starts its new value from the event's current one. */
   function chooseField(chosen: ChangeRequestField | '') {
     setField(chosen)
-    setProblem(null)
     setStartsAt(event.starts_at ? instantToInput(event.starts_at) : '')
     setEndsAt(event.ends_at ? instantToInput(event.ends_at) : '')
     setAttendance(event.expected_attendance === null ? '' : String(event.expected_attendance))
@@ -392,8 +391,8 @@ export function ChangeRequestsSection({
 
   async function handleSend(submitted: FormEvent<HTMLFormElement>) {
     submitted.preventDefault()
+    setIsChecked(true)
     const found = findProblem()
-    setProblem(found)
     if (found !== null) {
       if (found.target === 'reason') reasonInput.current?.focus()
       else if (found.target === 'field') fieldSelect.current?.focus()
@@ -443,6 +442,8 @@ export function ChangeRequestsSection({
     }
   }
 
+  // Worked out from what is typed now, so it clears as soon as it is fixed once Send was pressed.
+  const problem = isChecked ? findProblem() : null
   const problemId = `${ids}-problem`
   const describedBy = (target: FormProblem['target']) =>
     problem?.target === target ? problemId : undefined

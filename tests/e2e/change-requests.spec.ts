@@ -171,3 +171,38 @@ test('19.1 AC9: an organiser withdraws a pending change request', async ({ page 
   await expect(raised).toContainText('Withdrawn')
   await expect(raised.getByRole('button', { name: 'Withdraw' })).toHaveCount(0)
 })
+
+test('19.1 AC4: a point of contact problem clears as soon as it is fixed', async ({ page }) => {
+  // Nothing is saved: Olivia's Regional Sales Summit is only looked at here, never changed.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await page.getByRole('button', { name: 'Update point of contact' }).click()
+  const email = page.getByLabel('Contact email')
+  const phone = page.getByLabel('Contact phone number')
+
+  await email.fill('not-an-email')
+  await page.getByRole('button', { name: 'Save contact details' }).click()
+  await expect(email).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('Enter an email address like name@example.com.')).toBeVisible()
+  await expect(phone).not.toHaveAttribute('aria-invalid', 'true')
+
+  // Fixed without pressing Save again: the message goes as soon as the address is valid.
+  await email.fill('events@acme.example')
+  await expect(page.getByText('Enter an email address like name@example.com.')).toHaveCount(0)
+  await expect(email).not.toHaveAttribute('aria-invalid', 'true')
+})
+
+test('19.1 AC4: the reason message clears once a reason is typed', async ({ page }) => {
+  // Nothing is sent: Olivia's Regional Sales Summit is only looked at here, never changed.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await openChangeForm(page, 'Expected attendance')
+  await changeRequests(page).getByLabel('New expected attendance').fill('250')
+  await changeRequests(page).getByRole('button', { name: 'Send change request' }).click()
+  const reason = changeRequests(page).getByLabel('Reason for the change')
+  await expect(changeRequests(page).getByText('Enter a reason for the change.')).toBeVisible()
+
+  await reason.fill(REASON)
+  await expect(changeRequests(page).getByText('Enter a reason for the change.')).toHaveCount(0)
+  await expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+})

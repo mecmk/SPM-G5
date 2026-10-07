@@ -97,7 +97,6 @@ export type ErrorCode =
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
   | 'CHANGE_REQUEST_REASON_REQUIRED'
   | 'EVENT_CONTACT_EDIT_CLOSED'
-  | 'EVENT_CONTACT_REQUIRED'
 
 export interface ErrorEntry {
   title: string
@@ -556,11 +555,6 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_CONTACT_EDIT_CLOSED: {
     title: 'Cannot update the point of contact',
     message: 'The point of contact can no longer be updated on this event.',
-  },
-  /** AC2: the form's own pre-check - a submitted event keeps both contact details. */
-  EVENT_CONTACT_REQUIRED: {
-    title: 'Contact details needed',
-    message: 'Enter both a contact email and a contact phone number.',
   },
 }
 
