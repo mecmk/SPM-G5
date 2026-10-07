@@ -7,18 +7,21 @@
  * Beyond those ACs this spec also covers delete (Venue Staff have full CRUD), search and a
  * capacity filter, and that every save appears in the notification centre.
  *
- * Story 8.3 AC5-AC8 (bug f8.3.2): a venue's pictures.
+ * Story 8.3 AC5-AC8 and AC10 (bugs f8.3.2 and f8.3.3): a venue's pictures.
  * AC5 Venue Staff add pictures by choosing files or dragging them onto the form, preview them,
  *     arrange them (carrying one across the others, or with its arrows) and remove any of them;
- *     they are saved with the venue's details, in that order.
+ *     they are saved with the venue's details, in that order. A file dropped outside the drop
+ *     area is not opened in place of the form.
  * AC6 the record shows them as a gallery, the first also in its banner, and each opens a
  *     carousel; the catalogue card shows the first.
  * AC7 JPEG, PNG or WebP, at most 5 MB each, at most 10 a venue: the form checks each chosen file
  *     on its own and names each one it refuses, before sending anything.
  * AC8 a picture the server refuses leaves the venue and its other pictures saved, and its edit
  *     page says why, once.
- * The server's own refusals, the files, the order's rules, AC9's permissions and AC10's
- * simultaneous changes are backend cases: backend/tests/venues/test_venue_pictures.py.
+ * AC10 a save that changes only the details sends no order, so another tab's change to the
+ *     pictures does not refuse it.
+ * The server's own refusals, the files, the order's rules, AC9's permissions and the rest of
+ * AC10's simultaneous changes are backend cases: backend/tests/venues/test_venue_pictures.py.
  *
  * Story 8.1 AC12 (f8.1.1): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
@@ -394,6 +397,33 @@ test('8.3 AC5: pictures can be dragged onto the form', async ({ page }) => {
   await expect(page.getByText('Drop the pictures here')).toHaveCount(0)
 })
 
+test('8.3 AC5: a picture dropped outside the drop area is not opened in place of the form', async ({
+  page,
+}) => {
+  const name = uniqueName('Stray drop')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+
+  // A browser opens a file dropped where the page does not cancel the drop, in place of the page
+  // and its unsaved form. A drop sent by a test never opens anything, so this checks the page
+  // cancels it.
+  const isCancelled = await page.getByLabel('Venue name').evaluate((field, base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+    const data = new DataTransfer()
+    data.items.add(new File([bytes], 'hall.png', { type: 'image/png' }))
+    return ['dragover', 'drop'].map(
+      (type) =>
+        !field.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }),
+        ),
+    )
+  }, PNG_BYTES.toString('base64'))
+
+  expect(isCancelled).toEqual([true, true])
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(0)
+  await expect(page.getByLabel('Venue name')).toHaveValue(name)
+})
+
 test('8.3 AC5/AC6: pictures can be removed while editing', async ({ page }) => {
   const name = uniqueName('Fewer pictures')
   await signIn(page, ACCOUNTS.venueStaff)
@@ -567,6 +597,39 @@ test('8.3 AC5: pictures can be put in a new order while editing', async ({ page 
   await venueCard(page, name).getByRole('link', { name }).click()
   await expect(gallery.getByRole('img')).toHaveCount(3)
   expect(await sourcesIn(gallery)).toEqual([three, one, two])
+})
+
+test('8.3 AC10: a save that changes only the details is not refused when another tab changed the pictures', async ({
+  page,
+  context,
+}) => {
+  const name = uniqueName('Two tabs')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await choosePictures(page, pictureFile('one.png'), pictureFile('two.png'))
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await expect(page.getByRole('img', { name: PREVIEW_NAME })).toHaveCount(2)
+
+  // While this form is open, another tab adds a third picture.
+  const otherTab = await context.newPage()
+  await otherTab.goto(page.url())
+  await expect(otherTab.getByRole('heading', { name: `Edit ${name}` })).toBeVisible()
+  await choosePictures(otherTab, pictureFile('three.png'))
+  await otherTab.getByRole('button', { name: 'Save changes' }).click()
+  await expect(otherTab).toHaveURL(CATALOGUE_PATH)
+  await otherTab.close()
+
+  // This form only renames the venue; it arranged nothing, so there is no order to refuse.
+  const renamed = `${name} renamed`
+  await page.getByLabel('Venue name').fill(renamed)
+  await page.getByRole('button', { name: 'Save changes' }).click()
+
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, renamed).getByRole('link', { name: renamed }).click()
+  await expect(page.getByRole('region', { name: 'Pictures' }).getByRole('img')).toHaveCount(3)
 })
 
 /** The middle of `element` on the page. */

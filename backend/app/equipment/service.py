@@ -1,6 +1,6 @@
 """Business rules for an event's equipment items (story 15.1): the assigned coordinator records
 them, starting from what the organiser asked for (story 2.1), and submits them to Technical
-Support.
+Support, who are told of each submission (story 20.1).
 
 Story 15.1 - "As an Event Coordinator I want to record the equipment an event needs, starting from
 what the organiser asked for, and submit it to Technical Support, with each item held for the
@@ -30,12 +30,17 @@ Who and when (AC9): only the event's assigned coordinator, and only while the ev
 Review, Clarification Requested or Planning. A draft is private to its organiser (2.1 AC8), so it
 is not found. Item statuses are ``EquipmentRequestStatus``; ACCEPTED and DECLINED are Technical
 Support's to set (story 16.1), and an item in either is locked (AC7).
+
+Story 15.2 - "As a Technical Support Staff member I want to see the equipment requests waiting for
+me, with what is available for each, so that I can work through them in a sensible order." The
+queue (``list_equipment_requests``) only reads: deciding a request is story 16.1.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
@@ -43,10 +48,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 from app.auth.models import User
+from app.auth.permissions import RoleCode
 from app.common.audit import record_audit
 from app.equipment.schemas import (
     EquipmentItemIn,
     EquipmentItemUpdate,
+    EquipmentQueueStatus,
     EventEquipmentAvailabilityOut,
 )
 from app.events import service as events_service
@@ -59,6 +66,7 @@ from app.events.models import (
     EventEquipmentRequest,
     EventStatus,
 )
+from app.notifications.service import NotificationType, active_members, notify
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can change its equipment."
@@ -86,6 +94,9 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
+# Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
+# the queue leaves them out by the event's status rather than the item's.
+_CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
 # Why each hold was placed, in ``equipment_reservations.notes``.
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
@@ -215,6 +226,70 @@ def list_event_equipment_availability(
         )
         for equipment_type in active_types
     ]
+
+
+@dataclass(frozen=True)
+class EquipmentQueueRow:
+    """Story 15.2 AC1/AC2: one request in Technical Support's queue, its event, and how many of its
+    type the event's period has for it."""
+
+    item: EventEquipmentRequest
+    event: Event
+    available: int
+
+
+@dataclass(frozen=True)
+class EquipmentQueueListing:
+    """Story 15.2 AC3: one tab's requests, and how many requests each tab holds."""
+
+    rows: list[EquipmentQueueRow]
+    counts_by_status: dict[str, int]
+
+
+def list_equipment_requests(
+    db: Session, *, status: EquipmentQueueStatus | None = None
+) -> EquipmentQueueListing:
+    """Story 15.2 AC1/AC3: the requests in one tab, or in all three when ``status`` is ``None`` (the
+    All tab), soonest event first; ties fall back to the order the items were recorded in, then
+    id, so the list is stable. AC5: an item the coordinator removed is gone, and every item on a
+    cancelled or rejected event is left out, whatever its own status.
+    Items in a status with no tab (not yet sent, flagged unavailable, cancelled) are left out too.
+
+    AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
+    own holds left out, since a Pending item already holds its units (15.1 AC2). AC7: worked out
+    afresh on every call, once per event in the tab."""
+    in_queue = (
+        EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
+        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
+    )
+    tab = (
+        select(EventEquipmentRequest, Event)
+        .join(Event, Event.id == EventEquipmentRequest.event_id)
+        .where(*in_queue)
+        .order_by(Event.starts_at, EventEquipmentRequest.created_at, EventEquipmentRequest.id)
+    )
+    if status is not None:
+        tab = tab.where(EventEquipmentRequest.status == status)
+    found = db.execute(tab).all()
+    counts_by_status = dict(
+        db.execute(
+            select(EventEquipmentRequest.status, func.count())
+            .join(Event, Event.id == EventEquipmentRequest.event_id)
+            .where(*in_queue)
+            .group_by(EventEquipmentRequest.status)
+        ).all()
+    )
+
+    available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
+    rows = []
+    for item, event in found:
+        if event.id not in available_by_event:
+            available_by_event[event.id] = events_service.available_by_type(
+                db, event.starts_at, event.ends_at, exclude_event_id=event.id
+            )
+        available = available_by_event[event.id][item.equipment_type_id]
+        rows.append(EquipmentQueueRow(item=item, event=event, available=available))
+    return EquipmentQueueListing(rows=rows, counts_by_status=counts_by_status)
 
 
 # --- writes --------------------------------------------------------------------------------------
@@ -427,13 +502,42 @@ def remove_equipment_item(
     db.commit()
 
 
+def _describe_items(items: Iterable[EventEquipmentRequest]) -> str:
+    """The items as one phrase, in the order given: "Wireless microphone ×6, Presentation
+    laptop ×2", as the event page shows a quantity."""
+    return ", ".join(f"{item.equipment_type.name} ×{item.quantity}" for item in items)
+
+
+def _notify_technical_support(
+    db: Session, event: Event, items: Iterable[EventEquipmentRequest], *, actor: User
+) -> None:
+    """Story 20.1 AC1: the items now wait for Technical Support (15.2's queue), so every active
+    Technical Support member is told which event they are for, what they are and who sent them -
+    as Venue Staff are told of a new booking request."""
+    message = f'{actor.full_name} requested equipment for "{event.name}": {_describe_items(items)}.'
+    for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.EQUIPMENT_SUBMITTED,
+            event_id=event.id,
+            title=f'New equipment request for "{event.name}"',
+            message=message,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
 def submit_equipment(
     db: Session, event_id: uuid.UUID, *, actor: User
 ) -> list[EventEquipmentRequest]:
     """AC1: send every item not yet sent to Technical Support as Pending, recording who sent it
     and when. An item without a hold yet (recorded before holds existed) is held first, and if any
     no longer fits, nothing is sent (AC3). AC10: with nothing waiting - a second click - it is
-    refused."""
+    refused. Story 20.1 AC1/AC4: Technical Support are notified in the same transaction, so a
+    refused or failed send tells nobody."""
     event = _event_for_change(db, event_id, actor=actor)
     waiting = db.scalars(
         select(EventEquipmentRequest)
@@ -469,6 +573,7 @@ def submit_equipment(
         item.status = EquipmentRequestStatus.PENDING
         item.submitted_at = submitted_at
         item.submitted_by_id = actor.id
+    _notify_technical_support(db, event, waiting, actor=actor)
     record_audit(
         db,
         actor=actor,

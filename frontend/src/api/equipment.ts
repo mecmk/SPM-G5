@@ -100,3 +100,50 @@ export function submitEquipment(eventId: string): Promise<EquipmentLine[]> {
     },
   })
 }
+
+/** Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Mirrors
+ * `EquipmentQueueStatus`. */
+export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED'
+
+/**
+ * Mirrors `EquipmentQueueEntry`: story 15.2 AC1, a request with its event's name and dates, the
+ * item's type, quantity and notes, and who sent it (`null` when that was never recorded). AC2:
+ * `available` for the event's period, not counting the event's own hold, and `shortfall`.
+ */
+export interface EquipmentQueueEntry {
+  id: string
+  event_id: string
+  event_name: string
+  starts_at: string
+  ends_at: string
+  equipment_type_code: string
+  equipment_type_name: string
+  quantity: number
+  technical_notes: string | null
+  requested_by_name: string | null
+  status: EquipmentQueueStatus
+  available: number
+  shortfall: number
+}
+
+/** Mirrors `EquipmentQueueCounts`: story 15.2 AC3, how many requests each tab holds. */
+export interface EquipmentQueueCounts {
+  pending: number
+  accepted: number
+  declined: number
+}
+
+/** Mirrors `EquipmentQueue`: story 15.2 AC1-AC3, one tab of the queue and every tab's count. */
+export interface EquipmentQueue {
+  items: EquipmentQueueEntry[]
+  counts: EquipmentQueueCounts
+}
+
+/** Story 15.2 AC1-AC3: one tab of Technical Support's queue, soonest event first; `null` is the
+ * All tab. */
+export function listEquipmentRequests(
+  status: EquipmentQueueStatus | null,
+): Promise<EquipmentQueue> {
+  if (status === null) return api<EquipmentQueue>('/equipment-requests')
+  return api<EquipmentQueue>(`/equipment-requests?${new URLSearchParams({ status })}`)
+}

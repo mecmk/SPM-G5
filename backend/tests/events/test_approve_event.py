@@ -19,8 +19,8 @@ Excluded, with reason:
   ``test_approve_booking.py`` for its row lock. The repeated-approval test below proves the
   guard sequentially: the first decision's ``UPDATE`` matches and succeeds, the second's
   ``WHERE`` clause matches zero rows and is refused rather than overwriting the first.
-* Organiser notification - there is no notification application code anywhere in the backend
-  yet (epic 20 is unbuilt), and story 13.2's approve-booking precedent does not write one either.
+* Organiser notification - story 20.1's, tested in
+  ``tests/notifications/test_generate_and_route_notifications.py``.
 """
 
 from __future__ import annotations

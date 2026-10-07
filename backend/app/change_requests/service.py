@@ -30,10 +30,10 @@ from app.change_requests.schemas import (
     VenueRequirementsChangeIn,
 )
 from app.common.audit import record_audit
-from app.common.notifications import notify
 from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement
 from app.events.schemas import VenueRequirementIn
+from app.notifications.service import NotificationType, notify
 
 # The events refusals this service lets through, named here so the router imports only this
 # module (backend/CLAUDE.md), as bookings/router.py catches ``service.EventNotFound``.
@@ -223,15 +223,21 @@ def _refuse_unless_requestable(event: Event) -> None:
 
 
 def _notify_coordinator(
-    db: Session, event: Event, request: EventChangeRequest, *, title: str, message: str, kind: str
+    db: Session,
+    event: Event,
+    request: EventChangeRequest,
+    *,
+    actor: User,
+    kind: NotificationType,
+    title: str,
+    message: str,
 ) -> None:
-    """AC1/AC9: tell whoever is assigned to the event now (story 5.2 may have changed it). The
-    notification is only written here; listing it is story 20.1."""
-    if event.assigned_coordinator is None:
-        return
+    """AC1/AC9: tell whoever is assigned to the event now (story 5.2 may have changed it), as
+    story 20.1's ``notify`` does it: nothing is written when no coordinator is assigned."""
     notify(
         db,
         recipient=event.assigned_coordinator,
+        actor=actor,
         notification_type=kind,
         event_id=event.id,
         title=title,
@@ -284,7 +290,8 @@ def raise_change_request(
         db,
         event,
         request,
-        kind="EVENT_CHANGE_REQUESTED",
+        actor=actor,
+        kind=NotificationType.EVENT_CHANGE_REQUESTED,
         title=_REQUESTED_TITLE.format(event=event.name),
         message=_REQUESTED_MESSAGE.format(
             organiser=actor.full_name, label=label, reason=data.reason
@@ -363,7 +370,8 @@ def withdraw_change_request(
         db,
         event,
         request,
-        kind="EVENT_CHANGE_REQUEST_WITHDRAWN",
+        actor=actor,
+        kind=NotificationType.EVENT_CHANGE_REQUEST_WITHDRAWN,
         title=_WITHDRAWN_TITLE.format(event=event.name),
         message=_WITHDRAWN_MESSAGE.format(
             organiser=actor.full_name, label=FIELD_LABELS[request.field_name]

@@ -48,10 +48,10 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.auth.permissions import Permission, RoleCode, role_has
 from app.common.audit import record_audit
-from app.common.notifications import notify
 from app.coordination.models import EventCoordinatorAssignment
 from app.coordination.schemas import AssignCoordinatorIn
 from app.events.models import Event, EventStatus
+from app.notifications.service import NotificationType, notify
 
 # AC1 says a *submitted* event gets a coordinator: a DRAFT has not been handed over yet, and a
 # closed event (rejected / cancelled / completed) no longer needs an owner. Everything between
@@ -204,13 +204,16 @@ def _notify_reassignment(
     """Story 5.2 AC1: the previous coordinator, the new one, and the organiser are each told.
     Only called for a genuine reassignment (there was a previous coordinator, and a human made
     the change) - auto-assignment (story 5.1) and an event's first-ever claim have nobody
-    "previous" to tell and are not this AC's concern."""
+    "previous" to tell and are not this AC's concern. Story 20.1 AC3 tells nobody of their own
+    action, and under 5.2 the previous coordinator is the one reassigning (AC6), so in practice
+    they are skipped; they are told when someone else reassigns, as the Lead will (story 5.6)."""
     previous_coordinator = db.get(User, previous_coordinator_id)
     organiser = db.get(User, event.organiser_id)
     notify(
         db,
         recipient=previous_coordinator,
-        notification_type="EVENT_REASSIGNED_FROM",
+        actor=reassigned_by,
+        notification_type=NotificationType.EVENT_REASSIGNED_FROM,
         event_id=event.id,
         title=f'"{event.name}" was reassigned',
         message=f'{reassigned_by.full_name} handed "{event.name}" to {new_coordinator.full_name}.',
@@ -221,7 +224,8 @@ def _notify_reassignment(
     notify(
         db,
         recipient=new_coordinator,
-        notification_type="EVENT_REASSIGNED_TO",
+        actor=reassigned_by,
+        notification_type=NotificationType.EVENT_REASSIGNED_TO,
         event_id=event.id,
         title=f'You are now assigned to "{event.name}"',
         message=f'{reassigned_by.full_name} handed you "{event.name}".',
@@ -232,7 +236,8 @@ def _notify_reassignment(
     notify(
         db,
         recipient=organiser,
-        notification_type="EVENT_REASSIGNED_ORGANISER",
+        actor=reassigned_by,
+        notification_type=NotificationType.EVENT_REASSIGNED_ORGANISER,
         event_id=event.id,
         title=f'"{event.name}" has a new coordinator',
         message=f'{new_coordinator.full_name} is now the coordinator for "{event.name}".',

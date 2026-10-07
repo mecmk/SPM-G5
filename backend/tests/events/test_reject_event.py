@@ -7,8 +7,8 @@ AC4 A rejected request cannot be approved afterwards without a new submission.
 
 Excluded, with reason:
 * A genuine multi-connection concurrency test - same reasoning as ``test_approve_event.py``.
-* Organiser notification - no notification application code exists yet (see
-  ``test_approve_event.py``).
+* Organiser notification - story 20.1's, tested in
+  ``tests/notifications/test_generate_and_route_notifications.py``.
 * "without a new submission" (AC4) - re-submitting a fresh request is a different story (2.x
   epic); this file only proves the rejected request itself can no longer be approved.
 """

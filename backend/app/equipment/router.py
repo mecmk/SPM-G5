@@ -1,10 +1,11 @@
 """HTTP endpoints for an event's equipment items (story 15.1): the availability figures the form
-shows, and the assigned coordinator recording, editing, removing and submitting items.
+shows, and the assigned coordinator recording, editing, removing and submitting items. And
+Technical Support's queue of the items sent to it (story 15.2).
 
 The items are a sub-resource of the event, so the paths sit under ``/events/{event_id}``; an item
 is returned as ``EquipmentLineOut``, the shape the event page already reads. Submitting creates an
 equipment submission rather than calling an action on the event (backend/STYLE.md: a URL names a
-resource).
+resource). The queue spans every event, so it has a path of its own, ``/equipment-requests``.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
@@ -22,14 +23,22 @@ from app.equipment import service
 from app.equipment.schemas import (
     EquipmentItemIn,
     EquipmentItemUpdate,
+    EquipmentQueue,
+    EquipmentQueueCounts,
+    EquipmentQueueEntry,
+    EquipmentQueueStatus,
     EventEquipmentAvailabilityOut,
 )
 from app.events.schemas import EquipmentLineOut
 
 router = APIRouter(prefix="/events", tags=["equipment"])
+queue_router = APIRouter(prefix="/equipment-requests", tags=["equipment"])
 
 CanRead = Depends(require_permission(Permission.EQUIPMENT_READ))
 CanRequest = Depends(require_permission(Permission.EQUIPMENT_REQUEST))
+# Story 15.2 AC6: only Technical Support. Every internal role holds EQUIPMENT_READ, so the queue
+# is guarded by the permission only Technical Support holds.
+CanManage = Depends(require_permission(Permission.EQUIPMENT_MANAGE))
 DbSession = Annotated[Session, Depends(get_db)]
 
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
@@ -139,3 +148,22 @@ def submit_equipment(
     except service.EquipmentConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return [EquipmentLineOut.from_line(item) for item in items]
+
+
+@queue_router.get("", response_model=EquipmentQueue, dependencies=[CanManage])
+def list_equipment_requests(
+    db: DbSession,
+    request_status: Annotated[EquipmentQueueStatus | None, Query(alias="status")] = None,
+) -> EquipmentQueue:
+    """Story 15.2 AC1-AC3: ``?status=`` picks the Pending, Accepted or Declined tab, and no status
+    is the All tab; soonest event first, each request with its figures. ``counts`` labels every
+    tab. AC6: Technical Support only. ``request_status`` is aliased so it does not shadow
+    FastAPI's ``status`` module."""
+    listing = service.list_equipment_requests(db, status=request_status)
+    return EquipmentQueue(
+        items=[
+            EquipmentQueueEntry.from_item(row.item, row.event, available=row.available)
+            for row in listing.rows
+        ],
+        counts=EquipmentQueueCounts.from_counts(listing.counts_by_status),
+    )

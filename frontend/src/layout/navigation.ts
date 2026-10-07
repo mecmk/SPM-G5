@@ -2,6 +2,7 @@ import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
 import {
   BOOKING_REQUESTS_PATH,
+  EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
@@ -143,6 +144,15 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Equipment',
     items: [
+      {
+        to: EQUIPMENT_REQUESTS_PATH,
+        label: 'Equipment requests',
+        description: 'Equipment requests to work through, with what is available for each.',
+        icon: 'inbox',
+        permission: PERMISSIONS.EQUIPMENT_MANAGE,
+        story: '15.2',
+        isAvailable: true,
+      },
       {
         to: '/equipment/holds',
         label: 'Equipment holds',

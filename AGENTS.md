@@ -147,8 +147,9 @@ backend/
     coordination/       # assigning and reassigning an event's coordinator
     equipment/          # an event's equipment requests: recording, holding, submitting to Technical Support
     events/             # event requests, review and decisions, event details, routine edits
+    notifications/      # who is told of each action, and each user's own notifications
     venues/             # the venue catalogue, its search and its availability calendar
-    common/             # shared by feature areas: the audit log, in-app notifications
+    common/             # shared by feature areas: the audit log
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
   db/
     migrations/         # NNN_*.sql schema, applied once in order
@@ -158,7 +159,7 @@ frontend/
   src/
     api/                # one <feature>.ts per backend feature area, plus the shared client
     auth/               # the sign-in page, the session, route guards, permission codes
-    bookings/, events/, venues/   # the pages of each feature area
+    bookings/, equipment/, events/, venues/   # the pages of each feature area
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the notification centre
