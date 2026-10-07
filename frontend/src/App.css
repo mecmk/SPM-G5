@@ -1345,6 +1345,7 @@ td.num {
 
 .badge-active,
 .badge-approved,
+.badge-accepted,
 .badge-reserved,
 .badge-registered,
 .badge-completed,
@@ -1376,6 +1377,7 @@ td.num {
 }
 
 .badge-rejected,
+.badge-declined,
 .badge-cancelled,
 .badge-unavailable,
 .badge-danger {

@@ -761,7 +761,7 @@ def test_changing_the_type_holds_the_new_type_instead(login_as, db: Session):
 
     assert response.status_code == 200, response.text
     assert _held(db, event["id"]) == {("WIRELESS_MIC", 2, period[0], period[1])}
-    assert {line["status"] for line in response.json()["equipment"]} == {"RESERVED"}
+    assert {line["status"] for line in response.json()["equipment"]} == {"REQUESTED"}
 
 
 @pytest.mark.story("7.2", ac=7)
@@ -958,7 +958,7 @@ def test_a_line_replaced_by_an_identical_one_is_held_again(login_as, db: Session
     )
 
     assert response.status_code == 200, response.text
-    assert {line["status"] for line in response.json()["equipment"]} == {"RESERVED"}
+    assert {line["status"] for line in response.json()["equipment"]} == {"REQUESTED"}
 
 
 # --- AC8: only the assigned coordinator, enforced by the API ----------------------------------

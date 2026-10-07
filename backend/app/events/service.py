@@ -122,8 +122,6 @@ SUBMITTED_DETAILS_MISSING_MESSAGE = (
     "Add the following before saving this submitted request: {missing}."
 )
 
-# ``event_equipment_requests.status`` once the units are held for the event.
-_LINE_RESERVED = "RESERVED"
 # ``equipment_reservations.notes`` on a hold: why it was placed (2.1 AC11, 7.2 AC7).
 _SUBMITTED_HOLD_NOTE = "Held when the request was submitted."
 _CORRECTED_HOLD_NOTE = "Held again when the coordinator corrected the request."
@@ -718,7 +716,7 @@ def _known(
 # --- writes --------------------------------------------------------------------------------
 
 
-def _available_by_type(
+def available_by_type(
     db: Session,
     period_start: datetime,
     period_end: datetime,
@@ -727,7 +725,8 @@ def _available_by_type(
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
     events over the period (a hold's quantity less what was released), less units out of service.
-    Overlap is half-open, so a hold ending exactly as the period starts does not count.
+    Overlap is half-open, so a hold ending exactly as the period starts does not count. Story 15.1
+    (``app/equipment/service.py``) uses the same calculation for the coordinator's items.
     Story 7.2 AC7: ``exclude_event_id`` leaves that event's own holds out, so an event being
     corrected is not counted against itself."""
     held_query = (
@@ -783,7 +782,7 @@ def list_equipment_availability(
         raise InvalidSchedule(END_NOT_AFTER_START_MESSAGE)
     if exclude_event_id is not None:
         get_event(db, exclude_event_id, viewer=viewer)
-    available = _available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
+    available = available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
     active_types = db.scalars(
         select(EquipmentType).where(EquipmentType.is_active.is_(True)).order_by(EquipmentType.name)
     ).all()
@@ -806,7 +805,7 @@ def _check_equipment_available(
     ``exclude_event_id`` leaves that event's own holds out (story 7.2 AC7)."""
     if starts_at is None or ends_at is None or not lines:
         return
-    available = _available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
+    available = available_by_type(db, starts_at, ends_at, exclude_event_id=exclude_event_id)
     short = [t.name for t, quantity in lines if quantity > available[t.id]]
     if short:
         raise EquipmentNotAvailable(short)
@@ -815,6 +814,8 @@ def _check_equipment_available(
 def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> None:
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
     requests for the last units cannot both be held; the loser is refused and nothing is held.
+    Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
+    which is the assigned coordinator's step.
     ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
     lines = list(event.equipment_requests)
     if not lines or event.starts_at is None or event.ends_at is None:
@@ -826,7 +827,7 @@ def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> No
         .order_by(EquipmentType.id)
         .with_for_update()
     )
-    available = _available_by_type(db, event.starts_at, event.ends_at)
+    available = available_by_type(db, event.starts_at, event.ends_at)
     short = [
         line.equipment_type.name
         for line in lines
@@ -848,7 +849,6 @@ def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> No
                 notes=notes,
             )
         )
-        line.status = _LINE_RESERVED
 
 
 def _replace_venue_requirements(db: Session, event: Event, items: list[VenueRequirementIn]) -> None:

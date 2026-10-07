@@ -44,6 +44,7 @@ import {
   AWAITING_DECISION_STATUSES,
   DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
+  EQUIPMENT_OPEN_STATUSES,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import {
@@ -54,6 +55,7 @@ import {
   instantToInput,
 } from '../shared/format'
 import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
+import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -193,6 +195,9 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
  * reason and moves it to REJECTED. Both are offered from the same set of statuses.
+ *
+ * Story 15.1: the Equipment requirements section is where the assigned coordinator records the
+ * event's equipment and submits it to Technical Support (`EquipmentRequestsSection`).
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -307,6 +312,12 @@ export function EventDetailPage() {
 
   function markImageFailed() {
     setHasImageFailed(true)
+  }
+
+  /** Story 15.1: after an equipment change, show every item's new status. A failed reload keeps
+   *  the page as it was rather than replacing it with an error. */
+  function reloadEvent(): Promise<void> {
+    return getEvent(eventId).then(setEvent, () => {})
   }
 
   function askToApprove() {
@@ -522,6 +533,13 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_REVIEW) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
+   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
+   *  mirroring the backend's own checks. Everyone else sees the list alone. */
+  const canChangeEquipment =
+    can(PERMISSIONS.EQUIPMENT_REQUEST) &&
+    isAssignedCoordinator &&
+    EQUIPMENT_OPEN_STATUSES.includes(event.status)
   /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
    *  its assigned coordinator, while it can take a booking. */
   const canFindVenue = canRequestVenueFor(event, user, can)
@@ -912,29 +930,12 @@ export function EventDetailPage() {
           </EmptyState>
         )}
 
-        <section className="card stack" aria-labelledby="equipment-heading">
-          <h2 id="equipment-heading">Equipment requirements</h2>
-          {event.equipment.length === 0 ? (
-            <p className="muted">No equipment requested.</p>
-          ) : (
-            <ul className="check-list">
-              {event.equipment.map((item) => (
-                <li key={item.id}>
-                  <span className="grow-text">
-                    {item.equipment_type_name}
-                    {item.technical_notes && (
-                      <>
-                        <br />
-                        <span className="small muted">{item.technical_notes}</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="mono">×{item.quantity}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <EquipmentRequestsSection
+          eventId={event.id}
+          equipment={event.equipment}
+          canChange={canChangeEquipment}
+          onChanged={reloadEvent}
+        />
 
         {canViewClarifications && (
           <ClarificationHistory

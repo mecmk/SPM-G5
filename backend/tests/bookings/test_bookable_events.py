@@ -44,8 +44,9 @@ def event_ids(response) -> list[str]:
 def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_client):
     """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
     CONFIRMED one (story 6.1's seed data), a PLANNING one dedicated to the story 13.2.1
-    reject e2e test and a PLANNING one dedicated to 12.1's e2e request (s8.1) - "approved or
-    later" includes them all. The pick-list offers all seven, soonest first."""
+    reject e2e test, a PLANNING one dedicated to 12.1's e2e request (s8.1) and two PLANNING ones
+    dedicated to 15.1's e2e spec - "approved or later" includes them all. The pick-list offers
+    all nine, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -55,6 +56,8 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.APPROVED_3),
         str(Events.CONFIRMED),
         str(Events.PARTNER_BRIEFING),
+        str(Events.EQUIPMENT_WORKSHOP),
+        str(Events.EQUIPMENT_SHOWCASE),
         str(Events.APPROVED_4),
         str(Events.APPROVED_6),
     ]
