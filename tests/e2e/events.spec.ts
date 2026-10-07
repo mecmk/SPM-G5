@@ -10,6 +10,9 @@
  * This spec covers the flows a user actually clicks through, plus the one refusal that is purely
  * a frontend rendering concern: what a blocked direct URL shows.
  *
+ * f7.1.1 (AC1): an event that runs over more than one day names both dates in its heading line,
+ * rather than reading as its first day.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -97,6 +100,22 @@ test('7.1 AC1: a draft with no dates or attendance shows clear empty states', as
   await expect(page.getByText('Not yet assigned')).toHaveCount(0)
   // AC1: no recorded image falls back to the placeholder rather than a broken or empty image.
   await expect(page.locator('img')).toHaveCount(0)
+})
+
+test("7.1 AC1: a two-day event's heading line shows both dates", async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+
+  await expect(
+    page.getByRole('heading', { name: 'Regional Sales Summit', level: 1 }),
+  ).toBeVisible()
+  // The seeded summit runs 15 Dec 09:00 to 16 Dec 17:00. Matched with the organiser's name, as
+  // only the heading line has it: the Main venue's line below shows the same period.
+  await expect(
+    page.getByText(
+      'Tue, 15 Dec 2026, 09:00 – Wed, 16 Dec 2026, 17:00 · Organised by Olivia Organiser',
+    ),
+  ).toBeVisible()
 })
 
 test('2.1 AC8/AC19: the coordinator sees the registration choice, closing date and visibility of a submitted request', async ({

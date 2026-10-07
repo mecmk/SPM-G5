@@ -11,6 +11,9 @@
  * (tests/e2e/my-event-requests.spec.ts's sibling for the coordinator side), backed by
  * `/events/assigned-to-me`. AC1-AC4 above still hold true within the "Under Review" tab, which
  * carries the same awaiting-decision rows the old page's single view showed.
+ *
+ * Story 6.1 AC2 each entry shows the event name, date and current status. f7.1.1: an event that
+ * runs over more than one day names both dates.
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, signIn } from './support'
@@ -125,4 +128,15 @@ test("6.1: every tab shows the coordinator's events in that status, and each car
 
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
   await expect(queueCard(page, 'Summer Rooftop Mixer')).toContainText('Cancelled')
+})
+
+test("6.1 AC2: a two-day event's card shows both dates", async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/events/inbox')
+  await page.getByRole('tab', { name: /^Planning/ }).click()
+
+  // The seeded Regional Sales Summit runs 15 Dec 09:00 to 16 Dec 17:00.
+  await expect(queueCard(page, 'Regional Sales Summit')).toContainText(
+    'Tue, 15 Dec 2026, 09:00 – Wed, 16 Dec 2026, 17:00',
+  )
 })

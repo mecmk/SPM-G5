@@ -50,6 +50,9 @@
  * AC14 (built with s8.1): a venue that stopped being available since the search is refused, and
  * the step leads back to the same results.
  *
+ * f7.1.1: an event over two days keeps both dates, on the catalogue's banner (AC15) and in the
+ * request step's Date and time (AC2).
+ *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
@@ -198,6 +201,22 @@ test('12.1 AC2: the request step shows what it carries over from the event', asy
   await expect(summary).toContainText('350')
   await expect(summary).toContainText('Theatre')
   await expect(summary).toContainText('Projector & screen')
+})
+
+test('12.1 AC2/AC15: a two-day event keeps both dates from Find a venue to the request step', async ({
+  page,
+}) => {
+  // Summit and its Main venue both run 15 Dec 09:00 to 16 Dec 17:00. Nothing is sent.
+  const period = 'Tue, 15 Dec 2026, 09:00 – Wed, 16 Dec 2026, 17:00'
+  await signIn(page, ACCOUNTS.coordinator)
+  await findVenueFor(page, SUMMIT)
+  await expect(catalogueBanner(page, SUMMIT.name)).toContainText(period)
+
+  await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'What this request will carry' })).toContainText(
+    period,
+  )
 })
 
 test('12.1 AC1/AC3: a coordinator raises a venue booking request for their approved event', async ({

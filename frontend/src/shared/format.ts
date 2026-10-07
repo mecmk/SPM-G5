@@ -26,9 +26,15 @@ export function formatTime(stamp: string): string {
   })
 }
 
-/** "Wed, 18 Nov 2026 · 09:00–17:00" */
+/**
+ * "Wed, 18 Nov 2026 · 09:00–17:00" for a period inside one day. f7.1.1 (story 7.1 AC1): a period
+ * over more than one day names both dates, "Tue, 15 Dec 2026, 09:00 – Wed, 16 Dec 2026, 17:00", so
+ * it never reads as its first day alone. The days compared are Singapore days, like every date here.
+ */
 export function formatSchedule(startsAt: string, endsAt: string): string {
-  return `${formatDate(startsAt)} · ${formatTime(startsAt)}–${formatTime(endsAt)}`
+  return formatDate(startsAt) === formatDate(endsAt)
+    ? `${formatDate(startsAt)} · ${formatTime(startsAt)}–${formatTime(endsAt)}`
+    : `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`
 }
 
 export function formatDateTime(stamp: string): string {
