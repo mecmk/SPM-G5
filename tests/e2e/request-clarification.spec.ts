@@ -7,8 +7,8 @@
  *         is sent. A purely client-side check has no backend call to assert against and no other
  *         runner, so it belongs here (AGENTS.md, tests/CLAUDE.md).
  * 4.2 AC4 the coordinator can still send a follow-up question once the request already awaits a
- *         response to an earlier one - nothing until story 4.3 moves the event back to Under
- *         Review to unlock a second round.
+ *         response to an earlier one - nothing moves the event back to Under Review (story 4.3's
+ *         response leaves the status alone), so a second round starts from there.
  * 4.2 AC7 a double-click on Send sends once: the button is disabled while the request is in
  *         flight, so one message survives a reload, not two.
  *
@@ -81,8 +81,8 @@ test('4.2 AC1/AC3/AC4/AC7: the coordinator asks, asks again, and a double-click 
   await expect(first).toContainText(/\d{1,2}:\d{2}/)
   await expect(page.getByText(AWAITING_RESPONSE_SENTENCE)).toBeVisible()
 
-  // 4.2 AC4: several rounds are allowed. Nothing until story 4.3 moves the event back to Under
-  // Review, so the coordinator has to be able to ask again directly from CLARIFICATION_REQUESTED.
+  // 4.2 AC4: several rounds are allowed. Nothing moves the event back to Under Review, so the
+  // coordinator has to be able to ask again directly from CLARIFICATION_REQUESTED.
   await expect(send).toBeVisible()
   await page.getByLabel('Message').fill('And which room layout do you need?')
   await send.click()
