@@ -39,7 +39,7 @@ import {
   venueSearchPath,
   type VenueSearch,
 } from '../routes'
-import { PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
+import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
   DETAILS_LOCKED_HINT,
@@ -191,6 +191,10 @@ function formatHeroMeta(event: EventDetail): string {
  * Venue Staff, Technical Support - not the organiser, who never held that permission), listing
  * every venue booking ever raised for the event, most recent first, each with its status and,
  * once rejected, its reason.
+ *
+ * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
+ * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
+ * booking queue words it.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
@@ -849,6 +853,7 @@ export function EventDetailPage() {
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
+              const outcomeLabels = bookingOutcomeLabels(booking.status)
               return (
                 <div
                   key={booking.id}
@@ -892,9 +897,16 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
+                      {booking.decided_at !== null && (
+                        <p>
+                          <span className="fact-label">{outcomeLabels.when}</span>
+                          <br />
+                          {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
                       {booking.decision_reason !== null && (
                         <p>
-                          <span className="fact-label">Reason</span>
+                          <span className="fact-label">{outcomeLabels.why}</span>
                           <br />
                           {booking.decision_reason}
                         </p>
