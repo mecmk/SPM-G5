@@ -55,6 +55,11 @@ function describeValidationIssues(issues: ValidationIssue[]): string {
 /** The backend's own sentence when it sent one, otherwise the registry's message for the code. */
 function messageFor(code: ErrorCode, detail: unknown): string {
   if (typeof detail === 'string' && detail.trim()) return detail
+  // A refusal that carries figures beside its sentence (story 16.1 AC6) sends both as an object.
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const { message } = detail
+    if (typeof message === 'string' && message.trim()) return message
+  }
   if (Array.isArray(detail) && detail.length > 0) return describeValidationIssues(detail)
   return ERROR_REGISTRY[code].message
 }
