@@ -143,7 +143,7 @@ C4Component
         Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period")
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
-        Component(changes, "Change request service", "epic 19", "Requested changes after submission, and the arrangements each one affects")
+        Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the event's own validation is reused from app/events. The arrangements each change affects are still to come")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
@@ -160,6 +160,7 @@ C4Component
     Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
     Rel(registration, notifications, "Raises confirmations through")
+    Rel(changes, notifications, "Raises change requests and withdrawals through")
     Rel(shared, db, "Reads and writes")
     Rel(events, db, "Reads and writes")
     Rel(review, db, "Reads and writes")
@@ -299,7 +300,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 16 | Equipment availability checking | Equipment service | `equipment_types.total_quantity`, `equipment_reservations`, `equipment_unavailability_periods` | `app/events` for any dates; `app/equipment` for an event, counting what it holds |
 | 17 | Equipment reservation | Equipment service | `equipment_reservations` | `app/events` for the hold made on submission; `app/equipment` for the coordinator's holds |
 | 18 | Attendee registration | Registration service | `event_registrations`, registration columns on `events` | — (an event's registration settings are in `app/events`) |
-| 19 | Event change requests | Change request service | `event_change_requests` | — |
+| 19 | Event change requests | Change request service | `event_change_requests` | `app/change_requests`; `app/events` for the point of contact updated directly |
 | 20 | Notification system | Notification service | `notifications` | `app/notifications` |
 
 Auditability runs across all of them. Every significant action appends to `audit_log` through one

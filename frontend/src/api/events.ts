@@ -499,6 +499,28 @@ export function updateEventRoutineInformation(
   })
 }
 
+/** Mirrors `PointOfContactUpdate` (story 19.1 AC2): leave a field out to keep it. */
+export interface PointOfContactInput {
+  contact_email?: string
+  contact_phone?: string
+}
+
+/**
+ * Story 19.1 AC2: the organiser updates their approved event's point of contact directly, with no
+ * change request, while it is Planning or Confirmed. The backend logs the old and new values.
+ */
+export function updatePointOfContact(
+  eventId: string,
+  input: PointOfContactInput,
+): Promise<EventDetail> {
+  return api<EventDetail>(`/events/${eventId}/point-of-contact`, {
+    method: 'PATCH',
+    body: input,
+    errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'EVENT_CONTACT_EDIT_CLOSED' },
+    notify: { title: 'Point of contact updated', message: 'The new contact details were saved.' },
+  })
+}
+
 /**
  * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
  * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.

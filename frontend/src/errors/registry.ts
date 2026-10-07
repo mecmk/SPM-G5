@@ -94,6 +94,12 @@ export type ErrorCode =
   | 'EQUIPMENT_QUANTITY_INVALID'
   | 'EQUIPMENT_DECISION_REFUSED'
   | 'EQUIPMENT_REASON_REQUIRED'
+  | 'CHANGE_REQUEST_REFUSED'
+  | 'CHANGE_REQUEST_INVALID'
+  | 'CHANGE_REQUEST_FIELD_REQUIRED'
+  | 'CHANGE_REQUEST_REASON_REQUIRED'
+  | 'CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID'
+  | 'EVENT_CONTACT_EDIT_CLOSED'
 
 export interface ErrorEntry {
   title: string
@@ -534,6 +540,42 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EQUIPMENT_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for declining this request.',
+  },
+
+  // Story 19.1: change requests and the point of contact on an approved event.
+  /** AC5/AC6/AC8/AC10: a change request refused for the state it found - the event is no longer
+   *  in Planning, the field already has a pending request, or the request was decided before it
+   *  could be withdrawn. The backend's own sentence (always sent) says which. */
+  CHANGE_REQUEST_REFUSED: {
+    title: 'Change request not sent',
+    message: "This change request could not be made in the event's current state.",
+  },
+  /** AC3/AC4: a proposed value the creation rules refuse, or one identical to the current value. */
+  CHANGE_REQUEST_INVALID: {
+    title: 'Check the change',
+    message: 'The proposed value is not valid.',
+  },
+  /** AC1: the form's own pre-check - never wired into an errorCodes map. */
+  CHANGE_REQUEST_FIELD_REQUIRED: {
+    title: 'Choose what to change',
+    message: 'Choose what you want to change.',
+  },
+  /** AC4: the form's own pre-check before calling the API - never wired into an errorCodes map,
+   *  same precedent as EVENT_REJECTION_REASON_REQUIRED. */
+  CHANGE_REQUEST_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for the change.',
+  },
+  /** AC4: the form's own pre-check. Unlike a draft's (VENUE_REQUIREMENT_CAPACITY_INVALID), a
+   *  proposed requirement must say how many people it holds - never wired into an errorCodes map. */
+  CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID: {
+    title: 'Check the number of people',
+    message: 'Give every venue requirement a number of people, as a whole number from 1.',
+  },
+  /** AC2: the point of contact is updated directly only while the event is Planning or Confirmed. */
+  EVENT_CONTACT_EDIT_CLOSED: {
+    title: 'Cannot update the point of contact',
+    message: 'The point of contact can no longer be updated on this event.',
   },
 }
 

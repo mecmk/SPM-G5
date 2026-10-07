@@ -680,6 +680,29 @@ class EventRoutineUpdate(BaseModel):
         return _blank_to_none(value)
 
 
+# --- point of contact edit (story 19.1 AC2) -----------------------------------------------
+POINT_OF_CONTACT_REQUIRED_MESSAGE = (
+    "The point of contact needs an email address and a phone number; they cannot be removed."
+)
+
+
+class PointOfContactUpdate(_EventRequestRules):
+    """Story 19.1 AC2/AC4: the organiser updates the point of contact of an approved event
+    directly. Only the email and phone - nothing else on the event can be sent - checked by the
+    same 2.1 AC13 rules as the request form, inherited from ``_EventRequestRules``. Leave a field
+    out to keep it; a field sent cannot be emptied, since a submitted request must keep both."""
+
+    contact_email: str | None = None
+    contact_phone: str | None = None
+
+    @model_validator(mode="after")
+    def _check_not_removed(self):
+        # ``_normalize_contact`` has already turned a blank value into None.
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError(POINT_OF_CONTACT_REQUIRED_MESSAGE)
+        return self
+
+
 # --- decision (4.4 approve, 4.5 reject) ---------------------------------------------------
 class EventRejection(BaseModel):
     """4.5 AC1: a reason is mandatory - blank or whitespace-only does not count."""
