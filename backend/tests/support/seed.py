@@ -103,6 +103,7 @@ class Events:
     RECRUITMENT_FAIR = _e(25)  # coordinator 1
     PARTNER_GALA = _e(26)  # coordinator 2; accepted and declined items only
     EQUIPMENT_DECISIONS = _e(27)  # organiser 2, coordinator 1, dedicated to 16.1's e2e decisions
+    SMART_CITIES_EXPO = _e(28)  # organiser 2, coordinator 1, three requirements, for 8.4's e2e
 
 
 class Bookings:
@@ -135,11 +136,16 @@ def _r(n: int) -> uuid.UUID:
 
 class VenueRequirements:
     """Story 2.7: each sample event's "Main venue" is numbered like its event (3333..NN ->
-    cccc..NN). These three are the ones that also require facilities."""
+    cccc..NN). These three are the ones that also require facilities. Story 8.4: the Smart Cities
+    Expo's three requirements are numbered within their event (cccc..0028-..0N)."""
 
     DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
     NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
     PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60
+    # Events.SMART_CITIES_EXPO, in the banner's order:
+    EXPO_PLENARY_HALL = uuid.UUID("cccccccc-0000-0000-0028-000000000001")  # THEATRE, 300
+    EXPO_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0028-000000000002")  # CLASSROOM, 40
+    EXPO_EXHIBITION_SPACE = uuid.UUID("cccccccc-0000-0000-0028-000000000003")  # EXHIBITION, 150
 
 
 class EquipmentItems:

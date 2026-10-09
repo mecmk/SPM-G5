@@ -39,6 +39,9 @@ export const EVENTS = {
   // Story 16.1, Planning, organiser: organiser2, coordinator, dated December 2027. Six pending
   // equipment items; the 16.1 spec accepts and declines them.
   equipmentDecisions: '33333333-0000-0000-0000-000000000027',
+  // Story 8.4, Planning, organiser: organiser2, coordinator, dated March 2028. Three venue
+  // requirements, each finding different venues; the 8.4 spec only reads it.
+  smartCitiesExpo: '33333333-0000-0000-0000-000000000028',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
