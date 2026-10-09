@@ -243,7 +243,25 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- Dated March 2028, clear of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Smart Cities Expo', 'Industry exhibition', 'Two days of keynotes, breakout workshops and an exhibition of smart-city projects.', NULL, '2028-03-14 09:00+08', '2028-03-15 18:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-05 09:00+08', '2026-10-07 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-05 09:00+08', '2026-10-07 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..29 and 3333..30: in planning and assigned to Chloe; dedicated to story 12.5's e2e spec
+    -- (tests/e2e/venue-requirement-booking.spec.ts), which sends real requests for them, so 8.4's
+    -- read-only Expo above is never changed. 29 records three venue requirements and no bookings;
+    -- 30 records one, already booked (below). Dated April and June 2028, clear of every other
+    -- seeded event and of the periods backend tests build.
+    ('33333333-0000-0000-0000-000000000029', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Urban Mobility Forum', 'Industry forum', 'Two days of exhibits, workshops and an evening of networking on city transport.', NULL, '2028-04-11 09:00+08', '2028-04-12 17:00+08', 200, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 09:00+08', '2026-10-08 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    ('33333333-0000-0000-0000-000000000030', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Coastal Resilience Workshop', 'Partner workshop', 'A morning working session on flood planning with partner agencies.', NULL, '2028-06-06 09:00+08', '2028-06-06 12:00+08', 12, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 10:00+08', '2026-10-08 10:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..31: in planning and assigned to Chloe; dedicated to story 12.1's e2e request that is
+    -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1. Since story 12.5 a
+    -- venue requirement takes one request at a time, so it has an event of its own rather than
+    -- sharing 3333..18's, which story 11.1's spec requests a venue for. Dated May 2028.
+    ('33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Sales Onboarding Day', 'Staff training', 'A day of product training for new sales starters.', NULL, '2028-05-17 09:00+08', '2028-05-17 17:00+08', 40, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 11:00+08', '2026-10-08 11:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -331,7 +349,38 @@ ON CONFLICT (id) DO UPDATE SET
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
 
+-- Story 12.5: the Urban Mobility Forum (3333..29) and the Coastal Resilience Workshop (3333..30),
+-- numbered like the Expo's. The Forum's Expo hall and Networking lounge both fit Grand Hall and
+-- Exhibition Foyer and overlap on 11 April, so a venue held for one drops out for the other
+-- (12.5 AC9); its Workshop room fits Seminar Room 2.1. The Workshop's Meeting room is booked
+-- below. Like the Expo's, they belong to the seed: any other requirement on them is removed.
+DELETE FROM venue_requirements
+WHERE event_id IN ('33333333-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000030')
+  AND id NOT IN ('cccccccc-0000-0000-0029-000000000001', 'cccccccc-0000-0000-0029-000000000002',
+                 'cccccccc-0000-0000-0029-000000000003', 'cccccccc-0000-0000-0030-000000000001')
+  OR event_id = '33333333-0000-0000-0000-000000000031'
+  AND id <> 'cccccccc-0000-0000-0031-000000000001';
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code, notes) VALUES
+    ('cccccccc-0000-0000-0029-000000000001', '33333333-0000-0000-0000-000000000029', 0, 'Expo hall', 200,
+     '2028-04-11 09:00+08', '2028-04-12 17:00+08', 'STANDING', 'Stands for transport operators.'),
+    ('cccccccc-0000-0000-0029-000000000002', '33333333-0000-0000-0000-000000000029', 1, 'Workshop room', 40,
+     '2028-04-12 13:00+08', '2028-04-12 17:00+08', 'CLASSROOM', NULL),
+    ('cccccccc-0000-0000-0029-000000000003', '33333333-0000-0000-0000-000000000029', 2, 'Networking lounge', 100,
+     '2028-04-11 17:00+08', '2028-04-11 20:00+08', 'STANDING', NULL),
+    ('cccccccc-0000-0000-0030-000000000001', '33333333-0000-0000-0000-000000000030', 0, 'Meeting room', 12,
+     '2028-06-06 09:00+08', '2028-06-06 12:00+08', 'BOARDROOM', NULL),
+    ('cccccccc-0000-0000-0031-000000000001', '33333333-0000-0000-0000-000000000031', 0, 'Training room', 40,
+     '2028-05-17 09:00+08', '2028-05-17 17:00+08', 'CLASSROOM', NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
+
 INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
+    ('cccccccc-0000-0000-0029-000000000001', 'WIFI'),
+    ('cccccccc-0000-0000-0029-000000000002', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0031-000000000001', 'PROJECTOR'),
     ('cccccccc-0000-0000-0028-000000000001', 'PROJECTOR'),
     ('cccccccc-0000-0000-0028-000000000001', 'SOUND_SYSTEM'),
     ('cccccccc-0000-0000-0028-000000000001', 'STAGE'),
@@ -342,7 +391,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO event_accessibility_needs (event_id, feature_code, notes) VALUES
     ('33333333-0000-0000-0000-000000000003', 'WHEELCHAIR_ACCESS', 'Two wheelchair users expected'),
     ('33333333-0000-0000-0000-000000000003', 'HEARING_LOOP', NULL),
-    ('33333333-0000-0000-0000-000000000028', 'WHEELCHAIR_ACCESS', NULL)
+    ('33333333-0000-0000-0000-000000000028', 'WHEELCHAIR_ACCESS', NULL),
+    ('33333333-0000-0000-0000-000000000029', 'WHEELCHAIR_ACCESS', NULL)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, created_by_id) VALUES
@@ -516,7 +566,10 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000025', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-30 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000026', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-01 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000027', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-03 09:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000032', '33333333-0000-0000-0000-000000000028', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-07 09:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000032', '33333333-0000-0000-0000-000000000028', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-07 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000029', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000030', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 10:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000031', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 11:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -559,7 +612,12 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     -- 3333..27 (story 16.1's e2e event): self-assigned too, for the same reason.
     ('aaaaaaaa-0000-0000-0000-000000000026', '33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08'),
     -- 3333..28 (story 8.4's e2e event): self-assigned too, for the same reason.
-    ('aaaaaaaa-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 09:00+08'),
+    -- 3333..29 and 3333..30 (story 12.5's e2e events): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000028', '33333333-0000-0000-0000-000000000029', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000030', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 10:00+08'),
+    -- 3333..31 (12.1's real send since story 12.5): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 11:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
@@ -623,3 +681,39 @@ ON CONFLICT (id) DO UPDATE SET
     required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at;
+
+-- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
+-- Boardroom 3.4, approved by Vera. Its e2e spec reads the "All required venues booked" state and
+-- requests an additional venue beside it.
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id) VALUES
+    ('44444444-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000030', '22222222-0000-0000-0000-000000000003',
+     '11111111-0000-0000-0000-000000000003', '2028-06-06 09:00+08', '2028-06-06 12:00+08', 0, 0,
+     12, 'BOARDROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-08 15:00+08', NULL, '2026-10-08 11:00+08',
+     'cccccccc-0000-0000-0030-000000000001')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id;
+
+-- Story 12.5: the earlier seeded bookings name the requirement they were made for. Each was made
+-- for its event's Main venue (2.7 AC13), as migration 017 links bookings made before it, except
+-- Nimbus's second, the breakout track, which is an additional venue.
+UPDATE venue_bookings AS b
+SET venue_requirement_id = link.requirement_id
+FROM (VALUES
+    ('44444444-0000-0000-0000-000000000001'::uuid, 'cccccccc-0000-0000-0000-000000000003'::uuid),
+    ('44444444-0000-0000-0000-000000000002'::uuid, NULL::uuid),
+    ('44444444-0000-0000-0000-000000000003'::uuid, 'cccccccc-0000-0000-0000-000000000008'::uuid),
+    ('44444444-0000-0000-0000-000000000004'::uuid, 'cccccccc-0000-0000-0000-000000000009'::uuid),
+    ('44444444-0000-0000-0000-000000000005'::uuid, 'cccccccc-0000-0000-0000-000000000010'::uuid),
+    ('44444444-0000-0000-0000-000000000006'::uuid, 'cccccccc-0000-0000-0000-000000000011'::uuid),
+    ('44444444-0000-0000-0000-000000000007'::uuid, 'cccccccc-0000-0000-0000-000000000016'::uuid),
+    ('44444444-0000-0000-0000-000000000008'::uuid, 'cccccccc-0000-0000-0000-000000000017'::uuid)
+) AS link (booking_id, requirement_id)
+WHERE b.id = link.booking_id;
