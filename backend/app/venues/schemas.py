@@ -288,6 +288,9 @@ class VenueSearchQuery(BaseModel):
     include_withdrawn: bool = False
     # Story 11.1 AC1: the event venues are being found for. Judges each result; filters nothing.
     event: uuid.UUID | None = None
+    # f11.1.1 (11.1 AC1): the event's venue requirement selected in the catalogue's banner (story
+    # 8.4), judged instead of its first. Read only with ``event``; filters nothing either.
+    requirement: uuid.UUID | None = None
 
 
 class FailedCriterionOut(BaseModel):

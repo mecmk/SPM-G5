@@ -38,6 +38,9 @@ import { hasFilters, hasSameFilters, RELAX_CHANGES, useVenueSearch } from './use
  * ends are filled in, as Singapore instants. Story 11.1 AC1: `judgedEventId` - the event a venue
  * is being requested for, once it has resolved to one the user may request a venue for - asks
  * for each result's suitability; a fake or someone else's event in the address is never sent.
+ * f11.1.1: with it goes the venue requirement selected in the banner (story 8.4), so each result
+ * is judged against that requirement; the page searches only once the address names one of the
+ * event's, or none.
  */
 function searchQueryFor(search: VenueSearch, judgedEventId: string | undefined): VenueSearchQuery {
   const hasPeriod = Boolean(search.from && search.to)
@@ -52,6 +55,7 @@ function searchQueryFor(search: VenueSearch, judgedEventId: string | undefined):
     accessibility: search.accessibilityFeatures,
     include_withdrawn: search.includeWithdrawn,
     event: judgedEventId,
+    requirement: judgedEventId === undefined ? undefined : search.requirementId,
   }
 }
 
