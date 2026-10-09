@@ -17,7 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.events.models import Event
+from app.events.models import Event, VenueRequirement
 from app.venues.models import RoomLayout, Venue
 
 
@@ -63,6 +63,12 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decision_reason: Mapped[str | None] = mapped_column(Text)
     alternative_suggestion: Mapped[str | None] = mapped_column(Text)
+    # Story 12.5 AC1: the event's venue requirement this request is for; None for an
+    # additional venue (AC5, AC7). uq_venue_bookings_one_per_requirement allows one pending or
+    # approved request per requirement (AC10-AC12).
+    venue_requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("venue_requirements.id", ondelete="SET NULL")
+    )
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)
@@ -73,3 +79,4 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     venue: Mapped[Venue] = relationship()
     requested_by: Mapped[User] = relationship(foreign_keys=[requested_by_id])
     required_layout: Mapped[RoomLayout | None] = relationship(foreign_keys=[required_layout_code])
+    venue_requirement: Mapped[VenueRequirement | None] = relationship()
