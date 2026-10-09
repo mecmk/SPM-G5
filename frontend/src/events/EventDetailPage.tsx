@@ -37,7 +37,6 @@ import {
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
   venueSearchPath,
-  type VenueSearch,
 } from '../routes'
 import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import {
@@ -50,14 +49,8 @@ import {
   EQUIPMENT_OPEN_STATUSES,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
-import {
-  formatDate,
-  formatDateTime,
-  formatSchedule,
-  formatTime,
-  instantToInput,
-} from '../shared/format'
-import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
+import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
+import { canRequestVenueFor, firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
@@ -127,22 +120,12 @@ function formatMinutesDuration(minutes: number): string {
 }
 
 /**
- * f12.1.1 (story 12.1 AC15): the catalogue search Find a venue opens, holding only what the event
- * recorded. Story 2.7: for the event's first venue requirement, the one a request carries - its
- * times, number of people as the minimum capacity, layout and facilities - plus the event's
- * accessibility needs. An event with no requirements searches by its own dates and attendance.
+ * f12.1.1 (story 12.1 AC15) and story 8.4 AC1: the catalogue address Find a venue opens - the
+ * event's first venue requirement selected in its banner, with that requirement's filters. An
+ * event with no requirements searches by its own dates and attendance (8.4 AC6).
  */
-function venueSearchFor(event: EventDetail): VenueSearch {
-  const terms = venueRequestTermsFor(event)
-  return {
-    eventId: event.id,
-    capacity: terms.capacity ?? undefined,
-    from: terms.startsAt ? instantToInput(terms.startsAt) : undefined,
-    to: terms.endsAt ? instantToInput(terms.endsAt) : undefined,
-    layout: terms.layoutCode ?? undefined,
-    facilities: terms.facilities.map((facility) => facility.code),
-    accessibilityFeatures: event.accessibility_needs.map((need) => need.code),
-  }
+function findVenuePath(event: EventDetail): string {
+  return venueSearchPath(venueSearchFor(event, firstVenueRequirement(event)))
 }
 
 /** Story 2.7 AC4: one requirement's number of people and times, as one line. */
@@ -768,7 +751,7 @@ export function EventDetailPage() {
             <div className="card-heading">
               <h2 id="venue-requirements-heading">Venue requirements</h2>
               {canFindVenue && (
-                <Link to={venueSearchPath(venueSearchFor(event))} className="button button-sm">
+                <Link to={findVenuePath(event)} className="button button-sm">
                   Find a venue
                 </Link>
               )}
