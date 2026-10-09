@@ -356,7 +356,7 @@ for (const viewer of [
 
     await expect(panel(page).getByLabel('Capacity from')).toHaveValue('220')
     await expectListed(page, ['Grand Hall'], ['Exhibition Foyer'])
-    await expect(catalogueBanner(page, SUMMIT.name)).toHaveCount(0)
+    // Story 8.4 AC10: the event's banner shows for anyone who may read it; the request does not.
     await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
 
     await panel(page).getByLabel('Name or location').fill('seminar')

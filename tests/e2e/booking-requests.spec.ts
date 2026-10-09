@@ -85,9 +85,11 @@ const NOT_REQUESTABLE_MESSAGE =
   "Only the event's assigned coordinator can request a venue for it, while the event is in " +
   'Planning or Confirmed.'
 
-/** The address Find a venue writes for Nimbus, as 8.1's panel reads it (AC15). */
+/** The address Find a venue writes for Nimbus, as 8.1's panel reads it (AC15). Story 8.4 AC1: it
+ * names the event's first venue requirement, selected in the catalogue's banner. */
 const NIMBUS_SEARCH = {
   event: NIMBUS.id,
+  requirement: 'cccccccc-0000-0000-0000-000000000003', // Nimbus's Main venue in the seed
   capacity: '350',
   from: '2026-11-25T09:00',
   to: '2026-11-25T18:00',
@@ -129,6 +131,7 @@ function searchOf(address: URL) {
     path: address.pathname,
     names: [...new Set(params.keys())].sort(),
     event: params.get('event'),
+    requirement: params.get('requirement'),
     capacity: params.get('capacity'),
     from: params.get('from'),
     to: params.get('to'),
@@ -166,7 +169,16 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
   await expect(page).toHaveURL(/\/venues\?/)
   expect(searchOf(new URL(page.url()))).toEqual({
     path: '/venues',
-    names: ['accessibility', 'capacity', 'event', 'facility', 'from', 'layout', 'to'],
+    names: [
+      'accessibility',
+      'capacity',
+      'event',
+      'facility',
+      'from',
+      'layout',
+      'requirement',
+      'to',
+    ],
     ...NIMBUS_SEARCH,
   })
 
@@ -276,8 +288,9 @@ test('12.1 AC15: only what the event recorded goes into the catalogue address', 
   // No facilities or accessibility needs recorded, and a two-day event keeps both dates.
   expect(await findVenueSearch(page)).toEqual({
     path: '/venues',
-    names: ['capacity', 'event', 'from', 'layout', 'to'],
+    names: ['capacity', 'event', 'from', 'layout', 'requirement', 'to'],
     event: SUMMIT.id,
+    requirement: 'cccccccc-0000-0000-0000-000000000012', // Summit's Main venue in the seed
     capacity: '220',
     from: '2026-12-15T09:00',
     to: '2026-12-16T17:00',
@@ -314,6 +327,7 @@ test('12.1 AC15: an event with no venue requirements still finds a venue by date
     path: '/venues',
     names: ['accessibility', 'capacity', 'event', 'from', 'to'],
     event: NIMBUS.id,
+    requirement: null,
     capacity: '350',
     from: NIMBUS_SEARCH.from,
     to: NIMBUS_SEARCH.to,
@@ -435,14 +449,14 @@ for (const viewer of NOT_REQUESTING) {
     await signIn(page, viewer.email)
     const search = new URLSearchParams({ event: NIMBUS.id, capacity: NIMBUS_SEARCH.capacity })
 
-    // Wait for the event itself, so the banner's absence is not read before it could appear.
+    // Wait for the event itself, so the absence of a request is not read before it could appear.
+    // Story 8.4 AC10: the banner itself shows for anyone who may read the event.
     await Promise.all([
       page.waitForResponse((response) => response.url().endsWith(`/events/${NIMBUS.id}`)),
       page.goto(`/venues?${search}`),
     ])
     await expect(venueCard(page, VENUE)).toBeVisible()
 
-    await expect(catalogueBanner(page, NIMBUS.name)).toHaveCount(0)
     await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
   })
 }

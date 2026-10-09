@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router'
+import type { VenueRequirement } from '../api/events'
 import {
   searchVenues,
   type RelaxHint,
@@ -24,12 +25,13 @@ import {
 } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
 import { DeleteVenueDialog } from './DeleteVenueDialog'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenueCard } from './VenueCard'
 import { VenueFilterPanel } from './VenueFilterPanel'
-import { hasFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
+import { hasFilters, hasSameFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
 
 /**
  * Story 8.1 AC3/AC8: the server query for the address's search. The period goes only once both
@@ -89,6 +91,12 @@ function describeRelaxHint(hint: RelaxHint): string {
  * and why not. The search waits for the event in the address to resolve and carries it only when
  * Request this venue would show (AC6), so arriving sends one search and a fake event none.
  *
+ * Story 8.4: the banner lists the event's venue requirements for anyone who may read the event
+ * (AC10), and selecting one replaces the filters with its own (AC3). The selection lives in the
+ * address with the filters (AC4, AC11), so Find a venue opens with the first selected (AC1). An
+ * address naming a requirement that is not the event's is corrected to the first, with its
+ * filters, before anything is searched (AC8).
+ *
  * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
@@ -97,14 +105,24 @@ export function VenueCataloguePage() {
   const location = useLocation()
   const { can } = useAuth()
   const canManageVenues = can(PERMISSIONS.VENUES_MANAGE)
-  const { requestingEvent, error: eventError, isResolving } = useRequestingEvent()
-  const { search, updateSearch, clearFilters } = useVenueSearch()
+  const { event, requestingEvent, error: eventError, isResolving } = useRequestingEvent()
+  const { search, updateSearch, replaceSearch, clearFilters } = useVenueSearch()
+  const selectedRequirement =
+    event?.venue_requirements.find((requirement) => requirement.id === search.requirementId) ?? null
+  /** Story 8.4 AC8: the address names a requirement that is not one of the event's. */
+  const isStrayRequirement =
+    event !== null && search.requirementId !== undefined && selectedRequirement === null
+  const hasChangedFilters =
+    event !== null &&
+    selectedRequirement !== null &&
+    !hasSameFilters(search, venueSearchFor(event, selectedRequirement))
+  const isWaiting = isResolving || isStrayRequirement
   const judgedEventId = requestingEvent?.id
   const query = useMemo(() => searchQueryFor(search, judgedEventId), [search, judgedEventId])
   const [listRequest, setListRequest] = useState<VenueListRequest | null>(
-    isResolving ? null : { query },
+    isWaiting ? null : { query },
   )
-  if (!isResolving && listRequest?.query !== query) setListRequest({ query })
+  if (!isWaiting && listRequest?.query !== query) setListRequest({ query })
   const [pendingDelete, setPendingDelete] = useState<VenueSummary | null>(null)
 
   const loadVenues = useCallback(
@@ -113,6 +131,14 @@ export function VenueCataloguePage() {
   )
   const { data: result, error, setData: setResult } = useLoaded(loadVenues)
   const isPeriodSearched = query.starts_at !== undefined
+
+  // Story 8.4 AC8: opened as Find a venue would open it - the event's first requirement, or the
+  // event's own dates and attendance when it records none.
+  useEffect(() => {
+    if (event !== null && isStrayRequirement) {
+      replaceSearch(venueSearchFor(event, firstVenueRequirement(event)))
+    }
+  }, [event, isStrayRequirement, replaceSearch])
 
   function askToDelete(venue: VenueSummary) {
     setPendingDelete(venue)
@@ -142,6 +168,12 @@ export function VenueCataloguePage() {
 
   function removeFilter(hint: RelaxHint) {
     updateSearch(RELAX_CHANGES[hint.filter])
+  }
+
+  /** Story 8.4 AC3/AC7: the filters become the requirement's own, even when it is already the
+   *  selected one and they were changed by hand. */
+  function selectRequirement(requirement: VenueRequirement) {
+    if (event !== null) replaceSearch(venueSearchFor(event, requirement))
   }
 
   /** Story 8.1 AC3's "Opening hours not recorded", and story 11.1 AC1's suitability, when the
@@ -218,7 +250,14 @@ export function VenueCataloguePage() {
           {eventError}
         </p>
       )}
-      {requestingEvent && <RequestingEventBanner event={requestingEvent} />}
+      {event && (
+        <RequestingEventBanner
+          event={event}
+          selectedRequirement={selectedRequirement}
+          hasChangedFilters={hasChangedFilters}
+          onSelectRequirement={selectRequirement}
+        />
+      )}
 
       <div className="catalogue-layout">
         <VenueFilterPanel

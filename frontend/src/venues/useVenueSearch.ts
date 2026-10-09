@@ -9,7 +9,11 @@ export interface VenueSearchState {
   /** Change some filters. The new address replaces the current one, so the Back button is not
    *  one history entry per keystroke. */
   updateSearch: (change: Partial<VenueSearch>) => void
-  /** Every filter back to Any. The event stays, so f12.1.1's banner and Request this venue do. */
+  /** Story 8.4 AC3: every filter replaced at once by another search, as selecting a venue
+   *  requirement in the banner does. It replaces the address too, like any filter change. */
+  replaceSearch: (search: VenueSearch) => void
+  /** Every filter back to Any. The event and its selected venue requirement stay, so f12.1.1's
+   *  banner, its selection (story 8.4) and Request this venue do. */
   clearFilters: () => void
 }
 
@@ -43,6 +47,26 @@ export function hasFilters(search: VenueSearch): boolean {
   return countFilters(search) > 0
 }
 
+/** One search's filters as text, ticked codes in a fixed order - the order they were ticked in
+ *  is not part of the search. */
+function filtersKey(search: VenueSearch): string {
+  return venueSearchParams({
+    ...search,
+    facilities: [...(search.facilities ?? [])].sort(),
+    accessibilityFeatures: [...(search.accessibilityFeatures ?? [])].sort(),
+    includeWithdrawn: false,
+  }).toString()
+}
+
+/**
+ * Story 8.4 AC7: whether `search` holds exactly the filters of `own` - a venue requirement's own
+ * search - or has been changed by hand since. Showing withdrawn venues widens the catalogue rather
+ * than filtering it, so it is no change.
+ */
+export function hasSameFilters(search: VenueSearch, own: VenueSearch): boolean {
+  return filtersKey(search) === filtersKey(own)
+}
+
 /**
  * The search the address holds this moment. react-router applies a navigation in a transition,
  * so an earlier change can already be in the address but not yet in the rendered `searchParams`;
@@ -67,13 +91,15 @@ export function useVenueSearch(): VenueSearchState {
     [setSearchParams],
   )
 
-  const clearFilters = useCallback(
-    () =>
-      setSearchParams(venueSearchParams({ eventId: currentVenueSearch().eventId }), {
-        replace: true,
-      }),
+  const replaceSearch = useCallback(
+    (newSearch: VenueSearch) => setSearchParams(venueSearchParams(newSearch), { replace: true }),
     [setSearchParams],
   )
 
-  return { search, updateSearch, clearFilters }
+  const clearFilters = useCallback(() => {
+    const { eventId, requirementId } = currentVenueSearch()
+    setSearchParams(venueSearchParams({ eventId, requirementId }), { replace: true })
+  }, [setSearchParams])
+
+  return { search, updateSearch, replaceSearch, clearFilters }
 }

@@ -236,7 +236,14 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Leadership Offsite', 'Staff conference', 'Two days of strategy sessions for senior leaders.', NULL, '2027-12-08 09:00+08', '2027-12-09 17:00+08', 40, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..28: in planning and assigned to Chloe; dedicated to story 8.4's e2e spec
+    -- (tests/e2e/venue-requirement-search.spec.ts), which only reads it. Its three venue
+    -- requirements (below) each find different venues, so choosing one visibly changes the results.
+    -- Dated March 2028, clear of every other seeded event and of the periods backend tests build.
+    ('33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Smart Cities Expo', 'Industry exhibition', 'Two days of keynotes, breakout workshops and an exhibition of smart-city projects.', NULL, '2028-03-14 09:00+08', '2028-03-15 18:00+08', 300, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-05 09:00+08', '2026-10-07 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -252,7 +259,8 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Venue requirements (story 2.7). Each sample event that records venue requirements keeps them
 -- as one "Main venue" (story 2.7 AC7), with the event's own times and expected attendance - read
--- from the events rows above, so the two cannot drift apart. The draft 3333..01 records none.
+-- from the events rows above, so the two cannot drift apart. The draft 3333..01 records none, and
+-- 3333..28 (story 8.4) records three of its own, below.
 -- These sample events' requirements belong to the seed: any other requirement on them is removed
 -- first, so a database migrated by 012 (which gave them a Main venue with a random id) heals to
 -- these fixed ids instead of colliding with them on the name or position.
@@ -301,9 +309,40 @@ INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
     ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR')
 ON CONFLICT DO NOTHING;
 
+-- Story 8.4: the Smart Cities Expo (3333..28) records three venue requirements, each with its own
+-- times and number of people inside the event's, numbered within their event (cccc..0028-..0N).
+-- Each finds different seed venues: the plenary hall only Grand Hall, the breakout room only
+-- Seminar Room 2.1, the exhibition space Exhibition Foyer and Grand Hall. Like the Main venues
+-- above, they belong to the seed: any other requirement on the event is removed first.
+DELETE FROM venue_requirements
+WHERE event_id = '33333333-0000-0000-0000-000000000028'
+  AND id NOT IN ('cccccccc-0000-0000-0028-000000000001', 'cccccccc-0000-0000-0028-000000000002',
+                 'cccccccc-0000-0000-0028-000000000003');
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code, notes) VALUES
+    ('cccccccc-0000-0000-0028-000000000001', '33333333-0000-0000-0000-000000000028', 0, 'Plenary hall', 300,
+     '2028-03-14 09:00+08', '2028-03-15 18:00+08', 'THEATRE', 'Keynotes on both mornings.'),
+    ('cccccccc-0000-0000-0028-000000000002', '33333333-0000-0000-0000-000000000028', 1, 'Breakout room', 40,
+     '2028-03-15 13:00+08', '2028-03-15 17:00+08', 'CLASSROOM', 'Hands-on workshops on the second afternoon.'),
+    ('cccccccc-0000-0000-0028-000000000003', '33333333-0000-0000-0000-000000000028', 2, 'Exhibition space', 150,
+     '2028-03-14 10:00+08', '2028-03-15 16:00+08', 'EXHIBITION', 'Booths for thirty exhibitors.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
+
+INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
+    ('cccccccc-0000-0000-0028-000000000001', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0028-000000000001', 'SOUND_SYSTEM'),
+    ('cccccccc-0000-0000-0028-000000000001', 'STAGE'),
+    ('cccccccc-0000-0000-0028-000000000002', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0028-000000000003', 'WIFI')
+ON CONFLICT DO NOTHING;
+
 INSERT INTO event_accessibility_needs (event_id, feature_code, notes) VALUES
     ('33333333-0000-0000-0000-000000000003', 'WHEELCHAIR_ACCESS', 'Two wheelchair users expected'),
-    ('33333333-0000-0000-0000-000000000003', 'HEARING_LOOP', NULL)
+    ('33333333-0000-0000-0000-000000000003', 'HEARING_LOOP', NULL),
+    ('33333333-0000-0000-0000-000000000028', 'WHEELCHAIR_ACCESS', NULL)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, created_by_id) VALUES
@@ -476,7 +515,8 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000028', '33333333-0000-0000-0000-000000000024', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-09-29 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000025', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-30 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000026', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-01 09:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000027', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-03 09:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000027', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-03 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000032', '33333333-0000-0000-0000-000000000028', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-07 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -517,7 +557,9 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000025', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-29 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000025', '33333333-0000-0000-0000-000000000026', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-30 09:00+08'),
     -- 3333..27 (story 16.1's e2e event): self-assigned too, for the same reason.
-    ('aaaaaaaa-0000-0000-0000-000000000026', '33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000026', '33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08'),
+    -- 3333..28 (story 8.4's e2e event): self-assigned too, for the same reason.
+    ('aaaaaaaa-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-05 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
