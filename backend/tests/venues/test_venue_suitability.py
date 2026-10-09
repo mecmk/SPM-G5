@@ -17,7 +17,8 @@ AC5  A characteristic the venue has not recorded is Unknown and never treated as
 AC6  Only the event's assigned coordinator sees indicators.
 AC7  If the event's requirements change, indicators are recalculated on the next search.
 
-Until story 8.4 lets the coordinator choose one, the requirement judged is the event's first.
+The requirement judged is the one selected in the catalogue's banner (story 8.4), else the
+event's first: test_venue_search_by_requirement.py (f11.1.1).
 
 ``GET /venues/{id}/suitability?event=`` is the request step's read of one venue (AC2, AC3),
 for the event's assigned coordinator only (AC6). It and the search share one check, so they
