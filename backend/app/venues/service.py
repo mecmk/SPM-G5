@@ -99,6 +99,10 @@ CAPACITY_RANGE_BACKWARDS_MESSAGE = "Capacity to must not be below capacity from.
 # Story 11.1 AC3: the event the search or the request step judges venues against must exist, and
 # must have a number of people to judge them on. AC6: only its assigned coordinator may ask.
 SEARCH_EVENT_NOT_FOUND_MESSAGE = "The event these venues are being found for does not exist."
+# f11.1.1: the venue requirement the search judges against must be one of that event's.
+SEARCH_REQUIREMENT_NOT_FOUND_MESSAGE = (
+    "The venue requirement these venues are being found for is not one of the event's."
+)
 EVENT_NOT_JUDGEABLE_MESSAGE = (
     "The event these venues are being found for has no expected attendance yet, so they cannot "
     "be judged against it."
@@ -117,6 +121,13 @@ class EventToJudgeNotFound(LookupError):
 
     def __init__(self) -> None:
         super().__init__(SEARCH_EVENT_NOT_FOUND_MESSAGE)
+
+
+class RequirementToJudgeNotFound(LookupError):
+    """f11.1.1 (11.1 AC3): the venue requirement to judge against is not one of the event's."""
+
+    def __init__(self) -> None:
+        super().__init__(SEARCH_REQUIREMENT_NOT_FOUND_MESSAGE)
 
 
 class EventNotJudgeable(ValueError):
@@ -301,9 +312,11 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     results, with the count, largest first.
 
     Story 11.1 AC1/AC3: with ``event``, each venue found also carries its suitability for that
-    event's venue requirement, for the event's assigned coordinator only (AC6). It is judged
-    after the search, so it never changes which venues are found or their order. An event that
-    does not exist (``EventToJudgeNotFound``) or has no number of people yet
+    event's venue requirement, for the event's assigned coordinator only (AC6) - the one
+    ``requirement`` names, as selected in the catalogue's banner (f11.1.1, story 8.4), else the
+    event's first. It is judged after the search, so it never changes which venues are found or
+    their order. An event that does not exist (``EventToJudgeNotFound``), a requirement that is not
+    the event's (``RequirementToJudgeNotFound``) or no number of people yet
     (``EventNotJudgeable``) is refused.
     """
     period = _search_period(query)
@@ -314,7 +327,7 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     ):
         raise InvalidVenueSearch(CAPACITY_RANGE_BACKWARDS_MESSAGE)
     _check_search_codes(db, query)
-    judged = _event_judged_by_search(db, query.event, actor=actor)
+    judged = _requirement_judged_by_search(db, query.event, query.requirement, actor=actor)
 
     scope = [] if query.include_withdrawn else [Venue.status == VenueStatus.ACTIVE]
     groups = _search_groups(query, period)
@@ -332,8 +345,9 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
 
 
 def first_venue_requirement(event: Event) -> VenueRequirement | None:
-    """Story 2.7 / 11.1: the requirement a booking request carries and the catalogue judges -
-    the event's first, by position - until story 8.4 lets the coordinator choose one."""
+    """Story 2.7 / 11.1: the event's first venue requirement, by position - the one a booking
+    request carries until story 12.5 lets a request name its own, and the one the catalogue
+    judges when no requirement is selected in its banner (f11.1.1)."""
     return event.venue_requirements[0] if event.venue_requirements else None
 
 
@@ -408,12 +422,13 @@ def _check_judgeable(event: Event, requirement: VenueRequirement | None) -> None
         raise EventNotJudgeable()
 
 
-def judge_venue_for_event(event: Event, venue: Venue) -> JudgedVenue:
-    """Story 11.1 AC1/AC3: whether ``venue`` suits ``event``'s first venue requirement, or its
+def judge_venue_for_requirement(
+    event: Event, requirement: VenueRequirement | None, venue: Venue
+) -> JudgedVenue:
+    """Story 11.1 AC1/AC3: whether ``venue`` suits ``requirement`` of ``event``, or the event's
     attendance alone when it has none (AC5). The one check the catalogue search, the request
     step's read and the booking request all make, so they cannot disagree. ``EventNotJudgeable``
-    when the event has no number of people yet."""
-    requirement = first_venue_requirement(event)
+    when there is no number of people yet."""
     _check_judgeable(event, requirement)
     return JudgedVenue(
         requirement_id=None if requirement is None else requirement.id,
@@ -421,6 +436,13 @@ def judge_venue_for_event(event: Event, venue: Venue) -> JudgedVenue:
             requirement_needs(event, requirement), venue_characteristics(venue)
         ),
     )
+
+
+def judge_venue_for_event(event: Event, venue: Venue) -> JudgedVenue:
+    """Story 11.1 AC1/AC3: whether ``venue`` suits ``event``'s first venue requirement - the one
+    the request step's read and the booking request judge, until story 12.5 lets a request name
+    its own."""
+    return judge_venue_for_requirement(event, first_venue_requirement(event), venue)
 
 
 def _event_to_judge(db: Session, event_id: uuid.UUID) -> Event:
@@ -445,29 +467,58 @@ def get_venue_suitability(
     return judge_venue_for_event(event, venue)
 
 
-def _event_judged_by_search(
-    db: Session, event_id: uuid.UUID | None, *, actor: User
-) -> Event | None:
-    """Story 11.1: the event a search in ``event_id``'s context judges its results against. None
+@dataclass(frozen=True)
+class _JudgedRequirement:
+    """Story 11.1: what a search in event context judges each venue against - the event, and its
+    venue requirement (None when it has none)."""
+
+    event: Event
+    requirement: VenueRequirement | None
+
+
+def _requirement_to_judge(
+    event: Event, requirement_id: uuid.UUID | None
+) -> VenueRequirement | None:
+    """f11.1.1 (11.1 AC1): the requirement selected in the catalogue's banner (story 8.4), which
+    must be one of ``event``'s (AC3: ``RequirementToJudgeNotFound``), else the event's first."""
+    if requirement_id is None:
+        return first_venue_requirement(event)
+    selected = next((each for each in event.venue_requirements if each.id == requirement_id), None)
+    if selected is None:
+        raise RequirementToJudgeNotFound()
+    return selected
+
+
+def _requirement_judged_by_search(
+    db: Session,
+    event_id: uuid.UUID | None,
+    requirement_id: uuid.UUID | None,
+    *,
+    actor: User,
+) -> _JudgedRequirement | None:
+    """Story 11.1: the event and venue requirement a search in ``event_id``'s context judges its
+    results against - ``requirement_id`` when given (f11.1.1), else the event's first. None
     outside event context (AC5), and for anyone but the event's assigned coordinator holding
-    bookings:request (AC6) - whatever the event's status. AC3: an event that does not exist, or
-    has no number of people yet, is refused here, whether or not any venue matches - but only for
-    a caller who could be judged against it: anyone else is not told whether the event exists."""
+    bookings:request (AC6) - whatever the event's status. AC3: an event that does not exist, a
+    requirement that is not the event's, or no number of people yet, is refused here, whether or
+    not any venue matches - but only for a caller who could be judged against it: anyone else is
+    not told whether the event exists, or which requirements it has."""
     if event_id is None or not role_has(actor.role_code, Permission.BOOKINGS_REQUEST):
         return None
     event = _event_to_judge(db, event_id)
     if event.assigned_coordinator_id != actor.id:
         return None
-    _check_judgeable(event, first_venue_requirement(event))
-    return event
+    requirement = _requirement_to_judge(event, requirement_id)
+    _check_judgeable(event, requirement)
+    return _JudgedRequirement(event=event, requirement=requirement)
 
 
-def _suitability_of(venue: Venue, event: Event | None) -> VenueSuitabilityOut | None:
-    if event is None:
+def _suitability_of(venue: Venue, judged: _JudgedRequirement | None) -> VenueSuitabilityOut | None:
+    if judged is None:
         return None
-    judged = judge_venue_for_event(event, venue)
+    verdict = judge_venue_for_requirement(judged.event, judged.requirement, venue)
     return VenueSuitabilityOut.from_suitability(
-        judged.suitability, requirement_id=judged.requirement_id
+        verdict.suitability, requirement_id=verdict.requirement_id
     )
 
 

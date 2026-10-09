@@ -25,6 +25,11 @@
  * 8.4 changes no backend rule: the filters come from the event the page already reads, and the
  * search they run is 8.1's (backend/tests/venues/test_venue_search.py). So every case is here.
  *
+ * f11.1.1 - story 11.1 AC1, "for the venue requirement currently selected (8.4)": for the event's
+ * assigned coordinator, each venue's Suitable or Unsuitable is judged against the requirement
+ * selected in the banner. Its rules are backend cases
+ * (backend/tests/venues/test_venue_search_by_requirement.py).
+ *
  * Seed (backend/db/seed/020_sample_data.sql): Smart Cities Expo, Chloe's, Planning, 14-15 Mar 2028,
  * 300 people, wheelchair access. Its requirements each find different venues: Plenary hall (300,
  * Theatre, projector, sound system and stage, both days) only Grand Hall; Breakout room (40,
@@ -399,4 +404,26 @@ test('8.4 AC11: two tabs keep their own requirement selected', async ({ page, co
   await expectListed(other, ['Exhibition Foyer', 'Grand Hall'], ['Seminar Room 2.1'])
   expect(requirementParam(page)).toBe(BREAKOUT.id)
   expect(requirementParam(other)).toBe(EXHIBITION.id)
+})
+
+test('11.1 AC1: each venue is judged against the requirement selected in the banner', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findVenueFor(page, EXPO)
+  await expect(
+    venueCard(page, 'Grand Hall').getByText('Suitable for Plenary hall', { exact: true }),
+  ).toBeVisible()
+
+  await requirementChoice(page, BREAKOUT.name).click()
+
+  await expect(
+    venueCard(page, 'Seminar Room 2.1').getByText('Suitable for Breakout room', { exact: true }),
+  ).toBeVisible()
+  // With the filters cleared the selection stays, and a room too small for the breakout room
+  // fails by the breakout room's own number, not the plenary hall's.
+  await panel(page).getByRole('button', { name: 'Clear all filters' }).click()
+  const boardroom = venueCard(page, 'Boardroom 3.4')
+  await expect(boardroom.getByText('Unsuitable for Breakout room', { exact: true })).toBeVisible()
+  await expect(boardroom.getByText('Capacity 16 < 40 people', { exact: true })).toBeVisible()
 })
