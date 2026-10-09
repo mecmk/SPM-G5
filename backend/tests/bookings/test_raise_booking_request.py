@@ -50,7 +50,7 @@ from app.bookings.models import BookingStatus
 from app.events.models import EventStatus
 from app.venues.models import Venue
 from tests.support.factories import make_event, make_venue, make_venue_requirement
-from tests.support.seed import Events, Users, Venues
+from tests.support.seed import Bookings, Events, Users, VenueRequirements, Venues
 
 # The seeded APPROVED event (Nimbus Developer Conference): 2026-11-25 09:00-18:00 +08, 350
 # attendees, THEATRE layout, requiring PROJECTOR + SOUND_SYSTEM + STAGE.
@@ -64,6 +64,10 @@ EVENT_LAYOUT = "THEATRE"
 # the default only for requests refused before suitability is judged. A request a test expects to
 # be accepted names a venue that suits its event instead (``nimbus_venue``).
 REQUESTED_VENUE = Venues.EXHIBITION_FOYER
+
+
+# Story 12.5: Nimbus's Main venue, named by a request that carries its details.
+NIMBUS_REQUIREMENT = {"venue_requirement_id": str(VenueRequirements.NIMBUS_MAIN)}
 
 
 def request_body(**overrides) -> dict:
@@ -89,7 +93,15 @@ def _venue_suited_to_nimbus(db: Session, **overrides) -> Venue:
 
 @pytest.fixture
 def nimbus_venue(db: Session) -> Venue:
-    """A free venue that suits Nimbus, for a request a test expects to be accepted."""
+    """A free venue that suits Nimbus, for a request a test expects to be accepted.
+
+    Story 12.5: a request names the venue requirement it is for, and Nimbus's Main venue is
+    booked in the seed (Grand Hall, approved). That booking is made an additional venue here,
+    inside the test's rolled-back transaction, so the requirement can take a test's request."""
+    db.execute(
+        text("UPDATE venue_bookings SET venue_requirement_id = NULL WHERE id = :id"),
+        {"id": Bookings.APPROVED_GRAND_HALL},
+    )
     return _venue_suited_to_nimbus(db)
 
 
@@ -259,7 +271,7 @@ def test_the_request_carries_the_events_schedule_attendance_and_layout(
     coordinator_client, nimbus_venue: Venue
 ):
     response = coordinator_client.post(
-        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id), **NIMBUS_REQUIREMENT)
     )
 
     assert response.status_code == 201
@@ -277,7 +289,7 @@ def test_the_request_states_the_events_required_facilities_to_venue_staff(
     """The seeded event requires PROJECTOR, SOUND_SYSTEM and STAGE. Venue Staff read
     ``requirement_notes``, so the facilities are stated there by name, not by code."""
     response = coordinator_client.post(
-        "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
+        "/bookings", json=request_body(venue_id=str(nimbus_venue.id), **NIMBUS_REQUIREMENT)
     )
 
     notes = response.json()["requirement_notes"]
@@ -299,7 +311,7 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     )
     # The seed rows carry neither a quantity nor a note, so this test adds its own (story 2.7:
     # on the event's venue requirement).
-    make_venue_requirement(
+    requirement_id = make_venue_requirement(
         db,
         event.id,
         facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
@@ -309,7 +321,12 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     )
 
     response = coordinator_client.post(
-        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(venue.id))
+        "/bookings",
+        json=request_body(
+            event_id=str(event.id),
+            venue_id=str(venue.id),
+            venue_requirement_id=str(requirement_id),
+        ),
     )
 
     notes = response.json()["requirement_notes"]
@@ -323,9 +340,14 @@ def test_the_events_own_venue_requirement_notes_are_carried_too(coordinator_clie
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
-    make_venue_requirement(db, event.id, notes="Must be step-free from the drop-off point.")
+    requirement_id = make_venue_requirement(
+        db, event.id, notes="Must be step-free from the drop-off point."
+    )
 
-    response = coordinator_client.post("/bookings", json=request_body(event_id=str(event.id)))
+    response = coordinator_client.post(
+        "/bookings",
+        json=request_body(event_id=str(event.id), venue_requirement_id=str(requirement_id)),
+    )
 
     assert "Must be step-free from the drop-off point." in response.json()["requirement_notes"]
 
@@ -362,6 +384,7 @@ def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
             expected_attendance=1,
             required_layout_code="BOARDROOM",
             status=BookingStatus.APPROVED,
+            **NIMBUS_REQUIREMENT,
         ),
     )
 

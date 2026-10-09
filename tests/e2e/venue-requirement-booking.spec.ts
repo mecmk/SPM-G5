@@ -18,6 +18,9 @@
  * AC7  An event marked "No venue requirements" keeps Find a venue's normal look.
  * AC8  A requirement whose request is withdrawn needs a venue again.
  * AC9  A venue requested for one requirement drops out for another whose times overlap.
+ * AC11 A requirement that has a request offers no other - not in the catalogue, nor on a venue's
+ *      record - and a request step whose address names another event's requirement offers none.
+ *      The server's own refusals are backend cases.
  *
  * The rules - one request per requirement, refusals, the race, independence, suitability per
  * requirement - are backend cases: backend/tests/bookings/test_request_per_requirement.py.
@@ -28,7 +31,7 @@
  *   Seminar Room 2.1), Networking lounge (100, Standing, 11 Apr 17:00-20:00: Grand Hall and
  *   Exhibition Foyer). Its one test requests a venue for each in turn, so it runs once, on its own.
  * - Coastal Resilience Workshop, 6 Jun 2028, 12 people: its one requirement, Meeting room, already
- *   booked (Boardroom 3.4, approved).
+ *   booked (Seminar Room 2.1, approved).
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn, venueCard } from './support'
@@ -41,6 +44,8 @@ const EXPO_HALL = 'Expo hall'
 const WORKSHOP_ROOM = 'Workshop room'
 const NETWORKING_LOUNGE = 'Networking lounge'
 const WORKSHOP_ROOM_ID = 'cccccccc-0000-0000-0029-000000000002'
+const MEETING_ROOM_ID = 'cccccccc-0000-0000-0030-000000000001' // the Workshop's, booked
+const GRAND_HALL_ID = '22222222-0000-0000-0000-000000000001'
 
 const FIND_A_VENUE = 'Find a venue'
 const ALL_BOOKED = 'All required venues booked'
@@ -162,13 +167,13 @@ test('12.5 AC2/AC5: an event whose every requirement is booked offers an additio
   await openEvent(page, WORKSHOP)
 
   await expect(bookingList(page)).toContainText('For Meeting room')
-  await expect(bookingList(page)).toContainText('Boardroom 3.4')
+  await expect(bookingList(page)).toContainText('Seminar Room 2.1')
   await expect(page.getByRole('link', { name: FIND_A_VENUE })).toHaveCount(0)
   await page.getByRole('link', { name: ALL_BOOKED }).click()
 
   const banner = catalogueBanner(page, WORKSHOP.name)
   await expect(banner.getByRole('listitem')).toContainText('Meeting room')
-  await expect(banner.getByRole('listitem')).toContainText('Booked: Boardroom 3.4')
+  await expect(banner.getByRole('listitem')).toContainText('Booked: Seminar Room 2.1')
   await expect(banner).toContainText('an additional venue')
   expect(new URL(page.url()).searchParams.has('requirement')).toBe(false)
 })
@@ -180,16 +185,51 @@ test('12.5 AC5: an additional venue is requested beside the booked requirement',
   await openEvent(page, WORKSHOP)
   await page.getByRole('link', { name: ALL_BOOKED }).click()
 
-  await venueCard(page, 'Seminar Room 2.1').getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await venueCard(page, 'Grand Hall').getByRole('link', { name: REQUEST_THIS_VENUE }).click()
   const carries = page.getByRole('region', { name: 'What this request will carry' })
   await expect(carries).toContainText('Additional venue')
   await expect(carries).toContainText('Tue, 6 Jun 2028 · 09:00–12:00')
   await page.getByRole('button', { name: 'Send request' }).click()
 
-  await expect(notice(page, 'Seminar Room 2.1 was requested as an additional venue')).toBeVisible()
+  await expect(notice(page, 'Grand Hall was requested as an additional venue')).toBeVisible()
   await expect(page.getByRole('heading', { name: WORKSHOP.name, level: 1 })).toBeVisible()
   await expect(bookingList(page)).toContainText('Additional venue')
-  await expect(bookingList(page)).toContainText('Seminar Room 2.1')
+  await expect(bookingList(page)).toContainText('Grand Hall')
+})
+
+test('12.5 AC11: a requirement that has a venue offers no other, in the catalogue or a venue record', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // The Meeting room selected by address, as a bookmark or the browser's history opens it.
+  await page.goto(`/venues?event=${WORKSHOP.id}&requirement=${MEETING_ROOM_ID}`)
+
+  const booked = page.getByRole('region', { name: 'Booked for Meeting room' })
+  await expect(booked).toContainText('Seminar Room 2.1')
+  await expect(booked).toContainText('Approved')
+  await expect(venueCard(page, 'Grand Hall')).toBeVisible()
+  await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
+
+  // A venue's record, opened from those results, says why instead of offering a request.
+  await venueCard(page, 'Grand Hall').getByRole('link', { name: 'Grand Hall' }).click()
+  await expect(page.getByRole('heading', { name: 'Grand Hall', level: 1 })).toBeVisible()
+  await expect(
+    page.getByText('Meeting room already has a venue booked: Seminar Room 2.1.'),
+  ).toBeVisible()
+  await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
+})
+
+test("12.5 AC11: a request step naming another event's requirement offers no request", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // The Forum's Workshop room, in the address of the Coastal Resilience Workshop's request step.
+  await page.goto(
+    `/events/${WORKSHOP.id}/request-venue/${GRAND_HALL_ID}?requirement=${WORKSHOP_ROOM_ID}`,
+  )
+
+  await expect(page.getByRole('alert')).toContainText("not one of the event's")
+  await expect(page.getByRole('button', { name: 'Send request' })).toHaveCount(0)
 })
 
 test('12.5 AC7: an event marked "No venue requirements" keeps Find a venue as it is', async ({

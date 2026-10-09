@@ -44,7 +44,7 @@ export const EVENTS = {
   smartCitiesExpo: '33333333-0000-0000-0000-000000000028',
   // Story 12.5, Planning, organiser: organiser2, coordinator. The 12.5 spec sends requests for
   // them: the forum has three venue requirements and no bookings, dated April 2028; the
-  // workshop's one requirement is booked (Boardroom 3.4, approved), dated June 2028.
+  // workshop's one requirement is booked (Seminar Room 2.1, approved), dated June 2028.
   mobilityForum: '33333333-0000-0000-0000-000000000029',
   resilienceWorkshop: '33333333-0000-0000-0000-000000000030',
   // Planning, organiser: organiser2, coordinator, May 2028: one venue requirement and no

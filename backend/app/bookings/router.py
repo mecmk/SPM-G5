@@ -62,7 +62,8 @@ def create_booking_request(
     """Story 12.1 AC1/AC2/AC3: raises one PENDING request for one venue, carrying the event's
     period, attendance, layout and required facilities. AC4: only the event's assigned
     coordinator may raise it. Story 11.1 AC2/AC7: a venue that does not suit the event needs a
-    justification (422 without one).
+    justification (422 without one). Story 12.5 AC11/AC12: the venue requirement it names must
+    be the event's (404) and have no pending or approved request yet (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -75,6 +76,10 @@ def create_booking_request(
     except service.EventNotBookable as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueNotBookable as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.RequirementNotOfEvent as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    except service.RequirementAlreadyRequested as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueHeld as exc:
         # 12.1 AC3/AC12/AC14: the venue is already booked or held for part of the period.

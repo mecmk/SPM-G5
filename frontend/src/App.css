@@ -3537,6 +3537,56 @@ button.requirement-choice[aria-pressed='true'] .requirement-choice-name::before 
   transform: translateY(-2px) rotate(-45deg);
 }
 
+/* Story 12.5 AC2 (decided 10 Oct 2026): a venue requirement that has a venue is greyed and listed
+   after those that still need one. It stays selectable, to show that venue. */
+button.requirement-choice.requirement-covered,
+button.requirement-choice.requirement-covered:hover,
+.requirement-summary.requirement-covered {
+  border-style: dashed;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.requirement-covered .requirement-choice-name {
+  color: var(--text-muted);
+}
+
+/* Its status: "Needs a venue", "Requested: <venue>" or "Booked: <venue>". */
+.requirement-coverage {
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.requirement-covered .requirement-coverage {
+  color: var(--text-muted);
+}
+
+/* Story 12.5: the selected requirement's own venue, above the catalogue's results. */
+.covering-venue-name {
+  font-weight: 600;
+}
+
+/* Story 12.5 AC5: Find a venue once every venue requirement has a request - greyed, and still a
+   link to the catalogue, for an additional venue. */
+.button.button-muted {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.button.button-muted:hover {
+  background: var(--surface-alt);
+  border-color: var(--accent);
+  color: var(--text-h);
+}
+
+/* Story 12.5 AC4/AC5: the venue requirement a booking on the event's page is for. */
+.booking-outcome-purpose {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 /* Story 19.1: on a phone a change request's text takes the whole row, with its status and
    Withdraw beneath it, rather than being squeezed into a narrow column beside them. */
 @media (max-width: 640px) {

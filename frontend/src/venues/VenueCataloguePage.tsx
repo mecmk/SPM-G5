@@ -25,7 +25,12 @@ import {
 } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
+import {
+  firstRequirementNeedingVenue,
+  requirementName,
+  venueSearchFor,
+} from '../shared/venueRequest'
+import { CoveringBookingCard } from './CoveringBookingCard'
 import { DeleteVenueDialog } from './DeleteVenueDialog'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
@@ -101,6 +106,13 @@ function describeRelaxHint(hint: RelaxHint): string {
  * address naming a requirement that is not the event's is corrected to the first, with its
  * filters, before anything is searched (AC8).
  *
+ * Story 12.5: the banner says which requirements have a venue (AC2), and the stray address is
+ * corrected as Find a venue now opens - to the first requirement that needs a venue, or to none
+ * once every one has a request (AC5). A venue requested with none selected is an additional
+ * venue, which the banner says (AC5). As decided on 10 Oct 2026, a selected requirement that
+ * already has a venue shows that venue above the results, and no venue offers a request
+ * (AC11).
+ *
  * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
@@ -109,10 +121,16 @@ export function VenueCataloguePage() {
   const location = useLocation()
   const { can } = useAuth()
   const canManageVenues = can(PERMISSIONS.VENUES_MANAGE)
-  const { event, requestingEvent, error: eventError, isResolving } = useRequestingEvent()
+  const {
+    event,
+    bookings,
+    selectedRequirement,
+    selectedCovering,
+    requestingEvent,
+    error: eventError,
+    isResolving,
+  } = useRequestingEvent()
   const { search, updateSearch, replaceSearch, clearFilters } = useVenueSearch()
-  const selectedRequirement =
-    event?.venue_requirements.find((requirement) => requirement.id === search.requirementId) ?? null
   /** Story 8.4 AC8: the address names a requirement that is not one of the event's. */
   const isStrayRequirement =
     event !== null && search.requirementId !== undefined && selectedRequirement === null
@@ -136,13 +154,14 @@ export function VenueCataloguePage() {
   const { data: result, error, setData: setResult } = useLoaded(loadVenues)
   const isPeriodSearched = query.starts_at !== undefined
 
-  // Story 8.4 AC8: opened as Find a venue would open it - the event's first requirement, or the
-  // event's own dates and attendance when it records none.
+  // Story 8.4 AC8: opened as Find a venue would open it - story 12.5 AC2/AC5: the event's first
+  // requirement that needs a venue, or none, with the event's own dates and attendance, once
+  // every one has a request or when it records none.
   useEffect(() => {
     if (event !== null && isStrayRequirement) {
-      replaceSearch(venueSearchFor(event, firstVenueRequirement(event)))
+      replaceSearch(venueSearchFor(event, firstRequirementNeedingVenue(event, bookings ?? [])))
     }
-  }, [event, isStrayRequirement, replaceSearch])
+  }, [event, bookings, isStrayRequirement, replaceSearch])
 
   function askToDelete(venue: VenueSummary) {
     setPendingDelete(venue)
@@ -218,7 +237,8 @@ export function VenueCataloguePage() {
         </div>
       )
     }
-    if (requestingEvent) {
+    // Story 12.5 AC11: a selected requirement that already has a venue takes no other request.
+    if (requestingEvent && selectedCovering === null) {
       return (
         <Link
           to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
@@ -257,8 +277,14 @@ export function VenueCataloguePage() {
       {event && (
         <RequestingEventBanner
           event={event}
+          bookings={bookings}
           selectedRequirement={selectedRequirement}
           hasChangedFilters={hasChangedFilters}
+          isAdditionalVenue={
+            requestingEvent !== null &&
+            event.venue_requirements.length > 0 &&
+            search.requirementId === undefined
+          }
           onSelectRequirement={selectRequirement}
         />
       )}
@@ -273,6 +299,13 @@ export function VenueCataloguePage() {
         />
 
         <div className="stack">
+          {event !== null && selectedRequirement !== null && selectedCovering !== null && (
+            <CoveringBookingCard
+              booking={selectedCovering}
+              requirementName={requirementName(event, selectedRequirement)}
+              search={location.search}
+            />
+          )}
           {result === null && !error && <LoadingState label="Loading venues…" />}
 
           {result !== null && result.venues.length === 0 && !hasFilters(search) && (

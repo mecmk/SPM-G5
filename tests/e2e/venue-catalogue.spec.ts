@@ -60,7 +60,7 @@ async function findVenueFor(page: Page, event: { id: string; name: string }) {
   await page.goto(`/events/${event.id}`)
   await expect(page.getByRole('heading', { name: event.name, level: 1 })).toBeVisible()
   // Story 12.5 AC5: once every requirement has a request the link reads "All required venues
-  // booked" (Nimbus's, booked in the seed), and still opens the catalogue for the event.
+  // booked" (Nimbus's, both requested in the seed), and still opens the catalogue for the event.
   await page.getByRole('link', { name: /^(Find a venue|All required venues booked)$/ }).click()
   await expect(catalogueBanner(page, event.name)).toBeVisible()
 }

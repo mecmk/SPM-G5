@@ -1,7 +1,7 @@
 """Story 11.1 - venue suitability with reasons and override: requesting a venue that does not suit.
 
 POST /bookings judges the venue again when the request is sent, with the same check the catalogue
-uses (``app.venues.service.judge_venue_for_event``), so the request and the indicator cannot
+uses (``app.venues.service.judge_venue_for_requirement``), so the request and the indicator cannot
 disagree.
 
 AC2  Requesting an unsuitable venue requires a justification, stored with the request.

@@ -305,7 +305,8 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
-WHERE r.event_id = sample.event_id AND r.id <> sample.id;
+WHERE r.event_id = sample.event_id AND r.id <> sample.id
+  AND r.id <> 'cccccccc-0000-0000-0003-000000000002'; -- Nimbus's Breakout room, story 12.5's, below
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code)
 SELECT sample.id, e.id, 0, 'Main venue', e.expected_attendance, e.starts_at, e.ends_at, sample.layout_code
@@ -349,6 +350,17 @@ ON CONFLICT (id) DO UPDATE SET
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
 
+-- Story 12.5: Nimbus (3333..03) also needs a breakout room, which its seeded pending request of
+-- Seminar Room 2.1 (4444..02, "Breakout track B.") is for: a conference needing a hall and a
+-- breakout room raises one request for each.
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0003-000000000002', '33333333-0000-0000-0000-000000000003', 1, 'Breakout room', 60,
+     '2026-11-25 13:00+08', '2026-11-25 18:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
+
 -- Story 12.5: the Urban Mobility Forum (3333..29) and the Coastal Resilience Workshop (3333..30),
 -- numbered like the Expo's. The Forum's Expo hall and Networking lounge both fit Grand Hall and
 -- Exhibition Foyer and overlap on 11 April, so a venue held for one drops out for the other
@@ -369,7 +381,7 @@ INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_a
     ('cccccccc-0000-0000-0029-000000000003', '33333333-0000-0000-0000-000000000029', 2, 'Networking lounge', 100,
      '2028-04-11 17:00+08', '2028-04-11 20:00+08', 'STANDING', NULL),
     ('cccccccc-0000-0000-0030-000000000001', '33333333-0000-0000-0000-000000000030', 0, 'Meeting room', 12,
-     '2028-06-06 09:00+08', '2028-06-06 12:00+08', 'BOARDROOM', NULL),
+     '2028-06-06 09:00+08', '2028-06-06 12:00+08', 'CLASSROOM', NULL),
     ('cccccccc-0000-0000-0031-000000000001', '33333333-0000-0000-0000-000000000031', 0, 'Training room', 40,
      '2028-05-17 09:00+08', '2028-05-17 17:00+08', 'CLASSROOM', NULL)
 ON CONFLICT (id) DO UPDATE SET
@@ -378,6 +390,7 @@ ON CONFLICT (id) DO UPDATE SET
     layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
 
 INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
+    ('cccccccc-0000-0000-0003-000000000002', 'PROJECTOR'),
     ('cccccccc-0000-0000-0029-000000000001', 'WIFI'),
     ('cccccccc-0000-0000-0029-000000000002', 'PROJECTOR'),
     ('cccccccc-0000-0000-0031-000000000001', 'PROJECTOR'),
@@ -683,14 +696,14 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at;
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
--- Boardroom 3.4, approved by Vera. Its e2e spec reads the "All required venues booked" state and
--- requests an additional venue beside it.
+-- Seminar Room 2.1, approved by Vera. Its e2e spec reads the "All required venues booked" state
+-- and requests an additional venue beside it. Not Boardroom 3.4, which story 8.3's tests delete.
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             venue_requirement_id) VALUES
-    ('44444444-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000030', '22222222-0000-0000-0000-000000000003',
+    ('44444444-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000030', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2028-06-06 09:00+08', '2028-06-06 12:00+08', 0, 0,
-     12, 'BOARDROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-08 15:00+08', NULL, '2026-10-08 11:00+08',
+     12, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-08 15:00+08', NULL, '2026-10-08 11:00+08',
      'cccccccc-0000-0000-0030-000000000001')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
@@ -701,14 +714,14 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id;
 
--- Story 12.5: the earlier seeded bookings name the requirement they were made for. Each was made
--- for its event's Main venue (2.7 AC13), as migration 017 links bookings made before it, except
--- Nimbus's second, the breakout track, which is an additional venue.
+-- Story 12.5: the earlier seeded bookings name the requirement they were made for: each its
+-- event's Main venue (2.7 AC13), as migration 017 links bookings made before it, except Nimbus's
+-- second, the breakout track, which is for its Breakout room.
 UPDATE venue_bookings AS b
 SET venue_requirement_id = link.requirement_id
 FROM (VALUES
     ('44444444-0000-0000-0000-000000000001'::uuid, 'cccccccc-0000-0000-0000-000000000003'::uuid),
-    ('44444444-0000-0000-0000-000000000002'::uuid, NULL::uuid),
+    ('44444444-0000-0000-0000-000000000002'::uuid, 'cccccccc-0000-0000-0003-000000000002'::uuid),
     ('44444444-0000-0000-0000-000000000003'::uuid, 'cccccccc-0000-0000-0000-000000000008'::uuid),
     ('44444444-0000-0000-0000-000000000004'::uuid, 'cccccccc-0000-0000-0000-000000000009'::uuid),
     ('44444444-0000-0000-0000-000000000005'::uuid, 'cccccccc-0000-0000-0000-000000000010'::uuid),

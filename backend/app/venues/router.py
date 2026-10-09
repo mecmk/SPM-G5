@@ -93,7 +93,7 @@ def search_venues(
 
     Story 11.1 AC1/AC6: with ``event``, each result says whether it suits that event, for its
     assigned coordinator - judged against the venue requirement ``requirement`` names (f11.1.1),
-    else the event's first."""
+    else on the event's attendance alone, as an additional venue is (story 12.5 AC5)."""
     try:
         return service.search_venues(db, query, actor=actor)
     except service.InvalidVenueSearch as exc:
@@ -143,20 +143,26 @@ def get_venue_suitability(
     db: DbSession,
     event: Annotated[uuid.UUID, Query()],
     actor: Annotated[CurrentUser, CanRequestBookings],
+    requirement: Annotated[uuid.UUID | None, Query()] = None,
 ) -> VenueSuitabilityOut:
     """Story 11.1 AC2/AC3: the request step's read of whether one venue suits ``event``, with
     every criterion it fails - the same check the catalogue search and ``POST /bookings`` make.
     AC6: only the event's assigned coordinator (403 for anyone else). The venue is the resource
     (404); an event that does not exist or has no number of people yet is refused as the search
-    refuses it (422)."""
+    refuses it (422). Story 12.5 AC14: ``requirement`` is the venue requirement the request is
+    for; none judges an additional venue on the attendance alone."""
     try:
-        judged = service.get_venue_suitability(db, venue_id, event_id=event, actor=actor)
+        judged = service.get_venue_suitability(
+            db, venue_id, event_id=event, requirement_id=requirement, actor=actor
+        )
     except service.VenueNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.EventToJudgeNotFound as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.NotEventCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.RequirementToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.EventNotJudgeable as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return VenueSuitabilityOut.from_suitability(

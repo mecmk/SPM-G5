@@ -47,9 +47,10 @@
  * for. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at the pending
  * booking the event's page shows.
  *
- * Story 12.5: a request is for one venue requirement, and Nimbus's one requirement is booked in
- * the seed, so its Find a venue reads "All required venues booked" and opens the catalogue for an
- * additional venue: the event's own dates, attendance and accessibility needs. Sending a request
+ * Story 12.5: a request is for one venue requirement, and both of Nimbus's have one in the seed
+ * (its Main venue booked, its Breakout room requested), so its Find a venue reads "All required
+ * venues booked" and opens the catalogue for an additional venue: the event's own dates,
+ * attendance and accessibility needs. Sending a request
  * for an event whose only requirement then has one opens the event's page (12.5 AC6).
  *
  * AC14 (built with s8.1): a venue that stopped being available since the search is refused, and
@@ -94,12 +95,12 @@ const NOT_REQUESTABLE_MESSAGE =
   "Only the event's assigned coordinator can request a venue for it, while the event is in " +
   'Planning or Confirmed.'
 
-/** Nimbus's one venue requirement in the seed, already booked (Grand Hall, approved). */
+/** Nimbus's Main venue in the seed, already booked (Grand Hall, approved). */
 const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
 
-/** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: its
- * one requirement is booked, so it selects none - an additional venue - and carries the event's
- * own dates, attendance and accessibility needs. */
+/** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: both
+ * its requirements have a request in the seed, so it selects none - an additional venue - and
+ * carries the event's own dates, attendance and accessibility needs. */
 const NIMBUS_SEARCH = {
   event: NIMBUS.id,
   requirement: null,
@@ -176,8 +177,8 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
   await page.getByRole('link', { name: NIMBUS.name, exact: true }).click()
   await expect(page.getByRole('heading', { name: NIMBUS.name, level: 1 })).toBeVisible()
 
-  // Story 12.5 AC5: Nimbus's one requirement is booked, so the link says so and opens the
-  // catalogue for an additional venue.
+  // Story 12.5 AC5: both of Nimbus's requirements have a request, so the link says so and opens
+  // the catalogue for an additional venue.
   await page.getByRole('link', { name: 'All required venues booked' }).click()
 
   // The address is exactly the contract: what the event recorded, and nothing else.

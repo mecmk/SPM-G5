@@ -122,8 +122,8 @@ class Bookings:
     # reference these from any other test; rejecting them would make them unusable there.
     PENDING_REJECT_E2E_CARD = uuid.UUID("44444444-0000-0000-0000-000000000007")
     PENDING_REJECT_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000008")
-    # Story 12.5: Events.RESILIENCE_WORKSHOP's Meeting room, Boardroom 3.4, approved.
-    APPROVED_WORKSHOP_BOARDROOM = uuid.UUID("44444444-0000-0000-0000-000000000009")
+    # Story 12.5: Events.RESILIENCE_WORKSHOP's Meeting room, Seminar Room 2.1, approved.
+    APPROVED_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000009")
 
 
 class Unavailability:
@@ -146,6 +146,8 @@ class VenueRequirements:
 
     DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
     NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
+    # Story 12.5: Nimbus's second, which Bookings' pending Seminar Room 2.1 request is for.
+    NIMBUS_BREAKOUT = uuid.UUID("cccccccc-0000-0000-0003-000000000002")  # CLASSROOM, PROJECTOR, 60
     PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60
     # Events.SMART_CITIES_EXPO, in the banner's order:
     EXPO_PLENARY_HALL = uuid.UUID("cccccccc-0000-0000-0028-000000000001")  # THEATRE, 300
@@ -155,7 +157,7 @@ class VenueRequirements:
     FORUM_EXPO_HALL = uuid.UUID("cccccccc-0000-0000-0029-000000000001")  # STANDING, 200
     FORUM_WORKSHOP_ROOM = uuid.UUID("cccccccc-0000-0000-0029-000000000002")  # CLASSROOM, 40
     FORUM_NETWORKING_LOUNGE = uuid.UUID("cccccccc-0000-0000-0029-000000000003")  # STANDING, 100
-    WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # BOARDROOM, 12
+    WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # CLASSROOM, 12
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
 
 

@@ -296,10 +296,19 @@ const JUSTIFICATION_REQUIRED =
  * requirement a request is for; without it the request is for an additional venue. */
 const BRIEFING_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000018'
 
-async function openRequestStep(page: Page, venue: { id: string; name: string }) {
-  await page.goto(
-    `/events/${BRIEFING.id}/request-venue/${venue.id}?requirement=${BRIEFING_MAIN_VENUE}`,
-  )
+/** Story 12.5: the AC7 cases below really send, to be refused for want of a justification. For
+ * Briefing's one requirement they would be refused first, for the request E5 sends for it (409:
+ * one at a time), so they ask for an additional venue - judged on the event's 60 attendees
+ * alone, still more than Boardroom 3.4 holds. */
+const ADDITIONAL_VENUE = null
+
+async function openRequestStep(
+  page: Page,
+  venue: { id: string; name: string },
+  requirement: string | null = BRIEFING_MAIN_VENUE,
+) {
+  const query = requirement === null ? '' : `?requirement=${requirement}`
+  await page.goto(`/events/${BRIEFING.id}/request-venue/${venue.id}${query}`)
   await expect(page.getByRole('heading', { name: `Request ${venue.name}`, level: 1 })).toBeVisible()
 }
 
@@ -393,7 +402,7 @@ test('11.1 AC7: a send refused for a missing justification shows the warning aga
     },
   )
   await signIn(page, ACCOUNTS.coordinator)
-  await openRequestStep(page, BOARDROOM)
+  await openRequestStep(page, BOARDROOM, ADDITIONAL_VENUE)
   await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Send request' }).click()
@@ -483,7 +492,7 @@ test('11.1 AC7: a send refused for a missing justification replaces an earlier f
   const state = { failing: true }
   await failSuitabilityReadsWhile(page, BOARDROOM, state)
   await signIn(page, ACCOUNTS.coordinator)
-  await openRequestStep(page, BOARDROOM)
+  await openRequestStep(page, BOARDROOM, ADDITIONAL_VENUE)
   await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
 
   state.failing = false
@@ -507,7 +516,7 @@ test('11.1 AC7: with the check down, a send refused for a missing justification 
   await failSuitabilityReadsWhile(page, BOARDROOM, state)
   await signIn(page, ACCOUNTS.coordinator)
   const sends = recordBookingSends(page)
-  await openRequestStep(page, BOARDROOM)
+  await openRequestStep(page, BOARDROOM, ADDITIONAL_VENUE)
   await expect(suitabilityRegion(page).getByRole('alert')).toBeVisible()
 
   await page.getByRole('button', { name: 'Send request' }).click()
@@ -544,7 +553,7 @@ test('11.1 AC7: a read after a refused send that says the venue suits asks for n
     },
   )
   await signIn(page, ACCOUNTS.coordinator)
-  await openRequestStep(page, BOARDROOM)
+  await openRequestStep(page, BOARDROOM, ADDITIONAL_VENUE)
   await expect(suitabilityRegion(page).getByText('Suitable', { exact: true })).toBeVisible()
   const readsOnArrival = reads
 
