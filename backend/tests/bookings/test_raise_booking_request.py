@@ -390,11 +390,10 @@ def test_the_held_period_is_the_event_period_until_story_12_2(
 
 
 # --- Story 2.7 AC13 (CL-087): an event lists several venue requirements -------------------------
-# Until story 12.5 lets a booking name the requirement it is for, a request carries the event's
-# first requirement. An event without one books its own period. Tagged to 2.7, not 12.1, because
-# 12.1 is Done and its criteria stay as written.
-@pytest.mark.story("2.7", ac=13)
-def test_the_request_carries_the_first_venue_requirement(coordinator_client, db: Session):
+# Story 12.5 AC1: a request names the venue requirement it is for and carries that requirement
+# (until 12.5 it carried the first, 2.7 AC13). An event without one books its own period.
+@pytest.mark.story("12.5", ac=1)
+def test_the_request_carries_the_named_venue_requirement(coordinator_client, db: Session):
     event = make_event(
         db,
         status=EventStatus.PLANNING,
@@ -405,7 +404,7 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
     # requirement, never from the event.
     plenary_starts = event.starts_at + timedelta(hours=1)
     plenary_ends = event.starts_at + timedelta(hours=3)
-    make_venue_requirement(
+    plenary_id = make_venue_requirement(
         db,
         event.id,
         position=0,
@@ -429,7 +428,7 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
         notes="Quiet corridor.",
         facilities=(("WIFI", None, None),),
     )
-    # Suits the plenary hall, the requirement a request carries (story 11.1).
+    # Suits the plenary hall, the requirement the request names (story 11.1).
     hall = _with_quantity(
         db,
         make_venue(db, capacity=150, layouts={"THEATRE": None}, facilities=("PROJECTOR",)),
@@ -438,7 +437,10 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
     )
 
     response = coordinator_client.post(
-        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(hall.id))
+        "/bookings",
+        json=request_body(
+            event_id=str(event.id), venue_id=str(hall.id), venue_requirement_id=str(plenary_id)
+        ),
     )
 
     assert response.status_code == 201, response.text
@@ -453,18 +455,23 @@ def test_the_request_carries_the_first_venue_requirement(coordinator_client, db:
     assert "Quiet corridor." not in body["requirement_notes"]
 
 
-@pytest.mark.story("2.7", ac=13)
-def test_a_first_requirement_with_no_facilities_or_notes_states_none(
-    coordinator_client, db: Session
-):
+@pytest.mark.story("12.5", ac=1)
+def test_a_requirement_with_no_facilities_or_notes_states_none(coordinator_client, db: Session):
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
     )
-    make_venue_requirement(db, event.id, name="Main venue", capacity=20, layout_code="THEATRE")
+    requirement_id = make_venue_requirement(
+        db, event.id, name="Main venue", capacity=20, layout_code="THEATRE"
+    )
     venue = make_venue(db, layouts={"THEATRE": None})
 
     response = coordinator_client.post(
-        "/bookings", json=request_body(event_id=str(event.id), venue_id=str(venue.id))
+        "/bookings",
+        json=request_body(
+            event_id=str(event.id),
+            venue_id=str(venue.id),
+            venue_requirement_id=str(requirement_id),
+        ),
     )
 
     assert response.status_code == 201, response.text
@@ -473,6 +480,7 @@ def test_a_first_requirement_with_no_facilities_or_notes_states_none(
 
 
 @pytest.mark.story("2.7", ac=13)
+@pytest.mark.story("12.5", ac=7)
 def test_an_event_without_venue_requirements_books_its_own_period_and_attendance(
     coordinator_client, db: Session
 ):

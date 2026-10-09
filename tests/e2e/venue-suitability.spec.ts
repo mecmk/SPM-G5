@@ -292,8 +292,14 @@ const BOOKINGS_PATH = '/bookings'
 const JUSTIFICATION_REQUIRED =
   'Give a justification for requesting a venue that does not suit the event.'
 
+/** Briefing's one venue requirement in the seed. Story 12.5: the step's address names the
+ * requirement a request is for; without it the request is for an additional venue. */
+const BRIEFING_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000018'
+
 async function openRequestStep(page: Page, venue: { id: string; name: string }) {
-  await page.goto(`/events/${BRIEFING.id}/request-venue/${venue.id}`)
+  await page.goto(
+    `/events/${BRIEFING.id}/request-venue/${venue.id}?requirement=${BRIEFING_MAIN_VENUE}`,
+  )
   await expect(page.getByRole('heading', { name: `Request ${venue.name}`, level: 1 })).toBeVisible()
 }
 
@@ -334,12 +340,9 @@ test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, w
   await expect(dialog).toContainText(FOYER.name)
   await dialog.getByRole('button', { name: 'Send request' }).click()
 
-  const outcome = page.getByRole('region', { name: 'Request sent' })
-  await expect(outcome).toBeVisible()
-  await expect(outcome).toContainText(justification)
-
-  // AC6: the coordinator reads it on the event's bookings.
-  await outcome.getByRole('link', { name: 'Back to the event' }).click()
+  // AC6: the coordinator reads it on the event's bookings - story 12.5 AC6 opens the event's
+  // page once its one requirement has a request.
+  await expect(page.getByRole('heading', { name: BRIEFING.name, level: 1 })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Venue booking' })).toContainText(justification)
 
   // AC3: Venue Staff read it on the request.

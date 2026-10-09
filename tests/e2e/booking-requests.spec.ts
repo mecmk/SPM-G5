@@ -42,10 +42,15 @@
  * pin the address only, or open the request step by its address, and send nothing - story 13.1's
  * queue tests also find the seeded Nimbus request by its event name. The flows through the
  * catalogue use Regional Sales Summit, whose results show Grand Hall, and send nothing either, so
- * Grand Hall stays free for them. The one request really sent is Quarterly Partner Briefing's, to
+ * Grand Hall stays free for them. The one request really sent is Sales Onboarding Day's, to
  * Seminar Room 2.1: an event no other test uses, so its hold hides nothing another test looks
  * for. The pending queue itself is story 13.1's (`bookings.spec.ts`), so AC3 stops at the pending
- * outcome shown here.
+ * booking the event's page shows.
+ *
+ * Story 12.5: a request is for one venue requirement, and Nimbus's one requirement is booked in
+ * the seed, so its Find a venue reads "All required venues booked" and opens the catalogue for an
+ * additional venue: the event's own dates, attendance and accessibility needs. Sending a request
+ * for an event whose only requirement then has one opens the event's page (12.5 AC6).
  *
  * AC14 (built with s8.1): a venue that stopped being available since the search is refused, and
  * the step leads back to the same results.
@@ -56,8 +61,8 @@
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
- * 15-16 Dec 2026), Quarterly Partner Briefing (Planning: Classroom, a projector, 60 people, 10 Mar
- * 2027 09:00-12:00) and Data Literacy Workshop (Under Review, so it cannot take a booking yet).
+ * 15-16 Dec 2026), Sales Onboarding Day (Planning: Classroom, a projector, 40 people, 17 May
+ * 2028 09:00-17:00) and Data Literacy Workshop (Under Review, so it cannot take a booking yet).
  * Carl is the other coordinator, and Omar organises Nimbus. No seeded event records "No venue
  * requirements", so that case sets the flag on Nimbus's real response with `page.route`.
  */
@@ -68,15 +73,19 @@ import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
 const SUMMIT = { id: EVENTS.planning, name: 'Regional Sales Summit' }
 const WORKSHOP = { id: EVENTS.submitted, name: 'Data Literacy Workshop' }
-const BRIEFING = { id: EVENTS.partnerBriefing, name: 'Quarterly Partner Briefing' }
+// Story 12.5: a venue requirement takes one request at a time, so 12.1's real send has an event
+// of its own (one requirement, no bookings) rather than sharing Briefing's with 11.1's spec.
+const ONBOARDING = { id: EVENTS.onboardingDay, name: 'Sales Onboarding Day' }
 // Confirmed, Chloe's, Banquet layout, 90 people, 10 Feb 2027 - no other spec sends a request
 // for it or searches the catalogue on its date, so raising and withdrawing one here holds
 // nothing another test looks for (unlike Summit's own slot, which 8.1's catalogue specs read).
 const DINNER = { id: '33333333-0000-0000-0000-000000000013', name: 'Partner Appreciation Dinner' }
 const VENUE = 'Grand Hall'
 const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the seed
-const BRIEFING_VENUE = 'Seminar Room 2.1'
+const ONBOARDING_VENUE = 'Seminar Room 2.1'
 const FIND_A_VENUE = 'Find a venue'
+// Story 12.5 AC5: Find a venue's name once every requirement of the event has a request.
+const FIND_A_VENUE_EITHER_WAY = /^(Find a venue|All required venues booked)$/
 const REQUEST_THIS_VENUE = 'Request this venue'
 // As the backend words a venue closed since the search (AC14).
 const CLOSED_VENUE_MESSAGE =
@@ -85,16 +94,20 @@ const NOT_REQUESTABLE_MESSAGE =
   "Only the event's assigned coordinator can request a venue for it, while the event is in " +
   'Planning or Confirmed.'
 
-/** The address Find a venue writes for Nimbus, as 8.1's panel reads it (AC15). Story 8.4 AC1: it
- * names the event's first venue requirement, selected in the catalogue's banner. */
+/** Nimbus's one venue requirement in the seed, already booked (Grand Hall, approved). */
+const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
+
+/** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: its
+ * one requirement is booked, so it selects none - an additional venue - and carries the event's
+ * own dates, attendance and accessibility needs. */
 const NIMBUS_SEARCH = {
   event: NIMBUS.id,
-  requirement: 'cccccccc-0000-0000-0000-000000000003', // Nimbus's Main venue in the seed
+  requirement: null,
   capacity: '350',
   from: '2026-11-25T09:00',
   to: '2026-11-25T18:00',
-  layout: 'THEATRE',
-  facility: ['PROJECTOR', 'SOUND_SYSTEM', 'STAGE'],
+  layout: null,
+  facility: [],
   accessibility: ['HEARING_LOOP', 'WHEELCHAIR_ACCESS'],
 }
 
@@ -120,7 +133,7 @@ async function openEvent(page: Page, event: { id: string; name: string }) {
  * cases that only pin the contract. Repeated names are sorted, as their order is not part of it.
  */
 async function findVenueSearch(page: Page) {
-  const href = await page.getByRole('link', { name: FIND_A_VENUE }).getAttribute('href')
+  const href = await page.getByRole('link', { name: FIND_A_VENUE_EITHER_WAY }).getAttribute('href')
   expect(href).not.toBeNull()
   return searchOf(new URL(href ?? '', 'http://address.invalid'))
 }
@@ -163,22 +176,15 @@ test('12.1 AC15: a coordinator finds a venue from the event and opens its reques
   await page.getByRole('link', { name: NIMBUS.name, exact: true }).click()
   await expect(page.getByRole('heading', { name: NIMBUS.name, level: 1 })).toBeVisible()
 
-  await page.getByRole('link', { name: FIND_A_VENUE }).click()
+  // Story 12.5 AC5: Nimbus's one requirement is booked, so the link says so and opens the
+  // catalogue for an additional venue.
+  await page.getByRole('link', { name: 'All required venues booked' }).click()
 
-  // The address is exactly the contract: every recorded requirement, and nothing else.
+  // The address is exactly the contract: what the event recorded, and nothing else.
   await expect(page).toHaveURL(/\/venues\?/)
   expect(searchOf(new URL(page.url()))).toEqual({
     path: '/venues',
-    names: [
-      'accessibility',
-      'capacity',
-      'event',
-      'facility',
-      'from',
-      'layout',
-      'requirement',
-      'to',
-    ],
+    names: ['accessibility', 'capacity', 'event', 'from', 'to'],
     ...NIMBUS_SEARCH,
   })
 
@@ -204,7 +210,8 @@ test('12.1 AC2: the request step shows what it carries over from the event', asy
   await signIn(page, ACCOUNTS.coordinator)
   // Nimbus records the most to carry over. Its catalogue lists nothing, so the step is opened by
   // its address; nothing is sent.
-  await page.goto(`/events/${NIMBUS.id}/request-venue/${VENUE_ID}`)
+  // Story 12.5: the step's address names the requirement the request is for.
+  await page.goto(`/events/${NIMBUS.id}/request-venue/${VENUE_ID}?requirement=${NIMBUS_MAIN_VENUE}`)
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
 
   // The step states what it will carry over from the event, so the coordinator can see the
@@ -235,28 +242,23 @@ test('12.1 AC1/AC3: a coordinator raises a venue booking request for their appro
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await findVenueFor(page, BRIEFING)
+  await findVenueFor(page, ONBOARDING)
 
-  // The one request really sent is Quarterly Partner Briefing's, to Seminar Room 2.1, which fits
-  // everything it records. The only other spec to use that event, venue-suitability.spec.ts (11.1),
-  // requests Exhibition Foyer for it and never asserts on Seminar Room's availability, so the hold
-  // this request leaves on the room hides nothing another test looks for; and not Nimbus's, whose
-  // seeded request story 13.1's queue tests find by its event name.
-  await venueCard(page, BRIEFING_VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  // The one request really sent is Sales Onboarding Day's, to Seminar Room 2.1, which fits
+  // everything it records: an event no other spec uses, so the hold the request leaves on the
+  // room hides nothing another test looks for.
+  await venueCard(page, ONBOARDING_VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
   await expect(
-    page.getByRole('heading', { name: `Request ${BRIEFING_VENUE}`, level: 1 }),
+    page.getByRole('heading', { name: `Request ${ONBOARDING_VENUE}`, level: 1 }),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Send request' }).click()
 
-  // AC3: the outcome names the venue and shows the request waiting for Venue Staff.
-  const outcome = page.getByRole('region', { name: 'Request sent' })
-  await expect(outcome).toBeVisible()
-  await expect(outcome).toContainText(BRIEFING_VENUE)
-  await expect(outcome).toContainText('Pending')
-
-  // AC15: the outcome leads back to the event the request was raised for.
-  await outcome.getByRole('link', { name: 'Back to the event' }).click()
-  await expect(page.getByRole('heading', { name: BRIEFING.name, level: 1 })).toBeVisible()
+  // AC3 and AC15: the event the request was raised for opens - story 12.5 AC6, since its one
+  // requirement now has a request - and lists it as pending, waiting for Venue Staff.
+  await expect(page.getByRole('heading', { name: ONBOARDING.name, level: 1 })).toBeVisible()
+  const bookings = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookings).toContainText(ONBOARDING_VENUE)
+  await expect(bookings).toContainText('Pending')
 })
 
 test('12.1 AC15: a venue can be requested from its record in event context', async ({ page }) => {
@@ -509,8 +511,7 @@ test('12.2 AC1/AC2/AC4: a coordinator withdraws a pending request from the event
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Send request' }).click()
 
-  const outcome = page.getByRole('region', { name: 'Request sent' })
-  await outcome.getByRole('link', { name: 'Back to the event' }).click()
+  // Story 12.5 AC6: the event has one venue requirement, so sending opens its page.
   await expect(page.getByRole('heading', { name: DINNER.name, level: 1 })).toBeVisible()
 
   // AC1: the request's venue and status already read directly off the event page's own Venue
