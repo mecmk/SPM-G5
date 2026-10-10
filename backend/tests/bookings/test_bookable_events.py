@@ -45,9 +45,9 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
     """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
     CONFIRMED one (story 6.1's seed data), a PLANNING one dedicated to the story 13.2.1
     reject e2e test, a PLANNING one dedicated to 12.1's e2e request (s8.1), two PLANNING ones
-    dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 8.4's, two to
-    12.5's and one to 12.1's real send - "approved or later" includes them all. The pick-list
-    offers all seventeen, soonest first."""
+    dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 8.4's, three
+    to 12.5's and one to 12.1's real send - "approved or later" includes them all. The
+    pick-list offers all eighteen, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -69,6 +69,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.MOBILITY_FORUM),
         str(Events.ONBOARDING_DAY),
         str(Events.RESILIENCE_WORKSHOP),
+        str(Events.TRADE_FAIR),
     ]
 
 

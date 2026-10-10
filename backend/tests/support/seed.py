@@ -107,6 +107,7 @@ class Events:
     MOBILITY_FORUM = _e(29)  # organiser 2, coordinator 1, three requirements, for 12.5's e2e
     RESILIENCE_WORKSHOP = _e(30)  # organiser 2, coordinator 1, its one requirement booked
     ONBOARDING_DAY = _e(31)  # organiser 2, coordinator 1, 12.1's real send since 12.5
+    TRADE_FAIR = _e(32)  # organiser 2, coordinator 1, 12.5's withdraw and switch e2e flow
 
 
 class Bookings:

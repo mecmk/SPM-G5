@@ -16,6 +16,11 @@ AC12 Of two requests for one requirement sent at the same moment, only the first
 AC13 Withdrawing or rejecting one booking never changes the event's others.
 AC14 Each requirement's request is judged for suitability, and keeps its justification, on its own.
 
+Decided 11 Oct 2026, beyond the ACs' wording: a requirement's pending request can be switched to
+another venue in one step (``POST /bookings/{id}/switch``). The old request is withdrawn and the
+new one written together, so a new venue that cannot take the request leaves the old one as it
+was (AC11: still one request per requirement).
+
 Also migration 017, which links the bookings made before this story to the requirement they were
 made for, and the audit entry (DoD: each request records its requirement). The page flows are
 tests/e2e/venue-requirement-booking.spec.ts.
@@ -39,9 +44,10 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingRequestIn
+from app.bookings.schemas import BookingRequestIn, BookingSwitchIn
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, VenueRequirement
+from app.notifications.models import Notification
 from app.venues import service as venue_service
 from app.venues.models import Venue
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
@@ -135,6 +141,13 @@ def _request(client, event: Event, venue: Venue, requirement_id=None, **extra):
     if requirement_id is not None:
         body["venue_requirement_id"] = str(requirement_id)
     return client.post(BOOKINGS_PATH, json=body)
+
+
+def _switch(client, booking_id, venue: Venue, **extra):
+    """Switch the pending request ``booking_id`` to ``venue`` (decided 11 Oct 2026)."""
+    return client.post(
+        f"{BOOKINGS_PATH}/{booking_id}/switch", json={"venue_id": str(venue.id), **extra}
+    )
 
 
 def _created(response) -> dict:
@@ -575,3 +588,201 @@ def test_migration_017_links_each_events_earlier_booking_to_its_first_requiremen
     assert linked(later) is None
     assert linked(rejected_first) is None
     assert linked(without_requirements) is None
+
+
+# --- Switching a pending request to another venue (decided 11 Oct 2026) -------------------------
+@pytest.mark.story("12.5", ac=11)
+def test_switching_a_pending_request_withdraws_it_and_requests_the_new_venue(
+    coordinator_client, db
+):
+    """The requirement keeps one request: the old one is withdrawn, the new one is pending with
+    the requirement's own terms, and the old venue is free again for that period."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    first, second = _roomy(db), _roomy(db)
+    old = _created(_request(coordinator_client, event, first, plenary_id))
+
+    new = _created(_switch(coordinator_client, old["id"], second))
+
+    assert new["venue_id"] == str(second.id)
+    assert new["venue_requirement_id"] == str(plenary_id)
+    assert (_moment(new["starts_at"]), _moment(new["ends_at"])) == (_at(10, 9), _at(10, 17))
+    assert (new["expected_attendance"], new["required_layout_code"]) == (150, "THEATRE")
+    statuses = {str(booking.id): booking.status for booking in _bookings_of(db, event)}
+    assert statuses == {old["id"]: BookingStatus.WITHDRAWN, new["id"]: BookingStatus.PENDING}
+    other = _event(db)
+    _created(_request(coordinator_client, other, first, _plenary(db, other)))
+
+
+@pytest.mark.story("12.5", ac=11)
+@pytest.mark.parametrize("why", ["held", "unsuitable"])
+def test_a_switch_the_new_venue_cannot_take_changes_nothing(coordinator_client, db, why):
+    """Held for another event (409), or not suiting the requirement with no justification (422):
+    the old request stays pending, and nothing new is written."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(coordinator_client, event, _roomy(db), plenary_id))
+    if why == "held":
+        target = _roomy(db)
+        make_booking(
+            db,
+            event_id=_event(db).id,
+            venue_id=target.id,
+            starts_at=_at(10, 9),
+            ends_at=_at(10, 17),
+        )
+    else:
+        target = make_venue(
+            db,
+            name=f"Small Room {uuid.uuid4().hex[:8]}",
+            capacity=50,
+            layouts={"THEATRE": None},
+            facilities=("PROJECTOR",),
+        )
+
+    response = _switch(coordinator_client, old["id"], target)
+
+    assert response.status_code == (409 if why == "held" else 422), response.text
+    remaining = [(str(booking.id), booking.status) for booking in _bookings_of(db, event)]
+    assert remaining == [(old["id"], BookingStatus.PENDING)]
+
+
+@pytest.mark.story("12.5", ac=11)
+@pytest.mark.parametrize(
+    "status", [BookingStatus.APPROVED, BookingStatus.WITHDRAWN], ids=["approved", "withdrawn"]
+)
+def test_only_a_pending_request_can_be_switched(coordinator_client, db, status):
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    decided = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=_roomy(db).id,
+        status=status,
+        starts_at=_at(10, 9),
+        ends_at=_at(10, 17),
+        venue_requirement_id=plenary_id,
+    )
+
+    response = _switch(coordinator_client, decided.id, _roomy(db))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.BOOKING_NOT_PENDING_MESSAGE.format(
+        status=status, action="switched"
+    )
+    assert [booking.status for booking in _bookings_of(db, event)] == [status]
+
+
+@pytest.mark.story("12.5", ac=10)
+def test_only_the_assigned_coordinator_switches_and_an_unknown_request_is_not_found(login_as, db):
+    """Carl is not the event's coordinator and Venue Staff do not request venues: both are
+    refused (403) and the request stays as it was. A request that does not exist is 404."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(login_as(Users.COORDINATOR), event, _roomy(db), plenary_id))
+
+    carl = login_as(Users.COORDINATOR_2)
+    refused = _switch(carl, old["id"], _roomy(db))
+    unknown = _switch(carl, uuid.uuid4(), _roomy(db))
+    staff = _switch(login_as(Users.VENUE_STAFF), old["id"], _roomy(db))
+
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == service.NOT_ASSIGNED_COORDINATOR_MESSAGE
+    assert unknown.status_code == 404
+    assert staff.status_code == 403
+    remaining = [(str(booking.id), booking.status) for booking in _bookings_of(db, event)]
+    assert remaining == [(old["id"], BookingStatus.PENDING)]
+
+
+@pytest.mark.story("12.5", ac=12)
+def test_two_switches_of_one_request_at_once_make_one(engine):
+    """Real concurrent transactions, so this test commits and cleans up after itself. Two tabs
+    switch the same request to two different venues at the same moment: one switch is made, and
+    the other is refused because the request is no longer pending."""
+    with Session(engine) as session:
+        event = _event(session, name="Switch Race")
+        requirement_id = _plenary(session, event)
+        venues = [_roomy(session), _roomy(session), _roomy(session)]
+        old = make_booking(
+            session,
+            event_id=event.id,
+            venue_id=venues[0].id,
+            starts_at=_at(10, 9),
+            ends_at=_at(10, 17),
+            venue_requirement_id=requirement_id,
+        )
+        session.commit()
+        event_id, old_id = event.id, old.id
+        venue_ids = [venue.id for venue in venues]
+    start = threading.Barrier(2)
+
+    def attempt(venue_id: uuid.UUID) -> str:
+        with Session(engine) as session:
+            actor = session.get(User, Users.COORDINATOR.id)
+            start.wait()
+            replaced = service.get_booking_for_decision(session, old_id)
+            try:
+                service.switch_booking_request(
+                    session, replaced, BookingSwitchIn(venue_id=venue_id), actor=actor
+                )
+            except service.BookingNotPending as refusal:
+                return str(refusal)
+            return "switched"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt, venue_id) for venue_id in venue_ids[1:]]
+            outcomes = [future.result(timeout=30) for future in futures]
+
+        assert sorted(outcomes) == sorted(
+            [
+                "switched",
+                service.BOOKING_NOT_PENDING_MESSAGE.format(
+                    status=BookingStatus.WITHDRAWN, action="switched"
+                ),
+            ]
+        )
+        with Session(engine) as session:
+            statuses = sorted(
+                session.scalars(
+                    select(VenueBooking.status).where(VenueBooking.event_id == event_id)
+                ).all()
+            )
+        assert statuses == [BookingStatus.PENDING, BookingStatus.WITHDRAWN]
+    finally:
+        with Session(engine) as session:
+            booking_ids = session.scalars(
+                select(VenueBooking.id).where(VenueBooking.event_id == event_id)
+            ).all()
+            session.execute(delete(AuditLog).where(AuditLog.entity_id.in_(booking_ids)))
+            session.execute(delete(VenueBooking).where(VenueBooking.event_id == event_id))
+            session.execute(delete(VenueRequirement).where(VenueRequirement.event_id == event_id))
+            session.execute(delete(Event).where(Event.id == event_id))
+            session.execute(delete(Venue).where(Venue.id.in_(venue_ids)))
+            session.commit()
+
+
+@pytest.mark.story("12.5", ac=11)
+def test_a_switch_is_audited_and_venue_staff_are_told(coordinator_client, db):
+    """Both halves are recorded as their own actions are: the withdrawal (12.2) and the new
+    request (12.1), which names the request it replaces. Venue Staff are told of each."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(coordinator_client, event, _roomy(db), plenary_id))
+
+    new = _created(_switch(coordinator_client, old["id"], _roomy(db)))
+
+    entries = db.scalars(
+        select(AuditLog).where(AuditLog.entity_id.in_([uuid.UUID(old["id"]), uuid.UUID(new["id"])]))
+    ).all()
+    recorded = {(entry.action, str(entry.entity_id)): entry.details for entry in entries}
+    assert ("BOOKING_WITHDRAWN", old["id"]) in recorded
+    assert recorded[("BOOKING_REQUESTED", new["id"])]["replaces_booking_id"] == old["id"]
+    told = {
+        (notice.notification_type, str(notice.related_entity_id))
+        for notice in db.scalars(
+            select(Notification).where(Notification.recipient_id == Users.VENUE_STAFF.id)
+        )
+    }
+    assert ("BOOKING_WITHDRAWN", old["id"]) in told
+    assert ("BOOKING_REQUESTED", new["id"]) in told

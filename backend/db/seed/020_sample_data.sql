@@ -261,7 +261,13 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- sharing 3333..18's, which story 11.1's spec requests a venue for. Dated May 2028.
     ('33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Sales Onboarding Day', 'Staff training', 'A day of product training for new sales starters.', NULL, '2028-05-17 09:00+08', '2028-05-17 17:00+08', 40, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 11:00+08', '2026-10-08 11:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 11:00+08', '2026-10-08 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..32: in planning and assigned to Chloe; dedicated to story 12.5's e2e spec, which
+    -- requests venues for it and then withdraws and switches them from the catalogue (decided
+    -- 11 Oct 2026). Three venue requirements and no bookings, dated July 2028.
+    ('33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Harbourfront Trade Fair', 'Trade fair', 'A day of exhibitor stands, buyer training and an evening reception.', NULL, '2028-07-19 09:00+08', '2028-07-19 20:00+08', 150, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 12:00+08', '2026-10-08 12:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -371,7 +377,10 @@ WHERE event_id IN ('33333333-0000-0000-0000-000000000029', '33333333-0000-0000-0
   AND id NOT IN ('cccccccc-0000-0000-0029-000000000001', 'cccccccc-0000-0000-0029-000000000002',
                  'cccccccc-0000-0000-0029-000000000003', 'cccccccc-0000-0000-0030-000000000001')
   OR event_id = '33333333-0000-0000-0000-000000000031'
-  AND id <> 'cccccccc-0000-0000-0031-000000000001';
+  AND id <> 'cccccccc-0000-0000-0031-000000000001'
+  OR event_id = '33333333-0000-0000-0000-000000000032'
+  AND id NOT IN ('cccccccc-0000-0000-0032-000000000001', 'cccccccc-0000-0000-0032-000000000002',
+                 'cccccccc-0000-0000-0032-000000000003');
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code, notes) VALUES
     ('cccccccc-0000-0000-0029-000000000001', '33333333-0000-0000-0000-000000000029', 0, 'Expo hall', 200,
@@ -383,7 +392,15 @@ INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_a
     ('cccccccc-0000-0000-0030-000000000001', '33333333-0000-0000-0000-000000000030', 0, 'Meeting room', 12,
      '2028-06-06 09:00+08', '2028-06-06 12:00+08', 'CLASSROOM', NULL),
     ('cccccccc-0000-0000-0031-000000000001', '33333333-0000-0000-0000-000000000031', 0, 'Training room', 40,
-     '2028-05-17 09:00+08', '2028-05-17 17:00+08', 'CLASSROOM', NULL)
+     '2028-05-17 09:00+08', '2028-05-17 17:00+08', 'CLASSROOM', NULL),
+    -- The Trade Fair's: the Training room fits Seminar Room 2.1 alone, and the Exhibition area
+    -- Exhibition Foyer and Grand Hall, so its request can be switched between them.
+    ('cccccccc-0000-0000-0032-000000000001', '33333333-0000-0000-0000-000000000032', 0, 'Welcome reception', 100,
+     '2028-07-19 17:00+08', '2028-07-19 20:00+08', 'STANDING', NULL),
+    ('cccccccc-0000-0000-0032-000000000002', '33333333-0000-0000-0000-000000000032', 1, 'Training room', 40,
+     '2028-07-19 09:00+08', '2028-07-19 12:00+08', 'CLASSROOM', NULL),
+    ('cccccccc-0000-0000-0032-000000000003', '33333333-0000-0000-0000-000000000032', 2, 'Exhibition area', 150,
+     '2028-07-19 10:00+08', '2028-07-19 16:00+08', 'EXHIBITION', NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
@@ -394,6 +411,8 @@ INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
     ('cccccccc-0000-0000-0029-000000000001', 'WIFI'),
     ('cccccccc-0000-0000-0029-000000000002', 'PROJECTOR'),
     ('cccccccc-0000-0000-0031-000000000001', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0032-000000000002', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0032-000000000003', 'WIFI'),
     ('cccccccc-0000-0000-0028-000000000001', 'PROJECTOR'),
     ('cccccccc-0000-0000-0028-000000000001', 'SOUND_SYSTEM'),
     ('cccccccc-0000-0000-0028-000000000001', 'STAGE'),
@@ -582,7 +601,8 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000032', '33333333-0000-0000-0000-000000000028', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-07 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000029', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000030', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 10:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000031', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 11:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000031', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 11:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000032', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 12:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -630,7 +650,9 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000028', '33333333-0000-0000-0000-000000000029', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000029', '33333333-0000-0000-0000-000000000030', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 10:00+08'),
     -- 3333..31 (12.1's real send since story 12.5): self-assigned too.
-    ('aaaaaaaa-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 11:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 11:00+08'),
+    -- 3333..32 (12.5's withdraw-and-switch flow): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 12:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
