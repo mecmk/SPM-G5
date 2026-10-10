@@ -39,6 +39,11 @@ from tests.support.seed import SEED_PASSWORD, SeedUser, Users
 
 TEST_DATABASE_URL = settings.resolved_test_database_url
 
+# Story 12.7: while the app runs, a timer sweeps lapsed venue holds in a session of its own, which
+# would be the development database's, not a test's transaction - so no test starts it.
+# tests/bookings/test_hold_expiry.py turns it on for its own timer test, with the sweep replaced.
+settings.hold_sweep_interval_seconds = 0
+
 
 # ---------------------------------------------------------------------------------------
 # Database lifecycle
