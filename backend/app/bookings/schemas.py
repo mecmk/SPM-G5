@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.bookings.models import BookingStatus, VenueBooking
 
@@ -111,6 +111,17 @@ class BookingRejection(BaseModel):
         return _strip(value)
 
 
+class BookingHoldUpdate(BaseModel):
+    """Story 12.7 AC1/AC7: the new expiry Venue Staff give a pending request's hold. It names its
+    time zone, since a wall-clock time is no moment until it does (422 without one). Whether it is
+    in the future and before the booked period starts (AC5) needs the booking, so the service
+    checks that."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hold_expires_at: AwareDatetime
+
+
 class BookingOut(BaseModel):
     """Full booking record, including the decision fields story 13.2 AC1/AC3 need."""
 
@@ -133,6 +144,8 @@ class BookingOut(BaseModel):
     requirement_notes: str | None
     suitability_override_reason: str | None
     status: str
+    # Story 12.7 AC1: when the request's hold on its venue expires, unless approved first.
+    hold_expires_at: datetime | None
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -173,6 +186,8 @@ class BookingQueueEntry(BaseModel):
     decision_reason: str | None
     created_at: datetime
     decided_at: datetime | None
+    # Story 12.7 AC1: when a pending request's hold expires, on its queue entry.
+    hold_expires_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -194,6 +209,7 @@ class BookingQueueEntry(BaseModel):
             decision_reason=booking.decision_reason,
             created_at=booking.created_at,
             decided_at=booking.decided_at,
+            hold_expires_at=booking.hold_expires_at,
         )
 
 
@@ -252,6 +268,8 @@ class BookingOutcome(BaseModel):
     # Story 11.1 AC6: why the coordinator requested a venue that did not suit, for the assigned
     # coordinator on the event page. None when the venue suited.
     suitability_override_reason: str | None
+    # Story 12.7 AC1/AC8: when the hold expires while pending, and when it expired once EXPIRED.
+    hold_expires_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -272,4 +290,5 @@ class BookingOutcome(BaseModel):
             decided_at=booking.decided_at,
             decision_reason=booking.decision_reason,
             suitability_override_reason=booking.suitability_override_reason,
+            hold_expires_at=booking.hold_expires_at,
         )

@@ -1,5 +1,5 @@
 import { BOOKING_REASON, HELD_REASON, type VenueUnavailableWindow } from '../api/venues'
-import { inputToInstant } from '../shared/format'
+import { formatDateTime, inputToInstant } from '../shared/format'
 import type { CalendarEntry, CalendarEntryTone } from './Calendar'
 import { eachDate } from './calendarGrid'
 
@@ -19,6 +19,8 @@ const TURNAROUND_BOTH_LABEL = 'Setup and teardown included'
 // instead of calling it booked; a pending request keeps its "Held – pending".
 const TURNAROUND_ONLY_LABEL = 'Setup and teardown only'
 const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
+// Story 12.7 AC1: what a held request's row says about when its hold expires.
+const HOLD_EXPIRES_PREFIX = 'Hold expires'
 
 /** Mirrors `UnavailabilityReason` in backend/app/venues/models.py: a closure's `reason`. */
 const CLOSURE_REASON_NAMES: Record<string, string> = {
@@ -64,6 +66,9 @@ export interface DayItem {
    *  whichever side runs past it. Null when the two are the same, for a closure, and on a day the
    *  booking does not reach, where `kindLabel` already says so. */
   turnaround: string | null
+  /** Story 12.7 AC1: "Hold expires Sat, 1 Jul 2028, 09:00" on a held request's row; null for a
+   *  booking or a closure. */
+  holdExpiry: string | null
   /** Where the item sorts within its day. */
   sortStart: number
   /** The item as a calendar cell shows it. */
@@ -145,6 +150,10 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
         tone: isHeld ? 'warning' : 'danger',
         timeRange: formatSlice(bookingSlice ?? blocked, dayStart),
         turnaround,
+        holdExpiry:
+          isHeld && window.hold_expires_at
+            ? `${HOLD_EXPIRES_PREFIX} ${formatDateTime(window.hold_expires_at)}`
+            : null,
         sortStart: (bookingSlice ?? blocked).start,
         entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
       },

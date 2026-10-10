@@ -104,6 +104,14 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     icon: 'x-circle',
     message: 'This booking was cancelled.',
   },
+  // Story 12.7 AC8: kept as history once its hold lapsed.
+  EXPIRED: {
+    label: 'Expired',
+    tone: 'neutral',
+    icon: 'clock',
+    message:
+      "This request's hold expired before Venue Staff approved it, so the venue was released.",
+  },
 }
 
 /** One required facility, as its quantity and notes make it distinct. */
@@ -187,6 +195,9 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
  * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
  * booking queue words it.
+ *
+ * Story 12.7 AC1: a pending request's card shows when its hold expires. AC8: one whose hold
+ * expired stays on the list as Expired, with when it expired.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
@@ -927,6 +938,14 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{bookingOutcome.message}</p>
+                      {/* Story 12.7 AC1: when a pending request's hold expires. */}
+                      {booking.status === PENDING_BOOKING_STATUS && booking.hold_expires_at && (
+                        <p>
+                          <span className="fact-label">Hold expires</span>
+                          <br />
+                          {formatDateTime(booking.hold_expires_at)}
+                        </p>
+                      )}
                       {booking.decided_at !== null && (
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>

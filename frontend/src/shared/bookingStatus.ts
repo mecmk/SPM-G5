@@ -1,10 +1,13 @@
 import type { BookingStatus, BookingStatusCounts } from '../api/bookings'
 
-export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
+export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'
 
 /** The one status Venue Staff can still decide: the queue card and detail page offer Approve /
  * Reject only for it. */
 export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
+
+/** Story 12.7 AC3: a pending request whose hold lapsed before Venue Staff approved it. */
+export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
 
 /** Statuses nobody on staff decided: the coordinator withdrew the request, or the system
  * cancelled it (migration 010 cancelled overlapping pending requests, stamping `decided_at` and a
@@ -18,8 +21,10 @@ export interface BookingOutcomeLabels {
 }
 
 /** Story 13.1.2 AC3: "Decided at" / "Reason" for a staff decision; "Closed at" / "Note" for a
- * request that was withdrawn or cancelled, so it does not read as if staff decided it. */
+ * request that was withdrawn or cancelled, so it does not read as if staff decided it. Story 12.7
+ * AC3/AC8: "Expired at" for one whose hold lapsed, its `decided_at` being the expiry. */
 export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabels {
+  if (status === EXPIRED_BOOKING_STATUS) return { when: 'Expired at', why: 'Note' }
   return CLOSED_WITHOUT_DECISION.includes(status)
     ? { when: 'Closed at', why: 'Note' }
     : { when: 'Decided at', why: 'Reason' }
@@ -27,12 +32,14 @@ export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabel
 
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN and CANCELLED have no tab of their own and
- * only show up under "All". */
+ * only show up under "All". Story 12.7 AC3: a request whose hold expired leaves Pending for a tab
+ * of its own. */
 export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
+  { key: 'EXPIRED', label: 'Expired' },
 ]
 
 /** The status a tab asks the backend for, or `null` for "All". */
@@ -45,7 +52,12 @@ export function bookingTabCount(tab: BookingStatusTabKey, counts: BookingStatusC
   switch (tab) {
     case 'ALL':
       return (
-        counts.pending + counts.approved + counts.rejected + counts.withdrawn + counts.cancelled
+        counts.pending +
+        counts.approved +
+        counts.rejected +
+        counts.withdrawn +
+        counts.cancelled +
+        counts.expired
       )
     case 'PENDING':
       return counts.pending
@@ -53,6 +65,8 @@ export function bookingTabCount(tab: BookingStatusTabKey, counts: BookingStatusC
       return counts.approved
     case 'REJECTED':
       return counts.rejected
+    case 'EXPIRED':
+      return counts.expired
   }
 }
 

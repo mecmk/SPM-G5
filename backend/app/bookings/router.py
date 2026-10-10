@@ -1,7 +1,10 @@
 """HTTP endpoints for venue bookings: raising a request (story 12.1), the venue staff queue
 (story 13.1), approval and rejection (stories 13.2, 13.2.1), the read endpoints 13.2 AC3 /
-13.2.1 AC4 need to make the outcome visible to the requesting coordinator, and withdrawing a
-request (story 12.2).
+13.2.1 AC4 need to make the outcome visible to the requesting coordinator, withdrawing a
+request (story 12.2), and a request's hold expiry (story 12.7).
+
+Story 12.7 AC3: every endpoint here expires the holds that have lapsed before it answers
+(``ReleaseLapsedHolds``), so none of them shows or acts on a lapsed one as pending.
 """
 
 from __future__ import annotations
@@ -15,8 +18,10 @@ from sqlalchemy.orm import Session
 from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.bookings import service
+from app.bookings.deps import ReleaseLapsedHolds
 from app.bookings.schemas import (
     BookableEvent,
+    BookingHoldUpdate,
     BookingOut,
     BookingOutcome,
     BookingQueue,
@@ -30,7 +35,7 @@ from app.bookings.schemas import (
 )
 from app.db import get_db
 
-router = APIRouter(prefix="/bookings", tags=["bookings"])
+router = APIRouter(prefix="/bookings", tags=["bookings"], dependencies=[ReleaseLapsedHolds])
 
 CanRead = Depends(require_permission(Permission.BOOKINGS_READ))
 CanRequest = Depends(require_permission(Permission.BOOKINGS_REQUEST))
@@ -64,7 +69,8 @@ def create_booking_request(
     period, attendance, layout and required facilities. AC4: only the event's assigned
     coordinator may raise it. Story 11.1 AC2/AC7: a venue that does not suit the event needs a
     justification (422 without one). Story 12.5 AC11/AC12: the venue requirement it names must
-    be the event's (404) and have no pending or approved request yet (409).
+    be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC1/AC5:
+    its hold gets the default expiry; a booked period already started cannot be held (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -90,6 +96,8 @@ def create_booking_request(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
         # 12.1 AC14: the venue is not open at those hours.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.JustificationRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
@@ -133,6 +141,33 @@ def get_booking(booking_id: uuid.UUID, db: DbSession) -> BookingOut:
         return BookingOut.model_validate(service.get_booking(db, booking_id))
     except service.BookingNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+
+
+@router.patch("/{booking_id}", response_model=BookingOut)
+def change_hold_expiry(
+    booking_id: uuid.UUID,
+    payload: BookingHoldUpdate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanDecide],
+) -> BookingOut:
+    """Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry, and its
+    coordinator is told it. AC5: it must be in the future and no later than the booked period
+    starts (422). AC7: a request no longer pending, an expired one included, is refused (409),
+    naming its status. AC9: Venue Staff only (403).
+    """
+    try:
+        booking = service.get_booking_for_decision(db, booking_id)
+    except service.BookingNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+    try:
+        service.change_hold_expiry(
+            db, booking, hold_expires_at=payload.hold_expires_at, actor=actor
+        )
+    except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidHoldExpiry as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return BookingOut.model_validate(booking)
 
 
 @router.post("/{booking_id}/approve", response_model=BookingOut)

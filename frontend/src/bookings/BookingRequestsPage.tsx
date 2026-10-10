@@ -92,6 +92,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * look can be decided without opening its detail page.
  *
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
+ *
+ * Story 12.7 AC1: a pending request's card shows when its hold expires. AC3: one whose hold
+ * expired leaves Pending for the Expired tab, showing when it expired.
  */
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
@@ -273,6 +276,12 @@ export function BookingRequestsPage() {
                       <p className="fact-label">Requested at</p>
                       <p className="fact-value">{formatDateTime(entry.created_at)}</p>
                     </div>
+                    {entry.status === PENDING_BOOKING_STATUS && entry.hold_expires_at && (
+                      <div className="subtle-block">
+                        <p className="fact-label">Hold expires</p>
+                        <p className="fact-value">{formatDateTime(entry.hold_expires_at)}</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="subtle-block">

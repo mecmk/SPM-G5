@@ -394,7 +394,10 @@ class VenueUnavailableWindowOut(BaseModel):
     ``starts_at`` / ``ends_at`` are the period the venue is blocked: for a booking, its held
     period (setup and teardown included). AC5: ``booking_starts_at`` / ``booking_ends_at`` are
     the booking's own requested period inside it - which may cover only part of its event's own
-    schedule - so a day's list can show both; None for a closure, which has no booking."""
+    schedule - so a day's list can show both; None for a closure, which has no booking.
+
+    Story 12.7 AC1: ``hold_expires_at`` is when a pending request's hold (HELD) expires; None for
+    a confirmed booking or a closure, which have none."""
 
     starts_at: datetime
     ends_at: datetime
@@ -402,3 +405,4 @@ class VenueUnavailableWindowOut(BaseModel):
     booking_ends_at: datetime | None
     reason: str
     label: str
+    hold_expires_at: datetime | None

@@ -244,6 +244,9 @@ def get_venue_calendar(
     (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not a
     conflict. venue_unavailability_periods has no such DB constraint, but is checked the same
     way for consistency. AC11: a booking that no longer holds the venue is not read.
+
+    Story 12.7 AC1: a pending request's window carries when its hold expires. AC11: an expired
+    one holds nothing, so it is not read either.
     """
     get_venue(db, venue_id)
     if ends_at <= starts_at:
@@ -256,6 +259,7 @@ def get_venue_calendar(
             VenueBooking.starts_at,
             VenueBooking.ends_at,
             VenueBooking.status,
+            VenueBooking.hold_expires_at,
             Event.name.label("event_name"),
         )
         .join(Event, Event.id == VenueBooking.event_id)
@@ -274,6 +278,9 @@ def get_venue_calendar(
             booking_ends_at=booking.ends_at,
             reason=_CALENDAR_BOOKING_REASONS[booking.status],
             label=booking.event_name,
+            hold_expires_at=(
+                booking.hold_expires_at if booking.status == BookingStatus.PENDING else None
+            ),
         )
         for booking in bookings
     ]
@@ -293,6 +300,7 @@ def get_venue_calendar(
             booking_ends_at=None,
             reason=period.reason,
             label=period.notes or _CLOSURE_REASON_LABELS.get(period.reason, period.reason),
+            hold_expires_at=None,
         )
         for period in closures
     ]

@@ -1,6 +1,8 @@
 import { api } from './client'
 
-export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED'
+/** Story 12.7 AC3: EXPIRED is a pending request whose hold lapsed before Venue Staff approved it. */
+export type BookingStatus =
+  'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED' | 'EXPIRED'
 
 /** Mirrors `BookingOut`: a venue booking request and, once decided, its outcome. */
 export interface Booking {
@@ -21,6 +23,8 @@ export interface Booking {
   requirement_notes: string | null
   suitability_override_reason: string | null
   status: BookingStatus
+  /** Story 12.7 AC1: when the request's hold on its venue expires, unless approved first. */
+  hold_expires_at: string | null
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
@@ -128,6 +132,8 @@ export interface BookingQueueEntry {
   decision_reason: string | null
   created_at: string
   decided_at: string | null
+  /** Story 12.7 AC1: when a pending request's hold expires. */
+  hold_expires_at: string | null
 }
 
 /** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was
@@ -138,6 +144,8 @@ export interface BookingStatusCounts {
   rejected: number
   withdrawn: number
   cancelled: number
+  /** Story 12.7 AC3. */
+  expired: number
 }
 
 /** Mirrors `BookingQueue`: one page of a queue tab, how many that tab holds, and every status's
@@ -195,6 +203,30 @@ export function withdrawBooking(bookingId: string, venueName: string): Promise<B
   })
 }
 
+/** Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry - a moment with its
+ * zone, as `inputToInstant` writes one. 422 for one in the past or after the booked period starts
+ * (AC5), 409 once the request is no longer pending, an expired one included (AC7); both arrive
+ * with the backend's own sentence. */
+export function changeHoldExpiry(
+  bookingId: string,
+  holdExpiresAt: string,
+  eventName: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}`, {
+    method: 'PATCH',
+    body: { hold_expires_at: holdExpiresAt },
+    errorCodes: {
+      404: 'BOOKING_NOT_FOUND',
+      409: 'BOOKING_HOLD_EXPIRY_REFUSED',
+      422: 'BOOKING_HOLD_EXPIRY_REFUSED',
+    },
+    notify: {
+      title: 'Hold expiry changed',
+      message: `${eventName}'s venue hold has a new expiry; its coordinator has been told.`,
+    },
+  })
+}
+
 /** Story 13.2.1 AC1/AC2: reject a pending booking request with a mandatory reason. */
 export function rejectBooking(
   bookingId: string,
@@ -234,6 +266,8 @@ export interface BookingOutcome {
   decision_reason: string | null
   /** Story 11.1 AC6: why a venue that did not suit was requested; null when it suited. */
   suitability_override_reason: string | null
+  /** Story 12.7 AC1/AC8: when the hold expires while pending, and when it expired once expired. */
+  hold_expires_at: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
