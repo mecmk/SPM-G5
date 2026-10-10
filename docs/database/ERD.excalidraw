@@ -4291,7 +4291,7 @@
       "x": 2700,
       "y": 406,
       "width": 400,
-      "height": 359
+      "height": 390
     },
     {
       "angle": 0,
@@ -4320,9 +4320,9 @@
       "x": 2708,
       "y": 414,
       "width": 384,
-      "height": 343,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid",
+      "height": 374,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -4354,7 +4354,7 @@
       "id": "text-1d5d3035f798",
       "type": "text",
       "x": 2700,
-      "y": 845,
+      "y": 876,
       "width": 400,
       "height": 28,
       "text": "EQUIPMENT",
@@ -4397,7 +4397,7 @@
       "id": "hdr-97861c40f44e",
       "type": "rectangle",
       "x": 2700,
-      "y": 885,
+      "y": 916,
       "width": 400,
       "height": 34
     },
@@ -4426,7 +4426,7 @@
       "id": "text-96a486ed6b48",
       "type": "text",
       "x": 2708,
-      "y": 891,
+      "y": 922,
       "width": 384,
       "height": 22,
       "text": "equipment_reservations",
@@ -4485,7 +4485,7 @@
       "id": "body-08647bd769fb",
       "type": "rectangle",
       "x": 2700,
-      "y": 919,
+      "y": 950,
       "width": 400,
       "height": 218
     },
@@ -4514,7 +4514,7 @@
       "id": "text-8790b4d9f7cb",
       "type": "text",
       "x": 2708,
-      "y": 927,
+      "y": 958,
       "width": 384,
       "height": 202,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_request_id?          uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    status                         text\nFK  reserved_by_id                 uuid\n    reserved_at                    timestamptz\n    released_at?                   timestamptz\n    released_quantity              int\n    notes?                         text",
@@ -4557,7 +4557,7 @@
       "id": "hdr-f2e8302464b3",
       "type": "rectangle",
       "x": 2700,
-      "y": 1197,
+      "y": 1228,
       "width": 400,
       "height": 34
     },
@@ -4586,7 +4586,7 @@
       "id": "text-11091916bd4e",
       "type": "text",
       "x": 2708,
-      "y": 1203,
+      "y": 1234,
       "width": 384,
       "height": 22,
       "text": "equipment_unavailability_periods",
@@ -4637,7 +4637,7 @@
       "id": "body-c4c9baa6c876",
       "type": "rectangle",
       "x": 2700,
-      "y": 1231,
+      "y": 1262,
       "width": 400,
       "height": 172
     },
@@ -4666,7 +4666,7 @@
       "id": "text-44ed8158edc4",
       "type": "text",
       "x": 2708,
-      "y": 1239,
+      "y": 1270,
       "width": 384,
       "height": 156,
       "text": "PK  id                             uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    reason                         text\n    starts_at                      timestamptz\n    ends_at?                       timestamptz\n    notes?                         text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz",
@@ -5509,9 +5509,9 @@
       "id": "arrow-af10ff55062a",
       "type": "arrow",
       "x": 2700,
-      "y": 945,
+      "y": 976,
       "width": 140,
-      "height": 276,
+      "height": 307,
       "points": [
         [
           0,
@@ -5519,7 +5519,7 @@
         ],
         [
           -140,
-          -276
+          -307
         ]
       ],
       "lastCommittedPoint": null,
@@ -5562,7 +5562,7 @@
       "id": "text-93f2dabec6ae",
       "type": "text",
       "x": 2570.0,
-      "y": 799.0,
+      "y": 814.5,
       "width": 120,
       "height": 16,
       "text": "equipment_request_id",
@@ -5605,9 +5605,9 @@
       "id": "arrow-81ac4058b969",
       "type": "arrow",
       "x": 2700,
-      "y": 945,
+      "y": 976,
       "width": 1760,
-      "height": 369,
+      "height": 400,
       "points": [
         [
           0,
@@ -5615,7 +5615,7 @@
         ],
         [
           -1760,
-          -369
+          -400
         ]
       ],
       "lastCommittedPoint": null,
@@ -5658,7 +5658,7 @@
       "id": "text-cd6d8c75c1bb",
       "type": "text",
       "x": 1760.0,
-      "y": 752.5,
+      "y": 768.0,
       "width": 120,
       "height": 16,
       "text": "equipment_type_id",
@@ -5701,9 +5701,9 @@
       "id": "arrow-0e6033b87e72",
       "type": "arrow",
       "x": 2700,
-      "y": 945,
+      "y": 976,
       "width": 680,
-      "height": 885,
+      "height": 916,
       "points": [
         [
           0,
@@ -5711,7 +5711,7 @@
         ],
         [
           -680,
-          -885
+          -916
         ]
       ],
       "lastCommittedPoint": null,
@@ -5754,7 +5754,7 @@
       "id": "text-4e810624f71a",
       "type": "text",
       "x": 2300.0,
-      "y": 494.5,
+      "y": 510.0,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -5797,9 +5797,9 @@
       "id": "arrow-c682bf703d9b",
       "type": "arrow",
       "x": 2700,
-      "y": 945,
+      "y": 976,
       "width": 2300,
-      "height": 713,
+      "height": 744,
       "points": [
         [
           0,
@@ -5807,7 +5807,7 @@
         ],
         [
           -2300,
-          -713
+          -744
         ]
       ],
       "lastCommittedPoint": null,
@@ -5850,7 +5850,7 @@
       "id": "text-0b3fa524b884",
       "type": "text",
       "x": 1490.0,
-      "y": 580.5,
+      "y": 596.0,
       "width": 120,
       "height": 16,
       "text": "reserved_by_id",
@@ -5893,9 +5893,9 @@
       "id": "arrow-22890126c0b4",
       "type": "arrow",
       "x": 2700,
-      "y": 1257,
+      "y": 1288,
       "width": 2300,
-      "height": 1025,
+      "height": 1056,
       "points": [
         [
           0,
@@ -5903,7 +5903,7 @@
         ],
         [
           -2300,
-          -1025
+          -1056
         ]
       ],
       "lastCommittedPoint": null,
@@ -5946,7 +5946,7 @@
       "id": "text-a3dc424e69be",
       "type": "text",
       "x": 1490.0,
-      "y": 736.5,
+      "y": 752.0,
       "width": 120,
       "height": 16,
       "text": "created_by_id",
@@ -5989,9 +5989,9 @@
       "id": "arrow-756794b7d1e6",
       "type": "arrow",
       "x": 2700,
-      "y": 1257,
+      "y": 1288,
       "width": 1760,
-      "height": 681,
+      "height": 712,
       "points": [
         [
           0,
@@ -5999,7 +5999,7 @@
         ],
         [
           -1760,
-          -681
+          -712
         ]
       ],
       "lastCommittedPoint": null,
@@ -6042,7 +6042,7 @@
       "id": "text-908ea7cebe03",
       "type": "text",
       "x": 1760.0,
-      "y": 908.5,
+      "y": 924.0,
       "width": 120,
       "height": 16,
       "text": "equipment_type_id",
