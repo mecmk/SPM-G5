@@ -41,6 +41,18 @@ export function coveringBooking(
 }
 
 /**
+ * Story 12.5 AC11: why a requirement takes no other request - "Meeting room already has a venue
+ * booked: Seminar Room 2.1." The venue's record says it in place of Request this venue.
+ */
+export function describeCoveredRequirement(
+  requirementName: string,
+  covering: BookingOutcome,
+): string {
+  const state = isBooked(covering) ? 'booked' : 'requested'
+  return `${requirementName} already has a venue ${state}: ${covering.venue_name}.`
+}
+
+/**
  * Story 12.5 AC2/AC3: the first of `event`'s venue requirements that still needs a venue - the one
  * Find a venue selects, and the one a sent request moves on to. Null once every requirement has a
  * pending or approved request (AC4, AC5), or when the event lists none (AC7).

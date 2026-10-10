@@ -4,6 +4,8 @@ import {
   createBookingRequest,
   listBookingsForEvent,
   SUITABILITY_OVERRIDE_REASON_MAX_LENGTH,
+  switchBookingRequest,
+  type BookingOutcome,
 } from '../api/bookings'
 import { ApiError, formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
@@ -14,12 +16,20 @@ import { PageHeader } from '../components/PageHeader'
 import { SuitabilityNote } from '../components/SuitabilityNote'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { eventPath, VENUE_CATALOGUE_PATH, VENUE_SEARCH_PARAMS, venueSearchPath } from '../routes'
+import {
+  eventPath,
+  VENUE_CATALOGUE_PATH,
+  VENUE_REQUEST_REPLACES_PARAM,
+  VENUE_SEARCH_PARAMS,
+  venueSearchPath,
+} from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import {
   canRequestVenueFor,
+  coveringBooking,
   firstRequirementNeedingVenue,
+  isBooked,
   requirementName,
   venueRequirementTerms,
   venueSearchFor,
@@ -98,6 +108,12 @@ interface RequestSubject {
  * refused before anything is sent (AC11). Once sent, a notice names the venue and the requirement,
  * and the step gives way to the next requirement still needing a venue, or to the event's page
  * (AC3, AC4, AC6).
+ *
+ * Decided 11 Oct 2026: opened with Switch to this venue, the address also names the
+ * requirement's pending request, and the step switches it - it says which request it replaces,
+ * and the server withdraws that one and requests this venue together. Opened any other way, the
+ * step sends a plain request, which the server refuses with its reason while the requirement
+ * has one (AC11).
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -105,6 +121,7 @@ export function BookingRequestFormPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
+  const replacesId = searchParams.get(VENUE_REQUEST_REPLACES_PARAM)
   const { user, can } = useAuth()
   const loadSubject = useCallback(
     () =>
@@ -134,6 +151,24 @@ export function BookingRequestFormPage() {
     error: suitabilityError,
     setData: setSuitability,
   } = useLoaded(loadSuitability)
+  // Story 12.5 (decided 11 Oct 2026): the event's bookings, read to find the request a switch
+  // replaces - only when the address names one.
+  const loadBookings = useCallback(
+    () =>
+      isRequestable && replacesId !== null
+        ? listBookingsForEvent(eventId)
+        : Promise.resolve<BookingOutcome[] | null>(null),
+    [isRequestable, replacesId, eventId],
+  )
+  const { data: bookings, error: bookingsError } = useLoaded(loadBookings)
+  const isFindingReplaced =
+    isRequestable && replacesId !== null && bookings === null && bookingsError === null
+  const covering =
+    requirement === null || bookings === null ? null : coveringBooking(requirement, bookings)
+  /** The request this one replaces: the requirement's own, while it is pending. Anything else
+   *  the address names - or bookings that could not be read - sends a plain request. */
+  const replaced =
+    covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
   const [sendError, setSendError] = useState<string | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -154,7 +189,8 @@ export function BookingRequestFormPage() {
       </div>
     )
   }
-  if (!subject) return <LoadingState label="Loading the request…" />
+  // Story 12.5: a switch names the request it replaces, so that is found first.
+  if (!subject || isFindingReplaced) return <LoadingState label="Loading the request…" />
 
   const { event, venue } = subject
   // Story 12.5 AC1: what the request carries - its venue requirement's own, or the event's own
@@ -164,9 +200,13 @@ export function BookingRequestFormPage() {
     requirement,
   )
   const forRequirement = requirement === null ? null : requirementName(event, requirement)
-  const backTo = location.search
-    ? `${VENUE_CATALOGUE_PATH}${location.search}`
-    : venueSearchPath({ eventId: event.id })
+  // The catalogue's own query, without the switch's.
+  const catalogueQuery = new URLSearchParams(location.search)
+  catalogueQuery.delete(VENUE_REQUEST_REPLACES_PARAM)
+  const backTo =
+    catalogueQuery.toString() === ''
+      ? venueSearchPath({ eventId: event.id })
+      : `${VENUE_CATALOGUE_PATH}?${catalogueQuery}`
   if (!canRequestVenueFor(event, user, can)) {
     return (
       <div className="page stack">
@@ -214,16 +254,26 @@ export function BookingRequestFormPage() {
   async function send(reason: string | null) {
     setIsSending(true)
     try {
-      await createBookingRequest(
-        {
-          event_id: event.id,
-          venue_id: venue.id,
-          venue_requirement_id: requirement?.id,
-          suitability_override_reason: reason ?? undefined,
-        },
-        venue.name,
-        forRequirement,
-      )
+      if (replaced !== null) {
+        await switchBookingRequest(
+          replaced.id,
+          { venue_id: venue.id, suitability_override_reason: reason ?? undefined },
+          venue.name,
+          forRequirement,
+          replaced.venue_name,
+        )
+      } else {
+        await createBookingRequest(
+          {
+            event_id: event.id,
+            venue_id: venue.id,
+            venue_requirement_id: requirement?.id,
+            suitability_override_reason: reason ?? undefined,
+          },
+          venue.name,
+          forRequirement,
+        )
+      }
       // Replaced, so Back does not return to a step whose request has been sent.
       navigate(await destinationAfterSend(event), { replace: true })
     } catch (err: unknown) {
@@ -294,6 +344,12 @@ export function BookingRequestFormPage() {
               ? 'Taken from the event’s own dates and attendance: an additional venue, which no venue requirement asks for.'
               : `Taken from the event’s venue requirement, ${forRequirement}, so Venue Staff assess the same requirements it was approved with.`}
           </p>
+          {replaced !== null && (
+            <p>
+              This replaces the request for {replaced.venue_name}, which is withdrawn when you
+              switch.
+            </p>
+          )}
           <ul className="check-list">
             <li>
               <span className="grow-text">Venue requirement</span>
@@ -364,7 +420,13 @@ export function BookingRequestFormPage() {
             </Link>
           )}
           <button type="submit" disabled={isSending || isChecking}>
-            {isSending ? 'Sending…' : 'Send request'}
+            {replaced === null
+              ? isSending
+                ? 'Sending…'
+                : 'Send request'
+              : isSending
+                ? 'Switching…'
+                : 'Switch request'}
           </button>
         </div>
       </form>
@@ -372,7 +434,7 @@ export function BookingRequestFormPage() {
       {isConfirming && (
         <ConfirmDialog
           title={`Request ${venue.name} anyway?`}
-          confirmLabel="Send request"
+          confirmLabel={replaced === null ? 'Send request' : 'Switch request'}
           tone="primary"
           isBusy={isSending}
           error={null}

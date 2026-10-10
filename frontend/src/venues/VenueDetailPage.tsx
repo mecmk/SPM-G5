@@ -7,10 +7,10 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
 import { LoadingState } from '../layout/LoadingState'
-import { VENUE_CATALOGUE_PATH, venueRequestPath } from '../routes'
+import { VENUE_CATALOGUE_PATH, venueRequestPath, venueSwitchPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 import { useVenueCalendar } from '../shared/useVenueCalendar'
-import { isBooked, requirementName } from '../shared/venueRequest'
+import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
 
@@ -34,8 +34,9 @@ const NOT_RECORDED = 'Not recorded'
  *
  * f12.1.1 (story 12.1 AC15): opened from the catalogue for an event, the event's assigned
  * coordinator can request the venue from here too, and the back link returns to that same search.
- * Story 12.5 AC11: when the venue requirement selected there already has a venue, the page says so
- * instead of offering a request.
+ * Story 12.5 AC11: when the venue requirement selected there already has a venue, the page says so.
+ * Once it is booked, nothing is offered; while it is only requested, the venue is offered in its
+ * place with Switch to this venue (decided 11 Oct 2026).
  *
  * Story 8.3 AC6 (bug f8.3.2): the venue's first picture fills the banner, and every picture shows
  * in a gallery, in order; selecting one opens a pop-up carousel at it. Without pictures the banner
@@ -95,20 +96,35 @@ export function VenueDetailPage() {
       {requestingEvent && (
         <div className="page-header actions-only">
           <div className="page-actions">
-            {/* Story 12.5 AC11: the selected requirement already has a venue, so this one
-             *  cannot be requested for it - the page says why instead. */}
-            {selectedRequirement !== null && selectedCovering !== null ? (
+            {/* Story 12.5 AC11: the selected requirement already has a venue, which the page
+             *  names; it is switched while only requested, never once booked. */}
+            {selectedRequirement !== null && selectedCovering !== null && (
               <p className="muted">
-                {`${requirementName(requestingEvent, selectedRequirement)} already has a venue ${
-                  isBooked(selectedCovering) ? 'booked' : 'requested'
-                }: ${selectedCovering.venue_name}.`}
+                {describeCoveredRequirement(
+                  requirementName(requestingEvent, selectedRequirement),
+                  selectedCovering,
+                )}
               </p>
-            ) : (
+            )}
+            {selectedCovering === null && (
               <Link
                 to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
                 className="button brand"
               >
                 Request this venue
+              </Link>
+            )}
+            {selectedCovering !== null && !isBooked(selectedCovering) && (
+              <Link
+                to={venueSwitchPath(
+                  requestingEvent.id,
+                  venue.id,
+                  location.search,
+                  selectedCovering.id,
+                )}
+                className="button brand"
+              >
+                Switch to this venue
               </Link>
             )}
           </div>

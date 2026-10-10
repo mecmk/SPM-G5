@@ -1,5 +1,6 @@
-"""Venue booking rules: raising a request (story 12.1), conflict detection (story 14.2), and
-withdrawing a request (story 12.2).
+"""Venue booking rules: raising a request (story 12.1), conflict detection (story 14.2),
+withdrawing a request (story 12.2), and switching a requirement's pending request to another
+venue (story 12.5, ``switch_booking_request``).
 
 Story 12.1 - "As an Event Coordinator I want to request a venue booking for an event so
 that Venue Staff can assess and confirm it":
@@ -80,7 +81,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingRequestIn
+from app.bookings.schemas import BookingRequestIn, BookingSwitchIn
 from app.common.audit import record_audit
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
 from app.notifications.service import NotificationType, active_members, notify
@@ -629,6 +630,15 @@ def withdraw_booking(db: Session, booking: VenueBooking, *, actor: User) -> None
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="withdrawn")
 
+    _mark_withdrawn(db, booking, actor=actor)
+    db.commit()
+    db.refresh(booking)
+
+
+def _mark_withdrawn(db: Session, booking: VenueBooking, *, actor: User) -> None:
+    """12.2 AC2/AC3: the withdrawal itself - the status, who withdrew it and when, the audit
+    entry and Venue Staff's notice - flushed but not committed, so story 12.5's switch writes
+    it in the same commit as the request that replaces it."""
     booking.status = BookingStatus.WITHDRAWN
     booking.decided_by_id = actor.id
     booking.decided_at = datetime.now(UTC)
@@ -644,8 +654,6 @@ def withdraw_booking(db: Session, booking: VenueBooking, *, actor: User) -> None
         commit=False,
     )
     _notify_venue_staff_of_withdrawal(db, booking, actor=actor)
-    db.commit()
-    db.refresh(booking)
 
 
 # --- 12.1: raising a request ----------------------------------------------------------------
@@ -840,9 +848,63 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     event = _bookable_event(db, data.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
     requirement = _requested_requirement(event, data.venue_requirement_id)
+    return _request_venue(
+        db, event, venue, requirement, data.suitability_override_reason, actor=actor
+    )
+
+
+def switch_booking_request(
+    db: Session, replaced: VenueBooking, data: BookingSwitchIn, *, actor: User
+) -> VenueBooking:
+    """Story 12.5, decided 11 Oct 2026: switch the pending request ``replaced`` to another
+    venue, for the same venue requirement (an additional venue stays one). Callers fetch
+    ``replaced`` with ``get_booking_for_decision``, as 12.2's withdrawal does, so two tabs
+    switching it at once wait on its row lock and the second finds it withdrawn.
+
+    Withdrawal's checks come first: only the event's assigned coordinator
+    (``NotAssignedCoordinator``, before anything about the request is said), and only while it
+    is pending (``BookingNotPending``). Then the new venue is checked as any request is (12.1,
+    11.1, 12.5), with the old request taken as released. Only when every check passes are the
+    withdrawal and the new request written, in one commit, so a venue that cannot take the
+    request leaves the old one as it was.
+    """
+    if replaced.event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator()
+    if replaced.status != BookingStatus.PENDING:
+        raise BookingNotPending(replaced, action="switched")
+    event = _bookable_event(db, replaced.event_id, actor=actor)
+    venue = _bookable_venue(db, data.venue_id)
+    return _request_venue(
+        db,
+        event,
+        venue,
+        replaced.venue_requirement,
+        data.suitability_override_reason,
+        actor=actor,
+        replacing=replaced,
+    )
+
+
+def _request_venue(
+    db: Session,
+    event: Event,
+    venue: Venue,
+    requirement: VenueRequirement | None,
+    override_reason: str | None,
+    *,
+    actor: User,
+    replacing: VenueBooking | None = None,
+) -> VenueBooking:
+    """The checks and the write ``create_booking_request`` and ``switch_booking_request``
+    share, once the event, the venue and the requirement are known: the requirement's other
+    request (story 12.5 AC11), the hold, closures and opening hours (12.1), suitability
+    (11.1), then the row, Venue Staff's notice and the audit entry. ``replacing`` is the
+    request a switch withdraws: it does not count as the requirement's request, and it is
+    withdrawn only after every check has passed, in the same commit as the new request."""
+    replacing_id = None if replacing is None else replacing.id
     if requirement is not None:
         covering = find_covering_booking(db, requirement.id)
-        if covering is not None:
+        if covering is not None and covering.id != replacing_id:
             raise RequirementAlreadyRequested(requirement, covering)
 
     # The requirement's own terms, each falling back to the event's, which a submitted event
@@ -878,14 +940,16 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
         raise VenueClosed(venue, starts_at=held_from, ends_at=held_until)
     # No EventNotJudgeable: only PLANNING/CONFIRMED events book, and the DB requires attendance.
     judged = venue_service.judge_venue_for_requirement(event, requirement, venue)
-    if not judged.suitability.is_suitable and data.suitability_override_reason is None:
+    if not judged.suitability.is_suitable and override_reason is None:
         raise JustificationRequired()
     booking.suitability_override_reason = (
-        None if judged.suitability.is_suitable else data.suitability_override_reason
+        None if judged.suitability.is_suitable else override_reason
     )
 
     venue_id = venue.id
     requirement_id = None if requirement is None else requirement.id
+    if replacing is not None:
+        _mark_withdrawn(db, replacing, actor=actor)
     db.add(booking)
     try:
         db.flush()
@@ -906,18 +970,21 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     _notify_venue_staff_of_request(
         db, booking, actor=actor, held_from=held_from, held_until=held_until
     )
+    details = {
+        "event_id": str(event.id),
+        "venue_id": str(venue.id),
+        "venue_requirement_id": None if requirement_id is None else str(requirement_id),
+        "suitability_overridden": booking.suitability_override_reason is not None,
+    }
+    if replacing_id is not None:
+        details["replaces_booking_id"] = str(replacing_id)
     record_audit(
         db,
         actor=actor,
         action="BOOKING_REQUESTED",
         entity_type="venue_booking",
         entity_id=booking.id,
-        details={
-            "event_id": str(event.id),
-            "venue_id": str(venue.id),
-            "venue_requirement_id": None if requirement_id is None else str(requirement_id),
-            "suitability_overridden": booking.suitability_override_reason is not None,
-        },
+        details=details,
         commit=False,
     )
     db.commit()

@@ -58,15 +58,53 @@ export function createBookingRequest(
   venueName: string,
   requirementName: string | null,
 ): Promise<Booking> {
-  const requestedFor =
-    requirementName === null ? 'as an additional venue' : `for ${requirementName}`
   return api<Booking>('/bookings', {
     method: 'POST',
     body: input,
     errorCodes: { 409: 'BOOKING_NOT_ALLOWED', 422: 'BOOKING_JUSTIFICATION_REQUIRED' },
     notify: {
       title: 'Venue requested',
-      message: `${venueName} was requested ${requestedFor}; it is with Venue Staff for review.`,
+      message: `${venueName} was requested ${requestedFor(requirementName)}; it is with Venue Staff for review.`,
+    },
+  })
+}
+
+/** Story 12.5 AC3: what a request is for, as its notice words it. */
+function requestedFor(requirementName: string | null): string {
+  return requirementName === null ? 'as an additional venue' : `for ${requirementName}`
+}
+
+/** Mirrors `BookingSwitchIn`: the venue a pending request is switched to. Story 11.1:
+ * `suitability_override_reason` is why a venue that does not suit is requested. */
+export interface BookingSwitchInput {
+  venue_id: string
+  suitability_override_reason?: string
+}
+
+/**
+ * Story 12.5 (decided 11 Oct 2026): switch the pending request `bookingId` to another venue,
+ * for the same venue requirement. The server withdraws it and requests the new venue together,
+ * so a refusal - 409 or 422, as for `createBookingRequest` - leaves it as it was. The notice
+ * names the new venue, the requirement and the venue it replaces.
+ */
+export function switchBookingRequest(
+  bookingId: string,
+  input: BookingSwitchInput,
+  venueName: string,
+  requirementName: string | null,
+  replacedVenueName: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/switch`, {
+    method: 'POST',
+    body: input,
+    errorCodes: {
+      404: 'BOOKING_NOT_FOUND',
+      409: 'BOOKING_NOT_ALLOWED',
+      422: 'BOOKING_JUSTIFICATION_REQUIRED',
+    },
+    notify: {
+      title: 'Venue switched',
+      message: `${venueName} was requested ${requestedFor(requirementName)} in place of ${replacedVenueName}; it is with Venue Staff for review.`,
     },
   })
 }

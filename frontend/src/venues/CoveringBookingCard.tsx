@@ -13,6 +13,9 @@ export interface CoveringBookingCardProps {
   requirementName: string
   /** The catalogue's own query, kept on the venue's link as the result cards keep it (f12.1.1). */
   search: string
+  /** Story 12.5 (decided 11 Oct 2026): withdraw the request, for whoever may - the event's
+   *  assigned coordinator. Offered while it is pending only (12.2). */
+  onWithdraw?: (booking: BookingOutcome) => void
 }
 
 /**
@@ -20,13 +23,23 @@ export interface CoveringBookingCardProps {
  * the banner, the catalogue shows that venue first - its location, booked period and the status
  * of its request - above the other venues that fit the requirement, none of which offers a
  * request (AC11: a requirement takes one pending or approved request at a time).
+ *
+ * Decided 11 Oct 2026: while the request is pending, the coordinator withdraws it here, as on the
+ * event's page (12.2), or switches it to one of the venues below.
  */
 export function CoveringBookingCard({
   booking,
   requirementName,
   search,
+  onWithdraw,
 }: CoveringBookingCardProps) {
   const headingId = useId()
+  const canChange = onWithdraw !== undefined && !isBooked(booking)
+
+  function withdraw() {
+    onWithdraw?.(booking)
+  }
+
   return (
     <section className="card stack" aria-labelledby={headingId}>
       <h2 id={headingId}>
@@ -41,11 +54,23 @@ export function CoveringBookingCard({
       <p className="small muted">
         {booking.venue_location} · {formatSchedule(booking.starts_at, booking.ends_at)}
       </p>
-      {!isBooked(booking) && (
-        <p className="small muted">
-          To request a different venue for {requirementName}, withdraw this request on the
-          event&apos;s page first.
-        </p>
+      {canChange && (
+        <>
+          <p className="small muted">
+            Switch it to one of the venues below, or withdraw it so {requirementName} needs a venue
+            again.
+          </p>
+          <div className="cluster">
+            <button
+              type="button"
+              className="secondary button-sm"
+              aria-label={`Withdraw ${booking.venue_name} for ${requirementName}`}
+              onClick={withdraw}
+            >
+              Withdraw
+            </button>
+          </div>
+        </>
       )}
     </section>
   )

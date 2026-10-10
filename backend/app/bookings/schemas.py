@@ -78,6 +78,25 @@ class BookingRequestIn(BaseModel):
         return None if stripped == "" else stripped
 
 
+class BookingSwitchIn(BaseModel):
+    """Story 12.5, decided 11 Oct 2026: the venue a pending request is switched to. The event and
+    the venue requirement are the switched request's own, so only the venue is sent - with story
+    11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+    """
+
+    venue_id: uuid.UUID
+    suitability_override_reason: str | None = Field(
+        default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
+    )
+
+    @field_validator("suitability_override_reason", mode="before")
+    @classmethod
+    def _blank_reason_is_none(cls, value: object) -> object:
+        """Story 11.1 AC7: an empty or whitespace-only justification is no justification."""
+        stripped = _strip(value)
+        return None if stripped == "" else stripped
+
+
 class BookingRejection(BaseModel):
     """13.2.1 AC2: a reason is mandatory - blank or whitespace-only does not count. Mirrors
     events.schemas.EventRejection (story 4.5)."""

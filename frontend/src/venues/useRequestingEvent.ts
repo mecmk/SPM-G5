@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router'
-import { listBookingsForEvent, type BookingOutcome } from '../api/bookings'
+import { listBookingsForEvent, type Booking, type BookingOutcome } from '../api/bookings'
 import { getEvent, type EventDetail, type VenueRequirement } from '../api/events'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -25,6 +25,9 @@ export interface RequestingEventState {
   requestingEvent: EventDetail | null
   /** Why the event in the address, or its bookings, could not be loaded, otherwise null. */
   error: string | null
+  /** Story 12.5 (decided 11 Oct 2026): a booking changed on the page - a request withdrawn from
+   * the catalogue - put into `bookings` without loading them again. */
+  applyBookingChange: (changed: Booking) => void
   /** Story 11.1: the address names an event that has not loaded or failed yet, so it is not known
    * whether the user may request a venue for it. The catalogue waits for this before searching,
    * so it searches once - with the event, or without it. Story 12.5: likewise its bookings. */
@@ -67,7 +70,31 @@ export function useRequestingEvent(): RequestingEventState {
         : listBookingsForEvent(eventId).then((bookings): EventBookings => ({ eventId, bookings })),
     [eventId, canReadBookings],
   )
-  const { data: eventBookings, error: bookingsError } = useLoaded(loadBookings)
+  const {
+    data: eventBookings,
+    error: bookingsError,
+    setData: setEventBookings,
+  } = useLoaded(loadBookings)
+  const applyBookingChange = useCallback(
+    (changed: Booking) =>
+      setEventBookings(
+        (current) =>
+          current && {
+            ...current,
+            bookings: current.bookings.map((booking) =>
+              booking.id === changed.id
+                ? {
+                    ...booking,
+                    status: changed.status,
+                    decided_at: changed.decided_at,
+                    decision_reason: changed.decision_reason,
+                  }
+                : booking,
+            ),
+          },
+      ),
+    [setEventBookings],
+  )
 
   // `useLoaded` keeps the last event while a changed address loads, so check it is this one.
   const addressEvent = event !== null && event.id === eventId ? event : null
@@ -92,6 +119,7 @@ export function useRequestingEvent(): RequestingEventState {
         : coveringBooking(selectedRequirement, bookings),
     requestingEvent: isRequestable ? resolvedEvent : null,
     error: error ?? bookingsError,
+    applyBookingChange,
     isResolving,
   }
 }

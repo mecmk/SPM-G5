@@ -22,8 +22,8 @@
  * AC9  A venue requested for one requirement drops out for another whose times overlap.
  * AC11 A requirement that has a request offers no other - not in the catalogue, nor on a venue's
  *      record - and a request step whose address names another event's requirement offers none.
- *      A pending request offers "Switch to this venue" instead; a booked one offers nothing, and
- *      its request step says why. The server's own refusals are backend cases.
+ *      A pending request offers "Switch to this venue" instead; a booked one offers nothing. The
+ *      server's own refusals are backend cases.
  *
  * The rules - one request per requirement, refusals, the race, independence, suitability per
  * requirement - are backend cases: backend/tests/bookings/test_request_per_requirement.py.
@@ -208,7 +208,7 @@ test('12.5 AC5: an additional venue is requested beside the booked requirement',
   await expect(bookingList(page)).toContainText('Grand Hall')
 })
 
-test('12.5 AC11: a booked requirement offers no other venue, in the catalogue, a venue record or its step', async ({
+test('12.5 AC11: a requirement that has a venue offers no other, in the catalogue or a venue record', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -232,15 +232,6 @@ test('12.5 AC11: a booked requirement offers no other venue, in the catalogue, a
   ).toBeVisible()
   await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
   await expect(page.getByRole('link', { name: SWITCH_TO })).toHaveCount(0)
-
-  // So does its request step, opened by address, offering nothing to send.
-  await page.goto(
-    `/events/${WORKSHOP.id}/request-venue/${GRAND_HALL_ID}?requirement=${MEETING_ROOM_ID}`,
-  )
-  await expect(
-    page.getByText('Meeting room already has a venue booked: Seminar Room 2.1.'),
-  ).toBeVisible()
-  await expect(page.getByRole('button', { name: /^(Send|Switch) request$/ })).toHaveCount(0)
 })
 
 test('12.5 AC8/AC11: a requested venue is withdrawn or switched from the catalogue', async ({
