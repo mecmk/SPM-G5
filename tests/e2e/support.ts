@@ -58,6 +58,9 @@ export const EVENTS = {
   // like the partner briefing's, and no bookings. Story 11.1's real send with a justification
   // since story 12.5 (one request per requirement).
   pricingClinic: '33333333-0000-0000-0000-000000000033',
+  // Story 12.7, Planning, organiser: organiser2, coordinator, July 2028: one venue requirement,
+  // whose request expired. The 12.7 spec requests a venue for it again.
+  craftFair: '33333333-0000-0000-0000-000000000034',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

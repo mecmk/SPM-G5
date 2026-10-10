@@ -109,6 +109,7 @@ class Events:
     ONBOARDING_DAY = _e(31)  # organiser 2, coordinator 1, 12.1's real send since 12.5
     TRADE_FAIR = _e(32)  # organiser 2, coordinator 1, 12.5's withdraw and switch e2e flow
     PRICING_CLINIC = _e(33)  # organiser 2, coordinator 1, 11.1's justified send since 12.5
+    CRAFT_FAIR = _e(34)  # organiser 2, coordinator 1, its one request expired, for 12.7's e2e
 
 
 class Bookings:
@@ -126,6 +127,8 @@ class Bookings:
     PENDING_REJECT_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000008")
     # Story 12.5: Events.RESILIENCE_WORKSHOP's Meeting room, Seminar Room 2.1, approved.
     APPROVED_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000009")
+    # Story 12.7: Events.CRAFT_FAIR's Craft hall, Exhibition Foyer, expired on 5 Oct 2026.
+    EXPIRED_CRAFT_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000010")
 
 
 class Unavailability:
@@ -161,6 +164,8 @@ class VenueRequirements:
     FORUM_NETWORKING_LOUNGE = uuid.UUID("cccccccc-0000-0000-0029-000000000003")  # STANDING, 100
     WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # CLASSROOM, 12
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
+    # Story 12.7: Events.CRAFT_FAIR's one, whose request expired.
+    CRAFT_FAIR_HALL = uuid.UUID("cccccccc-0000-0000-0034-000000000001")  # EXHIBITION, WIFI, 120
 
 
 class EquipmentItems:
