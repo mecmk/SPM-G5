@@ -208,6 +208,8 @@ class BookingStatusCounts(BaseModel):
     rejected: int
     withdrawn: int
     cancelled: int
+    # Story 12.7 AC3: requests whose hold lapsed before Venue Staff approved them.
+    expired: int
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> BookingStatusCounts:

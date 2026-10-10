@@ -22,13 +22,16 @@ from app.venues.models import RoomLayout, Venue
 
 
 class BookingStatus:
-    """Values allowed by ``ck_venue_bookings_status``. Only APPROVED occupies the venue."""
+    """Values allowed by ``ck_venue_bookings_status``. PENDING and APPROVED hold the venue (story
+    12.1 AC3); EXPIRED is a pending request whose hold lapsed before Venue Staff approved it
+    (story 12.7 AC3)."""
 
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     WITHDRAWN = "WITHDRAWN"
     CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -69,6 +72,11 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     venue_requirement_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venue_requirements.id", ondelete="SET NULL")
     )
+    # Story 12.7 AC1: when a pending request's hold on its venue expires - set when it is raised,
+    # changed only by Venue Staff; ck_venue_bookings_hold_expiry requires it while PENDING or
+    # EXPIRED. AC2: when the coordinator was warned it is about to, NULL until then.
+    hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hold_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)
