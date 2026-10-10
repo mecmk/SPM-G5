@@ -2,9 +2,9 @@
 
 Story 11.1 AC1 now reads "Suitable or Unsuitable for the venue requirement currently selected
 (8.4)". Story 8.4 keeps that selection in the catalogue's address, and the catalogue sends it to
-``GET /venues/search`` as ``requirement``, beside ``event``. Without it, the event's first
-requirement is judged, as before
-(``test_venue_suitability.py::test_only_the_first_requirement_is_judged_until_one_can_be_chosen``).
+``GET /venues/search`` as ``requirement``, beside ``event``. Without it the search is finding an
+additional venue (story 12.5), judged on the event's attendance alone
+(``test_venue_suitability.py::test_with_no_requirement_chosen_only_the_attendance_is_judged``).
 
 AC1  With ``requirement``, every result is judged against that requirement - its name and its
      number of people - and the search finds exactly the venues it finds without it.

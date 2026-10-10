@@ -50,7 +50,12 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
-import { canRequestVenueFor, firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
+import {
+  canRequestVenueFor,
+  firstRequirementNeedingVenue,
+  requirementName,
+  venueSearchFor,
+} from '../shared/venueRequest'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
@@ -120,12 +125,22 @@ function formatMinutesDuration(minutes: number): string {
 }
 
 /**
- * f12.1.1 (story 12.1 AC15) and story 8.4 AC1: the catalogue address Find a venue opens - the
- * event's first venue requirement selected in its banner, with that requirement's filters. An
- * event with no requirements searches by its own dates and attendance (8.4 AC6).
+ * f12.1.1 (story 12.1 AC15) and story 8.4 AC1: the catalogue address Find a venue opens - a venue
+ * requirement selected in its banner, with that requirement's filters. Story 12.5 AC2: the first
+ * that needs a venue; AC5: none once every one has a request, for an additional venue. An event
+ * with no requirements searches by its own dates and attendance (8.4 AC6).
  */
-function findVenuePath(event: EventDetail): string {
-  return venueSearchPath(venueSearchFor(event, firstVenueRequirement(event)))
+function findVenuePath(event: EventDetail, bookings: readonly BookingOutcome[]): string {
+  return venueSearchPath(venueSearchFor(event, firstRequirementNeedingVenue(event, bookings)))
+}
+
+/** Story 12.5 AC4: the name of the venue requirement a booking is for, as the catalogue's banner
+ *  names it; null for an additional venue (AC5). */
+function bookedRequirementName(event: EventDetail, booking: BookingOutcome): string | null {
+  const requirement = event.venue_requirements.find(
+    (each) => each.id === booking.venue_requirement_id,
+  )
+  return requirement ? requirementName(event, requirement) : booking.venue_requirement_name
 }
 
 /** Story 2.7 AC4: one requirement's number of people and times, as one line. */
@@ -522,8 +537,17 @@ export function EventDetailPage() {
     isAssignedCoordinator &&
     EQUIPMENT_OPEN_STATUSES.includes(event.status)
   /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
-   *  its assigned coordinator, while it can take a booking. */
-  const canFindVenue = canRequestVenueFor(event, user, can)
+   *  its assigned coordinator, while it can take a booking. Story 12.5: once its bookings are
+   *  known, so it opens on a requirement that needs a venue. */
+  const canFindVenue =
+    canRequestVenueFor(event, user, can) &&
+    (!canReadBooking || bookings !== null || bookingError !== null)
+  /** Story 12.5 AC5: every venue requirement has a pending or approved request. Never for an
+   *  event with none (AC7), and back to the normal look once one needs a venue again (AC8). */
+  const isEveryRequirementCovered =
+    bookings !== null &&
+    event.venue_requirements.length > 0 &&
+    firstRequirementNeedingVenue(event, bookings) === null
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
@@ -751,8 +775,13 @@ export function EventDetailPage() {
             <div className="card-heading">
               <h2 id="venue-requirements-heading">Venue requirements</h2>
               {canFindVenue && (
-                <Link to={findVenuePath(event)} className="button button-sm">
-                  Find a venue
+                <Link
+                  to={findVenuePath(event, bookings ?? [])}
+                  className={
+                    isEveryRequirementCovered ? 'button button-sm button-muted' : 'button button-sm'
+                  }
+                >
+                  {isEveryRequirementCovered ? 'All required venues booked' : 'Find a venue'}
                 </Link>
               )}
             </div>
@@ -850,6 +879,7 @@ export function EventDetailPage() {
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
               const outcomeLabels = bookingOutcomeLabels(booking.status)
+              const forRequirement = bookedRequirementName(event, booking)
               return (
                 <div
                   key={booking.id}
@@ -870,6 +900,10 @@ export function EventDetailPage() {
                           {bookingOutcome.label}
                         </span>
                       </div>
+                      {/* Story 12.5 AC4/AC5: the requirement the venue is for. */}
+                      <p className="booking-outcome-purpose">
+                        {forRequirement === null ? 'Additional venue' : `For ${forRequirement}`}
+                      </p>
                       <p className="muted">{booking.venue_location}</p>
                       <div className="booking-outcome-schedule small muted">
                         <span className="booking-outcome-schedule-item">
@@ -923,9 +957,16 @@ export function EventDetailPage() {
                    *  relationship and status checks. */}
                   {booking.status === PENDING_BOOKING_STATUS && isAssignedCoordinator && (
                     <div className="cluster">
+                      {/* Story 12.5 AC8: named for its venue and requirement, since an event
+                       *  can have several pending at once. */}
                       <button
                         type="button"
                         className="secondary button-sm"
+                        aria-label={
+                          forRequirement === null
+                            ? `Withdraw ${booking.venue_name}`
+                            : `Withdraw ${booking.venue_name} for ${forRequirement}`
+                        }
                         onClick={() => askToWithdraw(booking)}
                       >
                         Withdraw

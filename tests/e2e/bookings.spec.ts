@@ -617,7 +617,10 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
     .getByRole('link', { name: 'Request this venue' })
     .click()
   await page.getByRole('button', { name: 'Send request' }).click()
-  await expect(page.getByRole('region', { name: 'Request sent' })).toBeVisible()
+  // Story 12.5 AC6: the event has one venue requirement, so sending opens its page.
+  await expect(
+    page.getByRole('heading', { name: 'Alumni Homecoming Weekend', level: 1 }),
+  ).toBeVisible()
 
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()

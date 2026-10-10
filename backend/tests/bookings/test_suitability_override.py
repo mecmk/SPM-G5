@@ -1,7 +1,7 @@
 """Story 11.1 - venue suitability with reasons and override: requesting a venue that does not suit.
 
 POST /bookings judges the venue again when the request is sent, with the same check the catalogue
-uses (``app.venues.service.judge_venue_for_event``), so the request and the indicator cannot
+uses (``app.venues.service.judge_venue_for_requirement``), so the request and the indicator cannot
 disagree.
 
 AC2  Requesting an unsuitable venue requires a justification, stored with the request.
@@ -220,15 +220,18 @@ def test_a_venue_that_recorded_no_layouts_needs_a_justification_for_one(
     """The requirement needs Theatre and the venue recorded no layouts at all: Unknown, which is
     never treated as met."""
     event = _assigned_event(db, expected_attendance=40)
-    make_venue_requirement(db, event.id, capacity=40, layout_code="THEATRE")
+    requirement_id = make_venue_requirement(db, event.id, capacity=40, layout_code="THEATRE")
     venue = make_venue(db, capacity=100)
+    # Story 12.5: the request names the requirement it is for.
+    named = {"venue_requirement_id": str(requirement_id)}
 
-    refused = _request(coordinator_client, event_id=event.id, venue_id=venue.id)
+    refused = _request(coordinator_client, event_id=event.id, venue_id=venue.id, **named)
     accepted = _request(
         coordinator_client,
         event_id=event.id,
         venue_id=venue.id,
         suitability_override_reason=JUSTIFICATION,
+        **named,
     )
 
     assert refused.status_code == 422
@@ -263,15 +266,22 @@ def test_a_venue_that_stopped_suiting_after_the_step_loaded_needs_a_justificatio
     event = _assigned_event(db, expected_attendance=150)
     requirement_id = make_venue_requirement(db, event.id, capacity=60)
     venue = make_venue(db, capacity=80)
+    # Story 12.5: the read and the request name the requirement they are for.
     read = coordinator_client.get(
-        f"/venues/{venue.id}/suitability", params={"event": str(event.id)}
+        f"/venues/{venue.id}/suitability",
+        params={"event": str(event.id), "requirement": str(requirement_id)},
     )
     db.execute(
         text("UPDATE venue_requirements SET capacity = 120 WHERE id = :id"), {"id": requirement_id}
     )
     db.expire_all()
 
-    response = _request(coordinator_client, event_id=event.id, venue_id=venue.id)
+    response = _request(
+        coordinator_client,
+        event_id=event.id,
+        venue_id=venue.id,
+        venue_requirement_id=str(requirement_id),
+    )
 
     assert read.status_code == 200, read.text
     assert read.json()["is_suitable"] is True
@@ -294,6 +304,7 @@ def test_a_pending_request_keeps_its_justification_after_the_requirements_change
         event_id=event.id,
         venue_id=venue.id,
         suitability_override_reason=JUSTIFICATION,
+        venue_requirement_id=str(requirement_id),  # Story 12.5: names its requirement.
     )
     assert raised.status_code == 201, raised.text
 

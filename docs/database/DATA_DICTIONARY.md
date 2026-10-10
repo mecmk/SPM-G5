@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-07 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-09 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -419,7 +419,7 @@ One venue an event needs: a name, how many people it must hold, when, and what t
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event that needs this venue. |
-| `position` | `integer` | no | - | - | Order on the request, from 0. The first requirement (0) is what a booking request copies until story 12.5 lets a booking name its requirement. |
+| `position` | `integer` | no | - | - | Order on the request, from 0: the order the event's page and the catalogue's banner list them in, and Find a venue selects the first that has no pending or approved request (story 12.5 AC2). |
 | `name` | `text` | yes | - | - | Short name, e.g. "Plenary hall" (story 2.7 AC1). Unique per event, trimmed and case-insensitive (AC9). NULL only while the request is a draft. |
 | `capacity` | `integer` | yes | - | - | How many people the venue must hold: a positive whole number, at most the event's expected attendance (story 2.7 AC6). NULL only while the request is a draft. |
 | `starts_at` | `timestamp with time zone` | yes | - | - | When the venue is needed from, within the event's proposed period (story 2.7 AC2, AC5). Set together with ends_at; NULL on a draft takes the event's times on submission. |
@@ -626,6 +626,7 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
+| `venue_requirement_id` | `uuid` | yes | - | FK → `venue_requirements.id` | FK -> venue_requirements.id. The event's venue requirement this request is for (story 12.5 AC1), always one of the same event's requirements (checked in the service). NULL for an additional venue (AC5, AC7), and if the requirement is removed. |
 
 Allowed values:
 
@@ -637,6 +638,7 @@ Rules and indexes:
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
+- unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
 - index `ix_venue_bookings_event`: `btree (event_id)`
 - index `ix_venue_bookings_status`: `btree (status)`
 - index `ix_venue_bookings_venue_period`: `btree (venue_id, held_from, held_until)`

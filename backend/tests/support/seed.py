@@ -104,6 +104,10 @@ class Events:
     PARTNER_GALA = _e(26)  # coordinator 2; accepted and declined items only
     EQUIPMENT_DECISIONS = _e(27)  # organiser 2, coordinator 1, dedicated to 16.1's e2e decisions
     SMART_CITIES_EXPO = _e(28)  # organiser 2, coordinator 1, three requirements, for 8.4's e2e
+    MOBILITY_FORUM = _e(29)  # organiser 2, coordinator 1, three requirements, for 12.5's e2e
+    RESILIENCE_WORKSHOP = _e(30)  # organiser 2, coordinator 1, its one requirement booked
+    ONBOARDING_DAY = _e(31)  # organiser 2, coordinator 1, 12.1's real send since 12.5
+    TRADE_FAIR = _e(32)  # organiser 2, coordinator 1, 12.5's withdraw and switch e2e flow
 
 
 class Bookings:
@@ -119,6 +123,8 @@ class Bookings:
     # reference these from any other test; rejecting them would make them unusable there.
     PENDING_REJECT_E2E_CARD = uuid.UUID("44444444-0000-0000-0000-000000000007")
     PENDING_REJECT_E2E_DETAIL = uuid.UUID("44444444-0000-0000-0000-000000000008")
+    # Story 12.5: Events.RESILIENCE_WORKSHOP's Meeting room, Seminar Room 2.1, approved.
+    APPROVED_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000009")
 
 
 class Unavailability:
@@ -141,11 +147,19 @@ class VenueRequirements:
 
     DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
     NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
+    # Story 12.5: Nimbus's second, which Bookings' pending Seminar Room 2.1 request is for.
+    NIMBUS_BREAKOUT = uuid.UUID("cccccccc-0000-0000-0003-000000000002")  # CLASSROOM, PROJECTOR, 60
     PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60
     # Events.SMART_CITIES_EXPO, in the banner's order:
     EXPO_PLENARY_HALL = uuid.UUID("cccccccc-0000-0000-0028-000000000001")  # THEATRE, 300
     EXPO_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0028-000000000002")  # CLASSROOM, 40
     EXPO_EXHIBITION_SPACE = uuid.UUID("cccccccc-0000-0000-0028-000000000003")  # EXHIBITION, 150
+    # Story 12.5: Events.MOBILITY_FORUM's, in the banner's order, and Events.RESILIENCE_WORKSHOP's.
+    FORUM_EXPO_HALL = uuid.UUID("cccccccc-0000-0000-0029-000000000001")  # STANDING, 200
+    FORUM_WORKSHOP_ROOM = uuid.UUID("cccccccc-0000-0000-0029-000000000002")  # CLASSROOM, 40
+    FORUM_NETWORKING_LOUNGE = uuid.UUID("cccccccc-0000-0000-0029-000000000003")  # STANDING, 100
+    WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # CLASSROOM, 12
+    ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
 
 
 class EquipmentItems:

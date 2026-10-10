@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router'
+import { withdrawBooking, type BookingOutcome } from '../api/bookings'
+import { formatApiError } from '../api/client'
 import type { VenueRequirement } from '../api/events'
 import {
   searchVenues,
@@ -11,6 +13,7 @@ import {
 } from '../api/venues'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
@@ -21,11 +24,18 @@ import {
   venueEditPath,
   venuePath,
   venueRequestPath,
+  venueSwitchPath,
   type VenueSearch,
 } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
+import {
+  firstRequirementNeedingVenue,
+  isBooked,
+  requirementName,
+  venueSearchFor,
+} from '../shared/venueRequest'
+import { CoveringBookingCard } from './CoveringBookingCard'
 import { DeleteVenueDialog } from './DeleteVenueDialog'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
@@ -101,6 +111,15 @@ function describeRelaxHint(hint: RelaxHint): string {
  * address naming a requirement that is not the event's is corrected to the first, with its
  * filters, before anything is searched (AC8).
  *
+ * Story 12.5: the banner says which requirements have a venue (AC2), and the stray address is
+ * corrected as Find a venue now opens - to the first requirement that needs a venue, or to none
+ * once every one has a request (AC5). A venue requested with none selected is an additional
+ * venue, which the banner says (AC5). As decided on 10 Oct 2026, a selected requirement that
+ * already has a venue shows that venue above the results, and no venue offers a request
+ * (AC11). Decided 11 Oct 2026: while that request is pending, the coordinator withdraws it
+ * from there, as from the event's page (12.2), and each venue below offers Switch to this
+ * venue instead, through the request step; the empty list reads "No other venues".
+ *
  * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
  * card; the backend still refuses those writes to anyone else.
@@ -109,10 +128,17 @@ export function VenueCataloguePage() {
   const location = useLocation()
   const { can } = useAuth()
   const canManageVenues = can(PERMISSIONS.VENUES_MANAGE)
-  const { event, requestingEvent, error: eventError, isResolving } = useRequestingEvent()
+  const {
+    event,
+    bookings,
+    selectedRequirement,
+    selectedCovering,
+    requestingEvent,
+    error: eventError,
+    applyBookingChange,
+    isResolving,
+  } = useRequestingEvent()
   const { search, updateSearch, replaceSearch, clearFilters } = useVenueSearch()
-  const selectedRequirement =
-    event?.venue_requirements.find((requirement) => requirement.id === search.requirementId) ?? null
   /** Story 8.4 AC8: the address names a requirement that is not one of the event's. */
   const isStrayRequirement =
     event !== null && search.requirementId !== undefined && selectedRequirement === null
@@ -128,6 +154,9 @@ export function VenueCataloguePage() {
   )
   if (!isWaiting && listRequest?.query !== query) setListRequest({ query })
   const [pendingDelete, setPendingDelete] = useState<VenueSummary | null>(null)
+  const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
 
   const loadVenues = useCallback(
     () => (listRequest === null ? untilTheEventResolves() : searchVenues(listRequest.query)),
@@ -136,13 +165,14 @@ export function VenueCataloguePage() {
   const { data: result, error, setData: setResult } = useLoaded(loadVenues)
   const isPeriodSearched = query.starts_at !== undefined
 
-  // Story 8.4 AC8: opened as Find a venue would open it - the event's first requirement, or the
-  // event's own dates and attendance when it records none.
+  // Story 8.4 AC8: opened as Find a venue would open it - story 12.5 AC2/AC5: the event's first
+  // requirement that needs a venue, or none, with the event's own dates and attendance, once
+  // every one has a request or when it records none.
   useEffect(() => {
     if (event !== null && isStrayRequirement) {
-      replaceSearch(venueSearchFor(event, firstVenueRequirement(event)))
+      replaceSearch(venueSearchFor(event, firstRequirementNeedingVenue(event, bookings ?? [])))
     }
-  }, [event, isStrayRequirement, replaceSearch])
+  }, [event, bookings, isStrayRequirement, replaceSearch])
 
   function askToDelete(venue: VenueSummary) {
     setPendingDelete(venue)
@@ -168,6 +198,33 @@ export function VenueCataloguePage() {
   /** The list is out of date: a venue it shows was deleted elsewhere. */
   function reloadVenues() {
     setListRequest((current) => current && { ...current })
+  }
+
+  /** Story 12.5 (decided 11 Oct 2026): withdraw the selected requirement's request here, as
+   *  from the event's page (12.2), after the same confirmation. */
+  function askToWithdraw(booking: BookingOutcome) {
+    setWithdrawError(null)
+    setPendingWithdraw(booking)
+  }
+
+  function cancelWithdraw() {
+    setPendingWithdraw(null)
+  }
+
+  /** The requirement needs a venue again, and the venue it held is free, so the list reloads. */
+  async function confirmWithdraw() {
+    if (pendingWithdraw === null) return
+    setIsWithdrawing(true)
+    setWithdrawError(null)
+    try {
+      applyBookingChange(await withdrawBooking(pendingWithdraw.id, pendingWithdraw.venue_name))
+      setPendingWithdraw(null)
+      reloadVenues()
+    } catch (err) {
+      setWithdrawError(formatApiError(err))
+    } finally {
+      setIsWithdrawing(false)
+    }
   }
 
   function removeFilter(hint: RelaxHint) {
@@ -218,13 +275,25 @@ export function VenueCataloguePage() {
         </div>
       )
     }
-    if (requestingEvent) {
+    if (requestingEvent && selectedCovering === null) {
       return (
         <Link
           to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
           className="button brand button-sm"
         >
           Request this venue
+        </Link>
+      )
+    }
+    // Story 12.5 AC11: a selected requirement takes one request at a time. While its request is
+    // pending, a venue is offered in its place (decided 11 Oct 2026); once booked, none is.
+    if (requestingEvent && selectedCovering !== null && !isBooked(selectedCovering)) {
+      return (
+        <Link
+          to={venueSwitchPath(requestingEvent.id, venue.id, location.search, selectedCovering.id)}
+          className="button brand button-sm"
+        >
+          Switch to this venue
         </Link>
       )
     }
@@ -257,8 +326,14 @@ export function VenueCataloguePage() {
       {event && (
         <RequestingEventBanner
           event={event}
+          bookings={bookings}
           selectedRequirement={selectedRequirement}
           hasChangedFilters={hasChangedFilters}
+          isAdditionalVenue={
+            requestingEvent !== null &&
+            event.venue_requirements.length > 0 &&
+            search.requirementId === undefined
+          }
           onSelectRequirement={selectRequirement}
         />
       )}
@@ -273,6 +348,14 @@ export function VenueCataloguePage() {
         />
 
         <div className="stack">
+          {event !== null && selectedRequirement !== null && selectedCovering !== null && (
+            <CoveringBookingCard
+              booking={selectedCovering}
+              requirementName={requirementName(event, selectedRequirement)}
+              search={location.search}
+              onWithdraw={requestingEvent === null ? undefined : askToWithdraw}
+            />
+          )}
           {result === null && !error && <LoadingState label="Loading venues…" />}
 
           {result !== null && result.venues.length === 0 && !hasFilters(search) && (
@@ -292,7 +375,10 @@ export function VenueCataloguePage() {
 
           {result !== null && result.venues.length === 0 && hasFilters(search) && (
             <EmptyState>
-              No venues match these filters.{' '}
+              {/* Story 12.5: beside the selected requirement's own venue, the others. */}
+              {selectedCovering === null
+                ? 'No venues match these filters.'
+                : 'No other venues match these filters.'}{' '}
               {result.relax.length > 0 && (
                 <>
                   Try removing:{' '}
@@ -334,6 +420,22 @@ export function VenueCataloguePage() {
           )}
         </div>
       </div>
+
+      {pendingWithdraw && (
+        <ConfirmDialog
+          title="Withdraw this booking request?"
+          confirmLabel="Withdraw"
+          isBusy={isWithdrawing}
+          error={withdrawError}
+          onConfirm={confirmWithdraw}
+          onCancel={cancelWithdraw}
+        >
+          <p>
+            The request for {pendingWithdraw.venue_name} will be withdrawn and its hold on the venue
+            released. Venue Staff will be told.
+          </p>
+        </ConfirmDialog>
+      )}
 
       {pendingDelete && (
         <DeleteVenueDialog

@@ -54,12 +54,36 @@ class BookingRequestIn(BaseModel):
     facilities, so the service copies those from the event row; a client cannot book a period or
     an attendance the event was not approved for.
 
+    Story 12.5 AC1: ``venue_requirement_id`` names the event's venue requirement the request is
+    for, and the service copies that requirement's own period, number of people, layout and
+    facilities. None makes an additional venue (AC5, AC7), which carries the event's own.
+
     The one other thing a client sends is story 11.1's ``suitability_override_reason``: why it is
     requesting a venue that does not suit the event. Trimmed, and blank counts as not given; the
     service decides whether one is needed.
     """
 
     event_id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_requirement_id: uuid.UUID | None = None
+    suitability_override_reason: str | None = Field(
+        default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
+    )
+
+    @field_validator("suitability_override_reason", mode="before")
+    @classmethod
+    def _blank_reason_is_none(cls, value: object) -> object:
+        """Story 11.1 AC7: an empty or whitespace-only justification is no justification."""
+        stripped = _strip(value)
+        return None if stripped == "" else stripped
+
+
+class BookingSwitchIn(BaseModel):
+    """Story 12.5, decided 11 Oct 2026: the venue a pending request is switched to. The event and
+    the venue requirement are the switched request's own, so only the venue is sent - with story
+    11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+    """
+
     venue_id: uuid.UUID
     suitability_override_reason: str | None = Field(
         default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
@@ -95,6 +119,8 @@ class BookingOut(BaseModel):
     id: uuid.UUID
     event_id: uuid.UUID
     venue_id: uuid.UUID
+    # Story 12.5 AC1: the venue requirement the request is for; None for an additional venue.
+    venue_requirement_id: uuid.UUID | None
     requested_by_id: uuid.UUID
     starts_at: datetime
     ends_at: datetime
@@ -209,6 +235,11 @@ class BookingOutcome(BaseModel):
     venue_id: uuid.UUID
     venue_name: str
     venue_location: str
+    # Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
+    # catalogue's banner can say which requirements are covered. Both None for an additional
+    # venue (AC5).
+    venue_requirement_id: uuid.UUID | None
+    venue_requirement_name: str | None
     starts_at: datetime
     ends_at: datetime
     setup_minutes: int
@@ -227,6 +258,10 @@ class BookingOutcome(BaseModel):
             venue_id=booking.venue_id,
             venue_name=booking.venue.name,
             venue_location=booking.venue.location,
+            venue_requirement_id=booking.venue_requirement_id,
+            venue_requirement_name=(
+                None if booking.venue_requirement is None else booking.venue_requirement.name
+            ),
             starts_at=booking.starts_at,
             ends_at=booking.ends_at,
             setup_minutes=booking.setup_minutes,

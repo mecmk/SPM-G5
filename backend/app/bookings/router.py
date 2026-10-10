@@ -26,6 +26,7 @@ from app.bookings.schemas import (
     BookingRejection,
     BookingRequestIn,
     BookingStatusCounts,
+    BookingSwitchIn,
 )
 from app.db import get_db
 
@@ -62,7 +63,8 @@ def create_booking_request(
     """Story 12.1 AC1/AC2/AC3: raises one PENDING request for one venue, carrying the event's
     period, attendance, layout and required facilities. AC4: only the event's assigned
     coordinator may raise it. Story 11.1 AC2/AC7: a venue that does not suit the event needs a
-    justification (422 without one).
+    justification (422 without one). Story 12.5 AC11/AC12: the venue requirement it names must
+    be the event's (404) and have no pending or approved request yet (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -75,6 +77,10 @@ def create_booking_request(
     except service.EventNotBookable as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueNotBookable as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.RequirementNotOfEvent as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    except service.RequirementAlreadyRequested as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueHeld as exc:
         # 12.1 AC3/AC12/AC14: the venue is already booked or held for part of the period.
@@ -195,4 +201,42 @@ def withdraw_booking(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.BookingNotPending as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return BookingOut.model_validate(booking)
+
+
+@router.post("/{booking_id}/switch", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
+def switch_booking_request(
+    booking_id: uuid.UUID,
+    payload: BookingSwitchIn,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanRequest],
+) -> BookingOut:
+    """Story 12.5, decided 11 Oct 2026: switches a pending request to another venue for the
+    same venue requirement - the old one withdrawn and the new one requested together, or
+    neither. Refused (403) for anyone but the event's assigned coordinator, (409) once the
+    request is no longer pending, and as a new request is (409, or 422 for a venue that does
+    not suit without a justification) when the new venue cannot take it.
+    """
+    try:
+        replaced = service.get_booking_for_decision(db, booking_id)
+    except service.BookingNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+    try:
+        booking = service.switch_booking_request(db, replaced, payload, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except (
+        service.BookingNotPending,
+        service.EventNotBookable,
+        service.VenueNotBookable,
+        service.RequirementAlreadyRequested,
+        service.VenueHeld,
+        service.VenueBlocked,
+        service.VenueClosed,
+    ) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.JustificationRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return BookingOut.model_validate(booking)

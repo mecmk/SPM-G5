@@ -7,6 +7,8 @@ export interface Booking {
   id: string
   event_id: string
   venue_id: string
+  /** Story 12.5 AC1: the venue requirement the request is for; null for an additional venue. */
+  venue_requirement_id: string | null
   requested_by_id: string
   starts_at: string
   ends_at: string
@@ -32,20 +34,29 @@ export interface Booking {
 export const SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 
 /** Mirrors `BookingRequestIn`: one event, one venue. Everything else is copied server-side.
- * Story 11.1: `suitability_override_reason` is why a venue that does not suit is requested. */
+ * Story 11.1: `suitability_override_reason` is why a venue that does not suit is requested.
+ * Story 12.5 AC1: `venue_requirement_id` is the event's venue requirement the request is for,
+ * whose own times, people, layout and facilities it carries; left out, the request is for an
+ * additional venue (AC5, AC7), carrying the event's own period and attendance. */
 export interface BookingRequestInput {
   event_id: string
   venue_id: string
+  venue_requirement_id?: string
   suitability_override_reason?: string
 }
 
 /** Story 12.1 AC1-AC4. Story 11.1 AC7: a venue that does not suit, sent without a justification,
  * is refused with a 422 - for instance when it stopped suiting after the step loaded. The code is
  * mapped by status alone, so it assumes `JustificationRequired` is this endpoint's only 422: give
- * any other 422 here its own code first, or it will be read as a missing justification. */
+ * any other 422 here its own code first, or it will be read as a missing justification.
+ *
+ * Story 12.5 AC3: the notice names the venue and the requirement it was requested for - or says
+ * it is an additional venue, when `requirementName` is null. AC11/AC12: a requirement that
+ * already has a pending or approved request is refused with a 409 naming its venue. */
 export function createBookingRequest(
   input: BookingRequestInput,
   venueName: string,
+  requirementName: string | null,
 ): Promise<Booking> {
   return api<Booking>('/bookings', {
     method: 'POST',
@@ -53,7 +64,47 @@ export function createBookingRequest(
     errorCodes: { 409: 'BOOKING_NOT_ALLOWED', 422: 'BOOKING_JUSTIFICATION_REQUIRED' },
     notify: {
       title: 'Venue requested',
-      message: `${venueName} was requested; it is with Venue Staff for review.`,
+      message: `${venueName} was requested ${requestedFor(requirementName)}; it is with Venue Staff for review.`,
+    },
+  })
+}
+
+/** Story 12.5 AC3: what a request is for, as its notice words it. */
+function requestedFor(requirementName: string | null): string {
+  return requirementName === null ? 'as an additional venue' : `for ${requirementName}`
+}
+
+/** Mirrors `BookingSwitchIn`: the venue a pending request is switched to. Story 11.1:
+ * `suitability_override_reason` is why a venue that does not suit is requested. */
+export interface BookingSwitchInput {
+  venue_id: string
+  suitability_override_reason?: string
+}
+
+/**
+ * Story 12.5 (decided 11 Oct 2026): switch the pending request `bookingId` to another venue,
+ * for the same venue requirement. The server withdraws it and requests the new venue together,
+ * so a refusal - 409 or 422, as for `createBookingRequest` - leaves it as it was. The notice
+ * names the new venue, the requirement and the venue it replaces.
+ */
+export function switchBookingRequest(
+  bookingId: string,
+  input: BookingSwitchInput,
+  venueName: string,
+  requirementName: string | null,
+  replacedVenueName: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/switch`, {
+    method: 'POST',
+    body: input,
+    errorCodes: {
+      404: 'BOOKING_NOT_FOUND',
+      409: 'BOOKING_NOT_ALLOWED',
+      422: 'BOOKING_JUSTIFICATION_REQUIRED',
+    },
+    notify: {
+      title: 'Venue switched',
+      message: `${venueName} was requested ${requestedFor(requirementName)} in place of ${replacedVenueName}; it is with Venue Staff for review.`,
     },
   })
 }
@@ -169,6 +220,11 @@ export interface BookingOutcome {
   venue_id: string
   venue_name: string
   venue_location: string
+  /** Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
+   * catalogue's banner can tell which requirements are covered. Both null for an additional
+   * venue (AC5). */
+  venue_requirement_id: string | null
+  venue_requirement_name: string | null
   starts_at: string
   ends_at: string
   setup_minutes: number

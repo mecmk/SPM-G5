@@ -42,6 +42,18 @@ export const EVENTS = {
   // Story 8.4, Planning, organiser: organiser2, coordinator, dated March 2028. Three venue
   // requirements, each finding different venues; the 8.4 spec only reads it.
   smartCitiesExpo: '33333333-0000-0000-0000-000000000028',
+  // Story 12.5, Planning, organiser: organiser2, coordinator. The 12.5 spec sends requests for
+  // them: the forum has three venue requirements and no bookings, dated April 2028; the
+  // workshop's one requirement is booked (Seminar Room 2.1, approved), dated June 2028.
+  mobilityForum: '33333333-0000-0000-0000-000000000029',
+  resilienceWorkshop: '33333333-0000-0000-0000-000000000030',
+  // Planning, organiser: organiser2, coordinator, May 2028: one venue requirement and no
+  // bookings. 12.1's real send since story 12.5 (one request per requirement).
+  onboardingDay: '33333333-0000-0000-0000-000000000031',
+  // Story 12.5, Planning, organiser: organiser2, coordinator, July 2028: three venue
+  // requirements and no bookings. The 12.5 spec requests venues for it, then withdraws one
+  // and switches another from the catalogue.
+  tradeFair: '33333333-0000-0000-0000-000000000032',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

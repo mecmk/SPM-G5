@@ -112,6 +112,10 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PARTNER_GALA),
         str(Events.EQUIPMENT_DECISIONS),
         str(Events.SMART_CITIES_EXPO),
+        str(Events.MOBILITY_FORUM),
+        str(Events.RESILIENCE_WORKSHOP),
+        str(Events.ONBOARDING_DAY),
+        str(Events.TRADE_FAIR),
     }
 
 

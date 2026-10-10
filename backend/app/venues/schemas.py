@@ -289,7 +289,8 @@ class VenueSearchQuery(BaseModel):
     # Story 11.1 AC1: the event venues are being found for. Judges each result; filters nothing.
     event: uuid.UUID | None = None
     # f11.1.1 (11.1 AC1): the event's venue requirement selected in the catalogue's banner (story
-    # 8.4), judged instead of its first. Read only with ``event``; filters nothing either.
+    # 8.4), judged against. None judges the event's attendance alone, as for an additional venue
+    # (story 12.5 AC5). Read only with ``event``; filters nothing either.
     requirement: uuid.UUID | None = None
 
 
@@ -307,8 +308,9 @@ class FailedCriterionOut(BaseModel):
 
 class VenueSuitabilityOut(BaseModel):
     """Story 11.1 AC1/AC3: whether a venue suits the venue requirement it was judged against,
-    and every criterion it fails. ``requirement_id`` and ``requirement_name`` are None for an
-    event with no venue requirements, judged on its attendance alone (AC5)."""
+    and every criterion it fails. ``requirement_id`` and ``requirement_name`` are None when no
+    requirement was judged - an event with none, or an additional venue (story 12.5 AC5) - and
+    the venue was judged on the event's attendance alone (AC5)."""
 
     requirement_id: uuid.UUID | None
     requirement_name: str | None
