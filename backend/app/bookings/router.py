@@ -227,15 +227,19 @@ def switch_booking_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    except (
-        service.BookingNotPending,
-        service.EventNotBookable,
-        service.VenueNotBookable,
-        service.RequirementAlreadyRequested,
-        service.VenueHeld,
-        service.VenueBlocked,
-        service.VenueClosed,
-    ) as exc:
+    except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.EventNotBookable as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueNotBookable as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.RequirementAlreadyRequested as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueHeld as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueBlocked as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueClosed as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.JustificationRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
