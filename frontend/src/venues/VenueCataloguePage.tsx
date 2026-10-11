@@ -25,7 +25,11 @@ import {
 } from '../routes'
 import { inputToInstant } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { firstVenueRequirement, venueSearchFor } from '../shared/venueRequest'
+import {
+  firstVenueRequirement,
+  requestBooksSelection,
+  venueSearchFor,
+} from '../shared/venueRequest'
 import { DeleteVenueDialog } from './DeleteVenueDialog'
 import { RequestingEventBanner } from './RequestingEventBanner'
 import { useRequestingEvent } from './useRequestingEvent'
@@ -95,7 +99,8 @@ function describeRelaxHint(hint: RelaxHint): string {
  * (AC10), and selecting one replaces the filters with its own (AC3). The selection lives in the
  * address with the filters (AC4, AC11), so Find a venue opens with the first selected (AC1). An
  * address naming a requirement that is not the event's is corrected to the first, with its
- * filters, before anything is searched (AC8).
+ * filters, before anything is searched (AC8). Until story 12.5, a request carries the event's
+ * first requirement, so Request this venue is offered only while that one is selected (AC10).
  *
  * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
  * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
@@ -214,7 +219,8 @@ export function VenueCataloguePage() {
         </div>
       )
     }
-    if (requestingEvent) {
+    // Story 8.4 AC10: never a request that would book another requirement's room.
+    if (requestingEvent && requestBooksSelection(requestingEvent, search.requirementId)) {
       return (
         <Link
           to={venueRequestPath(requestingEvent.id, venue.id, location.search)}

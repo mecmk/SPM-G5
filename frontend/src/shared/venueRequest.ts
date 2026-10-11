@@ -14,6 +14,20 @@ export function firstVenueRequirement(event: EventDetail): VenueRequirement | nu
   return event.venue_requirements[0] ?? null
 }
 
+/**
+ * Story 8.4 AC10 (PR #98 review, 11 Oct 2026): whether a request raised now books the venue
+ * requirement the catalogue's address selects. Until story 12.5 lets a request name its
+ * requirement, every request carries the event's first (`firstVenueRequirement`), so Request
+ * this venue is offered only while that one, or none, is selected - never for a requirement
+ * whose room it would not book.
+ */
+export function requestBooksSelection(
+  event: EventDetail,
+  requirementId: string | undefined,
+): boolean {
+  return requirementId === undefined || requirementId === firstVenueRequirement(event)?.id
+}
+
 /** What finding or booking a venue for one of an event's venue requirements asks the venue for. */
 export interface VenueRequestTerms {
   requirement: VenueRequirement | null
