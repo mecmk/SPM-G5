@@ -63,14 +63,13 @@ function RequirementChoice({ event, requirement, isSelected, onSelect }: Require
   )
 }
 
-/** Story 8.4 AC5: the event's one venue requirement, shown alone - there is nothing to choose. */
-function RequirementSummary({
-  event,
-  requirement,
-}: {
+interface RequirementSummaryProps {
   event: EventDetail
   requirement: VenueRequirement
-}) {
+}
+
+/** Story 8.4 AC5: the event's one venue requirement, shown alone - there is nothing to choose. */
+function RequirementSummary({ event, requirement }: RequirementSummaryProps) {
   return (
     <div className="requirement-summary">
       <span className="requirement-choice-name">{requirementName(event, requirement)}</span>
