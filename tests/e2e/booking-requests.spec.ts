@@ -459,6 +459,7 @@ for (const viewer of NOT_REQUESTING) {
       page.goto(`/venues?${search}`),
     ])
     await expect(venueCard(page, VENUE)).toBeVisible()
+    await expect(catalogueBanner(page, NIMBUS.name)).toBeVisible()
 
     await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
   })

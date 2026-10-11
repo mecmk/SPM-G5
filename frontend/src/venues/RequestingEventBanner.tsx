@@ -113,8 +113,13 @@ function RequirementChoice({ event, listed, isSelected, onSelect }: RequirementC
   )
 }
 
+interface RequirementSummaryProps {
+  event: EventDetail
+  listed: ListedRequirement
+}
+
 /** Story 8.4 AC5: the event's one venue requirement, shown alone - there is nothing to choose. */
-function RequirementSummary({ event, listed }: { event: EventDetail; listed: ListedRequirement }) {
+function RequirementSummary({ event, listed }: RequirementSummaryProps) {
   const { requirement, covering } = listed
   return (
     <div className={requirementClassName('requirement-summary', covering)}>
