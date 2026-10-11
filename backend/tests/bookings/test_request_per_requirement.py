@@ -694,6 +694,31 @@ def test_only_the_assigned_coordinator_switches_and_an_unknown_request_is_not_fo
     assert remaining == [(old["id"], BookingStatus.PENDING)]
 
 
+@pytest.mark.story("12.5", ac=10)
+def test_an_unassigned_coordinator_is_refused_before_the_requests_status_is_read(login_as, db):
+    """Who is asking is checked before anything about the request, as for a withdrawal: Carl,
+    not the event's coordinator, is refused (403) for an approved request rather than told it
+    is no longer pending (409), which would give its status away (PR #101 review, 11 Oct
+    2026)."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    approved = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=_roomy(db).id,
+        status=BookingStatus.APPROVED,
+        starts_at=_at(10, 9),
+        ends_at=_at(10, 17),
+        venue_requirement_id=plenary_id,
+    )
+
+    response = _switch(login_as(Users.COORDINATOR_2), approved.id, _roomy(db))
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == service.NOT_ASSIGNED_COORDINATOR_MESSAGE
+    assert [booking.status for booking in _bookings_of(db, event)] == [BookingStatus.APPROVED]
+
+
 @pytest.mark.story("12.5", ac=12)
 def test_two_switches_of_one_request_at_once_make_one(engine):
     """Real concurrent transactions, so this test commits and cleans up after itself. Two tabs
