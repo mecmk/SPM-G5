@@ -27,7 +27,7 @@ export const EVENTS = {
   clarificationRequested: '33333333-0000-0000-0000-000000000006', // organiser: organiser
   draft: '33333333-0000-0000-0000-000000000001',
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
-  partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; 12.1's request is sent for it
+  partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; no spec writes a request for it
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   // Story 15.1, both Planning, organiser: organiser, coordinator, dated May 2027. Only the
   // equipment flow changes the workshop's equipment; nothing changes the showcase's.
@@ -54,6 +54,10 @@ export const EVENTS = {
   // requirements and no bookings. The 12.5 spec requests venues for it, then withdraws one
   // and switches another from the catalogue.
   tradeFair: '33333333-0000-0000-0000-000000000032',
+  // Planning, organiser: organiser2, coordinator, March 2027: one venue requirement shaped
+  // like the partner briefing's, and no bookings. Story 11.1's real send with a justification
+  // since story 12.5 (one request per requirement).
+  pricingClinic: '33333333-0000-0000-0000-000000000033',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

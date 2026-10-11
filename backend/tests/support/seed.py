@@ -92,7 +92,7 @@ class Events:
     CANCELLED = _e(15)  # organiser 2, coordinator 1
     APPROVED_6 = _e(16)  # organiser 1, coordinator 1, pending booking dedicated to 13.2.1 e2e
     APPROVED_7 = _e(17)  # organiser 2, coordinator 2, pending booking dedicated to 13.2.1 e2e
-    PARTNER_BRIEFING = _e(18)  # organiser 2, coordinator 1, dedicated to 12.1's e2e request
+    PARTNER_BRIEFING = _e(18)  # organiser 2, coordinator 1, 11.1's e2e spec, no request written
     EQUIPMENT_WORKSHOP = _e(19)  # organiser 1, coordinator 1, dedicated to 15.1's e2e flow
     EQUIPMENT_SHOWCASE = _e(20)  # organiser 1, coordinator 1, dedicated to 15.1's e2e picker
     EQUIPMENT_ROADSHOW = _e(21)  # organiser 2, coordinator 1, dedicated to 15.2's e2e queue
@@ -108,6 +108,7 @@ class Events:
     RESILIENCE_WORKSHOP = _e(30)  # organiser 2, coordinator 1, its one requirement booked
     ONBOARDING_DAY = _e(31)  # organiser 2, coordinator 1, 12.1's real send since 12.5
     TRADE_FAIR = _e(32)  # organiser 2, coordinator 1, 12.5's withdraw and switch e2e flow
+    PRICING_CLINIC = _e(33)  # organiser 2, coordinator 1, 11.1's justified send since 12.5
 
 
 class Bookings:

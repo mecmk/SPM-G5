@@ -189,10 +189,11 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000015', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Summer Rooftop Mixer', 'Team social', 'An evening social mixer on the rooftop terrace.', NULL, '2026-10-05 18:00+08', '2026-10-05 21:00+08', 60, 'CANCELLED',
      '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..18: in planning and assigned to Chloe; dedicated to story 12.1's e2e request that is
-    -- really sent, to Seminar Room 2.1, which fits every requirement it records (story 8.1's
-    -- search lists it). No other test sends a request for it, so parallel specs never race for
-    -- the same venue, and the hold it leaves on Seminar Room hides nothing another test looks for.
+    -- 3333..18: in planning and assigned to Chloe; dedicated to story 11.1's e2e spec
+    -- (tests/e2e/venue-suitability.spec.ts), which judges venues for its one venue requirement
+    -- and is refused for want of a justification. Since story 12.5 a requirement takes one
+    -- request at a time, so no test's request for it is ever written: the spec's real send has
+    -- 3333..33, and story 12.1's has 3333..31.
     ('33333333-0000-0000-0000-000000000018', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Quarterly Partner Briefing', 'Partner relations', 'Pricing and roadmap update for channel partners.', NULL, '2027-03-10 09:00+08', '2027-03-10 12:00+08', 60, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
@@ -267,7 +268,16 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 11 Oct 2026). Three venue requirements and no bookings, dated July 2028.
     ('33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbourfront Trade Fair', 'Trade fair', 'A day of exhibitor stands, buyer training and an evening reception.', NULL, '2028-07-19 09:00+08', '2028-07-19 20:00+08', 150, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 12:00+08', '2026-10-08 12:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 12:00+08', '2026-10-08 12:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..33: in planning and assigned to Chloe; dedicated to story 11.1's e2e request that is
+    -- really sent with a justification (tests/e2e/venue-suitability.spec.ts), to Exhibition
+    -- Foyer. Shaped like 3333..18 - one Main venue for 60 people, Classroom with a projector -
+    -- so the Foyer fails it the same way. An event of its own since story 12.5, because a venue
+    -- requirement takes one request at a time. Dated a week after 3333..18, so its request sits
+    -- where that one's did in Venue Staff's queue, which lists the soonest first.
+    ('33333333-0000-0000-0000-000000000033', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Reseller Pricing Clinic', 'Partner relations', 'A morning of pricing questions from reseller partners.', NULL, '2027-03-17 09:00+08', '2027-03-17 12:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-09 09:00+08', '2026-10-11 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -307,7 +317,8 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000013', 'BANQUET'),
     ('cccccccc-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000014', 'THEATRE'),
     ('cccccccc-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000015', 'STANDING'),
-    ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM');
+    ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM');
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
@@ -331,7 +342,8 @@ INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
     ('cccccccc-0000-0000-0000-000000000003', 'PROJECTOR'),
     ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
     ('cccccccc-0000-0000-0000-000000000003', 'STAGE'),
-    ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR')
+    ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR')
 ON CONFLICT DO NOTHING;
 
 -- Story 8.4: the Smart Cities Expo (3333..28) records three venue requirements, each with its own
@@ -602,7 +614,8 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000029', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000030', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 10:00+08', NULL),
     ('99999999-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000031', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 11:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000032', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 12:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000032', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-08 12:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000033', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-11 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -652,7 +665,9 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     -- 3333..31 (12.1's real send since story 12.5): self-assigned too.
     ('aaaaaaaa-0000-0000-0000-000000000030', '33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 11:00+08'),
     -- 3333..32 (12.5's withdraw-and-switch flow): self-assigned too.
-    ('aaaaaaaa-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 12:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000031', '33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-06 12:00+08'),
+    -- 3333..33 (11.1's justified real send since story 12.5): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000032', '33333333-0000-0000-0000-000000000033', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-09 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
