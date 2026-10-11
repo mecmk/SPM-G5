@@ -19,7 +19,9 @@
  * AC9  A requirement whose start has passed stays listed; selecting it shows why its search
  *      cannot run (8.1 AC8).
  * AC10 The banner lists the requirements for anyone who may read the event; only the event's
- *      assigned coordinator is offered Request this venue.
+ *      assigned coordinator is offered Request this venue. Until story 12.5 lets a request
+ *      name its requirement, a request carries the event's first (2.7 AC13), so it is offered
+ *      only while that one is selected (PR #98 review, 11 Oct 2026).
  * AC11 Two tabs can have different requirements selected, each keeping its own.
  *
  * 8.4 changes no backend rule: the filters come from the event the page already reads, and the
@@ -193,6 +195,12 @@ test('8.4 AC3: selecting another requirement replaces the filters with its own, 
 
   await expectSelected(page, EXHIBITION)
   await expectListed(page, ['Exhibition Foyer', 'Grand Hall'], ['Seminar Room 2.1'])
+
+  // Selecting replaces the page's history entry rather than adding one, so Back leaves the
+  // catalogue for the event's page instead of stepping back through the selections.
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: EXPO.name, level: 1 })).toBeVisible()
+  expect(new URL(page.url()).pathname).toBe(`/events/${EXPO.id}`)
 })
 
 test("8.4 AC4: the selected requirement comes back after a reload, from a bookmark, with Back and with the record's back link", async ({
@@ -300,6 +308,15 @@ test('8.4 AC7: filters changed by hand stay until the requirement is selected ag
   await expect(page).toHaveURL(/[?&]capacity=40(&|$)/)
   await expectBreakoutRoomSearch(page)
   await expect(banner).not.toContainText('restore its own filters')
+
+  // Clearing every filter is a change by hand too: the requirement stays selected, so its own
+  // filters can still be restored.
+  await panel(page).getByRole('button', { name: 'Clear all filters' }).click()
+
+  await expect(page).not.toHaveURL(/[?&]capacity=/)
+  await expectSelected(page, BREAKOUT)
+  expect(requirementParam(page)).toBe(BREAKOUT.id)
+  await expect(banner).toContainText(`Select ${BREAKOUT.name} again to restore its own filters.`)
 })
 
 test("8.4 AC8: an address naming a requirement that is not the event's opens with the first selected", async ({
@@ -379,6 +396,42 @@ for (const viewer of [
     await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
   })
 }
+
+test('8.4 AC10: until story 12.5, a request is offered only while the first requirement is selected', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findVenueFor(page, EXPO)
+  await expect(
+    venueCard(page, 'Grand Hall').getByRole('link', { name: 'Request this venue' }),
+  ).toBeVisible()
+
+  // A request would carry the plenary hall, so none is offered for the Breakout room's venues.
+  await requirementChoice(page, BREAKOUT.name).click()
+  await expectBreakoutRoomSearch(page)
+  await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
+
+  // Nor by the venue's record, opened from those results. Its read of the event is awaited in
+  // full and the page left to draw it, so the absence of a request is not read before one could
+  // appear.
+  const [eventRead] = await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith(`/events/${EXPO.id}`)),
+    venueCard(page, 'Seminar Room 2.1').getByRole('link', { name: 'Seminar Room 2.1' }).click(),
+  ])
+  await eventRead.finished()
+  await expect(page.getByRole('heading', { name: 'Seminar Room 2.1', level: 1 })).toBeVisible()
+  await page.evaluate(
+    () => new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn))),
+  )
+  await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
+
+  // Back to the plenary hall, and the request is offered again.
+  await page.getByRole('link', { name: '← Venue catalogue' }).click()
+  await requirementChoice(page, PLENARY.name).click()
+  await expect(
+    venueCard(page, 'Grand Hall').getByRole('link', { name: 'Request this venue' }),
+  ).toBeVisible()
+})
 
 test('8.4 AC11: two tabs keep their own requirement selected', async ({ page, context }) => {
   await signIn(page, ACCOUNTS.coordinator)
