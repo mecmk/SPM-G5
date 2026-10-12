@@ -31,8 +31,8 @@ PO decisions (Checkpoint 1, 2 Oct 2026), tested here as well:
   unspecified - only recorded requirements are kept (AC7).
 
 Client-side defaults and marking (AC2, AC6 defaults, AC8 checklist, AC11 focus) are
-tests/e2e/venue-requirements.spec.ts. 12.1's booking request reading the first requirement is
-tests/bookings/test_raise_booking_request.py.
+tests/e2e/venue-requirements.spec.ts. A booking request carrying the requirement it names (story
+12.5, which replaced 12.1's reading of the first) is tests/bookings/test_request_per_requirement.py.
 """
 
 from __future__ import annotations
@@ -676,6 +676,8 @@ def test_lowering_attendance_and_the_requirement_together_is_accepted(organiser_
 # the same approach as test_venue_hold.py's migration 010 test. PRE_012_SCHEMA puts back the
 # venue-requirement shape of migration 001 that 012 replaces.
 PRE_012_SCHEMA = """
+-- Story 12.5's migration 017 links each booking to a venue requirement; 012 came before it.
+ALTER TABLE venue_bookings DROP COLUMN IF EXISTS venue_requirement_id;
 DROP TABLE IF EXISTS venue_requirement_facilities;
 DROP TABLE IF EXISTS venue_requirements;
 ALTER TABLE events

@@ -149,6 +149,21 @@ export function venueRequestPath(eventId: string, venueId: string, search = ''):
   return `${path}${search}`
 }
 
+// Story 12.5 (decided 11 Oct 2026): Switch to this venue opens the same step, its address also
+// naming the pending request it replaces. The step's back link leaves it out.
+export const VENUE_REQUEST_REPLACES_PARAM = 'replaces'
+
+export function venueSwitchPath(
+  eventId: string,
+  venueId: string,
+  search: string,
+  replacedBookingId: string,
+): string {
+  const params = new URLSearchParams(search)
+  params.set(VENUE_REQUEST_REPLACES_PARAM, replacedBookingId)
+  return venueRequestPath(eventId, venueId, `?${params}`)
+}
+
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section is structured as
 // separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues (which reuses the venue catalogue
 // above rather than a duplicate).

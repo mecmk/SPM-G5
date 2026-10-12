@@ -84,6 +84,7 @@ export type ErrorCode =
   | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
+  | 'BOOKING_REQUIREMENT_NOT_FOUND'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
@@ -478,6 +479,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message:
       "Only the event's assigned coordinator can request a venue for it, while the event is in " +
       'Planning or Confirmed.',
+  },
+  /**
+   * Story 12.5 AC11: the request step's address names a venue requirement that is not the
+   * event's, so the page offers no request - the backend would refuse it with the same first
+   * sentence.
+   */
+  BOOKING_REQUIREMENT_NOT_FOUND: {
+    title: 'Venue requirement not found',
+    message:
+      "This venue requirement is not one of the event's. Go back to the catalogue and select " +
+      'one of its venue requirements.',
   },
 
   // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own

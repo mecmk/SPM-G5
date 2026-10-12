@@ -205,7 +205,8 @@ export interface VenueSearchQuery {
    * event in its address is one the user may request a venue for. */
   event?: string
   /** f11.1.1 (11.1 AC1): the event's venue requirement to judge against - the one selected in the
-   * catalogue's banner (story 8.4). Without it, the event's first. Sent only with `event`. */
+   * catalogue's banner (story 8.4). Without it, the event's attendance alone, as for an additional
+   * venue (story 12.5 AC5). Sent only with `event`. */
   requirement?: string
 }
 
@@ -268,9 +269,16 @@ export interface VenueSearchResult {
 
 /** Story 11.1 AC2/AC3: whether one venue suits the event it is being requested for, with every
  * criterion it fails - the request step's read. Only the event's assigned coordinator may ask; an
- * event that cannot be judged is refused with a 422 whose sentence says why. */
-export function getVenueSuitability(venueId: string, eventId: string): Promise<VenueSuitability> {
+ * event that cannot be judged is refused with a 422 whose sentence says why. Story 12.5 AC14:
+ * judged against `requirementId`, the venue requirement the request is for; null for an
+ * additional venue, judged on the event's attendance alone. */
+export function getVenueSuitability(
+  venueId: string,
+  eventId: string,
+  requirementId: string | null,
+): Promise<VenueSuitability> {
   const params = new URLSearchParams({ event: eventId })
+  if (requirementId !== null) params.set('requirement', requirementId)
   return api<VenueSuitability>(`/venues/${venueId}/suitability?${params}`)
 }
 

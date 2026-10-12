@@ -1,9 +1,11 @@
 import { useCallback, useState, type FormEvent } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   createBookingRequest,
+  listBookingsForEvent,
   SUITABILITY_OVERRIDE_REASON_MAX_LENGTH,
-  type Booking,
+  switchBookingRequest,
+  type BookingOutcome,
 } from '../api/bookings'
 import { ApiError, formatApiError } from '../api/client'
 import { getEvent, type EventDetail, type RequiredFacility } from '../api/events'
@@ -11,14 +13,27 @@ import { getVenue, getVenueSuitability, type Venue, type VenueSuitability } from
 import { useAuth } from '../auth/authContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
-import { StatusBadge } from '../components/StatusBadge'
 import { SuitabilityNote } from '../components/SuitabilityNote'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { eventPath, VENUE_CATALOGUE_PATH, venueSearchPath } from '../routes'
+import {
+  eventPath,
+  VENUE_CATALOGUE_PATH,
+  VENUE_REQUEST_REPLACES_PARAM,
+  VENUE_SEARCH_PARAMS,
+  venueSearchPath,
+} from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { canRequestVenueFor, venueRequestTermsFor } from '../shared/venueRequest'
+import {
+  canRequestVenueFor,
+  coveringBooking,
+  firstRequirementNeedingVenue,
+  isBooked,
+  requirementName,
+  venueRequirementTerms,
+  venueSearchFor,
+} from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -31,6 +46,21 @@ function describeFacility(facility: RequiredFacility): string {
   const quantity = facility.quantity === null ? '' : ` ×${facility.quantity}`
   const notes = facility.notes === null ? '' : ` (${facility.notes})`
   return `${facility.name}${quantity}${notes}`
+}
+
+/**
+ * Story 12.5 AC3/AC4/AC6: where a sent request leads - the catalogue for the event's first venue
+ * requirement that still needs a venue, with its filters, or the event's page once every
+ * requirement has a request. The request is already sent, so if the bookings cannot be read this
+ * goes to the event's page, which lists them, rather than holding the coordinator on the step.
+ */
+async function destinationAfterSend(event: EventDetail): Promise<string> {
+  try {
+    const next = firstRequirementNeedingVenue(event, await listBookingsForEvent(event.id))
+    return next === null ? eventPath(event.id) : venueSearchPath(venueSearchFor(event, next))
+  } catch {
+    return eventPath(event.id)
+  }
 }
 
 /** The event and the venue a request is for. The step can say nothing until it has both. */
@@ -46,9 +76,10 @@ interface RequestSubject {
  *
  * AC1: the address fixes one event and one venue, so one request is one venue; the backend refuses
  * an event that cannot take a booking. AC2: the period, attendance, layout and required facilities
- * are the event's - shown here, never entered, and copied by the backend. AC3: the outcome shows
- * the request pending. AC4: the backend refuses anyone but the event's assigned coordinator.
- * Nothing can be sent before both records have arrived.
+ * are the event's - shown here, never entered, and copied by the backend. AC3: once sent, the
+ * request reads as pending on the event's page and in the catalogue's banner (story 12.5 AC2, AC4).
+ * AC4: the backend refuses anyone but the event's assigned coordinator. Nothing can be sent before
+ * both records have arrived.
  *
  * The address can be reached without Request this venue (an old link, an edited one), so the
  * page checks it with the same rule as Find a venue and, for anyone that rule turns away, says why
@@ -69,10 +100,28 @@ interface RequestSubject {
  * the step loaded - the step reads again and shows the warning. That refusal is itself enough to
  * ask for the justification, so a read that fails again still leaves the coordinator able to give
  * one; and only the latest read's failure is shown, never an earlier one beside a read that worked.
+ *
+ * Story 12.5: the request is for the venue requirement the catalogue's query selects. The step
+ * names it and carries its own times, people, layout and facilities (AC1), or, with none selected,
+ * says it is an additional venue with the event's own period and attendance (AC5, AC7); the
+ * suitability read and the send name it too (AC14). A requirement that is not the event's is
+ * refused before anything is sent (AC11). Once sent, a notice names the venue and the requirement,
+ * and the step gives way to the next requirement still needing a venue, or to the event's page
+ * (AC3, AC4, AC6).
+ *
+ * Decided 11 Oct 2026: opened with Switch to this venue, the address also names the
+ * requirement's pending request, and the step switches it - it says which request it replaces,
+ * and the server withdraws that one and requests this venue together. Opened any other way, the
+ * step sends a plain request, which the server refuses with its reason while the requirement
+ * has one (AC11).
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
+  const replacesId = searchParams.get(VENUE_REQUEST_REPLACES_PARAM)
   const { user, can } = useAuth()
   const loadSubject = useCallback(
     () =>
@@ -82,20 +131,44 @@ export function BookingRequestFormPage() {
     [eventId, venueId],
   )
   const { data: subject, error } = useLoaded(loadSubject)
-  const isRequestable = subject !== null && canRequestVenueFor(subject.event, user, can)
+  const requirement =
+    subject === null || requirementId === null
+      ? null
+      : (subject.event.venue_requirements.find((each) => each.id === requirementId) ?? null)
+  /** Story 12.5 AC11: the address names a venue requirement that is not the event's. */
+  const isStrayRequirement = subject !== null && requirementId !== null && requirement === null
+  const isRequestable =
+    subject !== null && canRequestVenueFor(subject.event, user, can) && !isStrayRequirement
   const loadSuitability = useCallback(
     () =>
       isRequestable
-        ? getVenueSuitability(venueId, eventId)
+        ? getVenueSuitability(venueId, eventId, requirementId)
         : Promise.resolve<VenueSuitability | null>(null),
-    [isRequestable, venueId, eventId],
+    [isRequestable, venueId, eventId, requirementId],
   )
   const {
     data: suitability,
     error: suitabilityError,
     setData: setSuitability,
   } = useLoaded(loadSuitability)
-  const [sent, setSent] = useState<Booking | null>(null)
+  // Story 12.5 (decided 11 Oct 2026): the event's bookings, read to find the request a switch
+  // replaces - only when the address names one.
+  const loadBookings = useCallback(
+    () =>
+      isRequestable && replacesId !== null
+        ? listBookingsForEvent(eventId)
+        : Promise.resolve<BookingOutcome[] | null>(null),
+    [isRequestable, replacesId, eventId],
+  )
+  const { data: bookings, error: bookingsError } = useLoaded(loadBookings)
+  const isFindingReplaced =
+    isRequestable && replacesId !== null && bookings === null && bookingsError === null
+  const covering =
+    requirement === null || bookings === null ? null : coveringBooking(requirement, bookings)
+  /** The request this one replaces: the requirement's own, while it is pending. Anything else
+   *  the address names - or bookings that could not be read - sends a plain request. */
+  const replaced =
+    covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
   const [sendError, setSendError] = useState<string | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -116,12 +189,24 @@ export function BookingRequestFormPage() {
       </div>
     )
   }
-  if (!subject) return <LoadingState label="Loading the request…" />
+  // Story 12.5: a switch names the request it replaces, so that is found first.
+  if (!subject || isFindingReplaced) return <LoadingState label="Loading the request…" />
 
   const { event, venue } = subject
-  // Story 2.7: what the request carries - the event's first venue requirement, or the event's own.
-  const { requirement, startsAt, endsAt, capacity, layoutName, facilities } =
-    venueRequestTermsFor(event)
+  // Story 12.5 AC1: what the request carries - its venue requirement's own, or the event's own
+  // for an additional venue.
+  const { startsAt, endsAt, capacity, layoutName, facilities } = venueRequirementTerms(
+    event,
+    requirement,
+  )
+  const forRequirement = requirement === null ? null : requirementName(event, requirement)
+  // The catalogue's own query, without the switch's.
+  const catalogueQuery = new URLSearchParams(location.search)
+  catalogueQuery.delete(VENUE_REQUEST_REPLACES_PARAM)
+  const backTo =
+    catalogueQuery.toString() === ''
+      ? venueSearchPath({ eventId: event.id })
+      : `${VENUE_CATALOGUE_PATH}?${catalogueQuery}`
   if (!canRequestVenueFor(event, user, can)) {
     return (
       <div className="page stack">
@@ -135,10 +220,20 @@ export function BookingRequestFormPage() {
       </div>
     )
   }
+  if (isStrayRequirement) {
+    return (
+      <div className="page stack">
+        <Link to={backTo} className="back-link">
+          ← Venue catalogue
+        </Link>
+        <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
+        <p role="alert" className="error">
+          {ERROR_REGISTRY.BOOKING_REQUIREMENT_NOT_FOUND.message}
+        </p>
+      </div>
+    )
+  }
 
-  const backTo = location.search
-    ? `${VENUE_CATALOGUE_PATH}${location.search}`
-    : venueSearchPath({ eventId: event.id })
   const isChecking = suitability === null && suitabilityError === null
   const isUnsuitable = suitability !== null && !suitability.is_suitable
   const requiresJustification = isUnsuitable || serverAskedForJustification
@@ -147,7 +242,7 @@ export function BookingRequestFormPage() {
   /** AC7: the backend judged the venue unsuitable on send, so read it again for the warning. */
   async function rereadSuitability() {
     try {
-      setSuitability(await getVenueSuitability(venue.id, event.id))
+      setSuitability(await getVenueSuitability(venue.id, event.id, requirement?.id ?? null))
       setReread({ error: null })
       // The read is now the latest word on whether the venue suits, so it decides.
       setServerAskedForJustification(false)
@@ -159,13 +254,28 @@ export function BookingRequestFormPage() {
   async function send(reason: string | null) {
     setIsSending(true)
     try {
-      const input = { event_id: event.id, venue_id: venue.id }
-      setSent(
-        await createBookingRequest(
-          reason === null ? input : { ...input, suitability_override_reason: reason },
+      if (replaced !== null) {
+        await switchBookingRequest(
+          replaced.id,
+          { venue_id: venue.id, suitability_override_reason: reason ?? undefined },
           venue.name,
-        ),
-      )
+          forRequirement,
+          replaced.venue_name,
+        )
+      } else {
+        await createBookingRequest(
+          {
+            event_id: event.id,
+            venue_id: venue.id,
+            venue_requirement_id: requirement?.id,
+            suitability_override_reason: reason ?? undefined,
+          },
+          venue.name,
+          forRequirement,
+        )
+      }
+      // Replaced, so Back does not return to a step whose request has been sent.
+      navigate(await destinationAfterSend(event), { replace: true })
     } catch (err: unknown) {
       setSendError(formatApiError(err))
       setCanReturnToResults(err instanceof ApiError && err.code === 'BOOKING_NOT_ALLOWED')
@@ -212,137 +322,119 @@ export function BookingRequestFormPage() {
         subtitle={`For ${event.name}. Venue Staff decide whether to hold it.`}
       />
 
-      {sent ? (
-        <section className="card stack" aria-labelledby="booking-sent-heading">
-          <h2 id="booking-sent-heading">Request sent</h2>
-          <p>
-            {venue.name} was requested for {event.name}. The request is with Venue Staff for review.
-          </p>
+      <form className="card stack" onSubmit={handleSubmit}>
+        <section aria-labelledby="booking-venue-heading" className="stack">
+          <h2 id="booking-venue-heading">Venue</h2>
           <ul className="check-list">
             <li>
-              <span className="grow-text">Status</span>
-              <StatusBadge status={sent.status} />
+              <span className="grow-text">Location</span>
+              <span>{venue.location}</span>
             </li>
             <li>
-              <span className="grow-text">Requested period</span>
-              <span>{formatSchedule(sent.held_from, sent.held_until)}</span>
+              <span className="grow-text">Capacity</span>
+              <span className="mono">{venue.capacity}</span>
+            </li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="booking-carries-heading" className="stack">
+          <h2 id="booking-carries-heading">What this request will carry</h2>
+          <p className="muted">
+            {forRequirement === null
+              ? 'Taken from the event’s own dates and attendance: an additional venue, which no venue requirement asks for.'
+              : `Taken from the event’s venue requirement, ${forRequirement}, so Venue Staff assess the same requirements it was approved with.`}
+          </p>
+          {replaced !== null && (
+            <p>
+              This replaces the request for {replaced.venue_name}, which is withdrawn when you
+              switch.
+            </p>
+          )}
+          <ul className="check-list">
+            <li>
+              <span className="grow-text">Venue requirement</span>
+              <span>{forRequirement ?? 'Additional venue'}</span>
+            </li>
+            <li>
+              <span className="grow-text">Date and time</span>
+              <span>{startsAt && endsAt ? formatSchedule(startsAt, endsAt) : NOT_RECORDED}</span>
             </li>
             <li>
               <span className="grow-text">Expected attendance</span>
-              <span className="mono">{sent.expected_attendance}</span>
+              <span className="mono">{capacity ?? NOT_RECORDED}</span>
             </li>
-            {sent.suitability_override_reason !== null && (
-              <li>
-                <span className="grow-text">Justification</span>
-                <span>{sent.suitability_override_reason}</span>
-              </li>
-            )}
+            <li>
+              <span className="grow-text">Room layout</span>
+              <span>{layoutName ?? NOT_RECORDED}</span>
+            </li>
+            <li>
+              <span className="grow-text">Required facilities</span>
+              <span>
+                {facilities.length === 0
+                  ? NOT_RECORDED
+                  : facilities.map(describeFacility).join(', ')}
+              </span>
+            </li>
           </ul>
-          <div className="form-actions">
-            <Link to={eventPath(event.id)} className="button secondary">
-              Back to the event
-            </Link>
-          </div>
         </section>
-      ) : (
-        <form className="card stack" onSubmit={handleSubmit}>
-          <section aria-labelledby="booking-venue-heading" className="stack">
-            <h2 id="booking-venue-heading">Venue</h2>
-            <ul className="check-list">
-              <li>
-                <span className="grow-text">Location</span>
-                <span>{venue.location}</span>
-              </li>
-              <li>
-                <span className="grow-text">Capacity</span>
-                <span className="mono">{venue.capacity}</span>
-              </li>
-            </ul>
-          </section>
 
-          <section aria-labelledby="booking-carries-heading" className="stack">
-            <h2 id="booking-carries-heading">What this request will carry</h2>
-            <p className="muted">
-              Taken from the event
-              {requirement?.name ? `’s first venue requirement, ${requirement.name},` : ','} so
-              Venue Staff assess the same requirements it was approved with.
+        <section aria-labelledby="booking-suitability-heading" className="stack">
+          <h2 id="booking-suitability-heading">Suitability</h2>
+          {isChecking && <p className="muted">Checking whether this venue suits the event…</p>}
+          {checkError !== null && (
+            <p role="alert" className="error">
+              {checkError}
             </p>
-            <ul className="check-list">
-              <li>
-                <span className="grow-text">Date and time</span>
-                <span>{startsAt && endsAt ? formatSchedule(startsAt, endsAt) : NOT_RECORDED}</span>
-              </li>
-              <li>
-                <span className="grow-text">Expected attendance</span>
-                <span className="mono">{capacity ?? NOT_RECORDED}</span>
-              </li>
-              <li>
-                <span className="grow-text">Room layout</span>
-                <span>{layoutName ?? NOT_RECORDED}</span>
-              </li>
-              <li>
-                <span className="grow-text">Required facilities</span>
-                <span>
-                  {facilities.length === 0
-                    ? NOT_RECORDED
-                    : facilities.map(describeFacility).join(', ')}
-                </span>
-              </li>
-            </ul>
-          </section>
-
-          <section aria-labelledby="booking-suitability-heading" className="stack">
-            <h2 id="booking-suitability-heading">Suitability</h2>
-            {isChecking && <p className="muted">Checking whether this venue suits the event…</p>}
-            {checkError !== null && (
-              <p role="alert" className="error">
-                {checkError}
-              </p>
-            )}
-            {suitability !== null && (
-              <SuitabilityNote
-                suitability={suitability}
-                requirementCount={event.venue_requirements.length}
+          )}
+          {suitability !== null && (
+            <SuitabilityNote
+              suitability={suitability}
+              requirementCount={event.venue_requirements.length}
+            />
+          )}
+          {requiresJustification && (
+            <label>
+              Justification
+              <textarea
+                value={justification}
+                onChange={(changeEvent) => setJustification(changeEvent.target.value)}
+                maxLength={SUITABILITY_OVERRIDE_REASON_MAX_LENGTH}
+                rows={4}
               />
-            )}
-            {requiresJustification && (
-              <label>
-                Justification
-                <textarea
-                  value={justification}
-                  onChange={(changeEvent) => setJustification(changeEvent.target.value)}
-                  maxLength={SUITABILITY_OVERRIDE_REASON_MAX_LENGTH}
-                  rows={4}
-                />
-                <span className="small muted">
-                  Why request it anyway? Venue Staff read this with the request.
-                </span>
-              </label>
-            )}
-          </section>
+              <span className="small muted">
+                Why request it anyway? Venue Staff read this with the request.
+              </span>
+            </label>
+          )}
+        </section>
 
-          <div className="form-actions">
-            {sendError && (
-              <p role="alert" className="error">
-                {sendError}
-              </p>
-            )}
-            {canReturnToResults && (
-              <Link to={backTo} className="button secondary">
-                Back to the results
-              </Link>
-            )}
-            <button type="submit" disabled={isSending || isChecking}>
-              {isSending ? 'Sending…' : 'Send request'}
-            </button>
-          </div>
-        </form>
-      )}
+        <div className="form-actions">
+          {sendError && (
+            <p role="alert" className="error">
+              {sendError}
+            </p>
+          )}
+          {canReturnToResults && (
+            <Link to={backTo} className="button secondary">
+              Back to the results
+            </Link>
+          )}
+          <button type="submit" disabled={isSending || isChecking}>
+            {replaced === null
+              ? isSending
+                ? 'Sending…'
+                : 'Send request'
+              : isSending
+                ? 'Switching…'
+                : 'Switch request'}
+          </button>
+        </div>
+      </form>
 
       {isConfirming && (
         <ConfirmDialog
           title={`Request ${venue.name} anyway?`}
-          confirmLabel="Send request"
+          confirmLabel={replaced === null ? 'Send request' : 'Switch request'}
           tone="primary"
           isBusy={isSending}
           error={null}
@@ -350,8 +442,8 @@ export function BookingRequestFormPage() {
           onCancel={cancelSend}
         >
           <p>
-            {venue.name} does not suit the event&apos;s venue requirement. Your justification goes
-            to Venue Staff with the request.
+            {venue.name} does not suit {forRequirement ?? 'the event'}. Your justification goes to
+            Venue Staff with the request.
           </p>
         </ConfirmDialog>
       )}

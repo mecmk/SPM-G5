@@ -26,7 +26,13 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn, venueCard } from './support'
 
-const BRIEFING = { id: EVENTS.partnerBriefing, name: 'Quarterly Partner Briefing' }
+/** Story 12.5: a request step's address names the venue requirement the request is for -
+ * here the event's one, its Main venue in the seed. */
+const BRIEFING = {
+  id: EVENTS.partnerBriefing,
+  name: 'Quarterly Partner Briefing',
+  requirementId: 'cccccccc-0000-0000-0000-000000000018',
+}
 const SEARCH_PATH = '/venues/search'
 const EVENT_PARAM = 'event'
 
@@ -281,8 +287,9 @@ test('11.1 AC5: a characteristic the venue has not recorded reads Unknown', asyn
 })
 
 // --- The request step: the warning, the justification and the confirmation (AC2, AC3, AC6, AC7) -
-// Seeded venue ids. Exhibition Foyer is the one venue E5 really requests for Briefing; E7's real
-// send goes to Boardroom 3.4 instead, so E5's hold on Foyer can never turn it into a 409.
+// Seeded venue ids. Exhibition Foyer is the one venue E5 really requests, for an event of its own
+// (below); E7's real send goes to Boardroom 3.4 instead, so E5's hold on Foyer can never turn it
+// into a 409.
 const FOYER = { id: '22222222-0000-0000-0000-000000000004', name: 'Exhibition Foyer' }
 const SEMINAR_ROOM = { id: '22222222-0000-0000-0000-000000000002', name: 'Seminar Room 2.1' }
 const BOARDROOM = { id: '22222222-0000-0000-0000-000000000003', name: 'Boardroom 3.4' }
@@ -292,8 +299,24 @@ const BOOKINGS_PATH = '/bookings'
 const JUSTIFICATION_REQUIRED =
   'Give a justification for requesting a venue that does not suit the event.'
 
-async function openRequestStep(page: Page, venue: { id: string; name: string }) {
-  await page.goto(`/events/${BRIEFING.id}/request-venue/${venue.id}`)
+/** Story 12.5: a venue requirement takes one request at a time, so E5's real send has an event
+ * of its own, shaped like Briefing. Were it Briefing's, the AC7 cases' real sends would be
+ * refused for E5's request (409) whenever E5 ran first, before their justification is asked
+ * for. */
+const PRICING_CLINIC = {
+  id: EVENTS.pricingClinic,
+  name: 'Reseller Pricing Clinic',
+  requirementId: 'cccccccc-0000-0000-0000-000000000033',
+}
+
+async function openRequestStep(
+  page: Page,
+  venue: { id: string; name: string },
+  event: { id: string; requirementId: string } = BRIEFING,
+) {
+  await page.goto(
+    `/events/${event.id}/request-venue/${venue.id}?requirement=${event.requirementId}`,
+  )
   await expect(page.getByRole('heading', { name: `Request ${venue.name}`, level: 1 })).toBeVisible()
 }
 
@@ -317,7 +340,7 @@ test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, w
 }) => {
   const justification = `E2E ${Date.now()}: the only free room that day with space for booths.`
   await signIn(page, ACCOUNTS.coordinator)
-  await openRequestStep(page, FOYER)
+  await openRequestStep(page, FOYER, PRICING_CLINIC)
 
   // AC2: the warning lists every failure, and asks for a justification.
   const suitability = suitabilityRegion(page)
@@ -334,12 +357,9 @@ test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, w
   await expect(dialog).toContainText(FOYER.name)
   await dialog.getByRole('button', { name: 'Send request' }).click()
 
-  const outcome = page.getByRole('region', { name: 'Request sent' })
-  await expect(outcome).toBeVisible()
-  await expect(outcome).toContainText(justification)
-
-  // AC6: the coordinator reads it on the event's bookings.
-  await outcome.getByRole('link', { name: 'Back to the event' }).click()
+  // AC6: the coordinator reads it on the event's bookings - story 12.5 AC6 opens the event's
+  // page once its one requirement has a request.
+  await expect(page.getByRole('heading', { name: PRICING_CLINIC.name, level: 1 })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Venue booking' })).toContainText(justification)
 
   // AC3: Venue Staff read it on the request.
@@ -348,7 +368,7 @@ test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, w
   await page.goto('/venue-staff/booking-requests')
   const card = page
     .getByRole('listitem')
-    .filter({ hasText: BRIEFING.name })
+    .filter({ hasText: PRICING_CLINIC.name })
     .filter({ hasText: FOYER.name })
   await card.getByRole('link', { name: 'View details' }).click()
   await expect(page.getByRole('region', { name: 'Why this venue was requested' })).toContainText(

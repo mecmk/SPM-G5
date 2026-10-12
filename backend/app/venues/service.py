@@ -313,8 +313,9 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
 
     Story 11.1 AC1/AC3: with ``event``, each venue found also carries its suitability for that
     event's venue requirement, for the event's assigned coordinator only (AC6) - the one
-    ``requirement`` names, as selected in the catalogue's banner (f11.1.1, story 8.4), else the
-    event's first. It is judged after the search, so it never changes which venues are found or
+    ``requirement`` names, as selected in the catalogue's banner (f11.1.1, story 8.4), or with
+    none an additional venue on the event's attendance alone (story 12.5). It is judged after
+    the search, so it never changes which venues are found or
     their order. An event that does not exist (``EventToJudgeNotFound``), a requirement that is not
     the event's (``RequirementToJudgeNotFound``) or no number of people yet
     (``EventNotJudgeable``) is refused.
@@ -342,13 +343,6 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
         total=_count_venues(db, scope),
         relax=[] if venues else _relax_hints(db, scope, query, period, active=groups),
     )
-
-
-def first_venue_requirement(event: Event) -> VenueRequirement | None:
-    """Story 2.7 / 11.1: the event's first venue requirement, by position - the one a booking
-    request carries until story 12.5 lets a request name its own, and the one the catalogue
-    judges when no requirement is selected in its banner (f11.1.1)."""
-    return event.venue_requirements[0] if event.venue_requirements else None
 
 
 def people_to_hold(event: Event, requirement: VenueRequirement | None) -> int | None:
@@ -438,13 +432,6 @@ def judge_venue_for_requirement(
     )
 
 
-def judge_venue_for_event(event: Event, venue: Venue) -> JudgedVenue:
-    """Story 11.1 AC1/AC3: whether ``venue`` suits ``event``'s first venue requirement - the one
-    the request step's read and the booking request judge, until story 12.5 lets a request name
-    its own."""
-    return judge_venue_for_requirement(event, first_venue_requirement(event), venue)
-
-
 def _event_to_judge(db: Session, event_id: uuid.UUID) -> Event:
     event = db.get(Event, event_id)
     if event is None:
@@ -453,18 +440,27 @@ def _event_to_judge(db: Session, event_id: uuid.UUID) -> Event:
 
 
 def get_venue_suitability(
-    db: Session, venue_id: uuid.UUID, *, event_id: uuid.UUID, actor: User
+    db: Session,
+    venue_id: uuid.UUID,
+    *,
+    event_id: uuid.UUID,
+    requirement_id: uuid.UUID | None,
+    actor: User,
 ) -> JudgedVenue:
     """Story 11.1 AC2/AC3: the request step's read - whether one venue suits the event it is
     being requested for. ``VenueNotFound``, ``EventToJudgeNotFound`` and ``EventNotJudgeable``
     as their names say; AC6: ``NotEventCoordinator`` for anyone but the event's assigned
     coordinator (the router has already required bookings:request), whatever the event's status.
+
+    Story 12.5 AC14: judged for the venue requirement the request is for - one of the event's,
+    or ``RequirementToJudgeNotFound`` - or, with none, as an additional venue on the event's
+    attendance alone, exactly as ``POST /bookings`` will judge it.
     """
     venue = get_venue(db, venue_id)
     event = _event_to_judge(db, event_id)
     if event.assigned_coordinator_id != actor.id:
         raise NotEventCoordinator()
-    return judge_venue_for_event(event, venue)
+    return judge_venue_for_requirement(event, _requirement_to_judge(event, requirement_id), venue)
 
 
 @dataclass(frozen=True)
@@ -480,9 +476,10 @@ def _requirement_to_judge(
     event: Event, requirement_id: uuid.UUID | None
 ) -> VenueRequirement | None:
     """f11.1.1 (11.1 AC1): the requirement selected in the catalogue's banner (story 8.4), which
-    must be one of ``event``'s (AC3: ``RequirementToJudgeNotFound``), else the event's first."""
+    must be one of ``event``'s (AC3: ``RequirementToJudgeNotFound``). Story 12.5: with none
+    selected the venue is for an additional venue, judged on the event's attendance alone."""
     if requirement_id is None:
-        return first_venue_requirement(event)
+        return None
     selected = next((each for each in event.venue_requirements if each.id == requirement_id), None)
     if selected is None:
         raise RequirementToJudgeNotFound()
@@ -497,7 +494,8 @@ def _requirement_judged_by_search(
     actor: User,
 ) -> _JudgedRequirement | None:
     """Story 11.1: the event and venue requirement a search in ``event_id``'s context judges its
-    results against - ``requirement_id`` when given (f11.1.1), else the event's first. None
+    results against - ``requirement_id`` when given (f11.1.1); with none, an additional venue,
+    judged on the event's attendance alone (story 12.5). None
     outside event context (AC5), and for anyone but the event's assigned coordinator holding
     bookings:request (AC6) - whatever the event's status. AC3: an event that does not exist, a
     requirement that is not the event's, or no number of people yet, is refused here, whether or

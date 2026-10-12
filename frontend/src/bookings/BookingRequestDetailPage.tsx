@@ -15,7 +15,6 @@ import { BOOKING_REQUESTS_PATH } from '../routes'
 import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
 import { formatDate, formatTime } from '../shared/format'
 import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
-import { firstVenueRequirement } from '../shared/venueRequest'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -175,8 +174,11 @@ export function BookingRequestDetailPage() {
     )
   }
   if (!booking || !venue || !event) return <LoadingState label="Loading the booking request…" />
-  // Story 2.7: the facilities of the venue requirement a request carries - the event's first.
-  const requiredFacilities = firstVenueRequirement(event)?.facilities ?? []
+  // Story 2.7: the facilities of the venue requirement a request carries - story 12.5 AC1: the
+  // one it names; none for an additional venue.
+  const requiredFacilities =
+    event.venue_requirements.find((requirement) => requirement.id === booking.venue_requirement_id)
+      ?.facilities ?? []
 
   return (
     <div className="page page-wide">

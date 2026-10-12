@@ -19,9 +19,10 @@
  * AC9  A requirement whose start has passed stays listed; selecting it shows why its search
  *      cannot run (8.1 AC8).
  * AC10 The banner lists the requirements for anyone who may read the event; only the event's
- *      assigned coordinator is offered Request this venue. Until story 12.5 lets a request
- *      name its requirement, a request carries the event's first (2.7 AC13), so it is offered
- *      only while that one is selected (PR #98 review, 11 Oct 2026).
+ *      assigned coordinator is offered Request this venue. Until story 12.5 a request carried
+ *      the event's first requirement (2.7 AC13), so it was offered only while that one was
+ *      selected (PR #98 review, 11 Oct 2026); since 12.5 a request names the selected
+ *      requirement, so it is offered for whichever is selected (12.5 AC1).
  * AC11 Two tabs can have different requirements selected, each keeping its own.
  *
  * 8.4 changes no backend rule: the filters come from the event the page already reads, and the
@@ -402,40 +403,23 @@ for (const viewer of [
   })
 }
 
-test('8.4 AC10: until story 12.5, a request is offered only while the first requirement is selected', async ({
+test('12.5 AC1: Request this venue is offered for whichever requirement is selected', async ({
   page,
 }) => {
+  // 8.4's interim rule - a request only while the first requirement is selected, since every
+  // request carried it - ends here: a request names the requirement selected in the banner.
   await signIn(page, ACCOUNTS.coordinator)
   await findVenueFor(page, EXPO)
-  await expect(
-    venueCard(page, 'Grand Hall').getByRole('link', { name: 'Request this venue' }),
-  ).toBeVisible()
-
-  // A request would carry the plenary hall, so none is offered for the Breakout room's venues.
   await requirementChoice(page, BREAKOUT.name).click()
   await expectBreakoutRoomSearch(page)
-  await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
-
-  // Nor by the venue's record, opened from those results. Its read of the event is awaited in
-  // full and the page left to draw it, so the absence of a request is not read before one could
-  // appear.
-  const [eventRead] = await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith(`/events/${EXPO.id}`)),
-    venueCard(page, 'Seminar Room 2.1').getByRole('link', { name: 'Seminar Room 2.1' }).click(),
-  ])
-  await eventRead.finished()
-  await expect(page.getByRole('heading', { name: 'Seminar Room 2.1', level: 1 })).toBeVisible()
-  await page.evaluate(
-    () => new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn))),
-  )
-  await expect(page.getByRole('link', { name: 'Request this venue' })).toHaveCount(0)
-
-  // Back to the plenary hall, and the request is offered again.
-  await page.getByRole('link', { name: '← Venue catalogue' }).click()
-  await requirementChoice(page, PLENARY.name).click()
   await expect(
-    venueCard(page, 'Grand Hall').getByRole('link', { name: 'Request this venue' }),
+    venueCard(page, 'Seminar Room 2.1').getByRole('link', { name: 'Request this venue' }),
   ).toBeVisible()
+
+  // And by the venue's record, opened from those results.
+  await venueCard(page, 'Seminar Room 2.1').getByRole('link', { name: 'Seminar Room 2.1' }).click()
+  await expect(page.getByRole('heading', { name: 'Seminar Room 2.1', level: 1 })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Request this venue' })).toBeVisible()
 })
 
 test('8.4 AC11: two tabs keep their own requirement selected', async ({ page, context }) => {
