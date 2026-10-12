@@ -160,7 +160,7 @@ this tree's existing majority disagree, the tree wins — see [Standing divergen
   written for — a typo's `AttributeError`, a `KeyError` from a renamed field — into the branch
   built for a database failure.
 
-  *`expected` · one licensed counter-site, see Standing divergences*
+  *`expected` · two licensed counter-sites, see Standing divergences*
 
 - `taste` — **One `except` per exception type, narrowest first; never group types in a tuple.**
   Handlers diverge over time, and a grouped block lets the next person change one type's
@@ -303,6 +303,7 @@ in an unrelated PR.**
 | Attempt the operation and catch the failure | `bookings/service.py::_request_venue` looks for the requirement's request (`find_covering_booking`, story 12.5 AC11) and the venue's hold (`find_holding_booking`, story 12.1 AC3) before the insert | licensed exception — each refusal comes in the order the stories set and names the booking in the way, and the constraint behind each check (`uq_venue_bookings_one_per_requirement`, `ex_venue_bookings_no_double_booking`) is still caught after the insert and turned into the same refusal, so a request that races past the check is still refused |
 | One `except` per type | `venues/router.py::update_venue`, `coordination/router.py::assign_coordinator`, `auth/passwords.py::verify_password`, `dbtool/__main__.py::main` | pre-existing, not precedent |
 | `except Exception` is not a handler | `events/service.py::_replace_cover_image` | licensed exception — it deletes the file it has just written and re-raises, so nothing is swallowed |
+| `except Exception` is not a handler | `main.py::_sweep_holds_forever` | licensed exception (story 12.7, review of #103) — the hold timer logs any error a pass did not expect and runs the next pass, since an escaped error would end the background task for the life of the process; the database's own errors are still handled in `_sweep_holds_once`, and shutdown's `CancelledError` is not an `Exception` |
 | Private helper defined above its caller | helpers below their callers in `venues/service.py`, `bookings/service.py` and `dbtool/docs.py` | pre-existing, not precedent — `auth/router.py::_set_session_cookie` shows the intended shape |
 | `is_` on booleans | parameters that read as flags: `include_withdrawn` (`venues/service.py::list_venues`), `only_present` (`::_replace_characteristics`), `commit` (`common/audit.py::record_audit`, `notifications/service.py::notify`), `required` (`events/service.py::_check_registration`), and the `force` / `with_seed` / `with_docs` options in `dbtool/__main__.py` | licensed exception — each reads as a flag and the prefix would worsen it |
 | `from __future__ import annotations` | `db.py`, `config.py`, `main.py` | licensed exception — none defers an annotation |

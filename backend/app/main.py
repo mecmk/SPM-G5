@@ -42,9 +42,16 @@ def _sweep_holds_once() -> None:
 
 async def _sweep_holds_forever(interval_seconds: float) -> None:
     """Story 12.7 AC2/AC3: warn coordinators and expire lapsed holds on time, with nobody using
-    the app. Each pass runs in a worker thread, so the API keeps answering meanwhile."""
+    the app. Each pass runs in a worker thread, so the API keeps answering meanwhile. An error a
+    pass did not expect is logged and the timer carries on (review of #103): left to escape, it
+    would end the task, unseen until shutdown, and warnings and expiries would wait for someone
+    to open a bookings page. Shutdown's ``CancelledError`` is no ``Exception``, so it still stops
+    the loop."""
     while True:
-        await asyncio.to_thread(_sweep_holds_once)
+        try:
+            await asyncio.to_thread(_sweep_holds_once)
+        except Exception:
+            _log.exception("The hold sweep failed; it runs again on the next pass.")
         await asyncio.sleep(interval_seconds)
 
 

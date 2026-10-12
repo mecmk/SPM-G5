@@ -519,13 +519,14 @@ def _notify_coordinator_of_decision(db: Session, booking: VenueBooking, *, actor
         notification_type = NotificationType.BOOKING_APPROVED
         title = f'{venue_name} approved for "{event.name}"'
         period = _describe_held_period(booking.held_from, booking.held_until)
+        message = f"{actor.full_name} approved the request for {venue_name} {period}."
         # Story 12.7 AC1 (R13): the approval starts the hold, so the coordinator is told its
-        # expiry and that the event must be confirmed by then.
-        message = (
-            f"{actor.full_name} approved the request for {venue_name} {period}. It is held for the "
-            f"event until {_describe_moment(booking.hold_expires_at)}: if the event is not "
-            "confirmed by then, the hold expires and the venue is released."
-        )
+        # expiry and that the event must be confirmed by then - unless the event already is (AC4).
+        if booking.hold_completed_at is None:
+            message += (
+                f" It is held for the event until {_describe_moment(booking.hold_expires_at)}: if "
+                "the event is not confirmed by then, the hold expires and the venue is released."
+            )
     notify(
         db,
         recipient=event.assigned_coordinator,
@@ -560,7 +561,10 @@ def approve_booking(
     tentative hold, which expires at ``hold_expires_at`` unless the event is confirmed first. A
     booked period that has started can no longer be held (``HoldPeriodStarted``), and the expiry
     must be in the future and no later than the booked start (``InvalidHoldExpiry``). AC2: an
-    expiry inside the warning period counts as warned, since the approval notice names it.
+    expiry inside the warning period counts as warned, since the approval notice names it. AC4
+    (review of #103): for an event already Confirmed - an extra venue - there is no confirmation
+    left to wait for, and migration 018's trigger fires only as an event becomes Confirmed, so the
+    approval completes the hold itself.
     """
     moment = datetime.now(UTC)
     if booking.status != BookingStatus.PENDING:
@@ -573,7 +577,12 @@ def approve_booking(
     booking.decided_by_id = actor_id
     booking.decided_at = moment
     booking.hold_expires_at = hold_expires_at
-    booking.hold_reminded_at = moment if _is_inside_warning(hold_expires_at, now=moment) else None
+    if booking.event.status == EventStatus.CONFIRMED:
+        booking.hold_completed_at = moment
+    else:
+        booking.hold_reminded_at = (
+            moment if _is_inside_warning(hold_expires_at, now=moment) else None
+        )
     try:
         db.flush()
     except IntegrityError as exc:

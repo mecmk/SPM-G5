@@ -70,8 +70,9 @@ def create_booking_request(
     period, attendance, layout and required facilities. AC4: only the event's assigned
     coordinator may raise it. Story 11.1 AC2/AC7: a venue that does not suit the event needs a
     justification (422 without one). Story 12.5 AC11/AC12: the venue requirement it names must
-    be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC1/AC5:
-    its hold gets the default expiry; a booked period already started cannot be held (409).
+    be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC5: a
+    pending request has no expiry - its hold starts when Venue Staff approve it - but a booked
+    period already started cannot be requested, since it could never be approved (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
