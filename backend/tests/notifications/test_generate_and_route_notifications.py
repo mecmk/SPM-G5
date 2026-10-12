@@ -158,13 +158,9 @@ def foyer_suits_nimbus(db: Session) -> None:
 # --- AC1/AC5: each action notifies its related users, and nobody else ----------------------
 @pytest.mark.story("20.1", ac=1)
 @pytest.mark.story("20.1", ac=5)
-def test_submitting_a_request_notifies_its_coordinator(organiser_client, db: Session):
-    """With Carl inactive, 5.1 assigns every submission to Chloe (5.1 AC4). Olivia submitted it,
-    so she is not told (AC3)."""
-    db.execute(
-        text("UPDATE users SET is_active = false WHERE id = :id"), {"id": Users.COORDINATOR_2.id}
-    )
-    db.expire_all()
+def test_submitting_a_request_notifies_the_leads(organiser_client, db: Session):
+    """Story 5.4 AC9: no coordinator is assigned on submission, so the active Leads, who assign
+    it, are told. Olivia submitted it, so she is not told (AC3)."""
     draft = create_submittable_event_request(organiser_client)
     event_id = uuid.UUID(draft["id"])
 
@@ -173,7 +169,7 @@ def test_submitting_a_request_notifies_its_coordinator(organiser_client, db: Ses
     after = datetime.now(UTC)
 
     assert response.status_code == 200, response.text
-    assert _recipients(db, "EVENT_SUBMITTED", event_id=event_id) == [Users.COORDINATOR.id]
+    assert _recipients(db, "EVENT_SUBMITTED", event_id=event_id) == [Users.LEAD.id]
     row = _only_notification(db, "EVENT_SUBMITTED", event_id=event_id)
     assert (row.related_entity_type, row.related_entity_id) == ("event", event_id)
     assert draft["name"] in row.title

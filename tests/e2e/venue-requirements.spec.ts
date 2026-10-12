@@ -24,7 +24,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
-  assignedCoordinator,
+  assignByLead,
   corsHeaders,
   EVENTS,
   inFuture,
@@ -170,7 +170,7 @@ test('2.7 AC4: the event page lists each venue requirement with its times', asyn
   await expect(page).toHaveURL(MY_EVENTS_PATH)
 
   await page.goto(eventPath)
-  const coordinator = await assignedCoordinator(page)
+  const coordinator = await assignByLead(page)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, coordinator.account)
   await page.goto(eventPath)

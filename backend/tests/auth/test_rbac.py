@@ -104,6 +104,15 @@ MATRIX = {
         "update": 403,
         "delete": 403,
     },
+    # Story 5.4 AC1: the Lead reads venues like every internal role, and manages none.
+    "EVENT_COORDINATOR_LEAD": {
+        "list": 200,
+        "view": 200,
+        "refdata": 200,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
     "ATTENDEE": {
         "list": 403,
         "view": 403,
