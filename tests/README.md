@@ -48,6 +48,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/venue-catalogue.spec.ts` | 8.1 AC1–AC6, AC8, AC9, AC11 | browsing and filtering the venue catalogue |
 | `e2e/venue-detail.spec.ts` | 8.2 AC1–AC3 | a venue's record |
 | `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC8, AC10 | creating, editing and deleting venues, and their pictures |
+| `e2e/venue-requirement-search.spec.ts` | 8.4 AC1–AC11 | finding a venue for each of an event's venue requirements: the requirements in the catalogue's banner, the filters each one sets, the selection kept in the address, and who is offered a request |
 | `e2e/venue-calendar.spec.ts` | 9.1 AC1–AC3, AC5, AC7–AC10, AC12, AC13 | a venue's availability calendar |
 | `e2e/venue-suitability.spec.ts` | 11.1 AC1–AC3, AC5–AC7 | whether each catalogue venue suits the event, and why not; requesting one that does not, with a justification |
 | `e2e/booking-requests.spec.ts` | 12.1 AC1–AC4, AC14, AC15; 12.2 AC1, AC2, AC4 | requesting a venue for an event, and withdrawing the request |

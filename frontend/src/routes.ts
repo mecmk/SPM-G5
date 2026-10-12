@@ -15,10 +15,12 @@ export function venuePath(venueId: string): string {
 
 // f12.1.1 (story 12.1 AC15) and story 8.1 AC4: the venue catalogue's filters in the page
 // address. The event page's Find a venue writes them and 8.1's filter panel reads and writes them,
-// so both use these names. `event` names the event a venue is being found for. `search`,
+// so both use these names. `event` names the event a venue is being found for, and `requirement`
+// which of its venue requirements is selected in the catalogue's banner (story 8.4 AC4). `search`,
 // `capacity_max` and `withdrawn` are the panel's own (s8.1); Find a venue never sets them.
 export const VENUE_SEARCH_PARAMS = {
   event: 'event',
+  requirement: 'requirement',
   search: 'search',
   capacity: 'capacity',
   capacityMax: 'capacity_max',
@@ -34,6 +36,8 @@ export const VENUE_SEARCH_PARAMS = {
  *  reference codes (room layouts, facilities, accessibility features). */
 export interface VenueSearch {
   eventId?: string
+  /** Story 8.4 AC4: the event's venue requirement selected in the catalogue's banner. */
+  requirementId?: string
   /** Name or location contains this text. */
   search?: string
   capacity?: number
@@ -51,6 +55,7 @@ export interface VenueSearch {
 export function venueSearchParams(search: VenueSearch): URLSearchParams {
   const params = new URLSearchParams()
   if (search.eventId) params.set(VENUE_SEARCH_PARAMS.event, search.eventId)
+  if (search.requirementId) params.set(VENUE_SEARCH_PARAMS.requirement, search.requirementId)
   if (search.search) params.set(VENUE_SEARCH_PARAMS.search, search.search)
   if (search.capacity !== undefined) {
     params.set(VENUE_SEARCH_PARAMS.capacity, String(search.capacity))
@@ -74,6 +79,7 @@ export function venueSearchParams(search: VenueSearch): URLSearchParams {
 export function readVenueSearch(params: URLSearchParams): VenueSearch {
   return {
     eventId: params.get(VENUE_SEARCH_PARAMS.event) ?? undefined,
+    requirementId: params.get(VENUE_SEARCH_PARAMS.requirement) ?? undefined,
     search: searchText(params.get(VENUE_SEARCH_PARAMS.search)),
     capacity: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacity)),
     capacityMax: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacityMax)),

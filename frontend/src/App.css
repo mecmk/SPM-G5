@@ -3471,6 +3471,72 @@ label select[aria-invalid='true'],
   margin-bottom: 1.5rem;
 }
 
+/* Story 8.4: the event's venue requirements in that banner, side by side and one under another on
+   a phone. Each is a card-like choice; the selected one takes a ticked chip's border and tick. */
+.requirement-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.5rem;
+}
+
+.requirement-choices > li {
+  display: flex;
+}
+
+button.requirement-choice,
+.requirement-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-weight: 400;
+  text-align: left;
+  color: var(--text);
+}
+
+button.requirement-choice:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+button.requirement-choice[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+button.requirement-choice:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.requirement-choice-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* The selected requirement's tick, drawn like a ticked chip's so it takes the text colour in
+   either theme. */
+button.requirement-choice[aria-pressed='true'] .requirement-choice-name::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.25rem;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
+}
+
 /* Story 19.1: on a phone a change request's text takes the whole row, with its status and
    Withdraw beneath it, rather than being squeezed into a narrow column beside them. */
 @media (max-width: 640px) {
