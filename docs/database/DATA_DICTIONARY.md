@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-10 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-12 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -629,6 +629,9 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `venue_requirement_id` | `uuid` | yes | - | FK → `venue_requirements.id` | FK -> venue_requirements.id. The event's venue requirement this request is for (story 12.5 AC1), always one of the same event's requirements (checked in the service). NULL for an additional venue (AC5, AC7), and if the requirement is removed. |
 | `hold_expires_at` | `timestamp with time zone` | yes | - | - | When a pending request's hold on its venue expires (story 12.7 AC1): set when it is raised, 7 days later by default but never after held_from (AC5), and changed only by Venue Staff (AC7, AC9). Required for a PENDING or EXPIRED request (ck_venue_bookings_hold_expiry); kept once a request is decided. |
 | `hold_reminded_at` | `timestamp with time zone` | yes | - | - | When the event's coordinator was warned that the hold is about to expire (story 12.7 AC2). NULL until then, and again when Venue Staff move the expiry back outside the warning period. |
+| `hold_expiry_change_reason` | `text` | yes | - | - | Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the request and the event's booking list. NULL until the first change; the audit log keeps every change's reason. |
+| `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
+| `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 
 Allowed values:
 
@@ -639,6 +642,7 @@ Rules and indexes:
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
 - check `ck_venue_bookings_hold_expiry`: `CHECK (((status <> ALL (ARRAY['PENDING'::text, 'EXPIRED'::text])) OR (hold_expires_at IS NOT NULL)))`
+- check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
 - unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
