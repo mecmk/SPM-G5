@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
+from app.bookings.deps import ReleaseLapsedHolds
 from app.db import get_db
 from app.venues import service
 from app.venues.schemas import (
@@ -81,7 +82,7 @@ def list_venues(
     ]
 
 
-@router.get("/search", response_model=VenueSearchResult)
+@router.get("/search", response_model=VenueSearchResult, dependencies=[ReleaseLapsedHolds])
 def search_venues(
     db: DbSession,
     query: Annotated[VenueSearchQuery, Query()],
@@ -93,7 +94,9 @@ def search_venues(
 
     Story 11.1 AC1/AC6: with ``event``, each result says whether it suits that event, for its
     assigned coordinator - judged against the venue requirement ``requirement`` names (f11.1.1),
-    else on the event's attendance alone, as an additional venue is (story 12.5 AC5)."""
+    else on the event's attendance alone, as an additional venue is (story 12.5 AC5).
+
+    Story 12.7 AC11: a hold that has lapsed no longer keeps its venue out of the results."""
     try:
         return service.search_venues(db, query, actor=actor)
     except service.InvalidVenueSearch as exc:
@@ -119,7 +122,7 @@ def get_venue(venue_id: uuid.UUID, db: DbSession) -> VenueOut:
 @router.get(
     "/{venue_id}/calendar",
     response_model=list[VenueUnavailableWindowOut],
-    dependencies=[CanReadCalendar],
+    dependencies=[CanReadCalendar, ReleaseLapsedHolds],
 )
 def get_venue_calendar(
     venue_id: uuid.UUID,
@@ -128,7 +131,9 @@ def get_venue_calendar(
     ends_at: Annotated[AwareDatetime, Query()],
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
-    overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only."""
+    overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only.
+    Story 12.7 AC1: a booked window carries when its open hold expires; AC11: a lapsed one is
+    gone."""
     try:
         return service.get_venue_calendar(db, venue_id, starts_at=starts_at, ends_at=ends_at)
     except service.VenueNotFound:

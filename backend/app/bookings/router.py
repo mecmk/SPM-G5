@@ -1,7 +1,10 @@
 """HTTP endpoints for venue bookings: raising a request (story 12.1), the venue staff queue
 (story 13.1), approval and rejection (stories 13.2, 13.2.1), the read endpoints 13.2 AC3 /
-13.2.1 AC4 need to make the outcome visible to the requesting coordinator, and withdrawing a
-request (story 12.2).
+13.2.1 AC4 need to make the outcome visible to the requesting coordinator, withdrawing a
+request (story 12.2), and an approved booking's hold expiry (story 12.7).
+
+Story 12.7 AC3: every endpoint here expires the holds that have lapsed before it answers
+(``ReleaseLapsedHolds``), so none of them shows or acts on a lapsed one as approved.
 """
 
 from __future__ import annotations
@@ -15,8 +18,11 @@ from sqlalchemy.orm import Session
 from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.bookings import service
+from app.bookings.deps import ReleaseLapsedHolds
 from app.bookings.schemas import (
     BookableEvent,
+    BookingApproval,
+    BookingHoldUpdate,
     BookingOut,
     BookingOutcome,
     BookingQueue,
@@ -30,7 +36,7 @@ from app.bookings.schemas import (
 )
 from app.db import get_db
 
-router = APIRouter(prefix="/bookings", tags=["bookings"])
+router = APIRouter(prefix="/bookings", tags=["bookings"], dependencies=[ReleaseLapsedHolds])
 
 CanRead = Depends(require_permission(Permission.BOOKINGS_READ))
 CanRequest = Depends(require_permission(Permission.BOOKINGS_REQUEST))
@@ -64,7 +70,9 @@ def create_booking_request(
     period, attendance, layout and required facilities. AC4: only the event's assigned
     coordinator may raise it. Story 11.1 AC2/AC7: a venue that does not suit the event needs a
     justification (422 without one). Story 12.5 AC11/AC12: the venue requirement it names must
-    be the event's (404) and have no pending or approved request yet (409).
+    be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC5: a
+    pending request has no expiry - its hold starts when Venue Staff approve it - but a booked
+    period already started cannot be requested, since it could never be approved (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -90,6 +98,8 @@ def create_booking_request(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
         # 12.1 AC14: the venue is not open at those hours.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.JustificationRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
@@ -135,23 +145,66 @@ def get_booking(booking_id: uuid.UUID, db: DbSession) -> BookingOut:
         raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
 
 
-@router.post("/{booking_id}/approve", response_model=BookingOut)
-def approve_booking(
+@router.patch("/{booking_id}", response_model=BookingOut)
+def change_hold_expiry(
     booking_id: uuid.UUID,
+    payload: BookingHoldUpdate,
     db: DbSession,
     actor: Annotated[CurrentUser, CanDecide],
 ) -> BookingOut:
-    """AC1: sets the booking to confirmed, recording the approver and time. AC4: refused where
-    the period conflicts with an existing confirmed booking.
+    """Story 12.7 AC1/AC7: Venue Staff give an approved booking's open hold a new expiry, with a
+    reason (decided 12 Oct 2026; 422 without one), and its coordinator is told both. AC5: it must
+    be in the future and no later than the booked period starts (422). AC7: a booking with no open
+    hold - not approved, an expired one included, or completed by its event's confirmation - is
+    refused (409), saying why. AC9: Venue Staff only (403).
     """
     try:
         booking = service.get_booking_for_decision(db, booking_id)
     except service.BookingNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
     try:
-        service.approve_booking(db, booking, actor_id=actor.id)
+        service.change_hold_expiry(
+            db,
+            booking,
+            hold_expires_at=payload.hold_expires_at,
+            reason=payload.hold_expiry_change_reason,
+            actor=actor,
+        )
+    except service.NoOpenHold as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidHoldExpiry as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return BookingOut.model_validate(booking)
+
+
+@router.post("/{booking_id}/approve", response_model=BookingOut)
+def approve_booking(
+    booking_id: uuid.UUID,
+    payload: BookingApproval,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanDecide],
+) -> BookingOut:
+    """AC1: sets the booking to confirmed, recording the approver and time. AC4: refused where
+    the period conflicts with an existing confirmed booking.
+
+    Story 12.7 AC1/AC5: the approval starts the booking's hold, with the expiry Venue Staff give
+    (422 without one, or with one in the past or after the booked period starts); a booked period
+    that has already started can no longer be held (409).
+    """
+    try:
+        booking = service.get_booking_for_decision(db, booking_id)
+    except service.BookingNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+    try:
+        service.approve_booking(
+            db, booking, actor_id=actor.id, hold_expires_at=payload.hold_expires_at
+        )
     except service.BookingNotPending as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.HoldPeriodStarted as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidHoldExpiry as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.BookingConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)
@@ -215,7 +268,8 @@ def switch_booking_request(
     same venue requirement - the old one withdrawn and the new one requested together, or
     neither. Refused (403) for anyone but the event's assigned coordinator, (409) once the
     request is no longer pending, and as a new request is (409, or 422 for a venue that does
-    not suit without a justification) when the new venue cannot take it.
+    not suit without a justification) when the new venue cannot take it. Story 12.7 (Q26): a
+    booked period that has started is refused too (409), as for any new request.
     """
     try:
         replaced = service.get_booking_for_decision(db, booking_id)
@@ -240,6 +294,8 @@ def switch_booking_request(
     except service.VenueBlocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.JustificationRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None

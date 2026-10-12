@@ -236,6 +236,13 @@ def make_booking(
     return booking
 
 
+def approval_payload(*, expires_in: timedelta = timedelta(days=1)) -> dict:
+    """A valid POST /bookings/{id}/approve body (story 13.2). Since story 12.7 Venue Staff give
+    the approved booking's hold its expiry as they approve: a day from now unless said
+    otherwise, before any booking a test approves starts."""
+    return {"hold_expires_at": (datetime.now(UTC) + expires_in).isoformat()}
+
+
 def venue_payload(**overrides) -> dict:
     """A valid POST /venues body (story 8.3 AC1 minimum) with optional overrides."""
     n = next(_counter)

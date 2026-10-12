@@ -547,6 +547,16 @@
   gap: 1rem;
 }
 
+/* Story 12.7: when an approved booking's hold expires, with Change expiry beside it. */
+.booking-hold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 /* ---------- filter panel + results (story 8.1) ---------- */
 
 .catalogue-layout {
@@ -1466,6 +1476,7 @@ td.num {
 
 .badge-draft,
 .badge-withdrawn,
+.badge-expired,
 .badge-neutral {
   color: var(--neutral);
   background: var(--neutral-bg);

@@ -22,7 +22,7 @@ request is written. The request-time cases are tests/bookings/test_venue_hold.py
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from psycopg.errors import ExclusionViolation
@@ -36,8 +36,14 @@ from tests.support.seed import Bookings, Users, Venues
 
 
 def _approve(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) -> None:
-    """Stand-in for story 13.2's approve action - delegates to service.approve_booking."""
-    service.approve_booking(db, booking, actor_id=actor_id)
+    """Stand-in for story 13.2's approve action - delegates to service.approve_booking, with the
+    hold's expiry Venue Staff give since story 12.7 a day from now."""
+    service.approve_booking(
+        db,
+        booking,
+        actor_id=actor_id,
+        hold_expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    )
 
 
 def _probe(venue_id: uuid.UUID, starts_at: datetime, ends_at: datetime) -> VenueBooking:

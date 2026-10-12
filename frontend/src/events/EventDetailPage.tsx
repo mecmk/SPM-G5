@@ -38,7 +38,14 @@ import {
   VENUE_CATALOGUE_PATH,
   venueSearchPath,
 } from '../routes'
-import { bookingOutcomeLabels, PENDING_BOOKING_STATUS } from '../shared/bookingStatus'
+import {
+  bookingOutcomeLabels,
+  EXPIRED_BOOKING_STATUS,
+  HOLD_EXPIRED_LABEL,
+  HOLD_EXPIRES_LABEL,
+  openHoldExpiry,
+  PENDING_BOOKING_STATUS,
+} from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
   CHANGE_REQUESTABLE_STATUS,
@@ -104,7 +111,21 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     icon: 'x-circle',
     message: 'This booking was cancelled.',
   },
+  // Story 12.7 AC8: kept as history once its hold lapsed.
+  EXPIRED: {
+    label: 'Expired',
+    tone: 'neutral',
+    icon: 'clock',
+    message:
+      "This booking's hold expired before the event was confirmed, so the venue was released.",
+  },
 }
+
+/** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
+ * open is held for the event only until the event is confirmed or the hold expires, so it does
+ * not read as confirmed for good. */
+const OPEN_HOLD_MESSAGE =
+  'Venue Staff approved this booking. The venue is held for the event until it is confirmed, or until the hold expires.'
 
 /** One required facility, as its quantity and notes make it distinct. */
 function describeFacility(facility: RequiredFacility): string {
@@ -187,6 +208,11 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 13.2.2 AC1: once Venue Staff approve or reject a booking, its card also shows when they
  * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
  * booking queue words it.
+ *
+ * Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking's card shows when its
+ * open hold expires - and, once Venue Staff have changed it, who did, when and why (decided 12 Oct
+ * 2026). AC8: one whose hold expired stays on the list as Expired, with when it was approved and
+ * when it expired.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
@@ -879,6 +905,7 @@ export function EventDetailPage() {
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
               const outcomeLabels = bookingOutcomeLabels(booking.status)
+              const openHold = openHoldExpiry(booking)
               const forRequirement = bookedRequirementName(event, booking)
               return (
                 <div
@@ -926,12 +953,43 @@ export function EventDetailPage() {
                   <div className="booking-outcome-message">
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
-                      <p>{bookingOutcome.message}</p>
+                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
+                      {openHold && (
+                        <p>
+                          <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>
+                          <br />
+                          {formatDateTime(openHold)}
+                        </p>
+                      )}
+                      {/* Decided 12 Oct 2026: the latest change to that expiry - who, when, why. */}
+                      {openHold &&
+                        booking.hold_expiry_changed_by !== null &&
+                        booking.hold_expiry_changed_at !== null && (
+                          <p>
+                            <span className="small muted">
+                              Changed by {booking.hold_expiry_changed_by.full_name} on{' '}
+                              {formatDateTime(booking.hold_expiry_changed_at)}
+                            </span>
+                            <br />
+                            <span className="fact-label">Reason</span>
+                            <br />
+                            {booking.hold_expiry_change_reason}
+                          </p>
+                        )}
                       {booking.decided_at !== null && (
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
                           {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
+                      {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
+                      {booking.status === EXPIRED_BOOKING_STATUS && booking.hold_expires_at && (
+                        <p>
+                          <span className="fact-label">{HOLD_EXPIRED_LABEL}</span>
+                          <br />
+                          {formatDateTime(booking.hold_expires_at)}
                         </p>
                       )}
                       {booking.decision_reason !== null && (

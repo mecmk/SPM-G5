@@ -117,6 +117,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.ONBOARDING_DAY),
         str(Events.TRADE_FAIR),
         str(Events.PRICING_CLINIC),
+        str(Events.CRAFT_FAIR),
     }
 
 

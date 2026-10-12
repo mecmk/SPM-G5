@@ -35,7 +35,12 @@ from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
 from app.events.models import Event, EventStatus
-from tests.support.factories import make_booking, make_event, make_venue_requirement
+from tests.support.factories import (
+    approval_payload,
+    make_booking,
+    make_event,
+    make_venue_requirement,
+)
 from tests.support.seed import Bookings, Events, Users, Venues
 
 _SGT = timezone(timedelta(hours=8))
@@ -279,7 +284,7 @@ def test_approving_after_rejecting_is_refused(venue_staff_client):
     assert rejected.status_code == 200
 
     approve_attempt = venue_staff_client.post(
-        f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve"
+        f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve", json=approval_payload()
     )
 
     assert approve_attempt.status_code == 409
@@ -290,7 +295,9 @@ def test_approving_after_rejecting_is_refused(venue_staff_client):
 
 @pytest.mark.story("13.2.1", ac=5)
 def test_rejecting_after_approving_is_refused(venue_staff_client):
-    approved = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    approved = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
     assert approved.status_code == 200
 
     reject_attempt = venue_staff_client.post(
@@ -306,7 +313,9 @@ def test_rejecting_after_approving_is_refused(venue_staff_client):
 
 @pytest.mark.story("13.2.1", ac=5)
 def test_a_failed_rejection_does_not_create_an_audit_entry(venue_staff_client, db: Session):
-    approved = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    approved = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
     assert approved.status_code == 200
 
     reject_attempt = venue_staff_client.post(

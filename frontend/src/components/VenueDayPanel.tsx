@@ -20,7 +20,8 @@ export interface VenueDayPanelProps {
  * label ("Booked", "Held – pending", "Closed – Maintenance") so the difference is never carried
  * by colour alone, then, when the venue is blocked for longer than the event runs, the whole
  * blocked stretch. AC7/AC8: rows are separate, so several events on one day, or two that meet at
- * 12:00, are each listed. AC9: a multi-day booking's row holds only the part on this day.
+ * 12:00, are each listed. AC9: a multi-day booking's row holds only the part on this day. Story
+ * 12.7 AC1: an approved booking's row also says when its open hold expires.
  *
  * The list sits below the grid and legend, which on a phone is below the fold, so opening (or
  * switching to) a day scrolls it into view - only as far as needed. Focus is left on the day's
@@ -45,8 +46,12 @@ export function VenueDayPanel({ id, date, items, scrollIntoView = true }: VenueD
             <span className="calendar-day-kind">
               <Chip label={item.kindLabel} tone={item.tone} />
             </span>
-            {item.turnaround !== null && (
-              <span className="calendar-day-note small muted">{item.turnaround}</span>
+            {(item.turnaround !== null || item.holdExpiry !== null) && (
+              <span className="calendar-day-note small muted">
+                {item.turnaround}
+                {item.turnaround !== null && item.holdExpiry !== null && <br />}
+                {item.holdExpiry}
+              </span>
             )}
           </li>
         ))}
