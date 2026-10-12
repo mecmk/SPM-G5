@@ -13,7 +13,8 @@ INSERT INTO roles (code, name, is_internal, description) VALUES
     ('EVENT_COORDINATOR',  'Event Coordinator',       TRUE,  'Internal staff assigned to coordinate the overall planning of an event; main internal point of contact.'),
     ('VENUE_STAFF',        'Venue Staff',             TRUE,  'Internal staff responsible for venue information, availability, booking decisions and physical venue preparation.'),
     ('TECH_SUPPORT_STAFF', 'Technical Support Staff', TRUE,  'Internal staff responsible for equipment, technical requirements, reservations and on-site technical support.'),
-    ('ATTENDEE',           'Attendee',                FALSE, 'External participant who registers for and attends an event.')
+    ('ATTENDEE',           'Attendee',                FALSE, 'External participant who registers for and attends an event.'),
+    ('EVENT_COORDINATOR_LEAD', 'Event Coordinator Lead', TRUE, 'Internal staff who review newly submitted event requests and assign each to an Event Coordinator with the team''s workload in mind (story 5.4).')
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name, is_internal = EXCLUDED.is_internal, description = EXCLUDED.description;
 

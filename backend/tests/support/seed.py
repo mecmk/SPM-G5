@@ -37,6 +37,8 @@ class Users:
     TECH_SUPPORT = SeedUser(_u(6), "tech@connectsphere.example", "TECH_SUPPORT_STAFF", "Theo Tech")
     ATTENDEE = SeedUser(_u(7), "attendee@example.com", "ATTENDEE", "Aiden Attendee")
     INACTIVE = SeedUser(_u(8), "inactive@connectsphere.example", "VENUE_STAFF", "Ian Inactive")
+    # Story 5.4: reviews the unassigned queue and assigns events to coordinators.
+    LEAD = SeedUser(_u(9), "lead@connectsphere.example", "EVENT_COORDINATOR_LEAD", "Lena Lead")
 
     ALL_ACTIVE = (
         ORGANISER,
@@ -46,6 +48,7 @@ class Users:
         VENUE_STAFF,
         TECH_SUPPORT,
         ATTENDEE,
+        LEAD,
     )
     ONE_PER_ROLE = (ORGANISER, COORDINATOR, VENUE_STAFF, TECH_SUPPORT, ATTENDEE)
 

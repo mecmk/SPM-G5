@@ -10,6 +10,8 @@ export const ACCOUNTS = {
   organiser: 'organiser@acme.example',
   organiser2: 'organiser@nimbus.example',
   coordinator: 'coordinator@connectsphere.example',
+  // Story 5.4: the Event Coordinator Lead, who assigns submitted requests to coordinators.
+  lead: 'lead@connectsphere.example',
   coordinator2: 'coordinator2@connectsphere.example',
   venueStaff: 'venue@connectsphere.example',
   techSupport: 'tech@connectsphere.example',
