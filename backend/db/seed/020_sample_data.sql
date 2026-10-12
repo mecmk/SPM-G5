@@ -707,8 +707,9 @@ ON CONFLICT (id) DO NOTHING;
 -- ``now()`` default, so the queue's "Requested" timestamp (story 13.1 AC2) doesn't show every
 -- seed row landing in the same instant a bulk insert would otherwise give them.
 -- ---------------------------------------------------------------------
--- Story 12.7: each pending request holds its venue for a week from seeding (AC1), so a fresh or
--- re-seeded database never starts with a lapsed hold; the approved one has nothing to expire.
+-- Story 12.7 (decided 12 Oct 2026, Q17): each pending request holds its venue until the start of
+-- its booked period, setup included - the latest AC5 allows - so a development database that is
+-- not re-seeded keeps its sample requests pending; the approved one has nothing to expire.
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             hold_expires_at) VALUES
@@ -719,37 +720,37 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 13:00+08', '2026-11-25 18:00+08', 30, 15,
      60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL, '2026-09-03 16:47+08',
-     now() + INTERVAL '7 days'),
+     '2026-11-25 12:30+08'),
     ('44444444-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2026-12-03 09:00+08', '2026-12-03 17:00+08', 45, 45,
      180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL, '2026-09-12 11:03+08',
-     now() + INTERVAL '7 days'),
+     '2026-12-03 08:15+08'),
     ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
      300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL, NULL, '2026-09-18 16:30+08',
-     now() + INTERVAL '7 days'),
+     '2027-01-15 09:00+08'),
     -- Dedicated to the story 13.2 approve e2e test - see 3333..10/11's note above. Distinct
     -- venues, dates and events from every other booking, so approving them cannot conflict
     -- with anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000010', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-06-01 15:00+08', '2027-06-01 17:00+08', 30, 30,
      200, 'THEATRE', 'Stage mics and a roaming mic for Q&A.', 'PENDING', NULL, NULL, NULL, '2026-09-20 08:00+08',
-     now() + INTERVAL '7 days'),
+     '2027-06-01 14:30+08'),
     ('44444444-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000011', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-07-01 09:00+08', '2027-07-01 12:00+08', 45, 30,
      100, 'EXHIBITION', 'Demo booths and a screen for the product walkthrough.', 'PENDING', NULL, NULL, NULL, '2026-09-21 08:00+08',
-     now() + INTERVAL '7 days'),
+     '2027-07-01 08:15+08'),
     -- Dedicated to the story 13.2.1 reject e2e test - see 3333..16/17's note above. Distinct
     -- venues, dates and events from every other booking, so rejecting them cannot conflict with
     -- anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000016', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-08-01 18:00+08', '2027-08-01 22:00+08', 45, 45,
      220, 'BANQUET', 'Stage, PA system and a dance floor.', 'PENDING', NULL, NULL, NULL, '2026-09-22 08:00+08',
-     now() + INTERVAL '7 days'),
+     '2027-08-01 17:15+08'),
     ('44444444-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000017', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-09-01 09:00+08', '2027-09-01 17:00+08', 45, 30,
      100, 'EXHIBITION', 'Registration desk and campus tour meeting point.', 'PENDING', NULL, NULL, NULL, '2026-09-23 08:00+08',
-     now() + INTERVAL '7 days')
+     '2027-09-01 08:15+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -758,15 +759,6 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL;
-
--- Story 12.7 AC5: a hold never outlasts the start of its booked period.
-UPDATE venue_bookings
-SET hold_expires_at = held_from
-WHERE id IN ('44444444-0000-0000-0000-000000000002', '44444444-0000-0000-0000-000000000003',
-             '44444444-0000-0000-0000-000000000004', '44444444-0000-0000-0000-000000000005',
-             '44444444-0000-0000-0000-000000000006', '44444444-0000-0000-0000-000000000007',
-             '44444444-0000-0000-0000-000000000008')
-  AND hold_expires_at > held_from;
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
 -- Seminar Room 2.1, approved by Vera. Its e2e spec reads the "All required venues booked" state
