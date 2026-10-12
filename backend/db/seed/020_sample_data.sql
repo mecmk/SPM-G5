@@ -279,8 +279,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      'Reseller Pricing Clinic', 'Partner relations', 'A morning of pricing questions from reseller partners.', NULL, '2027-03-17 09:00+08', '2027-03-17 12:00+08', 60, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-09 09:00+08', '2026-10-11 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..34: in planning and assigned to Chloe; dedicated to story 12.7's e2e spec
-    -- (tests/e2e/venue-hold-expiry.spec.ts). Its one venue requirement's request expired before
-    -- Venue Staff approved it (below), and the spec requests a venue for it again. Dated July 2028.
+    -- (tests/e2e/venue-hold-expiry.spec.ts). Its one venue requirement's booking expired before
+    -- the event was confirmed (below), and the spec requests a venue for it again. Dated July 2028.
     ('33333333-0000-0000-0000-000000000034', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Community Craft Fair', 'Community event', 'Stalls for local makers, with a workshop corner.', NULL, '2028-07-12 10:00+08', '2028-07-12 16:00+08', 120, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
@@ -707,50 +707,50 @@ ON CONFLICT (id) DO NOTHING;
 -- ``now()`` default, so the queue's "Requested" timestamp (story 13.1 AC2) doesn't show every
 -- seed row landing in the same instant a bulk insert would otherwise give them.
 -- ---------------------------------------------------------------------
--- Story 12.7 (decided 12 Oct 2026, Q17): each pending request holds its venue until the start of
--- its booked period, setup included - the latest AC5 allows - so a development database that is
--- not re-seeded keeps its sample requests pending; the approved one has nothing to expire.
+-- Story 12.7 (the customer's hold, 12 Oct 2026, R11): the approved booking's hold lasts until the
+-- start of its booked period, setup included - the latest AC5 allows - so a development database
+-- that is not re-seeded keeps it booked. A pending request has no hold to expire.
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             hold_expires_at) VALUES
     ('44444444-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 09:00+08', '2026-11-25 18:00+08', 60, 60,
      350, 'THEATRE', 'Projector, sound system and stage required.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 10:00+08', NULL, '2026-09-03 16:00+08',
-     NULL),
+     '2026-11-25 08:00+08'),
     ('44444444-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2026-11-25 13:00+08', '2026-11-25 18:00+08', 30, 15,
      60, 'CLASSROOM', 'Breakout track B.', 'PENDING', NULL, NULL, NULL, '2026-09-03 16:47+08',
-     '2026-11-25 12:30+08'),
+     NULL),
     ('44444444-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2026-12-03 09:00+08', '2026-12-03 17:00+08', 45, 45,
      180, 'EXHIBITION', 'Wellness booths, a quiet room, and a stage for the keynote.', 'PENDING', NULL, NULL, NULL, '2026-09-12 11:03+08',
-     '2026-12-03 08:15+08'),
+     NULL),
     ('44444444-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000009', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-01-15 10:00+08', '2027-01-15 12:00+08', 60, 60,
      300, 'THEATRE', 'Livestream feed for remote offices; two roaming microphones.', 'PENDING', NULL, NULL, NULL, '2026-09-18 16:30+08',
-     '2027-01-15 09:00+08'),
+     NULL),
     -- Dedicated to the story 13.2 approve e2e test - see 3333..10/11's note above. Distinct
     -- venues, dates and events from every other booking, so approving them cannot conflict
     -- with anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000010', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-06-01 15:00+08', '2027-06-01 17:00+08', 30, 30,
      200, 'THEATRE', 'Stage mics and a roaming mic for Q&A.', 'PENDING', NULL, NULL, NULL, '2026-09-20 08:00+08',
-     '2027-06-01 14:30+08'),
+     NULL),
     ('44444444-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000011', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-07-01 09:00+08', '2027-07-01 12:00+08', 45, 30,
      100, 'EXHIBITION', 'Demo booths and a screen for the product walkthrough.', 'PENDING', NULL, NULL, NULL, '2026-09-21 08:00+08',
-     '2027-07-01 08:15+08'),
+     NULL),
     -- Dedicated to the story 13.2.1 reject e2e test - see 3333..16/17's note above. Distinct
     -- venues, dates and events from every other booking, so rejecting them cannot conflict with
     -- anything and cannot affect any other test's assertions.
     ('44444444-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000016', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000003', '2027-08-01 18:00+08', '2027-08-01 22:00+08', 45, 45,
      220, 'BANQUET', 'Stage, PA system and a dance floor.', 'PENDING', NULL, NULL, NULL, '2026-09-22 08:00+08',
-     '2027-08-01 17:15+08'),
+     NULL),
     ('44444444-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000017', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2027-09-01 09:00+08', '2027-09-01 17:00+08', 45, 30,
      100, 'EXHIBITION', 'Registration desk and campus tour meeting point.', 'PENDING', NULL, NULL, NULL, '2026-09-23 08:00+08',
-     '2027-09-01 08:15+08')
+     NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -758,24 +758,26 @@ ON CONFLICT (id) DO UPDATE SET
     required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
-    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL;
+    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL;
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
 -- Seminar Room 2.1, approved by Vera. Its e2e spec reads the "All required venues booked" state
 -- and requests an additional venue beside it. Not Boardroom 3.4, which story 8.3's tests delete.
+-- Story 12.7 (R11): its hold lasts until its booked start, as the approved booking's above does.
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             venue_requirement_id, hold_expires_at) VALUES
     ('44444444-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000030', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2028-06-06 09:00+08', '2028-06-06 12:00+08', 0, 0,
      12, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-08 15:00+08', NULL, '2026-10-08 11:00+08',
-     'cccccccc-0000-0000-0030-000000000001', NULL),
+     'cccccccc-0000-0000-0030-000000000001', '2028-06-06 09:00+08'),
     -- Story 12.7: the Community Craft Fair's (3333..34) Craft hall, Exhibition Foyer, requested on
-    -- 28 Sep 2026 and not approved within its week, so it expired on 5 Oct 2026 at 10:00. Its e2e
-    -- spec finds the request in the event's history and requests the foyer again.
+    -- 28 Sep 2026 and approved by Vera the next day with a hold until 5 Oct 2026 at 10:00. The
+    -- event was not confirmed by then, so the hold expired. Its e2e spec finds the booking in the
+    -- event's history and requests the foyer again.
     ('44444444-0000-0000-0000-000000000010', '33333333-0000-0000-0000-000000000034', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000003', '2028-07-12 10:00+08', '2028-07-12 16:00+08', 0, 0,
-     120, 'EXHIBITION', E'Required facilities: Wi-Fi.\nThirty stalls and a workshop corner.', 'EXPIRED', NULL, '2026-10-05 10:00+08', NULL, '2026-09-28 10:00+08',
+     120, 'EXHIBITION', E'Required facilities: Wi-Fi.\nThirty stalls and a workshop corner.', 'EXPIRED', '11111111-0000-0000-0000-000000000005', '2026-09-29 10:00+08', NULL, '2026-09-28 10:00+08',
      'cccccccc-0000-0000-0034-000000000001', '2026-10-05 10:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
@@ -785,7 +787,7 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL;
 
 -- Story 12.5: the earlier seeded bookings name the requirement they were made for: each its
 -- event's Main venue (2.7 AC13), as migration 017 links bookings made before it, except Nimbus's

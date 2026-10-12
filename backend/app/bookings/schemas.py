@@ -111,12 +111,23 @@ class BookingRejection(BaseModel):
         return _strip(value)
 
 
+class BookingApproval(BaseModel):
+    """Story 13.2 AC1, with story 12.7 AC1 (the customer's hold, 12 Oct 2026): approving a request
+    starts its tentative hold, and Venue Staff set when it expires - there is no default, so it is
+    required (422 without one). It names its time zone, since a wall-clock time is no moment until
+    it does. Whether it is in the future and before the booked period starts (AC5) needs the
+    booking, so the service checks that."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hold_expires_at: AwareDatetime
+
+
 class BookingHoldUpdate(BaseModel):
-    """Story 12.7 AC1/AC7: the new expiry Venue Staff give a pending request's hold. It names its
-    time zone, since a wall-clock time is no moment until it does (422 without one). Whether it is
-    in the future and before the booked period starts (AC5) needs the booking, so the service
-    checks that. Decided 12 Oct 2026 (Q27, Q29): a reason is mandatory, as a rejection's is -
-    blank or whitespace-only does not count."""
+    """Story 12.7 AC1/AC7: the new expiry Venue Staff give an approved booking's open hold. It
+    names its time zone (422 without one). Whether it is in the future and before the booked
+    period starts (AC5) needs the booking, so the service checks that. Decided 12 Oct 2026 (Q27,
+    Q29): a reason is mandatory, as a rejection's is - blank or whitespace-only does not count."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,8 +173,11 @@ class BookingOut(BaseModel):
     requirement_notes: str | None
     suitability_override_reason: str | None
     status: str
-    # Story 12.7 AC1: when the request's hold on its venue expires, unless approved first.
+    # Story 12.7 AC1: when an approved booking's hold expires unless its event is confirmed first,
+    # and the moment it expired once EXPIRED; None while pending. AC4: when the event's
+    # confirmation completed it; None while it is open.
     hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
     # Story 12.7 AC7, decided 12 Oct 2026 (Q30): the latest change to that expiry - why, by whom
     # and when; all None until Venue Staff make one.
     hold_expiry_change_reason: str | None
@@ -209,8 +223,12 @@ class BookingQueueEntry(BaseModel):
     decision_reason: str | None
     created_at: datetime
     decided_at: datetime | None
-    # Story 12.7 AC1: when a pending request's hold expires, on its queue entry.
+    # Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
+    # the event's confirmation completed it; R14: the booked start, which the Approve dialog's
+    # expiry may not pass (AC5).
     hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
+    held_from: datetime
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -233,6 +251,8 @@ class BookingQueueEntry(BaseModel):
             created_at=booking.created_at,
             decided_at=booking.decided_at,
             hold_expires_at=booking.hold_expires_at,
+            hold_completed_at=booking.hold_completed_at,
+            held_from=booking.held_from,
         )
 
 
@@ -247,7 +267,7 @@ class BookingStatusCounts(BaseModel):
     rejected: int
     withdrawn: int
     cancelled: int
-    # Story 12.7 AC3: requests whose hold lapsed before Venue Staff approved them.
+    # Story 12.7 AC3: approved bookings whose hold lapsed before their event was confirmed.
     expired: int
 
     @classmethod
@@ -291,8 +311,10 @@ class BookingOutcome(BaseModel):
     # Story 11.1 AC6: why the coordinator requested a venue that did not suit, for the assigned
     # coordinator on the event page. None when the venue suited.
     suitability_override_reason: str | None
-    # Story 12.7 AC1/AC8: when the hold expires while pending, and when it expired once EXPIRED.
+    # Story 12.7 AC1/AC8: when an approved booking's hold expires, and when it expired once
+    # EXPIRED; AC4: when the event's confirmation completed it.
     hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
     # Story 12.7 AC7, decided 12 Oct 2026 (Q30): the latest change to that expiry - why, by whom
     # and when - for the coordinator's card on the event page; all None until one is made.
     hold_expiry_change_reason: str | None
@@ -319,6 +341,7 @@ class BookingOutcome(BaseModel):
             decision_reason=booking.decision_reason,
             suitability_override_reason=booking.suitability_override_reason,
             hold_expires_at=booking.hold_expires_at,
+            hold_completed_at=booking.hold_completed_at,
             hold_expiry_change_reason=booking.hold_expiry_change_reason,
             hold_expiry_changed_by=(
                 None

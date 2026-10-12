@@ -319,7 +319,8 @@ export interface VenueUnavailableWindow {
   booking_ends_at: string | null
   reason: string
   label: string
-  /** Story 12.7 AC1: when a held request's hold expires; null for a booking or a closure. */
+  /** Story 12.7 AC1: when an approved booking's open hold expires; null for a pending request, a
+   * hold its event's confirmation completed, or a closure. */
   hold_expires_at: string | null
 }
 

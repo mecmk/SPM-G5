@@ -21,6 +21,8 @@ import { BOOKING_REQUESTS_PATH } from '../routes'
 import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
+  HOLD_EXPIRES_LABEL,
+  openHoldExpiry,
   PENDING_BOOKING_STATUS,
 } from '../shared/bookingStatus'
 import {
@@ -32,6 +34,7 @@ import {
   nowAsInput,
 } from '../shared/format'
 import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
+import { holdExpiryRefusal } from './holdExpiry'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -97,12 +100,14 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  * Story 11.1 AC3: a request for a venue that did not suit the event shows the coordinator's
  * justification, from the booking already loaded here.
  *
- * Story 12.7 AC1/AC7: a pending request shows when its hold expires, and Change expiry gives it a
- * new one, which the request's day in the calendar shows once saved. AC5: the dialog refuses a
- * time that is not in the future, or is after the booked period starts, before sending it. An
- * expired request shows when its hold expired instead (AC3). Decided 12 Oct 2026: every change
- * needs a reason, refused blank before sending, and the latest change - who made it, when and
- * why - shows beside the expiry.
+ * Story 12.7 (the customer's hold, 12 Oct 2026): approving starts the booking's tentative hold,
+ * so the Approve dialog asks when it expires, with no default (AC1). An approved booking whose
+ * hold is open shows its expiry, and Change expiry gives it a new one, which the request's day in
+ * the calendar shows once saved (AC7). AC5: both dialogs refuse no expiry, a time that is not in
+ * the future, or one after the booked period starts, before sending it. An expired booking shows
+ * when its hold expired instead (AC3). Decided 12 Oct 2026: every change needs a reason, refused
+ * blank before sending, and the latest change - who made it, when and why - shows beside the
+ * expiry.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -111,6 +116,7 @@ export function BookingRequestDetailPage() {
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
+  const [approveExpiry, setApproveExpiry] = useState('')
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
   const [isConfirmingReject, setIsConfirmingReject] = useState(false)
@@ -146,6 +152,7 @@ export function BookingRequestDetailPage() {
 
   function askToApprove() {
     setApproveError(null)
+    setApproveExpiry('')
     setIsConfirmingApprove(true)
   }
 
@@ -153,12 +160,22 @@ export function BookingRequestDetailPage() {
     setIsConfirmingApprove(false)
   }
 
+  /** Story 12.7 AC1/AC5: the hold's expiry is checked before the approval is sent. */
   async function confirmApprove() {
     if (!booking || !event) return
+    const refusal = holdExpiryRefusal(approveExpiry, booking.held_from)
+    if (refusal !== null) {
+      setApproveError(refusal)
+      return
+    }
     setIsApproving(true)
     setApproveError(null)
     try {
-      const updated = await approveBooking(booking.id, event.name)
+      const updated = await approveBooking(
+        booking.id,
+        { hold_expires_at: inputToInstant(approveExpiry) },
+        event.name,
+      )
       setBooking(updated)
       setIsConfirmingApprove(false)
     } catch (err) {
@@ -200,9 +217,10 @@ export function BookingRequestDetailPage() {
 
   /** Story 12.7 AC7: the dialog opens on the current expiry, to move from. */
   function askToChangeExpiry() {
-    if (!booking?.hold_expires_at) return
+    const openHold = booking && openHoldExpiry(booking)
+    if (!openHold) return
     setExpiryError(null)
-    setNewExpiry(instantToInput(booking.hold_expires_at))
+    setNewExpiry(instantToInput(openHold))
     setExpiryReason('')
     setIsChangingExpiry(true)
   }
@@ -214,12 +232,8 @@ export function BookingRequestDetailPage() {
   /** Story 12.7 AC5: what the server would refuse is refused here first, with nothing sent -
    * the reason too (decided 12 Oct 2026). */
   function expiryRefusal(heldFrom: string): string | null {
-    if (newExpiry === '') return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_REQUIRED.message
-    const expiresAt = Date.parse(inputToInstant(newExpiry))
-    if (expiresAt <= Date.now()) return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_IN_PAST.message
-    if (expiresAt > Date.parse(heldFrom)) {
-      return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_AFTER_START.message
-    }
+    const refusal = holdExpiryRefusal(newExpiry, heldFrom)
+    if (refusal !== null) return refusal
     if (expiryReason.trim() === '') {
       return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_REASON_REQUIRED.message
     }
@@ -269,9 +283,10 @@ export function BookingRequestDetailPage() {
     event.venue_requirements.find((requirement) => requirement.id === booking.venue_requirement_id)
       ?.facilities ?? []
   const isPending = booking.status === PENDING_BOOKING_STATUS
-  // Story 12.7 AC1/AC3: a pending request's hold, or the one an expired request lost.
+  // Story 12.7 AC1/AC3: an approved booking's open hold, or the one an expired booking lost.
+  const openHold = openHoldExpiry(booking)
   const shownHold =
-    isPending || booking.status === EXPIRED_BOOKING_STATUS ? booking.hold_expires_at : null
+    openHold ?? (booking.status === EXPIRED_BOOKING_STATUS ? booking.hold_expires_at : null)
 
   return (
     <div className="page page-wide">
@@ -300,7 +315,7 @@ export function BookingRequestDetailPage() {
         <section className="subtle-block booking-hold" aria-labelledby="booking-hold-heading">
           <div>
             <h2 id="booking-hold-heading" className="fact-label">
-              {isPending ? 'Hold expires' : 'Hold expired'}
+              {openHold ? HOLD_EXPIRES_LABEL : 'Hold expired'}
             </h2>
             <p>{formatDateTime(shownHold)}</p>
             {/* Decided 12 Oct 2026: the latest change to the expiry - who, when and why. */}
@@ -318,7 +333,7 @@ export function BookingRequestDetailPage() {
               </>
             )}
           </div>
-          {isPending && (
+          {openHold && (
             <button type="button" className="secondary button-sm" onClick={askToChangeExpiry}>
               Change expiry
             </button>
@@ -453,6 +468,22 @@ export function BookingRequestDetailPage() {
             {venue.name} will be booked for {event.name} from {formatDate(booking.starts_at)},{' '}
             {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}.
           </p>
+          {/* Story 12.7 AC1/AC5: the hold this approval starts, and when it expires. */}
+          <p>
+            It is held until the event is confirmed. Choose when the hold expires if it is not, no
+            later than the start of the booked period, {formatDateTime(booking.held_from)}.
+          </p>
+          <label>
+            {HOLD_EXPIRES_LABEL}
+            <input
+              type="datetime-local"
+              value={approveExpiry}
+              min={nowAsInput()}
+              max={instantToInput(booking.held_from)}
+              onChange={(event) => setApproveExpiry(event.target.value)}
+              disabled={isApproving}
+            />
+          </label>
         </ConfirmDialog>
       )}
 
@@ -491,8 +522,8 @@ export function BookingRequestDetailPage() {
           onCancel={cancelChangeExpiry}
         >
           <p>
-            {venue.name} is held for {event.name} until Venue Staff approve the request or its hold
-            expires. The hold can expire no later than the start of its booked period,{' '}
+            {venue.name} is held for {event.name} until the event is confirmed or its hold expires.
+            The hold can expire no later than the start of its booked period,{' '}
             {formatDateTime(booking.held_from)}.
           </p>
           <label>

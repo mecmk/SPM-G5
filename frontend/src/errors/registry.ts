@@ -539,14 +539,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'This request cannot be withdrawn in its current state.',
   },
 
-  // Story 12.7: Venue Staff changing when a pending request's hold expires. The server refuses one
-  // that is not in the future or is after the booked period starts (AC5), or a request no longer
-  // pending (AC7), each with a sentence of its own; this is the fallback and the notice's title.
+  // Story 12.7: Venue Staff setting when a hold expires, as they approve or later. The server
+  // refuses one that is not in the future or is after the booked period starts (AC5), or a booking
+  // with no open hold (AC7), each with a sentence of its own; this is the fallback and the
+  // notice's title.
   BOOKING_HOLD_EXPIRY_REFUSED: {
     title: 'Expiry not changed',
     message: "This hold's expiry could not be changed.",
   },
-  // Story 12.7 AC5: checks the Change expiry dialog makes before anything is sent.
+  // Story 12.7 AC5: checks the Approve and Change expiry dialogs make before anything is sent.
   BOOKING_HOLD_EXPIRY_REQUIRED: {
     title: 'Expiry needed',
     message: 'Choose when the hold should expire.',

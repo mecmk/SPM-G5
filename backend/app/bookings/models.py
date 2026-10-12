@@ -23,7 +23,7 @@ from app.venues.models import RoomLayout, Venue
 
 class BookingStatus:
     """Values allowed by ``ck_venue_bookings_status``. PENDING and APPROVED hold the venue (story
-    12.1 AC3); EXPIRED is a pending request whose hold lapsed before Venue Staff approved it
+    12.1 AC3); EXPIRED is an approved booking whose hold lapsed before its event was confirmed
     (story 12.7 AC3)."""
 
     PENDING = "PENDING"
@@ -72,11 +72,14 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     venue_requirement_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venue_requirements.id", ondelete="SET NULL")
     )
-    # Story 12.7 AC1: when a pending request's hold on its venue expires - set when it is raised,
-    # changed only by Venue Staff; ck_venue_bookings_hold_expiry requires it while PENDING or
-    # EXPIRED. AC2: when the coordinator was warned it is about to, NULL until then.
+    # Story 12.7 AC1: when an approved booking's hold on its venue expires unless its event is
+    # confirmed first - set by Venue Staff as they approve, changed only by them; never on a
+    # pending request, always on an EXPIRED one (ck_venue_bookings_hold_expiry). AC2: when the
+    # coordinator was warned it is about to, NULL until then. AC4: when the event's confirmation
+    # completed it (trg_events_complete_venue_holds), NULL while it is open.
     hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     hold_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hold_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 12.7 AC7, decided 12 Oct 2026: the latest change Venue Staff made to the expiry - its
     # reason, who made it and when, set together or not at all
     # (ck_venue_bookings_hold_expiry_change). NULL until the first change; the audit log keeps

@@ -396,8 +396,8 @@ class VenueUnavailableWindowOut(BaseModel):
     the booking's own requested period inside it - which may cover only part of its event's own
     schedule - so a day's list can show both; None for a closure, which has no booking.
 
-    Story 12.7 AC1: ``hold_expires_at`` is when a pending request's hold (HELD) expires; None for
-    a confirmed booking or a closure, which have none."""
+    Story 12.7 AC1: ``hold_expires_at`` is when an approved booking's open hold (BOOKED) expires;
+    None for a pending request, a hold its event's confirmation completed, or a closure."""
 
     starts_at: datetime
     ends_at: datetime

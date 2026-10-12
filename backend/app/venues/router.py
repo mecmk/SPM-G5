@@ -132,7 +132,8 @@ def get_venue_calendar(
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
     overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only.
-    Story 12.7 AC1: a held window carries when its hold expires; AC11: a lapsed one is gone."""
+    Story 12.7 AC1: a booked window carries when its open hold expires; AC11: a lapsed one is
+    gone."""
     try:
         return service.get_venue_calendar(db, venue_id, starts_at=starts_at, ends_at=ends_at)
     except service.VenueNotFound:

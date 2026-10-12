@@ -68,20 +68,22 @@ Each is written before the action's audit entry and commit, so a refused or fail
 none, and a decision that loses the row lock to another sends none (AC6).
 
 Story 12.7 - "As a Venue Staff member I want every tentative venue hold to have an expiry date
-and time": a pending request's hold expires at ``hold_expires_at``, set when it is raised
-(``_request_venue``, for a new request and a switched one alike, AC1, AC5) and moved only by Venue
-Staff (``change_hold_expiry``, AC7, AC9), with a reason each time, kept on the request with who
-made the change and when (decided 12 Oct 2026, Q27-Q31). Venue Staff must approve the request
-before then (AC4) - the "required action", assumed until the customer answers Q15.
-``expire_lapsed_holds`` makes a lapsed request EXPIRED, which, like REJECTED, holds nothing and
-covers no requirement (AC3, AC6, AC11), and tells its coordinator; ``remind_expiring_holds`` warns
-the coordinator once, a set time before (AC2). Both run together as ``sweep_holds``, on a timer
-while the API runs (``app/main.py``) and before any request whose answer a lapsed hold would change
-(``app/bookings/deps.py``), so a hold is released at its expiry, not at the next tick. Approving,
-switching and changing an expiry check the row they lock as well, on their own clock: a hold that
-lapsed since that sweep is expired there and then (AC4, AC7, Q12). Rows are taken
-``FOR UPDATE SKIP LOCKED``, so two sweeps never expire or warn about one request twice, and an
-approval and an expiry of one request are serialized by the row lock (AC10).
+and time", as the customer described the hold on 12 Oct 2026 (Q34, Q44, Q45, Q48, Q51): the hold
+is an approved booking waiting for its event to be confirmed. Venue Staff set its expiry,
+``hold_expires_at``, as they approve (``approve_booking``, AC1, AC5) - there is no default - and
+may move it (``change_hold_expiry``, AC7, AC9), with a reason each time, kept on the booking with
+who made the change and when (decided 12 Oct 2026, Q27-Q31). The coordinator confirming the event
+completes it: migration 018's trigger sets ``hold_completed_at`` when the event becomes CONFIRMED
+(AC4). A pending request still blocks its slot (12.1 AC3) but has no hold to expire.
+``expire_lapsed_holds`` makes an approved booking whose open hold lapsed EXPIRED, which, like
+REJECTED, holds nothing and covers no requirement (AC3, AC6, AC11), and tells its coordinator;
+``remind_expiring_holds`` warns the coordinator once, a set time before (AC2). Both run together as
+``sweep_holds``, on a timer while the API runs (``app/main.py``) and before any request whose answer
+a lapsed hold would change (``app/bookings/deps.py``), so a hold is released at its expiry, not at
+the next tick. Changing an expiry checks the row it locks as well, on its own clock: a hold that
+lapsed since that sweep is expired there and then (AC7). Rows are taken ``FOR UPDATE SKIP LOCKED``,
+so two sweeps never expire or warn about one booking twice, and the event's confirmation and the
+expiry of one hold are serialized by the row lock (AC10).
 """
 
 from __future__ import annotations
@@ -90,7 +92,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -190,14 +192,20 @@ JUSTIFICATION_REQUIRED_MESSAGE = (
 )
 
 # Story 12.7 AC5: a hold expires in the future and no later than its booked period starts, so a
-# request whose booked period has already started cannot be held at all.
+# request whose booked period has already started can be neither raised nor approved.
 HOLD_PERIOD_STARTED_MESSAGE = (
     "This booked period has already started, so the venue cannot be held for it."
 )
 HOLD_EXPIRY_IN_PAST_MESSAGE = "The hold must expire in the future."
 HOLD_EXPIRY_AFTER_START_MESSAGE = "The hold must expire by the start of the booked period, {start}."
-# Story 12.7 AC7: ``BOOKING_NOT_PENDING_MESSAGE``'s action for a request no longer pending.
-CHANGE_HOLD_EXPIRY_ACTION = "given a new expiry"
+# Story 12.7 AC7: only an approved booking's open hold takes a new expiry.
+NO_HOLD_MESSAGE = "This request is {status}, so it has no hold to give a new expiry."
+HOLD_COMPLETED_MESSAGE = (
+    "This booking's hold was completed when its event was confirmed, so it has no expiry to change."
+)
+NO_HOLD_SINCE_APPROVAL_MESSAGE = (
+    "This booking was approved before holds expired, so it has no expiry to change."
+)
 
 # AC1 is worded "an approved event"; the schema's rule is approved *or later* (see the
 # venue_bookings.event_id comment in 001_initial_schema.sql), because an event already in
@@ -340,8 +348,14 @@ class HoldPeriodStarted(ValueError):
 
 
 class InvalidHoldExpiry(ValueError):
-    """Story 12.7 AC5: a new expiry is not in the future, or is after the booked period starts;
-    the message says which."""
+    """Story 12.7 AC5: an expiry is not in the future, or is after the booked period starts; the
+    message says which."""
+
+
+class NoOpenHold(ValueError):
+    """Story 12.7 AC7: the booking has no open hold whose expiry could change - it is not
+    approved, its event's confirmation completed the hold, or it was approved before holds
+    expired. The message says which."""
 
 
 class BookingConflict(ValueError):
@@ -505,7 +519,13 @@ def _notify_coordinator_of_decision(db: Session, booking: VenueBooking, *, actor
         notification_type = NotificationType.BOOKING_APPROVED
         title = f'{venue_name} approved for "{event.name}"'
         period = _describe_held_period(booking.held_from, booking.held_until)
-        message = f"{actor.full_name} approved the request for {venue_name} {period}."
+        # Story 12.7 AC1 (R13): the approval starts the hold, so the coordinator is told its
+        # expiry and that the event must be confirmed by then.
+        message = (
+            f"{actor.full_name} approved the request for {venue_name} {period}. It is held for the "
+            f"event until {_describe_moment(booking.hold_expires_at)}: if the event is not "
+            "confirmed by then, the hold expires and the venue is released."
+        )
     notify(
         db,
         recipient=event.assigned_coordinator,
@@ -521,7 +541,11 @@ def _notify_coordinator_of_decision(db: Session, booking: VenueBooking, *, actor
 
 
 def approve_booking(
-    db: Session, booking: VenueBooking, *, actor_id: uuid.UUID, now: datetime | None = None
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor_id: uuid.UUID,
+    hold_expires_at: datetime,
 ) -> None:
     """13.2 AC1: approve ``booking``, recording the approver and time. Refuses a request that
     is not PENDING (``BookingNotPending``) or whose period would double-book its venue
@@ -532,19 +556,24 @@ def approve_booking(
     that should never fire. Callers must fetch ``booking`` via ``get_booking_for_decision`` -
     see the module docstring's concurrency note.
 
-    Story 12.7 AC4: from its hold's expiry on, a request can no longer be approved, on the clock
-    ``now`` reads - the current time unless the caller gives one. A hold that lapsed since the
-    last sweep is expired here and refused as EXPIRED (AC10: the first to be saved wins).
+    Story 12.7 AC1/AC5 (the customer's hold, 12 Oct 2026): approval starts the booking's
+    tentative hold, which expires at ``hold_expires_at`` unless the event is confirmed first. A
+    booked period that has started can no longer be held (``HoldPeriodStarted``), and the expiry
+    must be in the future and no later than the booked start (``InvalidHoldExpiry``). AC2: an
+    expiry inside the warning period counts as warned, since the approval notice names it.
     """
-    moment = datetime.now(UTC) if now is None else now
+    moment = datetime.now(UTC)
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="approved")
-    if _expire_if_lapsed(db, booking, now=moment):
-        raise BookingNotPending(booking, action="approved")
+    if booking.held_from <= moment:
+        raise HoldPeriodStarted()
+    _check_hold_expiry(booking, hold_expires_at, now=moment)
 
     booking.status = BookingStatus.APPROVED
     booking.decided_by_id = actor_id
     booking.decided_at = moment
+    booking.hold_expires_at = hold_expires_at
+    booking.hold_reminded_at = moment if _is_inside_warning(hold_expires_at, now=moment) else None
     try:
         db.flush()
     except IntegrityError as exc:
@@ -897,8 +926,8 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     the second, which becomes the same ``RequirementAlreadyRequested``.
 
     Story 12.7: lapsed holds are expired first, so one never blocks the request (AC3, AC6, AC11).
-    The request's hold expires after the default time, but no later than its booked period starts
-    (AC1, AC5); a booked period that has already started cannot be held (``HoldPeriodStarted``).
+    A booked period that has already started is refused (``HoldPeriodStarted``): the request
+    could never be approved, since its hold would need an expiry before that start (AC5).
     """
     now = datetime.now(UTC)
     expire_lapsed_holds(db, now=now)
@@ -911,12 +940,7 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
 
 
 def switch_booking_request(
-    db: Session,
-    replaced: VenueBooking,
-    data: BookingSwitchIn,
-    *,
-    actor: User,
-    now: datetime | None = None,
+    db: Session, replaced: VenueBooking, data: BookingSwitchIn, *, actor: User
 ) -> VenueBooking:
     """Story 12.5, decided 11 Oct 2026: switch the pending request ``replaced`` to another
     venue, for the same venue requirement (an additional venue stays one). Callers fetch
@@ -930,17 +954,12 @@ def switch_booking_request(
     withdrawal and the new request written, in one commit, so a venue that cannot take the
     request leaves the old one as it was.
 
-    Story 12.7, decided 12 Oct 2026 (Q12, Q26): on the clock ``now`` reads - the current time
-    unless the caller gives one - a hold that lapsed since the last sweep is expired here and
-    refused as EXPIRED, never switched. The new request gets a hold of its own, as any new
-    request does, and is refused the same way when its booked period has started.
+    Story 12.7 (Q26): the new request is refused, as any new request is, when its booked period
+    has started.
     """
-    moment = datetime.now(UTC) if now is None else now
     if replaced.event.assigned_coordinator_id != actor.id:
         raise NotAssignedCoordinator()
     if replaced.status != BookingStatus.PENDING:
-        raise BookingNotPending(replaced, action="switched")
-    if _expire_if_lapsed(db, replaced, now=moment):
         raise BookingNotPending(replaced, action="switched")
     event = _bookable_event(db, replaced.event_id, actor=actor)
     venue = _bookable_venue(db, data.venue_id)
@@ -952,7 +971,7 @@ def switch_booking_request(
         data.suitability_override_reason,
         actor=actor,
         replacing=replaced,
-        now=moment,
+        now=datetime.now(UTC),
     )
 
 
@@ -974,9 +993,8 @@ def _request_venue(
     request a switch withdraws: it does not count as the requirement's request, and it is
     withdrawn only after every check has passed, in the same commit as the new request.
 
-    Story 12.7 AC1/AC5: the request's hold expires the default time after ``now``, the moment
-    the caller acts on, but no later than its booked period starts; a period that has already
-    started cannot be held (``HoldPeriodStarted``)."""
+    Story 12.7 AC5: a booked period that has already started by ``now``, the moment the caller
+    acts on, cannot be held, so the request is refused (``HoldPeriodStarted``)."""
     replacing_id = None if replacing is None else replacing.id
     if requirement is not None:
         covering = find_covering_booking(db, requirement.id)
@@ -1004,9 +1022,6 @@ def _request_venue(
     held_until = booking.ends_at + timedelta(minutes=booking.teardown_minutes or 0)
     if held_from <= now:
         raise HoldPeriodStarted()
-    booking.hold_expires_at = min(
-        now + timedelta(hours=settings.hold_expiry_default_hours), held_from
-    )
     holding = find_holding_booking(db, venue.id, held_from, held_until)
     if holding is not None:
         raise VenueHeld(holding)
@@ -1087,6 +1102,24 @@ def _reminder_lead() -> timedelta:
     return timedelta(hours=settings.hold_expiry_reminder_hours)
 
 
+def _is_inside_warning(hold_expires_at: datetime, *, now: datetime) -> bool:
+    """Story 12.7 AC2: whether a hold expiring at ``hold_expires_at`` is already within the
+    warning period at ``now`` - an approval or a change that sets it there names the expiry, which
+    counts as the warning (Q21, R6)."""
+    return hold_expires_at - _reminder_lead() <= now
+
+
+def _check_hold_expiry(booking: VenueBooking, hold_expires_at: datetime, *, now: datetime) -> None:
+    """Story 12.7 AC5: an expiry Venue Staff give - as they approve, or later - must be after
+    ``now`` and no later than the booked period starts (``InvalidHoldExpiry``)."""
+    if hold_expires_at <= now:
+        raise InvalidHoldExpiry(HOLD_EXPIRY_IN_PAST_MESSAGE)
+    if hold_expires_at > booking.held_from:
+        raise InvalidHoldExpiry(
+            HOLD_EXPIRY_AFTER_START_MESSAGE.format(start=_describe_moment(booking.held_from))
+        )
+
+
 def _notify_coordinator_of_hold(
     db: Session,
     booking: VenueBooking,
@@ -1113,12 +1146,10 @@ def _notify_coordinator_of_hold(
 
 
 def _expire(db: Session, booking: VenueBooking) -> None:
-    """Story 12.7 AC3: ``booking``'s hold lapsed before Venue Staff approved it, so it is EXPIRED
-    as of its expiry, whenever this runs - closed by the system, with no decider or reason - and
-    its coordinator is told (AC2). The caller commits."""
+    """Story 12.7 AC3: ``booking``'s hold lapsed before its event was confirmed, so it is EXPIRED -
+    closed by the system, whenever this runs, while who approved it and when stay on the record
+    (R5) - and its coordinator is told (AC2). The caller commits."""
     booking.status = BookingStatus.EXPIRED
-    booking.decided_at = booking.hold_expires_at
-    booking.decided_by_id = None
     db.flush()
     venue_name, event_name = booking.venue.name, booking.event.name
     _notify_coordinator_of_hold(
@@ -1127,9 +1158,9 @@ def _expire(db: Session, booking: VenueBooking) -> None:
         notification_type=NotificationType.BOOKING_HOLD_EXPIRED,
         title=f"Hold on {venue_name} expired",
         message=(
-            f'Venue Staff did not approve the request for {venue_name} for "{event_name}" by '
-            f"{_describe_moment(booking.hold_expires_at)}, so its hold expired and the venue was "
-            "released. Request a venue again if the event still needs one."
+            f'The hold on {venue_name} for "{event_name}" expired on '
+            f"{_describe_moment(booking.hold_expires_at)}, before the event was confirmed, so the "
+            "venue was released. Request a venue again if the event still needs one."
         ),
         actor=None,
     )
@@ -1148,29 +1179,45 @@ def _expire(db: Session, booking: VenueBooking) -> None:
     )
 
 
+def _has_open_hold(booking: VenueBooking) -> bool:
+    """Story 12.7: an approved booking whose hold has an expiry and was not completed by its
+    event's confirmation (AC4) - the only kind that can expire or take a new expiry."""
+    return (
+        booking.status == BookingStatus.APPROVED
+        and booking.hold_expires_at is not None
+        and booking.hold_completed_at is None
+    )
+
+
 def _expire_if_lapsed(db: Session, booking: VenueBooking, *, now: datetime) -> bool:
-    """Story 12.7 AC4/AC7: whether ``booking``, locked by the caller, is a pending request whose
-    hold lapsed by ``now`` - if so it is expired and committed here, before the caller refuses
-    to act on it."""
-    if booking.status != BookingStatus.PENDING or booking.hold_expires_at > now:
+    """Story 12.7 AC7: whether ``booking``, locked by the caller, has an open hold that lapsed by
+    ``now`` - if so it is expired and committed here, before the caller refuses to act on it."""
+    if not _has_open_hold(booking) or booking.hold_expires_at > now:
         return False
     _expire(db, booking)
     db.commit()
     return True
 
 
+def _open_holds() -> Select[tuple[VenueBooking]]:
+    """The approved bookings whose hold is open (``_has_open_hold``), as a query to narrow."""
+    return select(VenueBooking).where(
+        VenueBooking.status == BookingStatus.APPROVED,
+        VenueBooking.hold_expires_at.is_not(None),
+        VenueBooking.hold_completed_at.is_(None),
+    )
+
+
 def expire_lapsed_holds(db: Session, *, now: datetime) -> list[VenueBooking]:
-    """Story 12.7 AC3: every pending request whose hold expired by ``now`` becomes EXPIRED, and
-    its coordinator is told (AC2). Its venue is free from then on (AC11), and it covers its
-    requirement no longer (AC6). A row another transaction has locked - one being approved or
-    given a new expiry - is skipped: that action decides it (AC10), and the next sweep sees it."""
+    """Story 12.7 AC3: every approved booking whose open hold expired by ``now`` becomes EXPIRED,
+    and its coordinator is told (AC2). Its venue is free from then on (AC11), and it covers its
+    requirement no longer (AC6). A row another transaction has locked - its event being confirmed,
+    or its expiry being changed - is skipped: that action decides it (AC10), and the next sweep
+    sees it."""
     lapsed = list(
         db.scalars(
-            select(VenueBooking)
-            .where(
-                VenueBooking.status == BookingStatus.PENDING,
-                VenueBooking.hold_expires_at <= now,
-            )
+            _open_holds()
+            .where(VenueBooking.hold_expires_at <= now)
             .order_by(VenueBooking.hold_expires_at, VenueBooking.id)
             .with_for_update(skip_locked=True)
         ).all()
@@ -1182,15 +1229,14 @@ def expire_lapsed_holds(db: Session, *, now: datetime) -> list[VenueBooking]:
 
 
 def remind_expiring_holds(db: Session, *, now: datetime) -> list[VenueBooking]:
-    """Story 12.7 AC2: the coordinator of each pending request whose hold expires within the
+    """Story 12.7 AC2: the coordinator of each approved booking whose open hold expires within the
     warning period of ``now`` is warned, once - ``hold_reminded_at`` marks it, and only a new
     expiry outside that period clears it (``change_hold_expiry``). A lapsed hold is told it
     expired instead (``expire_lapsed_holds``)."""
     due = list(
         db.scalars(
-            select(VenueBooking)
+            _open_holds()
             .where(
-                VenueBooking.status == BookingStatus.PENDING,
                 VenueBooking.hold_reminded_at.is_(None),
                 VenueBooking.hold_expires_at > now,
                 VenueBooking.hold_expires_at <= now + _reminder_lead(),
@@ -1208,9 +1254,9 @@ def remind_expiring_holds(db: Session, *, now: datetime) -> list[VenueBooking]:
             notification_type=NotificationType.BOOKING_HOLD_EXPIRING,
             title=f"Hold on {venue_name} expires soon",
             message=(
-                f'The request for {venue_name} for "{booking.event.name}" holds the venue until '
-                f"{_describe_moment(booking.hold_expires_at)}. If Venue Staff have not approved it "
-                "by then, the hold expires and the venue is released."
+                f'{venue_name} is held for "{booking.event.name}" until '
+                f"{_describe_moment(booking.hold_expires_at)}. If the event is not confirmed by "
+                "then, the hold expires and the venue is released."
             ),
             actor=None,
         )
@@ -1226,6 +1272,16 @@ def sweep_holds(db: Session, *, now: datetime) -> None:
     remind_expiring_holds(db, now=now)
 
 
+def _refuse_without_open_hold(booking: VenueBooking) -> None:
+    """Story 12.7 AC7: ``NoOpenHold``, saying why, unless ``booking`` has an open hold."""
+    if booking.status != BookingStatus.APPROVED:
+        raise NoOpenHold(NO_HOLD_MESSAGE.format(status=booking.status))
+    if booking.hold_completed_at is not None:
+        raise NoOpenHold(HOLD_COMPLETED_MESSAGE)
+    if booking.hold_expires_at is None:
+        raise NoOpenHold(NO_HOLD_SINCE_APPROVAL_MESSAGE)
+
+
 def change_hold_expiry(
     db: Session,
     booking: VenueBooking,
@@ -1235,35 +1291,29 @@ def change_hold_expiry(
     actor: User,
     now: datetime | None = None,
 ) -> None:
-    """Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry, later or
+    """Story 12.7 AC1/AC7: Venue Staff give an approved booking's open hold a new expiry, later or
     earlier, with a ``reason`` (decided 12 Oct 2026, Q27), and the event's coordinator is told
     both. AC5: it must be after ``now`` - the current time unless the caller gives one - and no
-    later than the booked period starts (``InvalidHoldExpiry``). AC7: a request no longer pending
-    is refused (``BookingNotPending``), and so is one whose hold lapsed since the last sweep,
-    which is expired instead: an expired hold is never revived. AC2: a new expiry inside the
-    warning period counts as the warning, since the coordinator is told it now; one outside it is
-    warned about again later. Q30/Q31: the request keeps this change - reason, who and when -
-    until the next one; the audit entry keeps every change.
+    later than the booked period starts (``InvalidHoldExpiry``). AC7: a booking with no open hold
+    is refused (``NoOpenHold``) - not approved, completed by its event's confirmation, or
+    approved before holds expired - and so is one whose hold lapsed since the last sweep, which
+    is expired instead: an expired hold is never revived. AC2: a new expiry inside the warning
+    period counts as the warning, since the coordinator is told it now; one outside it is warned
+    about again later. Q30/Q31: the booking keeps this change - reason, who and when - until the
+    next one; the audit entry keeps every change.
 
-    Callers must fetch ``booking`` via ``get_booking_for_decision``: an approval or a sweep of
-    the same request waits for this one, or this one for them.
+    Callers must fetch ``booking`` via ``get_booking_for_decision``: a sweep or the event's
+    confirmation touching the same booking waits for this one, or this one for them.
     """
     moment = datetime.now(UTC) if now is None else now
-    if booking.status != BookingStatus.PENDING:
-        raise BookingNotPending(booking, action=CHANGE_HOLD_EXPIRY_ACTION)
+    _refuse_without_open_hold(booking)
     if _expire_if_lapsed(db, booking, now=moment):
-        raise BookingNotPending(booking, action=CHANGE_HOLD_EXPIRY_ACTION)
-    if hold_expires_at <= moment:
-        raise InvalidHoldExpiry(HOLD_EXPIRY_IN_PAST_MESSAGE)
-    if hold_expires_at > booking.held_from:
-        raise InvalidHoldExpiry(
-            HOLD_EXPIRY_AFTER_START_MESSAGE.format(start=_describe_moment(booking.held_from))
-        )
+        _refuse_without_open_hold(booking)
+    _check_hold_expiry(booking, hold_expires_at, now=moment)
 
     previous = booking.hold_expires_at
     booking.hold_expires_at = hold_expires_at
-    is_inside_warning = hold_expires_at - _reminder_lead() <= moment
-    booking.hold_reminded_at = moment if is_inside_warning else None
+    booking.hold_reminded_at = moment if _is_inside_warning(hold_expires_at, now=moment) else None
     booking.hold_expiry_change_reason = reason
     booking.hold_expiry_changed_by_id = actor.id
     booking.hold_expiry_changed_at = moment
@@ -1276,8 +1326,8 @@ def change_hold_expiry(
         title=f"New expiry for the hold on {venue_name}",
         message=(
             f'{actor.full_name} changed when the hold on {venue_name} for "{booking.event.name}" '
-            f"expires, to {_describe_moment(hold_expires_at)}. Venue Staff must approve the "
-            f"request by then. Reason: {reason}"
+            f"expires, to {_describe_moment(hold_expires_at)}. The event must be confirmed by "
+            f"then. Reason: {reason}"
         ),
         actor=actor,
     )

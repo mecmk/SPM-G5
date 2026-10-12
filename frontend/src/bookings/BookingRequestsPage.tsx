@@ -23,12 +23,24 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  EXPIRED_BOOKING_STATUS,
+  HOLD_EXPIRED_LABEL,
+  HOLD_EXPIRES_LABEL,
+  openHoldExpiry,
   PENDING_BOOKING_STATUS,
   withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
-import { formatDate, formatDateTime, formatTime } from '../shared/format'
+import {
+  formatDate,
+  formatDateTime,
+  formatTime,
+  inputToInstant,
+  instantToInput,
+  nowAsInput,
+} from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { holdExpiryRefusal } from './holdExpiry'
 
 const SHORT_ID_LENGTH = 8
 /** Story 13.1.2 AC4: requests per numbered page. */
@@ -56,6 +68,19 @@ async function loadQueuePage(tab: BookingStatusTabKey, page: number): Promise<Qu
   return { ...(await fetchQueuePage(tab, lastPage)), page: lastPage }
 }
 
+/** Story 12.7 AC1: when an approved booking's open hold expires, as one of its card's facts;
+ * nothing for any other booking. */
+function OpenHoldFact({ entry }: { entry: BookingQueueEntry }) {
+  const openHold = openHoldExpiry(entry)
+  if (openHold === null) return null
+  return (
+    <div className="subtle-block">
+      <p className="fact-label">{HOLD_EXPIRES_LABEL}</p>
+      <p className="fact-value">{formatDateTime(openHold)}</p>
+    </div>
+  )
+}
+
 /** Under All, `queue` once `decided` - the request it names - was decided on this page: the
  * entry stays where it is, showing the outcome, and the counts move it to its new status. */
 function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
@@ -68,6 +93,8 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
             status: decided.status,
             decision_reason: decided.decision_reason,
             decided_at: decided.decided_at,
+            hold_expires_at: decided.hold_expires_at,
+            hold_completed_at: decided.hold_completed_at,
           }
         : entry,
     ),
@@ -93,8 +120,11 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  *
  * Story 13.2.1 AC1-AC3: a Reject action alongside it, requiring a reason.
  *
- * Story 12.7 AC1: a pending request's card shows when its hold expires. AC3: one whose hold
- * expired leaves Pending for the Expired tab, showing when it expired.
+ * Story 12.7 (the customer's hold, 12 Oct 2026) AC1: approving starts the booking's hold, so the
+ * Approve dialog asks when it expires, with no default, and refuses none, a past one or one after
+ * the booked period starts before sending (AC5). An approved booking's card shows when its open
+ * hold expires. AC3: one whose hold expired leaves Approved for the Expired tab, showing when it
+ * was approved and when it expired.
  */
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
@@ -109,6 +139,7 @@ export function BookingRequestsPage() {
   const loadPage = useCallback(() => loadQueuePage(view.tab, view.page), [view])
   const { data: queue, error, isLoading, isStale, setData: setQueue } = useLoaded(loadPage)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
+  const [approveExpiry, setApproveExpiry] = useState('')
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
   const [pendingReject, setPendingReject] = useState<BookingQueueEntry | null>(null)
@@ -149,6 +180,7 @@ export function BookingRequestsPage() {
 
   function askToApprove(entry: BookingQueueEntry) {
     setApproveError(null)
+    setApproveExpiry('')
     setPendingApprove(entry)
   }
 
@@ -156,13 +188,23 @@ export function BookingRequestsPage() {
     setPendingApprove(null)
   }
 
+  /** Story 12.7 AC1/AC5: the hold's expiry is checked before the approval is sent. */
   async function confirmApprove() {
     if (!pendingApprove) return
-    const { id, event_name: eventName } = pendingApprove
+    const { id, event_name: eventName, held_from: heldFrom } = pendingApprove
+    const refusal = holdExpiryRefusal(approveExpiry, heldFrom)
+    if (refusal !== null) {
+      setApproveError(refusal)
+      return
+    }
     setIsApproving(true)
     setApproveError(null)
     try {
-      const decided = await approveBooking(id, eventName)
+      const decided = await approveBooking(
+        id,
+        { hold_expires_at: inputToInstant(approveExpiry) },
+        eventName,
+      )
       setPendingApprove(null)
       recordDecision(decided)
     } catch (err) {
@@ -276,12 +318,7 @@ export function BookingRequestsPage() {
                       <p className="fact-label">Requested at</p>
                       <p className="fact-value">{formatDateTime(entry.created_at)}</p>
                     </div>
-                    {entry.status === PENDING_BOOKING_STATUS && entry.hold_expires_at && (
-                      <div className="subtle-block">
-                        <p className="fact-label">Hold expires</p>
-                        <p className="fact-value">{formatDateTime(entry.hold_expires_at)}</p>
-                      </div>
-                    )}
+                    <OpenHoldFact entry={entry} />
                   </div>
 
                   <div className="subtle-block">
@@ -293,6 +330,13 @@ export function BookingRequestsPage() {
                     <div className="subtle-block">
                       <p className="fact-label">{bookingOutcomeLabels(entry.status).when}</p>
                       <p>{formatDateTime(entry.decided_at)}</p>
+                    </div>
+                  )}
+
+                  {entry.status === EXPIRED_BOOKING_STATUS && entry.hold_expires_at && (
+                    <div className="subtle-block">
+                      <p className="fact-label">{HOLD_EXPIRED_LABEL}</p>
+                      <p>{formatDateTime(entry.hold_expires_at)}</p>
                     </div>
                   )}
 
@@ -357,6 +401,22 @@ export function BookingRequestsPage() {
             {formatDate(pendingApprove.starts_at)}, {formatTime(pendingApprove.starts_at)}–
             {formatTime(pendingApprove.ends_at)}.
           </p>
+          {/* Story 12.7 AC1/AC5: the hold this approval starts, and when it expires. */}
+          <p>
+            It is held until the event is confirmed. Choose when the hold expires if it is not, no
+            later than the start of the booked period, {formatDateTime(pendingApprove.held_from)}.
+          </p>
+          <label>
+            {HOLD_EXPIRES_LABEL}
+            <input
+              type="datetime-local"
+              value={approveExpiry}
+              min={nowAsInput()}
+              max={instantToInput(pendingApprove.held_from)}
+              onChange={(event) => setApproveExpiry(event.target.value)}
+              disabled={isApproving}
+            />
+          </label>
         </ConfirmDialog>
       )}
 

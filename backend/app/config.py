@@ -33,10 +33,9 @@ class Settings(BaseSettings):
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
 
     # --- tentative venue holds (story 12.7) ---
-    # Assumed until the customer answers Q15. A new request's hold expires this many hours after
-    # it is raised, but never after its booked period starts (AC1, AC5).
-    hold_expiry_default_hours: int = 168
-    # The event's coordinator is warned this many hours before a hold expires (AC2).
+    # Venue Staff set each hold's expiry as they approve; the system has no default (Q45). The
+    # event's coordinator is warned this many hours before a hold expires (AC2), assumed until the
+    # customer gives a lead time (Q34).
     hold_expiry_reminder_hours: int = 24
     # How often the API expires lapsed holds and sends due warnings, in seconds; 0 turns the timer
     # off (the backend tests do, since its session would be the development database's).

@@ -547,7 +547,7 @@
   gap: 1rem;
 }
 
-/* Story 12.7: when a pending request's hold expires, with Change expiry beside it. */
+/* Story 12.7: when an approved booking's hold expires, with Change expiry beside it. */
 .booking-hold {
   display: flex;
   flex-wrap: wrap;
