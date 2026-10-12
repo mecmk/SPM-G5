@@ -92,7 +92,8 @@ def search_venues(
     above ``/{venue_id}`` so the literal path is not read as a venue id.
 
     Story 11.1 AC1/AC6: with ``event``, each result says whether it suits that event, for its
-    assigned coordinator."""
+    assigned coordinator - judged against the venue requirement ``requirement`` names (f11.1.1),
+    else the event's first."""
     try:
         return service.search_venues(db, query, actor=actor)
     except service.InvalidVenueSearch as exc:
@@ -100,6 +101,8 @@ def search_venues(
     except service.UnknownReferenceCode as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.EventToJudgeNotFound as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.RequirementToJudgeNotFound as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.EventNotJudgeable as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None

@@ -204,6 +204,9 @@ export interface VenueSearchQuery {
   /** Story 11.1 AC1: the event to judge each result against. The catalogue sends it only once the
    * event in its address is one the user may request a venue for. */
   event?: string
+  /** f11.1.1 (11.1 AC1): the event's venue requirement to judge against - the one selected in the
+   * catalogue's banner (story 8.4). Without it, the event's first. Sent only with `event`. */
+  requirement?: string
 }
 
 /** Mirrors `Criterion` in backend/app/venues/suitability.py: what a failed criterion is about. */
@@ -285,6 +288,7 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
   for (const code of query.accessibility ?? []) params.append('accessibility', code)
   if (query.include_withdrawn) params.set('include_withdrawn', 'true')
   if (query.event) params.set('event', query.event)
+  if (query.requirement) params.set('requirement', query.requirement)
   return api<VenueSearchResult>(`/venues/search?${params}`)
 }
 
