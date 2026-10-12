@@ -5,11 +5,12 @@
  *      the request's own page and its calendar day, and Venue Staff can change it there.
  * AC3  An expired request leaves the Pending tab for its own Expired tab, with when it expired.
  * AC5  The Change expiry dialog refuses a time in the past, or one after the booked period
- *      starts, before anything is sent.
+ *      starts, before anything is sent - and a blank reason (decided 12 Oct 2026, Q29).
  * AC6  An expired request covers no venue requirement: Find a venue is not greyed, and the
  *      catalogue's banner says the requirement needs a venue.
- * AC7  Venue Staff extend a hold; the coordinator's page shows the new expiry. An expired hold is
- *      not revived: the coordinator requests the venue again.
+ * AC7  Venue Staff extend a hold, with a reason (decided 12 Oct 2026, Q27); the request's page
+ *      and the coordinator's event page show the new expiry, who changed it and why. An expired
+ *      hold is not revived: the coordinator requests the venue again.
  * AC8  The expired request stays in the event's booking list.
  * AC11 The venue the expired request held is found again for the same period.
  *
@@ -32,6 +33,8 @@ const CRAFT_HALL_ID = 'cccccccc-0000-0000-0034-000000000001'
 const FOYER = 'Exhibition Foyer'
 // The seeded request's expiry, as the pages write it (en-SG, Singapore time).
 const EXPIRED_AT = 'Mon, 5 Oct 2026, 10:00'
+// Why Venue Staff extend the Craft Fair's new hold (Q27), shown with who changed it (Q30).
+const CHANGE_REASON = 'The makers confirm their stalls at the end of June.'
 // Nimbus Developer Conference's breakout request (4444..02), pending, as its queue card shows it.
 const NIMBUS_BREAKOUT_SHORT_ID = '00000002'
 // Product Roadmap Townhall's Grand Hall request (4444..04), pending, read and never changed here:
@@ -111,20 +114,26 @@ test('12.7 AC8/AC6/AC11/AC1/AC7: an expired request stays as history, and the ve
   await expect(holdBlock(page)).toBeVisible()
   await expect(page.getByRole('region', { name: 'Wed, 12 Jul 2028' })).toContainText('Hold expires')
 
-  // AC7: they extend it, and the page shows the new expiry.
+  // AC7: they extend it, with a reason, and the page shows the new expiry, who changed it and
+  // why (Q27, Q30).
   await holdBlock(page).getByRole('button', { name: 'Change expiry' }).click()
   await changeExpiryDialog(page).getByLabel('New expiry').fill('2028-07-01T09:00')
+  await changeExpiryDialog(page).getByLabel('Reason').fill(CHANGE_REASON)
   await changeExpiryDialog(page).getByRole('button', { name: 'Save expiry' }).click()
   await expect(changeExpiryDialog(page)).toHaveCount(0)
   await expect(holdBlock(page)).toContainText('Sat, 1 Jul 2028, 09:00')
+  await expect(holdBlock(page)).toContainText('Changed by Vera Venue')
+  await expect(holdBlock(page)).toContainText(CHANGE_REASON)
   await expect(page.getByRole('region', { name: 'Wed, 12 Jul 2028' })).toContainText(
     'Hold expires Sat, 1 Jul 2028, 09:00',
   )
 
-  // AC7: the coordinator's page shows it too.
+  // AC7: the coordinator's page shows the new expiry, who changed it and why, too.
   await signInAgain(page, ACCOUNTS.coordinator)
   await openEvent(page)
   await expect(bookings).toContainText('Sat, 1 Jul 2028, 09:00')
+  await expect(bookings).toContainText('Changed by Vera Venue')
+  await expect(bookings).toContainText(CHANGE_REASON)
 })
 
 test('12.7 AC3: an expired request is under Expired, saying when it expired, with nothing to decide', async ({
@@ -151,7 +160,7 @@ test('12.7 AC1: a pending request’s queue card shows when its hold expires', a
   await expect(card.getByText('Hold expires', { exact: true })).toBeVisible()
 })
 
-test('12.7 AC5: an expiry in the past, or after the booked period starts, is refused before it is sent', async ({
+test('12.7 AC5: an expiry in the past, or after the booked period starts, or a blank reason, is refused before it is sent', async ({
   page,
 }) => {
   const sentChanges: string[] = []
@@ -179,6 +188,12 @@ test('12.7 AC5: an expiry in the past, or after the booked period starts, is ref
   await expect(dialog.getByRole('alert')).toHaveText(
     'The hold must expire by the start of the booked period.',
   )
+
+  // Q29: a sound expiry still needs a reason, and spaces are no reason.
+  await newExpiry.fill('2027-01-14T09:00')
+  await dialog.getByLabel('Reason').fill('   ')
+  await save.click()
+  await expect(dialog.getByRole('alert')).toHaveText('Give a reason for the new expiry.')
 
   expect(sentChanges).toEqual([])
 })

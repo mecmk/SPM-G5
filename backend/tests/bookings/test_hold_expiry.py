@@ -18,6 +18,12 @@ AC9  Only Venue Staff can change an expiry.
 AC10 Of an approval and an expiry at the same moment, only the first lands.
 AC11 An expired hold leaves the venue calendar and no longer keeps its venue out of a search.
 
+Decided 12 Oct 2026 (constitution s12.7, Q12, Q17, Q26 to Q31): switching a hold past its expiry
+(12.5) is refused as approving one is, a switched request gets the default expiry of any new
+request, every change Venue Staff make to an expiry carries a reason - required, blank refused, kept
+on the request with who made it and when, told to the coordinator and audited - and the seeded
+holds expire at the start of their booked period.
+
 Also migration 018, which gives the pending requests already in the database an expiry, and the
 timer that sweeps lapsed holds while the API runs. The page flows are
 tests/e2e/venue-hold-expiry.spec.ts.
@@ -43,21 +49,21 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app import main
 from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingRequestIn
+from app.bookings.schemas import BookingRequestIn, BookingSwitchIn
 from app.common.audit import AuditLog
 from app.config import settings
 from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
 from app.venues.models import Venue
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
-from tests.support.seed import Users
+from tests.support.seed import Bookings, Users
 
 SGT = timezone(timedelta(hours=8))
 BOOKINGS_PATH = "/bookings"
@@ -68,11 +74,25 @@ MIGRATION_018 = (
 # request either, such as the one seeded for the e2e spec.
 PRE_018_SCHEMA = (
     "DELETE FROM venue_bookings WHERE status = 'EXPIRED';"
-    " ALTER TABLE venue_bookings DROP COLUMN hold_expires_at, DROP COLUMN hold_reminded_at;"
+    " ALTER TABLE venue_bookings DROP COLUMN hold_expires_at, DROP COLUMN hold_reminded_at,"
+    " DROP COLUMN hold_expiry_change_reason, DROP COLUMN hold_expiry_changed_by_id,"
+    " DROP COLUMN hold_expiry_changed_at;"
     " ALTER TABLE venue_bookings DROP CONSTRAINT ck_venue_bookings_status;"
     " ALTER TABLE venue_bookings ADD CONSTRAINT ck_venue_bookings_status CHECK"
     " (status IN ('PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'CANCELLED'));"
 )
+# The reason every change of an expiry carries (Q27), unless a case leaves it out on purpose.
+CHANGE_REASON = "The organiser asked for more time to confirm the layout."
+# The seeded pending requests (Q17); the approved and expired ones have no hold to expire.
+SEEDED_PENDING = [
+    Bookings.PENDING_SEMINAR_ROOM,
+    Bookings.PENDING_EXHIBITION_FOYER,
+    Bookings.PENDING_GRAND_HALL,
+    Bookings.PENDING_APPROVE_E2E_CARD,
+    Bookings.PENDING_APPROVE_E2E_DETAIL,
+    Bookings.PENDING_REJECT_E2E_CARD,
+    Bookings.PENDING_REJECT_E2E_DETAIL,
+]
 NOT_PENDING_STATUSES = [
     BookingStatus.APPROVED,
     BookingStatus.REJECTED,
@@ -158,9 +178,18 @@ def _created(response) -> dict:
     return response.json()
 
 
-def _change(client, booking_id: uuid.UUID, expires_at: Any):
+def _change(client, booking_id: uuid.UUID, expires_at: Any, reason: Any = CHANGE_REASON):
+    """Give a request's hold a new expiry, with a reason (Q27) unless ``reason`` is None."""
     value = expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at
-    return client.patch(f"{BOOKINGS_PATH}/{booking_id}", json={"hold_expires_at": value})
+    body = {"hold_expires_at": value}
+    if reason is not None:
+        body["hold_expiry_change_reason"] = reason
+    return client.patch(f"{BOOKINGS_PATH}/{booking_id}", json=body)
+
+
+def _switch(client, booking_id: uuid.UUID, venue: Venue):
+    """Switch a pending request to ``venue`` (story 12.5, decided 11 Oct 2026)."""
+    return client.post(f"{BOOKINGS_PATH}/{booking_id}/switch", json={"venue_id": str(venue.id)})
 
 
 def _reloaded(db: Session, booking: VenueBooking) -> VenueBooking:
@@ -275,34 +304,127 @@ def test_a_request_whose_booked_period_has_started_is_refused(coordinator_client
     assert db.scalar(select(func.count()).where(VenueBooking.event_id == event.id)) == 0
 
 
+@pytest.mark.story("12.7", ac=1)
+@pytest.mark.story("12.7", ac=5)
+def test_seeded_pending_requests_hold_their_venue_until_their_booked_period_starts(db):
+    """Q17: a seeded hold expires at the start of its booked period, setup included - AC5's
+    latest - so a development database that is not re-seeded keeps its sample requests pending.
+    The one seeded expired request keeps the expiry it lapsed at."""
+    seeded = db.scalars(select(VenueBooking).where(VenueBooking.id.in_(SEEDED_PENDING))).all()
+    expired = db.get(VenueBooking, Bookings.EXPIRED_CRAFT_FAIR_FOYER)
+
+    assert {row.status for row in seeded} == {BookingStatus.PENDING}
+    assert [row.hold_expires_at for row in seeded] == [row.held_from for row in seeded]
+    assert (expired.status, expired.hold_expires_at, expired.decided_at) == (
+        BookingStatus.EXPIRED,
+        datetime(2026, 10, 5, 10, 0, tzinfo=SGT),
+        datetime(2026, 10, 5, 10, 0, tzinfo=SGT),
+    )
+
+
 # --- AC1/AC7: Venue Staff change the expiry; the coordinator is told -------------------------
 @pytest.mark.story("12.7", ac=7)
 @pytest.mark.story("12.7", ac=1)
-def test_venue_staff_extend_a_hold_and_the_coordinator_is_told(venue_staff_client, db):
+def test_venue_staff_extend_a_hold_and_the_coordinator_is_told(login_as, db):
     """The coordinator told is whoever holds the event now (20.1 AC4) - Carl, since the hand-over.
-    The expiry is written in Singapore time, as every event's times are."""
+    The expiry is written in Singapore time, as every event's times are. Q27/Q30: the change
+    carries a reason, and the reason, who made the change and when are on the request, on the
+    event's booking list, in Carl's notice and in the audit entry."""
     event = _event(db, assigned_coordinator_id=Users.COORDINATOR_2.id)
     venue = _venue(db)
     was = _in(days=2)
     hold = _hold(db, event=event, venue=venue, expires_at=was)
     extended = datetime(2027, 3, 1, 18, 30, tzinfo=SGT)
+    changed_from = datetime.now(UTC)
 
-    response = _change(venue_staff_client, hold.id, extended)
+    response = _change(login_as(Users.VENUE_STAFF), hold.id, extended)
 
+    changed_by = datetime.now(UTC)
     assert response.status_code == 200, response.text
-    assert _moment(response.json()["hold_expires_at"]) == extended
+    request = response.json()
+    assert _moment(request["hold_expires_at"]) == extended
+    assert request["hold_expiry_change_reason"] == CHANGE_REASON
+    assert request["hold_expiry_changed_by"] == {
+        "id": str(Users.VENUE_STAFF.id),
+        "full_name": "Vera Venue",
+    }
+    assert changed_from <= _moment(request["hold_expiry_changed_at"]) <= changed_by
     assert _reloaded(db, hold).hold_expires_at == extended
+    (outcome,) = login_as(Users.COORDINATOR_2).get(f"{BOOKINGS_PATH}/for-event/{event.id}").json()
+    assert (
+        outcome["hold_expires_at"],
+        outcome["hold_expiry_change_reason"],
+        outcome["hold_expiry_changed_by"],
+        outcome["hold_expiry_changed_at"],
+    ) == (
+        request["hold_expires_at"],
+        CHANGE_REASON,
+        request["hold_expiry_changed_by"],
+        request["hold_expiry_changed_at"],
+    )
     (told,) = _notifications(db, "BOOKING_HOLD_EXPIRY_CHANGED", hold.id)
     assert told.recipient_id == Users.COORDINATOR_2.id
     assert told.event_id == event.id
     assert told.message == (
         f'Vera Venue changed when the hold on {venue.name} for "{event.name}" expires, to Mon 1'
-        " Mar 2027 at 18:30. Venue Staff must approve the request by then."
+        " Mar 2027 at 18:30. Venue Staff must approve the request by then. Reason: "
+        f"{CHANGE_REASON}"
     )
     (audit,) = _audits(db, "BOOKING_HOLD_EXPIRY_CHANGED", hold.id)
     assert audit.actor_id == Users.VENUE_STAFF.id
     changed = audit.details["hold_expires_at"]
     assert (_moment(changed["from"]), _moment(changed["to"])) == (was, extended)
+    assert audit.details["reason"] == CHANGE_REASON
+
+
+@pytest.mark.story("12.7", ac=7)
+@pytest.mark.parametrize(
+    ("reason", "refusal"),
+    [(None, "missing"), ("", "string_too_short"), ("   ", "string_too_short")],
+    ids=["missing", "empty", "spaces only"],
+)
+def test_a_new_expiry_needs_a_reason(venue_staff_client, db, reason, refusal):
+    """Q29: as a rejection's reason - required, and blank or spaces only does not count."""
+    was = _in(days=2)
+    hold = _hold(db, expires_at=was)
+
+    response = _change(venue_staff_client, hold.id, _in(days=4), reason=reason)
+
+    assert response.status_code == 422, response.text
+    (error,) = response.json()["detail"]
+    assert (error["type"], error["loc"]) == (refusal, ["body", "hold_expiry_change_reason"])
+    assert _reloaded(db, hold).hold_expires_at == was
+    assert _notifications(db, "BOOKING_HOLD_EXPIRY_CHANGED", hold.id) == []
+
+
+@pytest.mark.story("12.7", ac=7)
+def test_a_second_change_replaces_the_first_on_the_request_and_the_audit_log_keeps_both(
+    venue_staff_client, db
+):
+    """Q30: the request shows its latest change; every change is in the audit log."""
+    hold = _hold(db, expires_at=_in(days=2))
+
+    first = _change(venue_staff_client, hold.id, _in(days=4), reason="The organiser asked.")
+    second = _change(venue_staff_client, hold.id, _in(days=3), reason="Another event needs it.")
+
+    assert (first.status_code, second.status_code) == (200, 200), second.text
+    assert second.json()["hold_expiry_change_reason"] == "Another event needs it."
+    audited = sorted(
+        entry.details["reason"] for entry in _audits(db, "BOOKING_HOLD_EXPIRY_CHANGED", hold.id)
+    )
+    assert audited == ["Another event needs it.", "The organiser asked."]
+
+
+@pytest.mark.story("12.7", ac=7)
+def test_a_changes_reason_who_and_when_are_stored_together(db):
+    """Q31: the latest change is three columns set together, or not at all, so no page shows a
+    reason with nobody behind it."""
+    with pytest.raises(IntegrityError) as excinfo:
+        _hold(
+            db, expires_at=_in(days=2), hold_expiry_change_reason="A reason with nobody behind it."
+        )
+
+    assert "ck_venue_bookings_hold_expiry_change" in str(excinfo.value.orig)
 
 
 @pytest.mark.story("12.7", ac=1)
@@ -408,7 +530,12 @@ def test_a_hold_lapsing_as_it_is_changed_expires_instead(db):
 
     with pytest.raises(service.BookingNotPending) as refusal:
         service.change_hold_expiry(
-            db, booking, hold_expires_at=expiry + timedelta(days=2), actor=staff, now=expiry
+            db,
+            booking,
+            hold_expires_at=expiry + timedelta(days=2),
+            reason=CHANGE_REASON,
+            actor=staff,
+            now=expiry,
         )
 
     assert str(refusal.value) == (
@@ -719,25 +846,108 @@ def test_approving_a_lapsed_hold_is_refused_naming_its_status(venue_staff_client
         (
             Users.VENUE_STAFF,
             "reject",
-            {"decision_reason": "The room is double-booked."},
+            lambda db: {"decision_reason": "The room is double-booked."},
             "This request is already EXPIRED, so it cannot be rejected.",
         ),
         (
             Users.COORDINATOR,
             "withdraw",
-            None,
+            lambda db: None,
             "This request is already EXPIRED, so it cannot be withdrawn.",
         ),
+        (
+            Users.COORDINATOR,
+            "switch",
+            lambda db: {"venue_id": str(_venue(db).id)},
+            "This request is already EXPIRED, so it cannot be switched.",
+        ),
     ],
-    ids=["reject", "withdraw"],
+    ids=["reject", "withdraw", "switch"],
 )
-def test_a_lapsed_hold_cannot_be_rejected_or_withdrawn(login_as, db, user, action, body, detail):
+def test_a_lapsed_hold_cannot_be_rejected_withdrawn_or_switched(
+    login_as, db, user, action, body, detail
+):
+    """Q12: a switch (12.5) of a lapsed hold is refused as a rejection or withdrawal is, showing
+    it Expired, and nothing is requested in its place."""
     hold = _hold(db, expires_at=_in(hours=0) - timedelta(seconds=1))
 
-    response = login_as(user).post(f"{BOOKINGS_PATH}/{hold.id}/{action}", json=body)
+    response = login_as(user).post(f"{BOOKINGS_PATH}/{hold.id}/{action}", json=body(db))
 
     assert response.status_code == 409
     assert response.json()["detail"] == detail
+    assert _reloaded(db, hold).status == BookingStatus.EXPIRED
+    assert db.scalar(select(func.count()).where(VenueBooking.event_id == hold.event_id)) == 1
+
+
+@pytest.mark.story("12.7", ac=7)
+@pytest.mark.story("12.7", ac=10)
+def test_a_hold_lapsing_as_it_is_switched_expires_instead(db):
+    """Q12, on the clock the switch reads: a hold that lapses between the sweep and the row lock
+    is expired there and then - never switched, so nothing is requested in its place."""
+    expiry = _in(days=3)
+    hold = _hold(db, expires_at=expiry)
+    replaced = service.get_booking_for_decision(db, hold.id)
+    chloe = db.get(User, Users.COORDINATOR.id)
+    target = _venue(db)
+
+    with pytest.raises(service.BookingNotPending) as refusal:
+        service.switch_booking_request(
+            db, replaced, BookingSwitchIn(venue_id=target.id), actor=chloe, now=expiry
+        )
+
+    assert str(refusal.value) == "This request is already EXPIRED, so it cannot be switched."
+    row = _reloaded(db, hold)
+    assert (row.status, row.hold_expires_at) == (BookingStatus.EXPIRED, expiry)
+    assert db.scalar(select(func.count()).where(VenueBooking.venue_id == target.id)) == 0
+
+
+# --- Q26: a switched request is a new request, hold and all -----------------------------------
+@pytest.mark.story("12.7", ac=1)
+@pytest.mark.story("12.7", ac=5)
+@pytest.mark.parametrize("starts_in_days", [None, 2], ids=["a week", "the booked start"])
+def test_a_switched_request_gets_a_fresh_default_hold(coordinator_client, db, starts_in_days):
+    """Q26: the request a switch makes gets the default expiry, counted from the switch rather
+    than carried over from the old hold, and never after its booked period starts. Pinned, not
+    driven: on main the request and the switch share ``_request_venue``, so the rebase gave the
+    switch this before the test did; the test keeps it."""
+    if starts_in_days is None:
+        event = _event(db)
+    else:
+        starts_at = _in(days=starts_in_days)
+        event = _event(db, starts_at=starts_at, ends_at=starts_at + timedelta(hours=3))
+    hold = _hold(db, event=event, expires_at=_in(days=1))
+    switched_from = datetime.now(UTC)
+
+    response = _switch(coordinator_client, hold.id, _venue(db))
+
+    assert response.status_code == 201, response.text
+    expiry = _moment(response.json()["hold_expires_at"])
+    if starts_in_days is None:
+        assert switched_from + timedelta(days=7) <= expiry <= datetime.now(UTC) + timedelta(days=7)
+    else:
+        assert expiry == event.starts_at
+    assert _reloaded(db, hold).status == BookingStatus.WITHDRAWN
+
+
+@pytest.mark.story("12.7", ac=5)
+def test_a_switch_for_a_booked_period_that_has_started_is_refused(coordinator_client, db):
+    """Q26 with Q8: the new request takes the requirement's period as it stands now, and one that
+    has started cannot be held, so the switch is refused and the old request stays pending. The
+    old hold is still unexpired because the requirement's period moved after it was raised.
+    Pinned, not driven, as above."""
+    event = _event(db)
+    requirement_id = make_venue_requirement(
+        db, event.id, capacity=40, starts_at=_in(hours=-1), ends_at=_in(hours=3)
+    )
+    hold = _hold(db, event=event, expires_at=_in(days=2), venue_requirement_id=requirement_id)
+
+    response = _switch(coordinator_client, hold.id, _venue(db))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This booked period has already started, so the venue cannot be held for it."
+    )
+    assert _reloaded(db, hold).status == BookingStatus.PENDING
 
 
 # --- AC6: an expired request covers no requirement -------------------------------------------
@@ -879,6 +1089,13 @@ def test_migration_018_gives_each_pending_request_an_expiry(db):
     assert expiry_of(in_two_days) == db.get(VenueBooking, in_two_days).held_from
     assert expiry_of(started) == db.get(VenueBooking, started).held_from
     assert expiry_of(approved) is None
+    # Q31: no change has been made to any of them yet.
+    migrated = db.get(VenueBooking, far_off)
+    assert (
+        migrated.hold_expiry_change_reason,
+        migrated.hold_expiry_changed_by_id,
+        migrated.hold_expiry_changed_at,
+    ) == (None, None, None)
 
 
 # --- the timer -----------------------------------------------------------------------------------
