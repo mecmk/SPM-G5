@@ -601,7 +601,7 @@ Rules and indexes:
 
 **Stories:** 12.x, 13.x, 14.x, 9.2
 
-A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, holding the venue until hold_expires_at (stories 12.1 AC3, 12.7); APPROVED = confirmed booking. No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED / EXPIRED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
+A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, blocking the venue (story 12.1 AC3); APPROVED = booked, held until hold_expires_at unless the event is confirmed first (story 12.7). No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED / EXPIRED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -619,17 +619,18 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); a PENDING request not approved by hold_expires_at becomes EXPIRED (story 12.7 AC3). |
-| `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1), or the coordinator who withdrew the request (story 12.2). NULL when the system closed it: CANCELLED by migration 010, or EXPIRED (story 12.7). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for a WITHDRAWN or CANCELLED request, when it was closed, and for an EXPIRED one, its hold_expires_at (story 12.7). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3). |
+| `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1) - for an EXPIRED booking, who approved it - or the coordinator who withdrew the request (story 12.2). NULL when the system cancelled it (migration 010). |
+| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), and for a WITHDRAWN or CANCELLED request, when it was closed. |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). |
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 | `venue_requirement_id` | `uuid` | yes | - | FK → `venue_requirements.id` | FK -> venue_requirements.id. The event's venue requirement this request is for (story 12.5 AC1), always one of the same event's requirements (checked in the service). NULL for an additional venue (AC5, AC7), and if the requirement is removed. |
-| `hold_expires_at` | `timestamp with time zone` | yes | - | - | When a pending request's hold on its venue expires (story 12.7 AC1): set when it is raised, 7 days later by default but never after held_from (AC5), and changed only by Venue Staff (AC7, AC9). Required for a PENDING or EXPIRED request (ck_venue_bookings_hold_expiry); kept once a request is decided. |
+| `hold_expires_at` | `timestamp with time zone` | yes | - | - | When an approved booking's tentative hold on its venue expires unless the event is confirmed first (story 12.7 AC1, AC3): set by Venue Staff when they approve, never after held_from (AC5), and changed only by them (AC7, AC9). NULL for a pending request (ck_venue_bookings_hold_expiry) and for a booking approved before migration 018; required for an EXPIRED one, which keeps it. |
 | `hold_reminded_at` | `timestamp with time zone` | yes | - | - | When the event's coordinator was warned that the hold is about to expire (story 12.7 AC2). NULL until then, and again when Venue Staff move the expiry back outside the warning period. |
-| `hold_expiry_change_reason` | `text` | yes | - | - | Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the request and the event's booking list. NULL until the first change; the audit log keeps every change's reason. |
+| `hold_completed_at` | `timestamp with time zone` | yes | - | - | When the event's confirmation completed the hold (story 12.7 AC4): set by trg_events_complete_venue_holds when the event becomes CONFIRMED before hold_expires_at. From then on the booking is held for good: it never expires and its expiry no longer changes. NULL while the hold is open (ck_venue_bookings_hold_completed). |
+| `hold_expiry_change_reason` | `text` | yes | - | - | Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the booking and the event's booking list. NULL until the first change; the audit log keeps every change's reason. |
 | `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
 | `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 
@@ -641,13 +642,14 @@ Rules and indexes:
 
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
-- check `ck_venue_bookings_hold_expiry`: `CHECK (((status <> ALL (ARRAY['PENDING'::text, 'EXPIRED'::text])) OR (hold_expires_at IS NOT NULL)))`
+- check `ck_venue_bookings_hold_completed`: `CHECK (((hold_completed_at IS NULL) OR ((hold_expires_at IS NOT NULL) AND (status <> 'EXPIRED'::text))))`
+- check `ck_venue_bookings_hold_expiry`: `CHECK ((((status <> 'PENDING'::text) OR (hold_expires_at IS NULL)) AND ((status <> 'EXPIRED'::text) OR (hold_expires_at IS NOT NULL))))`
 - check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
 - unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
 - index `ix_venue_bookings_event`: `btree (event_id)`
-- index `ix_venue_bookings_hold_expiry`: `btree (hold_expires_at) WHERE (status = 'PENDING'::text)`
+- index `ix_venue_bookings_open_holds`: `btree (hold_expires_at) WHERE ((status = 'APPROVED'::text) AND (hold_completed_at IS NULL))`
 - index `ix_venue_bookings_status`: `btree (status)`
 - index `ix_venue_bookings_venue_period`: `btree (venue_id, held_from, held_until)`
 
