@@ -42,7 +42,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
-from tests.support.factories import make_booking
+from tests.support.factories import approval_payload, make_booking
 from tests.support.seed import Bookings, Events, Users, Venues
 
 
@@ -51,7 +51,9 @@ from tests.support.seed import Bookings, Events, Users, Venues
 def test_venue_staff_can_approve_a_pending_request(venue_staff_client, db: Session):
     before = datetime.now(timezone.utc)
 
-    response = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    response = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -72,7 +74,9 @@ def test_venue_staff_can_approve_a_pending_request(venue_staff_client, db: Sessi
 
 @pytest.mark.story("13.2")
 def test_approval_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
-    venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
 
     row = db.execute(
         text(
@@ -104,7 +108,7 @@ def test_approving_a_request_that_is_not_pending_is_refused(
         ends_at=datetime(2027, 1, 10, 11, 0, tzinfo=timezone.utc),
     )
 
-    response = venue_staff_client.post(f"/bookings/{booking.id}/approve")
+    response = venue_staff_client.post(f"/bookings/{booking.id}/approve", json=approval_payload())
 
     assert response.status_code == 409
     db.expire_all()
@@ -119,10 +123,14 @@ def test_approving_a_request_that_is_not_pending_is_refused(
 
 @pytest.mark.story("13.2", ac=1)
 def test_approving_the_same_request_twice_is_refused_the_second_time(venue_staff_client):
-    first = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    first = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
     assert first.status_code == 200
 
-    second = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    second = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
 
     assert second.status_code == 409
     # The first decision stands; the refused second attempt did not overwrite it.
@@ -141,7 +149,9 @@ def test_a_newly_approved_booking_blocks_a_later_overlapping_request(
     held 12:30-18:15 on 25 Nov (13:00-18:00+08 with 30/15 min setup/teardown). Since s12.1 a
     pending request already holds its room, so a later overlapping request is refused when it is
     raised: as "held" before this approval, and as "booked" after it."""
-    approved = venue_staff_client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve")
+    approved = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
+    )
     assert approved.status_code == 200
 
     venue_staff_client.login(Users.COORDINATOR)
@@ -160,7 +170,7 @@ def test_a_newly_approved_booking_blocks_a_later_overlapping_request(
 @pytest.mark.story("13.2", ac=3)
 def test_requesting_coordinator_can_read_the_approved_outcome(client, login_as):
     approved = login_as(Users.VENUE_STAFF).post(
-        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve"
+        f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
     )
     assert approved.status_code == 200
 
@@ -233,4 +243,9 @@ def test_other_roles_cannot_approve_a_booking(client, user):
 
 @pytest.mark.story("13.2", ac=1)
 def test_approving_a_missing_booking_is_404(venue_staff_client):
-    assert venue_staff_client.post(f"/bookings/{uuid.uuid4()}/approve").status_code == 404
+    assert (
+        venue_staff_client.post(
+            f"/bookings/{uuid.uuid4()}/approve", json=approval_payload()
+        ).status_code
+        == 404
+    )

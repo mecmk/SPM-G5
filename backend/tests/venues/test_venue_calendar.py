@@ -450,7 +450,12 @@ def test_approving_a_pending_booking_turns_its_held_window_into_one_booked_windo
     )
     before = _windows(coordinator_client, venue.id, _sgt(10, 0), _sgt(11, 0))
 
-    booking_service.approve_booking(db, booking, actor_id=Users.VENUE_STAFF.id)
+    booking_service.approve_booking(
+        db,
+        booking,
+        actor_id=Users.VENUE_STAFF.id,
+        hold_expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    )
     after = _windows(coordinator_client, venue.id, _sgt(10, 0), _sgt(11, 0))
 
     assert [w["reason"] for w in before] == [HELD]

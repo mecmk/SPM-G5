@@ -44,7 +44,12 @@ from sqlalchemy.orm import Session
 import app.bookings.service as bookings_service
 from app.bookings.models import BookingStatus
 from app.events.models import Event, EventStatus
-from tests.support.factories import make_booking, make_event, make_venue_requirement
+from tests.support.factories import (
+    approval_payload,
+    make_booking,
+    make_event,
+    make_venue_requirement,
+)
 from tests.support.seed import Bookings, Users, Venues
 
 _SGT = timezone(timedelta(hours=8))
@@ -260,7 +265,9 @@ def test_withdrawing_after_venue_staff_already_decided_is_refused(client, db: Se
     the AC8 reason (a decision already landed), never AC6's. Mirrors
     ``test_approving_after_rejecting_is_refused``'s sequential proof of the same row lock."""
     client.login(Users.VENUE_STAFF)
-    approved = client.post(f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve")
+    approved = client.post(
+        f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve", json=approval_payload()
+    )
     assert approved.status_code == 200
 
     client.login(Users.COORDINATOR_2)

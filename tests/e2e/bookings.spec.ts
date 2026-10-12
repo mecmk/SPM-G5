@@ -69,6 +69,9 @@ import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 
 const QUEUE_PAGE_SIZE = 10
 const FAKE_QUEUE_LENGTH = 25
+// Story 12.7: the hold's expiry Venue Staff give as they approve, before either approved request's
+// booked period starts.
+const HOLD_EXPIRES = '2027-05-01T09:00'
 
 /** One fake queue entry, numbered so each page's rows can be told apart. */
 function fakeQueueEntry(index: number) {
@@ -441,7 +444,9 @@ test('13.2 AC1: approving from the queue card moves it from Pending to Approved'
   const card = page.getByRole('listitem').filter({ hasText: 'Founders Day Fireside Chat' })
   await card.getByRole('button', { name: 'Approve' }).click()
 
+  // Story 12.7: Venue Staff give the hold its expiry as they approve, before the 1 Jun 2027 chat.
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await dialog.getByLabel('Hold expires').fill(HOLD_EXPIRES)
   await dialog.getByRole('button', { name: 'Approve' }).click()
 
   await expect(dialog).not.toBeVisible()
@@ -466,7 +471,9 @@ test('13.2 AC1: approving from the detail page shows the request as approved', a
   await expect(page.getByRole('heading', { name: 'Investor Demo Day', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
 
+  // Story 12.7: Venue Staff give the hold its expiry as they approve, before the 1 Jul 2027 day.
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await dialog.getByLabel('Hold expires').fill(HOLD_EXPIRES)
   await dialog.getByRole('button', { name: 'Approve' }).click()
 
   await expect(dialog).not.toBeVisible()
@@ -724,6 +731,8 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
 
 /** Nimbus Developer Conference's pending request for Seminar Room 2.1, 25 Nov 2026 13:00-18:00. */
 const NIMBUS_SEMINAR_REQUEST_ID = '44444444-0000-0000-0000-000000000002'
+// Story 12.7: the hold's expiry Venue Staff give it as they approve, before its 25 Nov start.
+const NIMBUS_SEMINAR_HOLD_EXPIRES = '2026-11-20T09:00'
 
 /** The request detail page's calendar card - a region via its `aria-labelledby`. */
 function venueAvailability(page: Page) {
@@ -924,6 +933,8 @@ test('13.1.3 AC4: approving on the detail page reloads the calendar in place, sh
 
   await page.getByRole('button', { name: 'Approve' }).click()
   const dialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  // Story 12.7: the hold's expiry, before the breakout track's booked period starts on 25 Nov.
+  await dialog.getByLabel('Hold expires').fill(NIMBUS_SEMINAR_HOLD_EXPIRES)
   await dialog.getByRole('button', { name: 'Approve' }).click()
   await expect(dialog).not.toBeVisible()
 

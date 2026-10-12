@@ -219,10 +219,6 @@ def make_booking(
     """A venue booking. Refreshed after flush so the trigger-computed held_from/held_until
     (see app/bookings/models.py) are populated on the returned object, not just in the row -
     the conflict check compares those fields in Python.
-
-    Story 12.7 AC1: a pending request's hold has an expiry (ck_venue_bookings_hold_expiry). Left
-    out, it is a week from now, as for a request raised now, so a test's booking is never expired
-    or warned about while the test runs, whatever period it is for.
     """
     booking = VenueBooking(
         event_id=overrides.pop("event_id", Events.APPROVED),
@@ -232,13 +228,19 @@ def make_booking(
         ends_at=ends_at,
         expected_attendance=overrides.pop("expected_attendance", 10),
         status=status,
-        hold_expires_at=overrides.pop("hold_expires_at", datetime.now(UTC) + timedelta(days=7)),
         **overrides,
     )
     db.add(booking)
     db.flush()
     db.refresh(booking)
     return booking
+
+
+def approval_payload(*, expires_in: timedelta = timedelta(days=1)) -> dict:
+    """A valid POST /bookings/{id}/approve body (story 13.2). Since story 12.7 Venue Staff give
+    the approved booking's hold its expiry as they approve: a day from now unless said
+    otherwise, before any booking a test approves starts."""
+    return {"hold_expires_at": (datetime.now(UTC) + expires_in).isoformat()}
 
 
 def venue_payload(**overrides) -> dict:

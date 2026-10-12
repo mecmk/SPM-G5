@@ -58,13 +58,10 @@ BOOKINGS_PATH = "/bookings"
 MIGRATION_017 = (
     Path(__file__).resolve().parents[2] / "db" / "migrations" / "017_booking_venue_requirement.sql"
 )
-# The schema as it stood before migration 017: bookings named no requirement. Story 12.7's
-# migration 018 came after it, and a pending row before then had no hold expiry, so 018's check
-# goes too (its columns stay, for the model to read the rows back).
+# The schema as it stood before migration 017: bookings named no requirement.
 PRE_017_SCHEMA = (
     "DROP INDEX uq_venue_bookings_one_per_requirement;"
-    " ALTER TABLE venue_bookings DROP COLUMN venue_requirement_id,"
-    " DROP CONSTRAINT ck_venue_bookings_hold_expiry;"
+    " ALTER TABLE venue_bookings DROP COLUMN venue_requirement_id;"
 )
 
 

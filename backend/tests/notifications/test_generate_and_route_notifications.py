@@ -48,6 +48,7 @@ from app.notifications.models import Notification
 from app.notifications.service import NotificationType, notify
 from app.venues.models import Venue, VenueAccessibilityFeature, VenueFacility, VenueLayout
 from tests.support.factories import (
+    approval_payload,
     create_submittable_event_request,
     make_booking,
     make_equipment_item,
@@ -247,7 +248,9 @@ def test_approving_a_booking_notifies_the_events_coordinator(venue_staff_client,
     """Exhibition Foyer for Annual Wellness Summit, Carl's event: 09:00 to 17:00 on 3 Dec 2026
     with 45 minutes of setup and teardown, so held from 08:15 to 17:45."""
     before = datetime.now(UTC)
-    response = venue_staff_client.post(f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve")
+    response = venue_staff_client.post(
+        f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve", json=approval_payload()
+    )
     after = datetime.now(UTC)
 
     assert response.status_code == 200, response.text
@@ -475,7 +478,10 @@ class _Refused(NamedTuple):
         ),
         pytest.param(
             _Refused(
-                Users.VENUE_STAFF, f"/bookings/{Bookings.APPROVED_GRAND_HALL}/approve", None, 409
+                Users.VENUE_STAFF,
+                f"/bookings/{Bookings.APPROVED_GRAND_HALL}/approve",
+                approval_payload(),
+                409,
             ),
             id="approve-a-booking-already-decided",
         ),
@@ -552,7 +558,7 @@ class _FailsAtAudit(NamedTuple):
             _FailsAtAudit(
                 Users.VENUE_STAFF,
                 f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve",
-                None,
+                approval_payload(),
                 bookings_service,
                 "BOOKING_APPROVED",
                 Events.APPROVED_2,
@@ -614,7 +620,9 @@ def test_after_a_reassignment_the_new_coordinator_gets_later_notifications(clien
     assert reassigned.status_code == 200, reassigned.text
     client.login(Users.VENUE_STAFF)
 
-    response = client.post(f"/bookings/{Bookings.PENDING_GRAND_HALL}/approve")
+    response = client.post(
+        f"/bookings/{Bookings.PENDING_GRAND_HALL}/approve", json=approval_payload()
+    )
 
     assert response.status_code == 200, response.text
     assert _recipients(db, "BOOKING_APPROVED", event_id=Events.APPROVED_3) == [
@@ -738,7 +746,7 @@ class _Twice(NamedTuple):
             _Twice(
                 Users.VENUE_STAFF,
                 f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/approve",
-                None,
+                approval_payload(),
                 "BOOKING_APPROVED",
                 Events.APPROVED_2,
                 [Users.COORDINATOR_2.id],
@@ -819,7 +827,12 @@ def test_simultaneous_booking_decisions_notify_once(engine: Engine):
             start.wait()
             booking = bookings_service.get_booking_for_decision(session, booking_id)
             try:
-                bookings_service.approve_booking(session, booking, actor_id=Users.VENUE_STAFF.id)
+                bookings_service.approve_booking(
+                    session,
+                    booking,
+                    actor_id=Users.VENUE_STAFF.id,
+                    hold_expires_at=datetime.now(UTC) + timedelta(days=1),
+                )
             except bookings_service.BookingNotPending:
                 return "refused"
             return "approved"
