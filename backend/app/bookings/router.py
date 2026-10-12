@@ -150,10 +150,10 @@ def change_hold_expiry(
     db: DbSession,
     actor: Annotated[CurrentUser, CanDecide],
 ) -> BookingOut:
-    """Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry, and its
-    coordinator is told it. AC5: it must be in the future and no later than the booked period
-    starts (422). AC7: a request no longer pending, an expired one included, is refused (409),
-    naming its status. AC9: Venue Staff only (403).
+    """Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry, with a reason
+    (decided 12 Oct 2026; 422 without one), and its coordinator is told both. AC5: it must be in
+    the future and no later than the booked period starts (422). AC7: a request no longer pending,
+    an expired one included, is refused (409), naming its status. AC9: Venue Staff only (403).
     """
     try:
         booking = service.get_booking_for_decision(db, booking_id)
@@ -161,7 +161,11 @@ def change_hold_expiry(
         raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
     try:
         service.change_hold_expiry(
-            db, booking, hold_expires_at=payload.hold_expires_at, actor=actor
+            db,
+            booking,
+            hold_expires_at=payload.hold_expires_at,
+            reason=payload.hold_expiry_change_reason,
+            actor=actor,
         )
     except service.BookingNotPending as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
@@ -250,7 +254,9 @@ def switch_booking_request(
     same venue requirement - the old one withdrawn and the new one requested together, or
     neither. Refused (403) for anyone but the event's assigned coordinator, (409) once the
     request is no longer pending, and as a new request is (409, or 422 for a venue that does
-    not suit without a justification) when the new venue cannot take it.
+    not suit without a justification) when the new venue cannot take it. Story 12.7, decided
+    12 Oct 2026: a hold past its expiry is expired and refused as EXPIRED (409), and the new
+    request gets a hold of its own - so a booked period that has started is refused too (409).
     """
     try:
         replaced = service.get_booking_for_decision(db, booking_id)
@@ -275,6 +281,8 @@ def switch_booking_request(
     except service.VenueBlocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.JustificationRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None

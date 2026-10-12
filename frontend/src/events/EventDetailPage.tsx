@@ -196,8 +196,9 @@ function formatHeroMeta(event: EventDetail): string {
  * decided. A withdrawn or cancelled booking shows when it was closed instead, worded as the
  * booking queue words it.
  *
- * Story 12.7 AC1: a pending request's card shows when its hold expires. AC8: one whose hold
- * expired stays on the list as Expired, with when it expired.
+ * Story 12.7 AC1: a pending request's card shows when its hold expires - and, once Venue Staff
+ * have changed it, who did, when and why (decided 12 Oct 2026). AC8: one whose hold expired stays
+ * on the list as Expired, with when it expired.
  *
  * Story 4.4/4.5: also renders Approve and Reject actions for the assigned Event Coordinator
  * while the request awaits a decision. Approving moves it to PLANNING; rejecting requires a
@@ -946,6 +947,21 @@ export function EventDetailPage() {
                           {formatDateTime(booking.hold_expires_at)}
                         </p>
                       )}
+                      {/* Decided 12 Oct 2026: the latest change to that expiry - who, when, why. */}
+                      {booking.status === PENDING_BOOKING_STATUS &&
+                        booking.hold_expiry_changed_by !== null &&
+                        booking.hold_expiry_changed_at !== null && (
+                          <p>
+                            <span className="small muted">
+                              Changed by {booking.hold_expiry_changed_by.full_name} on{' '}
+                              {formatDateTime(booking.hold_expiry_changed_at)}
+                            </span>
+                            <br />
+                            <span className="fact-label">Reason</span>
+                            <br />
+                            {booking.hold_expiry_change_reason}
+                          </p>
+                        )}
                       {booking.decided_at !== null && (
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>

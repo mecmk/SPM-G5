@@ -115,11 +115,29 @@ class BookingHoldUpdate(BaseModel):
     """Story 12.7 AC1/AC7: the new expiry Venue Staff give a pending request's hold. It names its
     time zone, since a wall-clock time is no moment until it does (422 without one). Whether it is
     in the future and before the booked period starts (AC5) needs the booking, so the service
-    checks that."""
+    checks that. Decided 12 Oct 2026 (Q27, Q29): a reason is mandatory, as a rejection's is -
+    blank or whitespace-only does not count."""
 
     model_config = ConfigDict(extra="forbid")
 
     hold_expires_at: AwareDatetime
+    hold_expiry_change_reason: str = Field(min_length=1)
+
+    @field_validator("hold_expiry_change_reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
+
+
+class HoldExpiryChangedBy(BaseModel):
+    """Story 12.7 AC7, decided 12 Oct 2026 (Q30): the Venue Staff member who last changed a hold's
+    expiry, named beside the reason on the request and on the event's booking list. Read from the
+    booking's ``hold_expiry_changed_by`` row, so ``BookingOut`` needs no constructor of its own."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
 
 
 class BookingOut(BaseModel):
@@ -146,6 +164,11 @@ class BookingOut(BaseModel):
     status: str
     # Story 12.7 AC1: when the request's hold on its venue expires, unless approved first.
     hold_expires_at: datetime | None
+    # Story 12.7 AC7, decided 12 Oct 2026 (Q30): the latest change to that expiry - why, by whom
+    # and when; all None until Venue Staff make one.
+    hold_expiry_change_reason: str | None
+    hold_expiry_changed_by: HoldExpiryChangedBy | None
+    hold_expiry_changed_at: datetime | None
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -270,6 +293,11 @@ class BookingOutcome(BaseModel):
     suitability_override_reason: str | None
     # Story 12.7 AC1/AC8: when the hold expires while pending, and when it expired once EXPIRED.
     hold_expires_at: datetime | None
+    # Story 12.7 AC7, decided 12 Oct 2026 (Q30): the latest change to that expiry - why, by whom
+    # and when - for the coordinator's card on the event page; all None until one is made.
+    hold_expiry_change_reason: str | None
+    hold_expiry_changed_by: HoldExpiryChangedBy | None
+    hold_expiry_changed_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -291,4 +319,11 @@ class BookingOutcome(BaseModel):
             decision_reason=booking.decision_reason,
             suitability_override_reason=booking.suitability_override_reason,
             hold_expires_at=booking.hold_expires_at,
+            hold_expiry_change_reason=booking.hold_expiry_change_reason,
+            hold_expiry_changed_by=(
+                None
+                if booking.hold_expiry_changed_by is None
+                else HoldExpiryChangedBy.model_validate(booking.hold_expiry_changed_by)
+            ),
+            hold_expiry_changed_at=booking.hold_expiry_changed_at,
         )

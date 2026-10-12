@@ -95,6 +95,7 @@ export type ErrorCode =
   | 'BOOKING_HOLD_EXPIRY_REQUIRED'
   | 'BOOKING_HOLD_EXPIRY_IN_PAST'
   | 'BOOKING_HOLD_EXPIRY_AFTER_START'
+  | 'BOOKING_HOLD_EXPIRY_REASON_REQUIRED'
   | 'EQUIPMENT_REFUSED'
   | 'EQUIPMENT_INVALID'
   | 'EQUIPMENT_QUANTITY_INVALID'
@@ -557,6 +558,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_HOLD_EXPIRY_AFTER_START: {
     title: 'Check the expiry',
     message: 'The hold must expire by the start of the booked period.',
+  },
+  /** Story 12.7 AC7, decided 12 Oct 2026: every change of an expiry needs a reason. */
+  BOOKING_HOLD_EXPIRY_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Give a reason for the new expiry.',
   },
   /** Story 15.1 AC4/AC6/AC7/AC9/AC10: the event, the item or the stock no longer allows the
    *  change; the backend's own sentence says which. */

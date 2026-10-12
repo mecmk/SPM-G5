@@ -100,7 +100,9 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  * Story 12.7 AC1/AC7: a pending request shows when its hold expires, and Change expiry gives it a
  * new one, which the request's day in the calendar shows once saved. AC5: the dialog refuses a
  * time that is not in the future, or is after the booked period starts, before sending it. An
- * expired request shows when its hold expired instead (AC3).
+ * expired request shows when its hold expired instead (AC3). Decided 12 Oct 2026: every change
+ * needs a reason, refused blank before sending, and the latest change - who made it, when and
+ * why - shows beside the expiry.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -117,6 +119,7 @@ export function BookingRequestDetailPage() {
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [isChangingExpiry, setIsChangingExpiry] = useState(false)
   const [newExpiry, setNewExpiry] = useState('')
+  const [expiryReason, setExpiryReason] = useState('')
   const [isSavingExpiry, setIsSavingExpiry] = useState(false)
   const [expiryError, setExpiryError] = useState<string | null>(null)
 
@@ -200,6 +203,7 @@ export function BookingRequestDetailPage() {
     if (!booking?.hold_expires_at) return
     setExpiryError(null)
     setNewExpiry(instantToInput(booking.hold_expires_at))
+    setExpiryReason('')
     setIsChangingExpiry(true)
   }
 
@@ -207,13 +211,17 @@ export function BookingRequestDetailPage() {
     setIsChangingExpiry(false)
   }
 
-  /** Story 12.7 AC5: what the server would refuse is refused here first, with nothing sent. */
+  /** Story 12.7 AC5: what the server would refuse is refused here first, with nothing sent -
+   * the reason too (decided 12 Oct 2026). */
   function expiryRefusal(heldFrom: string): string | null {
     if (newExpiry === '') return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_REQUIRED.message
     const expiresAt = Date.parse(inputToInstant(newExpiry))
     if (expiresAt <= Date.now()) return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_IN_PAST.message
     if (expiresAt > Date.parse(heldFrom)) {
       return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_AFTER_START.message
+    }
+    if (expiryReason.trim() === '') {
+      return ERROR_REGISTRY.BOOKING_HOLD_EXPIRY_REASON_REQUIRED.message
     }
     return null
   }
@@ -228,7 +236,14 @@ export function BookingRequestDetailPage() {
     setIsSavingExpiry(true)
     setExpiryError(null)
     try {
-      const updated = await changeHoldExpiry(booking.id, inputToInstant(newExpiry), event.name)
+      const updated = await changeHoldExpiry(
+        booking.id,
+        {
+          hold_expires_at: inputToInstant(newExpiry),
+          hold_expiry_change_reason: expiryReason.trim(),
+        },
+        event.name,
+      )
       setBooking(updated)
       setIsChangingExpiry(false)
     } catch (err) {
@@ -288,6 +303,20 @@ export function BookingRequestDetailPage() {
               {isPending ? 'Hold expires' : 'Hold expired'}
             </h2>
             <p>{formatDateTime(shownHold)}</p>
+            {/* Decided 12 Oct 2026: the latest change to the expiry - who, when and why. */}
+            {booking.hold_expiry_changed_by !== null && booking.hold_expiry_changed_at !== null && (
+              <>
+                <p className="small muted">
+                  Changed by {booking.hold_expiry_changed_by.full_name} on{' '}
+                  {formatDateTime(booking.hold_expiry_changed_at)}
+                </p>
+                <p>
+                  <span className="fact-label">Reason</span>
+                  <br />
+                  {booking.hold_expiry_change_reason}
+                </p>
+              </>
+            )}
           </div>
           {isPending && (
             <button type="button" className="secondary button-sm" onClick={askToChangeExpiry}>
@@ -474,6 +503,15 @@ export function BookingRequestDetailPage() {
               min={nowAsInput()}
               max={instantToInput(booking.held_from)}
               onChange={(event) => setNewExpiry(event.target.value)}
+              disabled={isSavingExpiry}
+            />
+          </label>
+          <label>
+            Reason
+            <textarea
+              value={expiryReason}
+              onChange={(event) => setExpiryReason(event.target.value)}
+              rows={3}
               disabled={isSavingExpiry}
             />
           </label>

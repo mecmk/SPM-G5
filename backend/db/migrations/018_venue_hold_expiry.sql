@@ -13,6 +13,10 @@
 -- Pending requests already in the database get the default the service applies, 7 days, counted
 -- from this migration, but never later than their booked period's start. One whose period has
 -- already started expires the first time the API sweeps.
+--
+-- Decided 12 Oct 2026 (Q27, Q29 to Q31): every change Venue Staff make to an expiry carries a
+-- reason. The request keeps its latest change - the reason, who made it and when, set together or
+-- not at all (ck_venue_bookings_hold_expiry_change) - and the audit log keeps every change.
 -- =====================================================================
 
 ALTER TABLE venue_bookings DROP CONSTRAINT ck_venue_bookings_status;
@@ -34,6 +38,14 @@ ALTER TABLE venue_bookings ADD CONSTRAINT ck_venue_bookings_hold_expiry
 CREATE INDEX ix_venue_bookings_hold_expiry ON venue_bookings (hold_expires_at)
     WHERE status = 'PENDING';
 
+ALTER TABLE venue_bookings
+    ADD COLUMN hold_expiry_change_reason TEXT,
+    ADD COLUMN hold_expiry_changed_by_id UUID REFERENCES users (id),
+    ADD COLUMN hold_expiry_changed_at    TIMESTAMPTZ;
+
+ALTER TABLE venue_bookings ADD CONSTRAINT ck_venue_bookings_hold_expiry_change
+    CHECK (num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) IN (0, 3));
+
 COMMENT ON TABLE venue_bookings IS
     'Stories: 12.x, 13.x, 14.x, 9.2. A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, holding the venue until hold_expires_at (stories 12.1 AC3, 12.7); APPROVED = confirmed booking. No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED / EXPIRED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).';
 COMMENT ON COLUMN venue_bookings.status IS
@@ -42,6 +54,12 @@ COMMENT ON COLUMN venue_bookings.hold_expires_at IS
     'When a pending request''s hold on its venue expires (story 12.7 AC1): set when it is raised, 7 days later by default but never after held_from (AC5), and changed only by Venue Staff (AC7, AC9). Required for a PENDING or EXPIRED request (ck_venue_bookings_hold_expiry); kept once a request is decided.';
 COMMENT ON COLUMN venue_bookings.hold_reminded_at IS
     'When the event''s coordinator was warned that the hold is about to expire (story 12.7 AC2). NULL until then, and again when Venue Staff move the expiry back outside the warning period.';
+COMMENT ON COLUMN venue_bookings.hold_expiry_change_reason IS
+    'Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the request and the event''s booking list. NULL until the first change; the audit log keeps every change''s reason.';
+COMMENT ON COLUMN venue_bookings.hold_expiry_changed_by_id IS
+    'FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change).';
+COMMENT ON COLUMN venue_bookings.hold_expiry_changed_at IS
+    'When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all.';
 COMMENT ON COLUMN venue_bookings.decided_by_id IS
     'FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1), or the coordinator who withdrew the request (story 12.2). NULL when the system closed it: CANCELLED by migration 010, or EXPIRED (story 12.7).';
 COMMENT ON COLUMN venue_bookings.decided_at IS

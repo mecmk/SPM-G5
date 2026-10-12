@@ -4,6 +4,13 @@ import { api } from './client'
 export type BookingStatus =
   'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED' | 'EXPIRED'
 
+/** Mirrors `HoldExpiryChangedBy`: the Venue Staff member who last changed a hold's expiry
+ * (story 12.7 AC7, decided 12 Oct 2026). */
+export interface HoldExpiryChangedBy {
+  id: string
+  full_name: string
+}
+
 /** Mirrors `BookingOut`: a venue booking request and, once decided, its outcome. */
 export interface Booking {
   id: string
@@ -25,6 +32,11 @@ export interface Booking {
   status: BookingStatus
   /** Story 12.7 AC1: when the request's hold on its venue expires, unless approved first. */
   hold_expires_at: string | null
+  /** Story 12.7 AC7, decided 12 Oct 2026: the latest change to that expiry - why, by whom and
+   * when; all null until Venue Staff make one. */
+  hold_expiry_change_reason: string | null
+  hold_expiry_changed_by: HoldExpiryChangedBy | null
+  hold_expiry_changed_at: string | null
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
@@ -203,18 +215,25 @@ export function withdrawBooking(bookingId: string, venueName: string): Promise<B
   })
 }
 
-/** Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry - a moment with its
- * zone, as `inputToInstant` writes one. 422 for one in the past or after the booked period starts
- * (AC5), 409 once the request is no longer pending, an expired one included (AC7); both arrive
- * with the backend's own sentence. */
+/** Mirrors `BookingHoldUpdate`: a hold's new expiry - a moment with its zone, as `inputToInstant`
+ * writes one - and why it changed (decided 12 Oct 2026). */
+export interface BookingHoldUpdateInput {
+  hold_expires_at: string
+  hold_expiry_change_reason: string
+}
+
+/** Story 12.7 AC1/AC7: Venue Staff give a pending request's hold a new expiry, with a reason. 422
+ * for one in the past or after the booked period starts (AC5), or with no reason; 409 once the
+ * request is no longer pending, an expired one included (AC7); both arrive with the backend's own
+ * sentence. */
 export function changeHoldExpiry(
   bookingId: string,
-  holdExpiresAt: string,
+  input: BookingHoldUpdateInput,
   eventName: string,
 ): Promise<Booking> {
   return api<Booking>(`/bookings/${bookingId}`, {
     method: 'PATCH',
-    body: { hold_expires_at: holdExpiresAt },
+    body: input,
     errorCodes: {
       404: 'BOOKING_NOT_FOUND',
       409: 'BOOKING_HOLD_EXPIRY_REFUSED',
@@ -268,6 +287,11 @@ export interface BookingOutcome {
   suitability_override_reason: string | null
   /** Story 12.7 AC1/AC8: when the hold expires while pending, and when it expired once expired. */
   hold_expires_at: string | null
+  /** Story 12.7 AC7, decided 12 Oct 2026: the latest change to that expiry - why, by whom and
+   * when; all null until Venue Staff make one. */
+  hold_expiry_change_reason: string | null
+  hold_expiry_changed_by: HoldExpiryChangedBy | null
+  hold_expiry_changed_at: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
