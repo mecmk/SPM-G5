@@ -1014,6 +1014,37 @@ def test_an_event_confirmed_after_its_hold_lapsed_does_not_keep_it(db):
 
 
 @pytest.mark.story("12.7", ac=4)
+def test_a_booking_approved_for_an_event_already_confirmed_is_held_for_good(venue_staff_client, db):
+    """Review of #103 (Yu Bing, 12 Oct): an extra venue for an event already Confirmed has no
+    confirmation left to wait for, and the trigger fires only as an event becomes Confirmed, so
+    the approval completes the hold itself. The booking is never warned about or expired, even
+    past the expiry Venue Staff gave, its expiry takes no change, and the approval notice
+    promises no expiry."""
+    event, venue = _event(db), _venue(db)
+    event.status = EventStatus.CONFIRMED
+    db.flush()
+    request = _request(db, event=event, venue=venue)
+    expiry = _in(hours=12)
+
+    response = _approve(venue_staff_client, request.id, expiry)
+
+    assert response.status_code == 200, response.text
+    approved = response.json()
+    assert approved["status"] == BookingStatus.APPROVED
+    assert approved["hold_completed_at"] is not None
+    service.sweep_holds(db, now=_in(hours=1))
+    service.sweep_holds(db, now=expiry + timedelta(days=1))
+    assert _reloaded(db, request).status == BookingStatus.APPROVED
+    assert _notifications(db, "BOOKING_HOLD_EXPIRING", request.id) == []
+    assert _notifications(db, "BOOKING_HOLD_EXPIRED", request.id) == []
+    assert _change(venue_staff_client, request.id, _in(days=1)).status_code == 409
+    (told,) = _notifications(db, "BOOKING_APPROVED", request.id)
+    assert told.message == (
+        f"Vera Venue approved the request for {venue.name} on Mon 15 Mar 2027 from 09:00 to 17:00."
+    )
+
+
+@pytest.mark.story("12.7", ac=4)
 def test_confirming_an_event_completes_only_its_own_open_holds_for_good(db):
     """R4: not its pending request, its expired booking or its booking approved before holds
     expired, nor another event's hold. Sent back to Planning (9.4 AC3, 19.2 AC8), the event keeps
@@ -1206,6 +1237,29 @@ def test_the_api_sweeps_lapsed_holds_on_a_timer_while_it_runs(monkeypatch):
 
     assert stopped_at >= 3
     assert len(passes) == stopped_at
+
+
+@pytest.mark.story("12.7", ac=3)
+def test_an_unexpected_error_in_a_pass_is_logged_and_the_timer_carries_on(monkeypatch, caplog):
+    """Review of #103 (Yu Bing, 12 Oct): an error that is not the database's - a notice that
+    cannot be written, say - must not end the timer for the life of the process."""
+    passes: list[float] = []
+
+    def fails_once() -> None:
+        passes.append(time.monotonic())
+        if len(passes) == 1:
+            raise RuntimeError("a notice could not be written")
+
+    monkeypatch.setattr(main, "_sweep_holds_once", fails_once)
+    monkeypatch.setattr(settings, "hold_sweep_interval_seconds", 0.01)
+
+    with TestClient(main.app):
+        deadline = time.monotonic() + 5
+        while len(passes) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    assert len(passes) >= 3
+    assert "The hold sweep failed" in caplog.text
 
 
 @pytest.mark.story("12.7", ac=3)
