@@ -186,7 +186,9 @@ def add_unavailability(
 ) -> VenueUnavailabilityOut:
     """Story 9.4 AC1/AC5/AC9: only Venue Staff mark a venue unavailable."""
     try:
-        period = service.add_unavailability(db, venue_id, payload, actor=actor)
+        period = service.add_unavailability(
+            db, venue_id, payload, actor=actor, now=datetime.now(UTC)
+        )
     except service.VenueNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except (service.InvalidDateRange, service.DescriptionRequired) as exc:

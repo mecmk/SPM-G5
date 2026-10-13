@@ -516,3 +516,6 @@ class AffectedBookingOut(BaseModel):
     status: str
     held_from: datetime
     held_until: datetime
+    # True when the booking already carries the mark, from any of the venue's periods - so an
+    # edit's preview can tell the bookings it newly reaches from those already marked.
+    already_marked: bool

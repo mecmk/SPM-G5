@@ -89,6 +89,11 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     hold_expiry_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 9.4 AC3/AC6: when the booking was marked "Venue unavailable - alternative needed",
+    # while a period its venue is unavailable for overlaps its held period; NULL when unmarked.
+    # Read it through ``venue_unavailable_mark``, which leaves out a booking that no longer holds
+    # the venue.
+    venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)
@@ -103,3 +108,11 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     required_layout: Mapped[RoomLayout | None] = relationship(foreign_keys=[required_layout_code])
     venue_requirement: Mapped[VenueRequirement | None] = relationship()
+
+    @property
+    def venue_unavailable_mark(self) -> datetime | None:
+        """Story 9.4 AC3: the mark as readers see it - only on a booking still pending or
+        approved. A value left on a rejected, withdrawn, cancelled or expired booking is history
+        and is not reported."""
+        holds_venue = self.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+        return self.venue_unavailable_marked_at if holds_venue else None

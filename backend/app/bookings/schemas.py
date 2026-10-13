@@ -183,6 +183,9 @@ class BookingOut(BaseModel):
     hold_expiry_change_reason: str | None
     hold_expiry_changed_by: HoldExpiryChangedBy | None
     hold_expiry_changed_at: datetime | None
+    # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; None
+    # when unmarked, and always None once the booking is no longer pending or approved.
+    venue_unavailable_marked_at: datetime | None = Field(validation_alias="venue_unavailable_mark")
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -229,6 +232,8 @@ class BookingQueueEntry(BaseModel):
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
     held_from: datetime
+    # Story 9.4 AC3: the mark, for Venue Staff deciding the request (AC7); None when unmarked.
+    venue_unavailable_marked_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -253,6 +258,7 @@ class BookingQueueEntry(BaseModel):
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
             held_from=booking.held_from,
+            venue_unavailable_marked_at=booking.venue_unavailable_mark,
         )
 
 
@@ -320,6 +326,9 @@ class BookingOutcome(BaseModel):
     hold_expiry_change_reason: str | None
     hold_expiry_changed_by: HoldExpiryChangedBy | None
     hold_expiry_changed_at: datetime | None
+    # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed", for
+    # the event page; None when unmarked, and always None once the booking is closed.
+    venue_unavailable_marked_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -349,4 +358,5 @@ class BookingOutcome(BaseModel):
                 else HoldExpiryChangedBy.model_validate(booking.hold_expiry_changed_by)
             ),
             hold_expiry_changed_at=booking.hold_expiry_changed_at,
+            venue_unavailable_marked_at=booking.venue_unavailable_mark,
         )

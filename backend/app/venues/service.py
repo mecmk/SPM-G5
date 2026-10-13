@@ -109,6 +109,9 @@ UNAVAILABILITY_CREATED = "VENUE_UNAVAILABILITY_CREATED"
 UNAVAILABILITY_UPDATED = "VENUE_UNAVAILABILITY_UPDATED"
 UNAVAILABILITY_ENDED = "VENUE_UNAVAILABILITY_ENDED"
 UNAVAILABILITY_REMOVED = "VENUE_UNAVAILABILITY_REMOVED"
+# Story 9.4 AC3/AC6: the audit actions of a booking marked, and of one cleared.
+BOOKING_MARKED = "BOOKING_VENUE_UNAVAILABLE_MARKED"
+BOOKING_CLEARED = "BOOKING_VENUE_UNAVAILABLE_CLEARED"
 
 
 class UnavailabilityNotFound(LookupError):
@@ -983,12 +986,88 @@ def _get_period(
     return period
 
 
+@dataclass(frozen=True)
+class RecheckResult:
+    """What ``recheck_venue_bookings`` changed: the bookings it newly marked and the ones it
+    cleared, each in id order. Story 9.4 slice 4 tells the coordinators of the first."""
+
+    newly_marked: list[VenueBooking]
+    cleared: list[VenueBooking]
+
+
+def recheck_venue_bookings(
+    db: Session, venue_id: uuid.UUID, *, now: datetime, actor: User
+) -> RecheckResult:
+    """Story 9.4 AC3/AC6/AC8/AC10: bring the marks of ``venue_id``'s bookings in line with its
+    periods, whichever of them just changed. A candidate is a PENDING or APPROVED booking of an
+    event not COMPLETED whose held period (setup and teardown included) has not ended by ``now``;
+    it is overlapped when any period of the venue overlaps that held period, half-open as bookings
+    are (AC5). A candidate newly overlapped is marked at ``now``; one still overlapped keeps the
+    time it was marked; one no longer overlapped is cleared. A booking outside the candidates is
+    left as it is: a leftover mark on a closed booking is history.
+
+    The candidates are selected ``FOR UPDATE`` in id order and re-read (``populate_existing``), so
+    a booking another transaction is approving is waited for and marked as it then stands (AC10),
+    and two re-checks of one venue lock in the same order. The caller commits; each change leaves
+    an audit row."""
+    overlapped = (
+        select(VenueUnavailabilityPeriod.id)
+        .where(
+            VenueUnavailabilityPeriod.venue_id == VenueBooking.venue_id,
+            VenueUnavailabilityPeriod.starts_at < VenueBooking.held_until,
+            VenueUnavailabilityPeriod.ends_at > VenueBooking.held_from,
+        )
+        .exists()
+    )
+    rows = db.execute(
+        select(VenueBooking, overlapped.label("overlapped"))
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status.in_(_HOLDING_STATUSES),
+            ~VenueBooking.event.has(Event.status == EventStatus.COMPLETED),
+            VenueBooking.held_until > now,
+        )
+        .order_by(VenueBooking.id)
+        .with_for_update(of=VenueBooking)
+        .execution_options(populate_existing=True)
+    ).all()
+
+    newly_marked: list[VenueBooking] = []
+    cleared: list[VenueBooking] = []
+    for booking, is_overlapped in rows:
+        if is_overlapped and booking.venue_unavailable_marked_at is None:
+            booking.venue_unavailable_marked_at = now
+            newly_marked.append(booking)
+        elif not is_overlapped and booking.venue_unavailable_marked_at is not None:
+            booking.venue_unavailable_marked_at = None
+            cleared.append(booking)
+    db.flush()
+    for action, bookings in ((BOOKING_MARKED, newly_marked), (BOOKING_CLEARED, cleared)):
+        for booking in bookings:
+            record_audit(
+                db,
+                actor=actor,
+                action=action,
+                entity_type="venue_booking",
+                entity_id=booking.id,
+                details={"venue_id": str(venue_id), "event_id": str(booking.event_id)},
+                commit=False,
+            )
+    return RecheckResult(newly_marked=newly_marked, cleared=cleared)
+
+
 def add_unavailability(
-    db: Session, venue_id: uuid.UUID, data: VenueUnavailabilityCreate, *, actor: User
+    db: Session,
+    venue_id: uuid.UUID,
+    data: VenueUnavailabilityCreate,
+    *,
+    actor: User,
+    now: datetime,
 ) -> VenueUnavailabilityPeriod:
     """Story 9.4 AC1/AC5: mark ``venue_id`` unavailable from ``starts_at`` to ``ends_at`` for a
     reason. A period may start in the past and may overlap another of the venue's; bookings in
-    the way do not stop it being saved (AC2)."""
+    the way do not stop it being saved (AC2); the ones it overlaps are marked (AC3) in the same
+    transaction (``recheck_venue_bookings``)."""
     get_venue(db, venue_id)
     _check_period(data.starts_at, data.ends_at, reason=data.reason, description=data.description)
     period = VenueUnavailabilityPeriod(
@@ -1010,6 +1089,7 @@ def add_unavailability(
         details={"venue_id": str(venue_id), **_snapshot(period)},
         commit=False,
     )
+    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
     db.commit()
     db.refresh(period)
     return period
@@ -1051,6 +1131,7 @@ def edit_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
+    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
     db.commit()
     db.refresh(period)
     return period
@@ -1086,6 +1167,7 @@ def end_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
+    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
     db.commit()
     db.refresh(period)
     return period
@@ -1118,6 +1200,7 @@ def remove_unavailability(
         details=details,
         commit=False,
     )
+    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
     db.commit()
 
 
@@ -1145,6 +1228,7 @@ def list_affected_bookings(
             VenueBooking.status,
             VenueBooking.held_from,
             VenueBooking.held_until,
+            VenueBooking.venue_unavailable_marked_at.is_not(None).label("already_marked"),
         )
         .join(Event, Event.id == VenueBooking.event_id)
         .where(
@@ -1165,6 +1249,7 @@ def list_affected_bookings(
             status=row.status,
             held_from=row.held_from,
             held_until=row.held_until,
+            already_marked=row.already_marked,
         )
         for row in rows
     ]
