@@ -148,12 +148,17 @@ export function venueCard(page: Page, name: string) {
 }
 
 /**
- * Story 2.1 AC21 (f2.1.4): the contact phone's Country or region picker, when it has `name` (for
- * example 'Singapore (+65)') chosen. One picker per page: the request form, or the event page's
- * point-of-contact update (story 19.1 AC2).
+ * Story 2.1 AC21 (f2.1.4): the contact phone's Country or region picker - one per page, on the
+ * request form or the event page's point-of-contact update (story 19.1 AC2). Found by its role:
+ * a phone problem said inside the number's label can name the country or region too.
  */
+export function phoneRegionPicker(page: Page): Locator {
+  return page.getByRole('combobox', { name: 'Country or region' })
+}
+
+/** The picker's choice, when it is `name` (for example 'Singapore (+65)'). */
 export function chosenPhoneRegion(page: Page, name: string): Locator {
-  return page.getByLabel('Country or region').getByRole('option', { name, selected: true })
+  return phoneRegionPicker(page).getByRole('option', { name, selected: true })
 }
 
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */

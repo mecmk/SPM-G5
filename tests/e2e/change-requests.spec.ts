@@ -28,6 +28,7 @@ import {
   createAndSubmitRequest,
   EVENTS,
   inFuture,
+  phoneRegionPicker,
   signIn,
   uniqueName,
 } from './support'
@@ -129,11 +130,13 @@ test('2.1 AC25: the point of contact update has the same country or region picke
   await phone.fill('+852 1234 5678')
   await page.getByRole('button', { name: 'Save contact details' }).click()
   await expect(
-    page.getByText('Type the number without its calling code; choose the country or region instead.'),
+    page.getByText(
+      'Type the number without its calling code; choose the country or region instead.',
+    ),
   ).toBeVisible()
   await expect(phone).toHaveAttribute('aria-invalid', 'true')
 
-  await page.getByLabel('Country or region').selectOption({ label: 'Hong Kong (+852)' })
+  await phoneRegionPicker(page).selectOption({ label: 'Hong Kong (+852)' })
   await phone.fill('1234 5678')
   await page.getByRole('button', { name: 'Save contact details' }).click()
 

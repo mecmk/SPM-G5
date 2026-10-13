@@ -55,7 +55,14 @@
  * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, chosenPhoneRegion, inFuture, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  chosenPhoneRegion,
+  inFuture,
+  phoneRegionPicker,
+  signIn,
+  uniqueName,
+} from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
@@ -1462,7 +1469,7 @@ test('2.1 AC21: the contact phone is typed after a country or region and saved w
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   await page.getByLabel('Event name').fill(uniqueName('CallingCode'))
-  const region = page.getByLabel('Country or region')
+  const region = phoneRegionPicker(page)
 
   await expect(region.getByRole('option')).toHaveText([
     'Singapore (+65)',
@@ -1540,7 +1547,7 @@ test('2.1 AC23: changing the country or region checks the number again', async (
   // 65 and 5 digits make 7; 852 and the same 5 make 8.
   await page.getByLabel('Contact phone number').fill('12345')
   await expect(lengthProblem).toBeVisible()
-  await page.getByLabel('Country or region').selectOption({ label: 'Hong Kong (+852)' })
+  await phoneRegionPicker(page).selectOption({ label: 'Hong Kong (+852)' })
 
   await expect(lengthProblem).toHaveCount(0)
 })
