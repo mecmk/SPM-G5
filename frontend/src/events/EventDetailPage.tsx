@@ -196,8 +196,8 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 7.2: also renders the contact details and internal notes, which are coordinator-only
  * (never shown to the organiser), matching the backend. The assigned Event Coordinator of an event
  * that is not closed gets one "Edit event" action, opening the 2.1 request form: internal notes
- * always, the organiser's details only while under review or awaiting clarification (AC4). AC5:
- * once approved, that coordinator is also told here that further changes go through the change
+ * always, the organiser's details until the event is confirmed (AC4, AC10). AC12:
+ * once confirmed, that coordinator is also told here that further changes go through the change
  * request process.
  *
  * Story 13.2.1 AC4: a "Venue booking" card for whoever holds BOOKINGS_READ (Event Coordinator,

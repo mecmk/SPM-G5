@@ -26,9 +26,11 @@ import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_MINE_PATH, HOME_PATH, eventEditPath, eventPath } from '../routes'
 import {
+  ARRANGED_STATUSES,
   DETAILS_CORRECTABLE_STATUSES,
   DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
+  EQUIPMENT_LOCKED_HINT,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
@@ -127,7 +129,7 @@ const OUT_OF_DATE_CODES: readonly ErrorCode[] = [
 ]
 
 /**
- * Story 7.2 AC1/AC3-AC5/AC8: what the coordinator's edit page says above the form - what can be
+ * Story 7.2 AC1/AC3/AC4/AC8/AC10/AC12: what the coordinator's edit page says above the form - what can be
  * edited at this stage, and why the rest cannot.
  */
 function coordinatorEditNotice(event: EventDetail, userId: string | undefined): string {
@@ -141,7 +143,10 @@ function coordinatorEditNotice(event: EventDetail, userId: string | undefined): 
     return `${DETAILS_LOCKED_HINT} Internal notes can still be edited.`
   }
   if (!DETAILS_CORRECTABLE_STATUSES.includes(event.status)) {
-    return 'Event details can only be corrected while the event is under review or awaiting clarification. Internal notes can still be edited.'
+    return 'Event details can only be corrected before the event is confirmed. Internal notes can still be edited.'
+  }
+  if (ARRANGED_STATUSES.includes(event.status)) {
+    return 'You are correcting an approved event. Saved changes apply straight away; a change that no longer fits a venue booking is refused.'
   }
   return "You are correcting the organiser's request before it is decided. Saved changes apply straight away; the organiser does not need to approve them."
 }
@@ -184,10 +189,11 @@ interface EventRequestFormPageProps {
  * Serves /events/new (creates a draft) and /events/:eventId/edit (edits it).
  *
  * Story 7.2: with `isCoordinatorEdit`, serves /events/:eventId/coordinator-edit, where the assigned
- * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4: while it
- * is under review or awaiting clarification, the organiser's request too, cover picture included -
- * the same fields, the same controls and the same checks; and every field marked * must be filled
- * to save them, as on the backend. AC5: once approved, those fields are shown greyed out. AC7:
+ * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4/AC10:
+ * until it is confirmed, the organiser's request too, cover picture included - the same fields,
+ * the same controls and the same checks; and every field marked * must be filled to save them, as
+ * on the backend. AC15: once approved, the equipment is shown read-only, as it is changed in its
+ * own section. AC12: once confirmed, those fields are shown greyed out. AC7:
  * equipment no longer free for new dates is marked on its line, as 2.1 does. AC6/AC9: a save made
  * against a copy that was approved or changed meanwhile is refused, and the page offers a reload.
  */
@@ -269,13 +275,16 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     event !== null &&
     event.assigned_coordinator_id === user?.id &&
     !TERMINAL_STATUSES.includes(event.status)
-  /** Story 7.2 AC4/AC5: and the organiser's details too, only while the event is under review or
-   *  awaiting clarification. */
+  /** Story 7.2 AC4/AC10/AC12: and the organiser's details too, until the event is confirmed. */
   const canCorrectDetails =
     canEditNotes && event !== null && DETAILS_CORRECTABLE_STATUSES.includes(event.status)
   const isReadOnly = isCoordinatorEdit
     ? !canCorrectDetails
     : event !== null && event.status !== 'DRAFT'
+  /** Story 7.2 AC15: once approved, equipment is changed in its own section, not here. */
+  const isEquipmentApproved =
+    canCorrectDetails && event !== null && ARRANGED_STATUSES.includes(event.status)
+  const isEquipmentReadOnly = isReadOnly || isEquipmentApproved
   // Story 7.2 AC7: an event being corrected is not counted against its own equipment holds.
   const excludedEventId = isCoordinatorEdit && eventId !== undefined ? eventId : null
   const savedPictureUrl = isPictureRemoved ? null : mediaUrl(event?.cover_image_url ?? null)
@@ -325,7 +334,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
 
   // Availability is asked for once both dates are usable, and again after a refused submission.
   const datesKey =
-    form && form.startsAt && form.endsAt && !dateProblem && !isReadOnly
+    form && form.startsAt && form.endsAt && !dateProblem && !isEquipmentReadOnly
       ? `${form.startsAt}|${form.endsAt}|${availabilityRefresh}`
       : null
   const availabilityByType =
@@ -378,7 +387,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
 
   /** What the row says about stock: how many are free. */
   function equipmentAvailabilityNote(line: EquipmentDraft) {
-    if (isReadOnly || line.typeCode === NO_EQUIPMENT_CHOSEN) return null
+    if (isEquipmentReadOnly || line.typeCode === NO_EQUIPMENT_CHOSEN) return null
     if (datesKey === null) {
       return <p className="form-hint">Choose the start and end to see how many are available.</p>
     }
@@ -1387,9 +1396,10 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             </div>
           </fieldset>
 
-          <fieldset className="card" disabled={isReadOnly}>
+          <fieldset className="card" disabled={isEquipmentReadOnly}>
             <legend>Equipment</legend>
-            {form.equipment.length === 0 && (
+            {isEquipmentApproved && <p className="form-hint">{EQUIPMENT_LOCKED_HINT}</p>}
+            {form.equipment.length === 0 && !isEquipmentApproved && (
               <p className="form-hint">No equipment requested. Add each item you need.</p>
             )}
             {form.equipment.map((line, index) => (
@@ -1450,24 +1460,28 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   </label>
                 </div>
                 {equipmentAvailabilityNote(line)}
-                <button
-                  type="button"
-                  className="secondary button-sm"
-                  onClick={() => removeEquipment(line.key)}
-                >
-                  Remove
-                </button>
+                {!isEquipmentApproved && (
+                  <button
+                    type="button"
+                    className="secondary button-sm"
+                    onClick={() => removeEquipment(line.key)}
+                  >
+                    Remove
+                  </button>
+                )}
               </fieldset>
             ))}
-            <button
-              type="button"
-              className="secondary"
-              disabled={hasEveryEquipmentType}
-              onClick={addEquipment}
-            >
-              Add equipment
-            </button>
-            {hasEveryEquipmentType && (
+            {!isEquipmentApproved && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={hasEveryEquipmentType}
+                onClick={addEquipment}
+              >
+                Add equipment
+              </button>
+            )}
+            {hasEveryEquipmentType && !isEquipmentApproved && (
               <p className="form-hint">Every equipment type is already on this request.</p>
             )}
           </fieldset>
