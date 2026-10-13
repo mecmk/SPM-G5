@@ -16,6 +16,22 @@ AC7 Editing the event dates before approval re-validates all date-dependent fiel
 AC8 Only the assigned coordinator can edit, enforced by the API.
 AC9 A save made against a stale copy of the event is refused, so the user can reload.
 
+Fix f7.2.4 (Q32, Q35) moves the lock from approval to confirmation, replacing AC5 and AC6:
+AC10 The details can be corrected in every status before Confirmed, Planning included, with AC4's
+     checks; the status does not change.
+AC11 After approval, an edit that touches no booking or equipment request saves as under review.
+AC12 Once Confirmed, the details are read-only and changes go through a change request (19.1).
+AC13 An edit that keeps a booked requirement exactly at its booking's times and number of people
+     still fits.
+AC14 After approval, an edit that no longer fits a pending or approved venue booking - times
+     outside it, more people, another layout, or the requirement removed - is refused, naming
+     the venue and the requirement.
+AC15 After approval, the equipment is changed in its own section (15.1), not here, and a date
+     move outside the period an open item is held for is refused, naming the item.
+AC16 A refused edit leaves the event, its bookings, its equipment and its holds as they were.
+AC17 Only the assigned coordinator can edit (AC8).
+AC18 The fit is judged against the bookings and items as they stand when the save arrives.
+
 Excluded, with reason:
 * Venue re-check (AC7) - a venue request can only be raised once the event is approved (12.1
   AC1), so no venue request can exist while it is under review.
@@ -43,9 +59,14 @@ from app.events.models import Event, EventStatus
 from app.events.schemas import EventReviewCorrection
 from tests.support.factories import (
     create_submittable_event_request,
+    make_booking,
     make_equipment_hold,
+    make_equipment_item,
     make_equipment_out_of_service,
+    make_equipment_type,
     make_event,
+    make_venue,
+    make_venue_requirement,
 )
 from tests.support.seed import Events, Users
 
@@ -633,9 +654,9 @@ def test_a_coordinator_not_assigned_to_the_event_cannot_change_its_picture(login
     assert _read(client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
 
 
-@pytest.mark.story("7.2", ac=5)
-def test_the_cover_picture_is_locked_once_the_event_is_approved(coordinator_client, upload_dir):
-    event = _read(coordinator_client, Events.PLANNING)
+@pytest.mark.story("7.2", ac=12)
+def test_the_cover_picture_is_locked_once_the_event_is_confirmed(coordinator_client, upload_dir):
+    event = _read(coordinator_client, Events.CONFIRMED)
 
     assert _upload_picture(coordinator_client, event).status_code == 409
     assert _remove_picture(coordinator_client, event).status_code == 409
@@ -653,29 +674,28 @@ def test_a_picture_saved_against_a_stale_copy_is_refused(coordinator_client, upl
     assert _read(coordinator_client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
 
 
-# --- AC5: details lock at approval; internal notes do not -------------------------------------
-@pytest.mark.story("7.2", ac=5)
-@pytest.mark.parametrize("event_id", [Events.PLANNING, Events.CONFIRMED])
-def test_details_are_read_only_once_the_event_is_approved(coordinator_client, event_id):
-    event = _read(coordinator_client, event_id)
+# --- AC12 (f7.2.4, replacing AC5): details lock at confirmation; internal notes do not ---------
+@pytest.mark.story("7.2", ac=12)
+def test_details_are_read_only_once_the_event_is_confirmed(coordinator_client):
+    event = _read(coordinator_client, Events.CONFIRMED)
 
-    response = _correct(coordinator_client, event, name="Renamed after approval")
+    response = _correct(coordinator_client, event, name="Renamed after confirmation")
 
     assert response.status_code == 409
     assert "change request" in response.json()["detail"]
-    assert _read(coordinator_client, event_id)["name"] == event["name"]
+    assert _read(coordinator_client, Events.CONFIRMED)["name"] == event["name"]
 
 
-@pytest.mark.story("7.2", ac=5)
+@pytest.mark.story("7.2", ac=12)
 def test_internal_notes_stay_editable_once_details_are_locked(coordinator_client):
     response = coordinator_client.patch(
-        f"/events/{Events.PLANNING}/routine-information",
+        f"/events/{Events.CONFIRMED}/routine-information",
         json={"internal_notes": "Catering confirmed."},
     )
 
     assert response.status_code == 200, response.text
     assert response.json()["internal_notes"] == "Catering confirmed."
-    assert response.json()["status"] == "PLANNING"
+    assert response.json()["status"] == "CONFIRMED"
 
 
 @pytest.mark.story("7.2", ac=5)
@@ -706,16 +726,17 @@ def test_a_correction_saved_before_approval_is_kept_through_it(coordinator_clien
     assert approved.json()["name"] == "Corrected first"
 
 
-@pytest.mark.story("7.2", ac=6)
-def test_a_correction_arriving_after_approval_is_refused(coordinator_client):
-    """The editor was opened while under review; approval landed before Save reached the API."""
+@pytest.mark.story("7.2", ac=10)
+def test_a_correction_arriving_after_approval_is_refused_as_stale(coordinator_client):
+    """The editor was opened while under review; approval landed before Save reached the API.
+    Planning still takes corrections (f7.2.4), but the copy on screen is out of date (AC9)."""
     opened = _read(coordinator_client, Events.SUBMITTED)
     assert coordinator_client.post(f"/events/{Events.SUBMITTED}/approve").status_code == 200
 
     response = _correct(coordinator_client, opened, name="Too late")
 
     assert response.status_code == 409
-    assert "change request" in response.json()["detail"]
+    assert "reload" in response.json()["detail"].lower()
     after = _read(coordinator_client, Events.SUBMITTED)
     assert after["name"] == "Data Literacy Workshop"
     assert after["status"] == "PLANNING"
@@ -1025,3 +1046,504 @@ def test_a_save_without_the_token_it_was_read_with_is_refused(coordinator_client
     )
 
     assert response.status_code == 422
+
+
+# --- f7.2.4: editing until the event is confirmed (AC10-AC18) ----------------------------------
+LAYOUT = "THEATRE"
+OTHER_LAYOUT = "CLASSROOM"
+BOOKED_PEOPLE = 80
+
+
+def _planning_event(db: Session) -> tuple[Event, uuid.UUID]:
+    """An approved event (Planning) assigned to ``Users.COORDINATOR``, complete enough for any
+    correction to keep everything 2.1 AC10 requires, with one venue requirement for its whole
+    period. Returns the event and the requirement's id; the caller commits."""
+    starts_at, ends_at = _period()
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        expected_attendance=100,
+        description="An approved event.",
+        contact_name="Priya Nair",
+        contact_email="priya.nair@example.com",
+        contact_phone="+65 9123 4567",
+        accessibility_none_required=True,
+    )
+    requirement_id = make_venue_requirement(
+        db,
+        event.id,
+        capacity=BOOKED_PEOPLE,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        layout_code=LAYOUT,
+    )
+    return event, requirement_id
+
+
+def _book(db: Session, event: Event, requirement_id: uuid.UUID | None, *, status: str = "APPROVED"):
+    """A booking of a fresh venue for ``requirement_id``, recording the requirement as it is now:
+    the event's period, ``BOOKED_PEOPLE`` and ``LAYOUT`` - the values Venue Staff decided on."""
+    venue = make_venue(db, capacity=200, layouts={LAYOUT: None})
+    expiry = {} if status == "PENDING" else {"hold_expires_at": event.starts_at}
+    return make_booking(
+        db,
+        venue_id=venue.id,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        status=status,
+        event_id=event.id,
+        venue_requirement_id=requirement_id,
+        expected_attendance=BOOKED_PEOPLE,
+        required_layout_code=LAYOUT,
+        **expiry,
+    )
+
+
+def _requirement_change(event: dict, **changes) -> dict:
+    """The event's one venue requirement, sent back with ``changes``."""
+    return {"venue_requirements": [{**_requirement_in(event["venue_requirements"][0]), **changes}]}
+
+
+def _booking_row(db: Session, booking_id) -> tuple:
+    db.expire_all()
+    return db.execute(
+        text(
+            "SELECT status, starts_at, ends_at, expected_attendance, venue_requirement_id"
+            " FROM venue_bookings WHERE id = :id"
+        ),
+        {"id": booking_id},
+    ).one()
+
+
+def _item_status(db: Session, item_id) -> str:
+    db.expire_all()
+    return db.execute(
+        text("SELECT status FROM event_equipment_requests WHERE id = :id"), {"id": item_id}
+    ).scalar_one()
+
+
+# AC10: Planning takes corrections; the status stays where it was.
+@pytest.mark.story("7.2", ac=10)
+def test_details_can_be_corrected_while_the_event_is_planning(login_as, db: Session):
+    event, _ = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+
+    response = _correct(client, _read(client, event.id), name="Renamed while planning")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "PLANNING"
+    details = db.execute(
+        text(
+            "SELECT details FROM audit_log"
+            " WHERE action = 'EVENT_DETAILS_CORRECTED' AND entity_id = :id"
+        ),
+        {"id": event.id},
+    ).scalar_one()
+    assert details["name"]["to"] == "Renamed while planning"
+
+
+@pytest.mark.story("7.2", ac=10)
+def test_the_cover_picture_can_be_changed_while_the_event_is_planning(
+    login_as, db: Session, upload_dir
+):
+    event, _ = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+
+    uploaded = _upload_picture(client, _read(client, event.id))
+    assert uploaded.status_code == 200, uploaded.text
+    removed = _remove_picture(client, _read(client, event.id))
+
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["cover_image_url"] is None
+
+
+@pytest.mark.story("7.2", ac=10)
+def test_corrections_while_planning_keep_the_2_1_checks(login_as, db: Session):
+    event, _ = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+
+    response = _correct(client, _read(client, event.id), description="")
+
+    assert response.status_code == 422
+    assert _read(client, event.id)["description"] == "An approved event."
+
+
+# AC11: an edit that touches no booking or equipment saves as it does under review.
+@pytest.mark.story("7.2", ac=11)
+def test_an_edit_that_touches_no_booking_saves_and_leaves_the_booking_alone(login_as, db: Session):
+    event, requirement_id = _planning_event(db)
+    booking = _book(db, event, requirement_id)
+    db.commit()
+    before = _booking_row(db, booking.id)
+    client = login_as(Users.COORDINATOR)
+
+    response = _correct(
+        client,
+        _read(client, event.id),
+        description="Now with a keynote.",
+        contact_email="events@acme.example",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["description"] == "Now with a keynote."
+    assert _booking_row(db, booking.id) == before
+
+
+# AC12: confirmation landing while the form is open still locks the details.
+@pytest.mark.story("7.2", ac=12)
+def test_a_correction_arriving_after_confirmation_is_refused(login_as, db: Session):
+    """No story confirms an event yet (21.x), so the status is set directly."""
+    event, _ = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    opened = _read(client, event.id)
+    db.execute(text("UPDATE events SET status = 'CONFIRMED' WHERE id = :id"), {"id": event.id})
+    db.commit()
+
+    response = _correct(client, opened, name="Too late")
+
+    assert response.status_code == 409
+    assert "change request" in response.json()["detail"]
+    assert _read(client, event.id)["name"] == opened["name"]
+
+
+# AC13: exactly at the booking's limits still fits.
+@pytest.mark.story("7.2", ac=13)
+def test_a_requirement_kept_exactly_at_its_booking_still_fits(login_as, db: Session):
+    event, requirement_id = _planning_event(db)
+    _book(db, event, requirement_id)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+
+    response = _correct(
+        client,
+        read,
+        **_requirement_change(
+            read,
+            starts_at=event.starts_at.isoformat(),
+            ends_at=event.ends_at.isoformat(),
+            capacity=BOOKED_PEOPLE,
+            notes="Stage on the left.",
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["venue_requirements"][0]["notes"] == "Stage on the left."
+
+
+# AC14: an edit that no longer fits a booking is refused, naming it.
+@pytest.mark.story("7.2", ac=14)
+@pytest.mark.parametrize(
+    "case",
+    ["ends_a_minute_late", "starts_a_minute_early", "one_more_person", "another_layout"],
+)
+def test_a_requirement_edit_that_no_longer_fits_its_booking_is_refused(login_as, db: Session, case):
+    event, requirement_id = _planning_event(db)
+    booking = _book(db, event, requirement_id)
+    db.commit()
+    before = _booking_row(db, booking.id)
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    minute = timedelta(minutes=1)
+    change = {
+        "ends_a_minute_late": {"ends_at": (event.ends_at + minute).isoformat()},
+        "starts_a_minute_early": {"starts_at": (event.starts_at - minute).isoformat()},
+        "one_more_person": {"capacity": BOOKED_PEOPLE + 1},
+        "another_layout": {"layout_code": OTHER_LAYOUT},
+    }[case]
+    # The event's own period moves with the requirement, so only the booking can refuse it.
+    period = {
+        "ends_a_minute_late": {"ends_at": (event.ends_at + minute).isoformat()},
+        "starts_a_minute_early": {"starts_at": (event.starts_at - minute).isoformat()},
+    }.get(case, {})
+
+    response = _correct(client, read, **period, **_requirement_change(read, **change))
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert booking.venue.name in detail
+    assert "Main venue" in detail
+    after = _read(client, event.id)
+    assert after["venue_requirements"] == read["venue_requirements"]
+    assert (after["starts_at"], after["ends_at"]) == (read["starts_at"], read["ends_at"])
+    assert _booking_row(db, booking.id) == before
+
+
+@pytest.mark.story("7.2", ac=14)
+def test_removing_a_booked_requirement_is_refused(login_as, db: Session):
+    event, requirement_id = _planning_event(db)
+    booking = _book(db, event, requirement_id)
+    make_venue_requirement(
+        db,
+        event.id,
+        position=1,
+        name="Breakout room",
+        capacity=20,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    breakout = next(r for r in read["venue_requirements"] if r["name"] == "Breakout room")
+
+    response = _correct(client, read, venue_requirements=[_requirement_in(breakout)])
+
+    assert response.status_code == 409, response.text
+    assert booking.venue.name in response.json()["detail"]
+    assert len(_read(client, event.id)["venue_requirements"]) == 2
+    assert _booking_row(db, booking.id).venue_requirement_id == requirement_id
+
+
+@pytest.mark.story("7.2", ac=14)
+def test_moving_the_event_moves_a_booked_requirement_out_of_its_booking(login_as, db: Session):
+    """The form moves a requirement that follows the event (2.7 AC2) along with it."""
+    event, requirement_id = _planning_event(db)
+    booking = _book(db, event, requirement_id)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    hour = timedelta(hours=1)
+    moved = {"starts_at": event.starts_at + hour, "ends_at": event.ends_at + hour}
+    moved = {key: value.isoformat() for key, value in moved.items()}
+
+    response = _correct(client, read, **moved, **_requirement_change(read, **moved))
+
+    assert response.status_code == 409, response.text
+    assert booking.venue.name in response.json()["detail"]
+    assert _read(client, event.id)["starts_at"] == read["starts_at"]
+
+
+@pytest.mark.story("7.2", ac=14)
+def test_fewer_people_and_shorter_times_inside_the_booking_still_fit(login_as, db: Session):
+    event, requirement_id = _planning_event(db)
+    _book(db, event, requirement_id)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    hour = timedelta(hours=1)
+
+    response = _correct(
+        client,
+        read,
+        **_requirement_change(
+            read,
+            starts_at=(event.starts_at + hour).isoformat(),
+            ends_at=(event.ends_at - hour).isoformat(),
+            capacity=BOOKED_PEOPLE - 30,
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["venue_requirements"][0]["capacity"] == BOOKED_PEOPLE - 30
+
+
+@pytest.mark.story("7.2", ac=14)
+@pytest.mark.parametrize(
+    ("status", "is_refused"),
+    [
+        ("PENDING", True),
+        ("REJECTED", False),
+        ("WITHDRAWN", False),
+        ("CANCELLED", False),
+        ("EXPIRED", False),
+    ],
+)
+def test_only_a_pending_or_approved_booking_holds_its_requirement(
+    login_as, db: Session, status, is_refused
+):
+    event, requirement_id = _planning_event(db)
+    booking = _book(db, event, requirement_id, status=status)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+
+    response = _correct(client, read, **_requirement_change(read, capacity=BOOKED_PEOPLE + 1))
+
+    assert response.status_code == (409 if is_refused else 200), response.text
+    assert (booking.venue.name in response.text) is is_refused
+
+
+@pytest.mark.story("7.2", ac=14)
+def test_a_booking_linked_to_no_requirement_does_not_hold_one(login_as, db: Session):
+    """A booking can have lost its requirement (migration 017 sets it to null on delete)."""
+    event, _ = _planning_event(db)
+    _book(db, event, None)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+
+    response = _correct(client, read, **_requirement_change(read, capacity=BOOKED_PEOPLE + 1))
+
+    assert response.status_code == 200, response.text
+
+
+# AC15: after approval, equipment is changed in its own section, and its holds bound the dates.
+@pytest.mark.story("7.2", ac=15)
+def test_the_equipment_cannot_be_changed_here_after_approval(login_as, db: Session):
+    event, _ = _planning_event(db)
+    item = make_equipment_item(db, event=event, equipment_type=make_equipment_type(db), quantity=2)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    line = read["equipment"][0]
+
+    response = _correct(
+        client,
+        read,
+        equipment=[
+            {"id": line["id"], "equipment_type_code": line["equipment_type_code"], "quantity": 3}
+        ],
+    )
+
+    assert response.status_code == 409, response.text
+    assert "Equipment section" in response.json()["detail"]
+    assert _read(client, event.id)["equipment"][0]["quantity"] == 2
+    assert _item_status(db, item.id) == "REQUESTED"
+
+
+@pytest.mark.story("7.2", ac=15)
+def test_the_equipment_resent_unchanged_does_not_block_a_save(login_as, db: Session):
+    """The form sends every field, the equipment included."""
+    event, _ = _planning_event(db)
+    make_equipment_item(
+        db,
+        event=event,
+        equipment_type=make_equipment_type(db),
+        quantity=2,
+        technical_notes="HDMI",
+    )
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    resent = [
+        {
+            "id": line["id"],
+            "equipment_type_code": line["equipment_type_code"],
+            "quantity": line["quantity"],
+            "technical_notes": line["technical_notes"],
+        }
+        for line in read["equipment"]
+    ]
+
+    response = _correct(client, read, equipment=resent, name="Renamed with equipment")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "Renamed with equipment"
+
+
+@pytest.mark.story("7.2", ac=15)
+@pytest.mark.parametrize("status", ["REQUESTED", "PENDING", "ACCEPTED"])
+def test_moving_the_dates_beyond_an_open_items_hold_is_refused(login_as, db: Session, status):
+    event, _ = _planning_event(db)
+    kit = make_equipment_type(db)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=2, status=status)
+    db.commit()
+    held = _held(db, event.id)
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+
+    response = _correct(client, read, ends_at=(event.ends_at + timedelta(hours=1)).isoformat())
+
+    assert response.status_code == 409, response.text
+    assert kit.name in response.json()["detail"]
+    assert _read(client, event.id)["ends_at"] == read["ends_at"]
+    assert _item_status(db, item.id) == status
+    assert _held(db, event.id) == held
+
+
+@pytest.mark.story("7.2", ac=15)
+def test_shortening_the_dates_inside_the_holds_keeps_the_accepted_equipment(login_as, db: Session):
+    event, _ = _planning_event(db)
+    item = make_equipment_item(
+        db, event=event, equipment_type=make_equipment_type(db), quantity=2, status="ACCEPTED"
+    )
+    db.commit()
+    held = _held(db, event.id)
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    shorter_end = (event.ends_at - timedelta(hours=1)).isoformat()
+
+    response = _correct(
+        client, read, ends_at=shorter_end, **_requirement_change(read, ends_at=shorter_end)
+    )
+
+    assert response.status_code == 200, response.text
+    assert _item_status(db, item.id) == "ACCEPTED"
+    assert _held(db, event.id) == held
+
+
+@pytest.mark.story("7.2", ac=15)
+@pytest.mark.parametrize("status", ["DECLINED", "CANCELLED"])
+def test_a_declined_or_cancelled_item_does_not_bound_the_dates(login_as, db: Session, status):
+    event, _ = _planning_event(db)
+    make_equipment_item(
+        db,
+        event=event,
+        equipment_type=make_equipment_type(db),
+        quantity=2,
+        status=status,
+        is_held=False,
+    )
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+
+    response = _correct(client, read, ends_at=(event.ends_at + timedelta(hours=1)).isoformat())
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("7.2", ac=15)
+def test_an_event_with_nothing_booked_moves_freely_after_approval(login_as, db: Session):
+    event, _ = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    day = timedelta(days=1)
+    moved = {
+        "starts_at": (event.starts_at + day).isoformat(),
+        "ends_at": (event.ends_at + day).isoformat(),
+    }
+
+    response = _correct(client, read, **moved, **_requirement_change(read, **moved))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["starts_at"] == _read(client, event.id)["starts_at"]
+
+
+# AC17: only the assigned coordinator, in Planning as under review.
+@pytest.mark.story("7.2", ac=17)
+@pytest.mark.parametrize("user", [Users.COORDINATOR_2, Users.ORGANISER])
+def test_only_the_assigned_coordinator_corrects_a_planning_event(login_as, db: Session, user):
+    event, _ = _planning_event(db)
+    db.commit()
+    read = _read(login_as(Users.COORDINATOR), event.id)
+
+    response = _correct(login_as(user), read, name="Not mine to change")
+
+    assert response.status_code == 403
+    assert _read(login_as(Users.COORDINATOR), event.id)["name"] == read["name"]
+
+
+# AC18: the fit is judged against the bookings as they stand when the save arrives.
+@pytest.mark.story("7.2", ac=18)
+def test_a_booking_requested_after_the_form_opened_is_still_respected(login_as, db: Session):
+    event, requirement_id = _planning_event(db)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    opened = _read(client, event.id)
+    booking = _book(db, event, requirement_id, status="PENDING")
+    db.commit()
+
+    response = _correct(client, opened, **_requirement_change(opened, capacity=BOOKED_PEOPLE + 1))
+
+    assert response.status_code == 409, response.text
+    assert booking.venue.name in response.json()["detail"]
