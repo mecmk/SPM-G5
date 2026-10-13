@@ -27,7 +27,7 @@ from app.auth.permissions import Permission, role_has
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.config import settings
-from app.events.models import Event, VenueRequirement
+from app.events.models import Event, EventStatus, VenueRequirement
 from app.venues.models import (
     AccessibilityFeature,
     Facility,
@@ -44,12 +44,15 @@ from app.venues.models import (
 from app.venues.schemas import (
     BOOKING_REASON,
     HELD_REASON,
+    AffectedBookingOut,
     RelaxHint,
     VenueCreate,
     VenueSearchHit,
     VenueSearchQuery,
     VenueSearchResult,
     VenueSuitabilityOut,
+    VenueUnavailabilityCreate,
+    VenueUnavailabilityUpdate,
     VenueUnavailableWindowOut,
     VenueUpdate,
 )
@@ -91,6 +94,54 @@ class InvalidDateRange(ValueError):
 
 
 END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
+
+# Story 9.4: why a change to a venue's unavailability is refused.
+PERIOD_END_NOT_AFTER_START_MESSAGE = "The period must end after it starts."
+OTHER_NEEDS_DESCRIPTION_MESSAGE = "Describe the reason when it is Other."
+PERIOD_NOT_STARTED_MESSAGE = (
+    "This period has not started, so it cannot be ended. Remove it instead."
+)
+PERIOD_ALREADY_ENDED_MESSAGE = "This period has already ended."
+PERIOD_STARTED_MESSAGE = "This period has started, so it cannot be removed. End it instead."
+# The audit log's name for a period, and the actions each write leaves (story 9.4 AC1, AC6).
+UNAVAILABILITY_ENTITY_TYPE = "venue_unavailability_period"
+UNAVAILABILITY_CREATED = "VENUE_UNAVAILABILITY_CREATED"
+UNAVAILABILITY_UPDATED = "VENUE_UNAVAILABILITY_UPDATED"
+UNAVAILABILITY_ENDED = "VENUE_UNAVAILABILITY_ENDED"
+UNAVAILABILITY_REMOVED = "VENUE_UNAVAILABILITY_REMOVED"
+
+
+class UnavailabilityNotFound(LookupError):
+    """Story 9.4: no such period on this venue."""
+
+
+class DescriptionRequired(ValueError):
+    """Story 9.4 AC1: a reason of Other says what it is."""
+
+    def __init__(self) -> None:
+        super().__init__(OTHER_NEEDS_DESCRIPTION_MESSAGE)
+
+
+class PeriodNotStarted(ValueError):
+    """Story 9.4 AC6: only a period in force is ended; one not yet started is removed."""
+
+    def __init__(self) -> None:
+        super().__init__(PERIOD_NOT_STARTED_MESSAGE)
+
+
+class PeriodAlreadyEnded(ValueError):
+    """Story 9.4 AC6: a period that has ended cannot be ended again."""
+
+    def __init__(self) -> None:
+        super().__init__(PERIOD_ALREADY_ENDED_MESSAGE)
+
+
+class PeriodStarted(ValueError):
+    """Story 9.4 AC6: a period in force is ended, not removed, so the calendar keeps it."""
+
+    def __init__(self) -> None:
+        super().__init__(PERIOD_STARTED_MESSAGE)
+
 
 # Story 8.1 AC8: why a search is refused.
 SEARCH_NEEDS_BOTH_ENDS_MESSAGE = "Choose both a start and an end, or neither."
@@ -274,6 +325,7 @@ def get_venue_calendar(
     ).all()
     windows = [
         VenueUnavailableWindowOut(
+            id=None,
             starts_at=booking.held_from,
             ends_at=booking.held_until,
             booking_starts_at=booking.starts_at,
@@ -296,6 +348,7 @@ def get_venue_calendar(
     ).all()
     windows += [
         VenueUnavailableWindowOut(
+            id=period.id,
             starts_at=period.starts_at,
             ends_at=period.ends_at,
             booking_starts_at=None,
@@ -892,6 +945,229 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
     )
     db.commit()
     _delete_venue_image_files(image_urls)
+
+
+# --- unavailability (story 9.4) -----------------------------------------------------------
+def _snapshot(period: VenueUnavailabilityPeriod) -> dict[str, Any]:
+    """A period's own fields as the audit log keeps them."""
+    return {
+        "starts_at": period.starts_at.isoformat(),
+        "ends_at": period.ends_at.isoformat(),
+        "reason": period.reason,
+        "description": period.notes,
+    }
+
+
+def _check_period(
+    starts_at: datetime, ends_at: datetime, *, reason: str, description: str | None
+) -> None:
+    """AC5: the end is after the start. AC1: Other has a description. Nothing is written, so a
+    refusal needs no rollback."""
+    if ends_at <= starts_at:
+        raise InvalidDateRange(PERIOD_END_NOT_AFTER_START_MESSAGE)
+    if reason == UnavailabilityReason.OTHER and description is None:
+        raise DescriptionRequired()
+
+
+def _get_period(
+    db: Session, venue_id: uuid.UUID, period_id: uuid.UUID
+) -> VenueUnavailabilityPeriod:
+    period = db.scalar(
+        select(VenueUnavailabilityPeriod).where(
+            VenueUnavailabilityPeriod.id == period_id,
+            VenueUnavailabilityPeriod.venue_id == venue_id,
+        )
+    )
+    if period is None:
+        raise UnavailabilityNotFound(period_id)
+    return period
+
+
+def add_unavailability(
+    db: Session, venue_id: uuid.UUID, data: VenueUnavailabilityCreate, *, actor: User
+) -> VenueUnavailabilityPeriod:
+    """Story 9.4 AC1/AC5: mark ``venue_id`` unavailable from ``starts_at`` to ``ends_at`` for a
+    reason. A period may start in the past and may overlap another of the venue's; bookings in
+    the way do not stop it being saved (AC2)."""
+    get_venue(db, venue_id)
+    _check_period(data.starts_at, data.ends_at, reason=data.reason, description=data.description)
+    period = VenueUnavailabilityPeriod(
+        venue_id=venue_id,
+        starts_at=data.starts_at,
+        ends_at=data.ends_at,
+        reason=data.reason,
+        notes=data.description,
+        created_by_id=actor.id,
+    )
+    db.add(period)
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action=UNAVAILABILITY_CREATED,
+        entity_type=UNAVAILABILITY_ENTITY_TYPE,
+        entity_id=period.id,
+        details={"venue_id": str(venue_id), **_snapshot(period)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+def edit_unavailability(
+    db: Session,
+    venue_id: uuid.UUID,
+    period_id: uuid.UUID,
+    data: VenueUnavailabilityUpdate,
+    *,
+    actor: User,
+    now: datetime,
+) -> VenueUnavailabilityPeriod:
+    """Story 9.4 AC6: change a period's start, end, reason or description - only the fields
+    sent - or, with ``end_now``, end it (``end_unavailability``). The rules of AC1 and AC5 are
+    applied to the period as it would become, so moving only the start past the end is refused.
+    The audit row keeps what was replaced."""
+    if data.end_now:
+        return end_unavailability(db, venue_id, period_id, actor=actor, now=now)
+    period = _get_period(db, venue_id, period_id)
+    sent = data.model_fields_set
+    starts_at = data.starts_at if "starts_at" in sent else period.starts_at
+    ends_at = data.ends_at if "ends_at" in sent else period.ends_at
+    reason = data.reason if "reason" in sent else period.reason
+    description = data.description if "description" in sent else period.notes
+    _check_period(starts_at, ends_at, reason=reason, description=description)
+
+    before = _snapshot(period)
+    period.starts_at, period.ends_at = starts_at, ends_at
+    period.reason, period.notes = reason, description
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action=UNAVAILABILITY_UPDATED,
+        entity_type=UNAVAILABILITY_ENTITY_TYPE,
+        entity_id=period.id,
+        details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+def end_unavailability(
+    db: Session,
+    venue_id: uuid.UUID,
+    period_id: uuid.UUID,
+    *,
+    actor: User,
+    now: datetime,
+) -> VenueUnavailabilityPeriod:
+    """Story 9.4 AC6: end a period in force at ``now``. One that has not started - ``starts_at``
+    at or after ``now``, since ending it would leave it ending as it begins - is refused
+    (``PeriodNotStarted``; remove it instead), and so is one that has already ended
+    (``PeriodAlreadyEnded``). The caller gives ``now``, as 12.7's hold functions take theirs."""
+    period = _get_period(db, venue_id, period_id)
+    if period.starts_at >= now:
+        raise PeriodNotStarted()
+    if period.ends_at <= now:
+        raise PeriodAlreadyEnded()
+
+    before = _snapshot(period)
+    period.ends_at = now
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action=UNAVAILABILITY_ENDED,
+        entity_type=UNAVAILABILITY_ENTITY_TYPE,
+        entity_id=period.id,
+        details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+def remove_unavailability(
+    db: Session,
+    venue_id: uuid.UUID,
+    period_id: uuid.UUID,
+    *,
+    actor: User,
+    now: datetime,
+) -> None:
+    """Story 9.4 AC6: remove a period that has not started. One in force is refused
+    (``PeriodStarted``): it is ended, so the calendar keeps what happened. The audit row keeps
+    the removed period's fields."""
+    period = _get_period(db, venue_id, period_id)
+    if period.starts_at < now:
+        raise PeriodStarted()
+
+    details = {"venue_id": str(venue_id), **_snapshot(period)}
+    db.delete(period)
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action=UNAVAILABILITY_REMOVED,
+        entity_type=UNAVAILABILITY_ENTITY_TYPE,
+        entity_id=period_id,
+        details=details,
+        commit=False,
+    )
+    db.commit()
+
+
+def list_affected_bookings(
+    db: Session,
+    venue_id: uuid.UUID,
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    now: datetime,
+) -> list[AffectedBookingOut]:
+    """Story 9.4 AC2: the pending and approved bookings of ``venue_id`` whose held period - setup
+    and teardown included - overlaps ``starts_at``..``ends_at``, soonest first, so Venue Staff
+    see them before saving. Half-open, as bookings are (AC5): one that only touches is not
+    listed. A completed event's booking, and one whose held period is already over, are left out
+    (AC8). Reads only."""
+    get_venue(db, venue_id)
+    if ends_at <= starts_at:
+        raise InvalidDateRange(PERIOD_END_NOT_AFTER_START_MESSAGE)
+    rows = db.execute(
+        select(
+            VenueBooking.id,
+            VenueBooking.event_id,
+            Event.name,
+            VenueBooking.status,
+            VenueBooking.held_from,
+            VenueBooking.held_until,
+        )
+        .join(Event, Event.id == VenueBooking.event_id)
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status.in_(_HOLDING_STATUSES),
+            Event.status != EventStatus.COMPLETED,
+            VenueBooking.held_until > now,
+            VenueBooking.held_from < ends_at,
+            VenueBooking.held_until > starts_at,
+        )
+        .order_by(VenueBooking.held_from, VenueBooking.id)
+    ).all()
+    return [
+        AffectedBookingOut(
+            booking_id=row.id,
+            event_id=row.event_id,
+            event_name=row.name,
+            status=row.status,
+            held_from=row.held_from,
+            held_until=row.held_until,
+        )
+        for row in rows
+    ]
 
 
 # --- pictures (story 8.3 AC5-AC10, bug f8.3.2) --------------------------------------------

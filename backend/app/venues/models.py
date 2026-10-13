@@ -161,6 +161,8 @@ class UnavailabilityReason:
     SAFETY = "SAFETY"  # shown as "Safety concern"
     OTHER = "OTHER"  # needs a description (ck_venue_unavailability_other_description)
 
+    ALL = (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY, OTHER)
+
 
 class VenueUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A block of time a venue cannot be booked for a reason other than an event booking

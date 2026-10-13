@@ -3,13 +3,15 @@
 Story 8.3 (create / update, Venue Staff only), delete (story 8.1 AC12), plus the read endpoints
 stories 8.1 / 8.2 need, 8.1's search, and the calendar endpoint story 9.1 needs. Story 8.3
 AC5-AC10 (bug f8.3.2): a venue's pictures, added, arranged and removed by Venue Staff and served
-from /uploads/venues/.
+from /uploads/venues/. Story 9.4: Venue Staff mark a venue unavailable, edit and end the period,
+and preview the bookings it would affect.
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
@@ -23,6 +25,7 @@ from app.bookings.deps import ReleaseLapsedHolds
 from app.db import get_db
 from app.venues import service
 from app.venues.schemas import (
+    AffectedBookingOut,
     ReferenceItem,
     VenueCreate,
     VenueImageOrder,
@@ -32,6 +35,9 @@ from app.venues.schemas import (
     VenueSearchResult,
     VenueSuitabilityOut,
     VenueSummary,
+    VenueUnavailabilityCreate,
+    VenueUnavailabilityOut,
+    VenueUnavailabilityUpdate,
     VenueUnavailableWindowOut,
     VenueUpdate,
 )
@@ -45,9 +51,11 @@ CanRead = Depends(require_permission(Permission.VENUES_READ))
 CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
 CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
 CanRequestBookings = Depends(require_permission(Permission.BOOKINGS_REQUEST))
+CanManageUnavailability = Depends(require_permission(Permission.VENUE_UNAVAILABILITY_MANAGE))
 DbSession = Annotated[Session, Depends(get_db)]
 
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
+UNAVAILABILITY_NOT_FOUND_MESSAGE = "Unavailability period not found."
 PICTURE_NOT_FOUND_MESSAGE = "Picture not found."
 EMPTY_PICTURE_MESSAGE = "Choose a picture to upload."
 # A name the server generated: a UUID and one of the accepted extensions, nothing else.
@@ -140,6 +148,89 @@ def get_venue_calendar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
     except service.InvalidDateRange as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+
+@router.get(
+    "/{venue_id}/unavailability/affected-bookings",
+    response_model=list[AffectedBookingOut],
+    dependencies=[CanManageUnavailability],
+)
+def list_affected_bookings(
+    venue_id: uuid.UUID,
+    db: DbSession,
+    starts_at: Annotated[AwareDatetime, Query()],
+    ends_at: Annotated[AwareDatetime, Query()],
+) -> list[AffectedBookingOut]:
+    """Story 9.4 AC2/AC9: the pending and approved bookings a period from ``starts_at`` to
+    ``ends_at`` would affect, for Venue Staff to see before they save. Reads only."""
+    try:
+        return service.list_affected_bookings(
+            db, venue_id, starts_at=starts_at, ends_at=ends_at, now=datetime.now(UTC)
+        )
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.InvalidDateRange as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+
+@router.post(
+    "/{venue_id}/unavailability",
+    response_model=VenueUnavailabilityOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_unavailability(
+    venue_id: uuid.UUID,
+    payload: VenueUnavailabilityCreate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManageUnavailability],
+) -> VenueUnavailabilityOut:
+    """Story 9.4 AC1/AC5/AC9: only Venue Staff mark a venue unavailable."""
+    try:
+        period = service.add_unavailability(db, venue_id, payload, actor=actor)
+    except service.VenueNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except (service.InvalidDateRange, service.DescriptionRequired) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return VenueUnavailabilityOut.from_period(period)
+
+
+@router.patch("/{venue_id}/unavailability/{period_id}", response_model=VenueUnavailabilityOut)
+def edit_unavailability(
+    venue_id: uuid.UUID,
+    period_id: uuid.UUID,
+    payload: VenueUnavailabilityUpdate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManageUnavailability],
+) -> VenueUnavailabilityOut:
+    """Story 9.4 AC6/AC9: edit a period, or end one in force with ``{"end_now": true}``, which
+    sets its end to the server's now (409 if it has not started or has already ended)."""
+    try:
+        period = service.edit_unavailability(
+            db, venue_id, period_id, payload, actor=actor, now=datetime.now(UTC)
+        )
+    except service.UnavailabilityNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, UNAVAILABILITY_NOT_FOUND_MESSAGE) from None
+    except (service.InvalidDateRange, service.DescriptionRequired) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except (service.PeriodNotStarted, service.PeriodAlreadyEnded) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return VenueUnavailabilityOut.from_period(period)
+
+
+@router.delete("/{venue_id}/unavailability/{period_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_unavailability(
+    venue_id: uuid.UUID,
+    period_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManageUnavailability],
+) -> None:
+    """Story 9.4 AC6/AC9: remove a period that has not started; one in force is ended instead."""
+    try:
+        service.remove_unavailability(db, venue_id, period_id, actor=actor, now=datetime.now(UTC))
+    except service.UnavailabilityNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, UNAVAILABILITY_NOT_FOUND_MESSAGE) from None
+    except service.PeriodStarted as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
 
 
 @router.get("/{venue_id}/suitability", response_model=VenueSuitabilityOut)
