@@ -313,6 +313,8 @@ export const HELD_REASON = 'HELD'
  * (AC5) are the booking's own requested period inside it - which may cover only part of its
  * event's own schedule - null for a closure. */
 export interface VenueUnavailableWindow {
+  /** Story 9.4: a closure's id, which an edit or an end names; null for a booking. */
+  id: string | null
   starts_at: string
   ends_at: string
   booking_starts_at: string | null
