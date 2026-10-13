@@ -4,6 +4,7 @@ import {
   BOOKING_REQUESTS_PATH,
   EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
+  EVENTS_UNASSIGNED_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
   VENUE_CATALOGUE_PATH,
@@ -57,6 +58,15 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'inbox',
         permission: PERMISSIONS.EVENTS_REVIEW,
         story: '4.1',
+        isAvailable: true,
+      },
+      {
+        to: EVENTS_UNASSIGNED_PATH,
+        label: 'Unassigned events',
+        description: 'Submitted requests waiting for a coordinator. Assign each one from here.',
+        icon: 'inbox',
+        permission: PERMISSIONS.EVENTS_ASSIGN,
+        story: '5.4',
         isAvailable: true,
       },
       {

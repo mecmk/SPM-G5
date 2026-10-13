@@ -132,6 +132,9 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
+// Story 5.4: the Event Coordinator Lead's queue of submitted events with no coordinator yet.
+export const EVENTS_UNASSIGNED_PATH = '/events/unassigned'
+
 // Story 12.1: the old Request a venue page. f12.1.1 moved the request into the event's context,
 // so this address is kept only to redirect old links to the Events inbox.
 export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'

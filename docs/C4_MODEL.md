@@ -29,6 +29,7 @@ C4Context
     title Level 1 - System context for ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact who requests an event and follows its progress")
+    Person(lead, "Event Coordinator Lead", "ConnectSphere staff member who assigns each submitted request to a coordinator")
     Person(coordinator, "Event Coordinator", "ConnectSphere staff member who owns the planning of one event")
     Person(venueStaff, "Venue Staff", "Keeps the venue catalogue accurate and decides booking requests")
     Person(techStaff, "Technical Support Staff", "Looks after equipment and decides what can be reserved")
@@ -37,6 +38,7 @@ C4Context
     System(connectsphere, "ConnectSphere", "Event planning and venue booking: event requests, coordinator review, venue bookings, equipment reservations, attendee registration and notifications")
 
     Rel(organiser, connectsphere, "Submits event requests, answers clarifications, requests changes")
+    Rel(lead, connectsphere, "Assigns submitted requests to coordinators")
     Rel(coordinator, connectsphere, "Reviews requests, books venues, orders equipment, confirms events")
     Rel(venueStaff, connectsphere, "Maintains venues, approves or rejects bookings")
     Rel(techStaff, connectsphere, "Checks equipment availability, reserves equipment")
@@ -54,7 +56,7 @@ C4Container
     title Level 2 - Containers inside ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact")
-    Person(staff, "ConnectSphere staff", "Coordinators, Venue Staff, Technical Support Staff")
+    Person(staff, "ConnectSphere staff", "Coordinator Leads, Coordinators, Venue Staff, Technical Support Staff")
     Person(attendee, "Attendee", "Registers for events")
 
     System_Boundary(connectsphere, "ConnectSphere") {
@@ -138,7 +140,7 @@ C4Component
     Container_Boundary(api, "API application") {
         Component(shared, "Shared services", "app/auth, app/common, app/db.py", "Sign-in and access control, the audit log writer, the database session")
         Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits")
-        Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject, coordinator assignment and reassignment")
+        Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject. The Lead's unassigned queue and first assignment, and a coordinator's reassignment")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout")
         Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period")
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")

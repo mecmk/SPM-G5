@@ -620,10 +620,12 @@ def test_after_a_reassignment_the_new_coordinator_gets_later_notifications(clien
 
 # --- AC5: recipients are defined, and nobody else receives anything ---------------------------
 @pytest.mark.story("20.1", ac=5)
-def test_a_submission_with_no_coordinator_notifies_nobody(organiser_client, db: Session):
-    """5.1 AC5: with no active coordinator the request is still submitted, and left unassigned.
-    Nobody is related to it yet, so nobody is told."""
-    db.execute(text("UPDATE users SET is_active = false WHERE role_code = 'EVENT_COORDINATOR'"))
+def test_a_submission_with_no_active_lead_notifies_nobody(organiser_client, db: Session):
+    """Story 5.4 AC9: a submission is told to the active Leads, who assign it (20.1 AC1). With
+    none active, the request is still submitted and left unassigned, and nobody is told."""
+    db.execute(
+        text("UPDATE users SET is_active = false WHERE role_code = 'EVENT_COORDINATOR_LEAD'")
+    )
     db.expire_all()
     draft = create_submittable_event_request(organiser_client)
 

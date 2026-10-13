@@ -148,6 +148,7 @@ list, including a second organiser and coordinator, is in
 | --- | --- |
 | Event Organiser | `organiser@acme.example` |
 | Event Coordinator | `coordinator@connectsphere.example` |
+| Event Coordinator Lead | `lead@connectsphere.example` |
 | Venue Staff | `venue@connectsphere.example` |
 | Technical Support Staff | `tech@connectsphere.example` |
 | Attendee | `attendee@example.com` |
