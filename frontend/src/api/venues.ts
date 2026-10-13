@@ -302,8 +302,8 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
 
 /** Sentinel `reason` values for a booking on the calendar: an approved booking (BOOKED) and a
  * pending request that holds the venue (HELD, story 9.1 AC2). Neither is one of
- * venue_unavailability_periods' own reason codes (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
- * OTHER). Mirror BOOKING_REASON and HELD_REASON in backend/app/venues/schemas.py. */
+ * venue_unavailability_periods' own reason codes (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION,
+ * SAFETY, OTHER). Mirror BOOKING_REASON and HELD_REASON in backend/app/venues/schemas.py. */
 export const BOOKING_REASON = 'BOOKED'
 export const HELD_REASON = 'HELD'
 

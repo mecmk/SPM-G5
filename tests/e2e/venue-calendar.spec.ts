@@ -275,7 +275,7 @@ test('9.1 AC5: a closure in the day list shows its reason', async ({ page }) => 
 
   const list = dayList(page, /2 Nov 2026/)
   await expect(list).toContainText('Annual air-con servicing')
-  await expect(list).toContainText('Closed – Maintenance')
+  await expect(list).toContainText('Unavailable – Maintenance')
 })
 
 test('9.1 AC5: a day opens and closes from the keyboard', async ({ page }) => {

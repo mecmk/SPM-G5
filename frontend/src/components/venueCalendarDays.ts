@@ -9,7 +9,7 @@ import { eachDate } from './calendarGrid'
 export const BOOKED_LABEL = 'Booked'
 export const HELD_LABEL = 'Held – pending'
 
-const CLOSED_PREFIX = 'Closed'
+const UNAVAILABLE_PREFIX = 'Unavailable'
 const HELD_ENTRY_PREFIX = 'Held'
 // Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
 // (setup before it, teardown after it, or both), which side names the second line.
@@ -24,9 +24,9 @@ const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
 /** Mirrors `UnavailabilityReason` in backend/app/venues/models.py: a closure's `reason`. */
 const CLOSURE_REASON_NAMES: Record<string, string> = {
   MAINTENANCE: 'Maintenance',
+  EQUIPMENT_FAILURE: 'Equipment failure',
   RENOVATION: 'Renovation',
-  SAFETY: 'Safety',
-  INTERNAL_USE: 'Internal use',
+  SAFETY: 'Safety concern',
   OTHER: 'Other',
 }
 
@@ -53,7 +53,7 @@ export interface DayItem {
   date: string
   /** The event's name, or a closure's notes. */
   label: string
-  /** "Booked", "Held – pending" or "Closed – Maintenance"; on a day only a booking's setup or
+  /** "Booked", "Held – pending" or "Unavailable – Maintenance"; on a day only a booking's setup or
    *  teardown reaches, "Setup and teardown only" or "Held – pending, setup and teardown only". */
   kindLabel: string
   tone: CalendarEntryTone
@@ -103,7 +103,7 @@ function isSameSlice(first: DaySlice, second: DaySlice): boolean {
 }
 
 function closureKindLabel(reason: string): string {
-  return `${CLOSED_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
+  return `${UNAVAILABLE_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
 
 function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
