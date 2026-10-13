@@ -864,8 +864,9 @@ WHERE b.id = link.booking_id;
 INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, notes, facts) VALUES
     ('ffffffff-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000009', '2026-10-07 15:00+08',
      'CHANGES_REQUESTED', 'Confirm the attendance and the microphones.',
-     '{"expected_attendance": 120,
-       "starts_at": "2028-08-23T10:00:00+08:00", "ends_at": "2028-08-23T17:00:00+08:00",
+     '{"description": "Publisher stalls with author talks through the day.",
+       "expected_attendance": 120,
+       "starts_at": "2028-08-23T02:00:00+00:00", "ends_at": "2028-08-23T09:00:00+00:00",
        "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "layout": "EXHIBITION"}],
        "accessibility": [],
        "equipment": [{"equipment_type": "WIRELESS_MIC", "quantity": 2, "technical_notes": "Author talks"}]}')
