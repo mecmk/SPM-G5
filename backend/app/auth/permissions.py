@@ -45,7 +45,7 @@ class Permission(StrEnum):
     # a venues-specific permission.
     VENUES_READ = "venues:read"
     VENUES_MANAGE = "venues:manage"  # create / update / withdraw venues (8.3, 8.4)
-    VENUE_UNAVAILABILITY_MANAGE = "venue_unavailability:manage"  # maintenance periods (9.3)
+    VENUE_UNAVAILABILITY_MANAGE = "venue_unavailability:manage"  # mark a venue unavailable (9.4)
     VENUE_CALENDAR_READ = "venue_calendar:read"  # availability calendar & search (9.x, 10.x)
 
     # --- Event requests (2.x, 3.x) ---

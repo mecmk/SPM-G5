@@ -379,9 +379,9 @@ class VenueSearchResult(BaseModel):
 # --- calendar (story 9.1) ----------------------------------------------------------------
 # Sentinel `reason` values for the two kinds of booking on the calendar: an approved booking
 # (BOOKED) and a pending request that soft-locks the venue (HELD, story 9.1 AC2). Neither is a
-# value of venue_unavailability_periods.reason (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
-# OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries either
-# vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
+# value of venue_unavailability_periods.reason (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION,
+# SAFETY, OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries
+# either vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
 BOOKING_REASON = "BOOKED"
 HELD_REASON = "HELD"
 

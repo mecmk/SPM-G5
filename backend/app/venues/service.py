@@ -182,9 +182,9 @@ assert set(_CALENDAR_BOOKING_REASONS) == set(_HOLDING_STATUSES)
 # frontend/src/venues/venueCalendarDays.ts).
 _CLOSURE_REASON_LABELS = {
     UnavailabilityReason.MAINTENANCE: "Maintenance",
+    UnavailabilityReason.EQUIPMENT_FAILURE: "Equipment failure",
     UnavailabilityReason.RENOVATION: "Renovation",
-    UnavailabilityReason.SAFETY: "Safety",
-    UnavailabilityReason.INTERNAL_USE: "Internal use",
+    UnavailabilityReason.SAFETY: "Safety concern",
     UnavailabilityReason.OTHER: "Other",
 }
 

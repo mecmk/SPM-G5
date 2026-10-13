@@ -169,9 +169,9 @@ _SINGAPORE = timezone(timedelta(hours=8))
 VENUE_BLOCKED_MESSAGE = "{venue} is closed{reason} {period}."
 VENUE_BLOCKED_REASONS = {
     UnavailabilityReason.MAINTENANCE: " for maintenance",
+    UnavailabilityReason.EQUIPMENT_FAILURE: " for equipment failure",
     UnavailabilityReason.RENOVATION: " for renovation",
     UnavailabilityReason.SAFETY: " for safety reasons",
-    UnavailabilityReason.INTERNAL_USE: " for internal use",
     UnavailabilityReason.OTHER: "",
 }
 VENUE_CLOSED_MESSAGE = (
