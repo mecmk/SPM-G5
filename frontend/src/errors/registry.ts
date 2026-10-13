@@ -73,6 +73,7 @@ export type ErrorCode =
   | 'EVENT_QUANTITY_INVALID'
   | 'EVENT_CONTACT_EMAIL_INVALID'
   | 'EVENT_CONTACT_PHONE_INVALID'
+  | 'EVENT_CONTACT_PHONE_CALLING_CODE'
   | 'EVENT_PICTURE_TYPE_INVALID'
   | 'EVENT_PICTURE_TOO_LARGE'
   | 'EVENT_REGISTRATION_DATE_INCOMPLETE'
@@ -414,10 +415,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the contact email',
     message: 'Enter an email address like name@example.com.',
   },
-  /** Story 2.1 AC13. */
+  /** Story 2.1 AC13: counted on the number as saved, calling code included (f2.1.4). */
   EVENT_CONTACT_PHONE_INVALID: {
     title: 'Check the contact phone number',
     message: 'Enter a phone number with 8 to 15 digits.',
+  },
+  /** Story 2.1 AC21/AC23 (f2.1.4): the picker sets the calling code, so it is not typed. */
+  EVENT_CONTACT_PHONE_CALLING_CODE: {
+    title: 'Check the contact phone number',
+    message: 'Type the number without its calling code; choose the country or region instead.',
   },
   /** Story 2.1 AC14. */
   EVENT_PICTURE_TYPE_INVALID: {

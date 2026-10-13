@@ -35,7 +35,7 @@ import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
   CONTACT_NAME_MAX_LENGTH,
-  CONTACT_PHONE_MAX_LENGTH,
+  CONTACT_PHONE_NUMBER_MAX_LENGTH,
   COVER_IMAGE_TYPES,
   EMPTY_EVENT_FORM,
   EMPTY_FACILITY,
@@ -74,6 +74,7 @@ import {
   type VenueRequirementDraft,
 } from './eventRequestForm'
 import { readBackState } from './backState'
+import { PhoneRegionSelect } from './PhoneRegionSelect'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
@@ -970,7 +971,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             </legend>
             <p className="form-hint">Who ConnectSphere should reach about this event.</p>
             <div className="form-grid">
-              <label className="span-2">
+              <label>
                 Contact name <RequiredMark />
                 <input
                   autoComplete="name"
@@ -980,18 +981,24 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   onChange={(e) => updateField('contactName', e.target.value)}
                 />
               </label>
-              <label>
-                Contact phone number <RequiredMark />
-                <input
-                  type="tel"
-                  autoComplete="tel"
-                  maxLength={CONTACT_PHONE_MAX_LENGTH}
-                  {...fieldProps(FIELD_ID.contactPhone)}
-                  value={form.contactPhone}
-                  onChange={(e) => updateField('contactPhone', e.target.value)}
+              <div className="phone-field span-2">
+                <PhoneRegionSelect
+                  value={form.contactPhoneRegion}
+                  onChange={(region) => updateField('contactPhoneRegion', region)}
                 />
-                {renderProblem(FIELD_ID.contactPhone)}
-              </label>
+                <label>
+                  Contact phone number <RequiredMark />
+                  <input
+                    type="tel"
+                    autoComplete="tel-national"
+                    maxLength={CONTACT_PHONE_NUMBER_MAX_LENGTH}
+                    {...fieldProps(FIELD_ID.contactPhone)}
+                    value={form.contactPhone}
+                    onChange={(e) => updateField('contactPhone', e.target.value)}
+                  />
+                  {renderProblem(FIELD_ID.contactPhone)}
+                </label>
+              </div>
               <label className="span-all">
                 Contact email <RequiredMark />
                 <input

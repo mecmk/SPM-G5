@@ -59,6 +59,9 @@ export interface EventFormState {
   /** Story 2.1 AC13: the point of contact, all three needed to submit. */
   contactName: string
   contactEmail: string
+  /** Story 2.1 AC21 (f2.1.4): the phone's country or region, in front of the number. */
+  contactPhoneRegion: PhoneRegion
+  /** The phone number as typed, without its calling code. */
   contactPhone: string
   /** Story 2.1 AC4: true is "no venue requirements"; false with none listed is "not specified". */
   hasNoVenueRequirements: boolean
@@ -85,9 +88,44 @@ const EMAIL_ADDRESS = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const PHONE_NUMBER = /^\+?[\d -]+$/
 export const CONTACT_NAME_MAX_LENGTH = 200
 export const CONTACT_EMAIL_MAX_LENGTH = 254
-export const CONTACT_PHONE_MAX_LENGTH = 50
+const CONTACT_PHONE_MAX_LENGTH = 50
 const CONTACT_PHONE_MIN_DIGITS = 8
 const CONTACT_PHONE_MAX_DIGITS = 15
+/** What a saved phone may have between its calling code and the number. */
+const LEADING_SEPARATORS = /^[ -]+/
+
+/** Story 2.1 AC21 (f2.1.4): a country or region the contact phone's picker offers. */
+export interface PhoneRegion {
+  /** ISO 3166-1 alpha-2, the picker's value. */
+  code: string
+  name: string
+  /** Digits only: the phone is saved as "+", this, a space and the number. */
+  callingCode: string
+}
+
+/**
+ * Story 2.1 AC21 (f2.1.4): the picker's choices, in the order shown. Singapore comes first and is
+ * the default; the ten after it are assumed until the PO confirms them (backlog Q52).
+ */
+export const PHONE_REGIONS: readonly PhoneRegion[] = [
+  { code: 'SG', name: 'Singapore', callingCode: '65' },
+  { code: 'MY', name: 'Malaysia', callingCode: '60' },
+  { code: 'ID', name: 'Indonesia', callingCode: '62' },
+  { code: 'TH', name: 'Thailand', callingCode: '66' },
+  { code: 'PH', name: 'Philippines', callingCode: '63' },
+  { code: 'VN', name: 'Vietnam', callingCode: '84' },
+  { code: 'CN', name: 'China', callingCode: '86' },
+  { code: 'HK', name: 'Hong Kong', callingCode: '852' },
+  { code: 'JP', name: 'Japan', callingCode: '81' },
+  { code: 'KR', name: 'South Korea', callingCode: '82' },
+  { code: 'AU', name: 'Australia', callingCode: '61' },
+]
+export const DEFAULT_PHONE_REGION = PHONE_REGIONS[0]
+/** Story 2.1 AC21: the longest number the box takes, so that saved behind the longest calling code
+ * ("+852 ") it still keeps to AC13's 50 characters. */
+export const CONTACT_PHONE_NUMBER_MAX_LENGTH =
+  CONTACT_PHONE_MAX_LENGTH -
+  Math.max(...PHONE_REGIONS.map((region) => `+${region.callingCode} `.length))
 /** Story 2.1 AC14: what a cover picture may be, mirrored from the backend's service. */
 export const MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
 export const COVER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -117,6 +155,7 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   attendance: '',
   contactName: '',
   contactEmail: '',
+  contactPhoneRegion: DEFAULT_PHONE_REGION,
   contactPhone: '',
   hasNoVenueRequirements: false,
   venueRequirements: [],
@@ -310,6 +349,7 @@ function textOf(value: string | null): string {
 }
 
 export function formFromEvent(event: EventDetail): EventFormState {
+  const phone = splitContactPhone(event.contact_phone)
   return {
     name: event.name,
     purpose: textOf(event.purpose),
@@ -319,7 +359,8 @@ export function formFromEvent(event: EventDetail): EventFormState {
     attendance: event.expected_attendance === null ? '' : String(event.expected_attendance),
     contactName: textOf(event.contact_name),
     contactEmail: textOf(event.contact_email),
-    contactPhone: textOf(event.contact_phone),
+    contactPhoneRegion: phone.region,
+    contactPhone: phone.number,
     hasNoVenueRequirements: event.venue_none_required,
     venueRequirements: event.venue_requirements.map((requirement, index) =>
       venueRequirementDraftFrom(requirement, event, index === 0),
@@ -368,8 +409,9 @@ export function isBlankOrEmailAddress(value: string): boolean {
   )
 }
 
-/** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. */
-export function isBlankOrPhoneNumber(value: string): boolean {
+/** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. Given the phone
+ * as it is saved, calling code included, the way the backend counts (f2.1.4). */
+function isBlankOrPhoneNumber(value: string): boolean {
   const trimmed = value.trim()
   if (trimmed === '') return true
   const digitCount = trimmed.replace(/\D/g, '').length
@@ -379,6 +421,48 @@ export function isBlankOrPhoneNumber(value: string): boolean {
     digitCount >= CONTACT_PHONE_MIN_DIGITS &&
     digitCount <= CONTACT_PHONE_MAX_DIGITS
   )
+}
+
+/** Story 2.1 AC21 (f2.1.4): a contact phone as the form holds it. */
+export interface ContactPhone {
+  region: PhoneRegion
+  /** As typed, without the calling code. */
+  number: string
+}
+
+/**
+ * Story 2.1 AC24 (f2.1.4): a saved phone split into the region its calling code names and the
+ * number after it. A phone saved before the picker with no listed calling code opens under
+ * Singapore with its text as saved, so nothing is lost and the form says what to fix.
+ */
+export function splitContactPhone(saved: string | null): ContactPhone {
+  const text = textOf(saved)
+  const region = PHONE_REGIONS.find((each) => text.startsWith(`+${each.callingCode}`))
+  if (region === undefined) return { region: DEFAULT_PHONE_REGION, number: text }
+  const number = text.slice(`+${region.callingCode}`.length).replace(LEADING_SEPARATORS, '')
+  return { region, number }
+}
+
+/**
+ * Story 2.1 AC21 (f2.1.4): the phone as it is saved and shown - the region's calling code, then the
+ * number as typed, e.g. "+65 9123 4567" - or null when no number is typed.
+ */
+export function composeContactPhone(region: PhoneRegion, number: string): string | null {
+  const typed = number.trim()
+  return typed === '' ? null : `+${region.callingCode} ${typed}`
+}
+
+/**
+ * Story 2.1 AC13/AC21/AC23 (f2.1.4): what is wrong with the contact phone, or null; blank is fine
+ * on a draft. The picker sets the calling code, so a "+" in the number is wrong. Otherwise the
+ * number is judged as it will be saved, calling code included, by AC13's rule - as the backend
+ * judges it - so changing the region can change the answer.
+ */
+export function getContactPhoneProblem(region: PhoneRegion, number: string): ErrorCode | null {
+  if (number.includes('+')) return 'EVENT_CONTACT_PHONE_CALLING_CODE'
+  return isBlankOrPhoneNumber(composeContactPhone(region, number) ?? '')
+    ? null
+    : 'EVENT_CONTACT_PHONE_INVALID'
 }
 
 /**
@@ -446,9 +530,8 @@ export function validateEventForm(
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     return { code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail }
   }
-  if (!isBlankOrPhoneNumber(form.contactPhone)) {
-    return { code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone }
-  }
+  const phoneProblem = getContactPhoneProblem(form.contactPhoneRegion, form.contactPhone)
+  if (phoneProblem) return { code: phoneProblem, fieldId: FIELD_ID.contactPhone }
   return validateRequirements(form, availability)
 }
 
@@ -563,9 +646,8 @@ export function getLiveProblems(
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     problems[FIELD_ID.contactEmail] = 'EVENT_CONTACT_EMAIL_INVALID'
   }
-  if (!isBlankOrPhoneNumber(form.contactPhone)) {
-    problems[FIELD_ID.contactPhone] = 'EVENT_CONTACT_PHONE_INVALID'
-  }
+  const phoneProblem = getContactPhoneProblem(form.contactPhoneRegion, form.contactPhone)
+  if (phoneProblem) problems[FIELD_ID.contactPhone] = phoneProblem
   // Story 2.7: every venue requirement problem, said next to its field as it is typed (AC5, AC6,
   // AC9, AC10) - the same rules a save is refused for.
   for (const problem of getVenueRequirementProblems(form)) {
@@ -794,7 +876,7 @@ export function eventInputFrom(form: EventFormState): EventInput {
     expected_attendance: form.attendance.trim() === '' ? null : Number(form.attendance),
     contact_name: textOrNull(form.contactName),
     contact_email: textOrNull(form.contactEmail),
-    contact_phone: textOrNull(form.contactPhone),
+    contact_phone: composeContactPhone(form.contactPhoneRegion, form.contactPhone),
     venue_requirements: hasNoVenueNeeds
       ? []
       : form.venueRequirements.map((requirement) => ({
