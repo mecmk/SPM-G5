@@ -876,7 +876,8 @@ WHERE b.id = link.booking_id;
 
 -- ---------------------------------------------------------------------
 -- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)
--- sent it back. Its facts are the event as Sam saw it then: 120 people and two microphones,
+-- sent it back. Its facts are the event as Sam saw it then: 120 people and two microphones
+-- (its Grand Hall booking was already for 150, in the Exhibition layout that holds 300),
 -- where it now expects 150 and has four, so the next check shows both as changed.
 -- ---------------------------------------------------------------------
 INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, notes, facts) VALUES
@@ -885,9 +886,10 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
      '{"description": "Publisher stalls with author talks through the day.",
        "expected_attendance": 120,
        "starts_at": "2028-08-23T02:00:00+00:00", "ends_at": "2028-08-23T09:00:00+00:00",
-       "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "layout": "EXHIBITION"}],
-       "accessibility": [],
-       "equipment": [{"equipment_type": "WIRELESS_MIC", "quantity": 2, "technical_notes": "Author talks"}]}'),
+       "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 300, "people_to_hold": 150,
+                   "layout": "EXHIBITION", "layout_name": "Exhibition"}],
+       "accessibility": [], "accessibility_notes": null,
+       "equipment": [{"equipment_type": "WIRELESS_MIC", "equipment_type_name": "Wireless microphone", "quantity": 2, "technical_notes": "Author talks"}]}'),
     -- The Marina Food Festival (3333..37), approved, and the Lantern Night Walk (3333..38), sent
     -- back: story 21.1's Accepted and Declined tabs.
     ('ffffffff-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000009', '2026-10-09 10:00+08',
@@ -895,13 +897,13 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
      '{"description": "Food stalls along the waterfront promenade.",
        "expected_attendance": 200,
        "starts_at": "2028-09-02T03:00:00+00:00", "ends_at": "2028-09-02T13:00:00+00:00",
-       "venues": [], "accessibility": [], "equipment": []}'),
+       "venues": [], "accessibility": [], "accessibility_notes": null, "equipment": []}'),
     ('ffffffff-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08',
      'CHANGES_REQUESTED', 'Add marshals at each road crossing.',
      '{"description": "A guided evening walk with paper lanterns.",
        "expected_attendance": 80,
        "starts_at": "2028-09-09T11:00:00+00:00", "ends_at": "2028-09-09T14:00:00+00:00",
-       "venues": [], "accessibility": [], "equipment": []}')
+       "venues": [], "accessibility": [], "accessibility_notes": null, "equipment": []}')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
     outcome = EXCLUDED.outcome, notes = EXCLUDED.notes, facts = EXCLUDED.facts;

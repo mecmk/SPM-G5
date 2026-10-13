@@ -610,7 +610,7 @@ One row per safety review of an event by the Safety Officer, kept so a later che
 | `reviewed_at` | `timestamp with time zone` | no | `now()` | - | When the review was made. Previous reviews are listed newest first by it (story 21.1 AC3). |
 | `outcome` | `text` | no | - | - | APPROVED: the event passed the check. CHANGES_REQUESTED: the officer sent it back for changes. |
 | `notes` | `text` | yes | - | - | The officer's notes on the review. Optional. |
-| `facts` | `jsonb` | no | - | - | Snapshot of the safety-relevant facts reviewed: expected_attendance, starts_at, ends_at, venues (approved bookings: id, name, capacity, layout), accessibility (feature codes) and equipment (accepted items: equipment_type, quantity, technical_notes). The next check lists the top-level keys that differ (story 21.1 AC5). |
+| `facts` | `jsonb` | no | - | - | Snapshot of the safety-relevant facts reviewed, as app/safety/service.py::safety_facts builds them: description, expected_attendance, starts_at and ends_at (UTC), venues (approved bookings: id, name, capacity in the booked layout, people_to_hold, layout code and layout_name), accessibility (each need: feature code, feature_name, notes), accessibility_notes, and equipment (accepted items: equipment_type code, equipment_type_name, quantity, technical_notes). The next check lists the top-level keys that differ (story 21.1 AC5). |
 
 Allowed values:
 

@@ -20,10 +20,13 @@ export interface SafetyQueueEntry {
 }
 
 /** Mirrors `SafetyVenueOut`: story 21.1 AC3, one approved venue with its full record (story 8.2).
- * AC4: `over_capacity` when the event expects more people than the venue holds. */
+ * AC4: `over_capacity` when the booking's `people_to_hold` is more than `capacity`, the venue's
+ * capacity in the booked layout (its own where the layout has none recorded). */
 export interface SafetyVenue {
   venue: Venue
   layout: string | null
+  capacity: number
+  people_to_hold: number
   over_capacity: boolean
 }
 
@@ -48,6 +51,7 @@ export type SafetyFact =
   | 'ends_at'
   | 'venues'
   | 'accessibility'
+  | 'accessibility_notes'
   | 'equipment'
 
 /** Mirrors `FactChangeOut`: story 21.1 AC5, one fact as the last review saw it and as it is now.

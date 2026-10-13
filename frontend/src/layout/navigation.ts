@@ -119,8 +119,6 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Browse venues and compare capacity, layouts and availability.',
         icon: 'building',
         permission: PERMISSIONS.VENUES_READ,
-        // Story 21.1: the Safety Officer reads each venue on the safety check page instead.
-        hiddenWith: [PERMISSIONS.SAFETY_REVIEW],
         story: '8.1',
         isAvailable: true,
       },

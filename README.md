@@ -151,6 +151,7 @@ list, including a second organiser and coordinator, is in
 | Venue Staff | `venue@connectsphere.example` |
 | Technical Support Staff | `tech@connectsphere.example` |
 | Attendee | `attendee@example.com` |
+| Safety Officer | `safety@connectsphere.example` |
 
 ### Database commands
 

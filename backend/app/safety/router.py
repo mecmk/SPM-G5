@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import require_permission
@@ -24,7 +24,8 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 @router.get("", response_model=list[SafetyQueueEntry], dependencies=[CanReviewSafety])
 def list_safety_queue(
-    db: DbSession, status: service.SafetyQueueStatus | None = None
+    db: DbSession,
+    queue_status: Annotated[service.SafetyQueueStatus | None, Query(alias="status")] = None,
 ) -> list[SafetyQueueEntry]:
     """AC2: the events in one tab (Pending is the queue itself), or every tab without ``status``,
     oldest first. AC6: safety:review only - other roles get 403 from the dependency."""
@@ -34,7 +35,7 @@ def list_safety_queue(
             approved_bookings=item.approved_bookings,
             safety_status=item.safety_status,
         )
-        for item in service.list_safety_queue(db, status)
+        for item in service.list_safety_queue(db, status=queue_status)
     ]
 
 

@@ -6,7 +6,8 @@ AC2 The queue lists only events Awaiting Safety Check, oldest first by when each
     Declined are events no longer awaiting the check, by their latest review's outcome.
 AC3 An event's detail shows everything that affects safety: attendance, each approved venue,
     accessibility needs, accepted equipment and previous reviews.
-AC4 A venue whose capacity is below the expected attendance is flagged.
+AC4 A venue is flagged when its booking must hold more people than the venue holds in the booked
+    layout (the venue's own capacity where the layout has none recorded).
 AC5 What changed since the last review is listed, and unrecorded details stay null.
 AC6 Only the Safety Officer may see it, and the officer cannot edit, book or manage equipment.
 """
@@ -281,6 +282,7 @@ def test_detail_shows_attendance_venues_accessibility_and_equipment(safety_clien
     assert venue["venue"]["id"] == str(Venues.EXHIBITION_FOYER)
     assert venue["venue"]["capacity"] == 250
     assert venue["layout"] == "Standing / reception"
+    assert (venue["capacity"], venue["people_to_hold"]) == (250, 300)
     assert detail["accessibility_needs"] == [
         {
             "code": "WHEELCHAIR_ACCESS",
@@ -370,13 +372,53 @@ def test_unknown_event_is_not_found(safety_client):
 
 
 # --- AC4: over capacity -------------------------------------------------------------------------
+def _book_for_safety(db: Session, *, venue_id: uuid.UUID, people: int, layout: str | None = None):
+    """An event awaiting the check with one approved booking for ``people`` at ``venue_id``."""
+    event = make_event(db, status=EventStatus.AWAITING_SAFETY_CHECK, expected_attendance=people)
+    make_booking(
+        db,
+        event_id=event.id,
+        venue_id=venue_id,
+        starts_at=datetime(2029, 3, 1, 1, 0, tzinfo=UTC),
+        ends_at=datetime(2029, 3, 1, 9, 0, tzinfo=UTC),
+        status=BookingStatus.APPROVED,
+        expected_attendance=people,
+        required_layout_code=layout,
+    )
+    return event
+
+
 @pytest.mark.story("21.1", ac=4)
-@pytest.mark.parametrize(("attendance", "is_over"), [(16, False), (17, True)])
+@pytest.mark.parametrize(("people", "is_over"), [(16, False), (17, True)])
 def test_venue_is_over_capacity_only_above_its_capacity(
-    safety_client, db: Session, attendance, is_over
+    safety_client, db: Session, people, is_over
 ):
-    """The Boardroom seats 16."""
-    event = make_event(db, status=EventStatus.AWAITING_SAFETY_CHECK, expected_attendance=attendance)
+    """The Boardroom seats 16, and records no capacity for its layout."""
+    event = _book_for_safety(db, venue_id=Venues.BOARDROOM, people=people, layout="BOARDROOM")
+
+    [venue] = safety_client.get(_detail_path(event.id)).json()["venues"]
+
+    assert venue["over_capacity"] is is_over
+    assert (venue["capacity"], venue["people_to_hold"]) == (16, people)
+
+
+@pytest.mark.story("21.1", ac=4)
+@pytest.mark.parametrize(("people", "is_over"), [(300, False), (301, True)])
+def test_capacity_is_the_booked_layouts(safety_client, db: Session, people, is_over):
+    """Grand Hall holds 400, but 300 as an Exhibition."""
+    event = _book_for_safety(db, venue_id=Venues.GRAND_HALL, people=people, layout="EXHIBITION")
+
+    [venue] = safety_client.get(_detail_path(event.id)).json()["venues"]
+
+    assert venue["over_capacity"] is is_over
+    assert venue["capacity"] == 300
+
+
+@pytest.mark.story("21.1", ac=4)
+def test_each_venue_is_judged_on_the_people_its_booking_holds(safety_client, db: Session):
+    """A 300-person event in Grand Hall with a 12-person breakout in the 16-seat Boardroom: the
+    Boardroom is judged on its 12, not the event's 300."""
+    event = _book_for_safety(db, venue_id=Venues.GRAND_HALL, people=300)
     make_booking(
         db,
         event_id=event.id,
@@ -384,11 +426,15 @@ def test_venue_is_over_capacity_only_above_its_capacity(
         starts_at=datetime(2029, 3, 1, 1, 0, tzinfo=UTC),
         ends_at=datetime(2029, 3, 1, 9, 0, tzinfo=UTC),
         status=BookingStatus.APPROVED,
+        expected_attendance=12,
     )
 
-    [venue] = safety_client.get(_detail_path(event.id)).json()["venues"]
+    venues = safety_client.get(_detail_path(event.id)).json()["venues"]
 
-    assert venue["over_capacity"] is is_over
+    assert {venue["venue"]["name"]: venue["over_capacity"] for venue in venues} == {
+        "Grand Hall": False,
+        "Boardroom 3.4": False,
+    }
 
 
 # --- AC5: changes since the last review, and what was never recorded ----------------------------
@@ -431,3 +477,33 @@ def test_unrecorded_venue_details_stay_null(safety_client):
 
     assert venue["venue"]["operating_hours_start"] is None
     assert venue["venue"]["operating_hours_end"] is None
+
+
+@pytest.mark.story("21.1", ac=5)
+def test_changed_accessibility_notes_are_listed(safety_client, db: Session):
+    db.get(Event, Events.BOOK_FAIR).accessibility_notes = "Quiet room for neurodivergent visitors."
+    db.flush()
+
+    changes = safety_client.get(_detail_path(Events.BOOK_FAIR)).json()["changes_since_last_review"]
+
+    assert {
+        "fact": "accessibility_notes",
+        "before": None,
+        "after": "Quiet room for neurodivergent visitors.",
+    } in changes
+
+
+@pytest.mark.story("21.1", ac=5)
+def test_changes_carry_names_not_only_codes(safety_client):
+    """So the page reads "Wireless microphone", not WIRELESS_MIC."""
+    changes = safety_client.get(_detail_path(Events.BOOK_FAIR)).json()["changes_since_last_review"]
+    [equipment] = [change for change in changes if change["fact"] == "equipment"]
+
+    assert equipment["before"] == [
+        {
+            "equipment_type": "WIRELESS_MIC",
+            "equipment_type_name": "Wireless microphone",
+            "quantity": 2,
+            "technical_notes": "Author talks",
+        }
+    ]

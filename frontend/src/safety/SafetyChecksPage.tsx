@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { listSafetyChecks, type SafetyQueueEntry, type SafetyQueueStatus } from '../api/safety'
 import { EmptyState } from '../components/EmptyState'
+import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
@@ -91,6 +92,7 @@ export function SafetyChecksPage() {
                 onClick={(click) => openCard(click, entry.id)}
               >
                 <div className="item-card-header">
+                  <EventStatusBadge status={entry.status} />
                   <div className="item-card-capacity item-card-period">
                     <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>
                   </div>

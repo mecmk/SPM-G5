@@ -21,7 +21,7 @@ from app.events.models import (
     EventStatusHistory,
 )
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
-from app.safety.schemas import FactChangeOut
+from app.safety.schemas import FactChangeOut, booked_capacity
 
 
 class SafetyQueueStatus(StrEnum):
@@ -66,7 +66,7 @@ def _safety_status(event: Event, latest_outcome: str | None) -> SafetyQueueStatu
     return SafetyQueueStatus.DECLINED
 
 
-def list_safety_queue(db: Session, status: SafetyQueueStatus | None) -> list[SafetyQueueItem]:
+def list_safety_queue(db: Session, *, status: SafetyQueueStatus | None) -> list[SafetyQueueItem]:
     """AC2: the events in one tab, or every tab when ``status`` is None, oldest first by when
     each last entered the check."""
     entered = (
@@ -115,7 +115,7 @@ def list_safety_queue(db: Session, status: SafetyQueueStatus | None) -> list[Saf
     ]
 
 
-class SafetyCheckNotFound(Exception):
+class SafetyCheckNotFound(LookupError):
     """No event with this id is awaiting the safety check or has been reviewed (21.1 AC3)."""
 
 
@@ -138,8 +138,9 @@ def safety_facts(
     approved_bookings: list[VenueBooking],
     accepted_equipment: list[EventEquipmentRequest],
 ) -> dict[str, Any]:
-    """The facts a safety review is judged on, as JSON. Times are UTC so a stored snapshot
-    compares equal to a fresh one."""
+    """The facts a safety review is judged on, as JSON: what story 21.2 stores on
+    ``event_safety_reviews.facts`` and AC5 compares. Times are UTC so a stored snapshot compares
+    equal to a fresh one. Each code is stored with its name, so a change reads in words."""
     assert event.starts_at is not None  # ck_events_submitted_fields_complete
     assert event.ends_at is not None
     return {
@@ -151,18 +152,24 @@ def safety_facts(
             {
                 "id": str(booking.venue_id),
                 "name": booking.venue.name,
-                "capacity": booking.venue.capacity,
+                "capacity": booked_capacity(booking),
+                "people_to_hold": booking.expected_attendance,
                 "layout": booking.required_layout_code,
+                "layout_name": (
+                    booking.required_layout.name if booking.required_layout is not None else None
+                ),
             }
             for booking in approved_bookings
         ],
         "accessibility": [
-            {"feature": need.feature_code, "notes": need.notes}
+            {"feature": need.feature_code, "feature_name": need.feature.name, "notes": need.notes}
             for need in event.accessibility_needs
         ],
+        "accessibility_notes": event.accessibility_notes,
         "equipment": [
             {
                 "equipment_type": item.equipment_type.code,
+                "equipment_type_name": item.equipment_type.name,
                 "quantity": item.quantity,
                 "technical_notes": item.technical_notes,
             }
@@ -207,7 +214,7 @@ def get_safety_check(db: Session, event_id: uuid.UUID) -> SafetyCheck:
     facts = safety_facts(
         event, approved_bookings=approved_bookings, accepted_equipment=accepted_equipment
     )
-    # ponytail: diffs whole top-level facts, so one venue edit marks the whole venue list as
+    # Limitation: diffs whole top-level facts, so one venue edit marks the whole venue list as
     # changed; compare item by item if the officer needs finer detail.
     changes = (
         [

@@ -58,13 +58,13 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
     ],
     hidden: ['All events', 'Manage venues', 'Bookings & schedule'],
   },
-  // Story 21.1 AC1: the Safety Officer works from the safety queue alone.
+  // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the
+  // catalogue (venues:read).
   {
     role: 'safety officer',
     email: ACCOUNTS.safetyOfficer,
-    visible: ['Safety checks'],
+    visible: ['Safety checks', 'Venue catalogue'],
     hidden: [
-      'Venue catalogue',
       'All events',
       'Events inbox',
       'My events',

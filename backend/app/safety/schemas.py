@@ -48,12 +48,30 @@ class SafetyQueueEntry(BaseModel):
         )
 
 
+def booked_capacity(booking: VenueBooking) -> int:
+    """AC4: how many people the venue holds in the booked layout - the layout's recorded capacity
+    (``venue_layouts.layout_capacity``), else the venue's own, as Find a venue (8.1 AC6) and the
+    suitability check (11.1 AC4) judge it."""
+    layout_capacity = next(
+        (
+            layout.layout_capacity
+            for layout in booking.venue.layouts
+            if layout.layout_code == booking.required_layout_code
+        ),
+        None,
+    )
+    return booking.venue.capacity if layout_capacity is None else layout_capacity
+
+
 class SafetyVenueOut(BaseModel):
     """AC3: one approved venue with its full record (story 8.2), nulls passed through for AC5's
-    "Not recorded". AC4: ``over_capacity`` when the event expects more than the venue holds."""
+    "Not recorded". AC4: ``over_capacity`` when the booking's ``people_to_hold`` (what this room
+    must hold, stories 2.7 and 12.5) is more than ``capacity``, the venue's in the booked layout."""
 
     venue: VenueOut
     layout: str | None
+    capacity: int
+    people_to_hold: int
     over_capacity: bool
 
 
@@ -106,14 +124,13 @@ class SafetyCheckDetail(BaseModel):
         assert event.starts_at is not None
         assert event.ends_at is not None
         assert event.expected_attendance is not None
-        attendance = event.expected_attendance
         return cls(
             id=event.id,
             name=event.name,
             description=event.description,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
-            expected_attendance=attendance,
+            expected_attendance=event.expected_attendance,
             status=event.status,
             venues=[
                 SafetyVenueOut(
@@ -123,7 +140,9 @@ class SafetyCheckDetail(BaseModel):
                         if booking.required_layout is not None
                         else None
                     ),
-                    over_capacity=attendance > booking.venue.capacity,
+                    capacity=booked_capacity(booking),
+                    people_to_hold=booking.expected_attendance,
+                    over_capacity=booking.expected_attendance > booked_capacity(booking),
                 )
                 for booking in approved_bookings
             ],

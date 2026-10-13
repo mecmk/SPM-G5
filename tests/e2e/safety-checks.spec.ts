@@ -8,8 +8,9 @@
  *     tab is a backend case.
  * AC3 an event's page shows its description, attendance, each approved venue, accessibility needs,
  *     accepted equipment with technical notes, and the previous reviews.
- * AC4 a venue the event expects more people than it holds is flagged Over capacity. The boundary
- *     (capacity and capacity + 1) is a backend case.
+ * AC4 a venue whose booking must hold more people than the venue holds in the booked layout is
+ *     flagged Over capacity, with both figures shown. The boundary (capacity and capacity + 1),
+ *     the layout's capacity and a multi-venue event's smaller rooms are backend cases.
  * AC5 a detail never recorded shows "Not recorded", and what changed since the last review is
  *     listed. Which facts count as changed is a backend case.
  * AC6 another role cannot reach the pages. The API's 401/403 refusals are backend cases:
@@ -57,6 +58,7 @@ test('21.1 AC2: the Safety Officer opens the queue and sees each awaiting event,
   await expect(concert).toContainText('16 Aug 2028')
   await expect(concert).toContainText('300')
   await expect(concert).toContainText('Exhibition Foyer')
+  await expect(concert).toContainText('Awaiting safety check')
   await expect(queueCard(page, BOOK_FAIR)).toContainText('Grand Hall')
 
   const titles = page.getByRole('heading', { level: 3 }).filter({ hasText: SEEDED_TITLES })
@@ -79,6 +81,8 @@ test('21.1 AC2: the Accepted, Declined and All tabs list reviewed events by thei
 
   await page.getByRole('tab', { name: 'All' }).click()
   await expect(titles).toHaveText([NIGHT_WALK, FOOD_FESTIVAL, CONCERT, BOOK_FAIR])
+  await expect(queueCard(page, FOOD_FESTIVAL)).toContainText('Confirmed')
+  await expect(queueCard(page, NIGHT_WALK)).toContainText('Planning')
 })
 
 test('21.1 AC3: a declined event opens with the review that sent it back', async ({ page }) => {
@@ -117,6 +121,8 @@ test('21.1 AC3/AC5: an event shows what affects its safety and what changed sinc
   await expect(changes).toContainText('Expected attendance')
   await expect(changes).toContainText('120')
   await expect(changes).toContainText('Equipment')
+  await expect(changes).toContainText('2 × Wireless microphone')
+  await expect(changes).not.toContainText('WIRELESS_MIC')
   await expect(changes).not.toContainText('Description')
 
   const reviews = section(page, 'Previous reviews')
@@ -134,6 +140,8 @@ test('21.1 AC3/AC4: a venue the event outgrows is flagged Over capacity', async 
   await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`)
   await expect(section(page, 'Venues')).toContainText('Exhibition Foyer')
   await expect(section(page, 'Venues').getByText('Over capacity')).toBeVisible()
+  await expect(section(page, 'Venues')).toContainText('Capacity in this layout250')
+  await expect(section(page, 'Venues')).toContainText('People to hold300')
   await expect(section(page, 'Accessibility')).toContainText('A ramp up to the viewing area')
   await expect(section(page, 'Equipment')).toContainText('Stage left and right; cables taped down')
 

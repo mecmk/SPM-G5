@@ -13,16 +13,17 @@ import { useLoaded } from '../shared/useLoaded'
 interface VenueFact {
   name: string
   capacity: number
-  layout: string | null
+  people_to_hold: number
+  layout_name: string | null
 }
 
 interface AccessibilityFact {
-  feature: string
+  feature_name: string
   notes: string | null
 }
 
 interface EquipmentFact {
-  equipment_type: string
+  equipment_type_name: string
   quantity: number
   technical_notes: string | null
 }
@@ -34,6 +35,7 @@ const FACT_LABELS: Record<SafetyFact, string> = {
   ends_at: 'End',
   venues: 'Venues',
   accessibility: 'Accessibility needs',
+  accessibility_notes: 'Accessibility notes',
   equipment: 'Equipment',
 }
 
@@ -53,21 +55,22 @@ function describeFact(fact: SafetyFact, value: unknown): string {
     case 'venues':
       return listOrNone(
         (value as VenueFact[]).map(
-          (venue) => `${venue.name} (holds ${venue.capacity}, ${venue.layout ?? NOT_RECORDED})`,
+          (venue) =>
+            `${venue.name} (${venue.people_to_hold} people, holds ${venue.capacity}, ${venue.layout_name ?? NOT_RECORDED})`,
         ),
       )
     case 'accessibility':
       return listOrNone(
         (value as AccessibilityFact[]).map((need) =>
-          need.notes ? `${need.feature}: ${need.notes}` : need.feature,
+          need.notes ? `${need.feature_name}: ${need.notes}` : need.feature_name,
         ),
       )
     case 'equipment':
       return listOrNone(
         (value as EquipmentFact[]).map((item) =>
           item.technical_notes
-            ? `${item.quantity} × ${item.equipment_type} (${item.technical_notes})`
-            : `${item.quantity} × ${item.equipment_type}`,
+            ? `${item.quantity} × ${item.equipment_type_name} (${item.technical_notes})`
+            : `${item.quantity} × ${item.equipment_type_name}`,
         ),
       )
     default:
@@ -100,8 +103,8 @@ function ChangesList({ changes }: { changes: FactChange[] }) {
  * Story 21.1 - one event awaiting the safety check, read-only, opened from the queue.
  * AC3: the event and its description, each approved venue with its record (story 8.2) and the
  * layout booked, accessibility needs, accepted equipment with technical notes, and the previous
- * reviews, newest first. AC4: a venue the event expects more people than it holds is flagged
- * Over capacity. AC5: a detail never recorded says so, and what changed since the last review is
+ * reviews, newest first. AC4: a venue whose booking must hold more people than the venue holds
+ * in the booked layout is flagged Over capacity, with both figures shown. AC5: a detail never recorded says so, and what changed since the last review is
  * listed, fact by fact.
  */
 export function SafetyCheckDetailPage() {
@@ -153,7 +156,7 @@ export function SafetyCheckDetailPage() {
           <section className="card stack" aria-labelledby="safety-venues-heading">
             <h2 id="safety-venues-heading">Venues</h2>
             {check.venues.length === 0 && <p className="muted">No approved venues.</p>}
-            {check.venues.map(({ venue, layout, over_capacity }) => (
+            {check.venues.map(({ venue, layout, capacity, people_to_hold, over_capacity }) => (
               <div key={venue.id} className="subtle-block stack">
                 <div className="cluster">
                   <h3>{venue.name}</h3>
@@ -161,8 +164,12 @@ export function SafetyCheckDetailPage() {
                 </div>
                 <div className="fact-grid">
                   <div>
-                    <p className="fact-label">Capacity</p>
-                    <p className="fact-value">{venue.capacity}</p>
+                    <p className="fact-label">Capacity in this layout</p>
+                    <p className="fact-value">{capacity}</p>
+                  </div>
+                  <div>
+                    <p className="fact-label">People to hold</p>
+                    <p className="fact-value">{people_to_hold}</p>
                   </div>
                   <div>
                     <p className="fact-label">Layout</p>
