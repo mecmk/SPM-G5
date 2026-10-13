@@ -7,16 +7,19 @@
  *     picture is replaced with the organiser's own controls, a venue requirement is added with
  *     story 2.7's editor, and details cannot be saved while a field marked * is empty (checked
  *     before anything is sent).
- * AC5 once approved, the organiser's details and cover picture are greyed out with a hint that
+ * AC5/AC6 were replaced by fix f7.2.4, which moves the lock from approval to confirmation:
+ * AC10 an approved (Planning) event's details are still corrected, and the details page shows them.
+ *     An approval that lands while the editor is open makes the save fail as stale, and a reload
+ *     shows the details still editable.
+ * AC12 once Confirmed, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
- * AC6 an approval that lands while the editor is open makes the save fail, and a reload shows the
- *     details read-only.
+ * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment section.
  * AC7 the form counts availability without the event's own holds, and marks equipment no longer
  *     available for new dates on its line, refusing the save.
  * AC8 nobody but the assigned coordinator is offered the edit.
  * AC9 a save made from a copy that changed meanwhile is refused, with a reload offered.
- * Which fields the API accepts, the 2.1 rules, every 403/409/422 refusal and the equipment holds
- * themselves are covered by backend/tests/events/test_correct_event_under_review.py. The
+ * Which fields the API accepts, the 2.1 rules, every 403/409/422 refusal, which edits still fit a
+ * booking or an equipment hold (f7.2.4 AC13-AC18), and the equipment holds themselves are covered by backend/tests/events/test_correct_event_under_review.py. The
  * organiser-vs-coordinator case of AC9 needs story 4.3 (organisers editing a submitted request).
  *
  * Each test that saves raises its own request through the organiser's form, so parallel specs
@@ -38,7 +41,9 @@ const DETAILS_PATH = /\/events\/[0-9a-f-]{36}$/
 const EDIT_PATH = /\/events\/([0-9a-f-]{36})\/edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
 const LOCKED_HINT =
-  'Event details can no longer be edited directly after approval. Further changes must go through the change request process.'
+  'Event details can no longer be edited directly once the event is confirmed. Further changes must go through the change request process.'
+const EQUIPMENT_HINT =
+  'Once the event is approved, its equipment is changed in the Equipment section of the event page.'
 // An organiser submits, then the auto-assigned coordinator signs in and edits: two full sign-in
 // cycles take longer than the default per-test budget - the same reasoning as
 // request-clarification.spec.ts and coordinator-reassignment.spec.ts.
@@ -116,6 +121,16 @@ async function openCorrection(page: Page, eventId: string, name: string) {
   await page.goto(`/events/${eventId}`)
   await page.getByRole('link', { name: 'Edit event' }).click()
   await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+}
+
+/** The assigned coordinator approves the request (4.4) from its details page. */
+async function approve(page: Page, eventId: string) {
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/approve') && response.ok()),
+    page.getByRole('dialog').getByRole('button', { name: 'Approve' }).click(),
+  ])
 }
 
 async function saveCorrection(page: Page) {
@@ -283,7 +298,7 @@ test('7.2 AC9: a save made from a copy that changed meanwhile is refused and a r
   await expect(second.getByRole('alert')).toHaveCount(0)
 })
 
-test('7.2 AC6: an approval that lands while the editor is open refuses the save and locks the details', async ({
+test('7.2 AC10: an approval that lands while the editor is open refuses the save as stale, and the details stay editable', async ({
   page,
   browser,
 }) => {
@@ -295,28 +310,56 @@ test('7.2 AC6: an approval that lands while the editor is open refuses the save 
   const details = await editor.context().newPage()
   await openCorrection(editor, request.id, name)
 
-  await details.goto(`/events/${request.id}`)
-  await details.getByRole('button', { name: 'Approve' }).click()
-  await Promise.all([
-    details.waitForResponse((response) => response.url().endsWith('/approve')),
-    details.getByRole('dialog').getByRole('button', { name: 'Approve' }).click(),
-  ])
+  await approve(details, request.id)
 
   await editor.getByLabel('Description').fill('Too late.')
   await saveCorrection(editor)
 
-  await expect(editor.getByRole('alert')).toContainText('change request')
+  await expect(editor.getByRole('alert')).toContainText('changed since you opened it')
   await editor.getByRole('button', { name: 'Reload event' }).click()
-  await expect(editor.getByText(LOCKED_HINT)).toBeVisible()
-  await expect(editor.getByLabel('Description')).toBeDisabled()
-  await expect(editor.getByLabel('Internal notes')).toBeEnabled()
+  await expect(editor.getByText(LOCKED_HINT)).toHaveCount(0)
+  await expect(editor.getByLabel('Description')).toBeEnabled()
 })
 
-test('7.2 AC5: once approved, the details are greyed out, the hint says why, and notes still save', async ({
+test('7.2 AC10: the coordinator corrects an approved event and the details page shows it', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(TWO_USER_TIMEOUT)
+  const name = uniqueName('Planning fix')
+  await signIn(page, ACCOUNTS.organiser)
+  const request = await submittedRequest(page, name)
+  const coordinator = await signedInAs(browser, page, request.coordinator)
+  await approve(coordinator, request.id)
+
+  await openCorrection(coordinator, request.id, name)
+  await coordinator.getByLabel('Description').fill('Corrected while planning.')
+  await saveCorrection(coordinator)
+  await expect(coordinator.getByRole('alert')).toHaveCount(0)
+
+  await coordinator.getByRole('link', { name: /^← / }).click()
+  await expect(coordinator).toHaveURL(DETAILS_PATH)
+  await expect(coordinator.getByText('Corrected while planning.')).toBeVisible()
+  await expect(coordinator.getByText('Planning', { exact: true }).first()).toBeVisible()
+})
+
+test('7.2 AC15: once approved, the form shows the equipment read-only and points to its own section', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.planning}`)
+  await page.getByRole('link', { name: 'Edit event' }).click()
+
+  await expect(page.getByText(EQUIPMENT_HINT)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add equipment' })).toHaveCount(0)
+  await expect(page.getByLabel('Description')).toBeEnabled()
+})
+
+test('7.2 AC12: once confirmed, the details are greyed out, the hint says why, and notes still save', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.confirmed}`)
   await expect(page.getByText(LOCKED_HINT)).toBeVisible()
 
   await page.getByRole('link', { name: 'Edit event' }).click()
@@ -324,7 +367,7 @@ test('7.2 AC5: once approved, the details are greyed out, the hint says why, and
   await expect(page.getByLabel('Event name')).toBeDisabled()
   await expect(page.getByLabel('Description')).toBeDisabled()
   await expect(page.getByLabel('Choose cover picture')).toBeDisabled()
-  const note = `E2E planning note ${Date.now()}`
+  const note = `E2E confirmed note ${Date.now()}`
   await page.getByLabel('Internal notes').fill(note)
   await Promise.all([
     page.waitForResponse(
