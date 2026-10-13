@@ -32,7 +32,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | --- | --- | --- |
 | `e2e/health.spec.ts` | smoke | the sign-in page loads and the backend answers |
 | `e2e/auth.spec.ts` | 1.1 AC1, AC2, AC4–AC6 | sign in and out, the sign-in lock |
-| `e2e/rbac.spec.ts` | 1.2 AC1–AC4 | each role's sidebar and main page, blocked addresses |
+| `e2e/rbac.spec.ts` | 1.2 AC1–AC4; 21.1 AC1 | each role's sidebar and main page, blocked addresses |
 | `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19, AC20 | raising and submitting an event request |
 | `e2e/venue-requirements.spec.ts` | 2.7 AC1–AC6, AC8–AC11 | listing several venue requirements, each with its own times |
 | `e2e/my-event-requests.spec.ts` | 2.6 AC1–AC5, AC7–AC9, AC11, AC12 | an organiser's own list of requests |
@@ -58,6 +58,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/equipment-requests.spec.ts` | 15.1 AC1–AC4, AC6, AC9 | recording an event's equipment and submitting it to Technical Support |
 | `e2e/equipment-queue.spec.ts` | 15.2 AC1–AC3, AC5, AC6 | Technical Support's equipment request queue, its figures, its All / Pending / Accepted / Declined tabs, and View details to the event and back |
 | `e2e/equipment-decisions.spec.ts` | 16.1 AC1, AC2, AC4, AC6, AC9 | Technical Support accepting and declining equipment requests from the queue and from each request's own page, a blank decline reason blocked in the browser, a short request's Accept suggesting a decline, a double-click deciding once, a decision refused because another page decided first leaving the page showing the current status, a two-day event's period named in full on the card, the Accept dialog and the request's page, and the coordinator seeing each outcome and when it was decided on the event page |
+| `e2e/safety-checks.spec.ts` | 21.1 AC2–AC6 | the Safety Officer's queue of events awaiting the safety check, oldest first, its Pending / Accepted / Declined / All tabs, and each event's safety details: its venues with any over capacity flagged, accessibility needs, accepted equipment, what changed since the last review and the previous reviews, with details never recorded shown as such |
 
 Every case, by story and AC, without starting anything:
 
