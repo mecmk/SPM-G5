@@ -162,7 +162,7 @@ test('2.7 AC4: the event page lists each venue requirement with its times', asyn
   await breakout.getByLabel('Needed from').fill(inFuture(30, 13))
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
-  await page.getByLabel('Contact phone number').fill('+65 9123 4567')
+  await page.getByLabel('Contact phone number').fill('9123 4567')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await saveDraft(page)
   const eventPath = page.url().replace(/\/edit$/, '')

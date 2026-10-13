@@ -1,4 +1,4 @@
-import { expect, type Page, type Request } from '@playwright/test'
+import { expect, type Locator, type Page, type Request } from '@playwright/test'
 
 /**
  * Seed accounts from backend/db/seed/020_sample_data.sql (mirrored in
@@ -101,7 +101,7 @@ export async function createAndSubmitRequest(page: Page, name: string): Promise<
   await page.getByLabel('Expected attendance').fill('60')
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
-  await page.getByLabel('Contact phone number').fill('+65 9123 4567')
+  await page.getByLabel('Contact phone number').fill('9123 4567')
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -145,6 +145,15 @@ export function clarificationsSection(page: Page) {
 /** A venue card in the venue catalogue, matched by the venue's name. */
 export function venueCard(page: Page, name: string) {
   return page.getByRole('article').filter({ has: page.getByRole('heading', { name }) })
+}
+
+/**
+ * Story 2.1 AC21 (f2.1.4): the contact phone's Country or region picker, when it has `name` (for
+ * example 'Singapore (+65)') chosen. One picker per page: the request form, or the event page's
+ * point-of-contact update (story 19.1 AC2).
+ */
+export function chosenPhoneRegion(page: Page, name: string): Locator {
+  return page.getByLabel('Country or region').getByRole('option', { name, selected: true })
 }
 
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */

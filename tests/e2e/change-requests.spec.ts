@@ -9,6 +9,8 @@
  * AC5 change requests are offered only on a Planning event: not before approval, not once
  *     Confirmed.
  * AC9 the organiser withdraws a pending request after confirming, and it reads as Withdrawn.
+ * Story 2.1 AC25 (f2.1.4): the point-of-contact update has the request form's Country or region
+ * picker in front of the phone number, and the same checks.
  *
  * Validation rules, refusals (401/403/404/409/422), the one-pending-per-field rule, the conflict
  * cases (AC8, AC10) and the notifications are backend cases:
@@ -22,6 +24,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
   assignedCoordinator,
+  chosenPhoneRegion,
   createAndSubmitRequest,
   EVENTS,
   inFuture,
@@ -102,13 +105,39 @@ test('19.1 AC2: an organiser updates the point of contact on a planning event', 
 
   await page.getByRole('button', { name: 'Update point of contact' }).click()
   await page.getByLabel('Contact email').fill(email)
-  await page.getByLabel('Contact phone number').fill('+65 6999 0000')
+  await page.getByLabel('Contact phone number').fill('6999 0000')
   await page.getByRole('button', { name: 'Save contact details' }).click()
 
   await expect(page.getByText(email)).toBeVisible()
   await expect(page.getByText('+65 6999 0000')).toBeVisible()
   await page.reload()
   await expect(page.getByText(email)).toBeVisible()
+})
+
+test('2.1 AC25: the point of contact update has the same country or region picker and checks', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await approvedEvent(page, 'Contact region')
+
+  // createAndSubmitRequest typed 9123 4567 under the default, Singapore.
+  await page.getByRole('button', { name: 'Update point of contact' }).click()
+  await expect(chosenPhoneRegion(page, 'Singapore (+65)')).toHaveCount(1)
+  const phone = page.getByLabel('Contact phone number')
+  await expect(phone).toHaveValue('9123 4567')
+
+  await phone.fill('+852 1234 5678')
+  await page.getByRole('button', { name: 'Save contact details' }).click()
+  await expect(
+    page.getByText('Type the number without its calling code; choose the country or region instead.'),
+  ).toBeVisible()
+  await expect(phone).toHaveAttribute('aria-invalid', 'true')
+
+  await page.getByLabel('Country or region').selectOption({ label: 'Hong Kong (+852)' })
+  await phone.fill('1234 5678')
+  await page.getByRole('button', { name: 'Save contact details' }).click()
+
+  await expect(page.getByText('+852 1234 5678')).toBeVisible()
 })
 
 test('19.1 AC4: the change form will not submit without a reason', async ({ page }) => {

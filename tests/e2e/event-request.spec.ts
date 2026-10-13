@@ -43,16 +43,28 @@
  *     requests is refused, naming the conflict. No frontend logic of its own - the backend's
  *     sentence surfaces through the form's existing save-error handling. Rule detail (scoping,
  *     boundaries, dead statuses) is a backend case: test_event_request_duplicate.py.
+ * AC21 (f2.1.4) the contact phone is typed after a Country or region picker (Singapore (+65) by
+ *     default), saved with that calling code and shown with it. AC13's 8 to 15 digits are counted
+ *     on the number as saved, code included, as the backend counts them; the backend's check is
+ *     unchanged, so these are browser cases.
+ * AC23 (f2.1.4) a "+" typed in the number is refused before anything is sent, and changing the
+ *     country or region checks the number again.
+ * AC24 (f2.1.4) a phone saved before the picker, with no calling code, opens under Singapore as it
+ *     was saved.
  * Rule detail, refusals (401/403/404/409/422) and the rest of what the coordinator sees
  * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, inFuture, signIn, uniqueName } from './support'
+import { ACCOUNTS, chosenPhoneRegion, inFuture, signIn, uniqueName } from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
 const PAST_START = '2020-01-01T09:00'
-const CONTACT = { name: 'Priya Nair', email: 'priya.nair@example.com', phone: '+65 9123 4567' }
+// AC21: the number is typed without its calling code; Singapore (+65) is chosen by default.
+const CONTACT = { name: 'Priya Nair', email: 'priya.nair@example.com', phone: '9123 4567' }
+const PHONE_LENGTH_PROBLEM = 'Enter a phone number with 8 to 15 digits.'
+const TYPED_CALLING_CODE_PROBLEM =
+  'Type the number without its calling code; choose the country or region instead.'
 const MAX_PICTURE_BYTES = 5 * 1024 * 1024
 /** The smallest valid PNG: one transparent pixel. */
 const PNG_BYTES = Buffer.from(
@@ -1441,4 +1453,121 @@ test('2.1 AC20: a request with the same name and dates as another live request i
   await page.getByRole('button', { name: 'Save draft' }).click()
 
   await expect(page.getByRole('alert')).toContainText('already have a request')
+})
+
+// --- AC21-AC24 (f2.1.4): the contact phone's country or region ---------------------------------
+test('2.1 AC21: the contact phone is typed after a country or region and saved with its calling code', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('CallingCode'))
+  const region = page.getByLabel('Country or region')
+
+  await expect(region.getByRole('option')).toHaveText([
+    'Singapore (+65)',
+    'Malaysia (+60)',
+    'Indonesia (+62)',
+    'Thailand (+66)',
+    'Philippines (+63)',
+    'Vietnam (+84)',
+    'China (+86)',
+    'Hong Kong (+852)',
+    'Japan (+81)',
+    'South Korea (+82)',
+    'Australia (+61)',
+  ])
+  await expect(chosenPhoneRegion(page, 'Singapore (+65)')).toHaveCount(1)
+
+  await region.selectOption({ label: 'Malaysia (+60)' })
+  await page.getByLabel('Contact phone number').fill('12-345 6789')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  await page.reload()
+
+  await expect(chosenPhoneRegion(page, 'Malaysia (+60)')).toHaveCount(1)
+  await expect(page.getByLabel('Contact phone number')).toHaveValue('12-345 6789')
+  await page.goto(page.url().replace(/\/edit$/, ''))
+  await expect(page.getByText('+60 12-345 6789')).toBeVisible()
+})
+
+test('2.1 AC21: the 8 to 15 digits are counted with the calling code, as the number is saved', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const phone = page.getByLabel('Contact phone number')
+  const lengthProblem = page.getByText(PHONE_LENGTH_PROBLEM)
+
+  // Singapore's 65 counts too: 6 typed digits make 8, and 13 make 15.
+  await phone.fill('12345')
+  await expect(lengthProblem).toBeVisible()
+  await phone.fill('123456')
+  await expect(lengthProblem).toHaveCount(0)
+  await phone.fill('1234567890123')
+  await expect(lengthProblem).toHaveCount(0)
+  await phone.fill('12345678901234')
+  await expect(lengthProblem).toBeVisible()
+})
+
+test('2.1 AC23: a number typed with a calling code is refused before anything is sent', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await page.getByLabel('Event name').fill(uniqueName('TypedCode'))
+  const phone = page.getByLabel('Contact phone number')
+
+  await phone.fill('+65 9123 4567')
+  await expect(page.getByText(TYPED_CALLING_CODE_PROBLEM)).toBeVisible()
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page.getByRole('alert')).toContainText(TYPED_CALLING_CODE_PROBLEM)
+  await expect(phone).toBeFocused()
+  await expect(phone).toHaveAttribute('aria-invalid', 'true')
+  expect(createCalls).toBe(0)
+})
+
+test('2.1 AC23: changing the country or region checks the number again', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const lengthProblem = page.getByText(PHONE_LENGTH_PROBLEM)
+
+  // 65 and 5 digits make 7; 852 and the same 5 make 8.
+  await page.getByLabel('Contact phone number').fill('12345')
+  await expect(lengthProblem).toBeVisible()
+  await page.getByLabel('Country or region').selectOption({ label: 'Hong Kong (+852)' })
+
+  await expect(lengthProblem).toHaveCount(0)
+})
+
+test('2.1 AC24: a phone saved without a calling code opens under Singapore, as it was saved', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('SavedPhone'))
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  // The form now always saves a calling code, so a phone saved before the picker is reached by
+  // giving the draft's own answer one: only the phone changes, the rest is the real response.
+  const eventPath = new URL(page.url()).pathname.replace(/\/edit$/, '')
+  await page.route(
+    (url) => url.pathname === eventPath,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      const event = await response.json()
+      return route.fulfill({ response, json: { ...event, contact_phone: '9123-4567' } })
+    },
+  )
+
+  await page.reload()
+
+  await expect(chosenPhoneRegion(page, 'Singapore (+65)')).toHaveCount(1)
+  await expect(page.getByLabel('Contact phone number')).toHaveValue('9123-4567')
 })
