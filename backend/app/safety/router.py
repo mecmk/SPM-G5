@@ -23,19 +23,25 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 @router.get("", response_model=list[SafetyQueueEntry], dependencies=[CanReviewSafety])
-def list_safety_queue(db: DbSession) -> list[SafetyQueueEntry]:
-    """AC2: events awaiting the check, oldest first. AC6: safety:review only - other roles get
-    403 from the dependency."""
+def list_safety_queue(
+    db: DbSession, status: service.SafetyQueueStatus | None = None
+) -> list[SafetyQueueEntry]:
+    """AC2: the events in one tab (Pending is the queue itself), or every tab without ``status``,
+    oldest first. AC6: safety:review only - other roles get 403 from the dependency."""
     return [
-        SafetyQueueEntry.from_event(item.event, approved_bookings=item.approved_bookings)
-        for item in service.list_safety_queue(db)
+        SafetyQueueEntry.from_event(
+            item.event,
+            approved_bookings=item.approved_bookings,
+            safety_status=item.safety_status,
+        )
+        for item in service.list_safety_queue(db, status)
     ]
 
 
 @router.get("/{event_id}", response_model=SafetyCheckDetail, dependencies=[CanReviewSafety])
 def get_safety_check(event_id: uuid.UUID, db: DbSession) -> SafetyCheckDetail:
-    """AC3-AC5: everything about one awaiting event that affects safety, with what changed since
-    its last review. An event not awaiting the check is a 404. AC6: safety:review only."""
+    """AC3-AC5: everything about one event that affects safety, with what changed since its last
+    review. An event neither awaiting the check nor reviewed is a 404. AC6: safety:review only."""
     try:
         check = service.get_safety_check(db, event_id)
     except service.SafetyCheckNotFound:

@@ -26,9 +26,12 @@ class SafetyQueueEntry(BaseModel):
     expected_attendance: int
     venue_names: list[str]
     status: str
+    safety_status: str  # PENDING, ACCEPTED or DECLINED: the queue tab it belongs to
 
     @classmethod
-    def from_event(cls, event: Event, *, approved_bookings: list[VenueBooking]) -> SafetyQueueEntry:
+    def from_event(
+        cls, event: Event, *, approved_bookings: list[VenueBooking], safety_status: str
+    ) -> SafetyQueueEntry:
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
         assert event.starts_at is not None
         assert event.ends_at is not None
@@ -41,6 +44,7 @@ class SafetyQueueEntry(BaseModel):
             expected_attendance=event.expected_attendance,
             venue_names=[booking.venue.name for booking in approved_bookings],
             status=event.status,
+            safety_status=safety_status,
         )
 
 

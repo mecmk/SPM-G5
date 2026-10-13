@@ -115,6 +115,9 @@ class Events:
     # Story 21.1's, both organiser 2, coordinator 2 and AWAITING_SAFETY_CHECK, August 2028.
     HARBOUR_CONCERT = _e(35)  # 300 expected at the 250-seat Exhibition Foyer; first in the queue
     BOOK_FAIR = _e(36)  # within capacity; sent back once (SafetyReviews.BOOK_FAIR_CHANGES)
+    # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
+    FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
+    NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
 
 
 class Bookings:
@@ -223,3 +226,5 @@ class EquipmentOutOfService:
 class SafetyReviews:
     # Story 21.1: Events.BOOK_FAIR's earlier review, when it expected 120 and had 2 microphones.
     BOOK_FAIR_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
+    FOOD_FESTIVAL_APPROVED = uuid.UUID("ffffffff-0000-0000-0000-000000000002")
+    NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")

@@ -1,7 +1,9 @@
 """Story 21.1 - the Safety Officer's queue of events awaiting the safety check.
 
 AC2 The queue lists only events Awaiting Safety Check, oldest first by when each entered the
-    status, with name, dates, expected attendance, approved venues and status.
+    status, with name, dates, expected attendance, approved venues and status. Team request beyond
+    the AC: Pending, Accepted and Declined tabs, and All. Pending is the queue itself; Accepted and
+    Declined are events no longer awaiting the check, by their latest review's outcome.
 AC3 An event's detail shows everything that affects safety: attendance, each approved venue,
     accessibility needs, accepted equipment and previous reviews.
 AC4 A venue whose capacity is below the expected attendance is flagged.
@@ -48,8 +50,8 @@ def _entered_check(db: Session, event: Event, at: datetime) -> None:
     db.flush()
 
 
-def _ids(client) -> list[str]:
-    response = client.get(QUEUE_PATH)
+def _ids(client, tab: str | None = "PENDING") -> list[str]:
+    response = client.get(QUEUE_PATH, params={} if tab is None else {"status": tab})
     assert response.status_code == 200, response.text
     return [row["id"] for row in response.json()]
 
@@ -57,6 +59,20 @@ def _ids(client) -> list[str]:
 @pytest.fixture
 def safety_client(login_as):
     return login_as(Users.SAFETY_OFFICER)
+
+
+def _review(db: Session, event: Event, outcome: str, at: datetime) -> None:
+    db.add(
+        EventSafetyReview(
+            event_id=event.id,
+            reviewed_by_id=Users.SAFETY_OFFICER.id,
+            reviewed_at=at,
+            outcome=outcome,
+            notes=None,
+            facts={},
+        )
+    )
+    db.flush()
 
 
 # --- AC2: which events, in what order ----------------------------------------------------------
@@ -84,7 +100,7 @@ def test_queue_orders_by_when_each_event_entered_the_check(safety_client, db: Se
 
 @pytest.mark.story("21.1", ac=2)
 def test_entry_shows_name_dates_attendance_venues_and_status(safety_client):
-    entry = safety_client.get(QUEUE_PATH).json()[0]
+    entry = safety_client.get(QUEUE_PATH, params={"status": "PENDING"}).json()[0]
 
     assert entry == {
         "id": str(Events.HARBOUR_CONCERT),
@@ -94,6 +110,7 @@ def test_entry_shows_name_dates_attendance_venues_and_status(safety_client):
         "expected_attendance": 300,
         "venue_names": ["Exhibition Foyer"],
         "status": EventStatus.AWAITING_SAFETY_CHECK,
+        "safety_status": "PENDING",
     }
 
 
@@ -107,9 +124,10 @@ def test_entry_shows_name_dates_attendance_venues_and_status(safety_client):
     ],
 )
 def test_events_in_other_statuses_are_left_out(safety_client, db: Session, status):
+    """Never reviewed and not awaiting the check, so in no tab, All included."""
     event = make_event(db, status=status)
 
-    assert str(event.id) not in _ids(safety_client)
+    assert str(event.id) not in _ids(safety_client, tab=None)
 
 
 @pytest.mark.story("21.1", ac=2)
@@ -148,6 +166,59 @@ def test_only_approved_bookings_count_as_venues(safety_client, db: Session):
     entry = next(row for row in safety_client.get(QUEUE_PATH).json() if row["id"] == str(event.id))
 
     assert entry["venue_names"] == ["Boardroom 3.4"]
+
+
+# --- AC2 (team request): the Pending, Accepted, Declined and All tabs ---------------------------
+@pytest.mark.story("21.1", ac=2)
+def test_accepted_tab_lists_events_whose_latest_review_approved_them(safety_client):
+    assert _ids(safety_client, "ACCEPTED") == [str(Events.FOOD_FESTIVAL)]
+
+
+@pytest.mark.story("21.1", ac=2)
+def test_declined_tab_lists_events_sent_back_and_not_yet_resent(safety_client):
+    """The book fair was sent back too, but it awaits the check again, so it is Pending."""
+    assert _ids(safety_client, "DECLINED") == [str(Events.NIGHT_WALK)]
+
+
+@pytest.mark.story("21.1", ac=2)
+def test_all_tab_lists_every_tab_oldest_first(safety_client):
+    """By when each last entered the check: night walk 4 Oct, food festival 5 Oct, concert 10 Oct,
+    book fair 11 Oct."""
+    assert _ids(safety_client, tab=None) == [
+        str(Events.NIGHT_WALK),
+        str(Events.FOOD_FESTIVAL),
+        str(Events.HARBOUR_CONCERT),
+        str(Events.BOOK_FAIR),
+    ]
+
+
+@pytest.mark.story("21.1", ac=2)
+def test_each_entry_says_which_tab_it_belongs_to(safety_client):
+    entries = safety_client.get(QUEUE_PATH).json()
+
+    assert {row["id"]: row["safety_status"] for row in entries} == {
+        str(Events.NIGHT_WALK): "DECLINED",
+        str(Events.FOOD_FESTIVAL): "ACCEPTED",
+        str(Events.HARBOUR_CONCERT): "PENDING",
+        str(Events.BOOK_FAIR): "PENDING",
+    }
+
+
+@pytest.mark.story("21.1", ac=2)
+def test_latest_review_decides_between_accepted_and_declined(safety_client, db: Session):
+    event = make_event(db, status=EventStatus.PLANNING)
+    _review(db, event, SafetyReviewOutcome.APPROVED, datetime(2026, 10, 1, 1, 0, tzinfo=UTC))
+    _review(
+        db, event, SafetyReviewOutcome.CHANGES_REQUESTED, datetime(2026, 10, 2, 1, 0, tzinfo=UTC)
+    )
+
+    assert str(event.id) in _ids(safety_client, "DECLINED")
+    assert str(event.id) not in _ids(safety_client, "ACCEPTED")
+
+
+@pytest.mark.story("21.1", ac=2)
+def test_unknown_tab_is_refused(safety_client):
+    assert safety_client.get(QUEUE_PATH, params={"status": "BOGUS"}).status_code == 422
 
 
 # --- AC6: only the Safety Officer ---------------------------------------------------------------
@@ -278,10 +349,19 @@ def test_previous_reviews_are_newest_first(safety_client, db: Session):
 
 
 @pytest.mark.story("21.1", ac=3)
-def test_event_not_awaiting_the_check_is_not_found(safety_client, db: Session):
+def test_event_neither_awaiting_nor_reviewed_is_not_found(safety_client, db: Session):
     event = make_event(db, status=EventStatus.PLANNING)
 
     assert safety_client.get(_detail_path(event.id)).status_code == 404
+
+
+@pytest.mark.story("21.1", ac=3)
+@pytest.mark.parametrize("event_id", [Events.FOOD_FESTIVAL, Events.NIGHT_WALK])
+def test_reviewed_event_opens_from_its_tab(safety_client, event_id):
+    response = safety_client.get(_detail_path(event_id))
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()["previous_reviews"]) == 1
 
 
 @pytest.mark.story("21.1", ac=3)

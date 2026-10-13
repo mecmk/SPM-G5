@@ -295,7 +295,16 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      '11111111-0000-0000-0000-000000000004', 'Tower B', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-28 09:00+08', '2026-09-30 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Riverside Book Fair', 'Community event', 'Publisher stalls with author talks through the day.', NULL, '2028-08-23 10:00+08', '2028-08-23 17:00+08', 150, 'AWAITING_SAFETY_CHECK',
-     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL)
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+    -- 3333..37 and 3333..38: reviewed by the Safety Officer and no longer awaiting the check, for
+    -- story 21.1's Accepted and Declined tabs. The 37 was approved and is now Confirmed; the 38
+    -- was sent back to Planning and not sent again. Neither has a venue booked.
+    ('33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Marina Food Festival', 'Community event', 'Food stalls along the waterfront promenade.', NULL, '2028-09-02 11:00+08', '2028-09-02 21:00+08', 200, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+    ('33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Lantern Night Walk', 'Community event', 'A guided evening walk with paper lanterns.', NULL, '2028-09-09 19:00+08', '2028-09-09 22:00+08', 80, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -665,7 +674,14 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000041', '33333333-0000-0000-0000-000000000036', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-01 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000042', '33333333-0000-0000-0000-000000000036', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-06 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000043', '33333333-0000-0000-0000-000000000036', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-07 15:00+08', 'Confirm the attendance and the microphones.'),
-    ('99999999-0000-0000-0000-000000000044', '33333333-0000-0000-0000-000000000036', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-11 09:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000044', '33333333-0000-0000-0000-000000000036', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-11 09:00+08', NULL),
+    -- The 37 entered the check on 5 Oct and was approved; the 38 entered on 4 Oct and was sent back.
+    ('99999999-0000-0000-0000-000000000045', '33333333-0000-0000-0000-000000000037', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-09-27 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000037', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-05 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000047', '33333333-0000-0000-0000-000000000037', 'AWAITING_SAFETY_CHECK', 'CONFIRMED', '11111111-0000-0000-0000-000000000009', '2026-10-09 10:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000048', '33333333-0000-0000-0000-000000000038', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-09-26 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000049', '33333333-0000-0000-0000-000000000038', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-04 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000050', '33333333-0000-0000-0000-000000000038', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08', 'Add marshals at each road crossing.')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -722,7 +738,9 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000034', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-24 09:00+08'),
     -- 3333..35 and 3333..36 (story 21.1's): self-assigned too.
     ('aaaaaaaa-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000035', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-28 09:00+08'),
-    ('aaaaaaaa-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-29 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-29 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
@@ -857,7 +875,7 @@ FROM (VALUES
 WHERE b.id = link.booking_id;
 
 -- ---------------------------------------------------------------------
--- Story 21.1: the Safety Officer's earlier review of the Riverside Book Fair (3333..36), which
+-- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)
 -- sent it back. Its facts are the event as Sam saw it then: 120 people and two microphones,
 -- where it now expects 150 and has four, so the next check shows both as changed.
 -- ---------------------------------------------------------------------
@@ -869,7 +887,21 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
        "starts_at": "2028-08-23T02:00:00+00:00", "ends_at": "2028-08-23T09:00:00+00:00",
        "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "layout": "EXHIBITION"}],
        "accessibility": [],
-       "equipment": [{"equipment_type": "WIRELESS_MIC", "quantity": 2, "technical_notes": "Author talks"}]}')
+       "equipment": [{"equipment_type": "WIRELESS_MIC", "quantity": 2, "technical_notes": "Author talks"}]}'),
+    -- The Marina Food Festival (3333..37), approved, and the Lantern Night Walk (3333..38), sent
+    -- back: story 21.1's Accepted and Declined tabs.
+    ('ffffffff-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000009', '2026-10-09 10:00+08',
+     'APPROVED', NULL,
+     '{"description": "Food stalls along the waterfront promenade.",
+       "expected_attendance": 200,
+       "starts_at": "2028-09-02T03:00:00+00:00", "ends_at": "2028-09-02T13:00:00+00:00",
+       "venues": [], "accessibility": [], "equipment": []}'),
+    ('ffffffff-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08',
+     'CHANGES_REQUESTED', 'Add marshals at each road crossing.',
+     '{"description": "A guided evening walk with paper lanterns.",
+       "expected_attendance": 80,
+       "starts_at": "2028-09-09T11:00:00+00:00", "ends_at": "2028-09-09T14:00:00+00:00",
+       "venues": [], "accessibility": [], "equipment": []}')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
     outcome = EXCLUDED.outcome, notes = EXCLUDED.notes, facts = EXCLUDED.facts;
