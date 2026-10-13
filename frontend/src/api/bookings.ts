@@ -41,6 +41,9 @@ export interface Booking {
   hold_expiry_change_reason: string | null
   hold_expiry_changed_by: HoldExpiryChangedBy | null
   hold_expiry_changed_at: string | null
+  /** Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; null
+   * when unmarked, and always null once the booking is no longer pending or approved. */
+  venue_unavailable_marked_at: string | null
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
@@ -154,6 +157,8 @@ export interface BookingQueueEntry {
   hold_expires_at: string | null
   hold_completed_at: string | null
   held_from: string
+  /** Story 9.4 AC3: the mark, for Venue Staff deciding the request; null when unmarked. */
+  venue_unavailable_marked_at: string | null
 }
 
 /** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was
@@ -320,6 +325,9 @@ export interface BookingOutcome {
   hold_expiry_change_reason: string | null
   hold_expiry_changed_by: HoldExpiryChangedBy | null
   hold_expiry_changed_at: string | null
+  /** Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; null
+   * when unmarked, and always null once the booking is no longer pending or approved. */
+  venue_unavailable_marked_at: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
