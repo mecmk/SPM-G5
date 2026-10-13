@@ -33,6 +33,7 @@ class RoleCode(StrEnum):
     VENUE_STAFF = "VENUE_STAFF"
     TECH_SUPPORT_STAFF = "TECH_SUPPORT_STAFF"
     ATTENDEE = "ATTENDEE"
+    SAFETY_OFFICER = "SAFETY_OFFICER"
 
 
 class Permission(StrEnum):
@@ -70,6 +71,9 @@ class Permission(StrEnum):
     # --- Attendee registration (18.x) ---
     REGISTRATIONS_SELF = "registrations:self"  # browse, register, withdraw (18.1-18.4)
     REGISTRATIONS_VIEW = "registrations:view"  # organiser / coordinator view list (18.6)
+
+    # --- Operational safety checks (21.x) ---
+    SAFETY_REVIEW = "safety:review"  # queue and detail of events awaiting the check (21.1)
 
     # --- Cross-cutting ---
     NOTIFICATIONS_READ_OWN = "notifications:read_own"  # (20.x)
@@ -117,6 +121,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         }
     ),
     RoleCode.TECH_SUPPORT_STAFF: frozenset(_INTERNAL_COMMON | {Permission.EQUIPMENT_MANAGE}),
+    RoleCode.SAFETY_OFFICER: frozenset(_INTERNAL_COMMON | {Permission.SAFETY_REVIEW}),
     RoleCode.ATTENDEE: frozenset(
         {Permission.REGISTRATIONS_SELF, Permission.NOTIFICATIONS_READ_OWN}
     ),

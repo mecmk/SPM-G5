@@ -61,6 +61,11 @@ export const EVENTS = {
   // Story 12.7, Planning, organiser: organiser2, coordinator, July 2028: one venue requirement,
   // whose request expired. The 12.7 spec requests a venue for it again.
   craftFair: '33333333-0000-0000-0000-000000000034',
+  // Story 21.1, Awaiting Safety Check, organiser: organiser2, coordinator2, August 2028. The
+  // concert expects 300 at the 250-seat Exhibition Foyer, whose operating hours are not recorded,
+  // and leads the queue. The book fair is within capacity and was sent back once.
+  harbourConcert: '33333333-0000-0000-0000-000000000035',
+  bookFair: '33333333-0000-0000-0000-000000000036',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
