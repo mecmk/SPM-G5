@@ -71,7 +71,11 @@ async function submittedRequest(page: Page, name: string): Promise<SubmittedRequ
   return { id, coordinator: await coordinatorOf(page, id) }
 }
 
-/** AC7 only: a submitted request holding `laptops` presentation laptops on a chosen day. */
+/**
+ * AC7 only: a submitted request holding `laptops` presentation laptops on a chosen day. Like
+ * createAndSubmitRequest's, it has the one venue requirement a new request starts with (story 2.7
+ * AC14, f2.7.4), named, with its number of people and times following the event's.
+ */
 async function submittedRequestWithLaptops(
   page: Page,
   name: string,
@@ -87,7 +91,10 @@ async function submittedRequestWithLaptops(
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
   await page.getByLabel('Contact phone number').fill('+65 9123 4567')
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
+  await page
+    .getByRole('group', { name: 'Venue requirement 1' })
+    .getByLabel('Requirement name')
+    .fill('Main venue')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await page.getByRole('button', { name: 'Add equipment' }).click()
   await equipmentItem(page, 1)
@@ -204,7 +211,8 @@ test('7.2 AC4: the coordinator adds a venue requirement and the details page sho
 
   await openCorrection(coordinator, request.id, name)
   await coordinator.getByRole('button', { name: 'Add a venue requirement' }).click()
-  const added = coordinator.getByRole('group', { name: 'Venue requirement 1' })
+  // The organiser's request already has one, Main venue (story 2.7 AC14, f2.7.4).
+  const added = coordinator.getByRole('group', { name: 'Venue requirement 2' })
   await added.getByLabel('Requirement name').fill('Main hall')
   await added.getByLabel('Number of people').fill('50')
   await saveCorrection(coordinator)
@@ -240,6 +248,8 @@ test('7.2 AC7: the form leaves out the event’s own holds and marks equipment n
   // Its own 2 held laptops are not counted against it.
   await expect(laptops.getByText('6 available for these dates')).toBeVisible()
 
+  // Its venue requirement follows the event's times (story 2.7 AC2), so it moves with the dates:
+  // only the laptops stop the save.
   await coordinator.getByLabel('Proposed start').fill(inFuture(busyDay, 9))
   await coordinator.getByLabel('Proposed end').fill(inFuture(busyDay, 17))
 

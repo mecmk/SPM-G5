@@ -9,7 +9,10 @@
  *     browser, said next to the field as it is typed, and the field to fix is marked and focused
  *     on a save).
  * AC4 venue requirements (room layout, facilities with a quantity, other requirements) are
- *     recorded; "No venue requirements" differs from left empty and clears the other choices.
+ *     recorded. Since f2.7.4 every request has at least one venue requirement, so a new request
+ *     starts with one and "No venue requirements" is no longer offered (2.7 AC14, proven in
+ *     venue-requirements.spec.ts). The cases here fill that one rather than add another, so each
+ *     of its fields' labels is still unique on the page.
  * AC5 accessibility needs are selected or described; "none required" differs from left empty.
  * AC6 several equipment items are added, each with a type and quantity; a type can be on the
  *     request only once, so the form stops offering one that is taken. The form says how many of
@@ -20,9 +23,9 @@
  * AC9-AC11 the organiser submits their own request, from the new-request page or from a saved
  *     draft; it then shows as submitted and read-only.
  * AC10 submitting with anything missing keeps the details as a draft (the backend names what is
- *     missing);
- *     the form
- *     also lists what is still needed as it is filled in, so it is no surprise at submit.
+ *     missing); the form also lists what is still needed as it is filled in, so it is no surprise
+ *     at submit. With 2.7 AC15 that list names what the venue requirement a new request starts
+ *     with still needs: its name, and its number of people until the expected attendance is typed.
  * AC13 the organiser records a point of contact (name, email, phone); all three are needed to
  *     submit, and a bad email or phone is said next to the field as it is typed.
  * AC14 the organiser adds a cover picture by choosing a file or dragging it on, sees a preview,
@@ -133,16 +136,16 @@ function myEventsCard(page: Page, name: string): Locator {
   return page.getByRole('listitem').filter({ hasText: name })
 }
 
-/** Story 2.7 AC1: room layout, facilities and other requirements now belong to a venue
- * requirement, so a test of them adds one first. With only one on the page, each field's label
- * still names it uniquely. */
-async function addVenueRequirement(page: Page) {
-  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
-}
-
-/** Answer the two sections a request cannot be submitted without: "none" is an answer. */
+/**
+ * Answer the two sections a request cannot be submitted without. Venue: name the one venue
+ * requirement a new request starts with (story 2.7 AC14, f2.7.4); its number of people follows
+ * the expected attendance and its times the event's. Accessibility: "none" is an answer.
+ */
 async function answerVenueAndAccessibility(page: Page) {
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
+  await page
+    .getByRole('group', { name: 'Venue requirement 1' })
+    .getByLabel('Requirement name')
+    .fill('Main venue')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
 }
 
@@ -217,7 +220,6 @@ test('2.1 AC3: attendance, facility and equipment quantities must be positive wh
   }
 
   await page.getByLabel('Expected attendance').fill('60')
-  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   await page.getByLabel('Breakout rooms quantity').fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -236,7 +238,6 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   await fillEssentials(page, uniqueName('Venue'))
-  await addVenueRequirement(page)
   await page.getByLabel('Requirement name').fill('Main venue')
 
   await page.getByLabel('Room layout').selectOption({ label: 'Theatre' })
@@ -256,42 +257,6 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
   await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('3')
   await expect(page.getByLabel('Other requirements')).toHaveValue('Close to the lifts')
   await expect(page.getByLabel('Preferred location')).toHaveCount(0)
-})
-
-test('2.1 AC4: "No venue requirements" is kept apart from left empty and clears the other choices', async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.organiser)
-
-  // Left empty: the box is not ticked, and it stays that way.
-  await startNewRequest(page)
-  await fillEssentials(page, uniqueName('Venue empty'))
-  await page.getByRole('button', { name: 'Save draft' }).click()
-  await expect(page).toHaveURL(EDIT_PATH)
-  await page.reload()
-  await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).not.toBeChecked()
-
-  // Ticking it clears the venue requirements (story 2.7 AC3); listing one again un-ticks it.
-  await startNewRequest(page)
-  await fillEssentials(page, uniqueName('Venue none'))
-  await addVenueRequirement(page)
-  await page.getByLabel('Room layout').selectOption({ label: 'Theatre' })
-  await page.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
-  await page.getByLabel('Other requirements').fill('Near the lifts')
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
-  await expect(page.getByLabel('Room layout')).toHaveCount(0)
-  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).toHaveCount(0)
-  await expect(page.getByLabel('Other requirements')).toHaveCount(0)
-
-  await addVenueRequirement(page)
-  await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).not.toBeChecked()
-
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
-  await page.getByRole('button', { name: 'Save draft' }).click()
-  await expect(page).toHaveURL(EDIT_PATH)
-  await page.reload()
-  await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).toBeChecked()
-  await expect(page.getByRole('checkbox', { name: 'Wi-Fi', exact: true })).toHaveCount(0)
 })
 
 test('2.1 AC5: selected accessibility needs, "none required" and left empty are kept apart', async ({
@@ -544,7 +509,6 @@ test('2.1 AC3: the field that needs fixing is marked and focused', async ({ page
   await attendance.fill('60')
   await expect(attendance).not.toHaveAttribute('aria-invalid', 'true')
 
-  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   const rooms = page.getByLabel('Breakout rooms quantity')
   await rooms.fill('0')
@@ -831,7 +795,6 @@ test('2.1 AC3: a bad number is said next to the field as soon as it is typed', a
   )
 
   // A facility quantity
-  await addVenueRequirement(page)
   await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
   await page.getByLabel('Breakout rooms quantity').fill('-2')
   await expect(
@@ -870,7 +833,7 @@ test('2.1 AC1: an empty event name is said as soon as you move off the field', a
   await expect(page.getByText('Enter a name for the event.')).toHaveCount(0)
 })
 
-test('2.1 AC10: what is still needed to submit is listed as you fill the form in', async ({
+test('2.1 AC10/2.7 AC15: what is still needed to submit is listed as you fill the form in', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.organiser)
@@ -882,7 +845,9 @@ test('2.1 AC10: what is still needed to submit is listed as you fill the form in
   await expect(needed).toContainText('proposed start date and time')
   await expect(needed).toContainText('proposed end date and time')
   await expect(needed).toContainText('expected attendance')
-  await expect(needed).toContainText('venue requirements')
+  // Story 2.7 AC15 (f2.7.4): the venue requirement the form starts with, by its place in the list.
+  await expect(needed).toContainText('venue requirement 1: name')
+  await expect(needed).toContainText('venue requirement 1: number of people')
   await expect(needed).toContainText('accessibility needs')
   await expect(needed).toContainText('point of contact name')
   await expect(needed).toContainText('point of contact email')
@@ -894,10 +859,15 @@ test('2.1 AC10: what is still needed to submit is listed as you fill the form in
 
   await fillEssentials(page, uniqueName('Checklist'))
   await expect(needed).not.toContainText('expected attendance')
-  await expect(needed).toContainText('venue requirements')
+  // The requirement's number of people follows the expected attendance; its name is still needed.
+  await expect(needed).not.toContainText('venue requirement 1: number of people')
+  await expect(needed).toContainText('venue requirement 1: name')
 
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
-  await expect(needed).not.toContainText('venue requirements')
+  await page
+    .getByRole('group', { name: 'Venue requirement 1' })
+    .getByLabel('Requirement name')
+    .fill('Main venue')
+  await expect(needed).not.toContainText('venue requirement')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await page.getByLabel('Contact name').fill(CONTACT.name)
   await expect(needed).not.toContainText('point of contact name')

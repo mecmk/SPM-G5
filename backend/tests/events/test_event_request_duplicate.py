@@ -126,8 +126,10 @@ def test_only_one_matching_date_does_not_block(organiser_client):
 
 @pytest.mark.story("2.1", ac=20)
 def test_two_dateless_drafts_with_the_same_name_do_not_block(organiser_client):
-    assert organiser_client.post("/events", json={"name": "Untitled"}).status_code == 201
-    assert organiser_client.post("/events", json={"name": "Untitled"}).status_code == 201
+    # Each with the one venue requirement every request has since fix f2.7.4 (story 2.7 AC14).
+    body = {"name": "Untitled", "venue_requirements": [{}]}
+    assert organiser_client.post("/events", json=body).status_code == 201
+    assert organiser_client.post("/events", json=body).status_code == 201
 
 
 @pytest.mark.story("2.1", ac=20)

@@ -78,7 +78,10 @@ def test_a_new_request_records_the_poc(organiser_client, db: Session):
 
 @pytest.mark.story("2.1", ac=13)
 def test_a_draft_saves_without_any_poc(organiser_client):
-    response = organiser_client.post("/events", json={"name": "Name only"})
+    # With the one venue requirement every request has since fix f2.7.4 (story 2.7 AC14).
+    response = organiser_client.post(
+        "/events", json={"name": "Name only", "venue_requirements": [{}]}
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()

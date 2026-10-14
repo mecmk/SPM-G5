@@ -2,10 +2,11 @@
 
 AC9  An organiser can submit their own request only while it is still a draft.
 AC10 Submitting requires every event detail (name, purpose, description, proposed start,
-     proposed end, expected attendance) to be filled in, and both the venue requirements and the
-     accessibility needs to be answered - something chosen, or marked "none". If anything is
-     missing, submission is refused with a message naming what's missing. Equipment stays
-     optional.
+     proposed end, expected attendance) to be filled in, at least one venue requirement with a
+     name and a number of people (fix f2.7.4, story 2.7 AC15: "none" is no longer an answer for
+     venues), and the accessibility needs answered - something chosen, or marked "none". If
+     anything is missing, submission is refused with a message naming what's missing. Equipment
+     stays optional.
 AC11 On successful submission the status changes to "submitted" and the submission date/time is
      recorded.
 AC12 An organiser cannot submit a request that belongs to someone else, or one that has already
@@ -35,7 +36,10 @@ REQUIRED = {
     "starts_at": ("proposed start date and time", {"starts_at": None}),
     "ends_at": ("proposed end date and time", {"ends_at": None}),
     "expected_attendance": ("expected attendance", {"expected_attendance": None}),
-    "venue": ("venue requirements", {"venue_none_required": False}),
+    # Fix f2.7.4: venues are left unanswered by a requirement with no number of people. The label
+    # matches both "venue requirement 1: number of people" and, for a request with none (the
+    # seeded draft), "venue requirements (at least one)".
+    "venue": ("venue requirement", {"venue_requirements": [{"name": "Main venue"}]}),
     "accessibility": ("accessibility needs", {"accessibility_none_required": False}),
 }
 NON_ORGANISERS = [
@@ -145,22 +149,12 @@ def test_a_detail_of_only_spaces_counts_as_missing(organiser_client, field):
 
 
 @pytest.mark.story("2.1", ac=10)
-@pytest.mark.parametrize(
-    "answer",
-    [
-        pytest.param({"venue_none_required": True}, id="marked-none"),
-        # Story 2.7 AC8: a requirement with a name and a number of people is the answer now; a
-        # layout, facility or note on its own no longer is (2.7's own tests cover that).
-        pytest.param(
-            {"venue_requirements": [{"name": "Main venue", "capacity": 40}]}, id="requirement"
-        ),
-    ],
-)
-def test_venue_requirements_count_as_answered_by_choosing_something_or_marking_none(
-    organiser_client, answer
-):
+def test_a_named_and_sized_venue_requirement_answers_the_venue_question(organiser_client):
+    """Story 2.7 AC8: a requirement with a name and a number of people is the answer now; a
+    layout, facility or note on its own no longer is (2.7's own tests cover that). Since fix
+    f2.7.4 "No venue requirements" is not an answer at all (2.7 AC15)."""
     created = create_submittable_event_request(
-        organiser_client, **{"venue_none_required": False, **answer}
+        organiser_client, venue_requirements=[{"name": "Main venue", "capacity": 40}]
     )
 
     assert _submit(organiser_client, created["id"]).status_code == 200
