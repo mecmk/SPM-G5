@@ -37,6 +37,7 @@ class Users:
     TECH_SUPPORT = SeedUser(_u(6), "tech@connectsphere.example", "TECH_SUPPORT_STAFF", "Theo Tech")
     ATTENDEE = SeedUser(_u(7), "attendee@example.com", "ATTENDEE", "Aiden Attendee")
     INACTIVE = SeedUser(_u(8), "inactive@connectsphere.example", "VENUE_STAFF", "Ian Inactive")
+    SAFETY_OFFICER = SeedUser(_u(9), "safety@connectsphere.example", "SAFETY_OFFICER", "Sam Safety")
 
     ALL_ACTIVE = (
         ORGANISER,
@@ -46,8 +47,9 @@ class Users:
         VENUE_STAFF,
         TECH_SUPPORT,
         ATTENDEE,
+        SAFETY_OFFICER,
     )
-    ONE_PER_ROLE = (ORGANISER, COORDINATOR, VENUE_STAFF, TECH_SUPPORT, ATTENDEE)
+    ONE_PER_ROLE = (ORGANISER, COORDINATOR, VENUE_STAFF, TECH_SUPPORT, ATTENDEE, SAFETY_OFFICER)
 
 
 def _v(n: int) -> uuid.UUID:
@@ -110,6 +112,12 @@ class Events:
     TRADE_FAIR = _e(32)  # organiser 2, coordinator 1, 12.5's withdraw and switch e2e flow
     PRICING_CLINIC = _e(33)  # organiser 2, coordinator 1, 11.1's justified send since 12.5
     CRAFT_FAIR = _e(34)  # organiser 2, coordinator 1, its one request expired, for 12.7's e2e
+    # Story 21.1's, both organiser 2, coordinator 2 and AWAITING_SAFETY_CHECK, August 2028.
+    HARBOUR_CONCERT = _e(35)  # 300 expected at the 250-seat Exhibition Foyer; first in the queue
+    BOOK_FAIR = _e(36)  # within capacity; sent back once (SafetyReviews.BOOK_FAIR_CHANGES)
+    # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
+    FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
+    NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
 
 
 class Bookings:
@@ -129,6 +137,9 @@ class Bookings:
     APPROVED_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000009")
     # Story 12.7: Events.CRAFT_FAIR's Craft hall, Exhibition Foyer, expired on 5 Oct 2026.
     EXPIRED_CRAFT_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000010")
+    # Story 21.1: each safety-check event's one venue, approved.
+    APPROVED_CONCERT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000011")
+    APPROVED_BOOK_FAIR_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000012")
 
 
 class Unavailability:
@@ -186,6 +197,9 @@ class EquipmentItems:
     OFFSITE_PROJECTORS = uuid.UUID("66666666-0000-0000-0000-000000000029")  # accepted, own page
     OFFSITE_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000030")  # declined, own page
     OFFSITE_CAMERAS = uuid.UUID("66666666-0000-0000-0000-000000000031")  # decided from 2 pages
+    # Story 21.1's, accepted, on Events.HARBOUR_CONCERT and Events.BOOK_FAIR in August 2028.
+    CONCERT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000032")
+    BOOK_FAIR_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000033")
 
 
 class EquipmentHolds:
@@ -200,8 +214,17 @@ class EquipmentHolds:
     OFFSITE_PROJECTORS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000022")
     OFFSITE_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000023")
     OFFSITE_CAMERAS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000024")
+    CONCERT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000025")
+    BOOK_FAIR_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000026")
 
 
 class EquipmentOutOfService:
     SHOWCASE_CAMERAS = uuid.UUID("dddddddd-0000-0000-0000-000000000001")  # every video camera
     ROADSHOW_LAPEL_MICS = uuid.UUID("dddddddd-0000-0000-0000-000000000002")  # 4 lapel microphones
+
+
+class SafetyReviews:
+    # Story 21.1: Events.BOOK_FAIR's earlier review, when it expected 120 and had 2 microphones.
+    BOOK_FAIR_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
+    FOOD_FESTIVAL_APPROVED = uuid.UUID("ffffffff-0000-0000-0000-000000000002")
+    NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")

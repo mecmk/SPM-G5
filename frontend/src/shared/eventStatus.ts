@@ -1,11 +1,13 @@
 import type { EventStatus } from '../api/events'
 
-/** Story 6.1: the 8 backend statuses, each with its own label, colour and tab. */
+/** Story 6.1: the backend statuses, each with its own label, colour and tab. Story 21.1 added
+ * Awaiting Safety Check. */
 const VISIBLE_EVENT_STATUSES = [
   'DRAFT',
   'UNDER_REVIEW',
   'CLARIFICATION_REQUESTED',
   'PLANNING',
+  'AWAITING_SAFETY_CHECK',
   'CONFIRMED',
   'COMPLETED',
   'CANCELLED',
@@ -96,6 +98,7 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   UNDER_REVIEW: 'Under review',
   CLARIFICATION_REQUESTED: 'Clarification requested',
   PLANNING: 'Planning',
+  AWAITING_SAFETY_CHECK: 'Awaiting safety check',
   CONFIRMED: 'Confirmed',
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',
@@ -114,6 +117,7 @@ const BADGE_STATUS: Record<EventStatus, string> = {
   UNDER_REVIEW: 'UNDER_REVIEW',
   CLARIFICATION_REQUESTED: 'CLARIFICATION_REQUESTED',
   PLANNING: 'PLANNING',
+  AWAITING_SAFETY_CHECK: 'AWAITING_SAFETY_CHECK',
   CONFIRMED: 'CONFIRMED',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'EVENT_CANCELLED',
@@ -138,6 +142,7 @@ export const EVENT_STATUS_TABS: { key: EventStatusTabKey; label: string }[] = [
   { key: 'UNDER_REVIEW', label: 'Under Review' },
   { key: 'CLARIFICATION_REQUESTED', label: 'Clarification Requested' },
   { key: 'PLANNING', label: 'Planning' },
+  { key: 'AWAITING_SAFETY_CHECK', label: 'Awaiting Safety Check' },
   { key: 'CONFIRMED', label: 'Confirmed' },
   { key: 'COMPLETED', label: 'Completed' },
   { key: 'CANCELLED', label: 'Cancelled' },

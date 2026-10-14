@@ -148,6 +148,7 @@ backend/
     equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
+    safety/             # the Safety Officer's queue of events awaiting the safety check, and each event's check
     venues/             # the venue catalogue, its search and its availability calendar
     common/             # shared by feature areas: the audit log
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
@@ -159,7 +160,7 @@ frontend/
   src/
     api/                # one <feature>.ts per backend feature area, plus the shared client
     auth/               # the sign-in page, the session, route guards, permission codes
-    bookings/, equipment/, events/, venues/   # the pages of each feature area
+    bookings/, equipment/, events/, safety/, venues/   # the pages of each feature area
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the notification centre

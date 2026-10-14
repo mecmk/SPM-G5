@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-12 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-13 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -44,6 +44,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
+| Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
@@ -365,7 +366,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `starts_at` | `timestamp with time zone` | yes | - | - | Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist. |
 | `ends_at` | `timestamp with time zone` | yes | - | - | Proposed end date-time. Must be after starts_at (story 2.1 AC2). |
 | `expected_attendance` | `integer` | yes | - | - | Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1). |
-| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
+| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, AWAITING_SAFETY_CHECK, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
 | `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated the event needs no venue, and it has no venue_requirements rows. FALSE with no rows = not yet specified. A request cannot be submitted until one or the other is given (story 2.1 AC10, story 2.7 AC8). |
@@ -391,7 +392,7 @@ An event request and, once approved, the event itself - one row for the whole li
 
 Allowed values:
 
-- `status`: `DRAFT`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `PLANNING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
+- `status`: `DRAFT`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `PLANNING`, `AWAITING_SAFETY_CHECK`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
 
 Rules and indexes:
 
@@ -594,6 +595,30 @@ Rules and indexes:
 
 - unique index `uq_event_change_requests_pending_field`: `btree (event_id, field_name) WHERE (status = 'PENDING'::text)`
 - index `ix_event_change_requests_event`: `btree (event_id, status)`
+
+### event_safety_reviews
+
+**Stories:** 21.1
+
+One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5). Append-only.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | Primary key. |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event reviewed. |
+| `reviewed_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. The Safety Officer who made the review. |
+| `reviewed_at` | `timestamp with time zone` | no | `now()` | - | When the review was made. Previous reviews are listed newest first by it (story 21.1 AC3). |
+| `outcome` | `text` | no | - | - | APPROVED: the event passed the check. CHANGES_REQUESTED: the officer sent it back for changes. |
+| `notes` | `text` | yes | - | - | The officer's notes on the review. Optional. |
+| `facts` | `jsonb` | no | - | - | Snapshot of the safety-relevant facts reviewed, as app/safety/service.py::safety_facts builds them: description, expected_attendance, starts_at and ends_at (UTC), venues (approved bookings: id, name, capacity in the booked layout, people_to_hold, layout code and layout_name), accessibility (each need: feature code, feature_name, notes), accessibility_notes, and equipment (accepted items: equipment_type code, equipment_type_name, quantity, technical_notes). The next check lists the top-level keys that differ (story 21.1 AC5). |
+
+Allowed values:
+
+- `outcome`: `APPROVED`, `CHANGES_REQUESTED`
+
+Rules and indexes:
+
+- index `ix_event_safety_reviews_event`: `btree (event_id, reviewed_at)`
 
 ## Venue bookings
 
@@ -816,6 +841,7 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | ATTENDEE | Attendee | False | External participant who registers for and attends an event. |
 | EVENT_COORDINATOR | Event Coordinator | True | Internal staff assigned to coordinate the overall planning of an event; main internal point of contact. |
 | EVENT_ORGANISER | Event Organiser | False | External client representative who has an event to organise and communicates requirements to ConnectSphere. |
+| SAFETY_OFFICER | Safety Officer | True | Internal staff who check an event is operationally safe before it goes ahead. |
 | TECH_SUPPORT_STAFF | Technical Support Staff | True | Internal staff responsible for equipment, technical requirements, reservations and on-site technical support. |
 | VENUE_STAFF | Venue Staff | True | Internal staff responsible for venue information, availability, booking decisions and physical venue preparation. |
 
