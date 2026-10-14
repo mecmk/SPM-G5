@@ -62,6 +62,10 @@ class Venues:
     BOARDROOM = _v(3)  # 16 seats
     EXHIBITION_FOYER = _v(4)  # 250, operating hours not recorded
     OLD_ANNEX = _v(5)  # WITHDRAWN
+    # Story 9.4's e2e spec; each dedicated to it, with no operating hours.
+    GARDEN_ATRIUM = _v(6)  # no booking: a closure is added, edited and ended here
+    HARBOUR_PAVILION = _v(7)  # one pending request (Events.CHOIR_SHOWCASE), for the preview
+    SUNRISE_STUDIO = _v(8)  # one pending request (Events.ART_MARKET), for the marked request
 
 
 def _e(n: int) -> uuid.UUID:
@@ -118,6 +122,10 @@ class Events:
     # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
     FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
+    # Story 9.4's e2e events, organiser 2, coordinator 1, PLANNING, October 2028, one pending
+    # request each at a venue dedicated to that spec.
+    CHOIR_SHOWCASE = _e(39)  # Harbour Pavilion
+    ART_MARKET = _e(40)  # Sunrise Studio
 
 
 class Bookings:

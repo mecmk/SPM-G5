@@ -154,10 +154,10 @@ def test_counts_cover_every_status_whatever_tab_or_page_is_asked_for(venue_staff
     unfiltered = venue_staff_client.get(BOOKINGS_PATH).json()
     narrowed = venue_staff_client.get(f"{PENDING_QUEUE_PATH}&limit=1").json()
 
-    # Seed: 4 approved (2 of them story 21.1's), 7 pending and 1 expired booking (story 12.7); the
-    # factory adds the one rejected.
+    # Seed: 4 approved (2 of them story 21.1's), 9 pending (2 of them story 9.4's) and 1 expired
+    # booking (story 12.7); the factory adds the one rejected.
     assert unfiltered["counts"] == {
-        "pending": 7,
+        "pending": 9,
         "approved": 4,
         "rejected": 1,
         "withdrawn": 0,
@@ -234,7 +234,7 @@ def test_limit_caps_the_page_and_total_counts_the_whole_tab(venue_staff_client):
     body = venue_staff_client.get(f"{PENDING_QUEUE_PATH}&limit=2").json()
 
     assert len(body["items"]) == 2
-    assert body["total"] == 7
+    assert body["total"] == 9
 
 
 @pytest.mark.story("13.1.2", ac=4)

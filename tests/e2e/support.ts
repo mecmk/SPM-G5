@@ -72,6 +72,22 @@ export const EVENTS = {
   // (Planning).
   foodFestival: '33333333-0000-0000-0000-000000000037',
   nightWalk: '33333333-0000-0000-0000-000000000038',
+  // Story 9.4, Planning, organiser: organiser2, coordinator, October 2028. Each has one pending
+  // request at a venue dedicated to the 9.4 spec (see VENUES below); only that spec saves a
+  // closure over them.
+  choirShowcase: '33333333-0000-0000-0000-000000000039',
+  artMarket: '33333333-0000-0000-0000-000000000040',
+} as const
+
+/** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
+ *  backend/tests/support/seed.py::Venues). The three below are dedicated to the 9.4 spec. */
+export const VENUES = {
+  // No booking: the spec adds, edits and ends closures here.
+  gardenAtrium: 'Garden Atrium',
+  // One pending request, the choir showcase's, at 14 October 2028: the preview lists it.
+  harbourPavilion: 'Harbour Pavilion',
+  // One pending request, the art market's, at 21 October 2028: a closure marks it.
+  sunriseStudio: 'Sunrise Studio',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
