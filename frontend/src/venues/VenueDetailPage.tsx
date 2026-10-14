@@ -83,6 +83,7 @@ export function VenueDetailPage() {
   function renderClosureActions(closure: DayClosure) {
     return (
       <ClosureActions
+        key={`${closure.id}:${closure.startsAt}:${closure.endsAt}`}
         venueId={venueId}
         closure={closure}
         onEdit={setEditingClosure}
@@ -306,16 +307,6 @@ export function VenueDetailPage() {
             <p className="eyebrow" id="venue-availability-heading">
               Availability
             </p>
-            {canManageUnavailability && (
-              <VenueUnavailabilitySection
-                key={editingClosure?.id ?? 'new'}
-                venueId={venue.id}
-                venueName={venue.name}
-                onSaved={handleClosureSaved}
-                editing={editingClosure}
-                onEditFinished={handleEditFinished}
-              />
-            )}
             <VenueAvailabilityCalendar
               month={calendar.month}
               onMonthChange={calendar.setMonth}
@@ -326,6 +317,27 @@ export function VenueDetailPage() {
               renderClosureActions={canManageUnavailability ? renderClosureActions : undefined}
             />
           </section>
+
+          {/* Story 9.4 AC1/AC9: Venue Staff's own controls, apart from the calendar everyone sees. */}
+          {canManageUnavailability && (
+            <section className="card stack" aria-labelledby="venue-block-off-heading">
+              <p className="eyebrow" id="venue-block-off-heading">
+                Block off time
+              </p>
+              <p className="muted">
+                Close this venue for a period, for example for maintenance. Any bookings in that
+                period will be flagged and their coordinators told.
+              </p>
+              <VenueUnavailabilitySection
+                key={editingClosure?.id ?? 'new'}
+                venueId={venue.id}
+                venueName={venue.name}
+                onSaved={handleClosureSaved}
+                editing={editingClosure}
+                onEditFinished={handleEditFinished}
+              />
+            </section>
+          )}
         </div>
 
         <aside className="card stack" aria-labelledby="venue-quick-facts-heading">

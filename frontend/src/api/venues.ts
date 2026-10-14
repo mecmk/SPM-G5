@@ -415,8 +415,8 @@ export function addUnavailability(
     body: input,
     errorCodes: { 404: 'VENUE_NOT_FOUND' },
     notify: {
-      title: 'Venue marked unavailable',
-      message: `${venueName} is marked unavailable for the period you chose.`,
+      title: 'Time blocked off',
+      message: `${venueName} is closed for the period you chose.`,
       importance: 'important',
     },
   })

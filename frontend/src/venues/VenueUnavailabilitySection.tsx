@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { formatApiError } from '../api/client'
 import {
@@ -40,7 +40,7 @@ interface PreviewResult {
 }
 
 /**
- * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff mark the venue unavailable from its page. The form takes a
+ * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its page. The form takes a
  * start, an end, a reason and a description, which Other requires. Once both ends make a period,
  * the pending and approved bookings it would affect - setup and teardown included - are listed
  * before Save; saving is allowed with some, after one confirmation that names them. A refusal,
@@ -70,6 +70,12 @@ export function VenueUnavailabilitySection({
   const [isConfirming, setIsConfirming] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // An edit opens from a closure's row in the calendar above, so bring the form into view.
+  useEffect(() => {
+    if (editing !== null) formRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [editing])
 
   /** The period the form describes, once both ends are given and the end is after the start. */
   const period = useMemo(() => {
@@ -162,7 +168,7 @@ export function VenueUnavailabilitySection({
     return (
       <div className="cluster">
         <button type="button" className="secondary button-sm" onClick={open}>
-          Mark unavailable
+          Block off time
         </button>
       </div>
     )
@@ -171,10 +177,11 @@ export function VenueUnavailabilitySection({
   return (
     <>
       <form
+        ref={formRef}
         className="stack"
         onSubmit={handleSubmit}
         noValidate
-        aria-label={editing === null ? 'Mark unavailable' : 'Edit closure'}
+        aria-label={editing === null ? `Block off time at ${venueName}` : 'Edit closure'}
       >
         <div className="form-grid form-grid-2">
           <label>
@@ -282,8 +289,8 @@ export function VenueUnavailabilitySection({
 
       {isConfirming && (
         <ConfirmDialog
-          title={`Mark ${venueName} unavailable?`}
-          confirmLabel="Mark unavailable"
+          title={`Block off time at ${venueName}`}
+          confirmLabel="Block off time"
           tone="primary"
           isBusy={isSaving}
           error={saveError}

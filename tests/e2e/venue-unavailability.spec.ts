@@ -37,6 +37,11 @@ function availability(page: Page) {
   return page.getByRole('region', { name: 'Availability', exact: true })
 }
 
+/** Venue Staff's "Block off time" card, under the calendar: the form, its preview and Save. */
+function blockOff(page: Page) {
+  return page.getByRole('region', { name: 'Block off time', exact: true })
+}
+
 async function openVenue(page: Page, name: string) {
   await page.goto('/venues')
   await page.getByRole('link', { name }).click()
@@ -63,8 +68,8 @@ interface ClosureForm {
 
 /** Open the add form on the venue's page and fill it. Nothing is saved. */
 async function fillClosure(page: Page, form: ClosureForm) {
-  const section = availability(page)
-  await section.getByRole('button', { name: 'Mark unavailable' }).click()
+  const section = blockOff(page)
+  await section.getByRole('button', { name: 'Block off time' }).click()
   await section.getByLabel('Starts').fill(form.starts)
   await section.getByLabel('Ends').fill(form.ends)
   if (form.reason) await section.getByLabel('Reason').selectOption({ label: form.reason })
@@ -112,8 +117,8 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
     reason: 'Maintenance',
     description,
   })
-  await expect(availability(page).getByText('No bookings are affected.')).toBeVisible()
-  await availability(page).getByRole('button', { name: 'Save closure' }).click()
+  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
 
   await dayButton(page, /^3 October 2028/).click()
   const list = dayList(page, /3 Oct 2028/)
@@ -134,12 +139,12 @@ test('9.4 AC2: the bookings a closure would affect are listed before Save, and S
     reason: 'Renovation',
   })
 
-  const affected = availability(page).getByRole('region', { name: 'Affected bookings' })
+  const affected = blockOff(page).getByRole('region', { name: 'Affected bookings' })
   await expect(affected).toContainText('Community Choir Showcase')
-  await availability(page).getByRole('button', { name: 'Save closure' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText('Community Choir Showcase')
-  await dialog.getByRole('button', { name: 'Mark unavailable' }).click()
+  await dialog.getByRole('button', { name: 'Block off time' }).click()
 
   await dayButton(page, /^14 October 2028/).click()
   await expect(dayList(page, /14 Oct 2028/)).toContainText('Unavailable – Renovation')
@@ -157,8 +162,8 @@ test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event
     ends: '2028-10-21T17:00',
     reason: 'Safety concern',
   })
-  await availability(page).getByRole('button', { name: 'Save closure' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Mark unavailable' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Block off time' }).click()
   await expect(dayButton(page, /^21 October 2028/)).toBeVisible()
 
   // AC3: the coordinator's event page flags the booking.
@@ -175,7 +180,11 @@ test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event
   // ... and so does the request's own page, with a notice saying why.
   await card.getByRole('link', { name: 'View details' }).click()
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByText(/unavailable for part of this request/)).toBeVisible()
+  // The request page's notice has the status role; the queue's card text does not, so this waits
+  // for the page itself and not for the queue it was opened from.
+  await expect(
+    page.getByRole('status').filter({ hasText: /unavailable for part of this request/ }),
+  ).toBeVisible()
   await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled()
 })
 
@@ -192,7 +201,7 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
     reason: 'Equipment failure',
     description,
   })
-  await availability(page).getByRole('button', { name: 'Save closure' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
 
   const singapore = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const today = new RegExp(
@@ -209,8 +218,8 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
 
   await item.getByRole('button', { name: 'Edit' }).click()
-  await availability(page).getByLabel('Reason').selectOption({ label: 'Renovation' })
-  await availability(page).getByRole('button', { name: 'Save changes' }).click()
+  await blockOff(page).getByLabel('Reason').selectOption({ label: 'Renovation' })
+  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
   await expect(item).toContainText('Unavailable – Renovation')
 
   await item.getByRole('button', { name: 'End now' }).click()
@@ -226,14 +235,13 @@ test('9.4 AC9: only Venue Staff see the controls; others read the reason and can
   await openVenue(page, VENUES.gardenAtrium)
   // The Venue Staff half is what makes this fail before the controls exist: the other two
   // halves cannot fail first, since no role but Venue Staff has ever had a way to add one.
-  await expect(availability(page).getByRole('button', { name: 'Mark unavailable' })).toBeVisible()
+  await expect(blockOff(page).getByRole('button', { name: 'Block off time' })).toBeVisible()
 
   for (const email of [ACCOUNTS.coordinator, ACCOUNTS.safetyOfficer]) {
     const other = await signedInPage(browser, email)
     await openVenue(other, VENUES.gardenAtrium)
     await expect(availability(other)).toBeVisible()
-    await expect(availability(other).getByRole('button', { name: 'Mark unavailable' })).toHaveCount(
-      0,
-    )
+    await expect(blockOff(other)).toHaveCount(0)
+    await expect(other.getByRole('button', { name: 'Block off time' })).toHaveCount(0)
   }
 })
