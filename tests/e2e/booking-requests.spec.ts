@@ -76,7 +76,11 @@
  * once at Exhibition Foyer (no hours recorded), opening the step by its address. One case sends
  * its request, to Seminar Room 2.1; no other spec uses the event or that day, so nothing done for
  * it holds anything another test looks for, and Venue Staff's Pending tab, soonest first, lists it
- * on its first page.
+ * on its first page. That request stays pending, so `bookings.spec.ts`'s Alumni Homecoming Weekend
+ * card (1 Sep 2027) is at worst tenth on that page: one more request dated before it and left
+ * pending by any spec would push that card to the second page. A request whose own times are
+ * outside the hours is the server's to refuse (AC16), so the step says nothing about its setup
+ * and teardown then.
  *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
@@ -135,6 +139,8 @@ const STAFF_DECIDE = 'Venue Staff decide whether to allow it when they approve.'
 const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
 /** Supplier Induction Morning's Main venue in the seed, with the event's own times (f12.1.2). */
 const INDUCTION_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000039'
+/** Partner Appreciation Dinner's Main venue in the seed, 18:30-22:00 (f12.1.2). */
+const DINNER_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000013'
 
 /** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: both
  * its requirements have a request in the seed, so it selects none - an additional venue - and
@@ -614,11 +620,26 @@ test('12.1 AC5: a negative, fractional or over-long setup or teardown is refused
   await sendRequest.click()
   await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
 
-  // Exactly 14 days is not refused. Every Send request above was made with a problem showing, so
-  // nothing has been sent.
+  // 14 days is the most, to the minute: a minute more is refused, 14 days itself is not. Every
+  // Send request above was made with a problem showing, so nothing has been sent.
   await turnaroundField(turnaround, 'Teardown', 'Days').fill('14')
+  await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('1')
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+  await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('0')
   await expect(problem).toHaveCount(0)
   expect(sends).toBe(0)
+})
+
+test('12.1 AC5: text that is not a whole number is refused, not read as 0', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  const turnaround = await openInductionStep(page)
+  const hours = turnaroundField(turnaround, 'Setup', 'Hours')
+
+  // Typed key by key, as a person types it, so the field holds exactly what was typed.
+  await hours.fill('')
+  await hours.pressSequentially('3-')
+  await expect(turnaround.getByRole('alert')).toHaveText(TURNAROUND_INVALID_MESSAGE)
+  await expect(turnaround).not.toContainText('Booked period')
 })
 
 test('12.1 AC17: the step says when setup or teardown would run outside the opening hours', async ({
@@ -656,6 +677,26 @@ test('12.1 AC17: the step says when setup or teardown would run outside the open
   await expect(notice).toHaveText(`${BOTH_OUTSIDE} ${STAFF_DECIDE}`)
 })
 
+test("12.1 AC17: the step says nothing about setup or teardown when the event's own times are outside the hours", async ({
+  page,
+}) => {
+  // Partner Appreciation Dinner runs 18:30-22:00, past Seminar Room 2.1's 20:00 closing, so the
+  // server refuses it there whatever its teardown (AC16): there is no request for Venue Staff to
+  // decide on. Its step is only opened; nothing is sent.
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(
+    `/events/${DINNER.id}/request-venue/${SEMINAR_ROOM_ID}?requirement=${DINNER_MAIN_VENUE}`,
+  )
+  await expect(
+    page.getByRole('heading', { name: `Request ${ONBOARDING_VENUE}`, level: 1 }),
+  ).toBeVisible()
+  const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
+
+  await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('15')
+  await expect(turnaround).toContainText('Wed, 10 Feb 2027 · 18:30–22:15')
+  await expect(turnaround.getByText(OUTSIDE_HOURS)).toHaveCount(0)
+})
+
 test('12.1 AC17: a venue with no opening hours recorded says nothing about setup and teardown', async ({
   page,
 }) => {
@@ -673,23 +714,26 @@ test('12.1 AC17: a venue with no opening hours recorded says nothing about setup
 test('12.1 AC17: Venue Staff see on the request that its setup runs outside the opening hours', async ({
   page,
 }) => {
-  const staffNotice = `${SETUP_OUTSIDE} Booked period: Wed, 3 Feb 2027 · 07:30–12:00.`
+  const staffNotice = `${SETUP_OUTSIDE} Booked period: Wed, 3 Feb 2027 · 07:30–12:30.`
   await signIn(page, ACCOUNTS.coordinator)
   const turnaround = await openInductionStep(page)
 
-  // An hour and a half of setup starts at 07:30, before Seminar Room 2.1 opens at 08:00.
+  // An hour and a half of setup starts at 07:30, before Seminar Room 2.1 opens at 08:00; half an
+  // hour of teardown ends at 12:30, well inside.
   await turnaroundField(turnaround, 'Setup', 'Hours').fill('1')
   await turnaroundField(turnaround, 'Setup', 'Minutes').fill('30')
-  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 07:30–12:00')
+  await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('30')
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 07:30–12:30')
   await expect(turnaround.getByText(OUTSIDE_HOURS)).toHaveText(`${SETUP_OUTSIDE} ${STAFF_DECIDE}`)
 
   // It is sent all the same, the Main venue's own 09:00-12:00 being inside the hours (AC16). Its
-  // one requirement now has a request, so the event's page opens (12.5 AC6), with the setup.
+  // one requirement now has a request, so the event's page opens (12.5 AC6), with the setup and
+  // teardown sent.
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByRole('heading', { name: INDUCTION.name, level: 1 })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Venue booking' })).toContainText(
-    'Setup: 1 hr 30 min',
-  )
+  const bookings = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookings).toContainText('Setup: 1 hr 30 min')
+  await expect(bookings).toContainText('Teardown: 30 min')
 
   // Venue Staff see it, with the booked period, on the request's card in their queue - where it
   // can be approved straight away (13.2 AC1) - and on its page.

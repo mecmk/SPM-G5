@@ -309,7 +309,9 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1, with a setup that
     -- starts before the room opens at 08:00. One Main venue for 30 people, Classroom with a
     -- projector, so the room suits it. Dated February 2027, so its request sits on the first page
-    -- of Venue Staff's Pending tab, which lists the soonest first.
+    -- of Venue Staff's Pending tab, which lists the soonest first. That request stays pending, so
+    -- tests/e2e/bookings.spec.ts's Alumni Homecoming Weekend card (3333..17) is at worst tenth on
+    -- that page: no further pending request dated before September 2027 can be added there.
     ('33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Supplier Induction Morning', 'Supplier onboarding', 'A morning briefing for newly contracted suppliers.', NULL, '2027-02-03 09:00+08', '2027-02-03 12:00+08', 30, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)

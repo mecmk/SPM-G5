@@ -404,11 +404,16 @@ def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
 
 @pytest.mark.story("12.1", ac=1)
 def test_setup_and_teardown_default_to_0_so_the_held_period_is_the_event_period(
-    coordinator_client, nimbus_venue: Venue
+    coordinator_client, db: Session, nimbus_venue: Venue
 ):
     """AC1 in the backlog's current numbering (f12.1.2): setup and teardown both start at 0, so a
-    request that sends neither holds exactly its own period. A request that sends them is
+    request that sends neither holds exactly its own period - even at a venue whose own setup and
+    teardown defaults are not 0, which a request does not take. A request that sends them is
     test_request_setup_and_teardown.py's."""
+    nimbus_venue.setup_minutes_default = 30
+    nimbus_venue.teardown_minutes_default = 15
+    db.flush()
+
     body = coordinator_client.post(
         "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
     ).json()

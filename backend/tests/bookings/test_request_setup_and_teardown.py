@@ -46,7 +46,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.bookings.models import VenueBooking
+from app.bookings.models import BookingStatus, VenueBooking
 from app.events.models import Event, EventStatus
 from tests.support.factories import make_booking, make_event, make_unavailability, make_venue
 from tests.support.seed import Users
@@ -142,6 +142,37 @@ def test_a_switch_stores_the_setup_and_teardown_sent_with_it(coordinator_client,
     assert datetime.fromisoformat(body["held_until"]) == _at(12, 20)
 
 
+@pytest.mark.story("12.1", ac=1)
+@pytest.mark.parametrize(
+    "sent",
+    [{}, {"setup_minutes": 0, "teardown_minutes": 0}],
+    ids=["none sent", "0 sent"],
+)
+def test_a_switch_that_sends_no_setup_or_teardown_has_none(coordinator_client, db, sent):
+    """Both start at 0 on a switch as on any request, whatever the replaced request had: it had 30
+    and 15 minutes, and the new request, sending none, holds only its own 09:00-12:00."""
+    event = _event(db, _at(9), _at(12))
+    replaced = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=make_venue(db).id,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        setup_minutes=30,
+        teardown_minutes=15,
+    )
+
+    response = coordinator_client.post(
+        f"/bookings/{replaced.id}/switch", json={"venue_id": str(make_venue(db).id), **sent}
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert (body["setup_minutes"], body["teardown_minutes"]) == (0, 0)
+    assert datetime.fromisoformat(body["held_from"]) == _at(9)
+    assert datetime.fromisoformat(body["held_until"]) == _at(12)
+
+
 # --- AC3 / AC6 / AC14: the booked period, setup included, is what is held and checked ----------
 @pytest.mark.story("12.1", ac=3)
 def test_a_setup_reaching_into_another_requests_held_period_is_refused_naming_it(
@@ -213,10 +244,31 @@ def test_a_negative_setup_or_teardown_is_refused(coordinator_client, db, turnaro
 
 
 @pytest.mark.story("12.1", ac=5)
-def test_a_fractional_setup_is_refused(coordinator_client, db):
+def test_a_setup_and_teardown_of_0_are_allowed(coordinator_client, db):
     event = _event(db, _at(9), _at(12))
 
-    response = _request(coordinator_client, event.id, make_venue(db).id, setup_minutes=1.5)
+    response = _request(
+        coordinator_client, event.id, make_venue(db).id, setup_minutes=0, teardown_minutes=0
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert (body["setup_minutes"], body["teardown_minutes"]) == (0, 0)
+    assert datetime.fromisoformat(body["held_from"]) == _at(9)
+    assert datetime.fromisoformat(body["held_until"]) == _at(12)
+
+
+@pytest.mark.story("12.1", ac=5)
+@pytest.mark.parametrize("field", ["setup_minutes", "teardown_minutes"])
+@pytest.mark.parametrize("value", [1.5, "90", True], ids=["fraction", "string", "boolean"])
+def test_a_setup_or_teardown_that_is_not_a_whole_number_is_refused(
+    coordinator_client, db, field, value
+):
+    """Whole minutes only, read strictly as the event's own whole numbers are (story 2.1 AC3): a
+    fraction, a number in a string and a boolean are all refused."""
+    event = _event(db, _at(9), _at(12))
+
+    response = _request(coordinator_client, event.id, make_venue(db).id, **{field: value})
 
     assert response.status_code == 422
     assert _bookings_for(db, event.id) == 0
@@ -278,3 +330,47 @@ def test_a_setup_that_still_starts_in_the_future_is_accepted(coordinator_client,
 
     assert response.status_code == 201, response.text
     assert datetime.fromisoformat(response.json()["held_from"]) == starts_at - timedelta(hours=1)
+
+
+@pytest.mark.story("12.1", ac=9)
+def test_a_switch_whose_setup_would_start_in_the_past_is_refused(coordinator_client, db):
+    """A switch is refused as a new request is: three hours of setup before an event two hours away
+    would start an hour ago. The replaced request stays as it was."""
+    starts_at = _in(hours=2)
+    event = _event(db, starts_at, starts_at + timedelta(hours=3))
+    replaced = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=make_venue(db).id,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+
+    response = coordinator_client.post(
+        f"/bookings/{replaced.id}/switch",
+        json={"venue_id": str(make_venue(db).id), "setup_minutes": 180},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This setup would start in the past, so the venue cannot be held for it."
+    )
+    db.refresh(replaced)
+    assert replaced.status == BookingStatus.PENDING
+    assert _bookings_for(db, event.id) == 1
+
+
+@pytest.mark.story("12.1", ac=9)
+def test_once_the_own_start_has_passed_the_refusal_is_12_7s(coordinator_client, db):
+    """The event started an hour ago, so its booked period has started whatever the setup: the
+    refusal is 12.7's, not AC9's."""
+    starts_at = _in(hours=-1)
+    event = _event(db, starts_at, starts_at + timedelta(hours=3))
+
+    response = _request(coordinator_client, event.id, make_venue(db).id, setup_minutes=60)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This booked period has already started, so the venue cannot be held for it."
+    )
+    assert _bookings_for(db, event.id) == 0
