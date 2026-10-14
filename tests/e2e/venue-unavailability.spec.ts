@@ -71,6 +71,26 @@ async function fillClosure(page: Page, form: ClosureForm) {
   if (form.description) await section.getByLabel('Description').fill(form.description)
 }
 
+/**
+ * A request's card in Venue Staff's queue, by the short id on it. The queue pages by ten and the
+ * database is shared with specs that raise requests of their own, so the card may be on a later
+ * page: press Next until it shows.
+ */
+async function queueCard(page: Page, shortId: string) {
+  const card = page.getByRole('listitem').filter({ hasText: `#${shortId}` })
+  const pager = page.getByRole('navigation', { name: 'Pages' })
+  await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
+  await expect(page.getByRole('listitem').first()).toBeVisible()
+  for (let turned = 0; turned < 20; turned += 1) {
+    if ((await card.count()) > 0) break
+    const next = pager.getByRole('button', { name: 'Next' })
+    if ((await pager.count()) === 0 || (await next.isDisabled())) break
+    await next.click()
+    await page.waitForLoadState('networkidle')
+  }
+  return card
+}
+
 async function signedInPage(browser: Browser, email: string): Promise<Page> {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -148,7 +168,7 @@ test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event
 
   // AC7: Venue Staff's queue card carries the marker and holds Approve back.
   await page.goto('/venue-staff/booking-requests')
-  const card = page.getByRole('listitem').filter({ hasText: '#00000014' })
+  const card = await queueCard(page, '00000014')
   await expect(card).toContainText('Venue unavailable')
   await expect(card.getByRole('button', { name: 'Approve' })).toBeDisabled()
 
