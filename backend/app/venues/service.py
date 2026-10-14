@@ -99,7 +99,7 @@ END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 
 # Story 9.4: why a change to a venue's unavailability is refused.
 PERIOD_END_NOT_AFTER_START_MESSAGE = "The period must end after it starts."
-OTHER_NEEDS_DESCRIPTION_MESSAGE = "Describe the reason when it is Other."
+DESCRIPTION_REQUIRED_MESSAGE = "Describe why the venue is blocked off."
 PERIOD_NOT_STARTED_MESSAGE = (
     "This period has not started, so it cannot be ended. Remove it instead."
 )
@@ -121,10 +121,10 @@ class UnavailabilityNotFound(LookupError):
 
 
 class DescriptionRequired(ValueError):
-    """Story 9.4 AC1: a reason of Other says what it is."""
+    """Story 9.4 AC1 (PO decision, 13 Oct 2026): every block off says why, whatever its reason."""
 
     def __init__(self) -> None:
-        super().__init__(OTHER_NEEDS_DESCRIPTION_MESSAGE)
+        super().__init__(DESCRIPTION_REQUIRED_MESSAGE)
 
 
 class PeriodNotStarted(ValueError):
@@ -965,14 +965,12 @@ def _snapshot(period: VenueUnavailabilityPeriod) -> dict[str, Any]:
     }
 
 
-def _check_period(
-    starts_at: datetime, ends_at: datetime, *, reason: str, description: str | None
-) -> None:
-    """AC5: the end is after the start. AC1: Other has a description. Nothing is written, so a
-    refusal needs no rollback."""
+def _check_period(starts_at: datetime, ends_at: datetime, *, description: str | None) -> None:
+    """AC5: the end is after the start. AC1: it has a description, whatever the reason. Nothing is
+    written, so a refusal needs no rollback."""
     if ends_at <= starts_at:
         raise InvalidDateRange(PERIOD_END_NOT_AFTER_START_MESSAGE)
-    if reason == UnavailabilityReason.OTHER and description is None:
+    if description is None:
         raise DescriptionRequired()
 
 
@@ -1159,7 +1157,7 @@ def add_unavailability(
     transaction (``recheck_venue_bookings``), their Confirmed events return to Planning, and
     their coordinators and organisers are told (AC3, AC4)."""
     venue = get_venue(db, venue_id)
-    _check_period(data.starts_at, data.ends_at, reason=data.reason, description=data.description)
+    _check_period(data.starts_at, data.ends_at, description=data.description)
     period = VenueUnavailabilityPeriod(
         venue_id=venue_id,
         starts_at=data.starts_at,
@@ -1207,7 +1205,7 @@ def edit_unavailability(
     ends_at = data.ends_at if "ends_at" in sent else period.ends_at
     reason = data.reason if "reason" in sent else period.reason
     description = data.description if "description" in sent else period.notes
-    _check_period(starts_at, ends_at, reason=reason, description=description)
+    _check_period(starts_at, ends_at, description=description)
 
     before = _snapshot(period)
     period.starts_at, period.ends_at = starts_at, ends_at

@@ -159,7 +159,7 @@ class UnavailabilityReason:
     EQUIPMENT_FAILURE = "EQUIPMENT_FAILURE"
     RENOVATION = "RENOVATION"
     SAFETY = "SAFETY"  # shown as "Safety concern"
-    OTHER = "OTHER"  # needs a description (ck_venue_unavailability_other_description)
+    OTHER = "OTHER"
 
     ALL = (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY, OTHER)
 

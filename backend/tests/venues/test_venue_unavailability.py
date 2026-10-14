@@ -7,11 +7,12 @@ Slice 4: the event goes back to Planning and its coordinator and organiser are t
 Slice 5: a pending request that overlaps a period cannot be approved while it stands.
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
-     Equipment failure, Renovation, Safety concern or Other (a description is required for
-     Other). It shows on the venue's calendar and is excluded from venue searches.
+     Equipment failure, Renovation, Safety concern or Other, and a description, which every
+     reason needs (PO decision, 13 Oct 2026). It shows on the venue's calendar and is excluded
+     from venue searches.
 
 The table's own rules are what this slice proves: the CHECK constraints refuse a reason outside
-the five and an Other without a description, migration 020 moves existing rows onto the new set,
+the five and a period without a description, migration 020 moves existing rows onto the new set,
 and the calendar and the booking request name each reason.
 """
 
@@ -52,7 +53,7 @@ SGT = timezone(timedelta(hours=8))
 MIGRATIONS = Path(__file__).resolve().parents[2] / "db" / "migrations"
 
 REASON_CONSTRAINT = "ck_venue_unavailability_reason"
-DESCRIPTION_CONSTRAINT = "ck_venue_unavailability_other_description"
+DESCRIPTION_CONSTRAINT = "ck_venue_unavailability_description"
 
 # The table as it stood before migration 020: INTERNAL_USE allowed, no EQUIPMENT_FAILURE, and an
 # Other that needs no description. IF EXISTS keeps this valid on a database 020 has not reached.
@@ -65,7 +66,7 @@ PRE_020_SCHEMA = (
 
 # Story 9.4 AC1: the five reasons, as the database stores them.
 REASONS = ["MAINTENANCE", "EQUIPMENT_FAILURE", "RENOVATION", "SAFETY", "OTHER"]
-# What the calendar calls a period when it has no description of its own.
+# The names the page gives each reason (the calendar's `reason` is the code).
 REASON_NAMES = {
     "MAINTENANCE": "Maintenance",
     "EQUIPMENT_FAILURE": "Equipment failure",
@@ -110,7 +111,7 @@ def _refused(db: Session, reason: str, notes: str | None) -> IntegrityError | No
 
 
 @pytest.mark.story("9.4", ac=1)
-@pytest.mark.parametrize("notes", [None, "Gym floor relaid"])
+@pytest.mark.parametrize("notes", ["Gym floor relaid", "Members' studio closed"])
 def test_internal_use_is_no_longer_a_reason(db, notes):
     """The five reasons are AC1's: a code outside them is refused by the table itself."""
     refusal = _refused(db, "INTERNAL_USE", notes)
@@ -120,23 +121,23 @@ def test_internal_use_is_no_longer_a_reason(db, notes):
 
 
 @pytest.mark.story("9.4", ac=1)
+@pytest.mark.parametrize("reason", REASONS)
 @pytest.mark.parametrize("notes", [None, "", "   ", "\t\n"])
-def test_other_needs_a_description_in_the_table_itself(db, notes):
-    """AC1: Other without a description is refused whatever wrote it. A description makes it
-    valid, and every other reason may go without one."""
-    refusal = _refused(db, "OTHER", notes)
+def test_every_reason_needs_a_description_in_the_table_itself(db, reason, notes):
+    """AC1 (PO decision, 13 Oct 2026): a period with no description is refused whatever wrote
+    it, for any reason. A description makes it valid."""
+    refusal = _refused(db, reason, notes)
 
-    assert refusal is not None, f"OTHER with notes {notes!r} was accepted"
+    assert refusal is not None, f"{reason} with notes {notes!r} was accepted"
     assert DESCRIPTION_CONSTRAINT in str(refusal.orig)
-    assert _refused(db, "OTHER", "Gala stage being built") is None
-    assert _refused(db, "MAINTENANCE", None) is None
+    assert _refused(db, reason, "Gala stage being built") is None
 
 
 @pytest.mark.story("9.4", ac=1)
 def test_migration_020_moves_existing_periods_onto_the_five_reasons(db):
     """Run on pre-020 rows inside the test's transaction, which is rolled back: Internal use
-    becomes Other, saying so and keeping what was written; an Other with nothing written gets a
-    description; everything else is left as it was. Afterwards the table refuses what AC1
+    becomes Other, saying so and keeping what was written; a period of any reason with nothing
+    written gets a description; the rest is left as it was. Afterwards the table refuses what AC1
     refuses."""
     migration = next(MIGRATIONS.glob("020_*.sql"), None)
     assert migration is not None, "migration 020 has not been written"
@@ -149,6 +150,8 @@ def test_migration_020_moves_existing_periods_onto_the_five_reasons(db):
     other_blank = _insert(db, venue.id, "OTHER", "   ", day=4)
     other_described = _insert(db, venue.id, "OTHER", "Gala stage being built", day=5)
     maintenance = _insert(db, venue.id, "MAINTENANCE", None, day=6)
+    renovation_blank = _insert(db, venue.id, "RENOVATION", "  ", day=7)
+    safety_described = _insert(db, venue.id, "SAFETY", "Rewiring", day=8)
 
     conn.exec_driver_sql(migration.read_text(encoding="utf-8"))
 
@@ -165,30 +168,29 @@ def test_migration_020_moves_existing_periods_onto_the_five_reasons(db):
     assert stored(other_null) == ("OTHER", "No description recorded.")
     assert stored(other_blank) == ("OTHER", "No description recorded.")
     assert stored(other_described) == ("OTHER", "Gala stage being built")
-    assert stored(maintenance) == ("MAINTENANCE", None)
+    assert stored(maintenance) == ("MAINTENANCE", "No description recorded.")
+    assert stored(renovation_blank) == ("RENOVATION", "No description recorded.")
+    assert stored(safety_described) == ("SAFETY", "Rewiring")
     refusal = _refused(db, "INTERNAL_USE", "x")
     assert refusal is not None and REASON_CONSTRAINT in str(refusal.orig)
-    refusal = _refused(db, "OTHER", None)
+    refusal = _refused(db, "MAINTENANCE", None)
     assert refusal is not None and DESCRIPTION_CONSTRAINT in str(refusal.orig)
 
 
 @pytest.mark.story("9.4", ac=1)
-def test_the_calendar_names_each_reason(db, venue_staff_client):
-    """AC1: a period shows with its reason, and Equipment failure is one of them. Safety is the
-    code SAFETY, named Safety concern. A description, where given, is what the entry reads."""
+def test_the_calendar_carries_each_reason_with_its_description(db, venue_staff_client):
+    """AC1: a period shows with its reason - Equipment failure is one of the five, Safety concern
+    is the code SAFETY - and the description it was given."""
     venue = make_venue(db)
-    for day, reason in enumerate(REASON_NAMES, start=1):
+    for day, reason in enumerate(REASONS, start=1):
         make_unavailability(
-            db, venue_id=venue.id, starts_at=_at(day), ends_at=_at(day + 1), reason=reason
+            db,
+            venue_id=venue.id,
+            starts_at=_at(day),
+            ends_at=_at(day + 1),
+            reason=reason,
+            notes=f"{reason} work",
         )
-    make_unavailability(
-        db,
-        venue_id=venue.id,
-        starts_at=_at(10),
-        ends_at=_at(11),
-        reason="OTHER",
-        notes="Gala stage being built",
-    )
 
     response = venue_staff_client.get(
         f"/venues/{venue.id}/calendar",
@@ -196,8 +198,9 @@ def test_the_calendar_names_each_reason(db, venue_staff_client):
     )
 
     assert response.status_code == 200, response.text
-    labels = {window["reason"]: window["label"] for window in response.json()}
-    assert labels == {**REASON_NAMES, "OTHER": "Gala stage being built"}
+    described = {window["reason"]: window["description"] for window in response.json()}
+    assert described == {reason: f"{reason} work" for reason in REASONS}
+    assert {window["label"] for window in response.json()} == {f"{r} work" for r in REASONS}
 
 
 @pytest.mark.story("9.4", ac=1)
@@ -279,7 +282,7 @@ def _body(starts_at: datetime, ends_at: datetime, **overrides) -> dict:
         "starts_at": starts_at.isoformat(),
         "ends_at": ends_at.isoformat(),
         "reason": "MAINTENANCE",
-        "description": None,
+        "description": "Scheduled servicing",
     }
     body.update(overrides)
     return body
@@ -367,11 +370,13 @@ def test_other_with_a_description_is_accepted(db, venue_staff_client):
 
 
 @pytest.mark.story("9.4", ac=1)
+@pytest.mark.parametrize("reason", REASONS)
 @pytest.mark.parametrize("description", [None, "", "   ", "\t\n", "<omitted>"])
-def test_other_without_a_description_is_refused(db, venue_staff_client, description):
-    """Plan 1.4: 422 and nothing saved, for a missing, empty or blank description."""
+def test_a_block_off_without_a_description_is_refused(db, venue_staff_client, reason, description):
+    """Plan 1.4 (PO decision, 13 Oct 2026): 422 and nothing saved, for a missing, empty or blank
+    description, whichever reason is given - every block off says why."""
     venue = make_venue(db)
-    body = _future_body(reason="OTHER", description=description)
+    body = _future_body(reason=reason, description=description)
     if description == "<omitted>":
         del body["description"]
 
@@ -396,15 +401,14 @@ def test_a_reason_outside_the_five_is_refused(db, venue_staff_client, reason):
 
 
 @pytest.mark.story("9.4", ac=1)
-@pytest.mark.parametrize("description", [None, "Annual air-con servicing"])
-def test_a_reason_other_than_other_needs_no_description(db, venue_staff_client, description):
-    """Plan 1.6: saved with or without one."""
+def test_the_refusal_of_a_missing_description_says_what_is_needed(db, venue_staff_client):
+    """Plan 1.6: the sentence the page shows, in the backend's own words."""
     venue = make_venue(db)
 
-    response = venue_staff_client.post(_url(venue.id), json=_future_body(description=description))
+    response = venue_staff_client.post(_url(venue.id), json=_future_body(description=None))
 
-    assert response.status_code == 201, response.text
-    assert response.json()["description"] == description
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Describe why the venue is blocked off."
 
 
 @pytest.mark.story("9.4", ac=1)
@@ -459,13 +463,14 @@ def test_the_calendar_shows_the_new_period_with_its_reason_description_and_id(
 @pytest.mark.story("9.4", ac=1)
 def test_the_calendar_carries_a_closures_description_apart_from_its_label(db, venue_staff_client):
     """Review of slice 6: the page's Edit prefills from the closure's own description, so the
-    window says it - null when there is none, where ``label`` falls back to the reason's name -
-    and a booking's window has none."""
+    window says it, as the label does; a booking's window has none, and its label is its event."""
     venue = make_venue(db)
     described = _period(
         db, venue.id, _days_from_now(10), _days_from_now(11), reason="RENOVATION", notes="Floor"
     )
-    bare = _period(db, venue.id, _days_from_now(12), _days_from_now(13), reason="SAFETY")
+    bare = _period(
+        db, venue.id, _days_from_now(12), _days_from_now(13), reason="SAFETY", notes="Wiring"
+    )
     booking = _booking(
         db, venue.id, _days_from_now(14), _days_from_now(14) + timedelta(hours=2), status="PENDING"
     )
@@ -485,8 +490,8 @@ def test_the_calendar_carries_a_closures_description_apart_from_its_label(db, ve
         "Floor",
     )
     assert (windows[str(bare.id)]["description"], windows[str(bare.id)]["label"]) == (
-        None,
-        "Safety concern",
+        "Wiring",
+        "Wiring",
     )
     held = [window for window in response.json() if window["id"] is None]
     assert [window["description"] for window in held] == [None]
@@ -639,21 +644,21 @@ def test_an_edit_changes_start_end_reason_and_description(db, venue_staff_client
 
 
 @pytest.mark.story("9.4", ac=6)
-def test_an_edit_may_not_leave_an_other_without_its_description(db, venue_staff_client):
-    """Plan 1.4 on edit, kept with the edit cases: changing the reason to OTHER needs a
-    description, and clearing the description of an OTHER is refused. The period is unchanged."""
+def test_an_edit_may_not_leave_a_closure_without_its_description(db, venue_staff_client):
+    """Plan 1.4 on edit (PO decision, 13 Oct 2026): clearing the description of a closure of any
+    reason is refused, and the period is unchanged."""
     venue = make_venue(db)
-    plain = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
+    plain = _period(db, venue.id, _days_from_now(10), _days_from_now(12), notes="Servicing")
     other = _period(
         db, venue.id, _days_from_now(20), _days_from_now(22), reason="OTHER", notes="Gala stage"
     )
 
-    to_other = venue_staff_client.patch(_url(venue.id, plain.id), json={"reason": "OTHER"})
-    cleared = venue_staff_client.patch(_url(venue.id, other.id), json={"description": ""})
+    cleared_plain = venue_staff_client.patch(_url(venue.id, plain.id), json={"description": ""})
+    cleared_other = venue_staff_client.patch(_url(venue.id, other.id), json={"description": None})
 
-    assert (to_other.status_code, cleared.status_code) == (422, 422)
+    assert (cleared_plain.status_code, cleared_other.status_code) == (422, 422)
     stored = {period.id: period for period in _periods(db, venue.id)}
-    assert stored[plain.id].reason == "MAINTENANCE"
+    assert stored[plain.id].notes == "Servicing"
     assert stored[other.id].notes == "Gala stage"
 
 
@@ -787,7 +792,7 @@ def test_a_refused_write_leaves_no_audit_row(db, venue_staff_client):
     period = _started(db, venue.id)
     before = _audit_count(db)
 
-    venue_staff_client.post(_url(venue.id), json=_future_body(reason="OTHER"))
+    venue_staff_client.post(_url(venue.id), json=_future_body(description=None))
     venue_staff_client.delete(_url(venue.id, period.id))
     venue_staff_client.patch(_url(venue.id, uuid.uuid4()), json={"end_now": True})
 
@@ -1035,7 +1040,7 @@ def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method)
 
     assert response.status_code == 403, response.text
     (stored,) = _periods(db, venue.id)
-    assert (stored.reason, stored.notes) == ("MAINTENANCE", None)
+    assert (stored.reason, stored.notes) == ("MAINTENANCE", period.notes)
 
 
 @pytest.mark.story("9.4", ac=9)
@@ -2117,7 +2122,7 @@ def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engin
         venue_id, event_id, booking_id = venue.id, event.id, booking.id
     start = threading.Barrier(2)
     data = VenueUnavailabilityCreate(
-        starts_at=_day(2), ends_at=_day(7), reason="MAINTENANCE", description=None
+        starts_at=_day(2), ends_at=_day(7), reason="MAINTENANCE", description="Servicing"
     )
 
     def save() -> None:
@@ -2401,6 +2406,7 @@ def _save_period(session: Session, venue_id: uuid.UUID):
             starts_at=_day(2),
             ends_at=_day(7),
             reason="MAINTENANCE",
+            notes="Servicing",
             created_by_id=STAFF_ID,
         )
     )
