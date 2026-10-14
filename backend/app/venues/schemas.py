@@ -401,7 +401,8 @@ class VenueUnavailableWindowOut(BaseModel):
     None for a pending request, a hold its event's confirmation completed, or a closure.
 
     Story 9.4: ``id`` is a closure's id, so Venue Staff's page can edit or end it; None for a
-    booking."""
+    booking. ``description`` is the closure's own text, which an edit starts from; None when it has
+    none, where ``label`` falls back to the reason's name, and for a booking."""
 
     id: uuid.UUID | None
     starts_at: datetime
@@ -411,6 +412,7 @@ class VenueUnavailableWindowOut(BaseModel):
     reason: str
     label: str
     hold_expires_at: datetime | None
+    description: str | None
 
 
 # --- unavailability (story 9.4) ----------------------------------------------------------

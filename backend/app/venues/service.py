@@ -340,6 +340,7 @@ def get_venue_calendar(
             hold_expires_at=(
                 booking.hold_expires_at if booking.hold_completed_at is None else None
             ),
+            description=None,
         )
         for booking in bookings
     ]
@@ -361,6 +362,7 @@ def get_venue_calendar(
             reason=period.reason,
             label=period.notes or _CLOSURE_REASON_LABELS.get(period.reason, period.reason),
             hold_expires_at=None,
+            description=period.notes,
         )
         for period in closures
     ]
