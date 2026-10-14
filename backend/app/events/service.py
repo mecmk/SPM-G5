@@ -1288,6 +1288,10 @@ def _record_transition(
     )
 
 
+# Story 9.4 AC3: the statuses a closed venue sends an event back to Planning from.
+_RETURNED_TO_PLANNING_FROM = (EventStatus.CONFIRMED, EventStatus.AWAITING_SAFETY_CHECK)
+
+
 def return_event_to_planning(
     db: Session,
     event: Event,
@@ -1297,12 +1301,13 @@ def return_event_to_planning(
     reason: str,
     details: dict[str, Any],
 ) -> bool:
-    """Story 9.4 AC3: a Confirmed event goes back to Planning because a venue it has booked was
-    marked unavailable - recorded in the status history with ``reason``, and in the audit log as
-    EVENT_RETURNED_TO_PLANNING with ``details`` beside where it came from. Any other status is
-    left as it is (Planning is already where it should be), and False says nothing changed.
-    The caller holds the event's row lock and commits, so this leaves no notice of its own."""
-    if event.status != EventStatus.CONFIRMED:
+    """Story 9.4 AC3: a Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to
+    Planning because a venue it has booked was marked unavailable - recorded in the status history
+    with ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside
+    where it came from. Any other status is left as it is (Planning is already where it should
+    be), and False says nothing changed. The caller holds the event's row lock and commits, so
+    this leaves no notice of its own."""
+    if event.status not in _RETURNED_TO_PLANNING_FROM:
         return False
     from_status = event.status
     event.status = EventStatus.PLANNING
