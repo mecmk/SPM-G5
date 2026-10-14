@@ -59,6 +59,19 @@
  * f7.1.1: an event over two days keeps both dates, on the catalogue's banner (AC15) and in the
  * request step's Date and time (AC2).
  *
+ * f12.1.2: the request step takes a setup and a teardown, under 12.1's ACs as the backlog numbers
+ * them now - the AC1-AC4 above are Sprint 1's numbering, which the older cases keep. AC1: each is
+ * entered in days, hours and minutes, 0 until changed, and the step shows the booked period they
+ * make around the requirement's own times. AC5: a setup may reach into earlier days, and a
+ * negative, fractional or over-long one is refused under the fields before anything is sent; the
+ * server's own refusals, AC9's setup that would start in the past among them, are
+ * `backend/tests/bookings/test_request_setup_and_teardown.py`'s. AC17, the notice when setup or
+ * teardown runs outside the venue's opening hours, comes with the opening-hours check (AC16), and
+ * its cases with it. These cases use only Supplier Induction Morning (Planning, Chloe's: one
+ * Main venue, a Classroom with a projector for 30 people, 3 Feb 2027 09:00-12:00) at Seminar Room
+ * 2.1, opening the step by its address. No other spec uses the event, so nothing done for it holds
+ * anything another test looks for.
+ *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
@@ -68,7 +81,7 @@
  * requirements", so that case sets the flag on Nimbus's real response with `page.route`.
  */
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
 
 const NIMBUS = { id: EVENTS.approved, name: 'Nimbus Developer Conference' }
@@ -81,9 +94,13 @@ const ONBOARDING = { id: EVENTS.onboardingDay, name: 'Sales Onboarding Day' }
 // for it or searches the catalogue on its date, so raising and withdrawing one here holds
 // nothing another test looks for (unlike Summit's own slot, which 8.1's catalogue specs read).
 const DINNER = { id: '33333333-0000-0000-0000-000000000013', name: 'Partner Appreciation Dinner' }
+// f12.1.2: Planning, Chloe's, one Main venue and no bookings, 3 Feb 2027 09:00-12:00. Only the
+// setup and teardown cases use it, at Seminar Room 2.1, which suits it.
+const INDUCTION = { id: EVENTS.supplierInduction, name: 'Supplier Induction Morning' }
 const VENUE = 'Grand Hall'
 const VENUE_ID = '22222222-0000-0000-0000-000000000001' // Grand Hall in the seed
 const ONBOARDING_VENUE = 'Seminar Room 2.1'
+const SEMINAR_ROOM_ID = '22222222-0000-0000-0000-000000000002' // Seminar Room 2.1 in the seed
 const FIND_A_VENUE = 'Find a venue'
 // Story 12.5 AC5: Find a venue's name once every requirement of the event has a request.
 const FIND_A_VENUE_EITHER_WAY = /^(Find a venue|All required venues booked)$/
@@ -94,9 +111,15 @@ const CLOSED_VENUE_MESSAGE =
 const NOT_REQUESTABLE_MESSAGE =
   "Only the event's assigned coordinator can request a venue for it, while the event is in " +
   'Planning or Confirmed.'
+// f12.1.2 (12.1 AC5): as the step words a setup or teardown it refuses before sending.
+const TURNAROUND_INVALID_MESSAGE =
+  'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.'
+const TURNAROUND_TOO_LONG_MESSAGE = 'Setup and teardown can each be at most 14 days.'
 
 /** Nimbus's Main venue in the seed, already booked (Grand Hall, approved). */
 const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
+/** Supplier Induction Morning's Main venue in the seed, with the event's own times (f12.1.2). */
+const INDUCTION_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000039'
 
 /** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: both
  * its requirements have a request in the seed, so it selects none - an additional venue - and
@@ -167,6 +190,25 @@ async function openRequestStep(page: Page) {
   await findVenueFor(page, SUMMIT)
   await venueCard(page, VENUE).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
   await expect(page.getByRole('heading', { name: `Request ${VENUE}`, level: 1 })).toBeVisible()
+}
+
+/** f12.1.2: the request step for Supplier Induction Morning's Main venue at Seminar Room 2.1,
+ * opened by its address, and its Setup and teardown section once the step has loaded. */
+async function openInductionStep(page: Page) {
+  await page.goto(
+    `/events/${INDUCTION.id}/request-venue/${SEMINAR_ROOM_ID}?requirement=${INDUCTION_MAIN_VENUE}`,
+  )
+  await expect(
+    page.getByRole('heading', { name: `Request ${ONBOARDING_VENUE}`, level: 1 }),
+  ).toBeVisible()
+  const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
+  await expect(turnaround).toBeVisible()
+  return turnaround
+}
+
+/** One field of the step's Setup or Teardown (12.1 AC1): its Days, Hours or Minutes. */
+function turnaroundField(turnaround: Locator, part: string, unit: string): Locator {
+  return turnaround.getByRole('group', { name: part, exact: true }).getByLabel(unit)
 }
 
 test('12.1 AC15: a coordinator finds a venue from the event and opens its request', async ({
@@ -502,6 +544,65 @@ test('12.1 AC4: Venue Staff are not offered a way to raise a request', async ({ 
   await expect(
     mainNav(page).getByRole('link', { name: 'Request a venue', exact: true }),
   ).toHaveCount(0)
+})
+
+test('12.1 AC1/AC5: setup and teardown start at 0, and the booked period follows them', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  const turnaround = await openInductionStep(page)
+
+  // AC1: nothing is added until the coordinator enters it, so the booked period is the Main
+  // venue's own times.
+  for (const part of ['Setup', 'Teardown']) {
+    for (const unit of ['Days', 'Hours', 'Minutes']) {
+      await expect(turnaroundField(turnaround, part, unit)).toHaveValue('0')
+    }
+  }
+  await expect(turnaround).toContainText('Booked period')
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 09:00–12:00')
+
+  // AC5: a setup may reach into earlier days, so two days of it start the booked period on the
+  // Monday; a teardown moves its end. Nothing is sent.
+  await turnaroundField(turnaround, 'Setup', 'Days').fill('2')
+  await expect(turnaround).toContainText('Mon, 1 Feb 2027, 09:00 – Wed, 3 Feb 2027, 12:00')
+  await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('30')
+  await expect(turnaround).toContainText('Mon, 1 Feb 2027, 09:00 – Wed, 3 Feb 2027, 12:30')
+})
+
+test('12.1 AC5: a negative, fractional or over-long setup or teardown is refused before it is sent', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  let sends = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/bookings') sends += 1
+  })
+  const turnaround = await openInductionStep(page)
+  const problem = turnaround.getByRole('alert')
+  const sendRequest = page.getByRole('button', { name: 'Send request' })
+
+  // Said under the fields as soon as it is typed, and still said after Send request, which sends
+  // nothing while it shows.
+  for (const hours of ['-1', '1.5']) {
+    await turnaroundField(turnaround, 'Setup', 'Hours').fill(hours)
+    await expect(problem).toHaveText(TURNAROUND_INVALID_MESSAGE)
+    await sendRequest.click()
+    await expect(problem).toHaveText(TURNAROUND_INVALID_MESSAGE)
+  }
+
+  // Each is at most 14 days, the longest an event may run.
+  await turnaroundField(turnaround, 'Setup', 'Hours').fill('0')
+  await turnaroundField(turnaround, 'Teardown', 'Days').fill('15')
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+  await sendRequest.click()
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+
+  // Exactly 14 days is not refused. Every Send request above was made with a problem showing, so
+  // nothing has been sent.
+  await turnaroundField(turnaround, 'Teardown', 'Days').fill('14')
+  await expect(problem).toHaveCount(0)
+  expect(sends).toBe(0)
 })
 
 test('12.2 AC1/AC2/AC4: a coordinator withdraws a pending request from the event page', async ({
