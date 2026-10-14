@@ -65,6 +65,7 @@ from app.events.schemas import (
     VenueRequirementIn,
 )
 from app.notifications.service import NotificationType, notify
+from app.venues import service as venue_service
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
 _log = logging.getLogger(__name__)
@@ -120,6 +121,10 @@ DETAILS_NOT_CORRECTABLE_MESSAGE = (
 BOOKING_NO_LONGER_FITS_MESSAGE = (
     'This change no longer fits the booking of {venue} for "{requirement}". Change or withdraw '
     "that booking first."
+)
+ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE = (
+    "This change no longer fits the booking of {venue} as an additional venue, which holds the "
+    "event's own dates and attendance. Change or withdraw that booking first."
 )
 EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE = (
     "This event has been approved, so its equipment is changed in its Equipment section, not here."
@@ -264,12 +269,15 @@ class EventDetailsNotCorrectable(EventStateConflict):
 
 
 class BookingNoLongerFits(EventStateConflict):
-    """7.2 AC14: the correction would leave a venue requirement outside what its pending or
-    approved booking was requested for."""
+    """7.2 AC14: the correction would leave a venue requirement, or for an additional venue
+    (``requirement`` None) the event itself, outside what its pending or approved booking was
+    requested for."""
 
-    def __init__(self, venue: str, requirement: str):
+    def __init__(self, venue: str, requirement: str | None):
         super().__init__(
-            BOOKING_NO_LONGER_FITS_MESSAGE.format(venue=venue, requirement=requirement)
+            ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE.format(venue=venue)
+            if requirement is None
+            else BOOKING_NO_LONGER_FITS_MESSAGE.format(venue=venue, requirement=requirement)
         )
 
 
@@ -2140,57 +2148,77 @@ def _check_equipment_holds_cover(db: Session, event: Event, data: EventReviewCor
 
 
 @dataclass(frozen=True)
-class _BookedRequirement:
-    """AC14: a pending or approved booking of one venue requirement, read before the correction
-    changes anything, so a requirement the correction removes is still known by its name."""
+class _LiveBooking:
+    """AC14: a pending or approved booking of the event, read before the correction changes
+    anything, so a requirement the correction removes is still known by its name.
+    ``requirement_name`` is None for an additional venue (12.5), booked for no requirement."""
 
     booking: VenueBooking
     venue_name: str
-    requirement_name: str
+    requirement_name: str | None
 
 
-def _booked_requirements(db: Session, event: Event) -> list[_BookedRequirement]:
-    """AC14/AC18: ``event``'s live bookings that name a venue requirement, as they stand now. A
-    booking whose requirement was removed before this fix names none, and holds nothing here."""
+def _live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
+    """AC14/AC18: ``event``'s pending and approved bookings, as they stand now."""
     bookings = db.scalars(
         select(VenueBooking)
         .where(
             VenueBooking.event_id == event.id,
             VenueBooking.status.in_(_LIVE_BOOKING_STATUSES),
-            VenueBooking.venue_requirement_id.is_not(None),
         )
         .order_by(VenueBooking.created_at, VenueBooking.id)
     ).all()
     return [
-        _BookedRequirement(
+        _LiveBooking(
             booking=booking,
             venue_name=booking.venue.name,
-            requirement_name=booking.venue_requirement.name or "",
+            requirement_name=None
+            if booking.venue_requirement is None
+            else booking.venue_requirement.name or "",
         )
         for booking in bookings
     ]
 
 
-def _fits_booking(requirement: VenueRequirement | None, booking: VenueBooking) -> bool:
+def _fits_booking(
+    event: Event, requirement: VenueRequirement | None, booking: VenueBooking
+) -> bool:
     """AC13/AC14: the requirement still asks for no more than its booking was requested for: it
     still exists, its times fall inside the booked ones, it needs room for no more people, and it
-    asks for the same layout. Exactly the booked values still fit (AC13)."""
+    asks for the same layout. Exactly the booked values still fit (AC13). The people are counted
+    as the booking counted them (``people_to_hold``): a requirement with no number of its own
+    was booked for the event's attendance."""
     if requirement is None:
         return False
     if requirement.starts_at < booking.starts_at or requirement.ends_at > booking.ends_at:
         return False
-    if requirement.capacity is not None and requirement.capacity > booking.expected_attendance:
+    if venue_service.people_to_hold(event, requirement) > booking.expected_attendance:
         return False
     return requirement.layout_code == booking.required_layout_code
 
 
-def _check_bookings_still_fit(event: Event, booked: list[_BookedRequirement]) -> None:
-    """AC14: judged on the requirements as the correction leaves them, before anything is
-    written, so the first booking that no longer fits refuses the whole correction (AC16)."""
+def _fits_additional_venue(event: Event, booking: VenueBooking) -> bool:
+    """AC14: an additional venue (12.5) was booked for the event's own period and attendance, so
+    those have to stay inside what it was booked for."""
+    return (
+        booking.starts_at <= event.starts_at
+        and event.ends_at <= booking.ends_at
+        and event.expected_attendance <= booking.expected_attendance
+    )
+
+
+def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
+    """AC14: judged on the event and its requirements as the correction leaves them, before
+    anything is written, so the first booking that no longer fits refuses the whole correction
+    (AC16)."""
     requirements = {requirement.id: requirement for requirement in event.venue_requirements}
     for item in booked:
+        if item.requirement_name is None:
+            if not _fits_additional_venue(event, item.booking):
+                raise BookingNoLongerFits(item.venue_name, None)
+            continue
         requirement = requirements.get(item.booking.venue_requirement_id)
-        if not _fits_booking(requirement, item.booking):
+        if not _fits_booking(event, requirement, item.booking):
             name = item.requirement_name if requirement is None else requirement.name
             raise BookingNoLongerFits(item.venue_name, name or item.requirement_name)
 
@@ -2208,11 +2236,11 @@ def _apply_correction(
     holds, and every booked requirement must still fit its booking; its holds are never touched.
     """
     is_arranged = event.status in _ARRANGED_STATUSES
-    booked: list[_BookedRequirement] = []
+    booked: list[_LiveBooking] = []
     if is_arranged:
         _check_equipment_unchanged(event, data)
         _check_equipment_holds_cover(db, event, data)
-        booked = _booked_requirements(db, event)
+        booked = _live_bookings(db, event)
     before = _request_values(event)
     edit = _validate_request_edit(
         db, event, data, recheck_resent_equipment=False, is_stock_checked=not is_arranged
