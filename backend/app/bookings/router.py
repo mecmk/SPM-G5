@@ -190,6 +190,10 @@ def approve_booking(
     Story 12.7 AC1/AC5: the approval starts the booking's hold, with the expiry Venue Staff give
     (422 without one, or with one in the past or after the booked period starts); a booked period
     that has already started can no longer be held (409).
+
+    Story 9.4 AC7: refused (409) while a period its venue is unavailable for overlaps the
+    request's held period, with the sentence the request step gives; it is approved once the
+    period no longer overlaps it.
     """
     try:
         booking = service.get_booking_for_decision(db, booking_id)
@@ -200,6 +204,8 @@ def approve_booking(
             db, booking, actor_id=actor.id, hold_expires_at=payload.hold_expires_at
         )
     except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueBlocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
