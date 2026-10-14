@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   EVENTS_READ_OWN: 'events:read_own',
   EVENTS_READ_ALL: 'events:read_all',
   EVENTS_REVIEW: 'events:review',
+  EVENTS_ASSIGN: 'events:assign',
   EVENTS_EDIT_ROUTINE: 'events:edit_routine',
   EVENTS_CANCEL: 'events:cancel',
   EVENT_CHANGE_REQUESTS_CREATE: 'event_change_requests:create',

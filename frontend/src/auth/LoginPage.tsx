@@ -13,6 +13,7 @@ const SAMPLE_PASSWORD = 'Password123!'
 const SAMPLE_ACCOUNTS: { role: string; email: string }[] = [
   { role: 'Event Organiser', email: 'organiser@acme.example' },
   { role: 'Event Coordinator', email: 'coordinator@connectsphere.example' },
+  { role: 'Event Coordinator Lead', email: 'lead@connectsphere.example' },
   { role: 'Venue Staff', email: 'venue@connectsphere.example' },
   { role: 'Technical Support', email: 'tech@connectsphere.example' },
   { role: 'Attendee', email: 'attendee@example.com' },

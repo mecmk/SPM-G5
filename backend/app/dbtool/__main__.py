@@ -36,6 +36,7 @@ SEED_ACCOUNTS = [
     ("Attendee", "attendee@example.com"),
     ("Attendee", "attendee2@example.com"),
     ("Safety Officer", "safety@connectsphere.example"),
+    ("Event Coordinator Lead", "lead@connectsphere.example"),
 ]
 SEED_PASSWORD = "Password123!"
 

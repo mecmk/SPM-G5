@@ -27,7 +27,7 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import {
   ACCOUNTS,
   EVENTS,
-  assignedCoordinator,
+  assignByLead,
   createAndSubmitRequest,
   inFuture,
   signIn,
@@ -62,7 +62,7 @@ function equipmentItem(page: Page, position: number): Locator {
 /** Who the event page says the request was assigned to. */
 async function coordinatorOf(page: Page, eventId: string): Promise<string> {
   await page.goto(`/events/${eventId}`)
-  return (await assignedCoordinator(page)).account
+  return (await assignByLead(page)).account
 }
 
 /** The organiser's submitted request, and the coordinator it went to. */

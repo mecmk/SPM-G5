@@ -667,6 +667,7 @@ def test_signed_out_users_can_neither_list_nor_register(client, db: Session):
         Users.VENUE_STAFF,
         Users.TECH_SUPPORT,
         Users.SAFETY_OFFICER,
+        Users.LEAD,
     ],
     ids=lambda user: user.role,
 )

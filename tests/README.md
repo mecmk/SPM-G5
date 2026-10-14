@@ -41,6 +41,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/respond-to-clarification.spec.ts` | 4.3 AC1, AC2, AC4, AC6 | the organiser answering a clarification request, more than once |
 | `e2e/decision-history.spec.ts` | 4.6 AC1, AC2 | the decision and the clarification thread |
 | `e2e/coordinator-reassignment.spec.ts` | 5.2 AC3 | handing an event to another coordinator |
+| `e2e/unassigned-queue.spec.ts` | 5.4 AC1–AC3, AC5–AC7, AC9; responsive | the Event Coordinator Lead's unassigned queue, assigning from it, its empty and no-coordinator states, at phone and desktop widths |
 | `e2e/events.spec.ts` | 2.1 AC8, AC19; 7.1 AC1, AC2 | the event details page |
 | `e2e/event-routine-edit.spec.ts` | 7.2 AC1–AC3 | editing an event's internal notes through Edit event |
 | `e2e/event-correction.spec.ts` | 7.2 AC4–AC9 | the assigned coordinator correcting a request under review or awaiting clarification: the save, replacing the cover picture, adding a venue requirement, a required field that cannot be emptied, equipment marked unavailable for new dates, a stale save and an approval landing mid-edit, details greyed out after approval with notes still saving, and who is offered the edit |

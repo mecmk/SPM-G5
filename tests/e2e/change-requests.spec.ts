@@ -21,7 +21,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
-  assignedCoordinator,
+  assignByLead,
   createAndSubmitRequest,
   EVENTS,
   inFuture,
@@ -43,7 +43,7 @@ async function approvedEvent(page: Page, label: string) {
   await signIn(page, ACCOUNTS.organiser)
   const eventId = await createAndSubmitRequest(page, uniqueName(label))
   await page.goto(`/events/${eventId}`)
-  const { account } = await assignedCoordinator(page)
+  const { account } = await assignByLead(page)
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, account)

@@ -39,9 +39,10 @@ INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_
     ('11111111-0000-0000-0000-000000000007', 'attendee@example.com',               'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Aiden Attendee',    'ATTENDEE',           NULL, NULL, NULL),
     ('11111111-0000-0000-0000-000000000008', 'inactive@connectsphere.example',     'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Ian Inactive',      'VENUE_STAFF',        NULL, NULL, 'Venues'),
     ('11111111-0000-0000-0000-000000000009', 'safety@connectsphere.example',       'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Sam Safety',        'SAFETY_OFFICER',     NULL, '+65 9500 0001', 'Safety'),
+    ('11111111-0000-0000-0000-000000000010', 'lead@connectsphere.example',         'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Lena Lead',         'EVENT_COORDINATOR_LEAD', NULL, '+65 9200 0009', 'Events'),
     -- Story 18.1: a second attendee, who holds the one place at the Portfolio Review Slot and
     -- takes the last place at the Career Mentoring Slot in the e2e spec.
-    ('11111111-0000-0000-0000-000000000010', 'attendee2@example.com',              'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Bella Attendee',    'ATTENDEE',           NULL, NULL, NULL)
+    ('11111111-0000-0000-0000-000000000011', 'attendee2@example.com',              'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Bella Attendee',    'ATTENDEE',           NULL, NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
     role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
@@ -960,7 +961,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
 -- is listed as Full.
 INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at) VALUES
-    ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000010',
+    ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000011',
      'REGISTERED', '2026-10-11 10:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
