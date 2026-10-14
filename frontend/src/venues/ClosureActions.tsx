@@ -27,7 +27,9 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const now = Date.now()
+  // The clock as of when this row appeared: the calendar loads its rows again after every change,
+  // and the backend decides again on the press, so a row open for hours is still safe.
+  const [now] = useState(() => Date.now())
   const hasEnded = Date.parse(closure.endsAt) <= now
   const hasStarted = Date.parse(closure.startsAt) < now
   if (hasEnded) return null
