@@ -33,6 +33,7 @@ C4Context
     Person(venueStaff, "Venue Staff", "Keeps the venue catalogue accurate and decides booking requests")
     Person(techStaff, "Technical Support Staff", "Looks after equipment and decides what can be reserved")
     Person(attendee, "Attendee", "Signs up for a confirmed event")
+    Person(safetyOfficer, "Safety Officer", "Checks an event is operationally safe before it goes ahead")
 
     System(connectsphere, "ConnectSphere", "Event planning and venue booking: event requests, coordinator review, venue bookings, equipment reservations, attendee registration and notifications")
 
@@ -41,6 +42,7 @@ C4Context
     Rel(venueStaff, connectsphere, "Maintains venues, approves or rejects bookings")
     Rel(techStaff, connectsphere, "Checks equipment availability, reserves equipment")
     Rel(attendee, connectsphere, "Registers for an event, withdraws")
+    Rel(safetyOfficer, connectsphere, "Reviews the events awaiting the safety check")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
@@ -54,7 +56,7 @@ C4Container
     title Level 2 - Containers inside ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact")
-    Person(staff, "ConnectSphere staff", "Coordinators, Venue Staff, Technical Support Staff")
+    Person(staff, "ConnectSphere staff", "Coordinators, Venue Staff, Technical Support Staff, Safety Officers")
     Person(attendee, "Attendee", "Registers for events")
 
     System_Boundary(connectsphere, "ConnectSphere") {
@@ -144,6 +146,7 @@ C4Component
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the event's own validation is reused from app/events. The arrangements each change affects are still to come")
+        Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
@@ -169,6 +172,7 @@ C4Component
     Rel(equipment, db, "Reads and writes")
     Rel(registration, db, "Reads and writes")
     Rel(changes, db, "Reads and writes")
+    Rel(safety, db, "Reads")
     Rel(notifications, db, "Reads and writes")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

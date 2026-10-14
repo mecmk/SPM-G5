@@ -22,6 +22,7 @@ export const PERMISSIONS = {
   EQUIPMENT_READ: 'equipment:read',
   EQUIPMENT_REQUEST: 'equipment:request',
   EQUIPMENT_MANAGE: 'equipment:manage',
+  SAFETY_REVIEW: 'safety:review',
   REGISTRATIONS_SELF: 'registrations:self',
   REGISTRATIONS_VIEW: 'registrations:view',
   NOTIFICATIONS_READ_OWN: 'notifications:read_own',

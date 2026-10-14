@@ -82,6 +82,21 @@ def test_reassignment_updates_pointer_and_records_who_and_when(coordinator_clien
 
 
 @pytest.mark.story("5.2", ac=1)
+def test_event_awaiting_the_safety_check_can_be_reassigned(login_as):
+    """Awaiting the safety check (story 21.1) sits between submission and closure, so it is
+    assignable. Events.HARBOUR_CONCERT is assigned to Carl."""
+    carl = login_as(Users.COORDINATOR_2)
+
+    response = carl.put(
+        f"/events/{Events.HARBOUR_CONCERT}/coordinator",
+        json={"coordinator_id": str(Users.COORDINATOR.id)},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["coordinator_id"] == str(Users.COORDINATOR.id)
+
+
+@pytest.mark.story("5.2", ac=1)
 def test_reassignment_notifies_the_new_coordinator_and_the_organiser(
     coordinator_client, db: Session
 ):

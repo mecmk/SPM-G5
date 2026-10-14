@@ -154,11 +154,11 @@ def test_counts_cover_every_status_whatever_tab_or_page_is_asked_for(venue_staff
     unfiltered = venue_staff_client.get(BOOKINGS_PATH).json()
     narrowed = venue_staff_client.get(f"{PENDING_QUEUE_PATH}&limit=1").json()
 
-    # Seed: 2 approved, 7 pending and 1 expired booking (story 12.7); the factory adds the one
-    # rejected.
+    # Seed: 4 approved (2 of them story 21.1's), 7 pending and 1 expired booking (story 12.7); the
+    # factory adds the one rejected.
     assert unfiltered["counts"] == {
         "pending": 7,
-        "approved": 2,
+        "approved": 4,
         "rejected": 1,
         "withdrawn": 0,
         "cancelled": 0,

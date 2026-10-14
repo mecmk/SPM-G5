@@ -18,6 +18,8 @@ import { NotificationProvider } from './notifications/NotificationProvider'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
+import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
+import { SafetyChecksPage } from './safety/SafetyChecksPage'
 import {
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
@@ -33,6 +35,8 @@ import {
   EVENTS_MINE_PATH,
   HOME_PATH,
   LOGIN_PATH,
+  SAFETY_CHECK_PATH,
+  SAFETY_CHECKS_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
   VENUE_NEW_PATH,
@@ -131,6 +135,12 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.EQUIPMENT_MANAGE} />}>
                 <Route path={EQUIPMENT_REQUESTS_PATH} element={<EquipmentRequestsPage />} />
                 <Route path={EQUIPMENT_REQUEST_PATH} element={<EquipmentRequestDetailPage />} />
+              </Route>
+
+              {/* Story 21.1: the Safety Officer's queue and each awaiting event's safety details. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.SAFETY_REVIEW} />}>
+                <Route path={SAFETY_CHECKS_PATH} element={<SafetyChecksPage />} />
+                <Route path={SAFETY_CHECK_PATH} element={<SafetyCheckDetailPage />} />
               </Route>
 
               {/*
