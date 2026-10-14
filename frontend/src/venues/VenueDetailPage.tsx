@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { mediaUrl } from '../api/client'
+import { useAuth } from '../auth/authContext'
+import { PERMISSIONS } from '../auth/permissions'
 import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
@@ -13,6 +15,7 @@ import { useVenueCalendar } from '../shared/useVenueCalendar'
 import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
+import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
 
 const DAY_PANEL_ID = 'venue-calendar-day-panel'
 
@@ -57,7 +60,16 @@ export function VenueDetailPage() {
     (startsAt: string, endsAt: string) => getVenueCalendar(venueId, startsAt, endsAt),
     [venueId],
   )
-  const calendar = useVenueCalendar(loadWindows, new Date())
+  /** Story 9.4: Venue Staff may mark the venue unavailable; nobody else is offered the controls. */
+  const { can } = useAuth()
+  const canManageUnavailability = can(PERMISSIONS.VENUE_UNAVAILABILITY_MANAGE)
+  /** Story 9.4: counts the closures saved from this page, so the calendar loads them again. */
+  const [closureVersion, setClosureVersion] = useState(0)
+  const calendar = useVenueCalendar(loadWindows, new Date(), String(closureVersion))
+
+  function handleClosureSaved() {
+    setClosureVersion((version) => version + 1)
+  }
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   /** Story 8.3 AC6: the gallery picture the carousel is open on, if it is open. */
@@ -274,6 +286,13 @@ export function VenueDetailPage() {
             <p className="eyebrow" id="venue-availability-heading">
               Availability
             </p>
+            {canManageUnavailability && (
+              <VenueUnavailabilitySection
+                venueId={venue.id}
+                venueName={venue.name}
+                onSaved={handleClosureSaved}
+              />
+            )}
             <VenueAvailabilityCalendar
               month={calendar.month}
               onMonthChange={calendar.setMonth}
