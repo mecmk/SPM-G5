@@ -192,6 +192,9 @@ export function safetyCheckPath(eventId: string): string {
   return SAFETY_CHECK_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
 
+// Story 18.1: the events an attendee can browse and register for.
+export const UPCOMING_EVENTS_PATH = '/browse'
+
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'
 

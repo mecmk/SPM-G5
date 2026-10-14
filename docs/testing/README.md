@@ -34,6 +34,13 @@ backend/tests/conftest.py   fixtures + traceability plugin
 One test file per story (or per closely related pair). Start the file with the story title and
 its acceptance criteria copied from the backlog; name each test after the behaviour it proves.
 
+A story may split its file by level, as story 18.1's do (`tests/registrations/`):
+`test_<story>_unit.py` for its pure rules - no database and no fixture, so it runs without
+PostgreSQL - and `test_<story>_integration.py` for the API and the database. Each file's
+docstring says which level it is and why a case is there and not in the other, so no case is
+proven twice. The `story` marker is the same in both, so the traceability matrix still maps every
+AC to its tests, and the file name in each row shows the level.
+
 ### Fixtures you get for free
 
 | Fixture | Gives you |

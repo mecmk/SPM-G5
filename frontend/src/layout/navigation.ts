@@ -7,6 +7,7 @@ import {
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
   SAFETY_CHECKS_PATH,
+  UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
 } from '../routes'
 
@@ -103,7 +104,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Who has registered for the events you manage.',
         icon: 'people',
         permission: PERMISSIONS.REGISTRATIONS_VIEW,
-        story: '18.6',
+        story: '18.3',
         isAvailable: false,
       },
     ],
@@ -194,13 +195,13 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Attend',
     items: [
       {
-        to: '/browse',
+        to: UPCOMING_EVENTS_PATH,
         label: 'Upcoming events',
-        description: 'Search confirmed events and register for them.',
+        description: 'Browse confirmed events and register for them.',
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.1',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: '/registrations',
@@ -208,7 +209,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'The events you have registered for, and your place at each.',
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
-        story: '18.3',
+        story: '18.2',
         isAvailable: false,
       },
     ],

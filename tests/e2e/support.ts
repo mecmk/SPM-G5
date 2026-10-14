@@ -15,6 +15,8 @@ export const ACCOUNTS = {
   techSupport: 'tech@connectsphere.example',
   safetyOfficer: 'safety@connectsphere.example',
   attendee: 'attendee@example.com',
+  // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
+  attendee2: 'attendee2@example.com',
 } as const
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.'
