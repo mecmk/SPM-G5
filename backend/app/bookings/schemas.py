@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, time
 from enum import StrEnum
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, field_validator
@@ -224,7 +224,9 @@ class BookingQueueEntry(BaseModel):
     """Story 13.1 AC2: event name, requested venue, period, expected attendance and stated
     requirements. Story 13.1.2 AC2: when the request was raised. 13.1.2 AC3: ``decision_reason``
     and ``decided_at``, so a decided entry shows why and when it was decided without a second
-    request. No defaults (response schema)."""
+    request. f12.1.2 (story 12.1 AC17): the setup and teardown, the booked period and the venue's
+    opening hours, so the card can say when the setup or teardown runs outside them. No defaults
+    (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -249,6 +251,14 @@ class BookingQueueEntry(BaseModel):
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
     held_from: datetime
+    # f12.1.2 (story 12.1 AC17): what the card needs to say whether the setup or teardown runs
+    # outside the venue's opening hours, which Venue Staff weigh when approving (13.2; Q51), and
+    # to name the booked period; the hours are None when the venue has none recorded.
+    setup_minutes: int
+    teardown_minutes: int
+    held_until: datetime
+    venue_operating_hours_start: time | None
+    venue_operating_hours_end: time | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -273,6 +283,11 @@ class BookingQueueEntry(BaseModel):
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
             held_from=booking.held_from,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            held_until=booking.held_until,
+            venue_operating_hours_start=booking.venue.operating_hours_start,
+            venue_operating_hours_end=booking.venue.operating_hours_end,
         )
 
 

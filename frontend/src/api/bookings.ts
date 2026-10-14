@@ -171,6 +171,14 @@ export interface BookingQueueEntry {
   hold_expires_at: string | null
   hold_completed_at: string | null
   held_from: string
+  /** f12.1.2 (story 12.1 AC17): the setup and teardown, the booked period's end and the venue's
+   * opening hours ("HH:MM:SS", null when not recorded, as `Venue` has them), so the card can say
+   * when setup or teardown runs outside those hours. */
+  setup_minutes: number
+  teardown_minutes: number
+  held_until: string
+  venue_operating_hours_start: string | null
+  venue_operating_hours_end: string | null
 }
 
 /** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was

@@ -35,9 +35,12 @@ import {
   venueSearchFor,
 } from '../shared/venueRequest'
 import {
+  BOOKED_PERIOD_LABEL,
   bookedPeriod,
   durationMinutes,
+  outsideHoursFact,
   turnaroundProblem,
+  VENUE_STAFF_DECIDE,
   ZERO_DURATION,
   type DurationDraft,
 } from './turnaround'
@@ -174,7 +177,10 @@ function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
  * changed, and sees the booked period they make around the request's own times (AC1). A negative,
  * fractional or over-14-day one is refused under the fields before anything is sent (AC5). The
  * server refuses those too, and a setup that would start in the past (AC9), with a sentence of its
- * own shown like any refusal.
+ * own shown like any refusal. A setup or teardown that runs outside the venue's opening hours is
+ * said under the booked period, with the hours and that Venue Staff decide whether to allow it,
+ * before anything is sent (AC17). Such a request can still be sent, the hours being checked on its
+ * own times (AC16).
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -312,6 +318,19 @@ export function BookingRequestFormPage() {
   const period =
     turnaroundError === null && startsAt && endsAt
       ? bookedPeriod(startsAt, endsAt, setupMinutes, teardownMinutes)
+      : null
+  // f12.1.2 (story 12.1 AC17): what of the setup and teardown runs outside the venue's opening
+  // hours, said under the booked period, so only while that shows.
+  const outsideFact =
+    period !== null && startsAt && endsAt
+      ? outsideHoursFact(
+          startsAt,
+          endsAt,
+          setupMinutes,
+          teardownMinutes,
+          venue.operating_hours_start,
+          venue.operating_hours_end,
+        )
       : null
 
   /** AC7: the backend judged the venue unsuitable on send, so read it again for the warning. */
@@ -480,10 +499,15 @@ export function BookingRequestFormPage() {
           {period !== null && (
             <ul className="check-list">
               <li>
-                <span className="grow-text">Booked period</span>
+                <span className="grow-text">{BOOKED_PERIOD_LABEL}</span>
                 <span>{formatSchedule(period.heldFrom, period.heldUntil)}</span>
               </li>
             </ul>
+          )}
+          {outsideFact !== null && (
+            <p className="warning">
+              {outsideFact} {VENUE_STAFF_DECIDE}
+            </p>
           )}
         </section>
 
