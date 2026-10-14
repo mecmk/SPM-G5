@@ -132,7 +132,9 @@ test('5.4 AC2/AC3: the Lead assigns a new request from the queue', async ({ page
   await queueItem(page, name).getByRole('button', { name: 'Assign' }).click()
   const dialog = assignDialog(page, name)
   const picker = dialog.getByLabel('Coordinator')
-  await expect(picker.locator('option', { hasText: CARL.name })).toContainText('active event')
+  await expect(picker.locator('option', { hasText: CARL.name })).toHaveText(
+    new RegExp(`^${CARL.name} · \\d+ active events?$`),
+  )
   await picker.selectOption(CARL.id)
   await dialog.getByRole('button', { name: 'Assign' }).click()
 

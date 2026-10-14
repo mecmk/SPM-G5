@@ -13,7 +13,7 @@ import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_UNASSIGNED_PATH, eventPath } from '../routes'
-import { formatDateTime, formatSchedule } from '../shared/format'
+import { formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 
 const QUEUE_LABEL = 'Unassigned events'
@@ -137,7 +137,7 @@ export function UnassignedQueuePage() {
                     formatSchedule(entry.starts_at, entry.ends_at),
                     `${entry.expected_attendance} people`,
                     `Requested by ${entry.organiser_name}`,
-                    `Submitted ${formatDateTime(entry.submitted_at)}`,
+                    `Submitted ${entry.submitted_at ? formatDateTime(entry.submitted_at) : NOT_RECORDED}`,
                   ]}
                   action={
                     <button

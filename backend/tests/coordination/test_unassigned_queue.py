@@ -26,7 +26,8 @@ AC10 Events assigned before this change keep their coordinator (assumption Q17).
 
 PO decisions at Checkpoint 1 these tests rely on:
 * A coordinator's "active events" are those assigned to them in Under Review, Clarification
-  Requested, Planning or Confirmed.
+  Requested, Planning, Awaiting Safety Check (added with story 21.1, PO decision at review) or
+  Confirmed.
 * A new submission notifies every active Lead (20.1 AC1's notice, which went to the
   round-robin coordinator before).
 * The Lead holds ``events:assign`` and reads every event, but does not decide them.
@@ -71,6 +72,7 @@ ACTIVE_STATUSES = (
     EventStatus.UNDER_REVIEW,
     EventStatus.CLARIFICATION_REQUESTED,
     EventStatus.PLANNING,
+    EventStatus.AWAITING_SAFETY_CHECK,
     EventStatus.CONFIRMED,
 )
 
@@ -253,11 +255,13 @@ def test_an_assigned_event_leaves_the_queue_and_reaches_the_coordinator(login_as
 
 @pytest.mark.story("5.4", ac=3)
 def test_the_picker_shows_each_active_coordinators_active_event_count(login_as, db: Session):
-    """Only the four active statuses count (PO decision); an inactive coordinator is not offered."""
+    """Only the active statuses count (PO decision, with 21.1's Awaiting Safety Check added):
+    completed, rejected and cancelled events do not. An inactive coordinator is not offered."""
     busy = make_user(db, role="EVENT_COORDINATOR", full_name="Busy Coordinator")
     resting = make_user(db, role="EVENT_COORDINATOR", full_name="Resting Coordinator")
     gone = make_user(db, role="EVENT_COORDINATOR", full_name="Gone Coordinator", is_active=False)
-    for status in (*ACTIVE_STATUSES, EventStatus.COMPLETED, EventStatus.REJECTED):
+    closed = (EventStatus.COMPLETED, EventStatus.REJECTED, EventStatus.CANCELLED)
+    for status in (*ACTIVE_STATUSES, *closed):
         make_event(db, status=status, assigned_coordinator_id=busy.id)
 
     response = login_as(Users.LEAD).get(COORDINATORS_PATH)
@@ -384,6 +388,7 @@ REFUSED_ROLES = [
     Users.VENUE_STAFF,
     Users.TECH_SUPPORT,
     Users.ATTENDEE,
+    Users.SAFETY_OFFICER,
 ]
 
 
@@ -462,7 +467,7 @@ def test_two_leads_assigning_at_once_write_one(engine):
                     AssignCoordinatorIn(coordinator_id=coordinator_id),
                     actor=actor,
                 )
-            except Exception as refusal:  # the second Lead's refusal, whatever its type
+            except coordination_service.AlreadyAssigned as refusal:  # AC8: told who got it
                 session.rollback()
                 return f"refused: {refusal}"
             return "assigned"

@@ -18,7 +18,8 @@ export interface UnassignedEventEntry {
   ends_at: string
   expected_attendance: number
   organiser_name: string
-  submitted_at: string
+  /** Null if the submission time was never recorded. */
+  submitted_at: string | null
 }
 
 /** Mirrors `EventCoordinatorOut`: the event's coordinator after an assign/reassign, who made the
