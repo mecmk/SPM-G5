@@ -100,7 +100,7 @@ def create_booking_request(
         # 12.1 AC14: a recorded closure covers part of the period.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
-        # 12.1 AC14: the venue is not open at those hours.
+        # 12.1 AC14/AC16: the venue is not open at the request's own hours.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.SetupStartsInThePast as exc:
         # 12.1 AC9: the setup would start the booked period in the past.

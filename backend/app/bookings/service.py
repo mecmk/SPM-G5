@@ -21,7 +21,9 @@ and teardown minutes sent with it - 0 when not sent, and whole minutes up to 14 
 ``BookingRequestIn`` enforces (AC5) - and its held period is its own times widened by them, from
 the setup before its start to the teardown after its end (AC1). A setup that would start that
 period in the past is refused (``SetupStartsInThePast``, AC9) while the request's own start is
-still ahead; once that has passed too, the refusal is 12.7's ``HoldPeriodStarted``.
+still ahead; once that has passed too, the refusal is 12.7's ``HoldPeriodStarted``. The
+venue's opening hours are checked on the request's own times alone (12.1 AC16): its setup and
+teardown may run outside them, for Venue Staff to weigh when they approve (Q28, Q51).
 
 The venue hold - Sprint 2's 12.1 AC3/AC12/AC14, built as s12.1: a PENDING request holds
 its venue for its held period, as an APPROVED booking does. ``create_booking_request`` refuses a
@@ -306,7 +308,9 @@ class VenueBlocked(ValueError):
 
 
 class VenueClosed(ValueError):
-    """12.1 AC14: the requested period's daily window falls outside the venue's opening hours."""
+    """12.1 AC14: the request's daily window falls outside the venue's opening hours - since
+    f12.1.2 (12.1 AC16), the window of its own times, its requirement's or the event's, not of
+    its booked period: setup and teardown may run outside the hours."""
 
     def __init__(self, venue: Venue, *, starts_at: datetime, ends_at: datetime) -> None:
         super().__init__(
@@ -934,7 +938,8 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
 
     Story 12.1 AC14: the venue may have stopped being available since the catalogue search, so
     the search's other two rules are checked again after the hold - a closure overlapping the
-    period (``VenueBlocked``) and opening hours that leave part of it out (``VenueClosed``).
+    booked period (``VenueBlocked``) and opening hours that leave out part of the request's own
+    times (``VenueClosed``; f12.1.2, AC16).
 
     Story 11.1 AC2/AC7: then, after availability, whether the venue suits the event - judged as
     the venue and the event's requirement stand now, with the catalogue's own check. One that
@@ -955,7 +960,9 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): the request carries the
     setup and teardown sent with it, and its booked period is its own times widened by them, from
     the setup before its start to the teardown after its end. That is the period it holds, and
-    the one the hold, closure and opening-hours checks above are made on.
+    the one the hold and closure checks above are made on. AC16: the opening hours are checked
+    on its own times alone, since its setup and teardown may run outside them, for Venue Staff
+    to weigh when they approve (Q28, Q51).
 
     Story 12.7: lapsed holds are expired first, so one never blocks the request (AC3, AC6, AC11).
     A booked period that has already started is refused: the request could never be approved,
@@ -1045,9 +1052,9 @@ def _request_venue(
     withdrawn only after every check has passed, in the same commit as the new request.
 
     f12.1.2 (story 12.1 AC1/AC5): ``setup_minutes`` and ``teardown_minutes`` are stored on the
-    row, and the booked period - held, and checked for holds, closures and opening hours - is
-    the booking's own times widened by them, from the setup before its start to the teardown
-    after its end.
+    row, and the booked period - held, and checked for holds and closures - is the booking's
+    own times widened by them, from the setup before its start to the teardown after its end.
+    AC16: the venue's opening hours are checked on the booking's own times alone.
 
     Story 12.7 AC5: a booked period that has already started by ``now``, the moment the caller
     acts on, cannot be held, so the request is refused (``HoldPeriodStarted``). 12.1 AC9
@@ -1090,15 +1097,18 @@ def _request_venue(
     holding = find_holding_booking(db, venue.id, held_from, held_until)
     if holding is not None:
         raise VenueHeld(holding)
-    # The held period is the booking's own (story 12.5 AC1: its requirement's times, or the
-    # event's for an additional venue) plus setup and teardown, which default to 0 (12.1 AC1).
+    # A closure is checked on the booked period, setup and teardown included (12.1 AC14), as the
+    # hold is.
     closure = venue_service.find_blocking_unavailability(
         db, venue.id, starts_at=held_from, ends_at=held_until
     )
     if closure is not None:
         raise VenueBlocked(venue, closure)
-    if venue_service.closed_for(venue, starts_at=held_from, ends_at=held_until):
-        raise VenueClosed(venue, starts_at=held_from, ends_at=held_until)
+    # The opening hours on the booking's own times alone (story 12.5 AC1: its requirement's, or
+    # the event's for an additional venue): its setup and teardown may run outside them, for
+    # Venue Staff to weigh when they approve (f12.1.2, 12.1 AC16; Q28, Q51).
+    if venue_service.closed_for(venue, starts_at=booking.starts_at, ends_at=booking.ends_at):
+        raise VenueClosed(venue, starts_at=booking.starts_at, ends_at=booking.ends_at)
     # No EventNotJudgeable: only PLANNING/CONFIRMED events book, and the DB requires attendance.
     judged = venue_service.judge_venue_for_requirement(event, requirement, venue)
     if not judged.suitability.is_suitable and override_reason is None:
