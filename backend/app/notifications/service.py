@@ -68,6 +68,9 @@ class NotificationType(StrEnum):
     EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
+    # 9.4: the event's coordinator, if it has one, and its organiser - a venue it has booked was
+    # marked unavailable for the period of a booking
+    BOOKING_VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
 
 
 def notify(

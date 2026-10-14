@@ -1288,6 +1288,46 @@ def _record_transition(
     )
 
 
+def return_event_to_planning(
+    db: Session,
+    event: Event,
+    *,
+    actor: User,
+    at: datetime,
+    reason: str,
+    details: dict[str, Any],
+) -> bool:
+    """Story 9.4 AC3: a Confirmed event goes back to Planning because a venue it has booked was
+    marked unavailable - recorded in the status history with ``reason``, and in the audit log as
+    EVENT_RETURNED_TO_PLANNING with ``details`` beside where it came from. Any other status is
+    left as it is (Planning is already where it should be), and False says nothing changed.
+    The caller holds the event's row lock and commits, so this leaves no notice of its own."""
+    if event.status != EventStatus.CONFIRMED:
+        return False
+    from_status = event.status
+    event.status = EventStatus.PLANNING
+    db.flush()
+    _record_transition(
+        db,
+        event,
+        from_status=from_status,
+        to_status=EventStatus.PLANNING,
+        actor=actor,
+        at=at,
+        reason=reason,
+    )
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_RETURNED_TO_PLANNING",
+        entity_type="event",
+        entity_id=event.id,
+        details={"from_status": from_status, **details},
+        commit=False,
+    )
+    return True
+
+
 def _notify_coordinator_of_submission(db: Session, event: Event, *, actor: User) -> None:
     """Story 20.1 AC1: the coordinator the request was just assigned to (5.1) is told it waits for
     their review. With nobody to assign (5.1 AC5) nobody is told; when story 5.4 replaces the

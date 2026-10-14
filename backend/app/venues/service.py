@@ -27,7 +27,9 @@ from app.auth.permissions import Permission, role_has
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.config import settings
+from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement
+from app.notifications.service import NotificationType, notify
 from app.venues.models import (
     AccessibilityFeature,
     Facility,
@@ -1006,9 +1008,11 @@ def recheck_venue_bookings(
     time it was marked; one no longer overlapped is cleared. A booking outside the candidates is
     left as it is: a leftover mark on a closed booking is history.
 
-    The candidates are selected ``FOR UPDATE`` in id order and re-read (``populate_existing``), so
-    a booking another transaction is approving is waited for and marked as it then stands (AC10),
-    and two re-checks of one venue lock in the same order. The caller commits; each change leaves
+    The candidates' events are locked first, then the candidates, each ``FOR UPDATE`` in id order
+    and re-read (``populate_existing``), so a booking another transaction is approving is waited
+    for and marked as it then stands (AC10), a confirmation of one of the events, which takes
+    the event and then its bookings, cannot deadlock with this, and two re-checks of one venue
+    lock in the same order. The caller commits; each change leaves
     an audit row."""
     overlapped = (
         select(VenueUnavailabilityPeriod.id)
@@ -1019,14 +1023,31 @@ def recheck_venue_bookings(
         )
         .exists()
     )
+    is_candidate = (
+        VenueBooking.venue_id == venue_id,
+        VenueBooking.status.in_(_HOLDING_STATUSES),
+        ~VenueBooking.event.has(Event.status == EventStatus.COMPLETED),
+        VenueBooking.held_until > now,
+    )
+    # The events are locked before their bookings, in id order, as a confirmation takes them: the
+    # event row, then the bookings its trigger updates. Candidates are read without a lock first
+    # to know which events; a booking that became a candidate since is locked with the rest.
+    event_ids = db.scalars(
+        select(VenueBooking.event_id)
+        .where(*is_candidate)
+        .distinct()
+        .order_by(VenueBooking.event_id)
+    ).all()
+    db.execute(
+        select(Event)
+        .where(Event.id.in_(event_ids))
+        .order_by(Event.id)
+        .with_for_update(of=Event)
+        .execution_options(populate_existing=True)
+    )
     rows = db.execute(
         select(VenueBooking, overlapped.label("overlapped"))
-        .where(
-            VenueBooking.venue_id == venue_id,
-            VenueBooking.status.in_(_HOLDING_STATUSES),
-            ~VenueBooking.event.has(Event.status == EventStatus.COMPLETED),
-            VenueBooking.held_until > now,
-        )
+        .where(*is_candidate)
         .order_by(VenueBooking.id)
         .with_for_update(of=VenueBooking)
         .execution_options(populate_existing=True)
@@ -1056,6 +1077,65 @@ def recheck_venue_bookings(
     return RecheckResult(newly_marked=newly_marked, cleared=cleared)
 
 
+def _describe_period(starts_at: datetime, ends_at: datetime) -> str:
+    """``from Thu 4 Mar 2027, 00:00 to Sat 6 Mar 2027, 00:00``, in Singapore time."""
+
+    def moment(value: datetime) -> str:
+        local = value.astimezone(_SINGAPORE)
+        return f"{local:%a} {local.day} {local:%b %Y}, {local:%H:%M}"
+
+    return f"from {moment(starts_at)} to {moment(ends_at)}"
+
+
+def _settle_marked_events(
+    db: Session,
+    venue: Venue,
+    period: VenueUnavailabilityPeriod,
+    marked: list[VenueBooking],
+    *,
+    actor: User,
+    now: datetime,
+) -> None:
+    """Story 9.4 AC3/AC4: for each event with a booking ``period`` has just marked - once, however
+    many of its bookings - a Confirmed event goes back to Planning, and its assigned coordinator,
+    if it has one, and its organiser are told the venue, the period and the reason. The person who
+    saved is never told of it (20.1 AC3), and nothing is sent when a mark clears."""
+    events: dict[uuid.UUID, Event] = {}
+    for booking in marked:
+        events.setdefault(booking.event_id, booking.event)
+    reason_name = _CLOSURE_REASON_LABELS[period.reason]
+    what = reason_name if period.notes is None else f"{reason_name}: {period.notes}"
+    when = _describe_period(period.starts_at, period.ends_at)
+    for event in events.values():
+        events_service.return_event_to_planning(
+            db,
+            event,
+            actor=actor,
+            at=now,
+            reason=(
+                f"{venue.name} was marked unavailable ({what}), so this event needs another venue."
+            ),
+            details={"venue_id": str(venue.id), "period_id": str(period.id)},
+        )
+        message = (
+            f"{actor.full_name} marked {venue.name} unavailable {when} ({what}). Its booking for "
+            f'"{event.name}" falls in that period, so the event needs another venue.'
+        )
+        for recipient in (event.assigned_coordinator, event.organiser):
+            notify(
+                db,
+                recipient=recipient,
+                actor=actor,
+                notification_type=NotificationType.BOOKING_VENUE_UNAVAILABLE,
+                event_id=event.id,
+                title=f'{venue.name} is unavailable for "{event.name}"',
+                message=message,
+                related_entity_type="event",
+                related_entity_id=event.id,
+                commit=False,
+            )
+
+
 def add_unavailability(
     db: Session,
     venue_id: uuid.UUID,
@@ -1067,8 +1147,9 @@ def add_unavailability(
     """Story 9.4 AC1/AC5: mark ``venue_id`` unavailable from ``starts_at`` to ``ends_at`` for a
     reason. A period may start in the past and may overlap another of the venue's; bookings in
     the way do not stop it being saved (AC2); the ones it overlaps are marked (AC3) in the same
-    transaction (``recheck_venue_bookings``)."""
-    get_venue(db, venue_id)
+    transaction (``recheck_venue_bookings``), their Confirmed events return to Planning, and
+    their coordinators and organisers are told (AC3, AC4)."""
+    venue = get_venue(db, venue_id)
     _check_period(data.starts_at, data.ends_at, reason=data.reason, description=data.description)
     period = VenueUnavailabilityPeriod(
         venue_id=venue_id,
@@ -1089,7 +1170,8 @@ def add_unavailability(
         details={"venue_id": str(venue_id), **_snapshot(period)},
         commit=False,
     )
-    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
+    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
+    _settle_marked_events(db, venue, period, rechecked.newly_marked, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
@@ -1131,7 +1213,10 @@ def edit_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
-    recheck_venue_bookings(db, venue_id, now=now, actor=actor)
+    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
+    _settle_marked_events(
+        db, get_venue(db, venue_id), period, rechecked.newly_marked, actor=actor, now=now
+    )
     db.commit()
     db.refresh(period)
     return period
