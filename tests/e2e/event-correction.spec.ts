@@ -13,14 +13,16 @@
  *     shows the details still editable.
  * AC12 once Confirmed, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
- * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment section.
+ * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment section,
+ *     and a save leaves the equipment out of what it sends.
  * AC7 the form counts availability without the event's own holds, and marks equipment no longer
  *     available for new dates on its line, refusing the save.
  * AC8 nobody but the assigned coordinator is offered the edit.
  * AC9 a save made from a copy that changed meanwhile is refused, with a reload offered.
  * Which fields the API accepts, the 2.1 rules, every 403/409/422 refusal, which edits still fit a
- * booking or an equipment hold (f7.2.4 AC13-AC18), and the equipment holds themselves are covered by backend/tests/events/test_correct_event_under_review.py. The
- * organiser-vs-coordinator case of AC9 needs story 4.3 (organisers editing a submitted request).
+ * booking or an equipment hold (f7.2.4 AC13-AC18), and the equipment holds themselves are covered
+ * by backend/tests/events/test_correct_event_under_review.py. The organiser-vs-coordinator case of
+ * AC9 needs story 4.3 (organisers editing a submitted request).
  *
  * Each test that saves raises its own request through the organiser's form, so parallel specs
  * never edit the same event. Submitting assigns it to either seeded coordinator (5.1, round
@@ -353,6 +355,34 @@ test('7.2 AC15: once approved, the form shows the equipment read-only and points
   await expect(page.getByText(EQUIPMENT_HINT)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add equipment' })).toHaveCount(0)
   await expect(page.getByLabel('Description')).toBeEnabled()
+})
+
+test('7.2 AC15: once approved, a correction leaves the equipment out of what it sends', async ({
+  page,
+}) => {
+  // The request is captured and aborted, so the seeded Planning event other specs read is never
+  // changed. Leaving the list out is what lets an event carrying a declined type requested again
+  // (15.1) still be corrected: 2.1's one-line-per-type rule would refuse the list if it were sent.
+  let sentBody: Record<string, unknown> | null = null
+  await page.route('**/review-details', async (route) => {
+    const request = route.request()
+    if (request.resourceType() !== 'fetch' || request.method() !== 'PATCH') {
+      await route.continue()
+      return
+    }
+    sentBody = request.postDataJSON()
+    await route.abort()
+  })
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await page.getByRole('link', { name: 'Edit event' }).click()
+
+  await page.getByLabel('Description').fill(`E2E approved correction ${Date.now()}`)
+  await page.getByRole('button', { name: 'Save changes' }).click()
+
+  await expect.poll(() => sentBody).not.toBeNull()
+  expect(sentBody).not.toHaveProperty('equipment')
+  expect(sentBody).toHaveProperty('description')
 })
 
 test('7.2 AC12: once confirmed, the details are greyed out, the hint says why, and notes still save', async ({
