@@ -457,6 +457,43 @@ def test_the_calendar_shows_the_new_period_with_its_reason_description_and_id(
 
 
 @pytest.mark.story("9.4", ac=1)
+def test_the_calendar_carries_a_closures_description_apart_from_its_label(db, venue_staff_client):
+    """Review of slice 6: the page's Edit prefills from the closure's own description, so the
+    window says it - null when there is none, where ``label`` falls back to the reason's name -
+    and a booking's window has none."""
+    venue = make_venue(db)
+    described = _period(
+        db, venue.id, _days_from_now(10), _days_from_now(11), reason="RENOVATION", notes="Floor"
+    )
+    bare = _period(db, venue.id, _days_from_now(12), _days_from_now(13), reason="SAFETY")
+    booking = _booking(
+        db, venue.id, _days_from_now(14), _days_from_now(14) + timedelta(hours=2), status="PENDING"
+    )
+
+    response = venue_staff_client.get(
+        f"/venues/{venue.id}/calendar",
+        params={
+            "starts_at": _days_from_now(9).isoformat(),
+            "ends_at": _days_from_now(16).isoformat(),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    windows = {window["id"]: window for window in response.json() if window["id"] is not None}
+    assert (windows[str(described.id)]["description"], windows[str(described.id)]["label"]) == (
+        "Floor",
+        "Floor",
+    )
+    assert (windows[str(bare.id)]["description"], windows[str(bare.id)]["label"]) == (
+        None,
+        "Safety concern",
+    )
+    held = [window for window in response.json() if window["id"] is None]
+    assert [window["description"] for window in held] == [None]
+    assert held[0]["label"] == db.get(Event, booking.event_id).name
+
+
+@pytest.mark.story("9.4", ac=1)
 def test_a_period_added_through_the_api_keeps_the_venue_out_of_a_search(db, venue_staff_client):
     """Plan 1.11. cannot fail first, for the search half: 8.1 already leaves a blocked venue out
     and keeps one a closure only touches. Written through the new POST so it is red with it."""
