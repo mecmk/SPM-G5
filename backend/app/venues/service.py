@@ -98,7 +98,7 @@ class InvalidDateRange(ValueError):
 END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 
 # Story 9.4: why a change to a venue's unavailability is refused.
-PERIOD_END_NOT_AFTER_START_MESSAGE = "The period must end after it starts."
+PERIOD_END_NOT_AFTER_START_MESSAGE = "The end must be after the start."
 DESCRIPTION_REQUIRED_MESSAGE = "Describe why the venue is blocked off."
 PERIOD_NOT_STARTED_MESSAGE = (
     "This period has not started, so it cannot be ended. Remove it instead."
