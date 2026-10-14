@@ -129,8 +129,8 @@ const OUT_OF_DATE_CODES: readonly ErrorCode[] = [
 ]
 
 /**
- * Story 7.2 AC1/AC3/AC4/AC8/AC10/AC12: what the coordinator's edit page says above the form - what can be
- * edited at this stage, and why the rest cannot.
+ * Story 7.2 AC1/AC3/AC4/AC8/AC10/AC12: what the coordinator's edit page says above the form -
+ * what can be edited at this stage, and why the rest cannot.
  */
 function coordinatorEditNotice(event: EventDetail, userId: string | undefined): string {
   if (event.assigned_coordinator_id !== userId) {
@@ -647,7 +647,9 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             : 'EVENT_DATE_INCOMPLETE',
           fieldId: incompleteFieldId,
         }
-      : validateEventForm(current, event, judgedAvailability)
+      : validateEventForm(current, event, judgedAvailability, {
+          isEquipmentLeftOut: isEquipmentApproved,
+        })
     if (problem) {
       setSaveError(ERROR_REGISTRY[problem.code].message)
       setInvalidField({ id: problem.fieldId, form: current })
@@ -789,7 +791,14 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     try {
       let latest = event
       if (isSavingDetails) {
-        latest = await correctEventUnderReview(latest.id, eventInputFrom(form), latest.updated_at)
+        // Story 7.2 AC15: an approved event's equipment is left out, as it is changed in its own
+        // section; sent, a declined type requested again (15.1) would read as a duplicate line.
+        const { equipment, ...details } = eventInputFrom(form)
+        latest = await correctEventUnderReview(
+          latest.id,
+          isEquipmentApproved ? details : { ...details, equipment },
+          latest.updated_at,
+        )
         setEvent(latest)
         setForm(formFromEvent(latest))
       }

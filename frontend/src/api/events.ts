@@ -526,7 +526,10 @@ export function updatePointOfContact(
  * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
  * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.
  */
-export interface EventReviewCorrectionInput extends EventInput {
+export interface EventReviewCorrectionInput extends Omit<EventInput, 'equipment'> {
+  /** Story 7.2 AC15: left out once the event is approved, which the backend reads as unchanged -
+   *  its equipment is changed in its own section then. */
+  equipment?: EquipmentInput[]
   expected_updated_at: string
 }
 
@@ -534,12 +537,12 @@ export interface EventReviewCorrectionInput extends EventInput {
  * Story 7.2 AC4-AC18: the coordinator assigned to the event corrects the organiser's request at
  * any point before it is confirmed. Every 409 - confirmed meanwhile (AC12), changed since it was
  * opened (AC9), or after approval a change that no longer fits a booking or the equipment (AC14,
- * AC15) - is one code: EVENT_CORRECTION_CONFLICT, shown with the server's sentence and a reload. Equipment no longer free for
- * the dates (AC7) is a 422, as in 2.1.
+ * AC15) - is one code: EVENT_CORRECTION_CONFLICT, shown with the server's sentence and a reload.
+ * Equipment no longer free for the dates (AC7) is a 422, as in 2.1.
  */
 export function correctEventUnderReview(
   eventId: string,
-  input: EventInput,
+  input: Omit<EventReviewCorrectionInput, 'expected_updated_at'>,
   expectedUpdatedAt: string,
 ): Promise<EventDetail> {
   const body: EventReviewCorrectionInput = { ...input, expected_updated_at: expectedUpdatedAt }
