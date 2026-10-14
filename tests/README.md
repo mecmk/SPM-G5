@@ -33,7 +33,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/health.spec.ts` | smoke | the sign-in page loads and the backend answers |
 | `e2e/auth.spec.ts` | 1.1 AC1, AC2, AC4–AC6 | sign in and out, the sign-in lock |
 | `e2e/rbac.spec.ts` | 1.2 AC1–AC4; 21.1 AC1 | each role's sidebar and main page, blocked addresses |
-| `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19–AC21, AC23, AC24 | raising and submitting an event request, and the contact phone's country or region picker |
+| `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19–AC23 | raising and submitting an event request, and the contact phone's country or region picker |
 | `e2e/venue-requirements.spec.ts` | 2.7 AC1–AC6, AC8–AC11 | listing several venue requirements, each with its own times |
 | `e2e/my-event-requests.spec.ts` | 2.6 AC1–AC5, AC7–AC9, AC11, AC12 | an organiser's own list of requests |
 | `e2e/review-queue.spec.ts` | 4.1 AC1–AC4; 6.1 AC2 | the coordinator's review queue, its status tabs, and each event's dates |
@@ -44,7 +44,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/events.spec.ts` | 2.1 AC8, AC19; 7.1 AC1, AC2 | the event details page |
 | `e2e/event-routine-edit.spec.ts` | 7.2 AC1–AC3 | editing an event's internal notes through Edit event |
 | `e2e/event-correction.spec.ts` | 7.2 AC4–AC9 | the assigned coordinator correcting a request under review or awaiting clarification: the save, replacing the cover picture, adding a venue requirement, a required field that cannot be emptied, equipment marked unavailable for new dates, a stale save and an approval landing mid-edit, details greyed out after approval with notes still saving, and who is offered the edit |
-| `e2e/change-requests.spec.ts` | 19.1 AC1, AC2, AC4, AC5, AC9; 2.1 AC25 | an organiser asking for a change to a planning event, the coordinator seeing it pending, updating the point of contact directly (with the request form's country or region picker), and withdrawing a request |
+| `e2e/change-requests.spec.ts` | 19.1 AC1, AC2, AC4, AC5, AC9; 2.1 AC24 | an organiser asking for a change to a planning event, the coordinator seeing it pending, updating the point of contact directly (with the request form's country or region picker), and withdrawing a request |
 | `e2e/venue-catalogue.spec.ts` | 8.1 AC1–AC6, AC8, AC9, AC11 | browsing and filtering the venue catalogue |
 | `e2e/venue-detail.spec.ts` | 8.2 AC1–AC3 | a venue's record |
 | `e2e/venues.spec.ts` | 8.1 AC12; 8.3 AC1–AC8, AC10 | creating, editing and deleting venues, and their pictures |

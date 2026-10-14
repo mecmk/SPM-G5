@@ -42,7 +42,7 @@ function findPhoneProblem(region: PhoneRegion, phone: string): string | null {
  * from the event page, with no change request. Checked here by story 2.1 AC13's rules before
  * anything is sent (AC4); the server re-checks and logs the old and new values. Once Save has been
  * pressed, each field is re-checked as it is typed in, so a problem clears as soon as it is fixed.
- * Story 2.1 AC25 (f2.1.4): the phone has the request form's country or region picker and checks.
+ * Story 2.1 AC24 (f2.1.4): the phone has the request form's country or region picker and checks.
  */
 export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorProps) {
   const ids = useId()

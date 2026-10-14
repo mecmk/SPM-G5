@@ -431,7 +431,7 @@ export interface ContactPhone {
 }
 
 /**
- * Story 2.1 AC24 (f2.1.4): a saved phone split into the region its calling code names and the
+ * Story 2.1 AC23 (f2.1.4): a saved phone split into the region its calling code names and the
  * number after it. A phone saved before the picker with no listed calling code opens under
  * Singapore with its text as saved, so nothing is lost and the form says what to fix.
  */
@@ -453,7 +453,7 @@ export function composeContactPhone(region: PhoneRegion, number: string): string
 }
 
 /**
- * Story 2.1 AC13/AC21/AC23 (f2.1.4): what is wrong with the contact phone, or null; blank is fine
+ * Story 2.1 AC13/AC21/AC22 (f2.1.4): what is wrong with the contact phone, or null; blank is fine
  * on a draft. The picker sets the calling code, so a "+" in the number is wrong. Otherwise the
  * number is judged as it will be saved, calling code included, by AC13's rule - as the backend
  * judges it - so changing the region can change the answer.

@@ -420,7 +420,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the contact phone number',
     message: 'Enter a phone number with 8 to 15 digits.',
   },
-  /** Story 2.1 AC21/AC23 (f2.1.4): the picker sets the calling code, so it is not typed. */
+  /** Story 2.1 AC21/AC22 (f2.1.4): the picker sets the calling code, so it is not typed. */
   EVENT_CONTACT_PHONE_CALLING_CODE: {
     title: 'Check the contact phone number',
     message: 'Type the number without its calling code; choose the country or region instead.',

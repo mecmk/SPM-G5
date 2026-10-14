@@ -9,7 +9,7 @@
  * AC5 change requests are offered only on a Planning event: not before approval, not once
  *     Confirmed.
  * AC9 the organiser withdraws a pending request after confirming, and it reads as Withdrawn.
- * Story 2.1 AC25 (f2.1.4): the point-of-contact update has the request form's Country or region
+ * Story 2.1 AC24 (f2.1.4): the point-of-contact update has the request form's Country or region
  * picker in front of the phone number, and the same checks.
  *
  * Validation rules, refusals (401/403/404/409/422), the one-pending-per-field rule, the conflict
@@ -115,7 +115,7 @@ test('19.1 AC2: an organiser updates the point of contact on a planning event', 
   await expect(page.getByText(email)).toBeVisible()
 })
 
-test('2.1 AC25: the point of contact update has the same country or region picker and checks', async ({
+test('2.1 AC24: the point of contact update has the same country or region picker and checks', async ({
   page,
 }) => {
   test.setTimeout(60_000)

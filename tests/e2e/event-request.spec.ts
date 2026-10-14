@@ -47,9 +47,9 @@
  *     default), saved with that calling code and shown with it. AC13's 8 to 15 digits are counted
  *     on the number as saved, code included, as the backend counts them; the backend's check is
  *     unchanged, so these are browser cases.
- * AC23 (f2.1.4) a "+" typed in the number is refused before anything is sent, and changing the
+ * AC22 (f2.1.4) a "+" typed in the number is refused before anything is sent, and changing the
  *     country or region checks the number again.
- * AC24 (f2.1.4) a phone saved before the picker, with no calling code, opens under Singapore as it
+ * AC23 (f2.1.4) a phone saved before the picker, with no calling code, opens under Singapore as it
  *     was saved.
  * Rule detail, refusals (401/403/404/409/422) and the rest of what the coordinator sees
  * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
@@ -1462,7 +1462,7 @@ test('2.1 AC20: a request with the same name and dates as another live request i
   await expect(page.getByRole('alert')).toContainText('already have a request')
 })
 
-// --- AC21-AC24 (f2.1.4): the contact phone's country or region ---------------------------------
+// --- AC21-AC23 (f2.1.4): the contact phone's country or region ---------------------------------
 test('2.1 AC21: the contact phone is typed after a country or region and saved with its calling code', async ({
   page,
 }) => {
@@ -1517,7 +1517,7 @@ test('2.1 AC21: the 8 to 15 digits are counted with the calling code, as the num
   await expect(lengthProblem).toBeVisible()
 })
 
-test('2.1 AC23: a number typed with a calling code is refused before anything is sent', async ({
+test('2.1 AC22: a number typed with a calling code is refused before anything is sent', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.organiser)
@@ -1539,7 +1539,7 @@ test('2.1 AC23: a number typed with a calling code is refused before anything is
   expect(createCalls).toBe(0)
 })
 
-test('2.1 AC23: changing the country or region checks the number again', async ({ page }) => {
+test('2.1 AC22: changing the country or region checks the number again', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   const lengthProblem = page.getByText(PHONE_LENGTH_PROBLEM)
@@ -1552,7 +1552,7 @@ test('2.1 AC23: changing the country or region checks the number again', async (
   await expect(lengthProblem).toHaveCount(0)
 })
 
-test('2.1 AC24: a phone saved without a calling code opens under Singapore, as it was saved', async ({
+test('2.1 AC23: a phone saved without a calling code opens under Singapore, as it was saved', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.organiser)

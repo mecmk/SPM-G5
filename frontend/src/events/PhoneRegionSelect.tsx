@@ -7,7 +7,7 @@ export interface PhoneRegionSelectProps {
 }
 
 /**
- * Story 2.1 AC21/AC25 (f2.1.4): the contact phone's country or region, each shown with its calling
+ * Story 2.1 AC21/AC24 (f2.1.4): the contact phone's country or region, each shown with its calling
  * code, in front of the number - on the request form and on the event page's point-of-contact
  * update (story 19.1 AC2).
  */
