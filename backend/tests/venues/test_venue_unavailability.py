@@ -4,6 +4,7 @@ Slice 1 (migration 020): the reasons a period can carry.
 Slice 2: add, edit, end and remove a period, the preview of what it would affect, and who may.
 Slice 3 (migration 021): the bookings a period affects are marked, and the mark follows it.
 Slice 4: the event goes back to Planning and its coordinator and organiser are told.
+Slice 5: a pending request that overlaps a period cannot be approved while it stands.
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
      Equipment failure, Renovation, Safety concern or Other (a description is required for
@@ -17,6 +18,7 @@ and the calendar and the booking request name each reason.
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
@@ -37,7 +39,13 @@ from app.notifications.service import NotificationType
 from app.venues import service as venue_service
 from app.venues.models import Venue, VenueUnavailabilityPeriod
 from app.venues.schemas import VenueUnavailabilityCreate
-from tests.support.factories import make_booking, make_event, make_unavailability, make_venue
+from tests.support.factories import (
+    approval_payload,
+    make_booking,
+    make_event,
+    make_unavailability,
+    make_venue,
+)
 from tests.support.seed import Users
 
 SGT = timezone(timedelta(hours=8))
@@ -2132,3 +2140,355 @@ def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engin
             session.execute(delete(Event).where(Event.id == event_id))
             session.execute(delete(Venue).where(Venue.id == venue_id))
             session.commit()
+
+
+# =====================================================================================
+# Slice 5: a pending request that overlaps a period cannot be approved while it stands.
+#
+# ``approve_booking`` refuses, right after its not-pending check and as its own query once the
+# row is locked, a request whose held period overlaps a period of its venue
+# (``find_blocking_unavailability``, the live overlap - not the mark), with the same
+# ``VenueBlocked`` the request step gives. The approve route answers it 409. Refusal order: not
+# pending, venue closed, hold period started, expiry.
+# =====================================================================================
+LOCK_WAIT_SECONDS = 20
+
+
+def _approve(client, booking_id: uuid.UUID, **overrides):
+    return client.post(f"/bookings/{booking_id}/approve", json=approval_payload(**overrides))
+
+
+def _stored(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    db.expire_all()
+    return db.get(VenueBooking, booking_id)
+
+
+# --- AC7: the refusal ------------------------------------------------------------------------
+@pytest.mark.story("9.4", ac=7)
+def test_a_request_overlapping_a_period_cannot_be_approved_until_it_ends(db, login_as):
+    """Plan 7.1 (with 7.4): 409, still pending with no hold and nobody's decision; once the
+    period is removed the same request is approved."""
+    venue = make_venue(db)
+    booking = _live(db, venue.id, _day(3))
+    staff = login_as(Users.VENUE_STAFF)
+    period = _add(staff, venue.id, _day(2), _day(7))
+
+    refused = _approve(staff, booking.id)
+
+    assert refused.status_code == 409, refused.text
+    stored = _stored(db, booking.id)
+    assert stored.status == "PENDING"
+    assert (stored.hold_expires_at, stored.decided_by_id) == (None, None)
+
+    staff.delete(_url(venue.id, uuid.UUID(period["id"])))
+    approved = _approve(staff, booking.id)
+
+    assert approved.status_code == 200, approved.text
+    assert _stored(db, booking.id).status == "APPROVED"
+
+
+@pytest.mark.story("9.4", ac=7)
+def test_the_refusal_uses_the_live_overlap_not_the_mark(db, login_as):
+    """Plan 7.2: a period written straight to the table leaves its booking unmarked and the
+    request is still refused; a stale mark on a request no period overlaps does not refuse it."""
+    venue, elsewhere = make_venue(db), make_venue(db)
+    unmarked = _live(db, venue.id, _day(3))
+    _period(db, venue.id, _day(2), _day(7))
+    stale = _live(db, elsewhere.id, _day(3))
+    _mark_in_sql(db, stale.id, datetime.now(UTC))
+    staff = login_as(Users.VENUE_STAFF)
+
+    assert _marked_at(db, unmarked.id) is None
+    assert _approve(staff, unmarked.id).status_code == 409
+    assert _approve(staff, stale.id).status_code == 200
+
+
+@pytest.mark.story("9.4", ac=7)
+def test_the_refusal_names_the_venue_and_the_period(db, login_as):
+    """Plan 7.5: the sentence the request step gives (12.1 AC14), not a new one."""
+    venue = make_venue(db)
+    booking = _live(db, venue.id, _day(3))
+    starts_at, ends_at = _day(2), _day(7)
+    staff = login_as(Users.VENUE_STAFF)
+    _add(staff, venue.id, starts_at, ends_at, reason="EQUIPMENT_FAILURE", description="Lift jammed")
+
+    refused = _approve(staff, booking.id)
+
+    assert refused.status_code == 409
+    detail = refused.json()["detail"]
+    assert detail.startswith(f"{venue.name} is closed for equipment failure from ")
+    assert _on_singapore_date(starts_at) in detail and _on_singapore_date(ends_at) in detail
+
+
+@pytest.mark.story("9.4", ac=7)
+def test_a_period_that_only_touches_the_request_does_not_stop_its_approval(db, login_as):
+    """Plan 7.3. cannot fail first: no guard exists yet, so every approval passes; it pins the
+    half-open rule beside the refusal above. A period ending exactly where the request's held
+    period starts, and one starting exactly where it ends."""
+    venue = make_venue(db)
+    booking = _live(db, venue.id, _day(3, 10))
+    staff = login_as(Users.VENUE_STAFF)
+    _add(staff, venue.id, _day(3, 6), _day(3, 10))
+    _add(staff, venue.id, _day(3, 12), _day(3, 18))
+
+    approved = _approve(staff, booking.id)
+
+    assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.story("9.4", ac=7)
+@pytest.mark.parametrize("action", ["reject", "withdraw", "change_hold_expiry"])
+def test_a_marked_booking_can_still_be_rejected_withdrawn_or_given_a_new_expiry(
+    db, login_as, action
+):
+    """Plan 7.6 (A1). cannot fail first: the guard touches approval only, and these already
+    work; it pins that nothing else refuses a marked booking."""
+    venue = make_venue(db)
+    staff = login_as(Users.VENUE_STAFF)
+    if action == "change_hold_expiry":
+        booking = _booking(
+            db, venue.id, _day(3), _day(3, 12), status="APPROVED", hold_expires_at=_day(1)
+        )
+    else:
+        booking = _live(db, venue.id, _day(3))
+    _add(staff, venue.id, _day(2), _day(7))
+    assert _marked_at(db, booking.id) is not None
+
+    if action == "reject":
+        response = staff.post(f"/bookings/{booking.id}/reject", json={"decision_reason": "No."})
+    elif action == "withdraw":
+        response = login_as(Users.COORDINATOR).post(f"/bookings/{booking.id}/withdraw")
+    else:
+        response = staff.patch(
+            f"/bookings/{booking.id}",
+            json={
+                "hold_expires_at": _day(2).isoformat(),
+                "hold_expiry_change_reason": "The organiser asked for more time.",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("9.4", ac=7)
+@pytest.mark.parametrize(
+    ("case", "expected_status", "expected_in_detail"),
+    [
+        ("not_pending_and_closed", 409, "APPROVED"),
+        ("closed_and_started", 409, "is closed for maintenance"),
+        ("started_only", 409, "already started"),
+        ("expiry_only", 422, "must expire in the future"),
+    ],
+)
+def test_the_refusals_keep_their_order(db, login_as, case, expected_status, expected_in_detail):
+    """Plan 7.7: not pending, then venue closed, then hold period started, then expiry. Only
+    ``closed_and_started`` fails before the guard - the others cannot fail first: they are the
+    existing refusals, pinned so the guard slots in without reordering them."""
+    venue = make_venue(db)
+    staff = login_as(Users.VENUE_STAFF)
+    now = datetime.now(UTC)
+    payload = {}
+    if case == "not_pending_and_closed":
+        booking = _booking(db, venue.id, _day(3), _day(3, 12), status="APPROVED")
+    elif case in ("closed_and_started", "started_only"):
+        booking = _booking(
+            db, venue.id, now - timedelta(hours=1), now + timedelta(hours=1), status="PENDING"
+        )
+    else:
+        booking = _live(db, venue.id, _day(3))
+        payload = {"expires_in": timedelta(days=-1)}
+    if case in ("not_pending_and_closed", "closed_and_started"):
+        _period(db, venue.id, _day(-2), _day(7))
+
+    response = _approve(staff, booking.id, **payload)
+
+    assert response.status_code == expected_status, response.text
+    assert expected_in_detail in response.json()["detail"]
+
+
+# --- AC10 and 10.6: the save and the approval at the same moment -----------------------------
+def _backend_pid(session: Session) -> int:
+    return session.connection().exec_driver_sql("SELECT pg_backend_pid()").scalar()
+
+
+def _is_waiting_on_a_lock(engine, pid: int) -> bool:
+    with engine.connect() as watcher:
+        waiting_on = watcher.execute(
+            text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"), {"pid": pid}
+        ).scalar()
+        watcher.rollback()  # pg_stat_activity is a per-transaction snapshot
+    return waiting_on == "Lock"
+
+
+def _wait_until(engine, pids: dict[str, int], name: str) -> None:
+    """Block until the connection ``name`` stands waiting on a row lock another holds."""
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if name in pids and _is_waiting_on_a_lock(engine, pids[name]):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"{name} never waited on the booking's lock")
+
+
+def _committed_pending_request(engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """A venue, and a pending request of a Planning event for it three days away, committed."""
+    with Session(engine) as session:
+        venue = make_venue(session)
+        event = _event_for(session)
+        booking = _pending_of(session, event, venue.id, _day(3))
+        session.commit()
+        return venue.id, event.id, booking.id
+
+
+def _remove_race_rows(engine, venue_id, event_id, booking_id) -> None:
+    with Session(engine) as session:
+        session.execute(
+            delete(AuditLog).where(
+                AuditLog.entity_id.in_([booking_id, event_id])
+                | (AuditLog.details["venue_id"].astext == str(venue_id))
+            )
+        )
+        session.execute(delete(Notification).where(Notification.event_id == event_id))
+        session.execute(delete(VenueBooking).where(VenueBooking.id == booking_id))
+        session.execute(delete(Event).where(Event.id == event_id))
+        session.execute(delete(Venue).where(Venue.id == venue_id))
+        session.commit()
+
+
+def _save_period(session: Session, venue_id: uuid.UUID):
+    """The save, in the two steps whose lock a race needs held between them: the period, then the
+    re-check that marks and so locks the venue's bookings. The caller commits."""
+    session.add(
+        VenueUnavailabilityPeriod(
+            venue_id=venue_id,
+            starts_at=_day(2),
+            ends_at=_day(7),
+            reason="MAINTENANCE",
+            created_by_id=STAFF_ID,
+        )
+    )
+    session.flush()
+    return venue_service.recheck_venue_bookings(
+        session, venue_id, now=datetime.now(UTC), actor=session.get(User, STAFF_ID)
+    )
+
+
+@pytest.mark.story("9.4", ac=10)
+def test_an_approval_that_wins_the_lock_is_approved_and_the_save_then_marks_it(engine):
+    """Plan 10.1, approve first, with 10.6. The approval holds the request's row; the save, which
+    loaded the request as pending, waits on it; the approval commits and the save marks the
+    request as it now stands - approved - rather than as it loaded it. cannot fail first: the
+    save's re-read (``populate_existing``) is slice 3's; it pins the order the guard must keep."""
+    venue_id, event_id, booking_id = _committed_pending_request(engine)
+    pids: dict[str, int] = {}
+    holding = threading.Event()
+
+    def approve() -> None:
+        with Session(engine) as session:
+            pids["approve"] = _backend_pid(session)
+            booking = booking_service.get_booking_for_decision(session, booking_id)
+            holding.set()
+            _wait_until(engine, pids, "save")
+            booking_service.approve_booking(
+                session,
+                booking,
+                actor_id=STAFF_ID,
+                hold_expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+
+    def save() -> list[tuple[uuid.UUID, str]]:
+        with Session(engine) as session:
+            pids["save"] = _backend_pid(session)
+            assert holding.wait(LOCK_WAIT_SECONDS)
+            loaded = session.get(VenueBooking, booking_id)
+            assert loaded.status == "PENDING"
+            marked = _save_period(session, venue_id).newly_marked
+            seen = [(booking.id, booking.status) for booking in marked]
+            session.commit()
+            return seen
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            approving = pool.submit(approve)
+            saving = pool.submit(save)
+            approving.result(timeout=40)
+            seen = saving.result(timeout=40)
+
+        assert seen == [(booking_id, "APPROVED")]
+        with Session(engine) as session:
+            row = session.get(VenueBooking, booking_id)
+            assert (row.status, row.venue_unavailable_marked_at is not None) == ("APPROVED", True)
+    finally:
+        _remove_race_rows(engine, venue_id, event_id, booking_id)
+
+
+@pytest.mark.story("9.4", ac=10)
+def test_a_save_that_wins_the_lock_refuses_the_approval_that_waited(engine):
+    """Plan 10.1, save first. The save marks the request and holds its row; the approval waits on
+    it; the save commits the period and the mark together, and the approval, reading the period
+    in a query of its own once the lock is its, is refused as the request step would: still
+    pending, still marked, nobody's decision."""
+    venue_id, event_id, booking_id = _committed_pending_request(engine)
+    pids: dict[str, int] = {}
+    holding = threading.Event()
+
+    def save() -> None:
+        with Session(engine) as session:
+            pids["save"] = _backend_pid(session)
+            _save_period(session, venue_id)
+            holding.set()
+            _wait_until(engine, pids, "approve")
+            session.commit()
+
+    def approve() -> Exception | None:
+        with Session(engine) as session:
+            pids["approve"] = _backend_pid(session)
+            assert holding.wait(LOCK_WAIT_SECONDS)
+            booking = booking_service.get_booking_for_decision(session, booking_id)
+            try:
+                booking_service.approve_booking(
+                    session,
+                    booking,
+                    actor_id=STAFF_ID,
+                    hold_expires_at=datetime.now(UTC) + timedelta(days=1),
+                )
+            except booking_service.VenueBlocked as refusal:
+                return refusal
+            return None
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            saving = pool.submit(save)
+            approving = pool.submit(approve)
+            saving.result(timeout=40)
+            refusal = approving.result(timeout=40)
+
+        assert isinstance(refusal, booking_service.VenueBlocked), "the approval was not refused"
+        with Session(engine) as session:
+            row = session.get(VenueBooking, booking_id)
+            assert row.status == "PENDING"
+            assert row.venue_unavailable_marked_at is not None
+            assert (row.decided_by_id, row.hold_expires_at) == (None, None)
+    finally:
+        _remove_race_rows(engine, venue_id, event_id, booking_id)
+
+
+@pytest.mark.story("9.4", ac=10)
+def test_a_request_that_slipped_in_unmarked_cannot_be_approved_and_the_next_save_marks_it(
+    db, login_as
+):
+    """Plan 10.2, the known gap, on one connection: a request raised at the instant of a save
+    sits pending inside the period, unmarked. Its approval is refused; the next save on the venue
+    - any - marks it."""
+    venue = make_venue(db)
+    _period(db, venue.id, _day(2), _day(7))
+    slipped = _live(db, venue.id, _day(3))
+    assert _marked_at(db, slipped.id) is None
+    staff = login_as(Users.VENUE_STAFF)
+
+    refused = _approve(staff, slipped.id)
+    _add(staff, venue.id, _day(30), _day(31))
+
+    assert refused.status_code == 409, refused.text
+    assert _stored(db, slipped.id).status == "PENDING"
+    assert _marked_at(db, slipped.id) is not None
