@@ -978,10 +978,11 @@ def _write(client, method: str, venue_id: uuid.UUID, period_id: uuid.UUID):
 
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.parametrize("method", WRITES)
-@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT])
+@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
 def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method):
     """Plan 9.1: 403, and the period is as it was. A period already exists so PATCH and DELETE
-    have something to refuse."""
+    have something to refuse. The Safety Officer (21.1) is a guard, cannot fail first: 21.1 gives
+    that role no manage permission, so the refusal is already in place."""
     venue = make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
 
@@ -1011,9 +1012,13 @@ def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, 
 
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.story("9.4", ac=2)
-@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.ORGANISER, None])
+@pytest.mark.parametrize(
+    "role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER, Users.ORGANISER, None]
+)
 def test_only_venue_staff_may_preview(db, login_as, role):
-    """Plan 2.9: the preview is part of marking a venue unavailable, so it is Venue Staff's."""
+    """Plan 2.9: the preview is part of marking a venue unavailable, so it is Venue Staff's. The
+    Safety Officer (21.1) is a guard, cannot fail first: 21.1 gives that role no manage
+    permission, so it is already refused."""
     venue = make_venue(db)
     day = _days_from_now(20)
     client = login_as(role or Users.VENUE_STAFF)
@@ -1026,10 +1031,11 @@ def test_only_venue_staff_may_preview(db, login_as, role):
 
 
 @pytest.mark.story("9.4", ac=9)
-@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT])
+@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
 def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role):
     """Plan 9.3. cannot fail first, for the read half: 9.1 already shows a closure's reason to
-    these roles. Written through the new POST so it is red with it."""
+    these roles, and the Safety Officer (21.1) has venues:read and venue_calendar:read through
+    the internal roles' common set. Written through the new POST so it is red with it."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(10), _days_from_now(12)
     staff = login_as(Users.VENUE_STAFF)
@@ -1760,6 +1766,41 @@ def test_a_confirmed_event_goes_back_to_planning(db, venue_staff_client):
     db.expire_all()
     assert db.get(VenueBooking, booking.id).status == "APPROVED"
     assert db.get(Event, event.id).name == "Nimbus Developer Conference"
+
+
+@pytest.mark.story("9.4", ac=3)
+def test_an_event_awaiting_its_safety_check_goes_back_to_planning_and_its_people_are_told(
+    db, venue_staff_client
+):
+    """Plan 3.4 (21.1): the same as for a Confirmed event - once, with a history row naming the
+    venue and an EVENT_RETURNED_TO_PLANNING audit entry saying where it came from - and its
+    coordinator and organiser are told exactly as for a Confirmed one."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.AWAITING_SAFETY_CHECK)
+    _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+    _pending_of(db, event, venue.id, _day(4), status="APPROVED")
+    starts_at, ends_at = _day(2), _day(7)
+
+    _add(venue_staff_client, venue.id, starts_at, ends_at, reason="SAFETY", description="Wiring")
+
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    returned = [
+        row
+        for row in _history(db, event.id)
+        if (row.from_status, row.to_status)
+        == (EventStatus.AWAITING_SAFETY_CHECK, EventStatus.PLANNING)
+    ]
+    (row,) = returned
+    assert row.changed_by_id == Users.VENUE_STAFF.id
+    assert venue.name in row.reason
+    (entry,) = _audit(db, RETURNED_TO_PLANNING, event.id)
+    assert entry.details["from_status"] == EventStatus.AWAITING_SAFETY_CHECK
+    assert entry.details["venue_id"] == str(venue.id)
+    notices = _told(db, event.id)
+    assert _recipients(notices) == sorted([Users.COORDINATOR.id, Users.ORGANISER.id])
+    for notice in notices:
+        for text_wanted in (venue.name, "Safety concern", "Wiring"):
+            assert text_wanted in notice.message
 
 
 @pytest.mark.story("9.4", ac=3)
