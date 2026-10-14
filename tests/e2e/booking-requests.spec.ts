@@ -138,7 +138,7 @@ const STAFF_DECIDE = 'Venue Staff decide whether to allow it when they approve.'
 /** Nimbus's Main venue in the seed, already booked (Grand Hall, approved). */
 const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
 /** Supplier Induction Morning's Main venue in the seed, with the event's own times (f12.1.2). */
-const INDUCTION_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000039'
+const INDUCTION_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000046'
 /** Partner Appreciation Dinner's Main venue in the seed, 18:30-22:00 (f12.1.2). */
 const DINNER_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000013'
 

@@ -119,7 +119,7 @@ class Events:
     FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
     # Fix f12.1.2's real send with a setup, PLANNING, dated 3 February 2027.
-    SUPPLIER_INDUCTION = _e(39)  # organiser 2, coordinator 1, one Main venue (Classroom, 30)
+    SUPPLIER_INDUCTION = _e(46)  # organiser 2, coordinator 1, one Main venue (Classroom, 30)
 
 
 class Bookings:
