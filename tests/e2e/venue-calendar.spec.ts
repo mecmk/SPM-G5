@@ -63,7 +63,7 @@ test('9.1 AC2/AC3: an approved booking shows as unavailable, with the event as t
   await expect(page.getByText('Nimbus Developer Conference')).toBeVisible()
 })
 
-test('9.1 AC2: a maintenance period shows as unavailable, with its notes as the label', async ({
+test('9.1 AC2: a maintenance period shows as unavailable, named by its reason, with its notes in the day list', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -72,7 +72,12 @@ test('9.1 AC2: a maintenance period shows as unavailable, with its notes as the 
 
   await goToNovember2026(page)
 
-  await expect(page.getByText('Annual air-con servicing').first()).toBeVisible()
+  // Story 9.4 AC1: the grid's chip names the reason; the notes are in the day's list.
+  await expect(
+    availabilitySection(page).getByRole('button', { name: /^2 November 2026.*Maintenance/ }),
+  ).toBeVisible()
+  await dayButton(page, /^2 November 2026/).click()
+  await expect(dayList(page, /2 Nov 2026/)).toContainText('Annual air-con servicing')
 })
 
 test('9.1 AC12: a venue with nothing booked shows no unavailable days', async ({ page }) => {

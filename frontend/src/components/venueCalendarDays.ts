@@ -1,6 +1,7 @@
 import {
   BOOKING_REASON,
   HELD_REASON,
+  OTHER_UNAVAILABILITY_REASON,
   UNAVAILABILITY_REASON_NAMES,
   type VenueUnavailableWindow,
 } from '../api/venues'
@@ -113,6 +114,14 @@ function isSameSlice(first: DaySlice, second: DaySlice): boolean {
   return first.start === second.start && first.end === second.end
 }
 
+/** Story 9.4 AC1: what a closure's chip says in the month grid, where there is room for a few
+ *  words: its reason's name, or - for Other, which says nothing by itself - its description. The
+ *  day list keeps "Unavailable – <reason>" and the description both. */
+function closureEntryLabel(window: VenueUnavailableWindow): string {
+  if (window.reason === OTHER_UNAVAILABILITY_REASON) return window.label
+  return CLOSURE_REASON_NAMES[window.reason] ?? window.label
+}
+
 function closureKindLabel(reason: string): string {
   return `${UNAVAILABLE_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
@@ -142,6 +151,11 @@ function closureOf(window: VenueUnavailableWindow): DayClosure | null {
     reason: window.reason,
     description: window.description,
   }
+}
+
+function entryLabelOf(window: VenueUnavailableWindow, isBooking: boolean, isHeld: boolean): string {
+  if (isHeld) return `${HELD_ENTRY_PREFIX} – ${window.label}`
+  return isBooking ? window.label : closureEntryLabel(window)
 }
 
 function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
@@ -177,7 +191,7 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
           ? `${HOLD_EXPIRES_LABEL} ${formatDateTime(window.hold_expires_at)}`
           : null,
         sortStart: (bookingSlice ?? blocked).start,
-        entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
+        entryLabel: entryLabelOf(window, isBooking, isHeld),
         closure: closureOf(window),
       },
     ]
