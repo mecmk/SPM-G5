@@ -125,7 +125,7 @@ EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE = (
     "This event has been approved, so its equipment is changed in its Equipment section, not here."
 )
 EQUIPMENT_HOLD_NOT_COVERING_MESSAGE = (
-    "The new dates fall outside the period {items} is held for. Change that equipment in the "
+    "The new dates fall outside the period this equipment is held for: {items}. Change it in the "
     "Equipment section first."
 )
 STALE_EVENT_EDIT_MESSAGE = (
