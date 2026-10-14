@@ -37,6 +37,7 @@ export type EventStatus =
   | 'UNDER_REVIEW'
   | 'CLARIFICATION_REQUESTED'
   | 'PLANNING'
+  | 'AWAITING_SAFETY_CHECK'
   | 'CONFIRMED'
   | 'COMPLETED'
   | 'CANCELLED'

@@ -6,6 +6,7 @@ import {
   EVENTS_INBOX_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
+  SAFETY_CHECKS_PATH,
   VENUE_CATALOGUE_PATH,
 } from '../routes'
 
@@ -67,11 +68,13 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.EVENTS_READ_ALL,
         // Hidden from Event Coordinator (covered by "Events inbox"), from Venue Staff (1.2.2:
         // their view of an event is scoped to the bookings they decide, via BOOKINGS_DECIDE, not
-        // a browse-everything list) and from Technical Support Staff (1.2.3, via EQUIPMENT_MANAGE).
+        // a browse-everything list), from Technical Support Staff (1.2.3, via EQUIPMENT_MANAGE)
+        // and from the Safety Officer (21.1, via SAFETY_REVIEW: they work from the safety queue).
         hiddenWith: [
           PERMISSIONS.EVENTS_REVIEW,
           PERMISSIONS.BOOKINGS_DECIDE,
           PERMISSIONS.EQUIPMENT_MANAGE,
+          PERMISSIONS.SAFETY_REVIEW,
         ],
         story: '7.1',
         isAvailable: false,
@@ -170,6 +173,20 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.EQUIPMENT_MANAGE,
         story: '16.1',
         isAvailable: false,
+      },
+    ],
+  },
+  {
+    label: 'Safety',
+    items: [
+      {
+        to: SAFETY_CHECKS_PATH,
+        label: 'Safety checks',
+        description: 'Events awaiting the operational safety check, with what affects each.',
+        icon: 'check-circle',
+        permission: PERMISSIONS.SAFETY_REVIEW,
+        story: '21.1',
+        isAvailable: true,
       },
     ],
   },

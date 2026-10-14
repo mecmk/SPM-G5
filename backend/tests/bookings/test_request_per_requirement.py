@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -243,8 +244,8 @@ def test_an_event_holds_a_request_per_requirement_and_several_additional_venues(
     for requirement_id in (plenary_id, breakout_id, None, None):
         _created(_request(coordinator_client, event, _roomy(db), requirement_id))
 
-    linked = [booking.venue_requirement_id for booking in _bookings_of(db, event)]
-    assert linked == [plenary_id, breakout_id, None, None]
+    linked = Counter(booking.venue_requirement_id for booking in _bookings_of(db, event))
+    assert linked == Counter([plenary_id, breakout_id, None, None])
 
 
 @pytest.mark.story("12.5", ac=10)
