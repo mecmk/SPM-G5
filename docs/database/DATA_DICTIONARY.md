@@ -33,7 +33,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_facilities`](#venue_facilities) | 8.2, 8.3, 10.3, 11.1 | Which facilities each venue offers (many-to-many) |
 | Venues | [`venue_layouts`](#venue_layouts) | 8.2, 8.3, 10.3, 11.1 | Which room layouts each venue supports (many-to-many) |
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
-| Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.4, 10.1, 14.1 | Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason) |
+| Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.4, 10.1, 14.1 | Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason), each with a description |
 | Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
@@ -302,7 +302,7 @@ Which accessibility features each venue provides (many-to-many).
 
 **Stories:** 9.1, 9.4, 10.1, 14.1
 
-Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason). Shown as unavailable on the calendar and excluded from availability searches. Periods of one venue may overlap.
+Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason), each with a description. Shown as unavailable on the calendar and excluded from availability searches. Periods of one venue may overlap.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -310,8 +310,8 @@ Blocks of time a venue cannot be booked, set by Venue Staff even while events ar
 | `venue_id` | `uuid` | no | - | FK → `venues.id` | FK -> venues.id. |
 | `starts_at` | `timestamp with time zone` | no | - | - | Start of the blocked period (inclusive). |
 | `ends_at` | `timestamp with time zone` | no | - | - | End of the blocked period (exclusive). Must be after starts_at (story 9.4 AC5). |
-| `reason` | `text` | no | - | - | Why the venue is blocked: MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY (shown as Safety concern) or OTHER, which needs a description (story 9.4 AC1). |
-| `notes` | `text` | yes | - | - | The description Venue Staff gave. Required when the reason is OTHER (ck_venue_unavailability_other_description), optional for the rest. |
+| `reason` | `text` | no | - | - | Why the venue is blocked: MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY (shown as Safety concern) or OTHER (story 9.4 AC1). |
+| `notes` | `text` | yes | - | - | The description Venue Staff gave, which every period needs (ck_venue_unavailability_description, story 9.4 AC1). |
 | `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who recorded it (story 9.4 AC9). NULL for a period written by the seed. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
@@ -322,7 +322,7 @@ Allowed values:
 
 Rules and indexes:
 
-- check `ck_venue_unavailability_other_description`: `CHECK (((reason <> 'OTHER'::text) OR ((notes IS NOT NULL) AND (notes ~ '\S'::text))))`
+- check `ck_venue_unavailability_description`: `CHECK (((notes IS NOT NULL) AND (notes ~ '\S'::text)))`
 - check `ck_venue_unavailability_period`: `CHECK ((ends_at > starts_at))`
 - index `ix_venue_unavailability_venue_period`: `btree (venue_id, starts_at, ends_at)`
 
