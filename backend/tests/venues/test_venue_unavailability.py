@@ -3,6 +3,7 @@
 Slice 1 (migration 020): the reasons a period can carry.
 Slice 2: add, edit, end and remove a period, the preview of what it would affect, and who may.
 Slice 3 (migration 021): the bookings a period affects are marked, and the mark follows it.
+Slice 4: the event goes back to Planning and its coordinator and organiser are told.
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
      Equipment failure, Renovation, Safety concern or Other (a description is required for
@@ -15,12 +16,14 @@ and the calendar and the booking request name each reason.
 
 from __future__ import annotations
 
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -28,10 +31,12 @@ from app.auth.models import User
 from app.bookings import service as booking_service
 from app.bookings.models import VenueBooking
 from app.common.audit import AuditLog
-from app.events.models import Event, EventStatus
+from app.events.models import Event, EventStatus, EventStatusHistory
 from app.notifications.models import Notification
+from app.notifications.service import NotificationType
 from app.venues import service as venue_service
-from app.venues.models import VenueUnavailabilityPeriod
+from app.venues.models import Venue, VenueUnavailabilityPeriod
+from app.venues.schemas import VenueUnavailabilityCreate
 from tests.support.factories import make_booking, make_event, make_unavailability, make_venue
 from tests.support.seed import Users
 
@@ -1631,3 +1636,458 @@ def test_the_preview_says_which_bookings_are_already_marked(db, venue_staff_clie
     assert response.status_code == 200, response.text
     flags = {entry["booking_id"]: entry["already_marked"] for entry in response.json()}
     assert flags == {str(marked.id): True, str(fresh.id): False}
+
+
+# =====================================================================================
+# Slice 4: the event goes back to Planning, and its coordinator and organiser are told.
+#
+# For each event with a booking newly marked in a save (``RecheckResult.newly_marked``):
+#   * CONFIRMED -> PLANNING, once, with an event_status_history row (its reason naming the
+#     venue) and an audit entry EVENT_RETURNED_TO_PLANNING; PLANNING stays; nothing else moves.
+#   * one BOOKING_VENUE_UNAVAILABLE notification each to the event's assigned coordinator (when
+#     it has one) and its organiser, naming the venue, the period and the reason. The Venue Staff
+#     member who saved is never told. Clearing a mark sends nothing and leaves the status alone.
+# Awaiting Safety Check -> Planning (plan case 3.4) waits for story 21.1 and is not written.
+# =====================================================================================
+VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
+RETURNED_TO_PLANNING = "EVENT_RETURNED_TO_PLANNING"
+
+
+def _event_for(db: Session, status: str = EventStatus.PLANNING, **overrides) -> Event:
+    """An event with the seed coordinator and organiser, unless overridden."""
+    overrides.setdefault("assigned_coordinator_id", Users.COORDINATOR.id)
+    return make_event(db, status=status, **overrides)
+
+
+def _pending_of(
+    db: Session, event: Event, venue_id: uuid.UUID, starts_at: datetime, **kwargs
+) -> VenueBooking:
+    return make_booking(
+        db,
+        venue_id=venue_id,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=2),
+        event_id=event.id,
+        **kwargs,
+    )
+
+
+def _told(db: Session, event_id: uuid.UUID) -> list[Notification]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(Notification)
+            .where(
+                Notification.notification_type == VENUE_UNAVAILABLE,
+                Notification.event_id == event_id,
+            )
+            .order_by(Notification.created_at, Notification.id)
+        )
+    )
+
+
+def _recipients(notices: list[Notification]) -> list[uuid.UUID]:
+    return sorted(notice.recipient_id for notice in notices)
+
+
+def _status_of(db: Session, event_id: uuid.UUID) -> str:
+    db.expire_all()
+    return db.get(Event, event_id).status
+
+
+def _history(db: Session, event_id: uuid.UUID) -> list[EventStatusHistory]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(EventStatusHistory)
+            .where(EventStatusHistory.event_id == event_id)
+            .order_by(EventStatusHistory.changed_at, EventStatusHistory.id)
+        )
+    )
+
+
+def _returned(db: Session, event_id: uuid.UUID) -> list[EventStatusHistory]:
+    return [
+        row
+        for row in _history(db, event_id)
+        if (row.from_status, row.to_status) == (EventStatus.CONFIRMED, EventStatus.PLANNING)
+    ]
+
+
+def _on_singapore_date(moment: datetime) -> str:
+    """The date as a notice words it: ``4 Mar 2027``, in Singapore time."""
+    local = moment.astimezone(SGT)
+    return f"{local.day} {local:%b %Y}"
+
+
+# --- AC3: the event's status -----------------------------------------------------------------
+@pytest.mark.story("9.4", ac=3)
+def test_a_planning_event_stays_in_planning(db, venue_staff_client):
+    """Plan 3.2. cannot fail first: nothing changes an event's status today, so it passes before
+    the change; it is paired with the Confirmed case below, which carries the red. No history
+    row, no audit entry."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.PLANNING)
+    _pending_of(db, event, venue.id, _day(3))
+    history_before = len(_history(db, event.id))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    assert len(_history(db, event.id)) == history_before
+    assert _audit(db, RETURNED_TO_PLANNING, event.id) == []
+
+
+@pytest.mark.story("9.4", ac=3)
+def test_a_confirmed_event_goes_back_to_planning(db, venue_staff_client):
+    """Plan 3.3: with a status-history row naming the venue, written by the Venue Staff member,
+    and an audit entry that says where it came from. Its booking is still approved: the event is
+    not cancelled and keeps its details."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.CONFIRMED, name="Nimbus Developer Conference")
+    booking = _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    (row,) = _returned(db, event.id)
+    assert row.changed_by_id == Users.VENUE_STAFF.id
+    assert venue.name in row.reason
+    (entry,) = _audit(db, RETURNED_TO_PLANNING, event.id)
+    assert entry.actor_id == Users.VENUE_STAFF.id
+    assert entry.details["from_status"] == EventStatus.CONFIRMED
+    assert entry.details["venue_id"] == str(venue.id)
+    db.expire_all()
+    assert db.get(VenueBooking, booking.id).status == "APPROVED"
+    assert db.get(Event, event.id).name == "Nimbus Developer Conference"
+
+
+@pytest.mark.story("9.4", ac=3)
+def test_two_marked_bookings_of_one_event_move_it_once(db, venue_staff_client):
+    """Plan 3.5b: one status change, one history row, one audit entry."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.CONFIRMED)
+    _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+    _pending_of(db, event, venue.id, _day(4), status="APPROVED")
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    assert len(_returned(db, event.id)) == 1
+    assert len(_audit(db, RETURNED_TO_PLANNING, event.id)) == 1
+
+
+@pytest.mark.story("9.4", ac=3)
+def test_an_event_whose_booking_is_not_reached_is_not_moved(db, venue_staff_client):
+    """Plan 3.3's other half. cannot fail first: passes on a no-op; paired with 3.3 above."""
+    venue = make_venue(db)
+    reached = _event_for(db, EventStatus.CONFIRMED)
+    untouched = _event_for(db, EventStatus.CONFIRMED)
+    _pending_of(db, reached, venue.id, _day(3), status="APPROVED")
+    _pending_of(db, untouched, venue.id, _day(20), status="APPROVED")
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _status_of(db, reached.id) == EventStatus.PLANNING
+    assert _status_of(db, untouched.id) == EventStatus.CONFIRMED
+    assert _told(db, untouched.id) == []
+
+
+# --- AC4: the notifications ------------------------------------------------------------------
+@pytest.mark.story("9.4", ac=4)
+def test_the_coordinator_and_the_organiser_are_each_told_naming_venue_period_and_reason(
+    db, venue_staff_client
+):
+    """Plan 4.1: the type is defined, one notice each, about the event, with the venue, the period
+    and the reason - and the description when there is one."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    _pending_of(db, event, venue.id, _day(3))
+    starts_at, ends_at = _day(2), _day(7)
+
+    _add(
+        venue_staff_client,
+        venue.id,
+        starts_at,
+        ends_at,
+        reason="RENOVATION",
+        description="Floor relaid",
+    )
+
+    assert NotificationType.BOOKING_VENUE_UNAVAILABLE.value == VENUE_UNAVAILABLE
+    notices = _told(db, event.id)
+    assert _recipients(notices) == sorted([Users.COORDINATOR.id, Users.ORGANISER.id])
+    for notice in notices:
+        assert venue.name in notice.title
+        for text_wanted in (
+            venue.name,
+            _on_singapore_date(starts_at),
+            _on_singapore_date(ends_at),
+            "Renovation",
+            "Floor relaid",
+        ):
+            assert text_wanted in notice.message
+        assert (notice.related_entity_type, notice.related_entity_id) == ("event", event.id)
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_two_newly_marked_bookings_of_one_event_tell_it_once(db, venue_staff_client):
+    """Plan 4.2 (D11, N2): one notice each to the coordinator and the organiser, not one per
+    booking."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    _pending_of(db, event, venue.id, _day(3))
+    _pending_of(db, event, venue.id, _day(4))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert len(_told(db, event.id)) == 2
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_an_event_with_no_coordinator_still_tells_its_organiser(db, venue_staff_client):
+    """Plan 4.3: nobody is assigned yet, so the organiser alone is told, and nothing fails."""
+    venue = make_venue(db)
+    event = _event_for(db, assigned_coordinator_id=None)
+    _pending_of(db, event, venue.id, _day(3))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _recipients(_told(db, event.id)) == [Users.ORGANISER.id]
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_after_a_reassignment_the_new_coordinator_is_told(db, venue_staff_client):
+    """Plan 4.4 (20.1 AC4): whoever coordinates the event when the period is saved, not whoever
+    did when the booking was requested."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    _pending_of(db, event, venue.id, _day(3))
+    event.assigned_coordinator_id = Users.COORDINATOR_2.id
+    db.flush()
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _recipients(_told(db, event.id)) == sorted([Users.COORDINATOR_2.id, Users.ORGANISER.id])
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_only_the_events_own_people_are_told_and_never_the_one_who_saved(db, venue_staff_client):
+    """Plan 4.5. cannot fail first: nothing notifies today; paired with the notice above. Other
+    users get none, and when the Venue Staff member who saves is also the event's assigned
+    coordinator, they are not told of their own action."""
+    venue = make_venue(db)
+    event = _event_for(db, assigned_coordinator_id=Users.VENUE_STAFF.id)
+    _pending_of(db, event, venue.id, _day(3))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _recipients(_told(db, event.id)) == [Users.ORGANISER.id]
+    everyone_else = [
+        Users.ORGANISER_2.id,
+        Users.COORDINATOR.id,
+        Users.COORDINATOR_2.id,
+        Users.TECH_SUPPORT.id,
+        Users.ATTENDEE.id,
+        Users.VENUE_STAFF.id,
+    ]
+    told = db.scalars(
+        select(Notification.recipient_id).where(
+            Notification.notification_type == VENUE_UNAVAILABLE,
+            Notification.recipient_id.in_(everyone_else),
+        )
+    ).all()
+    assert list(told) == []
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_a_refused_save_tells_nobody(db, login_as):
+    """Plan 4.6. cannot fail first: no route notifies today; paired with the notice above. A
+    save refused for its body (422), or by role (403), leaves no notification and no mark."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.CONFIRMED)
+    booking = _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+
+    refused_body = login_as(Users.VENUE_STAFF).post(
+        _url(venue.id), json=_body(_day(2), _day(7), reason="OTHER", description=None)
+    )
+    refused_role = login_as(Users.COORDINATOR).post(_url(venue.id), json=_body(_day(2), _day(7)))
+
+    assert (refused_body.status_code, refused_role.status_code) == (422, 403)
+    assert _told(db, event.id) == []
+    assert _status_of(db, event.id) == EventStatus.CONFIRMED
+    assert _marked_at(db, booking.id) is None
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_a_reason_only_edit_tells_nobody_and_a_later_save_tells_again(db, venue_staff_client):
+    """Plan 4.7 (A6): editing the reason or description of a period that affects the same
+    bookings sends nothing; a later save that newly affects another booking of the same event
+    sends that event's people another notice; bookings already marked are not told twice."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    _pending_of(db, event, venue.id, _day(3))
+    later = _pending_of(db, event, venue.id, _day(12))
+    period = _add(venue_staff_client, venue.id, _day(2), _day(7))
+    period_id = uuid.UUID(period["id"])
+    assert len(_told(db, event.id)) == 2
+
+    venue_staff_client.patch(_url(venue.id, period_id), json={"reason": "SAFETY"})
+    venue_staff_client.patch(_url(venue.id, period_id), json={"description": "Rewiring"})
+    assert len(_told(db, event.id)) == 2
+
+    extended = venue_staff_client.patch(
+        _url(venue.id, period_id), json={"ends_at": _day(14).isoformat()}
+    )
+
+    assert extended.status_code == 200, extended.text
+    assert _marked_at(db, later.id) is not None
+    assert len(_told(db, event.id)) == 4
+    assert _recipients(_told(db, event.id)) == sorted(
+        [Users.COORDINATOR.id, Users.ORGANISER.id] * 2
+    )
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_extending_tells_only_the_event_of_the_booking_it_newly_reaches(db, venue_staff_client):
+    """Plan 6.4b: the event already told is not told again."""
+    venue = make_venue(db)
+    inside = _event_for(db)
+    beyond = _event_for(db)
+    _pending_of(db, inside, venue.id, _day(3))
+    _pending_of(db, beyond, venue.id, _day(8))
+    period = _add(venue_staff_client, venue.id, _day(2), _day(5))
+    assert len(_told(db, inside.id)) == 2 and _told(db, beyond.id) == []
+
+    venue_staff_client.patch(
+        _url(venue.id, uuid.UUID(period["id"])), json={"ends_at": _day(10).isoformat()}
+    )
+
+    assert len(_told(db, inside.id)) == 2
+    assert len(_told(db, beyond.id)) == 2
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_clearing_a_mark_sends_nothing_and_leaves_the_status_alone(db, venue_staff_client):
+    """Plan 6.7 (D6, D11). cannot fail first: nothing changes status or notifies on clearing
+    today; paired with 3.3 above, which puts the event in Planning for the clearing to leave."""
+    venue = make_venue(db)
+    event = _event_for(db, EventStatus.CONFIRMED)
+    _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+    period = _add(venue_staff_client, venue.id, _day(2), _day(7))
+    notices = len(_told(db, event.id))
+    history = len(_history(db, event.id))
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+
+    removed = venue_staff_client.delete(_url(venue.id, uuid.UUID(period["id"])))
+
+    assert removed.status_code == 204, removed.text
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    assert len(_told(db, event.id)) == notices == 2
+    assert len(_history(db, event.id)) == history
+
+
+@pytest.mark.story("9.4", ac=8)
+def test_a_completed_events_status_and_notices_are_untouched(db, venue_staff_client):
+    """Plan 8.1b. cannot fail first: its booking is not a candidate, so nothing reaches the
+    event; paired with the notice above, whose period covers both."""
+    venue = make_venue(db)
+    now = datetime.now(UTC)
+    completed = _event_for(db, EventStatus.COMPLETED)
+    _pending_of(db, completed, venue.id, now - timedelta(hours=1), status="APPROVED")
+    reached = _event_for(db)
+    _pending_of(db, reached, venue.id, _day(1))
+
+    _add(venue_staff_client, venue.id, _day(-1), _day(3))
+
+    assert _status_of(db, completed.id) == EventStatus.COMPLETED
+    assert _told(db, completed.id) == []
+    assert len(_told(db, reached.id)) == 2
+
+
+# --- 10.5: the save and the confirmation of one event, at the same moment ---------------------
+@pytest.mark.story("9.4", ac=3)
+def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engine):
+    """Plan 10.5 (N1). Real concurrent transactions, so this test commits and cleans up after
+    itself. The save returns a Confirmed event to Planning; at the same moment another
+    transaction confirms that event again, which fires trg_events_complete_venue_holds and
+    updates the event's approved bookings. The save locks the event before its bookings, as the
+    confirmation does, so neither waits on the other for ever: both finish within the timeout,
+    the booking is marked, the event's return to Planning is recorded, and the hold the
+    confirmation completes stays completed."""
+    expiry = datetime.now(UTC) + timedelta(days=1)
+    with Session(engine) as session:
+        venue = make_venue(session)
+        event = _event_for(session, EventStatus.CONFIRMED)
+        booking = _pending_of(
+            session,
+            event,
+            venue.id,
+            _day(3),
+            status="APPROVED",
+            hold_expires_at=expiry,
+        )
+        session.commit()
+        venue_id, event_id, booking_id = venue.id, event.id, booking.id
+    start = threading.Barrier(2)
+    data = VenueUnavailabilityCreate(
+        starts_at=_day(2), ends_at=_day(7), reason="MAINTENANCE", description=None
+    )
+
+    def save() -> None:
+        with Session(engine) as session:
+            staff = session.get(User, STAFF_ID)
+            start.wait()
+            venue_service.add_unavailability(
+                session, venue_id, data, actor=staff, now=datetime.now(UTC)
+            )
+
+    def confirm() -> None:
+        with Session(engine) as session:
+            start.wait()
+            session.execute(
+                update(Event).where(Event.id == event_id).values(status=EventStatus.PLANNING)
+            )
+            session.execute(
+                update(Event).where(Event.id == event_id).values(status=EventStatus.CONFIRMED)
+            )
+            session.commit()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            saving = pool.submit(save)
+            confirming = pool.submit(confirm)
+            saving.result(timeout=30)
+            confirming.result(timeout=30)
+
+        with Session(engine) as session:
+            row = session.get(VenueBooking, booking_id)
+            assert row.venue_unavailable_marked_at is not None
+            assert row.hold_completed_at is not None
+            assert session.get(Event, event_id).status in (
+                EventStatus.PLANNING,
+                EventStatus.CONFIRMED,
+            )
+            returned = [
+                history
+                for history in session.scalars(
+                    select(EventStatusHistory).where(EventStatusHistory.event_id == event_id)
+                )
+                if history.changed_by_id == STAFF_ID
+                and (history.from_status, history.to_status)
+                == (EventStatus.CONFIRMED, EventStatus.PLANNING)
+            ]
+            assert len(returned) == 1
+    finally:
+        with Session(engine) as session:
+            session.execute(
+                delete(AuditLog).where(
+                    AuditLog.entity_id.in_([booking_id, event_id])
+                    | (AuditLog.details["venue_id"].astext == str(venue_id))
+                )
+            )
+            session.execute(delete(Notification).where(Notification.event_id == event_id))
+            session.execute(delete(VenueBooking).where(VenueBooking.id == booking_id))
+            session.execute(delete(Event).where(Event.id == event_id))
+            session.execute(delete(Venue).where(Venue.id == venue_id))
+            session.commit()
