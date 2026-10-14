@@ -1008,12 +1008,19 @@ def recheck_venue_bookings(
     time it was marked; one no longer overlapped is cleared. A booking outside the candidates is
     left as it is: a leftover mark on a closed booking is history.
 
-    The candidates' events are locked first, then the candidates, each ``FOR UPDATE`` in id order
-    and re-read (``populate_existing``), so a booking another transaction is approving is waited
-    for and marked as it then stands (AC10), a confirmation of one of the events, which takes
-    the event and then its bookings, cannot deadlock with this, and two re-checks of one venue
-    lock in the same order. The caller commits; each change leaves
-    an audit row."""
+    The candidates' events are locked first, then the candidates, each in id order and re-read
+    (``populate_existing``), so a booking another transaction is approving is waited for and
+    marked as it then stands (AC10), a confirmation of one of the events, which takes the event
+    and then its bookings, cannot deadlock with this, and two re-checks of one venue lock in the
+    same order. The events are locked ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: that still
+    serialises with an UPDATE of the event, such as a confirmation, but not with the foreign-key
+    checks (``FOR KEY SHARE``) of inserts that reference the event - a notification, a history
+    row. An approval holds its booking and then notifies, so a stronger event lock would wait on
+    the approval, which waits on the booking this waits for: a deadlock.
+
+    The bookings are locked ``FOR UPDATE``, the default, and could be ``FOR NO KEY UPDATE`` too,
+    since only a non-key column changes; nothing needs the difference, and a test shows if it
+    ever does. The caller commits; each change leaves an audit row."""
     overlapped = (
         select(VenueUnavailabilityPeriod.id)
         .where(
@@ -1042,7 +1049,7 @@ def recheck_venue_bookings(
         select(Event)
         .where(Event.id.in_(event_ids))
         .order_by(Event.id)
-        .with_for_update(of=Event)
+        .with_for_update(of=Event, key_share=True)
         .execution_options(populate_existing=True)
     )
     rows = db.execute(
