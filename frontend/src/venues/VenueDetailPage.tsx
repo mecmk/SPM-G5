@@ -8,6 +8,7 @@ import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
+import type { DayClosure } from '../components/venueCalendarDays'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH, venueRequestPath, venueSwitchPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
@@ -16,6 +17,7 @@ import { describeCoveredRequirement, isBooked, requirementName } from '../shared
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
 import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
+import { ClosureActions } from './ClosureActions'
 
 const DAY_PANEL_ID = 'venue-calendar-day-panel'
 
@@ -67,8 +69,26 @@ export function VenueDetailPage() {
   const [closureVersion, setClosureVersion] = useState(0)
   const calendar = useVenueCalendar(loadWindows, new Date(), String(closureVersion))
 
+  /** Story 9.4 AC6: the closure whose row's Edit was pressed, while the form is open on it. */
+  const [editingClosure, setEditingClosure] = useState<DayClosure | null>(null)
+
   function handleClosureSaved() {
     setClosureVersion((version) => version + 1)
+  }
+
+  function handleEditFinished() {
+    setEditingClosure(null)
+  }
+
+  function renderClosureActions(closure: DayClosure) {
+    return (
+      <ClosureActions
+        venueId={venueId}
+        closure={closure}
+        onEdit={setEditingClosure}
+        onChanged={handleClosureSaved}
+      />
+    )
   }
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
@@ -288,9 +308,12 @@ export function VenueDetailPage() {
             </p>
             {canManageUnavailability && (
               <VenueUnavailabilitySection
+                key={editingClosure?.id ?? 'new'}
                 venueId={venue.id}
                 venueName={venue.name}
                 onSaved={handleClosureSaved}
+                editing={editingClosure}
+                onEditFinished={handleEditFinished}
               />
             )}
             <VenueAvailabilityCalendar
@@ -300,6 +323,7 @@ export function VenueDetailPage() {
               error={calendar.error}
               isLoading={calendar.isLoading}
               dayPanelId={DAY_PANEL_ID}
+              renderClosureActions={canManageUnavailability ? renderClosureActions : undefined}
             />
           </section>
         </div>

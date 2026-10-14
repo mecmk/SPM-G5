@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { VenueUnavailableWindow } from '../api/venues'
 import { Calendar, type CalendarLegendItem } from './Calendar'
 import { VenueDayPanel } from './VenueDayPanel'
@@ -7,6 +7,7 @@ import {
   groupDayItemsByDate,
   HELD_LABEL,
   toCalendarEntry,
+  type DayClosure,
 } from './venueCalendarDays'
 
 // Story 9.1 AC2: a pending request that holds the venue has a style of its own.
@@ -27,6 +28,8 @@ export interface VenueAvailabilityCalendarProps {
   dayPanelId: string
   /** Story 13.1.3 AC2: a day (`YYYY-MM-DD`) whose list is open on arrival, once it has items. */
   initialOpenDay?: string | null
+  /** Story 9.4 AC6: what Venue Staff can do to a closure from its row in the day list. */
+  renderClosureActions?: (closure: DayClosure) => ReactNode
 }
 
 /**
@@ -42,6 +45,7 @@ export function VenueAvailabilityCalendar({
   isLoading,
   dayPanelId,
   initialOpenDay = null,
+  renderClosureActions,
 }: VenueAvailabilityCalendarProps) {
   /** Story 9.1 AC5: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
   const [openDay, setOpenDay] = useState<string | null>(initialOpenDay)
@@ -109,6 +113,7 @@ export function VenueAvailabilityCalendar({
           date={openDay}
           items={openDayItems}
           scrollIntoView={hasPickedDay}
+          renderClosureActions={renderClosureActions}
         />
       )}
     </>

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { formatApiError } from '../api/client'
 import {
   addUnavailability,
+  editUnavailability,
   fetchAffectedBookings,
   OTHER_UNAVAILABILITY_REASON,
   UNAVAILABILITY_REASON_NAMES,
@@ -12,14 +13,20 @@ import {
 import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
+import type { DayClosure } from '../components/venueCalendarDays'
 import { bookingRequestPath } from '../routes'
-import { formatDateTime, inputToInstant } from '../shared/format'
+import { formatDateTime, instantToInput, inputToInstant } from '../shared/format'
 
 export interface VenueUnavailabilitySectionProps {
   venueId: string
   venueName: string
   /** Called once a closure is saved, so the page loads its calendar again. */
   onSaved: () => void
+  /** The closure being edited, with the form open on it; null to add one. The page keys this
+   *  section on the closure, so the form starts from it. */
+  editing?: DayClosure | null
+  /** Called when an edit is saved or abandoned, so the page stops editing. */
+  onEditFinished?: () => void
 }
 
 const REASON_CODES = Object.keys(UNAVAILABILITY_REASON_NAMES) as UnavailabilityReason[]
@@ -40,17 +47,25 @@ interface PreviewResult {
  * such as an end not after the start or an Other without a description, shows the backend's
  * sentence and nothing is saved. The page only shows this to a role holding the manage permission;
  * the backend refuses everyone else.
+ *
+ * Story 9.4 AC6: the same form edits a closure - its start, end, reason and description - opened
+ * from the closure's row. The bookings its new period would affect are listed the same way, those
+ * already flagged marked as such, and only bookings it would newly flag ask for a confirmation.
  */
 export function VenueUnavailabilitySection({
   venueId,
   venueName,
   onSaved,
+  editing = null,
+  onEditFinished,
 }: VenueUnavailabilitySectionProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [starts, setStarts] = useState('')
-  const [ends, setEnds] = useState('')
-  const [reason, setReason] = useState<UnavailabilityReason>(DEFAULT_REASON)
-  const [description, setDescription] = useState('')
+  const [isOpen, setIsOpen] = useState(editing !== null)
+  const [starts, setStarts] = useState(editing === null ? '' : instantToInput(editing.startsAt))
+  const [ends, setEnds] = useState(editing === null ? '' : instantToInput(editing.endsAt))
+  const [reason, setReason] = useState<UnavailabilityReason>(
+    editing === null ? DEFAULT_REASON : (editing.reason as UnavailabilityReason),
+  )
+  const [description, setDescription] = useState(editing?.description ?? '')
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [isConfirming, setIsConfirming] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -82,6 +97,7 @@ export function VenueUnavailabilitySection({
 
   const isPreviewCurrent = preview !== null && preview.key === previewKey
   const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
+  const newlyAffected = affected.filter((booking) => !booking.already_marked)
   const isOther = reason === OTHER_UNAVAILABILITY_REASON
 
   function resetForm() {
@@ -102,6 +118,7 @@ export function VenueUnavailabilitySection({
   function close() {
     resetForm()
     setIsOpen(false)
+    if (editing !== null) onEditFinished?.()
   }
 
   async function save() {
@@ -109,12 +126,14 @@ export function VenueUnavailabilitySection({
     setIsSaving(true)
     setSaveError(null)
     try {
-      await addUnavailability(venueId, venueName, {
+      const input = {
         starts_at: period.startsAt,
         ends_at: period.endsAt,
         reason,
         description: description.trim() === '' ? null : description.trim(),
-      })
+      }
+      if (editing === null) await addUnavailability(venueId, venueName, input)
+      else await editUnavailability(venueId, editing.id, input)
       close()
       onSaved()
     } catch (err) {
@@ -127,7 +146,7 @@ export function VenueUnavailabilitySection({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (affected.length > 0) {
+    if (newlyAffected.length > 0) {
       setSaveError(null)
       setIsConfirming(true)
       return
@@ -151,7 +170,12 @@ export function VenueUnavailabilitySection({
 
   return (
     <>
-      <form className="stack" onSubmit={handleSubmit} noValidate aria-label="Mark unavailable">
+      <form
+        className="stack"
+        onSubmit={handleSubmit}
+        noValidate
+        aria-label={editing === null ? 'Mark unavailable' : 'Edit closure'}
+      >
         <div className="form-grid">
           <label>
             Starts
@@ -246,7 +270,7 @@ export function VenueUnavailabilitySection({
 
         <div className="cluster">
           <button type="submit" className="brand" disabled={isSaving || period === null}>
-            Save closure
+            {editing === null ? 'Save closure' : 'Save changes'}
           </button>
           <button type="button" className="secondary" onClick={close} disabled={isSaving}>
             Cancel
@@ -269,7 +293,7 @@ export function VenueUnavailabilitySection({
             back to Planning for its coordinator to find another venue.
           </p>
           <ul>
-            {affected.map((booking) => (
+            {newlyAffected.map((booking) => (
               <li key={booking.booking_id}>{booking.event_name}</li>
             ))}
           </ul>

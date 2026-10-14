@@ -46,6 +46,16 @@ interface DaySlice {
  * Story 9.1 AC5/AC9: one window's part of one Singapore day, ready to list. A booking that runs
  * over several days has one of these on each, holding only the part that falls on that day.
  */
+/** Story 9.4 AC6: the closure a day item is a part of, so Venue Staff can edit or end it from
+ *  the day it falls on. `description` is the closure's own text, or null when it has none. */
+export interface DayClosure {
+  id: string
+  startsAt: string
+  endsAt: string
+  reason: string
+  description: string | null
+}
+
 export interface DayItem {
   id: string
   /** `YYYY-MM-DD`, Singapore time. */
@@ -71,6 +81,8 @@ export interface DayItem {
   sortStart: number
   /** The item as a calendar cell shows it. */
   entryLabel: string
+  /** The closure this item is a part of; null for a booking or a hold. */
+  closure: DayClosure | null
 }
 
 function startOfDay(date: string): number {
@@ -119,6 +131,20 @@ function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string 
   return hasSetup ? TURNAROUND_SETUP_LABEL : TURNAROUND_TEARDOWN_LABEL
 }
 
+/** The closure a calendar window is, or null for a booking or a hold. The window's label is the
+ *  closure's description, or the reason's name when it has none. */
+function closureOf(window: VenueUnavailableWindow): DayClosure | null {
+  if (window.id === null) return null
+  const hasDescription = window.label !== CLOSURE_REASON_NAMES[window.reason]
+  return {
+    id: window.id,
+    startsAt: window.starts_at,
+    endsAt: window.ends_at,
+    reason: window.reason,
+    description: hasDescription ? window.label : null,
+  }
+}
+
 function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
   return eachDate(window.starts_at, window.ends_at).flatMap((date) => {
     const dayStart = startOfDay(date)
@@ -153,6 +179,7 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
           : null,
         sortStart: (bookingSlice ?? blocked).start,
         entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
+        closure: closureOf(window),
       },
     ]
   })
