@@ -1083,9 +1083,17 @@ def _planning_event(db: Session) -> tuple[Event, uuid.UUID]:
     return event, requirement_id
 
 
-def _book(db: Session, event: Event, requirement_id: uuid.UUID | None, *, status: str = "APPROVED"):
+def _book(
+    db: Session,
+    event: Event,
+    requirement_id: uuid.UUID | None,
+    *,
+    status: str = "APPROVED",
+    people: int = BOOKED_PEOPLE,
+):
     """A booking of a fresh venue for ``requirement_id``, recording the requirement as it is now:
-    the event's period, ``BOOKED_PEOPLE`` and ``LAYOUT`` - the values Venue Staff decided on."""
+    the event's period, ``people`` and ``LAYOUT`` - the values Venue Staff decided on. With no
+    requirement it is an additional venue (12.5), which asks for no layout."""
     venue = make_venue(db, capacity=200, layouts={LAYOUT: None})
     expiry = {} if status == "PENDING" else {"hold_expires_at": event.starts_at}
     return make_booking(
@@ -1096,8 +1104,8 @@ def _book(db: Session, event: Event, requirement_id: uuid.UUID | None, *, status
         status=status,
         event_id=event.id,
         venue_requirement_id=requirement_id,
-        expected_attendance=BOOKED_PEOPLE,
-        required_layout_code=LAYOUT,
+        expected_attendance=people,
+        required_layout_code=None if requirement_id is None else LAYOUT,
         **expiry,
     )
 
@@ -1372,17 +1380,67 @@ def test_only_a_pending_or_approved_booking_holds_its_requirement(
 
 
 @pytest.mark.story("7.2", ac=14)
-def test_a_booking_linked_to_no_requirement_does_not_hold_one(login_as, db: Session):
-    """A booking can have lost its requirement (migration 017 sets it to null on delete)."""
-    event, _ = _planning_event(db)
-    _book(db, event, None)
+def test_a_requirement_with_no_people_of_its_own_is_held_to_the_events_attendance(
+    login_as, db: Session
+):
+    """A requirement with no number of its own was booked for the event's attendance
+    (``people_to_hold``), so raising that attendance no longer fits the booking."""
+    event, requirement_id = _planning_event(db)
+    db.execute(
+        text("UPDATE venue_requirements SET capacity = NULL WHERE id = :id"), {"id": requirement_id}
+    )
+    booking = _book(db, event, requirement_id, people=event.expected_attendance)
     db.commit()
     client = login_as(Users.COORDINATOR)
     read = _read(client, event.id)
 
-    response = _correct(client, read, **_requirement_change(read, capacity=BOOKED_PEOPLE + 1))
+    response = _correct(client, read, expected_attendance=event.expected_attendance + 1)
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
+    assert booking.venue.name in response.json()["detail"]
+    assert _read(client, event.id)["expected_attendance"] == event.expected_attendance
+
+
+@pytest.mark.story("7.2", ac=14)
+@pytest.mark.parametrize(
+    "case", ["moved_an_hour_later", "one_more_person", "requirement_needs_more_people"]
+)
+def test_an_additional_venue_is_held_to_the_events_own_period_and_attendance(
+    login_as, db: Session, case
+):
+    """An additional venue (12.5, no requirement) was booked for the event's own period and
+    attendance, so it is those that have to keep fitting; a requirement's own needs do not."""
+    event, _ = _planning_event(db)
+    booking = _book(db, event, None, people=event.expected_attendance)
+    db.commit()
+    before = _booking_row(db, booking.id)
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    hour = timedelta(hours=1)
+    moved = {
+        "starts_at": (event.starts_at + hour).isoformat(),
+        "ends_at": (event.ends_at + hour).isoformat(),
+    }
+    change, is_refused = {
+        "moved_an_hour_later": ({**moved, **_requirement_change(read, **moved)}, True),
+        "one_more_person": ({"expected_attendance": event.expected_attendance + 1}, True),
+        "requirement_needs_more_people": (
+            _requirement_change(read, capacity=BOOKED_PEOPLE + 1),
+            False,
+        ),
+    }[case]
+
+    response = _correct(client, read, **change)
+
+    assert response.status_code == (409 if is_refused else 200), response.text
+    assert (booking.venue.name in response.text) is is_refused
+    if is_refused:
+        after = _read(client, event.id)
+        assert (after["starts_at"], after["expected_attendance"]) == (
+            read["starts_at"],
+            read["expected_attendance"],
+        )
+    assert _booking_row(db, booking.id) == before
 
 
 # AC15: after approval, equipment is changed in its own section, and its holds bound the dates.
@@ -1407,6 +1465,32 @@ def test_the_equipment_cannot_be_changed_here_after_approval(login_as, db: Sessi
     assert "Equipment section" in response.json()["detail"]
     assert _read(client, event.id)["equipment"][0]["quantity"] == 2
     assert _item_status(db, item.id) == "REQUESTED"
+
+
+@pytest.mark.story("7.2", ac=15)
+def test_a_correction_that_leaves_the_equipment_out_saves_beside_a_reopened_type(
+    login_as, db: Session
+):
+    """15.1 lets a type declined by Technical Support be requested again, so an approved event can
+    carry two lines of one type - which 2.1's one-line-per-type rule would refuse if the list were
+    sent. The form leaves the equipment out once the event is approved, and that saves."""
+    event, _ = _planning_event(db)
+    projector = make_equipment_type(db)
+    declined = make_equipment_item(
+        db, event=event, equipment_type=projector, quantity=1, status="DECLINED", is_held=False
+    )
+    requested = make_equipment_item(db, event=event, equipment_type=projector, quantity=1)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+
+    response = _correct(client, _read(client, event.id), name="Renamed beside a reopened type")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "Renamed beside a reopened type"
+    assert (_item_status(db, declined.id), _item_status(db, requested.id)) == (
+        "DECLINED",
+        "REQUESTED",
+    )
 
 
 @pytest.mark.story("7.2", ac=15)
