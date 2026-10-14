@@ -37,10 +37,10 @@ import {
   CONTACT_NAME_MAX_LENGTH,
   CONTACT_PHONE_MAX_LENGTH,
   COVER_IMAGE_TYPES,
-  EMPTY_EVENT_FORM,
   EMPTY_FACILITY,
   EMPTY_NOTE,
   FIELD_ID,
+  LAST_VENUE_REQUIREMENT_HINT,
   MAX_EVENT_DAYS,
   MAX_LEAD_YEARS,
   MAX_VENUE_REQUIREMENTS,
@@ -60,6 +60,7 @@ import {
   isEquipmentTypeTaken,
   withEventDefaults,
   newEquipmentDraft,
+  newEventForm,
   newVenueRequirementDraft,
   toggleEntry,
   validateCoverImage,
@@ -77,6 +78,8 @@ import { readBackState } from './backState'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
+/** The hint beside the only venue requirement's disabled Remove, which that button points at. */
+const LAST_VENUE_REQUIREMENT_HINT_ID = 'venue-requirement-last-hint'
 
 /** Story 2.1 AC14: a picture the organiser has chosen and that is not uploaded yet. */
 interface ChosenPicture {
@@ -168,15 +171,18 @@ interface EventRequestFormPageProps {
 /**
  * Story 2.1 - an Event Organiser records a request and sends it for review.
  * AC1: name, purpose, description, proposed start and end, expected attendance. All of them are
- * needed to submit (AC10), and so is an answer to each of venue requirements and accessibility.
+ * needed to submit (AC10), and so are at least one venue requirement and an answer to
+ * accessibility.
  * AC2/AC3: dates and whole numbers are checked here before anything is sent; the backend checks
  * them again.
- * AC4: venue requirements, or "No venue requirements". Story 2.7: any number of them, each with
- * a name, how many people it must hold, its own times, a room layout, facilities (each optionally
- * how many) and other requirements, added, edited and removed until submission.
- * AC5: accessibility needs, or "No accessibility needs". Either "none" box clears the other
- * choices in its section, so a request never says both. Left untouched, a draft is "not yet
- * specified".
+ * AC4: venue requirements. Story 2.7: one or more of them, each with a name, how many people it
+ * must hold, its own times, a room layout, facilities (each optionally how many) and other
+ * requirements, added, edited and removed until submission.
+ * Fix f2.7.4 (story 2.7 AC14-AC17): a new request starts with one venue requirement and the last
+ * one cannot be removed; a draft saved with "No venue requirements" before the fix opens with one
+ * to fill in; the coordinator's form for a request submitted with none lists one as still needed.
+ * AC5: accessibility needs, or "No accessibility needs". The "none" box clears the other choices in
+ * its section, so a request never says both. Left untouched, a draft is "not yet specified".
  * AC6/AC7: any number of equipment items, each added, edited or removed until submission.
  * AC16: after a successful submission the organiser lands on My events.
  * AC9-AC11: a request is submitted from this page, new or saved; the details are saved first, so
@@ -201,7 +207,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   const backState = readBackState(location.state)
   const [reference, setReference] = useState<EventReferenceData | null>(null)
   const [event, setEvent] = useState<EventDetail | null>(null)
-  const [form, setForm] = useState<EventFormState | null>(isEditing ? null : EMPTY_EVENT_FORM)
+  const [form, setForm] = useState<EventFormState | null>(() => (isEditing ? null : newEventForm()))
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(noticeFrom(location.state))
   const [isSaving, setIsSaving] = useState(false)
@@ -408,27 +414,13 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     setForm((current) => current && { ...current, [key]: value })
   }
 
-  /** Story 2.7 AC3: "no venue requirements" clears every requirement, so the two never disagree. */
-  function toggleNoVenueRequirements(isChecked: boolean) {
-    setForm(
-      (current) =>
-        current && {
-          ...current,
-          hasNoVenueRequirements: isChecked,
-          venueRequirements: isChecked ? [] : current.venueRequirements,
-        },
-    )
-  }
-
-  /** Story 2.7 AC1-AC3: add a requirement, starting from the event's times (AC2) and, for the
-   * first, its expected attendance (AC6). Listing one answers the venue question, so it un-ticks
-   * "No venue requirements". */
+  /** Story 2.7 AC1-AC3: add a requirement, starting from the event's times (AC2) and, when it is
+   * the first, its expected attendance (AC6). */
   function addVenueRequirement() {
     setForm(
       (current) =>
         current && {
           ...current,
-          hasNoVenueRequirements: false,
           venueRequirements: [...current.venueRequirements, newVenueRequirementDraft(current)],
         },
     )
@@ -446,16 +438,18 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     )
   }
 
+  /** Story 2.7 AC3: remove a requirement. AC14/AC16 (fix f2.7.4): never the last - every request
+   * keeps at least one, so its Remove is disabled, and this leaves it be. */
   function removeVenueRequirement(key: number) {
-    setForm(
-      (current) =>
-        current && {
-          ...current,
-          venueRequirements: current.venueRequirements.filter(
-            (requirement) => requirement.key !== key,
-          ),
-        },
-    )
+    setForm((current) => {
+      if (current === null || current.venueRequirements.length <= 1) return current
+      return {
+        ...current,
+        venueRequirements: current.venueRequirements.filter(
+          (requirement) => requirement.key !== key,
+        ),
+      }
+    })
   }
 
   function toggleRequirementFacility(requirement: VenueRequirementDraft, code: string) {
@@ -826,6 +820,10 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     form !== null &&
     reference.equipment_types.length > 0 &&
     form.equipment.length >= reference.equipment_types.length
+  // Story 2.7 AC14/AC16 (fix f2.7.4): every request keeps at least one venue requirement, so the
+  // only one cannot be removed - and, while the form can be edited, a hint beside it says why.
+  const isOnlyVenueRequirement = form !== null && form.venueRequirements.length === 1
+  const isLastVenueRequirementHintShown = isOnlyVenueRequirement && !isReadOnly
 
   const title = isEditing ? (event?.name ?? 'Event request') : 'New event request'
   const backTo = backState?.from ?? (excludedEventId ? eventPath(excludedEventId) : HOME_PATH)
@@ -846,8 +844,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       <>
         {event && <EventStatusBadge status={event.status} />}{' '}
         <span>
-          Fields marked * and an answer to venue requirements and accessibility are needed to
-          submit. Only the event name is needed to save a draft.
+          Fields marked *, at least one venue requirement and an answer to accessibility are needed
+          to submit. Only the event name is needed to save a draft.
         </span>
       </>
     )
@@ -1063,18 +1061,15 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               Venue requirements <RequiredMark />
             </legend>
             <p className="form-hint">
-              List each venue the event needs, or tick &ldquo;No venue requirements&rdquo;. A new
-              requirement starts with the event&rsquo;s times, and the first with the expected
-              attendance; change either to suit, e.g. breakout rooms needed only on the second day.
+              List each venue the event needs - at least one, each with a name and how many people
+              it must hold. A new requirement starts with the event&rsquo;s times, and the first
+              with the expected attendance; change either to suit, e.g. breakout rooms needed only
+              on the second day.
             </p>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={form.hasNoVenueRequirements}
-                onChange={(e) => toggleNoVenueRequirements(e.target.checked)}
-              />
-              No venue requirements
-            </label>
+            {/* Fix f2.7.4 (story 2.7 AC17): only a request submitted before the fix has none. */}
+            {form.venueRequirements.length === 0 && (
+              <p className="form-hint">No venue requirement recorded.</p>
+            )}
             {form.venueRequirements.map((requirement, index) => {
               const fieldIdOf = (field: 'name' | 'capacity' | 'starts' | 'ends') =>
                 getVenueRequirementFieldId(requirement.key, field)
@@ -1230,10 +1225,19 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                     type="button"
                     className="secondary button-sm"
                     aria-label={`Remove ${requirementLabel}`}
+                    disabled={isOnlyVenueRequirement}
+                    aria-describedby={
+                      isLastVenueRequirementHintShown ? LAST_VENUE_REQUIREMENT_HINT_ID : undefined
+                    }
                     onClick={() => removeVenueRequirement(requirement.key)}
                   >
                     Remove
                   </button>
+                  {isLastVenueRequirementHintShown && (
+                    <p id={LAST_VENUE_REQUIREMENT_HINT_ID} className="form-hint">
+                      {LAST_VENUE_REQUIREMENT_HINT}
+                    </p>
+                  )}
                 </fieldset>
               )
             })}

@@ -34,7 +34,8 @@ export interface VenueRequirementDraft {
   notes: string
   /** AC6: the number still follows the expected attendance - the first card, until it is edited. */
   isCapacityDefault: boolean
-  /** AC2: the times still follow the event's - a new card, until either time is edited. */
+  /** AC2: the times still follow the event's - a new card, until either time is edited. They wait
+   * for a valid start and end (fix f2.7.4), since a requirement has both or neither. */
   areTimesDefault: boolean
 }
 
@@ -60,9 +61,11 @@ export interface EventFormState {
   contactName: string
   contactEmail: string
   contactPhone: string
-  /** Story 2.1 AC4: true is "no venue requirements"; false with none listed is "not specified". */
-  hasNoVenueRequirements: boolean
-  /** Story 2.7: each venue the event needs, in order. */
+  /**
+   * Story 2.7: each venue the event needs, in order - at least one (AC14, fix f2.7.4). Only a
+   * request that is no longer a draft and was submitted without one, before the fix, opens with
+   * none: the organiser's read-only form as well as the coordinator's (see `formFromEvent`).
+   */
   venueRequirements: VenueRequirementDraft[]
   /** Story 2.1 AC5: true is "none required"; false with nothing selected is "not specified". */
   hasNoAccessibilityNeeds: boolean
@@ -100,6 +103,10 @@ const NO_EQUIPMENT_TYPE = ''
  * lists a bounded number of requirements. */
 export const VENUE_REQUIREMENT_NAME_MAX_LENGTH = 100
 export const MAX_VENUE_REQUIREMENTS = 20
+/** Story 2.7 AC14/AC16/AC18 (fix f2.7.4): why the last venue requirement's Remove is disabled, on
+ * the request form and on a change request's (story 19.1). */
+export const LAST_VENUE_REQUIREMENT_HINT =
+  'Every event needs at least one venue requirement, so the last one cannot be removed.'
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 /** How far ahead an event may start and how long it may run (story 2.1 AC2), mirrored from the
  * backend's service. */
@@ -108,7 +115,9 @@ export const MAX_EVENT_DAYS = 14
 /** The latest date a four-digit year allows; the backend cannot read a longer year. */
 export const LATEST_DATE_INPUT = '9999-12-31T23:59'
 
-export const EMPTY_EVENT_FORM: EventFormState = {
+/** Every field blank and nothing listed. A new request starts from `newEventForm` instead, which
+ * adds the venue requirement every request needs. */
+const EMPTY_EVENT_FORM: EventFormState = {
   name: '',
   purpose: '',
   description: '',
@@ -118,7 +127,6 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   contactName: '',
   contactEmail: '',
   contactPhone: '',
-  hasNoVenueRequirements: false,
   venueRequirements: [],
   hasNoAccessibilityNeeds: false,
   accessibility: {},
@@ -203,21 +211,38 @@ let nextEquipmentKey = 0
 let nextVenueRequirementKey = 0
 
 /**
- * Story 2.7: a new venue requirement. AC2: its times start as the event's proposed start and end.
- * AC6: the first one's number of people starts as the expected attendance; a later room is rarely
- * the whole audience, so its number is left for the organiser. Both keep following the event
- * until the organiser edits them - see `withEventDefaults`.
+ * Story 2.7 AC2 (fix f2.7.4): the times a requirement that follows the event takes. A requirement
+ * has both times or neither, so it takes the event's only once they are a valid start and end: a
+ * draft with only a start still saves with the requirement it starts with, and a date the
+ * organiser got wrong is said once, under the event's dates, not again on the requirement.
+ */
+function defaultTimesFor(form: EventFormState): Pick<VenueRequirementDraft, 'startsAt' | 'endsAt'> {
+  const isValidPeriod =
+    isReadableDateTime(form.startsAt) &&
+    isReadableDateTime(form.endsAt) &&
+    form.endsAt > form.startsAt
+  return isValidPeriod
+    ? { startsAt: form.startsAt, endsAt: form.endsAt }
+    : { startsAt: '', endsAt: '' }
+}
+
+/**
+ * Story 2.7: a new venue requirement. AC2: its times start as the event's proposed start and end,
+ * once they are a valid pair. AC6: the first one's number of people starts as the expected
+ * attendance; a later room is rarely the whole audience, so its number is left for the organiser.
+ * Both keep following the event until the organiser edits them - see `withEventDefaults`.
  */
 export function newVenueRequirementDraft(form: EventFormState): VenueRequirementDraft {
   nextVenueRequirementKey += 1
   const isFirst = form.venueRequirements.length === 0
+  const { startsAt, endsAt } = defaultTimesFor(form)
   return {
     key: nextVenueRequirementKey,
     id: null,
     name: '',
     capacity: isFirst ? form.attendance.trim() : '',
-    startsAt: form.startsAt,
-    endsAt: form.endsAt,
+    startsAt,
+    endsAt,
     layoutCode: '',
     facilities: {},
     notes: '',
@@ -227,20 +252,32 @@ export function newVenueRequirementDraft(form: EventFormState): VenueRequirement
 }
 
 /**
+ * Story 2.7 AC14 (fix f2.7.4): a new request starts with one venue requirement, the first, so its
+ * number of people and times follow the event's as they are filled in. A function rather than a
+ * constant, since each requirement takes the next key.
+ */
+export function newEventForm(): EventFormState {
+  return { ...EMPTY_EVENT_FORM, venueRequirements: [newVenueRequirementDraft(EMPTY_EVENT_FORM)] }
+}
+
+/**
  * Story 2.7 AC2/AC6: bring each card's defaults in line with the event as it now stands, so the
  * order the form is filled in does not matter - a card added before the dates or attendance were
- * known picks them up when they arrive. Only defaults move: a value the organiser edited is theirs
- * and stays put, so moving the event past it is refused instead (AC10). A saved value counts as a
- * default while it still matches the event (`venueRequirementDraftFrom`).
+ * known picks them up when they arrive (the times once they are a valid start and end, fix
+ * f2.7.4). Only
+ * defaults move: a value the organiser edited is theirs and stays put, so moving the event past it
+ * is refused instead (AC10). A saved value counts as a default while it still matches the event
+ * (`venueRequirementDraftFrom`).
  */
 export function withEventDefaults(form: EventFormState): EventFormState {
+  const { startsAt, endsAt } = defaultTimesFor(form)
   return {
     ...form,
     venueRequirements: form.venueRequirements.map((requirement) => ({
       ...requirement,
       capacity: requirement.isCapacityDefault ? form.attendance.trim() : requirement.capacity,
-      startsAt: requirement.areTimesDefault ? form.startsAt : requirement.startsAt,
-      endsAt: requirement.areTimesDefault ? form.endsAt : requirement.endsAt,
+      startsAt: requirement.areTimesDefault ? startsAt : requirement.startsAt,
+      endsAt: requirement.areTimesDefault ? endsAt : requirement.endsAt,
     })),
   }
 }
@@ -309,7 +346,22 @@ function textOf(value: string | null): string {
   return value ?? ''
 }
 
+/**
+ * The form for a saved request. Story 2.7 AC17 (fix f2.7.4): a draft saved with no venue
+ * requirement before the fix - marked "No venue requirements", or left unanswered - opens with one
+ * to fill in, the first, so it follows the expected attendance. Only a draft: its organiser is the
+ * only one who sees it, and can always edit it. Any other request shows what was saved, so the
+ * coordinator's form for one submitted with none lists one as still needed instead.
+ */
 export function formFromEvent(event: EventDetail): EventFormState {
+  const form = formAsSaved(event)
+  if (event.status !== 'DRAFT' || form.venueRequirements.length > 0) return form
+  return { ...form, venueRequirements: [newVenueRequirementDraft(form)] }
+}
+
+/** Story 2.1 AC7 / story 2.7 AC3: every field of a saved request, exactly as saved, to edit or to
+ * show read-only. */
+function formAsSaved(event: EventDetail): EventFormState {
   return {
     name: event.name,
     purpose: textOf(event.purpose),
@@ -320,7 +372,6 @@ export function formFromEvent(event: EventDetail): EventFormState {
     contactName: textOf(event.contact_name),
     contactEmail: textOf(event.contact_email),
     contactPhone: textOf(event.contact_phone),
-    hasNoVenueRequirements: event.venue_none_required,
     venueRequirements: event.venue_requirements.map((requirement, index) =>
       venueRequirementDraftFrom(requirement, event, index === 0),
     ),
@@ -596,11 +647,10 @@ export function getMissingForSubmission(form: EventFormState): string[] {
   if (!form.contactName.trim()) missing.push('point of contact name')
   if (!form.contactEmail.trim()) missing.push('point of contact email')
   if (!form.contactPhone.trim()) missing.push('point of contact phone number')
-  // Story 2.7 AC8: at least one requirement, or "none"; each listed one needs a name and a number
-  // of people, pointed out by its place in the list.
-  if (!form.hasNoVenueRequirements && form.venueRequirements.length === 0) {
-    missing.push('venue requirements (choose some, or mark none)')
-  }
+  // Story 2.7 AC8/AC15 (fix f2.7.4): at least one requirement - the line for none is the backend's
+  // `_VENUE_ANSWER_LABEL`, word for word - and each needs a name and a number of people, pointed
+  // out by its place in the list.
+  if (form.venueRequirements.length === 0) missing.push('venue requirements (at least one)')
   form.venueRequirements.forEach((requirement, index) => {
     if (!requirement.name.trim()) missing.push(`venue requirement ${index + 1}: name`)
     if (!isPositiveWholeNumber(requirement.capacity)) {
@@ -781,9 +831,12 @@ function textOrNull(value: string): string | null {
   return trimmed === '' ? null : trimmed
 }
 
-/** The request body for a valid form: every field, so an edit replaces what was saved. */
+/**
+ * The request body for a valid form: every field, so an edit replaces what was saved. Every venue
+ * requirement is sent, a blank one too: a draft may hold an empty requirement (story 2.7 AC8), and
+ * a request always keeps at least one (AC14, fix f2.7.4), so there is no "none" answer to send.
+ */
 export function eventInputFrom(form: EventFormState): EventInput {
-  const hasNoVenueNeeds = form.hasNoVenueRequirements
   const hasNoAccessibilityNeeds = form.hasNoAccessibilityNeeds
   return {
     name: form.name.trim(),
@@ -795,23 +848,20 @@ export function eventInputFrom(form: EventFormState): EventInput {
     contact_name: textOrNull(form.contactName),
     contact_email: textOrNull(form.contactEmail),
     contact_phone: textOrNull(form.contactPhone),
-    venue_requirements: hasNoVenueNeeds
-      ? []
-      : form.venueRequirements.map((requirement) => ({
-          id: requirement.id,
-          name: textOrNull(requirement.name),
-          capacity: requirement.capacity.trim() === '' ? null : Number(requirement.capacity),
-          starts_at: requirement.startsAt ? inputToInstant(requirement.startsAt) : null,
-          ends_at: requirement.endsAt ? inputToInstant(requirement.endsAt) : null,
-          layout_code: textOrNull(requirement.layoutCode),
-          facilities: Object.entries(requirement.facilities).map(([code, facility]) => ({
-            code,
-            quantity: facility.quantity.trim() === '' ? null : Number(facility.quantity),
-            notes: textOrNull(facility.notes),
-          })),
-          notes: textOrNull(requirement.notes),
-        })),
-    venue_none_required: hasNoVenueNeeds,
+    venue_requirements: form.venueRequirements.map((requirement) => ({
+      id: requirement.id,
+      name: textOrNull(requirement.name),
+      capacity: requirement.capacity.trim() === '' ? null : Number(requirement.capacity),
+      starts_at: requirement.startsAt ? inputToInstant(requirement.startsAt) : null,
+      ends_at: requirement.endsAt ? inputToInstant(requirement.endsAt) : null,
+      layout_code: textOrNull(requirement.layoutCode),
+      facilities: Object.entries(requirement.facilities).map(([code, facility]) => ({
+        code,
+        quantity: facility.quantity.trim() === '' ? null : Number(facility.quantity),
+        notes: textOrNull(facility.notes),
+      })),
+      notes: textOrNull(requirement.notes),
+    })),
     accessibility_none_required: hasNoAccessibilityNeeds,
     accessibility_needs: hasNoAccessibilityNeeds
       ? []

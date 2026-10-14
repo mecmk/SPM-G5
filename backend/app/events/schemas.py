@@ -34,8 +34,12 @@ PositiveWholeNumber = Annotated[StrictInt, Field(gt=0, le=_INT32_MAX)]
 ACCESSIBILITY_CONTRADICTION_MESSAGE = (
     "Accessibility cannot be marked none required while needs or notes are recorded."
 )
-VENUE_CONTRADICTION_MESSAGE = (
-    "Venue requirements cannot be marked none required while a venue requirement is listed."
+# Fix f2.7.4 (story 2.7 AC14, AC20): every request has at least one venue requirement, so "No venue
+# requirements" is no longer an answer. The field stays, so a client still sending false is not
+# refused.
+VENUE_NONE_REQUIRED_REFUSED_MESSAGE = (
+    "Venue requirements cannot be marked none required: every request needs at least one venue "
+    "requirement."
 )
 # Story 2.1 AC17: neither registration date can be recorded unless registration is required.
 REGISTRATION_CONTRADICTION_MESSAGE = (
@@ -362,6 +366,15 @@ class _EventRequestRules(BaseModel):
             raise ValueError(CONTACT_PHONE_INVALID_MESSAGE)
         return value
 
+    @field_validator("venue_none_required", check_fields=False)
+    @classmethod
+    def _refuse_venue_none_required(cls, value: bool | None) -> bool | None:
+        """Fix f2.7.4 (story 2.7 AC14, AC20): refused at the flag itself, on a create, an edit or a
+        7.2 correction, so a client still sending it is told which field to drop."""
+        if value is True:
+            raise ValueError(VENUE_NONE_REQUIRED_REFUSED_MESSAGE)
+        return value
+
     @model_validator(mode="after")
     def _check_lists(self):
         needs = getattr(self, "accessibility_needs", None) or []
@@ -379,9 +392,11 @@ class _EventRequestRules(BaseModel):
 
 
 class EventCreate(_EventRequestRules):
-    """AC1/AC4-AC6: only the name is required, so a draft can be saved half-finished. Status,
-    organiser and submission time are set by the server, and sending them is refused. What a
-    request needs before it can be submitted is checked at submission (AC10)."""
+    """AC1/AC4-AC6: only the name is required, so a draft can be saved half-finished - that and,
+    since fix f2.7.4, at least one venue requirement, which may still be empty (story 2.7 AC14;
+    checked in the service). Status, organiser and submission time are set by the server, and
+    sending them is refused. What a request needs before it can be submitted is checked at
+    submission (AC10)."""
 
     name: str = Field(min_length=1)
     purpose: str | None = None
@@ -407,8 +422,6 @@ class EventCreate(_EventRequestRules):
 
     @model_validator(mode="after")
     def _check_none_required(self):
-        if self.venue_none_required and self.venue_requirements:
-            raise ValueError(VENUE_CONTRADICTION_MESSAGE)
         if self.accessibility_none_required and (
             self.accessibility_needs or self.accessibility_notes
         ):
@@ -567,8 +580,9 @@ class EventDetailOut(BaseModel):
     coordinator both see it. No defaults (response schema).
 
     ``accessibility_none_required`` true means the organiser said none are needed; false with no
-    needs and no notes means it has not been specified (AC5). ``venue_none_required`` works the
-    same way for the venue requirements (AC4).
+    needs and no notes means it has not been specified (AC5). ``venue_none_required`` is true
+    only on a request saved with "No venue requirements" before fix f2.7.4 and given no venue
+    requirement since (story 2.7 AC14, AC17): every request created since has at least one.
 
     4.6 AC1: ``decided_by_name``/``decided_at``/``decision_reason`` are all ``None`` until the
     request has been decided.

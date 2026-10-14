@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-13 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-14 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -369,7 +369,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, AWAITING_SAFETY_CHECK, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
-| `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated the event needs no venue, and it has no venue_requirements rows. FALSE with no rows = not yet specified. A request cannot be submitted until one or the other is given (story 2.1 AC10, story 2.7 AC8). |
+| `venue_none_required` | `boolean` | no | `false` | - | TRUE only on a request saved with "No venue requirements" before fix f2.7.4, which made at least one venue requirement mandatory (story 2.7 AC14), and given no venue requirement since. It is no longer accepted, and the edit that gives the request its first venue requirement - the organiser's draft edit (story 2.1 AC7) or the coordinator's correction of its details (story 7.2 AC4) - clears it. FALSE otherwise. A request with no venue_requirements rows is one saved before the fix; it cannot be submitted or approved until it has one (story 2.7 AC15, AC17). |
 | `accessibility_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated no accessibility needs. FALSE with no rows in event_accessibility_needs = not yet specified (story 2.1 AC5 requires these to be distinguishable). |
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
 | `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.1 AC17). |
@@ -414,7 +414,7 @@ Rules and indexes:
 
 **Stories:** 2.7, 7.1, 12.1, 8.4, 12.5
 
-One venue an event needs: a name, how many people it must hold, when, and what the room must offer. An event has none (venue_none_required, or not yet specified) or several, in position order. Drafts may hold incomplete rows; submission needs a name and a number of people on each (story 2.7 AC8). Each row has a stable id a booking can later point at.
+One venue an event needs: a name, how many people it must hold, when, and what the room must offer. Every request has at least one, in position order (story 2.7 AC14, fix f2.7.4); a request with none is one saved before that fix. Drafts may hold incomplete rows; submission needs a name and a number of people on each (story 2.7 AC8). Each row has a stable id a booking can later point at.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |

@@ -170,9 +170,9 @@ export interface EquipmentLine {
 /**
  * Mirrors `EventDetailOut`: everything recorded on a request. `accessibility_none_required` true
  * means the organiser said no needs; false with no needs and no notes means not yet specified
- * (story 2.1 AC5). `venue_none_required` works the same way for venue requirements (AC4).
- * `decided_by_name`/`decided_at`/`decision_reason` are all `null` until the request has been
- * decided (story 4.6 AC1).
+ * (story 2.1 AC5). `venue_none_required` was the same answer for venue requirements (AC4) until
+ * fix f2.7.4 retired it. `decided_by_name`/`decided_at`/`decision_reason` are all `null` until the
+ * request has been decided (story 4.6 AC1).
  */
 export interface EventDetail {
   id: string
@@ -196,8 +196,11 @@ export interface EventDetail {
   /** Story 2.6 AC12/AC15: rides alongside the name, restricted the same way. */
   assigned_coordinator_email: string | null
   submitted_at: string | null
-  /** Story 2.7: in the order the organiser listed them; empty when none, or not yet specified. */
+  /** Story 2.7: in the order the organiser listed them. Since fix f2.7.4 every request has at least
+   *  one (AC14); empty only on a request from before the fix that has not been given one since. */
   venue_requirements: VenueRequirement[]
+  /** Story 2.1 AC4's "No venue requirements": true only on a request saved with it before fix
+   *  f2.7.4 and given no venue requirement since. A save no longer sends it (`EventInput`). */
   venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: AccessibilityNeed[]
@@ -241,7 +244,9 @@ export interface VenueRequirementInput {
 
 /**
  * Mirrors `EventCreate` / `EventUpdate`. The form always sends every field, so on an edit each
- * list replaces the stored one and a null clears an optional field.
+ * list replaces the stored one and a null clears an optional field. Fix f2.7.4: every request
+ * lists at least one venue requirement (story 2.7 AC14), so `venue_none_required` is left out -
+ * the backend still accepts false from an older client, and refuses true.
  */
 export interface EventInput {
   name: string
@@ -254,7 +259,6 @@ export interface EventInput {
   contact_email: string | null
   contact_phone: string | null
   venue_requirements: VenueRequirementInput[]
-  venue_none_required: boolean
   accessibility_none_required: boolean
   accessibility_needs: { code: string; notes: string | null }[]
   accessibility_notes: string | null
@@ -449,7 +453,9 @@ const EVENT_DECISION_ERROR_CODES = {
 } as const
 
 /** Story 4.4 AC1-AC3: approve a request awaiting the assigned coordinator's decision. Moves it
- *  to PLANNING. */
+ *  to PLANNING. A 409 is also a request with no venue requirement, submitted before fix f2.7.4,
+ *  which waits for its coordinator to add one (story 2.7 AC17); the backend's sentence says
+ *  which. */
 export function approveEvent(eventId: string, name: string): Promise<EventDetail> {
   return api<EventDetail>(`/events/${eventId}/approve`, {
     method: 'POST',

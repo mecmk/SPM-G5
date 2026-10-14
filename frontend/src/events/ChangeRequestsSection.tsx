@@ -28,6 +28,7 @@ import {
   inputToInstant,
   instantToInput,
 } from '../shared/format'
+import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
 /** Story 19.1 AC1: how each requestable field is named, in the order the form offers them.
  *  Mirrors the backend's `FIELD_LABELS` (app/change_requests/service.py). */
@@ -112,7 +113,11 @@ function describeSchedule(value: ScheduleValue): string {
   return `${formatDateTime(value.starts_at)} – ${formatDateTime(value.ends_at)}`
 }
 
-/** AC1: a stored value in words, for the request's "now" and "requested" lines. */
+/**
+ * AC1: a stored value in words, for the request's "now" and "requested" lines. An empty list of
+ * venue requirements still reads "No venue requirements": an event approved before fix f2.7.4 may
+ * have none, and a change asked for before it may propose none (story 2.7 AC18).
+ */
 function describeValue(
   field: ChangeRequestField,
   value: unknown,
@@ -158,6 +163,12 @@ function describeRefusal(err: unknown): string {
     if (sentences.length > 0) return sentences.join(' ')
   }
   return formatApiError(err)
+}
+
+/** Story 19.1 AC1, story 2.7 AC18 (fix f2.7.4): a blank venue requirement row - one the organiser
+ *  adds, or the one an event with none starts with. */
+function newRequirementDraft(): RequirementDraft {
+  return { key: newDraftKey(), source: null, name: '', capacity: '', layoutCode: '' }
 }
 
 function requirementDraftFrom(requirement: VenueRequirement): RequirementDraft {
@@ -213,6 +224,9 @@ export interface ChangeRequestsSectionProps {
  * pending per field (AC5), and withdraws a pending request after confirming (AC9). Nothing
  * changes on the event until the coordinator decides (stories 19.2-19.5). The form checks the
  * reason and the simple value rules before sending; the server re-checks every rule (AC3, AC4).
+ * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
+ * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
+ * saying why - and an event with none starts it with one blank row to fill in.
  */
 export function ChangeRequestsSection({
   event,
@@ -293,13 +307,21 @@ export function ChangeRequestsSection({
     setIsFormOpen(false)
   }
 
-  /** AC1: choosing a field starts its new value from the event's current one. */
+  /**
+   * AC1: choosing a field starts its new value from the event's current one. Story 2.7 AC18 (fix
+   * f2.7.4): an event with no venue requirement - one approved before the fix - starts with one
+   * blank row instead, since a change cannot leave it with none.
+   */
   function chooseField(chosen: ChangeRequestField | '') {
     setField(chosen)
     setStartsAt(event.starts_at ? instantToInput(event.starts_at) : '')
     setEndsAt(event.ends_at ? instantToInput(event.ends_at) : '')
     setAttendance(event.expected_attendance === null ? '' : String(event.expected_attendance))
-    setRequirements(event.venue_requirements.map(requirementDraftFrom))
+    setRequirements(
+      event.venue_requirements.length > 0
+        ? event.venue_requirements.map(requirementDraftFrom)
+        : [newRequirementDraft()],
+    )
     setEquipment(
       event.equipment.map((line) => ({
         key: newDraftKey(),
@@ -316,14 +338,13 @@ export function ChangeRequestsSection({
   }
 
   function addRequirement() {
-    setRequirements((rows) => [
-      ...rows,
-      { key: newDraftKey(), source: null, name: '', capacity: '', layoutCode: '' },
-    ])
+    setRequirements((rows) => [...rows, newRequirementDraft()])
   }
 
+  /** Story 2.7 AC18 (fix f2.7.4): never the last row - a change cannot leave the event without a
+   *  venue requirement, so its Remove is disabled, and this leaves it be. */
   function removeRequirement(key: number) {
-    setRequirements((rows) => rows.filter((row) => row.key !== key))
+    setRequirements((rows) => (rows.length > 1 ? rows.filter((row) => row.key !== key) : rows))
   }
 
   function updateEquipment(key: number, change: Partial<EquipmentDraft>) {
@@ -462,6 +483,9 @@ export function ChangeRequestsSection({
     problem?.target === target ? problemId : undefined
   const isInvalid = (target: FormProblem['target']) =>
     problem?.target === target ? true : undefined
+  // Story 2.7 AC18 (fix f2.7.4): the only row left cannot be removed, and a hint says why.
+  const isOnlyRequirement = requirements.length === 1
+  const lastRequirementHintId = `${ids}-last-requirement`
 
   return (
     <section className="card stack" aria-labelledby={`${ids}-heading`}>
@@ -588,9 +612,6 @@ export function ChangeRequestsSection({
 
           {field === 'venue_requirements' && (
             <div className="stack">
-              {requirements.length === 0 && (
-                <p className="muted">No venue requirements - the event will need no venue.</p>
-              )}
               {requirements.map((row, index) => (
                 <div key={row.key} className="stack">
                   <div className="form-grid">
@@ -632,6 +653,8 @@ export function ChangeRequestsSection({
                     <button
                       type="button"
                       className="secondary"
+                      disabled={isOnlyRequirement}
+                      aria-describedby={isOnlyRequirement ? lastRequirementHintId : undefined}
                       onClick={() => removeRequirement(row.key)}
                     >
                       Remove requirement {index + 1}
@@ -639,6 +662,11 @@ export function ChangeRequestsSection({
                   </div>
                 </div>
               ))}
+              {isOnlyRequirement && (
+                <p id={lastRequirementHintId} className="form-hint">
+                  {LAST_VENUE_REQUIREMENT_HINT}
+                </p>
+              )}
               <div className="page-actions">
                 <button type="button" className="secondary" onClick={addRequirement}>
                   Add a venue requirement
