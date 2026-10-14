@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 021 - story 9.4 (slice 3): marking the bookings an unavailability period affects.
+-- Migration 023 - story 9.4 (slice 3): marking the bookings an unavailability period affects.
 --
 -- Story 9.4 AC3: each pending or approved booking whose held period overlaps a period a venue is
 -- unavailable for is marked "Venue unavailable - alternative needed", and the mark follows the

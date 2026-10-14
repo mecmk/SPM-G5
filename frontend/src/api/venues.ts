@@ -342,7 +342,7 @@ export function getVenueCalendar(
 }
 
 /** The reasons a venue can be marked unavailable, mirroring `UnavailabilityReason` in
- * backend/app/venues/models.py (migration 020). `SAFETY` is shown as "Safety concern", and
+ * backend/app/venues/models.py (migration 022). `SAFETY` is shown as "Safety concern", and
  * `OTHER` needs a description. */
 export type UnavailabilityReason =
   'MAINTENANCE' | 'EQUIPMENT_FAILURE' | 'RENOVATION' | 'SAFETY' | 'OTHER'

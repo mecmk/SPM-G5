@@ -1,8 +1,8 @@
 """Story 9.4: mark a venue temporarily unavailable.
 
-Slice 1 (migration 020): the reasons a period can carry.
+Slice 1 (migration 022): the reasons a period can carry.
 Slice 2: add, edit, end and remove a period, the preview of what it would affect, and who may.
-Slice 3 (migration 021): the bookings a period affects are marked, and the mark follows it.
+Slice 3 (migration 023): the bookings a period affects are marked, and the mark follows it.
 Slice 4: the event goes back to Planning and its coordinator and organiser are told.
 Slice 5: a pending request that overlaps a period cannot be approved while it stands.
 
@@ -12,7 +12,7 @@ AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: 
      from venue searches.
 
 The table's own rules are what this slice proves: the CHECK constraints refuse a reason outside
-the five and a period without a description, migration 020 moves existing rows onto the new set,
+the five and a period without a description, migration 022 moves existing rows onto the new set,
 and the calendar and the booking request name each reason.
 """
 
@@ -55,9 +55,9 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "db" / "migrations"
 REASON_CONSTRAINT = "ck_venue_unavailability_reason"
 DESCRIPTION_CONSTRAINT = "ck_venue_unavailability_description"
 
-# The table as it stood before migration 020: INTERNAL_USE allowed, no EQUIPMENT_FAILURE, and an
+# The table as it stood before migration 022: INTERNAL_USE allowed, no EQUIPMENT_FAILURE, and an
 # Other that needs no description. IF EXISTS keeps this valid on a database 020 has not reached.
-PRE_020_SCHEMA = (
+PRE_022_SCHEMA = (
     f"ALTER TABLE venue_unavailability_periods DROP CONSTRAINT IF EXISTS {DESCRIPTION_CONSTRAINT};"
     f" ALTER TABLE venue_unavailability_periods DROP CONSTRAINT {REASON_CONSTRAINT};"
     f" ALTER TABLE venue_unavailability_periods ADD CONSTRAINT {REASON_CONSTRAINT} CHECK"
@@ -134,15 +134,15 @@ def test_every_reason_needs_a_description_in_the_table_itself(db, reason, notes)
 
 
 @pytest.mark.story("9.4", ac=1)
-def test_migration_020_moves_existing_periods_onto_the_five_reasons(db):
+def test_migration_022_moves_existing_periods_onto_the_five_reasons(db):
     """Run on pre-020 rows inside the test's transaction, which is rolled back: Internal use
     becomes Other, saying so and keeping what was written; a period of any reason with nothing
     written gets a description; the rest is left as it was. Afterwards the table refuses what AC1
     refuses."""
-    migration = next(MIGRATIONS.glob("020_*.sql"), None)
-    assert migration is not None, "migration 020 has not been written"
+    migration = next(MIGRATIONS.glob("022_*.sql"), None)
+    assert migration is not None, "migration 022 has not been written"
     conn = db.connection()
-    conn.exec_driver_sql(PRE_020_SCHEMA)
+    conn.exec_driver_sql(PRE_022_SCHEMA)
     venue = make_venue(db)
     internal_bare = _insert(db, venue.id, "INTERNAL_USE", None, day=1)
     internal_noted = _insert(db, venue.id, "INTERNAL_USE", "Gym floor relaid", day=2)
@@ -1132,7 +1132,7 @@ def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
 
 
 # =====================================================================================
-# Slice 3 (migration 021): marking the bookings a period affects, and clearing the mark.
+# Slice 3 (migration 023): marking the bookings a period affects, and clearing the mark.
 #
 #   venue_bookings.venue_unavailable_marked_at   timestamptz, nullable
 #   venue_service.recheck_venue_bookings(db, venue_id, *, now, actor) -> RecheckResult
@@ -1342,7 +1342,7 @@ def test_the_event_page_outcome_carries_the_mark(db, login_as):
 
 @pytest.mark.story("9.4", ac=3)
 def test_the_mark_is_a_nullable_timestamp_column(db):
-    """Plan X.1: migration 021's column, as the ORM and the dictionary describe it."""
+    """Plan X.1: migration 023's column, as the ORM and the dictionary describe it."""
     row = db.execute(
         text(
             "SELECT data_type, is_nullable FROM information_schema.columns"

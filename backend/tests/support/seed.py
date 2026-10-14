@@ -124,8 +124,8 @@ class Events:
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
     # Story 9.4's e2e events, organiser 2, coordinator 1, PLANNING, October 2028, one pending
     # request each at a venue dedicated to that spec.
-    CHOIR_SHOWCASE = _e(39)  # Harbour Pavilion
-    ART_MARKET = _e(40)  # Sunrise Studio
+    CHOIR_SHOWCASE = _e(60)  # Harbour Pavilion
+    ART_MARKET = _e(61)  # Sunrise Studio
 
 
 class Bookings:

@@ -181,7 +181,7 @@ test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event
 
   // AC7: Venue Staff's queue card carries the marker and holds Approve back.
   await page.goto('/venue-staff/booking-requests')
-  const card = await queueCard(page, '00000014')
+  const card = await queueCard(page, '00000021')
   await expect(card).toContainText('Venue unavailable')
   await expect(card.getByRole('button', { name: 'Approve' })).toBeDisabled()
 

@@ -75,8 +75,8 @@ export const EVENTS = {
   // Story 9.4, Planning, organiser: organiser2, coordinator, October 2028. Each has one pending
   // request at a venue dedicated to the 9.4 spec (see VENUES below); only that spec saves a
   // closure over them.
-  choirShowcase: '33333333-0000-0000-0000-000000000039',
-  artMarket: '33333333-0000-0000-0000-000000000040',
+  choirShowcase: '33333333-0000-0000-0000-000000000060',
+  artMarket: '33333333-0000-0000-0000-000000000061',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
