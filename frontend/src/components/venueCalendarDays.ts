@@ -131,17 +131,16 @@ function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string 
   return hasSetup ? TURNAROUND_SETUP_LABEL : TURNAROUND_TEARDOWN_LABEL
 }
 
-/** The closure a calendar window is, or null for a booking or a hold. The window's label is the
- *  closure's description, or the reason's name when it has none. */
+/** The closure a calendar window is, or null for a booking or a hold. */
 function closureOf(window: VenueUnavailableWindow): DayClosure | null {
-  if (window.id === null) return null
-  const hasDescription = window.label !== CLOSURE_REASON_NAMES[window.reason]
+  // A booking or hold has no id; a stubbed window in a spec may lack the field altogether.
+  if (typeof window.id !== 'string') return null
   return {
     id: window.id,
     startsAt: window.starts_at,
     endsAt: window.ends_at,
     reason: window.reason,
-    description: hasDescription ? window.label : null,
+    description: window.description,
   }
 }
 
