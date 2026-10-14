@@ -235,17 +235,27 @@ test('18.1 AC1: a next page that fails to load keeps the events already shown', 
   await expect(page.getByRole('button', { name: 'Load more' })).toBeEnabled()
 })
 
-test('18.1 AC1: at phone width the events and Register fit without sideways scrolling', async ({
+test('18.1 AC1: at phone width the events fit without sideways scrolling, and Register is a full-width button big enough for a thumb', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openUpcomingEvents(page)
 
-  await expect(registerButton(page, JAZZ_EVENING)).toBeVisible()
+  const register = registerButton(page, JAZZ_EVENING)
+  await expect(register).toBeVisible()
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   )
   expect(overflow).toBeLessThanOrEqual(0)
+
+  // The card's own control, below its details on a phone (story 5.4's card layout), as wide as
+  // the card's text and at least 44px tall.
+  const button = await register.boundingBox()
+  const title = await eventCard(page, JAZZ_EVENING).getByRole('heading', { level: 3 }).boundingBox()
+  if (button === null || title === null) throw new Error('the card is not laid out')
+  expect(button.height).toBeGreaterThanOrEqual(44)
+  expect(button.y).toBeGreaterThan(title.y)
+  expect(button.width).toBeGreaterThanOrEqual(title.width)
 })
 
 // --- AC3: full, closed and not yet open -------------------------------------------------------

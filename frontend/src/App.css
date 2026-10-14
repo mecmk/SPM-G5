@@ -3665,3 +3665,11 @@ button.requirement-choice.requirement-covered:hover,
     flex-basis: 100%;
   }
 }
+
+/* Story 18.1: on a phone each event's Register button - the card's action, full width below its
+   details (story 5.4) - is at least 44px tall, to be pressed with a thumb. */
+@media (max-width: 640px) {
+  .upcoming-events .event-card-action button {
+    min-height: 44px;
+  }
+}

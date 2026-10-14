@@ -75,9 +75,10 @@ interface UpcomingEventCardProps {
 }
 
 /**
- * Story 18.1 AC1/AC3: one event, with Register enabled only while it is open (AC3: disabled when
- * full, closed or not yet open; not offered once registered). AC6: disabled while its
- * registration is being sent, so a double-click sends one.
+ * Story 18.1 AC1/AC3: one event, with Register as the card's own control (story 5.4's card
+ * action: beside the details, below them on a phone), enabled only while the event is open (AC3:
+ * disabled when full, closed or not yet open; not offered once registered). AC6: disabled while
+ * its registration is being sent, so a double-click sends one.
  */
 function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: UpcomingEventCardProps) {
   function handleRegister() {
@@ -93,20 +94,6 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
     describePlacesLeft(event.places_left),
     describeRegistration(event),
   ]
-  if (event.state !== 'REGISTERED') {
-    details.push(
-      <button
-        key="register"
-        type="button"
-        className="button-sm"
-        aria-label={`Register for ${event.name}`}
-        disabled={event.state !== 'OPEN' || isRegistering}
-        onClick={handleRegister}
-      >
-        Register
-      </button>,
-    )
-  }
   if (refusal !== null) {
     details.push(
       <p key="refusal" role="alert" className="error">
@@ -114,7 +101,19 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
       </p>,
     )
   }
-  return <EventCard title={event.name} imageUrl={null} details={details} />
+  const register =
+    event.state === 'REGISTERED' ? undefined : (
+      <button
+        type="button"
+        className="button-sm"
+        aria-label={`Register for ${event.name}`}
+        disabled={event.state !== 'OPEN' || isRegistering}
+        onClick={handleRegister}
+      >
+        Register
+      </button>
+    )
+  return <EventCard title={event.name} imageUrl={null} details={details} action={register} />
 }
 
 /** The size of the list to load again after a registration: what is shown, within the API's
@@ -184,7 +183,7 @@ export function UpcomingEventsPage() {
   )
 
   return (
-    <div className="page page-wide">
+    <div className="page page-wide upcoming-events">
       <p className="eyebrow">Attend</p>
       <PageHeader
         title="Upcoming events"
