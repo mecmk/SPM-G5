@@ -29,6 +29,7 @@ export type ErrorCode =
   | 'UNAVAILABILITY_NOT_FOUND'
   | 'UNAVAILABILITY_CANNOT_BE_ENDED'
   | 'UNAVAILABILITY_CANNOT_BE_REMOVED'
+  | 'UNAVAILABILITY_END_BEFORE_START'
   | 'VENUE_NAME_REQUIRED'
   | 'VENUE_LOCATION_REQUIRED'
   | 'VENUE_CAPACITY_INVALID'
@@ -189,6 +190,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   UNAVAILABILITY_CANNOT_BE_REMOVED: {
     title: 'Closure cannot be removed',
     message: 'This closure has already started. End it instead.',
+  },
+  // Checked in the form before anything is sent; the backend refuses it too, in its own words.
+  UNAVAILABILITY_END_BEFORE_START: {
+    title: 'Check the dates',
+    message: 'The end must be after the start.',
   },
 
   // Story 8.3: checks the venue form makes before anything is sent.

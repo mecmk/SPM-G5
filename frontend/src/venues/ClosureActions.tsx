@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import { endUnavailabilityNow, removeUnavailability } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { DayClosure } from '../components/venueCalendarDays'
@@ -26,6 +26,7 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isGone, setIsGone] = useState(false)
 
   // The clock as of when this row appeared. The page keys this on the closure's start and end, so
   // a closure that changes gets a fresh clock, and the backend decides again on the press.
@@ -46,6 +47,7 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
 
   function cancel() {
     setPending(null)
+    if (isGone) onChanged()
   }
 
   function handleEdit() {
@@ -62,6 +64,9 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
       onChanged()
     } catch (err) {
       setError(formatApiError(err))
+      // The closure is already gone, so the day list is out of date: it is loaded again once the
+      // dialog, which keeps the sentence, is closed.
+      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') setIsGone(true)
     } finally {
       setIsBusy(false)
     }

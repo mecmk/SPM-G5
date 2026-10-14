@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import {
   addUnavailability,
   editUnavailability,
   fetchAffectedBookings,
-  OTHER_UNAVAILABILITY_REASON,
   UNAVAILABILITY_REASON_NAMES,
   type AffectedBooking,
   type UnavailabilityReason,
@@ -14,6 +13,7 @@ import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import type { DayClosure } from '../components/venueCalendarDays'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { bookingRequestPath } from '../routes'
 import { formatDateTime, instantToInput, inputToInstant } from '../shared/format'
 
@@ -41,12 +41,13 @@ interface PreviewResult {
 
 /**
  * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its page. The form takes a
- * start, an end, a reason and a description, which Other requires. Once both ends make a period,
- * the pending and approved bookings it would affect - setup and teardown included - are listed
- * before Save; saving is allowed with some, after one confirmation that names them. A refusal,
- * such as an end not after the start or an Other without a description, shows the backend's
- * sentence and nothing is saved. The page only shows this to a role holding the manage permission;
- * the backend refuses everyone else.
+ * start, an end, a reason and a description, which every reason needs. An end that is not after
+ * the start is refused in the form, beside the fields, before anything is sent. Once both ends
+ * make a period, the pending and approved bookings it would affect - setup and teardown included -
+ * are listed before Save; saving is allowed with some, after one confirmation that names them. A
+ * refusal from the server, such as a missing description, shows the backend's own sentence and
+ * nothing is saved. The page only shows this to a role holding the manage permission; the backend
+ * refuses everyone else.
  *
  * Story 9.4 AC6: the same form edits a closure - its start, end, reason and description - opened
  * from the closure's row. The bookings its new period would affect are listed the same way, those
@@ -104,7 +105,11 @@ export function VenueUnavailabilitySection({
   const isPreviewCurrent = preview !== null && preview.key === previewKey
   const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
   const newlyAffected = affected.filter((booking) => !booking.already_marked)
-  const isOther = reason === OTHER_UNAVAILABILITY_REASON
+  /** Story 9.4 AC5: both ends given and the end not after the start. */
+  const isEndBeforeStart =
+    starts !== '' &&
+    ends !== '' &&
+    Date.parse(inputToInstant(ends)) <= Date.parse(inputToInstant(starts))
 
   function resetForm() {
     setStarts('')
@@ -145,6 +150,8 @@ export function VenueUnavailabilitySection({
     } catch (err) {
       setSaveError(formatApiError(err))
       setIsConfirming(false)
+      // The closure is gone - removed or ended elsewhere - so the page's calendar is out of date.
+      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') onSaved()
     } finally {
       setIsSaving(false)
     }
@@ -203,6 +210,11 @@ export function VenueUnavailabilitySection({
             />
           </label>
         </div>
+        {isEndBeforeStart && (
+          <p role="alert" className="error">
+            {ERROR_REGISTRY.UNAVAILABILITY_END_BEFORE_START.message}
+          </p>
+        )}
         <div className="form-grid">
           <label>
             Reason
@@ -219,15 +231,10 @@ export function VenueUnavailabilitySection({
             </select>
           </label>
           <label className="span-2">
-            Description
-            {isOther && (
-              <>
-                {' '}
-                <span className="req" aria-hidden="true">
-                  *
-                </span>
-              </>
-            )}
+            Description{' '}
+            <span className="req" aria-hidden="true">
+              *
+            </span>
             <textarea
               rows={2}
               value={description}

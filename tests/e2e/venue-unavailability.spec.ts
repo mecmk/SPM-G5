@@ -1,11 +1,15 @@
 /**
  * Story 9.4: mark a venue temporarily unavailable, even with events booked there.
  *
- * AC1  Venue Staff add a closure from the venue's page - a start, an end, a reason and, for
- *      Other, a description - and the calendar shows it as "Unavailable" with its reason.
+ * AC1  Venue Staff add a closure from the venue's page - a start, an end, a reason and a
+ *      description, which every reason needs - and the calendar shows it as "Unavailable" with
+ *      its reason; a block off with no description is refused in the backend's own words, and
+ *      the month grid's chip names the reason, or the description for Other.
+ * AC5  An end not after the start is refused in the form, before anything is sent.
  * AC2  Before Save, the bookings the closure would affect are listed; Save still goes through.
  * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page.
- * AC6  A closure is edited, then ended, from the day it falls on; an ended one shows no actions.
+ * AC6  A closure is edited, then ended, from the day it falls on; an ended one shows no actions;
+ *      editing one that was removed meanwhile says so.
  * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
  *      Approve is held back.
  * AC9  Only Venue Staff see the controls; the coordinator and the Safety Officer see the reason
@@ -59,10 +63,13 @@ function dayList(page: Page, name: RegExp) {
   return page.getByRole('region', { name })
 }
 
+const DEFAULT_DESCRIPTION = 'Scheduled work'
+
 interface ClosureForm {
   starts: string
   ends: string
   reason?: string
+  /** Left out, the form is given `DEFAULT_DESCRIPTION`. Pass '' to leave it empty. */
   description?: string
 }
 
@@ -73,7 +80,8 @@ async function fillClosure(page: Page, form: ClosureForm) {
   await section.getByLabel('Starts').fill(form.starts)
   await section.getByLabel('Ends').fill(form.ends)
   if (form.reason) await section.getByLabel('Reason').selectOption({ label: form.reason })
-  if (form.description) await section.getByLabel('Description').fill(form.description)
+  // Every block off needs a description, so a case that is not about one gets a plain one.
+  await section.getByLabel('Description').fill(form.description ?? DEFAULT_DESCRIPTION)
 }
 
 /**
@@ -244,4 +252,123 @@ test('9.4 AC9: only Venue Staff see the controls; others read the reason and can
     await expect(blockOff(other)).toHaveCount(0)
     await expect(other.getByRole('button', { name: 'Block off time' })).toHaveCount(0)
   }
+})
+
+test('9.4 AC1: a block off with no description is refused in the backend\'s own words', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(PINNED_NOW)
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+
+  // Other first - the reason that used to be the only one needing a description - then another.
+  for (const reason of ['Other', 'Maintenance']) {
+    await fillClosure(page, {
+      starts: '2028-10-08T09:00',
+      ends: '2028-10-08T17:00',
+      reason,
+      description: '',
+    })
+    await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+    await expect(blockOff(page).getByRole('alert')).toHaveText(
+      'Describe why the venue is blocked off.',
+    )
+    await blockOff(page).getByRole('button', { name: 'Cancel' }).click()
+  }
+  await expect(dayButton(page, /^8 October 2028/)).toHaveCount(0)
+})
+
+test('9.4 AC5: an end that is not after the start is refused in the form, before anything is sent', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(PINNED_NOW)
+  const writes: string[] = []
+  page.on('request', (request) => {
+    if (request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`)
+  })
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  writes.length = 0
+
+  await fillClosure(page, { starts: '2028-10-09T10:00', ends: '2028-10-09T09:00' })
+
+  await expect(blockOff(page).getByRole('alert')).toHaveText('The end must be after the start.')
+  await expect(blockOff(page).getByRole('button', { name: 'Save closure' })).toBeDisabled()
+  // Equal is not after either.
+  await blockOff(page).getByLabel('Ends').fill('2028-10-09T10:00')
+  await expect(blockOff(page).getByRole('alert')).toHaveText('The end must be after the start.')
+  expect(writes).toEqual([])
+})
+
+test('9.4 AC1: the month grid names a closure by its reason, and by its description for Other', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date('2028-12-10T10:00:00+08:00'))
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const renovation = uniqueName('Atrium repainting')
+  const other = uniqueName('Atrium film shoot')
+
+  await fillClosure(page, {
+    starts: '2028-12-05T09:00',
+    ends: '2028-12-05T18:00',
+    reason: 'Renovation',
+    description: renovation,
+  })
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await dayButton(page, /^5 December 2028/).waitFor()
+  await fillClosure(page, {
+    starts: '2028-12-06T09:00',
+    ends: '2028-12-06T18:00',
+    reason: 'Other',
+    description: other,
+  })
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+
+  const grid = availability(page)
+  await expect(dayButton(page, /^5 December 2028/)).toContainText('Renovation')
+  await expect(dayButton(page, /^5 December 2028/)).not.toContainText(renovation)
+  await expect(dayButton(page, /^6 December 2028/)).toContainText(other)
+  // The day list keeps the kind and the description.
+  await dayButton(page, /^5 December 2028/).click()
+  const list = dayList(page, /5 Dec 2028/)
+  await expect(list).toContainText('Unavailable – Renovation')
+  await expect(list).toContainText(renovation)
+  await expect(grid).toBeVisible()
+})
+
+test('9.4 AC6: editing a closure that was removed meanwhile says it is gone, and the calendar catches up', async ({
+  page,
+  browser,
+}) => {
+  await page.clock.setFixedTime(PINNED_NOW)
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium carpet')
+  await fillClosure(page, {
+    starts: '2028-10-24T09:00',
+    ends: '2028-10-24T18:00',
+    description,
+  })
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await dayButton(page, /^24 October 2028/).click()
+  const item = page.getByRole('listitem').filter({ hasText: description })
+  await expect(item.getByRole('button', { name: 'Edit' })).toBeVisible()
+
+  // Meanwhile another Venue Staff session removes it.
+  const other = await signedInPage(browser, ACCOUNTS.venueStaff)
+  await other.clock.setFixedTime(PINNED_NOW)
+  await openVenue(other, VENUES.gardenAtrium)
+  await dayButton(other, /^24 October 2028/).click()
+  const removing = other.getByRole('listitem').filter({ hasText: description })
+  await removing.getByRole('button', { name: 'Remove' }).click()
+  await other.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
+  await expect(dayButton(other, /^24 October 2028/)).toHaveCount(0)
+
+  await item.getByRole('button', { name: 'Edit' }).click()
+  await blockOff(page).getByLabel('Description').fill(uniqueName('Atrium carpet again'))
+  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+
+  await expect(blockOff(page).getByRole('alert')).toHaveText('Unavailability period not found.')
+  await expect(dayButton(page, /^24 October 2028/)).toHaveCount(0)
 })
