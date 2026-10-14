@@ -647,3 +647,30 @@ test('2.7 AC18: an event with no venue requirement starts the change form with o
   await expect(section.getByText(NO_VENUE_NEEDED_LINE)).toHaveCount(0)
   expect(sent).toEqual([])
 })
+
+test("2.7 AC2/AC14: the starting venue requirement takes the event's times only once they are a valid start and end", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto('/events/new')
+  await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
+  const neededFrom = requirement(page, 1).getByLabel('Needed from')
+  const neededUntil = requirement(page, 1).getByLabel('Needed until')
+
+  // An end before the start is the event's own mistake, said once, under its dates: the card it
+  // starts with does not copy it and get marked as well.
+  await page.getByLabel('Proposed start').fill(inFuture(30, 17))
+  await page.getByLabel('Proposed end').fill(inFuture(30, 9))
+  await expect(
+    page.getByText('The proposed end date and time must be after the start date and time.'),
+  ).toBeVisible()
+  await expect(neededFrom).toHaveValue('')
+  await expect(neededUntil).toHaveValue('')
+  await expect(neededUntil).not.toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('A venue requirement must end after it starts.')).toHaveCount(0)
+
+  // Once the dates are right, the card takes them.
+  await page.getByLabel('Proposed end').fill(inFuture(30, 18))
+  await expect(neededFrom).toHaveValue(inFuture(30, 17))
+  await expect(neededUntil).toHaveValue(inFuture(30, 18))
+})
