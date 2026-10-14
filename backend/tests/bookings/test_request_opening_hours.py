@@ -251,3 +251,57 @@ def test_a_switch_is_checked_on_its_own_times_too(coordinator_client, db):
 
     assert response.status_code == 201, response.text
     assert datetime.fromisoformat(response.json()["held_from"]) == _at(7)
+
+
+# --- AC17: Venue Staff see setup and teardown outside the hours on the request (13.1) -----------
+def _queue_entry(client, booking_id: uuid.UUID) -> dict:
+    """``booking_id``'s entry in Venue Staff's Pending tab (story 13.1)."""
+    response = client.get("/bookings", params={"status": "PENDING"})
+    assert response.status_code == 200
+    return next(entry for entry in response.json()["items"] if entry["id"] == str(booking_id))
+
+
+@pytest.mark.story("12.1", ac=17)
+def test_the_queue_gives_each_request_its_setup_teardown_and_venue_hours(venue_staff_client, db):
+    """What the queue card needs to say whether the setup or teardown runs outside the venue's
+    hours: both durations, the booked period from its start to its end, and the hours. 90 minutes
+    of setup before 09:00 start at 07:30, before the venue opens at 08:00."""
+    booking = make_booking(
+        db,
+        event_id=_event(db, _at(9), _at(12)).id,
+        venue_id=_venue(db).id,
+        starts_at=_at(9),
+        ends_at=_at(12),
+        setup_minutes=90,
+        teardown_minutes=45,
+    )
+
+    entry = _queue_entry(venue_staff_client, booking.id)
+
+    assert (entry["setup_minutes"], entry["teardown_minutes"]) == (90, 45)
+    assert datetime.fromisoformat(entry["held_from"]) == _at(7, 30)
+    assert datetime.fromisoformat(entry["held_until"]) == _at(12, 45)
+    assert (entry["venue_operating_hours_start"], entry["venue_operating_hours_end"]) == (
+        "08:00:00",
+        "18:00:00",
+    )
+
+
+@pytest.mark.story("12.1", ac=17)
+def test_a_venue_with_no_recorded_hours_gives_none_on_the_queue(venue_staff_client, db):
+    """No hours are recorded, so nothing can run outside them, and the card says nothing."""
+    booking = make_booking(
+        db,
+        event_id=_event(db, _at(9), _at(12)).id,
+        venue_id=make_venue(db).id,
+        starts_at=_at(9),
+        ends_at=_at(12),
+        setup_minutes=90,
+    )
+
+    entry = _queue_entry(venue_staff_client, booking.id)
+
+    assert (entry["venue_operating_hours_start"], entry["venue_operating_hours_end"]) == (
+        None,
+        None,
+    )
