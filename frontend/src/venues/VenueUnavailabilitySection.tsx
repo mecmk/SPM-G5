@@ -176,7 +176,7 @@ export function VenueUnavailabilitySection({
         noValidate
         aria-label={editing === null ? 'Mark unavailable' : 'Edit closure'}
       >
-        <div className="form-grid">
+        <div className="form-grid form-grid-2">
           <label>
             Starts
             <input
@@ -195,6 +195,8 @@ export function VenueUnavailabilitySection({
               disabled={isSaving}
             />
           </label>
+        </div>
+        <div className="form-grid">
           <label>
             Reason
             <select
