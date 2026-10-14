@@ -1,5 +1,6 @@
 import { BOOKING_REASON, HELD_REASON, type VenueUnavailableWindow } from '../api/venues'
-import { inputToInstant } from '../shared/format'
+import { HOLD_EXPIRES_LABEL } from '../shared/bookingStatus'
+import { formatDateTime, inputToInstant } from '../shared/format'
 import type { CalendarEntry, CalendarEntryTone } from './Calendar'
 import { eachDate } from './calendarGrid'
 
@@ -64,6 +65,9 @@ export interface DayItem {
    *  whichever side runs past it. Null when the two are the same, for a closure, and on a day the
    *  booking does not reach, where `kindLabel` already says so. */
   turnaround: string | null
+  /** Story 12.7 AC1: "Hold expires Sat, 1 Jul 2028, 09:00" on an approved booking's row while its
+   *  hold is open; null for a pending request, a booking held for good, or a closure. */
+  holdExpiry: string | null
   /** Where the item sorts within its day. */
   sortStart: number
   /** The item as a calendar cell shows it. */
@@ -145,6 +149,9 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
         tone: isHeld ? 'warning' : 'danger',
         timeRange: formatSlice(bookingSlice ?? blocked, dayStart),
         turnaround,
+        holdExpiry: window.hold_expires_at
+          ? `${HOLD_EXPIRES_LABEL} ${formatDateTime(window.hold_expires_at)}`
+          : null,
         sortStart: (bookingSlice ?? blocked).start,
         entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
       },

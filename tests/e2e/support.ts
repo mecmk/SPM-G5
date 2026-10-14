@@ -15,6 +15,7 @@ export const ACCOUNTS = {
   coordinator2: 'coordinator2@connectsphere.example',
   venueStaff: 'venue@connectsphere.example',
   techSupport: 'tech@connectsphere.example',
+  safetyOfficer: 'safety@connectsphere.example',
   attendee: 'attendee@example.com',
 } as const
 
@@ -60,6 +61,19 @@ export const EVENTS = {
   // like the partner briefing's, and no bookings. Story 11.1's real send with a justification
   // since story 12.5 (one request per requirement).
   pricingClinic: '33333333-0000-0000-0000-000000000033',
+  // Story 12.7, Planning, organiser: organiser2, coordinator, July 2028: one venue requirement,
+  // whose request expired. The 12.7 spec requests a venue for it again.
+  craftFair: '33333333-0000-0000-0000-000000000034',
+  // Story 21.1, Awaiting Safety Check, organiser: organiser2, coordinator2, August 2028. The
+  // concert expects 300 at the 250-seat Exhibition Foyer, whose operating hours are not recorded,
+  // and leads the queue. The book fair is within capacity and was sent back once.
+  harbourConcert: '33333333-0000-0000-0000-000000000035',
+  bookFair: '33333333-0000-0000-0000-000000000036',
+  // Story 21.1, reviewed and no longer awaiting the check, organiser: organiser2, coordinator2,
+  // September 2028: the food festival was approved (Confirmed), the night walk sent back
+  // (Planning).
+  foodFestival: '33333333-0000-0000-0000-000000000037',
+  nightWalk: '33333333-0000-0000-0000-000000000038',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

@@ -50,6 +50,7 @@ ASSIGNABLE_STATUSES = frozenset(
         EventStatus.UNDER_REVIEW,
         EventStatus.CLARIFICATION_REQUESTED,
         EventStatus.PLANNING,
+        EventStatus.AWAITING_SAFETY_CHECK,
         EventStatus.CONFIRMED,
     }
 )

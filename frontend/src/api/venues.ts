@@ -319,6 +319,9 @@ export interface VenueUnavailableWindow {
   booking_ends_at: string | null
   reason: string
   label: string
+  /** Story 12.7 AC1: when an approved booking's open hold expires; null for a pending request, a
+   * hold its event's confirmation completed, or a closure. */
+  hold_expires_at: string | null
 }
 
 /** Story 9.1 AC1/AC2. `startsAt`/`endsAt` are ISO datetimes covering the visible range. */

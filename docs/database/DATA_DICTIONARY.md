@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-09 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-13 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -44,6 +44,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
+| Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
@@ -365,7 +366,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `starts_at` | `timestamp with time zone` | yes | - | - | Proposed start date-time (story 2.1 AC1). Mandatory once submitted. Important field (story 7.3) - changes go through change requests once arrangements exist. |
 | `ends_at` | `timestamp with time zone` | yes | - | - | Proposed end date-time. Must be after starts_at (story 2.1 AC2). |
 | `expected_attendance` | `integer` | yes | - | - | Expected number of attendees. Positive whole number (story 2.1 AC3). Compared with venue capacity (story 11.1). |
-| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
+| `status` | `text` | no | `'DRAFT'` | - | Current lifecycle stage: DRAFT, UNDER_REVIEW, CLARIFICATION_REQUESTED, PLANNING, AWAITING_SAFETY_CHECK, CONFIRMED, COMPLETED, CANCELLED, REJECTED. Every transition is also written to event_status_history. |
 | `assigned_coordinator_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Current Event Coordinator (story 5.1). History of assignments is in event_coordinator_assignments. |
 | `preferred_location` | `text` | yes | - | - | Not collected by the event request form: dropped from story 2.1 AC4 on 20 Sep 2026 as too broad beside room layout and facilities. Kept so existing rows stay valid. |
 | `venue_none_required` | `boolean` | no | `false` | - | TRUE = organiser explicitly stated the event needs no venue, and it has no venue_requirements rows. FALSE with no rows = not yet specified. A request cannot be submitted until one or the other is given (story 2.1 AC10, story 2.7 AC8). |
@@ -391,7 +392,7 @@ An event request and, once approved, the event itself - one row for the whole li
 
 Allowed values:
 
-- `status`: `DRAFT`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `PLANNING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
+- `status`: `DRAFT`, `UNDER_REVIEW`, `CLARIFICATION_REQUESTED`, `PLANNING`, `AWAITING_SAFETY_CHECK`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `REJECTED`
 
 Rules and indexes:
 
@@ -595,13 +596,37 @@ Rules and indexes:
 - unique index `uq_event_change_requests_pending_field`: `btree (event_id, field_name) WHERE (status = 'PENDING'::text)`
 - index `ix_event_change_requests_event`: `btree (event_id, status)`
 
+### event_safety_reviews
+
+**Stories:** 21.1
+
+One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5). Append-only.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | Primary key. |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event reviewed. |
+| `reviewed_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. The Safety Officer who made the review. |
+| `reviewed_at` | `timestamp with time zone` | no | `now()` | - | When the review was made. Previous reviews are listed newest first by it (story 21.1 AC3). |
+| `outcome` | `text` | no | - | - | APPROVED: the event passed the check. CHANGES_REQUESTED: the officer sent it back for changes. |
+| `notes` | `text` | yes | - | - | The officer's notes on the review. Optional. |
+| `facts` | `jsonb` | no | - | - | Snapshot of the safety-relevant facts reviewed, as app/safety/service.py::safety_facts builds them: description, expected_attendance, starts_at and ends_at (UTC), venues (approved bookings: id, name, capacity in the booked layout, people_to_hold, layout code and layout_name), accessibility (each need: feature code, feature_name, notes), accessibility_notes, and equipment (accepted items: equipment_type code, equipment_type_name, quantity, technical_notes). The next check lists the top-level keys that differ (story 21.1 AC5). |
+
+Allowed values:
+
+- `outcome`: `APPROVED`, `CHANGES_REQUESTED`
+
+Rules and indexes:
+
+- index `ix_event_safety_reviews_event`: `btree (event_id, reviewed_at)`
+
 ## Venue bookings
 
 ### venue_bookings
 
 **Stories:** 12.x, 13.x, 14.x, 9.2
 
-A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, holding the venue (story 12.1 AC3); APPROVED = confirmed booking. No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
+A request by the assigned coordinator to book one venue for an event, and its outcome. PENDING = awaiting Venue Staff, blocking the venue (story 12.1 AC3); APPROVED = booked, held until hold_expires_at unless the event is confirmed first (story 12.7). No two PENDING or APPROVED bookings of one venue may overlap (ex_venue_bookings_no_double_booking). REJECTED / WITHDRAWN / CANCELLED / EXPIRED free the venue. The held period (held_from..held_until) includes setup and teardown time (story 12.2).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -619,27 +644,37 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3). Only APPROVED bookings appear on the venue calendar (story 9.1). |
-| `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time. |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3). |
+| `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1) - for an EXPIRED booking, who approved it - or the coordinator who withdrew the request (story 12.2). NULL when the system cancelled it (migration 010). |
+| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), and for a WITHDRAWN or CANCELLED request, when it was closed. |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). |
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 | `venue_requirement_id` | `uuid` | yes | - | FK → `venue_requirements.id` | FK -> venue_requirements.id. The event's venue requirement this request is for (story 12.5 AC1), always one of the same event's requirements (checked in the service). NULL for an additional venue (AC5, AC7), and if the requirement is removed. |
+| `hold_expires_at` | `timestamp with time zone` | yes | - | - | When an approved booking's tentative hold on its venue expires unless the event is confirmed first (story 12.7 AC1, AC3): set by Venue Staff when they approve, never after held_from (AC5), and changed only by them (AC7, AC9). NULL for a pending request (ck_venue_bookings_hold_expiry) and for a booking approved before migration 018; required for an EXPIRED one, which keeps it. |
+| `hold_reminded_at` | `timestamp with time zone` | yes | - | - | When the event's coordinator was warned that the hold is about to expire (story 12.7 AC2). NULL until then, and again when Venue Staff move the expiry back outside the warning period. |
+| `hold_completed_at` | `timestamp with time zone` | yes | - | - | When the event's confirmation completed the hold (story 12.7 AC4): set by trg_events_complete_venue_holds when the event becomes CONFIRMED before hold_expires_at. From then on the booking is held for good: it never expires and its expiry no longer changes. NULL while the hold is open (ck_venue_bookings_hold_completed). |
+| `hold_expiry_change_reason` | `text` | yes | - | - | Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the booking and the event's booking list. NULL until the first change; the audit log keeps every change's reason. |
+| `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
+| `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 
 Allowed values:
 
-- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`
+- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`, `EXPIRED`
 
 Rules and indexes:
 
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
+- check `ck_venue_bookings_hold_completed`: `CHECK (((hold_completed_at IS NULL) OR ((hold_expires_at IS NOT NULL) AND (status <> 'EXPIRED'::text))))`
+- check `ck_venue_bookings_hold_expiry`: `CHECK ((((status <> 'PENDING'::text) OR (hold_expires_at IS NULL)) AND ((status <> 'EXPIRED'::text) OR (hold_expires_at IS NOT NULL))))`
+- check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
 - unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
 - index `ix_venue_bookings_event`: `btree (event_id)`
+- index `ix_venue_bookings_open_holds`: `btree (hold_expires_at) WHERE ((status = 'APPROVED'::text) AND (hold_completed_at IS NULL))`
 - index `ix_venue_bookings_status`: `btree (status)`
 - index `ix_venue_bookings_venue_period`: `btree (venue_id, held_from, held_until)`
 
@@ -806,6 +841,7 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | ATTENDEE | Attendee | False | External participant who registers for and attends an event. |
 | EVENT_COORDINATOR | Event Coordinator | True | Internal staff assigned to coordinate the overall planning of an event; main internal point of contact. |
 | EVENT_ORGANISER | Event Organiser | False | External client representative who has an event to organise and communicates requirements to ConnectSphere. |
+| SAFETY_OFFICER | Safety Officer | True | Internal staff who check an event is operationally safe before it goes ahead. |
 | TECH_SUPPORT_STAFF | Technical Support Staff | True | Internal staff responsible for equipment, technical requirements, reservations and on-site technical support. |
 | VENUE_STAFF | Venue Staff | True | Internal staff responsible for venue information, availability, booking decisions and physical venue preparation. |
 

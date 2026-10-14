@@ -32,7 +32,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | --- | --- | --- |
 | `e2e/health.spec.ts` | smoke | the sign-in page loads and the backend answers |
 | `e2e/auth.spec.ts` | 1.1 AC1, AC2, AC4–AC6 | sign in and out, the sign-in lock |
-| `e2e/rbac.spec.ts` | 1.2 AC1–AC4 | each role's sidebar and main page, blocked addresses |
+| `e2e/rbac.spec.ts` | 1.2 AC1–AC4; 21.1 AC1 | each role's sidebar and main page, blocked addresses |
 | `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19, AC20 | raising and submitting an event request |
 | `e2e/venue-requirements.spec.ts` | 2.7 AC1–AC6, AC8–AC11 | listing several venue requirements, each with its own times |
 | `e2e/my-event-requests.spec.ts` | 2.6 AC1–AC5, AC7–AC9, AC11, AC12 | an organiser's own list of requests |
@@ -54,10 +54,12 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 | `e2e/venue-suitability.spec.ts` | 11.1 AC1–AC3, AC5–AC7 | whether each catalogue venue suits the event, and why not; requesting one that does not, with a justification |
 | `e2e/booking-requests.spec.ts` | 12.1 AC1–AC4, AC14, AC15; 12.2 AC1, AC2, AC4; 12.5 AC6 | requesting a venue for an event, and withdrawing the request |
 | `e2e/venue-requirement-booking.spec.ts` | 12.5 AC1–AC5, AC7–AC9, AC11 | requesting a venue for each of an event's venue requirements: each one's status in the catalogue's banner, the catalogue moving on to the next after a request, the event's page once every one has a request, an additional venue, no second request for a requirement that has one, and withdrawing or switching a requirement's request from the catalogue |
-| `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.1.2 AC1, AC3, AC4; 13.1.3 AC1–AC4; 13.2 AC1; 13.2.1 AC2–AC4; 13.2.2 AC1 | Venue Staff's queue, Pending / All / Approved / Rejected tabs, cancellation timing, pagination, the requested venue's calendar on the request detail page, approving and rejecting, and when a decision was made |
+| `e2e/venue-hold-expiry.spec.ts` | 12.7 AC1, AC3, AC5–AC8, AC11 | Venue Staff setting a hold's expiry as they approve a request, and the hold shown on the request's page, its calendar day, the Approved tab's card and the event's page; changing it, with a reason shown beside it; an expired booking kept on the event's page and under its own Expired tab, its requirement needing a venue again and its venue requested again; no expiry, a past one, one after the booked period starts, or a blank reason, refused before it is sent |
+| `e2e/bookings.spec.ts` | 13.1 AC1–AC3; 13.1.2 AC1, AC3, AC4; 13.1.3 AC1–AC4; 13.2 AC1; 13.2.1 AC2–AC4; 13.2.2 AC1 | Venue Staff's queue, Pending / All / Approved / Rejected tabs, cancellation timing, pagination, the requested venue's calendar on the request detail page, approving (with the hold's expiry, story 12.7) and rejecting, and when a decision was made |
 | `e2e/equipment-requests.spec.ts` | 15.1 AC1–AC4, AC6, AC9 | recording an event's equipment and submitting it to Technical Support |
 | `e2e/equipment-queue.spec.ts` | 15.2 AC1–AC3, AC5, AC6 | Technical Support's equipment request queue, its figures, its All / Pending / Accepted / Declined tabs, and View details to the event and back |
 | `e2e/equipment-decisions.spec.ts` | 16.1 AC1, AC2, AC4, AC6, AC9 | Technical Support accepting and declining equipment requests from the queue and from each request's own page, a blank decline reason blocked in the browser, a short request's Accept suggesting a decline, a double-click deciding once, a decision refused because another page decided first leaving the page showing the current status, a two-day event's period named in full on the card, the Accept dialog and the request's page, and the coordinator seeing each outcome and when it was decided on the event page |
+| `e2e/safety-checks.spec.ts` | 21.1 AC2–AC6 | the Safety Officer's queue of events awaiting the safety check, oldest first, its Pending / Accepted / Declined / All tabs, and each event's safety details: its venues with any over capacity flagged, accessibility needs, accepted equipment, what changed since the last review and the previous reviews, with details never recorded shown as such |
 
 Every case, by story and AC, without starting anything:
 

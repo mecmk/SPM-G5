@@ -64,6 +64,9 @@ class NotificationType(StrEnum):
     BOOKING_WITHDRAWN = "BOOKING_WITHDRAWN"  # 12.2: Venue Staff
     BOOKING_APPROVED = "BOOKING_APPROVED"  # 13.2: the coordinator
     BOOKING_REJECTED = "BOOKING_REJECTED"  # 13.2.1: the coordinator
+    BOOKING_HOLD_EXPIRING = "BOOKING_HOLD_EXPIRING"  # 12.7: the coordinator, from the system
+    BOOKING_HOLD_EXPIRED = "BOOKING_HOLD_EXPIRED"  # 12.7: the coordinator, from the system
+    BOOKING_HOLD_EXPIRY_CHANGED = "BOOKING_HOLD_EXPIRY_CHANGED"  # 12.7: the coordinator
     EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator

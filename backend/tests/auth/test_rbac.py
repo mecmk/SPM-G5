@@ -15,7 +15,13 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.auth.permissions import ROLE_PERMISSIONS, Permission, permissions_for, role_has
+from app.auth.permissions import (
+    ROLE_PERMISSIONS,
+    Permission,
+    RoleCode,
+    permissions_for,
+    role_has,
+)
 from tests.support.factories import venue_payload
 from tests.support.seed import Users, Venues
 
@@ -48,6 +54,22 @@ def test_unknown_role_has_no_permissions():
 def test_me_reports_exactly_the_roles_permissions(client, user):
     body = client.login(user)
     assert body["permissions"] == sorted(permissions_for(user.role))
+
+
+@pytest.mark.story("21.1", ac=1)
+@pytest.mark.story("21.1", ac=6)
+def test_safety_officer_reviews_safety_and_writes_nothing_else():
+    """Read access to events, venues, bookings and equipment, plus the safety review."""
+    assert ROLE_PERMISSIONS[RoleCode.SAFETY_OFFICER] == {
+        Permission.VENUES_READ,
+        Permission.VENUE_CALENDAR_READ,
+        Permission.EVENTS_READ_ALL,
+        Permission.BOOKINGS_READ,
+        Permission.EQUIPMENT_READ,
+        Permission.NOTIFICATIONS_READ_OWN,
+        Permission.USERS_READ_INTERNAL,
+        Permission.SAFETY_REVIEW,
+    }
 
 
 # --- AC2: the permission list a client hides controls with ---------------------------------
@@ -117,6 +139,14 @@ MATRIX = {
         "list": 403,
         "view": 403,
         "refdata": 403,
+        "create": 403,
+        "update": 403,
+        "delete": 403,
+    },
+    "SAFETY_OFFICER": {
+        "list": 200,
+        "view": 200,
+        "refdata": 200,
         "create": 403,
         "update": 403,
         "delete": 403,

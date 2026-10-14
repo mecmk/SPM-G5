@@ -49,7 +49,12 @@ from sqlalchemy.orm import Session
 from app.bookings.models import BookingStatus
 from app.events.models import EventStatus
 from app.venues.models import Venue
-from tests.support.factories import make_event, make_venue, make_venue_requirement
+from tests.support.factories import (
+    approval_payload,
+    make_event,
+    make_venue,
+    make_venue_requirement,
+)
 from tests.support.seed import Bookings, Events, Users, VenueRequirements, Venues
 
 # The seeded APPROVED event (Nimbus Developer Conference): 2026-11-25 09:00-18:00 +08, 350
@@ -567,7 +572,9 @@ def test_a_raised_request_can_then_be_approved_by_venue_staff(
     )
     assert raised.status_code == 201
 
-    approved = login_as(Users.VENUE_STAFF).post(f"/bookings/{raised.json()['id']}/approve")
+    approved = login_as(Users.VENUE_STAFF).post(
+        f"/bookings/{raised.json()['id']}/approve", json=approval_payload()
+    )
 
     assert approved.status_code == 200
     assert approved.json()["status"] == BookingStatus.APPROVED

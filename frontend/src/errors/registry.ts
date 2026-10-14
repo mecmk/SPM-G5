@@ -91,6 +91,11 @@ export type ErrorCode =
   | 'BOOKING_REASON_REQUIRED'
   | 'BOOKING_JUSTIFICATION_REQUIRED'
   | 'BOOKING_WITHDRAW_REFUSED'
+  | 'BOOKING_HOLD_EXPIRY_REFUSED'
+  | 'BOOKING_HOLD_EXPIRY_REQUIRED'
+  | 'BOOKING_HOLD_EXPIRY_IN_PAST'
+  | 'BOOKING_HOLD_EXPIRY_AFTER_START'
+  | 'BOOKING_HOLD_EXPIRY_REASON_REQUIRED'
   | 'EQUIPMENT_REFUSED'
   | 'EQUIPMENT_INVALID'
   | 'EQUIPMENT_QUANTITY_INVALID'
@@ -532,6 +537,33 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_WITHDRAW_REFUSED: {
     title: 'Cannot withdraw this request',
     message: 'This request cannot be withdrawn in its current state.',
+  },
+
+  // Story 12.7: Venue Staff setting when a hold expires, as they approve or later. The server
+  // refuses one that is not in the future or is after the booked period starts (AC5), or a booking
+  // with no open hold (AC7), each with a sentence of its own; this is the fallback and the
+  // notice's title.
+  BOOKING_HOLD_EXPIRY_REFUSED: {
+    title: 'Expiry not changed',
+    message: "This hold's expiry could not be changed.",
+  },
+  // Story 12.7 AC5: checks the Approve and Change expiry dialogs make before anything is sent.
+  BOOKING_HOLD_EXPIRY_REQUIRED: {
+    title: 'Expiry needed',
+    message: 'Choose when the hold should expire.',
+  },
+  BOOKING_HOLD_EXPIRY_IN_PAST: {
+    title: 'Check the expiry',
+    message: 'The hold must expire in the future.',
+  },
+  BOOKING_HOLD_EXPIRY_AFTER_START: {
+    title: 'Check the expiry',
+    message: 'The hold must expire by the start of the booked period.',
+  },
+  /** Story 12.7 AC7, decided 12 Oct 2026: every change of an expiry needs a reason. */
+  BOOKING_HOLD_EXPIRY_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Give a reason for the new expiry.',
   },
   /** Story 15.1 AC4/AC6/AC7/AC9/AC10: the event, the item or the stock no longer allows the
    *  change; the backend's own sentence says which. */

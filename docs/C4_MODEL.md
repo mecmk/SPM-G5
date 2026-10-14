@@ -34,6 +34,7 @@ C4Context
     Person(venueStaff, "Venue Staff", "Keeps the venue catalogue accurate and decides booking requests")
     Person(techStaff, "Technical Support Staff", "Looks after equipment and decides what can be reserved")
     Person(attendee, "Attendee", "Signs up for a confirmed event")
+    Person(safetyOfficer, "Safety Officer", "Checks an event is operationally safe before it goes ahead")
 
     System(connectsphere, "ConnectSphere", "Event planning and venue booking: event requests, coordinator review, venue bookings, equipment reservations, attendee registration and notifications")
 
@@ -43,6 +44,7 @@ C4Context
     Rel(venueStaff, connectsphere, "Maintains venues, approves or rejects bookings")
     Rel(techStaff, connectsphere, "Checks equipment availability, reserves equipment")
     Rel(attendee, connectsphere, "Registers for an event, withdraws")
+    Rel(safetyOfficer, connectsphere, "Reviews the events awaiting the safety check")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
@@ -56,12 +58,12 @@ C4Container
     title Level 2 - Containers inside ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact")
-    Person(staff, "ConnectSphere staff", "Coordinator Leads, Coordinators, Venue Staff, Technical Support Staff")
+    Person(staff, "ConnectSphere staff", "Coordinator Leads, Coordinators, Venue Staff, Technical Support Staff, Safety Officers")
     Person(attendee, "Attendee", "Registers for events")
 
     System_Boundary(connectsphere, "ConnectSphere") {
         Container(spa, "Single-page application", "React 19, TypeScript, Vite", "Role-aware screens, one area per feature. A section whose story is not built yet opens a page naming that story")
-        Container(api, "API application", "Python 3.12, FastAPI, Uvicorn", "REST endpoints, session authentication, role checks and business rules. Publishes OpenAPI docs at /docs")
+        Container(api, "API application", "Python 3.12, FastAPI, Uvicorn", "REST endpoints, session authentication, role checks and business rules, plus a timer that expires lapsed venue holds. Publishes OpenAPI docs at /docs")
         ContainerDb(db, "Database", "PostgreSQL 16", "Users and sessions, events, venues, bookings, equipment, registrations, notifications and the audit log")
         Container(dbtool, "Schema and seed tool", "Python CLI, app.dbtool", "Applies SQL migrations, loads reference and sample data, regenerates the data dictionary and ERD")
     }
@@ -142,10 +144,11 @@ C4Component
         Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits")
         Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject. The Lead's unassigned queue and first assignment, and a coordinator's reassignment")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout")
-        Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period")
+        Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period. An approved booking's hold until its event is confirmed: the expiry Venue Staff set as they approve and their changes to it, and the sweep that warns coordinators and expires lapsed holds, run on the API's timer and before any answer a lapsed hold would change. The database completes the holds when an event becomes Confirmed")
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the event's own validation is reused from app/events. The arrangements each change affects are still to come")
+        Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
@@ -158,7 +161,7 @@ C4Component
     Rel(changes, equipment, "Flags affected reservations in")
     Rel(events, registration, "Opens registration for")
     Rel(events, notifications, "Raises submissions through")
-    Rel(bookings, notifications, "Raises requests, withdrawals and decisions through")
+    Rel(bookings, notifications, "Raises requests, withdrawals, decisions and hold expiries through")
     Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
     Rel(registration, notifications, "Raises confirmations through")
@@ -171,6 +174,7 @@ C4Component
     Rel(equipment, db, "Reads and writes")
     Rel(registration, db, "Reads and writes")
     Rel(changes, db, "Reads and writes")
+    Rel(safety, db, "Reads")
     Rel(notifications, db, "Reads and writes")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
