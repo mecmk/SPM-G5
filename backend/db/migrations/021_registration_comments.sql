@@ -1,6 +1,6 @@
 -- =====================================================================
--- Migration 020 - story 18.1: bring the registration comments up to date. Comments only; no
--- table, column or constraint changes.
+-- Migration 021 - story 18.1: bring the registration comments up to date. Comments only; no
+-- table, column or constraint changes. (021, not 020: fix f2.7.4, PR #108, adds its own 020.)
 --
 -- Migration 001 wrote event_registrations' comments for the stories as first numbered (18.2 AC2,
 -- 18.4 AC4, 18.2 AC3). Those stories were merged into 18.1 (browse and register) and 18.2 (view

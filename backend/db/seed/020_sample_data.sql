@@ -8,7 +8,8 @@
 --                  6666.. equipment requests   7777.. equipment types (010)
 --                  bbbb.. event clarifications   cccc.. venue requirements
 --                  dddd.. equipment out of service   eeee.. equipment holds
---                  ffff.. safety reviews   aaaa.. event registrations
+--                  ffff.. safety reviews   aaaa.. coordinator assignments
+--                  1818.. event registrations (story 18.1)
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -961,7 +962,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
 -- is listed as Full.
 INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at) VALUES
-    ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000011',
+    ('18181818-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000011',
      'REGISTERED', '2026-10-11 10:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,

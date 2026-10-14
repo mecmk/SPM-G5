@@ -169,7 +169,7 @@ class Bookings:
 class Registrations:
     """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one."""
 
-    PORTFOLIO_REVIEW = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
+    PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
 
 
 class Unavailability:
