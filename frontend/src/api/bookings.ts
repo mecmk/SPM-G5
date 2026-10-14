@@ -53,22 +53,35 @@ export interface Booking {
  * hand with SUITABILITY_OVERRIDE_REASON_MAX_LENGTH in backend/app/bookings/schemas.py. */
 export const SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 
+/** f12.1.2 (story 12.1 AC5): the longest setup or teardown, 14 days in minutes - the longest an
+ * event may run. Keep in step by hand with TURNAROUND_MAX_MINUTES in
+ * backend/app/bookings/schemas.py. */
+export const TURNAROUND_MAX_MINUTES = 14 * 24 * 60
+
 /** Mirrors `BookingRequestIn`: one event, one venue. Everything else is copied server-side.
  * Story 11.1: `suitability_override_reason` is why a venue that does not suit is requested.
  * Story 12.5 AC1: `venue_requirement_id` is the event's venue requirement the request is for,
  * whose own times, people, layout and facilities it carries; left out, the request is for an
- * additional venue (AC5, AC7), carrying the event's own period and attendance. */
+ * additional venue (AC5, AC7), carrying the event's own period and attendance.
+ * f12.1.2 (story 12.1 AC1/AC5): `setup_minutes` and `teardown_minutes` hold the venue that long
+ * before the request's own times start and after they end - whole minutes from 0 to
+ * `TURNAROUND_MAX_MINUTES`, and 0 when left out. The step refuses any other value before sending,
+ * since the server's 422 for one would read as a missing justification (`createBookingRequest`). */
 export interface BookingRequestInput {
   event_id: string
   venue_id: string
   venue_requirement_id?: string
   suitability_override_reason?: string
+  setup_minutes?: number
+  teardown_minutes?: number
 }
 
 /** Story 12.1 AC1-AC4. Story 11.1 AC7: a venue that does not suit, sent without a justification,
  * is refused with a 422 - for instance when it stopped suiting after the step loaded. The code is
- * mapped by status alone, so it assumes `JustificationRequired` is this endpoint's only 422: give
- * any other 422 here its own code first, or it will be read as a missing justification.
+ * mapped by status alone, so it assumes `JustificationRequired` is the only 422 the step can meet:
+ * give any other 422 here its own code first, or it will be read as a missing justification.
+ * f12.1.2: the server also answers 422 for a setup or teardown out of range, which the step
+ * refuses before sending (`turnaroundProblem` in src/bookings/turnaround.ts), so it never meets it.
  *
  * Story 12.5 AC3: the notice names the venue and the requirement it was requested for - or says
  * it is an additional venue, when `requirementName` is null. AC11/AC12: a requirement that
@@ -95,10 +108,14 @@ function requestedFor(requirementName: string | null): string {
 }
 
 /** Mirrors `BookingSwitchIn`: the venue a pending request is switched to. Story 11.1:
- * `suitability_override_reason` is why a venue that does not suit is requested. */
+ * `suitability_override_reason` is why a venue that does not suit is requested. f12.1.2 (story
+ * 12.1 AC1): `setup_minutes` and `teardown_minutes` as for `BookingRequestInput` - a switch is a
+ * new request, so it carries its own, never the replaced request's. */
 export interface BookingSwitchInput {
   venue_id: string
   suitability_override_reason?: string
+  setup_minutes?: number
+  teardown_minutes?: number
 }
 
 /**

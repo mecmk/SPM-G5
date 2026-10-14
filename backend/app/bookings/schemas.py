@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.bookings.models import BookingStatus, VenueBooking
 
@@ -46,6 +46,12 @@ class BookingReferenceData(BaseModel):
 # frontend/src/api/bookings.ts, which the request step's textarea uses.
 SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 
+# Story 12.1 AC5, decided for f12.1.2 (14 Oct 2026) and not in the backlog: setup and teardown are
+# each at most 14 days, the longest an event may run. Keep in step by hand with
+# TURNAROUND_MAX_MINUTES in frontend/src/api/bookings.ts, which the request step's Setup and
+# Teardown inputs use.
+TURNAROUND_MAX_MINUTES = 14 * 24 * 60
+
 
 class BookingRequestIn(BaseModel):
     """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
@@ -58,9 +64,15 @@ class BookingRequestIn(BaseModel):
     for, and the service copies that requirement's own period, number of people, layout and
     facilities. None makes an additional venue (AC5, AC7), which carries the event's own.
 
-    The one other thing a client sends is story 11.1's ``suitability_override_reason``: why it is
-    requesting a venue that does not suit the event. Trimmed, and blank counts as not given; the
-    service decides whether one is needed.
+    A client also sends story 11.1's ``suitability_override_reason``: why it is requesting a
+    venue that does not suit the event. Trimmed, and blank counts as not given; the service
+    decides whether one is needed.
+
+    f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): a client sends the setup and
+    teardown as well, in whole minutes, which widen the booked period before the request's own
+    start and after its own end. Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES``
+    (14 days), so a negative, fractional or longer value is refused (422) - and, as the event's
+    own whole numbers are (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
     """
 
     event_id: uuid.UUID
@@ -69,6 +81,8 @@ class BookingRequestIn(BaseModel):
     suitability_override_reason: str | None = Field(
         default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
     )
+    setup_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
 
     @field_validator("suitability_override_reason", mode="before")
     @classmethod
@@ -80,14 +94,20 @@ class BookingRequestIn(BaseModel):
 
 class BookingSwitchIn(BaseModel):
     """Story 12.5, decided 11 Oct 2026: the venue a pending request is switched to. The event and
-    the venue requirement are the switched request's own, so only the venue is sent - with story
-    11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+    the venue requirement are the switched request's own, so neither is sent; the venue is, with
+    story 11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+
+    f12.1.2 (story 12.1 AC1/AC5): the new request's setup and teardown are sent as well, read as
+    ``BookingRequestIn`` reads them. A switch is a new request, so it carries what it sends - 0
+    when it sends none - never the replaced request's.
     """
 
     venue_id: uuid.UUID
     suitability_override_reason: str | None = Field(
         default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
     )
+    setup_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
 
     @field_validator("suitability_override_reason", mode="before")
     @classmethod

@@ -85,6 +85,8 @@ export type ErrorCode =
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
+  | 'BOOKING_TURNAROUND_INVALID'
+  | 'BOOKING_TURNAROUND_TOO_LONG'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
@@ -495,6 +497,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message:
       "This venue requirement is not one of the event's. Go back to the catalogue and select " +
       'one of its venue requirements.',
+  },
+  // f12.1.2 (story 12.1 AC5): checks the request step makes on a setup and a teardown before
+  // anything is sent - never wired into an `errorCodes` map, same precedent as
+  // EVENT_REJECTION_REASON_REQUIRED. The server refuses the same values.
+  BOOKING_TURNAROUND_INVALID: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.',
+  },
+  /** Keep in step with TURNAROUND_MAX_MINUTES in src/api/bookings.ts. */
+  BOOKING_TURNAROUND_TOO_LONG: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown can each be at most 14 days.',
   },
 
   // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own
