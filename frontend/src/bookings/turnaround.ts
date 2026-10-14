@@ -14,8 +14,9 @@ const SINGAPORE_UTC_OFFSET_MINUTES = 8 * MINUTES_PER_HOUR
 const CLOCK_TIME_LENGTH = 'HH:MM'.length
 
 /** f12.1.2 (story 12.1 AC1): a setup or a teardown as the request step's fields hold it, in days,
- * hours and minutes. Each stays as typed until it is read, so a half-typed value never breaks the
- * step. */
+ * hours and minutes. Each is the text as typed - the fields are text, not number, inputs, so a
+ * browser never turns what it cannot read into a blank - and it is only read when needed, so a
+ * half-typed value never breaks the step. */
 export interface DurationDraft {
   days: string
   hours: string
@@ -33,7 +34,8 @@ export interface BookedPeriod {
 }
 
 /** One part of a draft as a whole number. A blank part counts as 0, as a cleared field adds
- * nothing; anything else that is not a whole number of zero or more ("-1", "1.5", "e") is null. */
+ * nothing; anything else that is not a whole number of zero or more ("-1", "1.5", "3-", "e") is
+ * null. */
 function wholeNumberOf(part: string): number | null {
   const trimmed = part.trim()
   if (trimmed === '') return 0
@@ -127,6 +129,26 @@ function outsideOpeningHours(
     isSetupOutside: setupMinutes > 0 && setupMinutes > sinceOpening,
     isTeardownOutside: teardownMinutes > 0 && teardownMinutes > untilClosing,
   }
+}
+
+/**
+ * f12.1.2 (story 12.1 AC16): whether a request's own times, `startsAt` to `endsAt`, are within the
+ * venue's opening hours as the server reads them (`closed_for` and `daily_window` in
+ * backend/app/venues/service.py): as daily sessions from the start's time of day to the end's, on
+ * the Singapore wall clock, each end included; never when the end's time of day is not after the
+ * start's. A venue with no hours recorded is open whenever. The server refuses a request whose
+ * own times are outside, so the request step says nothing about its setup and teardown then.
+ */
+export function isWithinOpeningHours(
+  startsAt: string,
+  endsAt: string,
+  opensAt: string | null,
+  closesAt: string | null,
+): boolean {
+  if (opensAt === null || closesAt === null) return true
+  const start = singaporeMinuteOfDay(startsAt)
+  const end = singaporeMinuteOfDay(endsAt)
+  return end > start && start >= minuteOfDay(opensAt) && end <= minuteOfDay(closesAt)
 }
 
 /**

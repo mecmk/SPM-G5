@@ -57,8 +57,9 @@ class BookingRequestIn(BaseModel):
     """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
 
     AC2 requires the request to carry *the event's* schedule, attendance, layout and required
-    facilities, so the service copies those from the event row; a client cannot book a period or
-    an attendance the event was not approved for.
+    facilities, so the service copies those from the event row; a client cannot change the
+    request's own times or its attendance, only widen its booked period around those times by the
+    setup and teardown below (f12.1.2).
 
     Story 12.5 AC1: ``venue_requirement_id`` names the event's venue requirement the request is
     for, and the service copies that requirement's own period, number of people, layout and

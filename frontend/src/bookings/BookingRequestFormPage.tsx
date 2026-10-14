@@ -38,6 +38,7 @@ import {
   BOOKED_PERIOD_LABEL,
   bookedPeriod,
   durationMinutes,
+  isWithinOpeningHours,
   outsideHoursFact,
   turnaroundProblem,
   VENUE_STAFF_DECIDE,
@@ -112,10 +113,10 @@ function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
           <label key={part}>
             {label}
             <input
-              type="number"
-              min={0}
-              step={1}
+              type="text"
               inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
               value={draft[part]}
               onChange={(changeEvent) => handlePartChange(part, changeEvent.target.value)}
             />
@@ -146,7 +147,10 @@ function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
  *
  * Story 12.1 AC14: the venue may have stopped being available since the search. The backend
  * re-checks and refuses with its reason, and the step then offers Back to the results: the same
- * search, which runs again, so the venue has gone from it.
+ * search, which runs again, so the venue has gone from it. f12.1.2: that search covers the
+ * request's own times only, so after a refusal that only the setup or teardown caused - another
+ * hold or a closure in it (AC3, AC14), or a setup starting in the past (AC9) - the venue is still
+ * listed, and the setup or teardown is what to change here.
  *
  * Story 11.1 AC2: once the step knows the coordinator may request the venue, it reads whether the
  * venue suits the event - "Checking…" meanwhile, with Send held back. A venue that suits shows
@@ -322,7 +326,10 @@ export function BookingRequestFormPage() {
   // f12.1.2 (story 12.1 AC17): what of the setup and teardown runs outside the venue's opening
   // hours, said under the booked period, so only while that shows.
   const outsideFact =
-    period !== null && startsAt && endsAt
+    period !== null &&
+    startsAt &&
+    endsAt &&
+    isWithinOpeningHours(startsAt, endsAt, venue.operating_hours_start, venue.operating_hours_end)
       ? outsideHoursFact(
           startsAt,
           endsAt,
@@ -346,6 +353,12 @@ export function BookingRequestFormPage() {
   }
 
   async function send(reason: string | null) {
+    // f12.1.2 (story 12.1 AC5): every way of sending - Send request, or the justification
+    // dialog's confirm - sends only a setup and teardown the step accepts.
+    if (turnaroundError !== null) {
+      setIsConfirming(false)
+      return
+    }
     setIsSending(true)
     try {
       if (replaced !== null) {
@@ -504,11 +517,15 @@ export function BookingRequestFormPage() {
               </li>
             </ul>
           )}
-          {outsideFact !== null && (
-            <p className="warning">
-              {outsideFact} {VENUE_STAFF_DECIDE}
-            </p>
-          )}
+          {/* f12.1.2 (story 12.1 AC17): a live region, there from the start, so a screen reader
+           *  says the notice as it appears while the setup or teardown is typed. */}
+          <div role="status">
+            {outsideFact !== null && (
+              <p className="warning">
+                {outsideFact} {VENUE_STAFF_DECIDE}
+              </p>
+            )}
+          </div>
         </section>
 
         <section aria-labelledby="booking-suitability-heading" className="stack">
