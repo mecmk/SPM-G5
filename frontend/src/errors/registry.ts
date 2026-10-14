@@ -26,6 +26,9 @@ export type ErrorCode =
   | 'VENUE_NOT_FOUND'
   | 'VENUE_NAME_TAKEN'
   | 'VENUE_IN_USE'
+  | 'UNAVAILABILITY_NOT_FOUND'
+  | 'UNAVAILABILITY_CANNOT_BE_ENDED'
+  | 'UNAVAILABILITY_CANNOT_BE_REMOVED'
   | 'VENUE_NAME_REQUIRED'
   | 'VENUE_LOCATION_REQUIRED'
   | 'VENUE_CAPACITY_INVALID'
@@ -172,6 +175,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_IN_USE: {
     title: 'Venue has bookings',
     message: 'You cannot delete a venue that has bookings. Withdraw it from service instead.',
+  },
+
+  // Story 9.4: a venue marked unavailable. These usually arrive with the backend's own sentence.
+  UNAVAILABILITY_NOT_FOUND: {
+    title: 'Closure not found',
+    message: 'This closure no longer exists. It may have been removed.',
+  },
+  UNAVAILABILITY_CANNOT_BE_ENDED: {
+    title: 'Closure cannot be ended',
+    message: 'This closure has not started, or has already ended. Reload the page to see it.',
+  },
+  UNAVAILABILITY_CANNOT_BE_REMOVED: {
+    title: 'Closure cannot be removed',
+    message: 'This closure has already started. End it instead.',
   },
 
   // Story 8.3: checks the venue form makes before anything is sent.

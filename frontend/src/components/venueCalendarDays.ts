@@ -1,4 +1,9 @@
-import { BOOKING_REASON, HELD_REASON, type VenueUnavailableWindow } from '../api/venues'
+import {
+  BOOKING_REASON,
+  HELD_REASON,
+  UNAVAILABILITY_REASON_NAMES,
+  type VenueUnavailableWindow,
+} from '../api/venues'
 import { HOLD_EXPIRES_LABEL } from '../shared/bookingStatus'
 import { formatDateTime, inputToInstant } from '../shared/format'
 import type { CalendarEntry, CalendarEntryTone } from './Calendar'
@@ -21,14 +26,8 @@ const TURNAROUND_BOTH_LABEL = 'Setup and teardown included'
 const TURNAROUND_ONLY_LABEL = 'Setup and teardown only'
 const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
 
-/** Mirrors `UnavailabilityReason` in backend/app/venues/models.py: a closure's `reason`. */
-const CLOSURE_REASON_NAMES: Record<string, string> = {
-  MAINTENANCE: 'Maintenance',
-  EQUIPMENT_FAILURE: 'Equipment failure',
-  RENOVATION: 'Renovation',
-  SAFETY: 'Safety concern',
-  OTHER: 'Other',
-}
+/** A closure's `reason` by name, from the one list `api/venues.ts` mirrors. */
+const CLOSURE_REASON_NAMES: Record<string, string> = UNAVAILABILITY_REASON_NAMES
 
 // Every event runs on Singapore time, which has no daylight saving, so a day is always 24 hours
 // (see shared/format.ts).

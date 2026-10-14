@@ -337,3 +337,129 @@ export function getVenueCalendar(
     errorCodes: { 404: 'VENUE_NOT_FOUND' },
   })
 }
+
+/** The reasons a venue can be marked unavailable, mirroring `UnavailabilityReason` in
+ * backend/app/venues/models.py (migration 020). `SAFETY` is shown as "Safety concern", and
+ * `OTHER` needs a description. */
+export type UnavailabilityReason =
+  'MAINTENANCE' | 'EQUIPMENT_FAILURE' | 'RENOVATION' | 'SAFETY' | 'OTHER'
+
+/** Story 9.4 AC1: how every page names each reason, in the order the form offers them. */
+export const UNAVAILABILITY_REASON_NAMES: Record<UnavailabilityReason, string> = {
+  MAINTENANCE: 'Maintenance',
+  EQUIPMENT_FAILURE: 'Equipment failure',
+  RENOVATION: 'Renovation',
+  SAFETY: 'Safety concern',
+  OTHER: 'Other',
+}
+
+/** Story 9.4 AC1: the reason that must carry a description. */
+export const OTHER_UNAVAILABILITY_REASON: UnavailabilityReason = 'OTHER'
+
+/** Mirrors `VenueUnavailabilityOut` (story 9.4): a period a venue is unavailable for. */
+export interface Unavailability {
+  id: string
+  venue_id: string
+  starts_at: string
+  ends_at: string
+  reason: UnavailabilityReason
+  description: string | null
+}
+
+/** Mirrors `VenueUnavailabilityCreate`: the body of adding a period. `description` is required
+ * when the reason is Other. */
+export interface UnavailabilityInput {
+  starts_at: string
+  ends_at: string
+  reason: UnavailabilityReason
+  description: string | null
+}
+
+/** Mirrors `AffectedBookingOut` (story 9.4 AC2): a pending or approved booking whose held period
+ * (setup and teardown included) overlaps a period about to be saved. `already_marked` is true
+ * when it already carries the venue-unavailable mark. */
+export interface AffectedBooking {
+  booking_id: string
+  event_id: string
+  event_name: string
+  status: string
+  held_from: string
+  held_until: string
+  already_marked: boolean
+}
+
+/** Story 9.4 AC2: the bookings a period from `startsAt` to `endsAt` would affect, to show before
+ * Venue Staff save. Reads only. */
+export function fetchAffectedBookings(
+  venueId: string,
+  startsAt: string,
+  endsAt: string,
+): Promise<AffectedBooking[]> {
+  const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  return api<AffectedBooking[]>(`/venues/${venueId}/unavailability/affected-bookings?${params}`, {
+    errorCodes: { 404: 'VENUE_NOT_FOUND' },
+  })
+}
+
+/** Story 9.4 AC1/AC5: mark a venue unavailable. Bookings in the way do not stop it being saved. */
+export function addUnavailability(
+  venueId: string,
+  venueName: string,
+  input: UnavailabilityInput,
+): Promise<Unavailability> {
+  return api<Unavailability>(`/venues/${venueId}/unavailability`, {
+    method: 'POST',
+    body: input,
+    errorCodes: { 404: 'VENUE_NOT_FOUND' },
+    notify: {
+      title: 'Venue marked unavailable',
+      message: `${venueName} is marked unavailable for the period you chose.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 9.4 AC6: change a period's start, end, reason or description - only the fields given. */
+export function editUnavailability(
+  venueId: string,
+  periodId: string,
+  changes: Partial<UnavailabilityInput>,
+): Promise<Unavailability> {
+  return api<Unavailability>(`/venues/${venueId}/unavailability/${periodId}`, {
+    method: 'PATCH',
+    body: changes,
+    errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND' },
+    notify: {
+      title: 'Unavailability changed',
+      message: 'The period was changed.',
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 9.4 AC6: end a period in force now. 409 when it has not started or has already ended. */
+export function endUnavailabilityNow(venueId: string, periodId: string): Promise<Unavailability> {
+  return api<Unavailability>(`/venues/${venueId}/unavailability/${periodId}`, {
+    method: 'PATCH',
+    body: { end_now: true },
+    errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND', 409: 'UNAVAILABILITY_CANNOT_BE_ENDED' },
+    notify: {
+      title: 'Unavailability ended',
+      message: 'The venue is available again from now.',
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 9.4 AC6: remove a period that has not started. 409 when it is already in force. */
+export function removeUnavailability(venueId: string, periodId: string): Promise<void> {
+  return api<void>(`/venues/${venueId}/unavailability/${periodId}`, {
+    method: 'DELETE',
+    errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND', 409: 'UNAVAILABILITY_CANNOT_BE_REMOVED' },
+    notify: {
+      title: 'Unavailability removed',
+      message: 'The period was removed from the venue.',
+      importance: 'important',
+    },
+  })
+}
