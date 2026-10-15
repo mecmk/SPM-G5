@@ -30,7 +30,7 @@
 import { expect, test } from '@playwright/test'
 import {
   ACCOUNTS,
-  assignedCoordinator,
+  assignByLead,
   clarificationsSection,
   createAndSubmitRequest,
   signIn,
@@ -53,7 +53,7 @@ test('4.2 AC1/AC3/AC4/AC7: the coordinator asks, asks again, and a double-click 
   const eventId = await createAndSubmitRequest(page, name)
 
   await page.goto(`/events/${eventId}`)
-  const coordinator = await assignedCoordinator(page)
+  const coordinator = await assignByLead(page)
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, coordinator.account)

@@ -50,11 +50,13 @@ class NotificationType(StrEnum):
     "The coordinator" is always the event's coordinator when the notification is sent (AC4), and
     "Venue Staff" and "Technical Support" every active member of that role (``active_members``)."""
 
-    EVENT_SUBMITTED = "EVENT_SUBMITTED"  # 2.1: the coordinator 5.1 assigned the request to
+    EVENT_SUBMITTED = "EVENT_SUBMITTED"  # 2.1: every active Event Coordinator Lead (5.4)
     EVENT_CLARIFICATION_REQUESTED = "EVENT_CLARIFICATION_REQUESTED"  # 4.2: the organiser
     EVENT_CLARIFICATION_RESPONDED = "EVENT_CLARIFICATION_RESPONDED"  # 4.3: the coordinator
     EVENT_APPROVED = "EVENT_APPROVED"  # 4.4: the organiser
     EVENT_REJECTED = "EVENT_REJECTED"  # 4.5: the organiser
+    EVENT_ASSIGNED_TO = "EVENT_ASSIGNED_TO"  # 5.4: the coordinator the Lead assigned
+    EVENT_ASSIGNED_ORGANISER = "EVENT_ASSIGNED_ORGANISER"  # 5.4: the organiser
     EVENT_REASSIGNED_FROM = "EVENT_REASSIGNED_FROM"  # 5.2: the previous coordinator
     EVENT_REASSIGNED_TO = "EVENT_REASSIGNED_TO"  # 5.2: the new coordinator
     EVENT_REASSIGNED_ORGANISER = "EVENT_REASSIGNED_ORGANISER"  # 5.2: the organiser

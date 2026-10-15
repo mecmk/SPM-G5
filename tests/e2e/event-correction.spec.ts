@@ -31,7 +31,7 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import {
   ACCOUNTS,
   EVENTS,
-  assignedCoordinator,
+  assignByLead,
   createAndSubmitRequest,
   inFuture,
   signIn,
@@ -57,7 +57,7 @@ const PNG_BYTES = Buffer.from(
 
 interface SubmittedRequest {
   id: string
-  /** The seeded coordinator story 5.1's round robin assigned it to. */
+  /** The seeded coordinator the Lead assigned it to (story 5.4, always Chloe). */
   coordinator: string
 }
 
@@ -65,10 +65,10 @@ function equipmentItem(page: Page, position: number): Locator {
   return page.getByRole('group', { name: `Equipment item ${position}` })
 }
 
-/** Who the event page says the request was assigned to. */
+/** Has the Lead assign the request (story 5.4), and returns the coordinator's account. */
 async function coordinatorOf(page: Page, eventId: string): Promise<string> {
   await page.goto(`/events/${eventId}`)
-  return (await assignedCoordinator(page)).account
+  return (await assignByLead(page)).account
 }
 
 /** The organiser's submitted request, and the coordinator it went to. */

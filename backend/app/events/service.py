@@ -26,11 +26,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload
 
 from app.auth.models import User
-from app.auth.permissions import Permission, role_has
+from app.auth.permissions import Permission, RoleCode, role_has
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.config import settings
-from app.coordination import service as coordination_service
 from app.events.models import (
     ClarificationKind,
     EquipmentHoldStatus,
@@ -64,7 +63,7 @@ from app.events.schemas import (
     ReviewQueueSort,
     VenueRequirementIn,
 )
-from app.notifications.service import NotificationType, notify
+from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
@@ -1361,32 +1360,32 @@ def _record_transition(
     )
 
 
-def _notify_coordinator_of_submission(db: Session, event: Event, *, actor: User) -> None:
-    """Story 20.1 AC1: the coordinator the request was just assigned to (5.1) is told it waits for
-    their review. With nobody to assign (5.1 AC5) nobody is told; when story 5.4 replaces the
-    automatic assignment, the Lead is told here instead. The organiser submitted it, so they are
-    not (AC3)."""
-    if event.assigned_coordinator_id is None:
-        return
-    notify(
-        db,
-        recipient=db.get(User, event.assigned_coordinator_id),
-        actor=actor,
-        notification_type=NotificationType.EVENT_SUBMITTED,
-        event_id=event.id,
-        title=f'"{event.name}" is waiting for your review',
-        message=f'{actor.full_name} submitted "{event.name}", and it is assigned to you.',
-        related_entity_type="event",
-        related_entity_id=event.id,
-        commit=False,
-    )
+def _notify_leads_of_submission(db: Session, event: Event, *, actor: User) -> None:
+    """Story 20.1 AC1, since story 5.4: a submitted request waits unassigned (5.4 AC9), so every
+    active Event Coordinator Lead - who assigns it - is told it is waiting. A role is told through
+    its active members only (20.1 AC5). The organiser submitted it, so they are not (AC3)."""
+    for lead in active_members(db, role_code=RoleCode.EVENT_COORDINATOR_LEAD):
+        notify(
+            db,
+            recipient=lead,
+            actor=actor,
+            notification_type=NotificationType.EVENT_SUBMITTED,
+            event_id=event.id,
+            title=f'"{event.name}" is waiting for a coordinator',
+            message=(
+                f'{actor.full_name} submitted "{event.name}". Assign it from the unassigned queue.'
+            ),
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
 
 
 def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9-AC12: submit ``actor``'s own draft once its four mandatory details are filled in.
-    Story 5.1 AC1: submitting also auto-assigns the next coordinator in round robin, in this
-    same transaction - see ``coordination.service.auto_assign_next_coordinator``. Story 20.1
-    AC1/AC4: that coordinator is notified, in the same transaction too.
+    Story 5.4 AC9: no coordinator is assigned here - the request waits in the Event Coordinator
+    Lead's unassigned queue. Story 20.1 AC1/AC4: the active Leads are notified, in the same
+    transaction.
     Story 2.7 AC12: the row is held from the moment it is read, so what is judged here is what
     an edit in another tab left, never what was there before it committed."""
     event = _get_own_event(db, event_id, actor, for_update=True)
@@ -1432,8 +1431,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
         at=submitted_at,
         reason=None,
     )
-    coordination_service.auto_assign_next_coordinator(db, event)
-    _notify_coordinator_of_submission(db, event, actor=actor)
+    _notify_leads_of_submission(db, event, actor=actor)
     record_audit(
         db,
         actor=actor,

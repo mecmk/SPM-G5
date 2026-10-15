@@ -160,7 +160,9 @@ def test_reassignment_failure_rolls_back_the_whole_change(
             f"/events/{Events.APPROVED}/coordinator",
             json={"coordinator_id": str(Users.COORDINATOR_2.id)},
         )
-    db.rollback()  # mirrors app.db.get_db's real teardown; see test_auto_assign_coordinator.py
+    # A real request's session is closed after the error, discarding its work; rolling back here
+    # does the same for the test's session before the pointer is read again.
+    db.rollback()
 
     after_pointer = db.execute(
         text("SELECT assigned_coordinator_id FROM events WHERE id = :e"), {"e": Events.APPROVED}
@@ -347,9 +349,10 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     before either writes: Chloe -> Carl, and, from a second tab, Chloe -> Dana. The second write
     must be refused rather than silently overwrite the first.
 
-    A single test session can't host two genuinely overlapping transactions (see the advisory-lock
-    test in test_auto_assign_coordinator.py for the same limitation and why this repo tests the
-    guard mechanism directly instead). The interleaving is injected deterministically: the moment
+    A single test session can't host two genuinely overlapping transactions (5.4's
+    test_two_leads_assigning_at_once_write_one needs real sessions, its own commits and a clean-up
+    for that), so this tests the guard mechanism directly. The interleaving is injected
+    deterministically: the moment
     the reassignment-in-progress reads "who is current" via ``current_assignment``, a second,
     already-authorised reassignment (Chloe -> Carl) is made and committed first, simulating the
     other request winning the race.

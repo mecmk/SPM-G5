@@ -12,12 +12,14 @@ import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
+import { UnassignedQueuePage } from './events/UnassignedQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
+import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
 import { SafetyChecksPage } from './safety/SafetyChecksPage'
 import {
@@ -33,10 +35,12 @@ import {
   EVENT_PATH,
   EVENTS_INBOX_PATH,
   EVENTS_MINE_PATH,
+  EVENTS_UNASSIGNED_PATH,
   HOME_PATH,
   LOGIN_PATH,
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
+  UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
   VENUE_NEW_PATH,
@@ -124,6 +128,11 @@ function App() {
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>
 
+              {/* Story 5.4: the Event Coordinator Lead's unassigned queue. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_ASSIGN} />}>
+                <Route path={EVENTS_UNASSIGNED_PATH} element={<UnassignedQueuePage />} />
+              </Route>
+
               {/* Story 13.1: the venue staff booking requests queue. */}
               <Route element={<RequirePermission permission={PERMISSIONS.BOOKINGS_DECIDE} />}>
                 <Route path={BOOKING_REQUESTS_PATH} element={<BookingRequestsPage />} />
@@ -141,6 +150,11 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.SAFETY_REVIEW} />}>
                 <Route path={SAFETY_CHECKS_PATH} element={<SafetyChecksPage />} />
                 <Route path={SAFETY_CHECK_PATH} element={<SafetyCheckDetailPage />} />
+              </Route>
+
+              {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only). */}
+              <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
+                <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
               </Route>
 
               {/*
