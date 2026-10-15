@@ -78,6 +78,11 @@ export const EVENTS = {
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
 export async function signIn(page: Page, email: string, password: string = PASSWORD) {
+  // A Sign out clicked just before may still be waiting on the server: let the app finish it and
+  // open /login itself, since navigating away now would cancel the request.
+  if ((await page.getByRole('button', { name: 'Sign out' }).count()) > 0) {
+    await page.waitForURL((url) => url.pathname === '/login')
+  }
   if (!page.url().endsWith('/login')) await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)

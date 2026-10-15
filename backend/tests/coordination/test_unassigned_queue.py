@@ -52,7 +52,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
-from app.auth.permissions import permissions_for
+from app.auth.permissions import Permission, permissions_for
 from app.common.audit import AuditLog
 from app.coordination import service as coordination_service
 from app.coordination.models import EventCoordinatorAssignment
@@ -154,6 +154,46 @@ def test_a_lead_signs_in_and_holds_the_assign_permission(login_as):
     assert body["role_code"] == LEAD_ROLE
     assert ASSIGN in body["permissions"]
     assert REVIEW not in body["permissions"]
+
+
+@pytest.mark.story("5.4", ac=1)
+def test_the_lead_holds_exactly_the_read_permissions_and_assigning():
+    """Reads like every internal role, and assigns; nothing else - no deciding events or bookings,
+    no editing, no equipment management."""
+    assert permissions_for(LEAD_ROLE) == {
+        Permission.VENUES_READ,
+        Permission.VENUE_CALENDAR_READ,
+        Permission.EVENTS_READ_ALL,
+        Permission.BOOKINGS_READ,
+        Permission.EQUIPMENT_READ,
+        Permission.NOTIFICATIONS_READ_OWN,
+        Permission.USERS_READ_INTERNAL,
+        Permission.EVENTS_ASSIGN,
+    }
+
+
+@pytest.mark.story("5.4", ac=1)
+@pytest.mark.parametrize("action", ["approve", "reject", "clarification"])
+def test_the_lead_opens_an_assigned_event_but_cannot_decide_it(login_as, db: Session, action):
+    """The Lead reads any event, assigned ones included, and decides none (AC2: read-only)."""
+    lead = login_as(Users.LEAD)
+    calls = {
+        "approve": lambda: lead.post(f"/events/{Events.SUBMITTED}/approve"),
+        "reject": lambda: lead.post(
+            f"/events/{Events.SUBMITTED}/reject", json={"reason": "Not a fit."}
+        ),
+        "clarification": lambda: lead.post(
+            f"/events/{Events.SUBMITTED}/clarifications", json={"message": "Which room?"}
+        ),
+    }
+
+    opened = lead.get(f"/events/{Events.SUBMITTED}")
+    refused = calls[action]()
+
+    assert opened.status_code == 200, opened.text
+    assert refused.status_code == 403, refused.text
+    db.expire_all()
+    assert db.get(Event, Events.SUBMITTED).status == EventStatus.UNDER_REVIEW
 
 
 # --- AC2: the queue ------------------------------------------------------------------------
@@ -322,6 +362,22 @@ def test_assigning_notifies_the_coordinator_and_the_organiser(login_as, db: Sess
 
     assert _notified(db, event.id, "EVENT_ASSIGNED_TO") == [Users.COORDINATOR_2.id]
     assert _notified(db, event.id, "EVENT_ASSIGNED_ORGANISER") == [Users.ORGANISER.id]
+    to_coordinator, to_organiser = (
+        db.scalars(
+            select(Notification).where(
+                Notification.event_id == event.id, Notification.notification_type == kind
+            )
+        ).one()
+        for kind in ("EVENT_ASSIGNED_TO", "EVENT_ASSIGNED_ORGANISER")
+    )
+    # The coordinator is told who assigned it; the organiser is told who their coordinator is.
+    assert event.name in to_coordinator.title
+    assert Users.LEAD.full_name in to_coordinator.message
+    assert event.name in to_organiser.title
+    assert Users.COORDINATOR_2.full_name in to_organiser.message
+    assert Users.LEAD.full_name not in to_organiser.message
+    for notice in (to_coordinator, to_organiser):
+        assert (notice.related_entity_type, notice.related_entity_id) == ("event", event.id)
     everyone = (
         db.execute(
             text("SELECT recipient_id FROM notifications WHERE event_id = :e"), {"e": event.id}
@@ -382,14 +438,8 @@ def test_an_unassigned_event_cannot_be_decided_or_clarified(
 
 
 # --- AC7: only the Lead -----------------------------------------------------------------------
-REFUSED_ROLES = [
-    Users.COORDINATOR,
-    Users.ORGANISER,
-    Users.VENUE_STAFF,
-    Users.TECH_SUPPORT,
-    Users.ATTENDEE,
-    Users.SAFETY_OFFICER,
-]
+# Every role but the Lead's, so a role added later is refused here without editing this list.
+REFUSED_ROLES = [user for user in Users.ONE_PER_ROLE if user != Users.LEAD]
 
 
 @pytest.mark.story("5.4", ac=7)
@@ -505,6 +555,43 @@ def test_two_leads_assigning_at_once_write_one(engine):
             session.commit()
 
 
+@pytest.mark.story("5.4", ac=8)
+def test_a_lead_whose_write_finds_the_event_taken_is_told_who_got_it(db: Session, monkeypatch):
+    """The race test above relies on timing. This one forces the interleaving, as 5.2's
+    stale-reassignment test does: the moment this Lead has read "no coordinator yet", a second
+    Lead assigns Carl. The guarded update then matches no row, and the refusal names Carl."""
+    event = _unassigned_event(db)
+    lena = db.get(User, Users.LEAD.id)
+    second_lead = make_user(db, role=LEAD_ROLE, full_name="Second Lead")
+    real_current_assignment = coordination_service.current_assignment
+    interloper_has_run = False
+
+    def _interloper_wins_first(db_, event_id_):
+        nonlocal interloper_has_run
+        result = real_current_assignment(db_, event_id_)
+        if not interloper_has_run:
+            interloper_has_run = True
+            coordination_service.assign_coordinator(
+                db_,
+                event_id_,
+                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
+                actor=second_lead,
+            )
+        return result
+
+    monkeypatch.setattr(coordination_service, "current_assignment", _interloper_wins_first)
+
+    with pytest.raises(coordination_service.AlreadyAssigned) as refusal:
+        coordination_service.assign_coordinator(
+            db, event.id, AssignCoordinatorIn(coordinator_id=Users.COORDINATOR.id), actor=lena
+        )
+
+    monkeypatch.undo()
+    assert Users.COORDINATOR_2.full_name in str(refusal.value)
+    assert _pointer(db, event.id) == Users.COORDINATOR_2.id
+    assert len(_open_assignments(db, event.id)) == 1
+
+
 # --- AC9: no automatic assignment ---------------------------------------------------------
 @pytest.mark.story("5.4", ac=9)
 def test_a_submitted_request_waits_unassigned_in_the_queue(login_as, db: Session):
@@ -519,9 +606,12 @@ def test_a_submitted_request_waits_unassigned_in_the_queue(login_as, db: Session
     assert draft["id"] in _queue_ids(login_as(Users.LEAD))
 
 
+@pytest.mark.story("5.4", ac=4)
 @pytest.mark.story("5.4", ac=9)
 def test_a_submission_notifies_every_active_lead(login_as, db: Session):
-    """20.1 AC1's notice now goes to the Leads, who assign the request (PO decision)."""
+    """20.1 AC1's notice now goes to the Leads, who assign the request (PO decision). Two are
+    active, so telling only the first would fail; an inactive one is not told."""
+    second_lead = make_user(db, role=LEAD_ROLE, full_name="Second Lead")
     resting_lead = make_user(db, role=LEAD_ROLE, full_name="Resting Lead", is_active=False)
     organiser = login_as(Users.ORGANISER)
     draft = create_submittable_event_request(organiser)
@@ -529,7 +619,7 @@ def test_a_submission_notifies_every_active_lead(login_as, db: Session):
     assert organiser.post(f"/events/{draft['id']}/submit").status_code == 200
 
     told = _notified(db, uuid.UUID(draft["id"]), "EVENT_SUBMITTED")
-    assert told == [Users.LEAD.id]
+    assert told == sorted([Users.LEAD.id, second_lead.id])
     assert resting_lead.id not in told
 
 

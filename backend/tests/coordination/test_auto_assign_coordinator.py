@@ -62,5 +62,6 @@ def test_submit_ignores_a_coordinator_chosen_by_the_organiser(organiser_client):
     )
 
     assert response.status_code == 200, response.text
-    # Story 5.4 AC9: nobody is assigned on submission, and naming Chloe in the body changes that.
+    # Story 5.4 AC9: nobody is assigned on submission, and naming Chloe in the body does not
+    # change that.
     assert response.json()["assigned_coordinator_id"] is None

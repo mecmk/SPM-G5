@@ -9,6 +9,7 @@
  * AC5 an empty queue says so; with no active coordinators the queue says why it cannot assign.
  * AC6 the organiser's submitted request reads "Not yet assigned".
  * AC7 a coordinator who opens the queue's address directly is not permitted.
+ * AC8 a Lead who loses the race to another Lead is told who got the event, and the queue reloads.
  * AC9 submitting leaves the request unassigned, waiting for the Lead.
  * Responsive: the queue and the assign dialog fit a phone (375 x 667) and a desktop (1280 x 800),
  *     with no sideways scroll, the queue's rows stacked as cards and touch targets 44px tall.
@@ -120,6 +121,8 @@ test('5.4 AC2/AC3: the Lead assigns a new request from the queue', async ({ page
   await expect(item).toContainText('Olivia Organiser')
   await expect(item).toContainText('60 people')
   await expect(item).toContainText('Submitted')
+  await expect(item).not.toContainText('Not recorded') // a real submission time
+  await expect(item).toContainText('09:00–17:00') // createAndSubmitRequest's proposed hours
 
   // AC2: the request opens read-only - the Lead decides nothing about it.
   await item.getByRole('link', { name }).click()
@@ -176,6 +179,60 @@ test("5.4 AC7: a coordinator who opens the queue's address is not permitted", as
 
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
   await expect(page.getByRole('list', { name: QUEUE_LABEL })).toHaveCount(0)
+})
+
+test('5.4 AC8: a Lead who loses the race is told who got the event', async ({ page }) => {
+  const name = uniqueName('Taken')
+  const winner = 'This event has already been assigned to Chloe Coordinator.'
+  let isTaken = false
+  // The queue holds the event until the refusal; after it, it has gone, as another Lead assigned
+  // it. (Counting calls would not do: the dev build loads the page twice.)
+  await page.route(
+    (url) => url.pathname === QUEUE_API,
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const entries = [
+        {
+          id: '00000000-0000-0000-0000-000000000058',
+          name,
+          starts_at: '2027-06-01T01:00:00Z',
+          ends_at: '2027-06-01T09:00:00Z',
+          expected_attendance: 40,
+          organiser_name: 'Olivia Organiser',
+          submitted_at: '2026-10-12T01:00:00Z',
+        },
+      ]
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(isTaken ? [] : entries),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await page.route(
+    (url) => /\/events\/[^/]+\/coordinator$/.test(url.pathname),
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'PUT') return route.fallback()
+      isTaken = true
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: winner }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await openQueueAsLead(page)
+
+  await queueItem(page, name).getByRole('button', { name: 'Assign' }).click()
+  await assignDialog(page, name).getByRole('button', { name: 'Assign' }).click()
+
+  await expect(assignDialog(page, name)).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveText(winner)
+  await expect(queueItem(page, name)).toHaveCount(0)
 })
 
 for (const { device, viewport } of [
