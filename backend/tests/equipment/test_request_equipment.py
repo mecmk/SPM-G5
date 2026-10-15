@@ -241,8 +241,12 @@ def test_the_coordinator_sees_and_submits_what_the_organiser_asked_for(login_as,
     )
     submitted = organiser.post(f"/events/{created['id']}/submit")
     assert submitted.status_code == 200, submitted.text
-    coordinator_id = uuid.UUID(submitted.json()["assigned_coordinator_id"])
-    coordinator = next(u for u in Users.ALL_ACTIVE if u.id == coordinator_id)
+    # Story 5.4 AC9: the Lead assigns a submitted request; it is no longer assigned on its own.
+    coordinator = Users.COORDINATOR
+    assigned = login_as(Users.LEAD).put(
+        f"/events/{created['id']}/coordinator", json={"coordinator_id": str(coordinator.id)}
+    )
+    assert assigned.status_code == 200, assigned.text
 
     client = login_as(coordinator)
     [line] = _lines(client, created["id"])

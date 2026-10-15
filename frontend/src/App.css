@@ -2504,6 +2504,34 @@ td.num {
   outline-offset: 2px;
 }
 
+/* Story 5.4: a control on the card (the unassigned queue's Assign), at its right edge. */
+.event-card-action {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Story 5.4 responsive: on a phone the control drops below the details, full width, and the
+   unassigned queue's buttons and picker are at least 44px tall, to be pressed with a thumb. */
+@media (max-width: 640px) {
+  .event-card:has(.event-card-action) {
+    flex-wrap: wrap;
+  }
+
+  .event-card-action {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .event-card-action button {
+    width: 100%;
+  }
+
+  .unassigned-queue button,
+  .unassigned-queue select {
+    min-height: 44px;
+  }
+}
+
 .load-more {
   display: flex;
   flex-wrap: wrap;
@@ -2676,6 +2704,14 @@ tbody tr:hover td {
   background: var(--surface);
   box-shadow: var(--shadow);
   transform: translate(-50%, -50%);
+}
+
+/* Story 5.4 responsive: on a phone the width above includes the padding and border, which
+   otherwise add to it and push the dialog past both edges of a 375px screen. */
+@media (max-width: 640px) {
+  .dialog {
+    box-sizing: border-box;
+  }
 }
 
 .dialog-title {

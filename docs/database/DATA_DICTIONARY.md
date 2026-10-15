@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-13 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-14 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -840,6 +840,7 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | --- | --- | --- | --- |
 | ATTENDEE | Attendee | False | External participant who registers for and attends an event. |
 | EVENT_COORDINATOR | Event Coordinator | True | Internal staff assigned to coordinate the overall planning of an event; main internal point of contact. |
+| EVENT_COORDINATOR_LEAD | Event Coordinator Lead | True | Internal staff who review newly submitted event requests and assign each to an Event Coordinator with the team's workload in mind (story 5.4). |
 | EVENT_ORGANISER | Event Organiser | False | External client representative who has an event to organise and communicates requirements to ConnectSphere. |
 | SAFETY_OFFICER | Safety Officer | True | Internal staff who check an event is operationally safe before it goes ahead. |
 | TECH_SUPPORT_STAFF | Technical Support Staff | True | Internal staff responsible for equipment, technical requirements, reservations and on-site technical support. |

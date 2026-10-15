@@ -1,38 +1,26 @@
-"""Business logic for coordinator assignment (story 5.1).
+"""Business logic for coordinator assignment (stories 5.1, 5.2 and 5.4).
 
-Story 5.1 gives a submitted event a clear internal owner by two paths. It gets a coordinator
-automatically on submission, in round-robin order (``auto_assign_next_coordinator``), and
-manual assign/reassign (``assign_coordinator`` below) is how a human overrides that choice.
-Both paths share ``_create_assignment`` so "close the old row, open the new one, update the
-denormalised pointer, write the audit entry" is written once.
+A submitted event waits unassigned until the Event Coordinator Lead assigns it from the unassigned
+queue (story 5.4, which replaced 5.1's automatic round-robin assignment - 5.4 AC9). Once it has a
+coordinator, only that coordinator may hand it to another (story 5.2). Both writes share
+``_create_assignment``, so "close the old row, open the new one, update the denormalised pointer,
+write the audit entry" is written once.
 
-Manual assignment (``assign_coordinator``):
+``assign_coordinator``:
 
-* AC1 a submitted event can be assigned to exactly one coordinator at a time - assigning
-  closes the previous open assignment before opening the new one, so
-  ``uq_event_coordinator_assignments_current`` always sees at most one open row per event, and
-  ``events.assigned_coordinator_id`` is updated in the same transaction;
-* AC2 only users holding the Event Coordinator role can be selected - ``list_coordinators``
-  offers only those users and ``assign_coordinator`` re-checks the role on the way in;
-* AC3 the assignment records who assigned it and when - ``assigned_by_id`` / ``assigned_at``,
-  plus an ``EVENT_COORDINATOR_ASSIGNED`` audit entry;
-* AC4 the assigned coordinator's name is visible on the event - ``current_assignment`` reads
-  the open row with the coordinator eagerly loaded.
-
-Automatic assignment (``auto_assign_next_coordinator``, called once from
-``events.service.submit_event`` - see AC1/AC7):
-
-* AC2/AC6 coordinators take turns in a fixed order (creation time, then id, so deactivating one
-  does not reshuffle the rest); the next turn is whoever comes after the coordinator named by the
-  most recent *automatic* assignment (AC10), wrapping around and skipping anyone inactive;
-* AC3 the row is written with ``assigned_by_id IS NULL`` ("the system") and a note identifying it
-  as a round-robin auto-assignment;
-* AC5/AC9 an event that already has a coordinator, or a system with no active coordinators at
-  all, is left exactly as it is - no override, no error;
-* AC11 only users holding the Event Coordinator role are ever in the rotation;
-* AC14 the whole pick is made under ``pg_advisory_xact_lock(ROUND_ROBIN_LOCK_KEY)``, released
-  automatically at the end of the caller's transaction, so two submissions racing for "whose turn
-  is it" are serialised rather than both reading the same answer.
+* 5.1 AC1 an event has exactly one coordinator at a time - assigning closes the previous open
+  assignment before opening the new one, so ``uq_event_coordinator_assignments_current`` always
+  sees at most one open row per event, and ``events.assigned_coordinator_id`` is updated in the
+  same transaction;
+* 5.1 AC2 only active users holding the Event Coordinator role can be selected - the pick-list
+  offers only those, each with their number of active events (5.4 AC3), and the role is
+  re-checked on the way in;
+* 5.1 AC3 / 5.4 AC3 the assignment records who made it and when - ``assigned_by_id`` /
+  ``assigned_at``, plus an ``EVENT_COORDINATOR_ASSIGNED`` audit entry;
+* 5.4 AC7/AC9 an unassigned event is assigned only by a holder of ``events:assign`` (the Lead);
+  5.2 AC6 an assigned one is reassigned only by its current coordinator;
+* 5.4 AC8 of two Leads assigning one event at once, the conditional update in
+  ``_create_assignment`` lets only the first through, and the second is told who got it.
 
 Routers translate the exceptions raised here into HTTP statuses (see router.py).
 """
@@ -40,6 +28,7 @@ Routers translate the exceptions raised here into HTTP statuses (see router.py).
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
@@ -66,15 +55,12 @@ ASSIGNABLE_STATUSES = frozenset(
     }
 )
 
-# AC3: the note stored on a round-robin auto-assignment, distinguishing it in the history from a
-# human's manual (re)assignment.
-AUTO_ASSIGNMENT_NOTE = "Automatically assigned by round-robin rotation."
 
-# AC14: the key for the transaction-scoped advisory lock that serialises picking "whose turn is
-# it" across concurrent submissions. Arbitrary but fixed and distinctive (story 5.1); Postgres
-# advisory locks share one namespace per database, so this must never collide with another
-# feature's lock key.
-ROUND_ROBIN_LOCK_KEY = 51001
+# Story 5.4 AC7/AC9 and AC8: the refusals a Lead's or a coordinator's assignment can meet.
+NOT_PERMITTED_TO_ASSIGN_MESSAGE = (
+    "Only the Event Coordinator Lead can assign an event that has no coordinator yet."
+)
+ALREADY_ASSIGNED_MESSAGE = "This event has already been assigned to {coordinator}."
 
 
 class EventNotFound(LookupError):
@@ -120,11 +106,28 @@ class CoordinatorInactive(ValueError):
 
 
 class NotCurrentCoordinator(PermissionError):
-    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it -
-    an unassigned event stays open to any Event Coordinator (story 5.1's original claim-it case)."""
+    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it. An
+    unassigned event is the Lead's to assign (story 5.4 AC9: ``NotPermittedToAssign``)."""
 
     def __init__(self) -> None:
         super().__init__("Only the coordinator currently assigned to this event may reassign it.")
+
+
+class NotPermittedToAssign(PermissionError):
+    """Story 5.4 AC7/AC9: an unassigned event is assigned only by the Event Coordinator Lead -
+    Event Coordinators no longer claim one by hand."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_PERMITTED_TO_ASSIGN_MESSAGE)
+
+
+class AlreadyAssigned(RuntimeError):
+    """Story 5.4 AC8: the event already has a coordinator - assigned just now by another Lead, or
+    before - and the message says who."""
+
+    def __init__(self, coordinator: User) -> None:
+        super().__init__(ALREADY_ASSIGNED_MESSAGE.format(coordinator=coordinator.full_name))
+        self.coordinator = coordinator
 
 
 class AssignmentChanged(RuntimeError):
@@ -140,20 +143,61 @@ class AssignmentChanged(RuntimeError):
 
 
 # --- reads -------------------------------------------------------------------------------
-def list_coordinators(db: Session, *, exclude_event_id: uuid.UUID | None = None) -> list[User]:
-    """AC2: the users that may be selected - active holders of the Event Coordinator role.
+@dataclass(frozen=True)
+class CoordinatorWorkload:
+    """Story 5.4 AC3: a selectable coordinator, and how many active events they hold now."""
+
+    coordinator: User
+    active_event_count: int
+
+
+def list_coordinators(
+    db: Session, *, exclude_event_id: uuid.UUID | None = None
+) -> list[CoordinatorWorkload]:
+    """5.1 AC2: the users that may be selected - active holders of the Event Coordinator role.
+    Story 5.4 AC3: each with their number of active events - assigned to them and still open
+    (``ASSIGNABLE_STATUSES``, PO decision) - counted in the same query, so it is never stale.
 
     Story 5.2 AC4: pass ``exclude_event_id`` for the reassignment picker, which must leave that
     event's current coordinator out - they are not a valid target for their own event.
     """
-    query = select(User).where(
-        User.role_code == RoleCode.EVENT_COORDINATOR, User.is_active.is_(True)
+    # Counted per coordinator in a subquery, then joined on: grouping the users themselves would
+    # clash with the role User loads eagerly by a join.
+    counts = (
+        select(Event.assigned_coordinator_id, func.count().label("active_event_count"))
+        .where(Event.status.in_(ASSIGNABLE_STATUSES))
+        .group_by(Event.assigned_coordinator_id)
+        .subquery()
+    )
+    query = (
+        select(User, func.coalesce(counts.c.active_event_count, 0))
+        .outerjoin(counts, counts.c.assigned_coordinator_id == User.id)
+        .where(User.role_code == RoleCode.EVENT_COORDINATOR, User.is_active.is_(True))
     )
     if exclude_event_id is not None:
         current = current_assignment(db, exclude_event_id)
         if current is not None:
             query = query.where(User.id != current.coordinator_id)
-    return list(db.scalars(query.order_by(User.full_name)).all())
+    return [
+        CoordinatorWorkload(coordinator=user, active_event_count=count)
+        for user, count in db.execute(query.order_by(User.full_name)).all()
+    ]
+
+
+def list_unassigned_events(db: Session) -> list[Event]:
+    """Story 5.4 AC2: every submitted event that is still open and has no coordinator, oldest
+    submission first (ties broken by id, so the order is stable). A draft is not submitted, and a
+    rejected, cancelled or completed event needs no owner, so neither waits here."""
+    return list(
+        db.scalars(
+            select(Event)
+            .where(
+                Event.assigned_coordinator_id.is_(None),
+                Event.status.in_(ASSIGNABLE_STATUSES),
+            )
+            .order_by(Event.submitted_at, Event.id)
+        ).all()
+    )
 
 
 def get_event(db: Session, event_id: uuid.UUID) -> Event:
@@ -203,9 +247,9 @@ def _notify_reassignment(
     reassigned_by: User,
 ) -> None:
     """Story 5.2 AC1: the previous coordinator, the new one, and the organiser are each told.
-    Only called for a genuine reassignment (there was a previous coordinator, and a human made
-    the change) - auto-assignment (story 5.1) and an event's first-ever claim have nobody
-    "previous" to tell and are not this AC's concern. Story 20.1 AC3 tells nobody of their own
+    Only called for a genuine reassignment (there was a previous coordinator) - an event's first
+    assignment, by the Lead, has nobody "previous" to tell and is told by ``_notify_assignment``
+    instead (story 5.4 AC4). Story 20.1 AC3 tells nobody of their own
     action, and under 5.2 the previous coordinator is the one reassigning (AC6), so in practice
     they are skipped; they are told when someone else reassigns, as the Lead will (story 5.6)."""
     previous_coordinator = db.get(User, previous_coordinator_id)
@@ -248,17 +292,47 @@ def _notify_reassignment(
     )
 
 
+def _notify_assignment(db: Session, event: Event, *, coordinator: User, assigned_by: User) -> None:
+    """Story 5.4 AC4: an event's first coordinator, and its organiser, are each told of the Lead's
+    assignment (20.1). Nobody is told of their own action (20.1 AC3)."""
+    organiser = db.get(User, event.organiser_id)
+    notify(
+        db,
+        recipient=coordinator,
+        actor=assigned_by,
+        notification_type=NotificationType.EVENT_ASSIGNED_TO,
+        event_id=event.id,
+        title=f'You are assigned to "{event.name}"',
+        message=f'{assigned_by.full_name} assigned "{event.name}" to you for review.',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+    notify(
+        db,
+        recipient=organiser,
+        actor=assigned_by,
+        notification_type=NotificationType.EVENT_ASSIGNED_ORGANISER,
+        event_id=event.id,
+        title=f'"{event.name}" has a coordinator',
+        message=f'{coordinator.full_name} is now the coordinator for "{event.name}".',
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+
+
 def _create_assignment(
     db: Session,
     event: Event,
     coordinator: User,
     *,
     previous: EventCoordinatorAssignment | None,
-    assigned_by: User | None,
+    assigned_by: User,
     note: str | None,
 ) -> EventCoordinatorAssignment:
-    """Shared machinery behind both ``assign_coordinator`` (``assigned_by`` is who chose it) and
-    ``auto_assign_next_coordinator`` (``assigned_by=None`` - AC3 "the system"): close any open
+    """Shared machinery behind ``assign_coordinator`` - the Lead's first assignment (5.4) and a
+    coordinator's reassignment (5.2), ``assigned_by`` being who chose it: close any open
     assignment, open the new one, keep ``events.assigned_coordinator_id`` in step, and write the
     audit entry. Does not commit - the caller owns the transaction.
 
@@ -307,11 +381,11 @@ def _create_assignment(
     assignment = EventCoordinatorAssignment(
         event_id=event.id,
         coordinator_id=coordinator.id,
-        assigned_by_id=assigned_by.id if assigned_by is not None else None,
+        assigned_by_id=assigned_by.id,
         # Stamped from Python, not the column's server_default: ``now()`` is transaction-start
         # time, so several assignments made in one transaction would otherwise tie on
-        # ``assigned_at`` and make "the most recent automatic assignment" (AC6/AC10's rotation
-        # cursor) ambiguous. Same pattern as ``submitted_at``/``decided_at`` in events/service.py.
+        # ``assigned_at`` and leave the history's order ambiguous. Same pattern as
+        # ``submitted_at``/``decided_at`` in events/service.py.
         assigned_at=datetime.now(UTC),
         note=note,
     )
@@ -332,12 +406,13 @@ def _create_assignment(
                 str(previous.coordinator_id) if previous is not None else None
             ),
             "note": note,
-            "auto_assigned": assigned_by is None,
         },
         commit=False,
     )
 
-    if previous is not None and assigned_by is not None:
+    if previous is None:
+        _notify_assignment(db, event, coordinator=coordinator, assigned_by=assigned_by)
+    else:
         _notify_reassignment(
             db,
             event,
@@ -352,16 +427,23 @@ def _create_assignment(
 def assign_coordinator(
     db: Session, event_id: uuid.UUID, data: AssignCoordinatorIn, *, actor: User
 ) -> EventCoordinatorAssignment:
-    """Give ``event_id`` a coordinator, replacing whoever held it before (5.1 AC1).
+    """Give ``event_id`` a coordinator (5.1 AC1).
 
-    5.2 AC6: an unassigned event may be claimed by any Event Coordinator (story 5.1's original
-    case - nobody to defer to yet), but once it has one, only that coordinator may reassign it.
+    Story 5.4 AC7/AC9: an unassigned event is assigned only by a holder of ``events:assign`` -
+    the Event Coordinator Lead; coordinators no longer claim one. AC8: a Lead who finds it already
+    assigned - before, or by another Lead a moment ago - is told so, and to whom (409).
+    Story 5.2 AC6: an assigned event is handed on only by its current coordinator.
     """
     event = get_event(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
 
+    is_lead = role_has(actor.role_code, Permission.EVENTS_ASSIGN)
     previous = current_assignment(db, event.id)
+    if previous is None and not is_lead:
+        raise NotPermittedToAssign()
+    if previous is not None and is_lead:
+        raise AlreadyAssigned(previous.coordinator)
     if previous is not None and previous.coordinator_id != actor.id:
         raise NotCurrentCoordinator()
 
@@ -373,82 +455,17 @@ def assign_coordinator(
     if not coordinator.is_active:
         raise CoordinatorInactive(coordinator)
 
-    assignment = _create_assignment(
-        db, event, coordinator, previous=previous, assigned_by=actor, note=data.note
-    )
+    try:
+        assignment = _create_assignment(
+            db, event, coordinator, previous=previous, assigned_by=actor, note=data.note
+        )
+    except AssignmentChanged:
+        # AC8: another Lead's assignment landed between this one's read and its write. The guarded
+        # update changed nothing, so read who got the event (it is committed) and name them.
+        winner = current_assignment(db, event.id) if is_lead else None
+        if winner is None:
+            raise
+        raise AlreadyAssigned(winner.coordinator) from None
     db.commit()
     db.refresh(assignment)
     return assignment
-
-
-def _coordinators_in_rotation_order(db: Session) -> list[User]:
-    """AC2/AC6: every Event Coordinator, active or not, ordered by when their account was made
-    and then by id. This is the fixed sequence the rotation walks; deactivating someone leaves
-    their slot in place (skipped, not removed) so reactivating them resumes where they left off."""
-    return list(
-        db.scalars(
-            select(User)
-            .where(User.role_code == RoleCode.EVENT_COORDINATOR)
-            .order_by(User.created_at, User.id)
-        ).all()
-    )
-
-
-def _last_auto_assigned_coordinator_id(db: Session) -> uuid.UUID | None:
-    """AC10: whose turn was last, counting only automatic assignments - a manual (re)assignment
-    has ``assigned_by_id`` set and is invisible here, so it cannot shift the rotation."""
-    last = db.scalars(
-        select(EventCoordinatorAssignment)
-        .where(EventCoordinatorAssignment.assigned_by_id.is_(None))
-        .order_by(
-            EventCoordinatorAssignment.assigned_at.desc(), EventCoordinatorAssignment.id.desc()
-        )
-        .limit(1)
-    ).one_or_none()
-    return last.coordinator_id if last is not None else None
-
-
-def _next_in_rotation(db: Session) -> User | None:
-    """AC2/AC5/AC6/AC11/AC14: the coordinator whose turn is next, or ``None`` when nobody is
-    eligible. Takes ``ROUND_ROBIN_LOCK_KEY`` for the rest of the caller's transaction first, so a
-    second submission picking concurrently blocks until this one commits or rolls back, rather
-    than both reading the same "next" answer."""
-    db.execute(select(func.pg_advisory_xact_lock(ROUND_ROBIN_LOCK_KEY)))
-
-    ordered = _coordinators_in_rotation_order(db)
-    if not any(coordinator.is_active for coordinator in ordered):
-        return None
-
-    start = 0
-    last_id = _last_auto_assigned_coordinator_id(db)
-    if last_id is not None:
-        ids = [coordinator.id for coordinator in ordered]
-        if last_id in ids:
-            start = ids.index(last_id) + 1
-
-    for offset in range(len(ordered)):
-        candidate = ordered[(start + offset) % len(ordered)]
-        if candidate.is_active:
-            return candidate
-    return None  # unreachable: the ``any(...)`` check above guarantees an active candidate
-
-
-def auto_assign_next_coordinator(db: Session, event: Event) -> EventCoordinatorAssignment | None:
-    """AC1-AC3/AC5/AC6/AC9/AC11/AC14: give ``event`` the next coordinator in round-robin order,
-    as part of the caller's transaction (no commit here - ``events.service.submit_event`` commits
-    once, so a failure here rolls the whole submission back, AC15).
-
-    Returns ``None``, leaving the event exactly as it was, when it already has a coordinator
-    (AC9 - also what covers AC8's "don't reassign on resubmission", once a resubmit exists) or
-    when there is nobody eligible to assign (AC5).
-    """
-    if current_assignment(db, event.id) is not None:
-        return None
-    coordinator = _next_in_rotation(db)
-    if coordinator is None:
-        return None
-    # previous=None is exact here, not just "usually true": the check above just confirmed it,
-    # under a lock nothing else could have changed it since (see _next_in_rotation's docstring).
-    return _create_assignment(
-        db, event, coordinator, previous=None, assigned_by=None, note=AUTO_ASSIGNMENT_NOTE
-    )

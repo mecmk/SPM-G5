@@ -38,6 +38,8 @@ class Users:
     ATTENDEE = SeedUser(_u(7), "attendee@example.com", "ATTENDEE", "Aiden Attendee")
     INACTIVE = SeedUser(_u(8), "inactive@connectsphere.example", "VENUE_STAFF", "Ian Inactive")
     SAFETY_OFFICER = SeedUser(_u(9), "safety@connectsphere.example", "SAFETY_OFFICER", "Sam Safety")
+    # Story 5.4: reviews the unassigned queue and assigns events to coordinators.
+    LEAD = SeedUser(_u(10), "lead@connectsphere.example", "EVENT_COORDINATOR_LEAD", "Lena Lead")
 
     ALL_ACTIVE = (
         ORGANISER,
@@ -48,8 +50,17 @@ class Users:
         TECH_SUPPORT,
         ATTENDEE,
         SAFETY_OFFICER,
+        LEAD,
     )
-    ONE_PER_ROLE = (ORGANISER, COORDINATOR, VENUE_STAFF, TECH_SUPPORT, ATTENDEE, SAFETY_OFFICER)
+    ONE_PER_ROLE = (
+        ORGANISER,
+        COORDINATOR,
+        VENUE_STAFF,
+        TECH_SUPPORT,
+        ATTENDEE,
+        SAFETY_OFFICER,
+        LEAD,
+    )
 
 
 def _v(n: int) -> uuid.UUID:
