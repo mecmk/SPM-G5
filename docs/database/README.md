@@ -142,6 +142,6 @@ All passwords are `Password123!`.
 | Event Coordinator Lead | `lead@connectsphere.example` |
 | Venue Staff | `venue@connectsphere.example` |
 | Technical Support Staff | `tech@connectsphere.example` |
-| Attendee | `attendee@example.com` |
+| Attendee | `attendee@example.com`, `attendee2@example.com` |
 | Safety Officer | `safety@connectsphere.example` |
 | (inactive, for tests) | `inactive@connectsphere.example` |
