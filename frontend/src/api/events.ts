@@ -535,10 +535,10 @@ export interface EventReviewCorrectionInput extends Omit<EventInput, 'equipment'
 
 /**
  * Story 7.2 AC4-AC18: the coordinator assigned to the event corrects the organiser's request at
- * any point before it is confirmed. Every 409 - confirmed meanwhile (AC12), changed since it was
- * opened (AC9), or after approval a change that no longer fits a booking or the equipment (AC14,
- * AC15) - is one code: EVENT_CORRECTION_CONFLICT, shown with the server's sentence and a reload.
- * Equipment no longer free for the dates (AC7) is a 422, as in 2.1.
+ * any point before it is confirmed. Every 409 - confirmed meanwhile (AC12) or changed since it was
+ * opened (AC9) - is one code: EVENT_CORRECTION_CONFLICT, shown with the server's sentence and a
+ * reload. Equipment no longer free for the dates (AC7) and, after approval, a change that no longer
+ * fits a booking or the equipment (AC14, AC15) are 422s, as in 2.1: the copy is not out of date.
  */
 export function correctEventUnderReview(
   eventId: string,

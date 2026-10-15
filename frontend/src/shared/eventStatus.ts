@@ -55,6 +55,7 @@ export const DETAILS_CORRECTABLE_STATUSES: readonly EventStatus[] = [
   'UNDER_REVIEW',
   'CLARIFICATION_REQUESTED',
   'PLANNING',
+  'AWAITING_SAFETY_CHECK',
 ]
 
 /**
@@ -71,14 +72,18 @@ export const DETAILS_LOCKED_HINT =
   'Event details can no longer be edited directly once the event is confirmed. Further changes must go through the change request process.'
 
 /**
- * Story 7.2 AC15: approved, so the event's equipment is changed in its Equipment section (15.1)
- * rather than the edit form. Mirrors the backend's `_ARRANGED_STATUSES`.
+ * Story 7.2 AC14/AC15: approved and not yet confirmed, so the event may hold venue bookings and
+ * Technical Support's equipment decisions, and its equipment is not changed in the edit form.
+ * Mirrors the backend's `_ARRANGED_STATUSES`.
  */
-export const ARRANGED_STATUSES: readonly EventStatus[] = ['PLANNING']
+export const ARRANGED_STATUSES: readonly EventStatus[] = ['PLANNING', 'AWAITING_SAFETY_CHECK']
 
-/** Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. */
+/**
+ * Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. Only Planning
+ * opens the Equipment requirements section (15.1 AC9, `EQUIPMENT_OPEN_STATUSES`).
+ */
 export const EQUIPMENT_LOCKED_HINT =
-  'Once the event is approved, its equipment is changed in the Equipment section of the event page.'
+  'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
 
 /**
  * Story 19.1 AC5: the one status a change request can be raised in, mirroring the backend's

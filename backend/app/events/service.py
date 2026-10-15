@@ -119,19 +119,21 @@ DETAILS_NOT_CORRECTABLE_MESSAGE = (
     "This event is {status}, so its details can only be edited before it is confirmed."
 )
 BOOKING_NO_LONGER_FITS_MESSAGE = (
-    'This change no longer fits the booking of {venue} for "{requirement}". Change or withdraw '
-    "that booking first."
+    'This change no longer fits the booking of {venue} for "{requirement}". Keep the requirement '
+    "within what was booked, or withdraw the booking first if it is still pending."
 )
 ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE = (
     "This change no longer fits the booking of {venue} as an additional venue, which holds the "
-    "event's own dates and attendance. Change or withdraw that booking first."
+    "event's own dates and attendance. Keep them within what was booked, or withdraw the booking "
+    "first if it is still pending."
 )
 EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE = (
-    "This event has been approved, so its equipment is changed in its Equipment section, not here."
+    "This event has been approved, so its equipment can no longer be changed here. While the "
+    "event is in Planning, change it in the Equipment requirements section of the event page."
 )
 EQUIPMENT_HOLD_NOT_COVERING_MESSAGE = (
-    "The new dates fall outside the period this equipment is held for: {items}. Change it in the "
-    "Equipment section first."
+    "The new dates fall outside the period this equipment is held for: {items}. Keep the dates "
+    "within the held period."
 )
 STALE_EVENT_EDIT_MESSAGE = (
     "This event has changed since you opened it. Reload it and make your changes again."
@@ -166,17 +168,17 @@ _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, E
 
 # Story 7.2 AC4, AC10 (f7.2.4, Q32): the organiser's details may be corrected directly in every
 # status before Confirmed. Clarification Requested was added to AC4 in the backlog's Change Log.
-# Awaiting Safety Check joins this list when story 21.2 adds it.
 _DETAILS_CORRECTABLE_STATUSES = (
     EventStatus.UNDER_REVIEW,
     EventStatus.CLARIFICATION_REQUESTED,
     EventStatus.PLANNING,
+    EventStatus.AWAITING_SAFETY_CHECK,
 )
 # Story 7.2 AC12: confirmed and still running - further changes go through a change request (19.1).
 _DETAILS_LOCKED_STATUSES = (EventStatus.CONFIRMED,)
 # Story 7.2 AC14/AC15: approved, so venue bookings and equipment decisions may exist that a
 # correction has to keep fitting.
-_ARRANGED_STATUSES = (EventStatus.PLANNING,)
+_ARRANGED_STATUSES = (EventStatus.PLANNING, EventStatus.AWAITING_SAFETY_CHECK)
 # AC14: the bookings that hold a venue for a requirement (12.1 AC3).
 _LIVE_BOOKING_STATUSES = (BookingStatus.PENDING, BookingStatus.APPROVED)
 # AC15: the equipment items that hold stock for the event's period (15.1 AC2, 16.1).
@@ -268,34 +270,6 @@ class EventDetailsNotCorrectable(EventStateConflict):
         super().__init__(DETAILS_NOT_CORRECTABLE_MESSAGE.format(status=status))
 
 
-class BookingNoLongerFits(EventStateConflict):
-    """7.2 AC14: the correction would leave a venue requirement, or for an additional venue
-    (``requirement`` None) the event itself, outside what its pending or approved booking was
-    requested for."""
-
-    def __init__(self, venue: str, requirement: str | None):
-        super().__init__(
-            ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE.format(venue=venue)
-            if requirement is None
-            else BOOKING_NO_LONGER_FITS_MESSAGE.format(venue=venue, requirement=requirement)
-        )
-
-
-class EquipmentChangedAfterApproval(EventStateConflict):
-    """7.2 AC15: an approved event's equipment is changed in its own section (15.1), where
-    Technical Support's decisions are kept, never through a correction."""
-
-    def __init__(self):
-        super().__init__(EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE)
-
-
-class EquipmentHoldNotCovering(EventStateConflict):
-    """7.2 AC15: the correction moves the event outside the period an open item is held for."""
-
-    def __init__(self, names: list[str]):
-        super().__init__(EQUIPMENT_HOLD_NOT_COVERING_MESSAGE.format(items=", ".join(names)))
-
-
 class StaleEventEdit(EventStateConflict):
     """7.2 AC9: the event changed after the copy being saved was read."""
 
@@ -305,6 +279,35 @@ class StaleEventEdit(EventStateConflict):
 
 class InvalidEventRequest(ValueError):
     """What was sent cannot be recorded as it stands (a 422)."""
+
+
+class BookingNoLongerFits(InvalidEventRequest):
+    """7.2 AC14: the correction would leave a venue requirement, or for an additional venue
+    (``requirement`` None) the event itself, outside what its pending or approved booking was
+    requested for. A 422, not a 409: the copy on screen is not out of date, the change is what
+    does not fit, so the coordinator fixes it rather than reloading."""
+
+    def __init__(self, venue: str, requirement: str | None):
+        super().__init__(
+            ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE.format(venue=venue)
+            if requirement is None
+            else BOOKING_NO_LONGER_FITS_MESSAGE.format(venue=venue, requirement=requirement)
+        )
+
+
+class EquipmentChangedAfterApproval(InvalidEventRequest):
+    """7.2 AC15: an approved event's equipment is changed in its own section (15.1), where
+    Technical Support's decisions are kept, never through a correction."""
+
+    def __init__(self):
+        super().__init__(EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE)
+
+
+class EquipmentHoldNotCovering(InvalidEventRequest):
+    """7.2 AC15: the correction moves the event outside the period an open item is held for."""
+
+    def __init__(self, names: list[str]):
+        super().__init__(EQUIPMENT_HOLD_NOT_COVERING_MESSAGE.format(items=", ".join(names)))
 
 
 class InvalidSchedule(InvalidEventRequest):
@@ -2100,8 +2103,9 @@ def _replace_equipment_holds(db: Session, event: Event, *, actor: User) -> None:
 
 
 def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> None:
-    """AC15: an approved event's equipment, if sent at all, must come back exactly as it is - the
-    form sends every field, so an unchanged list is the normal case, not an edit."""
+    """AC15: an approved event's equipment, if sent at all, must come back exactly as it is. The
+    form leaves it out once the event is approved; an API call that sends it unchanged is not an
+    edit, and one that sends an empty list would remove every line, so it is refused."""
     if data.equipment is None:
         return
     stored = Counter(
@@ -2117,13 +2121,16 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
 
 
 def _check_equipment_holds_cover(db: Session, event: Event, data: EventReviewCorrection) -> None:
-    """AC15: every item that holds stock for the event must still be held for the whole of the
-    event's new period. A move inside the held period keeps every hold and decision as it is; a
-    move outside it is refused, naming the items, for the coordinator to change in the Equipment
-    section (15.1 AC8 re-checks them there)."""
+    """AC15: every open item that holds stock for the event must still be held for the whole of
+    the event's new period. A move inside the held period keeps every hold and decision as it is;
+    a move outside it is refused, naming the items. An open item with no hold (a seeded one that
+    predates holds) has no period to keep inside, so it bounds nothing. A cleared date is left to
+    ``_missing_for_submission``, which refuses it as it would before approval."""
     sent = data.model_fields_set
     starts_at = data.starts_at if "starts_at" in sent else event.starts_at
     ends_at = data.ends_at if "ends_at" in sent else event.ends_at
+    if starts_at is None or ends_at is None:
+        return
     if (starts_at, ends_at) == (event.starts_at, event.ends_at):
         return
     holds = db.scalars(
@@ -2137,11 +2144,8 @@ def _check_equipment_holds_cover(db: Session, event: Event, data: EventReviewCor
         item.equipment_type.name
         for item in event.equipment_requests
         if item.status in _HELD_ITEM_STATUSES
-        and (
-            item.id not in held
-            or held[item.id].starts_at > starts_at
-            or held[item.id].ends_at < ends_at
-        )
+        and item.id in held
+        and (held[item.id].starts_at > starts_at or held[item.id].ends_at < ends_at)
     ]
     if uncovered:
         raise EquipmentHoldNotCovering(uncovered)
@@ -2208,9 +2212,13 @@ def _fits_additional_venue(event: Event, booking: VenueBooking) -> bool:
 
 
 def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
-    """AC14: judged on the event and its requirements as the correction leaves them, before
-    anything is written, so the first booking that no longer fits refuses the whole correction
-    (AC16)."""
+    """AC14: judged on the event and its requirements as the correction leaves them, before the
+    event itself is written. Requirements the correction removed have already been flushed, so
+    AC16 rests on ``correct_event_under_review`` rolling the whole correction back when the first
+    booking that no longer fits refuses it. A cleared date or attendance is left to
+    ``_missing_for_submission``, which refuses it as it would before approval."""
+    if event.starts_at is None or event.ends_at is None or event.expected_attendance is None:
+        return
     requirements = {requirement.id: requirement for requirement in event.venue_requirements}
     for item in booked:
         if item.requirement_name is None:
@@ -2283,7 +2291,7 @@ def correct_event_under_review(
 
     The status gate comes first, as with the internal-notes edit (AC3), so a locked or closed
     event refuses with 409 whoever asks; then only the assigned coordinator may go on (AC8).
-    ``_claim_for_correction`` is the real guard for AC6/AC9 - the status check above it only picks
+    ``_claim_for_correction`` is the real guard for AC9/AC12 - the status check above it only picks
     the message. Any refusal after the claim rolls the whole correction back, so the event, its
     equipment lines and its holds are left exactly as they were (AC7). Each saved correction
     writes one ``EVENT_DETAILS_CORRECTED`` audit row holding every changed field's old and new

@@ -389,10 +389,10 @@ def correct_event_under_review(
 ) -> EventDetailOut:
     """Story 7.2 AC4-AC18: the coordinator assigned to this event corrects the organiser's request
     at any point before it is confirmed. 403 for anyone else (AC8); 409 once it is confirmed or
-    closed (AC12), when the copy being saved is stale (AC9), or after approval when the change no
-    longer fits a booking or changes or outruns the equipment (AC14, AC15); 422 for anything
-    the 2.1 and 2.7 checks refuse, including equipment no longer available for the new dates (AC4,
-    AC7), with a refused venue requirement located as on the organiser's edit."""
+    closed (AC12), or when the copy being saved is stale (AC9); 422 for anything the 2.1 and 2.7
+    checks refuse, including equipment no longer available for the new dates (AC4, AC7), and,
+    after approval, a change that no longer fits a booking or changes or outruns the equipment
+    (AC14, AC15), with a refused venue requirement located as on the organiser's edit."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:

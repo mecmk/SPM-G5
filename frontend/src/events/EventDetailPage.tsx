@@ -514,13 +514,12 @@ export function EventDetailPage() {
   const canSeeInternalNotes = can(PERMISSIONS.EVENTS_REVIEW)
   const isAssignedCoordinator = event.assigned_coordinator_id === user?.id
   /** Story 7.2 AC1/AC3/AC8: the assigned coordinator edits the event until it is closed - its
-   *  internal notes always, the organiser's details only while it is under review or awaiting
-   *  clarification. */
+   *  internal notes always, the organiser's details only until it is confirmed. */
   const canEditEvent =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&
     !TERMINAL_STATUSES.includes(event.status)
-  /** Story 7.2 AC5: the details are locked, which the assigned coordinator is told. */
+  /** Story 7.2 AC12: the details are locked, which the assigned coordinator is told. */
   const isDetailsLockHintShown =
     can(PERMISSIONS.EVENTS_EDIT_ROUTINE) &&
     isAssignedCoordinator &&

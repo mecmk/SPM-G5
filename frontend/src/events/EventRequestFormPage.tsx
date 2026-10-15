@@ -122,7 +122,7 @@ function noticeFrom(state: unknown): string | null {
   return null
 }
 
-/** Story 7.2 AC6/AC9: refusals meaning the copy on screen is out of date, answered with a reload. */
+/** Story 7.2 AC9/AC12: refusals meaning the copy on screen is out of date, answered with a reload. */
 const OUT_OF_DATE_CODES: readonly ErrorCode[] = [
   'EVENT_CORRECTION_CONFLICT',
   'EVENT_ROUTINE_EDIT_CLOSED',
@@ -165,8 +165,8 @@ function holdKeyOf(form: EventFormState): string {
 }
 
 interface EventRequestFormPageProps {
-  /** Story 7.2: the assigned coordinator editing a submitted event - its details while under
-   *  review, its internal notes until it is closed. */
+  /** Story 7.2: the assigned coordinator editing a submitted event - its details until it is
+   *  confirmed, its internal notes until it is closed. */
   isCoordinatorEdit?: boolean
 }
 
@@ -787,6 +787,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       return
     }
     setSaveError(null)
+    // A refusal from the last save no longer applies, so its reload goes with it.
+    setIsOutOfDate(false)
     setIsSaving(true)
     try {
       let latest = event
