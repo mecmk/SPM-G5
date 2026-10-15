@@ -3825,3 +3825,11 @@ button.requirement-choice.requirement-covered:hover,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Story 18.2: on a phone each registration's Withdraw button on My registrations is at least
+   44px tall, to be pressed with a thumb, as 18.1's Register is. */
+@media (max-width: 640px) {
+  .my-registrations .event-card-action button {
+    min-height: 44px;
+  }
+}

@@ -20,6 +20,7 @@ import { NotificationProvider } from './notifications/NotificationProvider'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
+import { MyRegistrationsPage } from './registrations/MyRegistrationsPage'
 import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
 import { SafetyChecksPage } from './safety/SafetyChecksPage'
@@ -40,6 +41,7 @@ import {
   EVENTS_ASSIGNMENTS_PATH,
   HOME_PATH,
   LOGIN_PATH,
+  MY_REGISTRATIONS_PATH,
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
   UPCOMING_EVENTS_PATH,
@@ -156,9 +158,11 @@ function App() {
                 <Route path={SAFETY_CHECK_PATH} element={<SafetyCheckDetailPage />} />
               </Route>
 
-              {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only). */}
+              {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only).
+                  Story 18.2: their own registrations, and withdrawing one (AC5: attendees only). */}
               <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
                 <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
+                <Route path={MY_REGISTRATIONS_PATH} element={<MyRegistrationsPage />} />
               </Route>
 
               {/*

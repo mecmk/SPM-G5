@@ -10,6 +10,7 @@ import {
   EVENTS_MINE_PATH,
   SAFETY_CHECKS_PATH,
   UPCOMING_EVENTS_PATH,
+  MY_REGISTRATIONS_PATH,
   VENUE_CATALOGUE_PATH,
 } from '../routes'
 
@@ -224,13 +225,13 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: true,
       },
       {
-        to: '/registrations',
+        to: MY_REGISTRATIONS_PATH,
         label: 'My registrations',
         description: 'The events you have registered for, and your place at each.',
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.2',
-        isAvailable: false,
+        isAvailable: true,
       },
     ],
   },
