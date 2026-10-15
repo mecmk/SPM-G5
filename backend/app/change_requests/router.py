@@ -1,8 +1,11 @@
-"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests.
+"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests; and for
+story 19.2: the coordinator's queue of pending ones, and approving or rejecting one.
 
-They sit under the event they belong to (``/events/{event_id}/change-requests``). Withdrawing is
-``POST .../withdraw``, an action URL like story 12.2's booking withdrawal - a state transition with
-its own rules, notification and audit record (see backend/STYLE.md, Standing divergences).
+They sit under the event they belong to (``/events/{event_id}/change-requests``), except the
+queue, which spans the coordinator's events (``/change-requests``). Withdrawing, approving and
+rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs like story
+12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with its own
+rules, notification and audit record (see backend/STYLE.md, Standing divergences).
 """
 
 from __future__ import annotations
@@ -16,13 +19,21 @@ from sqlalchemy.orm import Session
 from app.auth.deps import CurrentUser, require_any_permission, require_permission
 from app.auth.permissions import Permission
 from app.change_requests import service
-from app.change_requests.schemas import ChangeRequestIn, ChangeRequestOut
+from app.change_requests.schemas import (
+    ChangeRequestIn,
+    ChangeRequestOut,
+    ChangeRequestQueueEntryOut,
+    ChangeRequestRejectionIn,
+)
 from app.db import get_db
 
 router = APIRouter(prefix="/events", tags=["change requests"])
+queue_router = APIRouter(prefix="/change-requests", tags=["change requests"])
 
 # AC7: only an organiser holds this; the service then checks the event is their own.
 CanRequestChanges = Depends(require_permission(Permission.EVENT_CHANGE_REQUESTS_CREATE))
+# Story 19.2 AC6: only a coordinator holds this; the service then checks the event is theirs.
+CanDecide = Depends(require_permission(Permission.EVENT_CHANGE_REQUESTS_DECIDE))
 CanRead = Depends(require_any_permission(Permission.EVENTS_READ_OWN, Permission.EVENTS_READ_ALL))
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -103,4 +114,74 @@ def withdraw_change_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND_MESSAGE) from None
     except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return ChangeRequestOut.from_change_request(request)
+
+
+@queue_router.get("", response_model=list[ChangeRequestQueueEntryOut])
+def list_pending_change_requests(
+    db: DbSession,
+    viewer: Annotated[CurrentUser, CanDecide],
+) -> list[ChangeRequestQueueEntryOut]:
+    """Story 19.2 AC1: the pending change requests on the coordinator's own events, oldest
+    first."""
+    requests = service.list_pending_change_requests(db, viewer=viewer)
+    return [ChangeRequestQueueEntryOut.from_queued_request(request) for request in requests]
+
+
+@router.post(
+    "/{event_id}/change-requests/{change_request_id}/approve",
+    response_model=ChangeRequestOut,
+)
+def approve_change_request(
+    event_id: uuid.UUID,
+    change_request_id: uuid.UUID,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanDecide],
+) -> ChangeRequestOut:
+    """Story 19.2 AC2: the assigned coordinator (AC6) approves a pending request, applying it.
+    409 when it was already decided or withdrawn, has gone stale, or cannot be approved until
+    Phase 2 (AC5, AC7, AC8); 422 when the change breaks a creation rule."""
+    try:
+        request = service.approve_change_request(db, event_id, change_request_id, actor=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.ChangeRequestNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return ChangeRequestOut.from_change_request(request)
+
+
+@router.post(
+    "/{event_id}/change-requests/{change_request_id}/reject",
+    response_model=ChangeRequestOut,
+)
+def reject_change_request(
+    event_id: uuid.UUID,
+    change_request_id: uuid.UUID,
+    payload: ChangeRequestRejectionIn,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanDecide],
+) -> ChangeRequestOut:
+    """Story 19.2 AC3/AC4: the assigned coordinator (AC6) rejects a pending request with a
+    non-blank reason, leaving the event as it is. 409 when it was already decided or withdrawn,
+    or its event is closed (AC7)."""
+    try:
+        request = service.reject_change_request(
+            db, event_id, change_request_id, payload, actor=actor
+        )
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.ChangeRequestNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.InvalidEventRequest as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return ChangeRequestOut.from_change_request(request)

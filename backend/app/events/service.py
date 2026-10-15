@@ -2141,7 +2141,7 @@ def remove_cover_image_under_review(
     _clear_cover_image(db, event, actor=actor, action="EVENT_DETAILS_CORRECTED")
 
 
-# --- story 19.1: what a change request may propose, and the point of contact ----------------
+# --- stories 19.1/19.2: what a change request may propose, and the point of contact ----------
 # Change requests themselves live in app/change_requests/. These are the event's own rules it
 # reuses, made public here so that package never reaches into this module's private helpers.
 
@@ -2168,6 +2168,29 @@ def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -
     """``actor``'s own event, its row held until the transaction ends, so a status change racing
     a story 19.1 write waits for it (AC8) - the lock story 2.7 AC12 already relies on."""
     return _get_own_event(db, event_id, actor, for_update=True)
+
+
+def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
+    """Story 19.2: the event as ``get_event`` shows it to ``viewer``, its row held until the
+    transaction ends, so a decision on one of its change requests waits for a withdrawal or a
+    reassignment already under way (and they for it), then reads what landed first. Only the
+    event's own row is held, as in ``_get_own_event``."""
+    event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
+    if event is None or not _can_view(viewer, event):
+        raise EventNotFound(event_id)
+    return event
+
+
+def check_proposed_attendance(event: Event, attendance: int) -> None:
+    """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
+    room for more people than the event's expected attendance - judged with the proposed
+    figure against the requirements as they stand."""
+    _check_venue_requirement_rules(
+        event.venue_requirements,
+        event_starts_at=event.starts_at,
+        event_ends_at=event.ends_at,
+        attendance=attendance,
+    )
 
 
 def check_proposed_schedule(starts_at: datetime, ends_at: datetime) -> None:

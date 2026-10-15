@@ -70,6 +70,8 @@ class NotificationType(StrEnum):
     EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
+    EVENT_CHANGE_APPROVED = "EVENT_CHANGE_APPROVED"  # 19.2: the organiser
+    EVENT_CHANGE_REJECTED = "EVENT_CHANGE_REJECTED"  # 19.2: the organiser
 
 
 def notify(

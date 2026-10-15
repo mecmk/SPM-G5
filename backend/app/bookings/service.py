@@ -482,6 +482,20 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     )
 
 
+def list_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
+    """Story 19.2: the event's bookings that hold a venue now - pending or approved (12.1 AC3) -
+    oldest first, with each one's venue and venue requirement, so a change to the event can be
+    judged against what was booked."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES))
+            .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.venue_requirement))
+            .order_by(VenueBooking.created_at, VenueBooking.id)
+        ).all()
+    )
+
+
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """Row-locked read for an approve/reject action - see the module docstring's concurrency
     note. Two simultaneous decisions on the same booking serialize on this lock instead of
