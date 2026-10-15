@@ -157,6 +157,15 @@ class Events:
     CYBER_CLINIC = _e(47)  # AWAITING_SAFETY_CHECK; the spec requests changes
     DATA_SUMMIT = _e(48)  # PLANNING; sent back with its venue flagged, venue unchanged
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
+    # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
+    # (Registrations below). Each is one case of tests/e2e/my-registrations.spec.ts.
+    POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
+    SKETCHING_WALK = _e(71)  # CONFIRMED; the spec withdraws and registers again
+    BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
+    SUNSET_YOGA = _e(73)  # CONFIRMED; only read
+    HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
+    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
+    BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
 
 
 class Bookings:
@@ -190,9 +199,17 @@ class Bookings:
 
 
 class Registrations:
-    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one."""
+    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
+    Users.ATTENDEE's, one for each of 18.2's events, named after it."""
 
     PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
+    POETRY_NIGHT = uuid.UUID("18181818-0000-0000-0000-000000000002")
+    SKETCHING_WALK = uuid.UUID("18181818-0000-0000-0000-000000000003")
+    BOARD_GAMES_SOCIAL = uuid.UUID("18181818-0000-0000-0000-000000000004")
+    SUNSET_YOGA = uuid.UUID("18181818-0000-0000-0000-000000000005")
+    HERITAGE_TRAIL = uuid.UUID("18181818-0000-0000-0000-000000000006")  # WITHDRAWN
+    CHARITY_FUN_RUN = uuid.UUID("18181818-0000-0000-0000-000000000007")
+    BOOK_SWAP = uuid.UUID("18181818-0000-0000-0000-000000000008")
 
 
 class Unavailability:

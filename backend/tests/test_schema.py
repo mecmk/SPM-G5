@@ -183,6 +183,13 @@ def test_seed_constants_match_database(db: Session):
         (Events.WINE_APPRECIATION, "CONFIRMED"),
         (Events.LUNAR_NEW_YEAR_MARKET, "CONFIRMED"),
         (Events.SUPPLIER_INDUCTION, "PLANNING"),
+        (Events.POETRY_NIGHT, "CONFIRMED"),
+        (Events.SKETCHING_WALK, "CONFIRMED"),
+        (Events.BOARD_GAMES_SOCIAL, "CONFIRMED"),
+        (Events.SUNSET_YOGA, "CONFIRMED"),
+        (Events.HERITAGE_TRAIL, "CONFIRMED"),
+        (Events.CHARITY_FUN_RUN, "CANCELLED"),
+        (Events.BOOK_SWAP, "CONFIRMED"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -198,6 +205,23 @@ def test_seed_constants_match_database(db: Session):
         ).scalar()
         == Users.ATTENDEE_2.id
     )
+    # Story 18.2: Aiden's registrations, one for each of 18.2's events.
+    for registration_id, event_id, status in (
+        (Registrations.POETRY_NIGHT, Events.POETRY_NIGHT, "REGISTERED"),
+        (Registrations.SKETCHING_WALK, Events.SKETCHING_WALK, "REGISTERED"),
+        (Registrations.BOARD_GAMES_SOCIAL, Events.BOARD_GAMES_SOCIAL, "REGISTERED"),
+        (Registrations.SUNSET_YOGA, Events.SUNSET_YOGA, "REGISTERED"),
+        (Registrations.HERITAGE_TRAIL, Events.HERITAGE_TRAIL, "WITHDRAWN"),
+        (Registrations.CHARITY_FUN_RUN, Events.CHARITY_FUN_RUN, "REGISTERED"),
+        (Registrations.BOOK_SWAP, Events.BOOK_SWAP, "REGISTERED"),
+    ):
+        assert db.execute(
+            text(
+                "SELECT attendee_id, status FROM event_registrations"
+                " WHERE id = :id AND event_id = :event"
+            ),
+            {"id": registration_id, "event": event_id},
+        ).one() == (Users.ATTENDEE.id, status)
     for clarification_id in (Clarifications.REQUEST, Clarifications.RESPONSE):
         assert db.execute(
             text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}
