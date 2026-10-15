@@ -4,7 +4,8 @@ Level: unit. Each test calls one pure function in ``app/registrations/service.py
 no HTTP, no fixture - so the whole file runs in milliseconds without PostgreSQL. The integration
 tests beside it (``test_browse_and_register_integration.py``) prove the service applies these rules
 to real rows through the API, and ``tests/e2e/attendee-registration.spec.ts`` proves the flows an
-attendee clicks through. No case is proven at more than one level.
+attendee clicks through. The integration tests check the AC2 boundaries again, through the
+service, to catch it wiring these rules up wrongly; the e2e spec repeats none of them.
 
 AC2 Capacity is the event's expected attendance (2.1 AC17). The registration that takes the last
     place is accepted; the next is refused. A registration before the closing time is accepted;

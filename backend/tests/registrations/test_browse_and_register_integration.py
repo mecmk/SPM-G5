@@ -6,7 +6,9 @@ fixtures) or its service functions, against the real schema in the rolled-back t
 The race tests at the end commit real concurrent transactions and clean up after themselves. The
 pure rules (places left, the registration window, which state wins) are unit-tested in
 ``test_browse_and_register_unit.py``; the attendee's clicks are e2e-tested in
-``tests/e2e/attendee-registration.spec.ts``. No case is proven at more than one level.
+``tests/e2e/attendee-registration.spec.ts``. The AC2 boundaries are tested at both levels on
+purpose: the unit tests pin each rule, and these catch the service wiring them up wrongly (a rule
+handed the wrong time, a count of the wrong rows).
 
 Service-level tests pass ``now=NOW``, a moment after every seeded event has started, so a listing
 at NOW holds only the events the test made, and a boundary can be hit to the microsecond. API
@@ -30,7 +32,9 @@ AC4 Events that are not Confirmed, including one sent back to Planning after con
 AC5 Only signed-in Attendees can list events or register: other roles get 403 and signed-out
     users 401, through the API too. No internal planning information is sent: no organiser,
     coordinator, contact, purpose, expected attendance, equipment, accessibility needs or
-    internal notes.
+    internal notes. (No field carries the expected attendance, but it shows through the places
+    left until someone registers: capacity is the expected attendance, 2.1 AC17, and the places
+    left are shown, decision 1.)
 AC6 A second registration by the same attendee is refused, also when both arrive at once. Of two
     attendees competing for the last place, one succeeds and the other is told the event is full.
 AC7 The server checks the event's status, the opening and closing times and capacity at the
@@ -41,6 +45,7 @@ AC7 The server checks the event's status, the opening and closing times and capa
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 import uuid
@@ -695,16 +700,15 @@ def test_a_listed_event_carries_no_internal_planning_information(attendee_client
         accessibility_notes="Accessibility-18.1",
         expected_attendance=73,
     )
-    _add_registration(db, event)  # places left (72) then differs from the expected attendance
 
     response = attendee_client.get(EVENTS_PATH, params={"limit": 100})
 
     item = _api_item(attendee_client, event.id)
+    # No field carries the expected attendance as such. It does show through the places left
+    # until someone registers, since capacity is the expected attendance (2.1 AC17) and the places
+    # left are shown (decision 1, 14 Oct 2026).
     assert set(item) == LISTED_EVENT_KEYS
-    assert item["places_left"] == 72
-    # The expected attendance is sent nowhere, as a field or as any field's value. (Not searched
-    # for as text: "73" turns up by chance inside random ids.)
-    assert 73 not in item.values()
+    assert item["places_left"] == 73
     for internal in (
         "Purpose-18.1-internal",
         "Internal-notes-18.1",
@@ -718,18 +722,35 @@ def test_a_listed_event_carries_no_internal_planning_information(attendee_client
         assert internal not in response.text
 
 
-@pytest.mark.story("18.1", ac=5)
+@pytest.mark.story("18.1", ac=4)
 def test_registering_for_an_unknown_event_is_not_found(attendee_client):
+    """The same answer as for an event that is not open to attendees (AC4)."""
     response = attendee_client.post(REGISTER_PATH, json={"event_id": str(uuid.uuid4())})
 
     assert response.status_code == 404
     assert response.json()["detail"] == service.REGISTRATION_EVENT_NOT_FOUND_MESSAGE
 
 
-@pytest.mark.story("18.1", ac=5)
+@pytest.mark.story("18.1", ac=1)
 @pytest.mark.parametrize("body", [{"event_id": "not-a-uuid"}, {}])
 def test_a_registration_without_a_valid_event_id_is_refused(attendee_client, body):
     assert attendee_client.post(REGISTER_PATH, json=body).status_code == 422
+
+
+@pytest.mark.story("18.1", ac=5)
+def test_an_attendee_named_in_the_request_is_ignored(attendee_client, db: Session):
+    """The attendee is the signed-in user. One named in the body registers nobody else."""
+    event = _open_event(db, starts_at=future_datetime(days=40))
+    someone_else = _attendee(db)
+
+    response = attendee_client.post(
+        REGISTER_PATH, json={"event_id": str(event.id), "attendee_id": str(someone_else.id)}
+    )
+
+    assert response.status_code == 201
+    registration = db.get(EventRegistration, uuid.UUID(response.json()["id"]))
+    assert registration.attendee_id == Users.ATTENDEE.id
+    assert _active_count(db, event.id) == 1
 
 
 # =============================================================================================
@@ -805,10 +826,14 @@ def _attempt(
     event_id: uuid.UUID,
     attendee_id: uuid.UUID,
     start: threading.Barrier | None = None,
+    pids: queue.Queue[int] | None = None,
 ) -> str:
-    """One registration in a session of its own, as one request would make it."""
+    """One registration in a session of its own, as one request would make it. When ``pids`` is
+    given, the session's database process id goes into it first, so a test can watch it alone."""
     with Session(engine) as session:
         attendee = session.get(User, attendee_id)
+        if pids is not None:
+            pids.put(session.execute(text("SELECT pg_backend_pid()")).scalar_one())
         if start is not None:
             start.wait()
         try:
@@ -822,18 +847,18 @@ def _attempt(
         return REGISTERED
 
 
-def _wait_until_blocked_or_done(engine: Engine, attempt: Future) -> None:
-    """Until ``attempt`` waits on a row lock (or, were nothing locked, has already finished)."""
+def _wait_until_blocked_or_done(engine: Engine, attempt: Future, pids: queue.Queue[int]) -> None:
+    """Until ``attempt``'s own session waits on a lock (or, were nothing locked, it has already
+    finished). Only that session is watched, so another one's wait cannot pass for it."""
+    pid = pids.get(timeout=10)
     deadline = time.monotonic() + 10
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         while time.monotonic() < deadline:
             if attempt.done():
                 return
             waiting = conn.execute(
-                text(
-                    "SELECT count(*) FROM pg_stat_activity"
-                    " WHERE datname = current_database() AND wait_event_type = 'Lock'"
-                )
+                text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                {"pid": pid},
             ).scalar()
             if waiting:
                 return
@@ -845,7 +870,7 @@ def _wait_until_blocked_or_done(engine: Engine, attempt: Future) -> None:
 @pytest.mark.story("18.1", ac=7)
 def test_two_attendees_racing_for_the_last_place_leave_one_registration(engine: Engine):
     race = _race(engine, capacity=1, attendees=2)
-    start = threading.Barrier(2)
+    start = threading.Barrier(2, timeout=10)
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             attempts = [
@@ -867,7 +892,7 @@ def test_two_registrations_by_one_attendee_at_once_leave_one(engine: Engine):
     """A double-click, or the same page open in two tabs."""
     race = _race(engine, capacity=10, attendees=1)
     (attendee_id,) = race.attendee_ids
-    start = threading.Barrier(2)
+    start = threading.Barrier(2, timeout=10)
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             attempts = [
@@ -898,9 +923,10 @@ def test_a_registration_waits_for_the_event_and_counts_a_place_taken_meanwhile(e
             EventRegistration(event_id=race.event_id, attendee_id=holder_id, registered_at=NOW)
         )
         holder.flush()
+        pids: queue.Queue[int] = queue.Queue()
         with ThreadPoolExecutor(max_workers=1) as pool:
-            attempt = pool.submit(_attempt, engine, race.event_id, waiter_id)
-            _wait_until_blocked_or_done(engine, attempt)
+            attempt = pool.submit(_attempt, engine, race.event_id, waiter_id, None, pids)
+            _wait_until_blocked_or_done(engine, attempt, pids)
             holder.commit()
             outcome = attempt.result(timeout=30)
 
@@ -909,6 +935,49 @@ def test_a_registration_waits_for_the_event_and_counts_a_place_taken_meanwhile(e
             assert _active_count(session, race.event_id) == 1
     finally:
         holder.close()
+        _clean_up(engine, race)
+
+
+@pytest.mark.story("18.1", ac=6)
+@pytest.mark.story("18.1", ac=7)
+def test_a_registration_waits_for_another_still_being_made_and_finds_the_event_full(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    """Deterministic: a real registration takes the last place and is held just before it
+    commits, still holding the event's row. The second must wait for it, then find the event full.
+    A row lock two registrations could hold at once (FOR SHARE) would let the second count the
+    first's uncommitted place as free and take it too, every time, not only when a race lines up."""
+    race = _race(engine, capacity=1, attendees=2)
+    first_id, second_id = race.attendee_ids
+    first_held = threading.Event()
+    let_first_commit = threading.Event()
+    record_audit = service.record_audit
+
+    def record_audit_then_hold_the_first(db: Session, **kwargs):
+        entry = record_audit(db, **kwargs)
+        if kwargs["actor"].id == first_id:
+            first_held.set()
+            let_first_commit.wait(timeout=30)
+        return entry
+
+    monkeypatch.setattr(service, "record_audit", record_audit_then_hold_the_first)
+    pids: queue.Queue[int] = queue.Queue()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(_attempt, engine, race.event_id, first_id)
+            assert first_held.wait(timeout=30), "the first registration never reached its commit"
+            second = pool.submit(_attempt, engine, race.event_id, second_id, None, pids)
+            _wait_until_blocked_or_done(engine, second, pids)
+            waited = not second.done()
+            let_first_commit.set()
+            outcomes = (first.result(timeout=30), second.result(timeout=30))
+
+        assert waited, "the second registration did not wait for the first"
+        assert outcomes == (REGISTERED, service.EVENT_FULL_MESSAGE)
+        with Session(engine) as session:
+            assert _active_count(session, race.event_id) == 1
+    finally:
+        let_first_commit.set()
         _clean_up(engine, race)
 
 
@@ -924,9 +993,10 @@ def test_a_registration_waiting_on_an_event_being_cancelled_is_refused(engine: E
         canceller.execute(
             update(Event).where(Event.id == race.event_id).values(status=EventStatus.CANCELLED)
         )
+        pids: queue.Queue[int] = queue.Queue()
         with ThreadPoolExecutor(max_workers=1) as pool:
-            attempt = pool.submit(_attempt, engine, race.event_id, attendee_id)
-            _wait_until_blocked_or_done(engine, attempt)
+            attempt = pool.submit(_attempt, engine, race.event_id, attendee_id, None, pids)
+            _wait_until_blocked_or_done(engine, attempt, pids)
             canceller.commit()
             outcome = attempt.result(timeout=30)
 
@@ -940,10 +1010,11 @@ def test_a_registration_waiting_on_an_event_being_cancelled_is_refused(engine: E
 
 @pytest.mark.story("18.1", ac=7)
 def test_a_registration_does_not_wait_for_a_booking_being_written_for_the_event(engine: Engine):
-    """Deterministic: holding the event's row for a registration must not hold up other work on
-    the event, nor wait for it. A booking being written for the event holds a key-share lock on
-    the event's row until it commits; a registration's FOR NO KEY UPDATE goes past it, where
-    FOR UPDATE would wait."""
+    """Deterministic: a registration's FOR NO KEY UPDATE on the event's row does not wait for a
+    write that only refers to the event, nor hold one up. A booking being written for the event
+    holds a key-share lock on the event's row until it commits; FOR NO KEY UPDATE goes past it,
+    where FOR UPDATE would wait. (It does wait for a change to the event's own row, as AC7 needs:
+    a status changed meanwhile is read as it now stands.)"""
     race = _race(engine, capacity=10, attendees=1)
     (attendee_id,) = race.attendee_ids
     booking = Session(engine)
@@ -955,9 +1026,10 @@ def test_a_registration_does_not_wait_for_a_booking_being_written_for_the_event(
             starts_at=NOW + timedelta(days=30),
             ends_at=NOW + timedelta(days=30, hours=2),
         )
+        pids: queue.Queue[int] = queue.Queue()
         with ThreadPoolExecutor(max_workers=1) as pool:
-            attempt = pool.submit(_attempt, engine, race.event_id, attendee_id)
-            _wait_until_blocked_or_done(engine, attempt)
+            attempt = pool.submit(_attempt, engine, race.event_id, attendee_id, None, pids)
+            _wait_until_blocked_or_done(engine, attempt, pids)
             waited = not attempt.done()
             booking.rollback()  # lets a registration that did wait go on, so this fails, not hangs
             outcome = attempt.result(timeout=30)
