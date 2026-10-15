@@ -7,6 +7,7 @@ back anyway). Use unique names/emails so tests never collide with the seed.
 from __future__ import annotations
 
 import itertools
+import json
 import uuid
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.auth.passwords import hash_password
 from app.bookings.models import VenueBooking
+from app.change_requests.models import EventChangeRequest
 from app.events.models import (
     EquipmentReservation,
     EquipmentType,
@@ -407,3 +409,33 @@ def make_equipment_item(
         db.flush()
     db.refresh(item)
     return item
+
+
+def make_change_request(
+    db: Session,
+    *,
+    event: Event,
+    field: str = "expected_attendance",
+    current: Any = 100,
+    proposed: Any = 150,
+    status: str = "PENDING",
+    **overrides,
+) -> EventChangeRequest:
+    """A change request on ``event`` (story 19.1), its values given as Python and stored as the
+    canonical JSON 19.1 writes, so a test can start from any status (story 19.2). Stamped with a
+    fresh time, so several made in one test keep the order they were made in."""
+    request = EventChangeRequest(
+        event_id=event.id,
+        requested_by_id=overrides.pop("requested_by_id", event.organiser_id),
+        field_name=field,
+        current_value=json.dumps(current, sort_keys=True, separators=(",", ":")),
+        proposed_value=json.dumps(proposed, sort_keys=True, separators=(",", ":")),
+        reason=overrides.pop("reason", "More sign-ups than expected."),
+        status=status,
+        created_at=overrides.pop("created_at", datetime.now(UTC)),
+        **overrides,
+    )
+    db.add(request)
+    db.flush()
+    db.refresh(request)
+    return request
