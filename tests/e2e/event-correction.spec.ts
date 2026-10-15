@@ -1,20 +1,19 @@
 /**
- * Story 7.2 - fe: the assigned Event Coordinator corrects an organiser's request while it is under
- * review or awaiting clarification, from the event details page, in the same form the organiser
- * filled in (2.1).
+ * Story 7.2 - fe: the assigned Event Coordinator corrects an organiser's request until it is
+ * confirmed, from the event details page, in the same form the organiser filled in (2.1).
  * AC4 the coordinator edits the organiser-provided details and saves them without the organiser's
  *     approval; the status stays where it was, including while a clarification is open. The cover
  *     picture is replaced with the organiser's own controls, a venue requirement is added with
  *     story 2.7's editor, and details cannot be saved while a field marked * is empty (checked
  *     before anything is sent).
  * AC5/AC6 were replaced by fix f7.2.4, which moves the lock from approval to confirmation:
- * AC10 an approved (Planning) event's details are still corrected, and the details page shows them.
- *     An approval that lands while the editor is open makes the save fail as stale, and a reload
- *     shows the details still editable.
+ * AC10 an approved (Planning) event's details are still corrected, and the details page shows them,
+ *     as an event awaiting its safety check still offers them. An approval that lands while the
+ *     editor is open makes the save fail as stale, and a reload shows the details still editable.
  * AC12 once Confirmed, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
- * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment section,
- *     and a save leaves the equipment out of what it sends.
+ * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment
+ *     requirements section, and a save leaves the equipment out of what it sends.
  * AC7 the form counts availability without the event's own holds, and marks equipment no longer
  *     available for new dates on its line, refusing the save.
  * AC8 nobody but the assigned coordinator is offered the edit.
@@ -45,7 +44,7 @@ const MY_EVENTS_PATH = /\/events\/mine$/
 const LOCKED_HINT =
   'Event details can no longer be edited directly once the event is confirmed. Further changes must go through the change request process.'
 const EQUIPMENT_HINT =
-  'Once the event is approved, its equipment is changed in the Equipment section of the event page.'
+  'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
 // An organiser submits, then the auto-assigned coordinator signs in and edits: two full sign-in
 // cycles take longer than the default per-test budget - the same reasoning as
 // request-clarification.spec.ts and coordinator-reassignment.spec.ts.
@@ -345,44 +344,68 @@ test('7.2 AC10: the coordinator corrects an approved event and the details page 
   await expect(coordinator.getByText('Planning', { exact: true }).first()).toBeVisible()
 })
 
+test('7.2 AC10: an event awaiting its safety check still offers its details for correction', async ({
+  page,
+}) => {
+  // Read only: the concert's coordinator opens the form and nothing is saved.
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(`/events/${EVENTS.harbourConcert}`)
+  await page.getByRole('link', { name: 'Edit event' }).click()
+
+  await expect(page.getByText(LOCKED_HINT)).toHaveCount(0)
+  await expect(page.getByLabel('Event name')).toBeEnabled()
+  await expect(page.getByLabel('Description')).toBeEnabled()
+})
+
 test('7.2 AC15: once approved, the form shows the equipment read-only and points to its own section', async ({
   page,
 }) => {
+  // Read only: the roadshow's pending, accepted and declined items are shown, never changed.
   await signIn(page, ACCOUNTS.coordinator)
-  await page.goto(`/events/${EVENTS.planning}`)
+  await page.goto(`/events/${EVENTS.equipmentRoadshow}`)
   await page.getByRole('link', { name: 'Edit event' }).click()
 
   await expect(page.getByText(EQUIPMENT_HINT)).toBeVisible()
+  const firstItem = equipmentItem(page, 1)
+  await expect(firstItem.getByLabel('Equipment type')).toBeDisabled()
+  await expect(firstItem.getByLabel('Quantity')).toBeDisabled()
+  await expect(firstItem.getByLabel('Technical notes')).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Add equipment' })).toHaveCount(0)
   await expect(page.getByLabel('Description')).toBeEnabled()
 })
 
 test('7.2 AC15: once approved, a correction leaves the equipment out of what it sends', async ({
   page,
+  browser,
 }) => {
-  // The request is captured and aborted, so the seeded Planning event other specs read is never
-  // changed. Leaving the list out is what lets an event carrying a declined type requested again
-  // (15.1) still be corrected: 2.1's one-line-per-type rule would refuse the list if it were sent.
-  let sentBody: Record<string, unknown> | null = null
-  await page.route('**/review-details', async (route) => {
-    const request = route.request()
-    if (request.resourceType() !== 'fetch' || request.method() !== 'PATCH') {
-      await route.continue()
-      return
-    }
-    sentBody = request.postDataJSON()
-    await route.abort()
+  // Leaving the list out is what lets an event carrying a declined type requested again (15.1)
+  // still be corrected: 2.1's one-line-per-type rule would refuse the list if it were sent.
+  test.setTimeout(TWO_USER_TIMEOUT)
+  const name = uniqueName('Approved kit')
+  await signIn(page, ACCOUNTS.organiser)
+  const request = await submittedRequestWithLaptops(page, name, {
+    days: 500 + Math.floor(Math.random() * 50),
+    laptops: 1,
   })
-  await signIn(page, ACCOUNTS.coordinator)
-  await page.goto(`/events/${EVENTS.planning}`)
-  await page.getByRole('link', { name: 'Edit event' }).click()
+  const coordinator = await signedInAs(browser, page, request.coordinator)
+  await approve(coordinator, request.id)
+  await openCorrection(coordinator, request.id, name)
+  await expect(equipmentItem(coordinator, 1).getByLabel('Quantity')).toBeDisabled()
 
-  await page.getByLabel('Description').fill(`E2E approved correction ${Date.now()}`)
-  await page.getByRole('button', { name: 'Save changes' }).click()
+  await coordinator.getByLabel('Description').fill('Corrected with the kit left alone.')
+  const [sent] = await Promise.all([
+    coordinator.waitForRequest(
+      (sent) => sent.url().includes('/review-details') && sent.method() === 'PATCH',
+    ),
+    saveCorrection(coordinator),
+  ])
 
-  await expect.poll(() => sentBody).not.toBeNull()
-  expect(sentBody).not.toHaveProperty('equipment')
-  expect(sentBody).toHaveProperty('description')
+  expect(sent.postDataJSON()).not.toHaveProperty('equipment')
+  expect(sent.postDataJSON()).toHaveProperty('description')
+  await expect(coordinator.getByRole('alert')).toHaveCount(0)
+  await coordinator.getByRole('link', { name: /^← / }).click()
+  await expect(coordinator.getByText('Corrected with the kit left alone.')).toBeVisible()
 })
 
 test('7.2 AC12: once confirmed, the details are greyed out, the hint says why, and notes still save', async ({
