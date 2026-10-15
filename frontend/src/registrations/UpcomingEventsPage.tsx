@@ -25,7 +25,7 @@ const STATE_BADGES: Record<RegistrationState, { status: string; label: string }>
   REGISTERED: { status: 'registered', label: 'Registered' },
 }
 
-/** Story 18.1 AC1: a Confirmed event approved before f2.7.4 may have no venue booked. */
+/** Story 18.1 AC1: what a Confirmed event with no approved venue booking shows. */
 const NO_VENUE_YET = 'Venue to be confirmed'
 
 /** Story 18.1 AC1: the places left are shown (decided 14 Oct 2026). */
@@ -57,7 +57,12 @@ function describeVenues(event: RegistrationEvent): string[] {
     : event.venues.map((venue) => `${venue.name}, ${venue.location}`)
 }
 
-/** AC1: a later page can repeat an event the list already shows, if one dropped off meanwhile. */
+/**
+ * AC1: the next page is asked for by how many events are shown. An event added ahead of them
+ * meanwhile pushes one already shown onto it, and that one is shown once. (One that dropped off
+ * ahead of them pushes the next one back a page instead, so it is missed until the list is next
+ * loaded whole, after a registration or when the page is opened again.)
+ */
 function withoutRepeats(
   shown: RegistrationEvent[],
   more: RegistrationEvent[],
@@ -66,8 +71,19 @@ function withoutRepeats(
   return [...shown, ...more.filter((event) => !shownIds.has(event.id))]
 }
 
+/** AC1: the event as the server now has it for this attendee, until the list is loaded again. */
+function markRegistered(event: RegistrationEvent, registeredAt: string): RegistrationEvent {
+  return {
+    ...event,
+    state: 'REGISTERED',
+    registered_at: registeredAt,
+    places_left: event.places_left - 1,
+  }
+}
+
 interface UpcomingEventCardProps {
   event: RegistrationEvent
+  /** A registration is being sent, for this event or another. */
   isRegistering: boolean
   /** Why the latest attempt to register was refused, null when it was not. */
   refusal: string | null
@@ -78,7 +94,8 @@ interface UpcomingEventCardProps {
  * Story 18.1 AC1/AC3: one event, with Register as the card's own control (story 5.4's card
  * action: beside the details, below them on a phone), enabled only while the event is open (AC3:
  * disabled when full, closed or not yet open; not offered once registered). AC6: disabled while
- * its registration is being sent, so a double-click sends one.
+ * any registration is being sent, so a double-click sends one, and a second card's answer cannot
+ * enable the first card's Register while its own is still on the way.
  */
 function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: UpcomingEventCardProps) {
   function handleRegister() {
@@ -116,8 +133,9 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
   return <EventCard title={event.name} imageUrl={null} details={details} action={register} />
 }
 
-/** The size of the list to load again after a registration: what is shown, within the API's
- *  limits, so a refreshed list keeps every page already loaded. */
+/** The size of the list to load again after a registration: what is shown, so a refreshed list
+ *  keeps the pages already loaded - up to REGISTRATION_EVENTS_MAX_LIMIT, the most the API sends
+ *  at once, past which it is cut back to that many. */
 function refreshLimit(shownCount: number): number {
   return Math.min(
     Math.max(shownCount, REGISTRATION_EVENTS_PAGE_SIZE),
@@ -135,6 +153,8 @@ function refreshLimit(shownCount: number): number {
  * AC5: attendees only - App.tsx guards the route, and the backend refuses everyone else.
  * AC6: a refused registration (full, closed, already registered) shows the backend's reason on
  *      the card, and the list is loaded again so every card shows where it now stands.
+ * AC4: an event that stopped taking registrations is gone from the reloaded list, so its refusal
+ *      is shown above the list instead, naming the event.
  */
 export function UpcomingEventsPage() {
   // What to load: the first page, then everything shown again after each registration. A new
@@ -145,9 +165,14 @@ export function UpcomingEventsPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [registeringId, setRegisteringId] = useState<string | null>(null)
-  const [refusal, setRefusal] = useState<{ eventId: string; message: string } | null>(null)
+  const [refusal, setRefusal] = useState<{
+    eventId: string
+    eventName: string
+    message: string
+  } | null>(null)
 
   const items = useMemo(() => list?.items ?? [], [list])
+  const isRefusalOnItsCard = refusal !== null && items.some((event) => event.id === refusal.eventId)
 
   const handleLoadMore = useCallback(async () => {
     setIsLoadingMore(true)
@@ -170,16 +195,30 @@ export function UpcomingEventsPage() {
     async (event: RegistrationEvent) => {
       setRegisteringId(event.id)
       setRefusal(null)
+      // The list is loaded again below, so an earlier page's failure no longer applies.
+      setLoadMoreError(null)
       try {
-        await registerForEvent(event)
+        const registration = await registerForEvent(event)
+        // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
+        // again in between.
+        setList((current) =>
+          current === null
+            ? current
+            : {
+                ...current,
+                items: current.items.map((item) =>
+                  item.id === event.id ? markRegistered(item, registration.registered_at) : item,
+                ),
+              },
+        )
       } catch (err) {
-        setRefusal({ eventId: event.id, message: formatApiError(err) })
+        setRefusal({ eventId: event.id, eventName: event.name, message: formatApiError(err) })
       } finally {
         setRegisteringId(null)
         setShown({ limit: refreshLimit(items.length) })
       }
     },
-    [items],
+    [items, setList],
   )
 
   return (
@@ -196,6 +235,11 @@ export function UpcomingEventsPage() {
         </p>
       )}
       {isLoading && <LoadingState label="Loading upcoming events…" />}
+      {refusal !== null && !isRefusalOnItsCard && (
+        <p role="alert" className="error">
+          {refusal.eventName}: {refusal.message}
+        </p>
+      )}
 
       {list !== null && list.items.length === 0 && (
         <EmptyState>No events are open for registration right now.</EmptyState>
@@ -208,7 +252,7 @@ export function UpcomingEventsPage() {
               <UpcomingEventCard
                 key={event.id}
                 event={event}
-                isRegistering={registeringId === event.id}
+                isRegistering={registeringId !== null}
                 refusal={refusal?.eventId === event.id ? refusal.message : null}
                 onRegister={handleRegister}
               />

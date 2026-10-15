@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-14 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-15 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -374,7 +374,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `accessibility_notes` | `text` | yes | - | - | Free-text accessibility needs beyond the selectable features. |
 | `registration_required` | `boolean` | no | `false` | - | Whether attendees must register (story 2.1 AC17). |
 | `registration_capacity` | `integer` | yes | - | - | Not set by story 2.1: registration capacity is always expected_attendance (AC17), not a     separate value. Reserved for a future story that lets it diverge (originally story 18.5). |
-| `registration_opens_at` | `timestamp with time zone` | yes | - | - | When attendees may start registering. Optional (story 2.1 AC17): left blank, registration opens as soon as the event is Confirmed (story 18.1 AC4). Must be no later than registration_closes_at and the proposed start, and is re-checked if the start is moved earlier than an already-saved value (2.1 AC18). |
+| `registration_opens_at` | `timestamp with time zone` | yes | - | - | When attendees may start registering. Optional (story 2.1 AC17): left blank, registration opens as soon as the event is Confirmed (story 18.1 AC4). Must be strictly before registration_closes_at (ck_events_registration_window) and no later than the proposed start, and is re-checked if the start is moved earlier than an already-saved value (2.1 AC18). |
 | `registration_closes_at` | `timestamp with time zone` | yes | - | - | Registration deadline. Must not be after the proposed start (story 2.1 AC17), and is     re-checked if the start is moved earlier than an already-saved deadline (AC18). |
 | `contact_name` | `text` | yes | - | - | On-the-day contact person. |
 | `contact_email` | `citext` | yes | - | - | Contact e-mail. |
@@ -757,7 +757,7 @@ An attendee's registration for an event. An attendee holds at most one active (R
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
 | `attendee_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id (role ATTENDEE). |
 | `status` | `text` | no | `'REGISTERED'` | - | REGISTERED, WITHDRAWN (by the attendee, story 18.2) or CANCELLED (by ConnectSphere, e.g. the event was cancelled). Only REGISTERED takes a place (story 18.1 AC2). |
-| `registered_at` | `timestamp with time zone` | no | `now()` | - | When the attendee registered: the moment the closing time and capacity were checked against (story 18.1 AC1, AC7). |
+| `registered_at` | `timestamp with time zone` | no | `now()` | - | When the attendee registered: the moment the opening and closing times were checked against (story 18.1 AC1, AC2). Capacity is counted afterwards, once the event's row is held (AC7). |
 | `withdrawn_at` | `timestamp with time zone` | yes | - | - | When the attendee withdrew (story 18.2). |
 | `attended` | `boolean` | yes | - | - | Recorded after the event; NULL = not recorded (attendance recording is outside the first release). |
 | `notes` | `text` | yes | - | - | Free text (dietary needs etc.). |

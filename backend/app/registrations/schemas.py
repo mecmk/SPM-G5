@@ -3,7 +3,9 @@ for, and a registration.
 
 AC5: what an attendee is sent is only what these models declare - an event's name, description,
 dates, booked venues, places left and registration state - never its organiser, coordinator,
-contact, purpose, expected attendance, equipment, accessibility needs or internal notes.
+contact, purpose, equipment, accessibility needs or internal notes. No field carries its expected
+attendance, but that shows through the places left until someone registers, since capacity is
+the expected attendance (2.1 AC17) and the places left are shown (decision 1, 14 Oct 2026).
 """
 
 from __future__ import annotations

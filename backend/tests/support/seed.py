@@ -164,6 +164,9 @@ class Bookings:
     # Story 21.1: each safety-check event's one venue, approved.
     APPROVED_CONCERT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000011")
     APPROVED_BOOK_FAIR_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000012")
+    # Story 18.1: Events.JAZZ_EVENING's two venues, approved, each hold completed.
+    APPROVED_JAZZ_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000013")
+    APPROVED_JAZZ_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000014")  # extra venue
 
 
 class Registrations:

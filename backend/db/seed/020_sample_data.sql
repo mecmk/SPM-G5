@@ -330,7 +330,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- registered for once per run; the portfolio review (43, one place) is full with Bella's place
 -- below; the wine appreciation (44) closed on 1 Oct 2026; the Lunar New Year market (45) opens on
 -- 10 Jan 2028. Organiser 2, coordinator 2. Only the jazz evening has its venues booked (below): the
--- others show "Venue to be confirmed", as a Confirmed event from before f2.7.4 may, and Venue Staff's
+-- others show "Venue to be confirmed", as a Confirmed event with no approved booking does, and Venue Staff's
 -- Approved tab stays on one page (tests/e2e/bookings.spec.ts, 13.1.2 AC1).
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
@@ -960,13 +960,19 @@ ON CONFLICT (id) DO UPDATE SET
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
 
 -- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
--- is listed as Full.
+-- is listed as Full. On a database where she has since withdrawn and registered again, the row is
+-- left as it is: making it REGISTERED again would give her two active registrations, which
+-- uq_event_registrations_active refuses, and db:ready would fail.
 INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at) VALUES
     ('18181818-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000011',
      'REGISTERED', '2026-10-11 10:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
-    registered_at = EXCLUDED.registered_at, withdrawn_at = NULL;
+    registered_at = EXCLUDED.registered_at, withdrawn_at = NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_registrations AS newer
+    WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
+      AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
 -- ---------------------------------------------------------------------
 -- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)

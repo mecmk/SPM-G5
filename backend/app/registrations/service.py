@@ -1,9 +1,8 @@
 """Business rules for story 18.1: the events an attendee can register for, and registering.
 
-An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19: Private events
-are reachable only by a shared link, which no story has built yet) and needs registration (2.1
-AC17). It is listed until it starts (AC3), and its capacity is its expected attendance (2.1 AC17,
-AC2). Only a REGISTERED row takes a place.
+An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19: a Private
+event is not listed) and needs registration (2.1 AC17). It is listed until it starts (AC3), and
+its capacity is its expected attendance (2.1 AC17, AC2). Only a REGISTERED row takes a place.
 
 AC7: ``register`` holds the event's row (``FOR NO KEY UPDATE``) while it checks the event and
 counts the places, so two registrations for one event take turns, and an event cancelled or sent

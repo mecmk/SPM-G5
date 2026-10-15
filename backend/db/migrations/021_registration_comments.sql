@@ -16,11 +16,11 @@ COMMENT ON TABLE event_registrations IS
 COMMENT ON COLUMN event_registrations.status IS
     'REGISTERED, WITHDRAWN (by the attendee, story 18.2) or CANCELLED (by ConnectSphere, e.g. the event was cancelled). Only REGISTERED takes a place (story 18.1 AC2).';
 COMMENT ON COLUMN event_registrations.registered_at IS
-    'When the attendee registered: the moment the closing time and capacity were checked against (story 18.1 AC1, AC7).';
+    'When the attendee registered: the moment the opening and closing times were checked against (story 18.1 AC1, AC2). Capacity is counted afterwards, once the event''s row is held (AC7).';
 COMMENT ON COLUMN event_registrations.withdrawn_at IS
     'When the attendee withdrew (story 18.2).';
 COMMENT ON INDEX uq_event_registrations_active IS
     'Story 18.1 AC6/AC7: one active (REGISTERED) registration per attendee per event, so two registrations sent at once cannot both be kept.';
 
 COMMENT ON COLUMN events.registration_opens_at IS
-    'When attendees may start registering. Optional (story 2.1 AC17): left blank, registration opens as soon as the event is Confirmed (story 18.1 AC4). Must be no later than registration_closes_at and the proposed start, and is re-checked if the start is moved earlier than an already-saved value (2.1 AC18).';
+    'When attendees may start registering. Optional (story 2.1 AC17): left blank, registration opens as soon as the event is Confirmed (story 18.1 AC4). Must be strictly before registration_closes_at (ck_events_registration_window) and no later than the proposed start, and is re-checked if the start is moved earlier than an already-saved value (2.1 AC18).';
