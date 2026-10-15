@@ -264,11 +264,6 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
         # The equipment is now held for the event (test_event_request_equipment.py), and its lines
         # are otherwise unchanged: they wait, not yet sent, for the coordinator to submit them to
         # Technical Support (story 15.1 AC1).
-        # a coordinator is auto-assigned on submission (story 5.1 AC1) - not a "recorded detail"
-        # the organiser supplied, so this test only excepts it rather than asserting on it
-        "assigned_coordinator_id": submitted["assigned_coordinator_id"],
-        "assigned_coordinator_name": submitted["assigned_coordinator_name"],
-        "assigned_coordinator_email": submitted["assigned_coordinator_email"],
     }
 
 

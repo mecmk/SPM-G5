@@ -106,8 +106,8 @@ class CoordinatorInactive(ValueError):
 
 
 class NotCurrentCoordinator(PermissionError):
-    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it -
-    an unassigned event stays open to any Event Coordinator (story 5.1's original claim-it case)."""
+    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it. An
+    unassigned event is the Lead's to assign (story 5.4 AC9: ``NotPermittedToAssign``)."""
 
     def __init__(self) -> None:
         super().__init__("Only the coordinator currently assigned to this event may reassign it.")

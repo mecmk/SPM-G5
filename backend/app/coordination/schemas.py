@@ -76,20 +76,26 @@ class UnassignedEventEntry(BaseModel):
 
     id: uuid.UUID
     name: str
-    starts_at: datetime | None
-    ends_at: datetime | None
-    expected_attendance: int | None
+    starts_at: datetime  # non-null for every non-DRAFT row (ck_events_submitted_fields_complete)
+    ends_at: datetime
+    expected_attendance: int
     organiser_name: str
-    submitted_at: datetime | None
+    submitted_at: datetime | None  # no constraint guarantees it, so the page allows for none
 
     @classmethod
     def from_event(cls, event: Event) -> UnassignedEventEntry:
+        # The queue holds no drafts, so ck_events_submitted_fields_complete guarantees these.
+        starts_at, ends_at = event.starts_at, event.ends_at
+        expected_attendance = event.expected_attendance
+        assert starts_at is not None
+        assert ends_at is not None
+        assert expected_attendance is not None
         return cls(
             id=event.id,
             name=event.name,
-            starts_at=event.starts_at,
-            ends_at=event.ends_at,
-            expected_attendance=event.expected_attendance,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            expected_attendance=expected_attendance,
             organiser_name=event.organiser.full_name,
             submitted_at=event.submitted_at,
         )

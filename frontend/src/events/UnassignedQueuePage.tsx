@@ -13,7 +13,7 @@ import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_UNASSIGNED_PATH, eventPath } from '../routes'
-import { formatDateTime, formatSchedule } from '../shared/format'
+import { formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 
 const QUEUE_LABEL = 'Unassigned events'
@@ -44,8 +44,9 @@ function describeCoordinator(coordinator: CoordinatorOption): string {
  * confirming, the event leaves the queue.
  * AC5: an empty queue says so, and with no active coordinator Assign is disabled and the page
  * says why.
- * AC8: if another Lead assigned the event first, the backend's 409 names who got it; the event
- * leaves this queue too, since it is no longer waiting.
+ * AC8: if another Lead assigned the event first, the dialog closes, the page shows the backend's
+ * 409 sentence naming who got it, and the queue reloads, so the event leaves it and the counts
+ * include the other Lead's assignment.
  */
 export function UnassignedQueuePage() {
   const { data: queue, error, isLoading, setData: setQueue } = useLoaded(loadQueue)
@@ -53,11 +54,13 @@ export function UnassignedQueuePage() {
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [assignError, setAssignError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<string | null>(null)
 
   const hasCoordinators = queue !== null && queue.coordinators.length > 0
 
   function askToAssign(entry: UnassignedEventEntry) {
     setAssignError(null)
+    setConflict(null)
     setSelectedCoordinatorId(queue?.coordinators[0]?.id ?? '')
     setAssigning(entry)
   }
@@ -81,6 +84,16 @@ export function UnassignedQueuePage() {
     )
   }
 
+  /** AC8: after losing to another Lead, read the queue and the counts afresh; if that fails, at
+   *  least drop the event this Lead was told is taken. */
+  async function reloadQueue(takenEventId: string) {
+    try {
+      setQueue(await loadQueue())
+    } catch {
+      removeFromQueue(takenEventId, null)
+    }
+  }
+
   async function confirmAssign() {
     if (assigning === null) return
     setIsSaving(true)
@@ -90,8 +103,15 @@ export function UnassignedQueuePage() {
       removeFromQueue(assigning.id, selectedCoordinatorId)
       setAssigning(null)
     } catch (err) {
-      setAssignError(formatApiError(err))
-      if (err instanceof ApiError && err.code === 'CONFLICT') removeFromQueue(assigning.id, null)
+      if (err instanceof ApiError && err.code === 'CONFLICT') {
+        // AC8: another Lead assigned it first. Close the dialog, say who got it, and reload, so
+        // the event leaves the queue and the winner's count is current.
+        setAssigning(null)
+        setConflict(formatApiError(err))
+        await reloadQueue(assigning.id)
+      } else {
+        setAssignError(formatApiError(err))
+      }
     } finally {
       setIsSaving(false)
     }
@@ -111,6 +131,11 @@ export function UnassignedQueuePage() {
         </p>
       )}
       {isLoading && <LoadingState label="Loading the unassigned queue…" />}
+      {conflict && (
+        <p role="alert" className="error">
+          {conflict}
+        </p>
+      )}
 
       {queue !== null && (
         <div className="stack">
@@ -137,7 +162,7 @@ export function UnassignedQueuePage() {
                     formatSchedule(entry.starts_at, entry.ends_at),
                     `${entry.expected_attendance} people`,
                     `Requested by ${entry.organiser_name}`,
-                    `Submitted ${formatDateTime(entry.submitted_at)}`,
+                    `Submitted ${entry.submitted_at ? formatDateTime(entry.submitted_at) : NOT_RECORDED}`,
                   ]}
                   action={
                     <button
