@@ -24,8 +24,8 @@
  * AC9 needs story 4.3 (organisers editing a submitted request).
  *
  * Each test that saves raises its own request through the organiser's form, so parallel specs
- * never edit the same event. Submitting assigns it to either seeded coordinator (5.1, round
- * robin), so the test reads who got it before signing in as them.
+ * never edit the same event. A submitted request waits until the Lead assigns it (5.4), so the
+ * test has the Lead assign it before signing in as that coordinator.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import {
