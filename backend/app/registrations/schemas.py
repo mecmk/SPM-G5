@@ -1,5 +1,5 @@
 """Request and response models for story 18.1: the events an attendee can browse and register
-for, and a registration.
+for, and a registration; and for story 18.2: the attendee's own registrations.
 
 AC5: what an attendee is sent is only what these models declare - an event's name, description,
 dates, booked venues, places left and registration state - never its organiser, coordinator,
@@ -107,4 +107,41 @@ class RegistrationOut(BaseModel):
             event_id=registration.event_id,
             status=registration.status,
             registered_at=registration.registered_at,
+        )
+
+
+class MyRegistrationOut(BaseModel):
+    """Story 18.2 AC1: one of the attendee's own registrations - its event's name and dates, where
+    they stand, when they registered and withdrew, and whether it can be withdrawn now (AC3), so
+    the page never decides that on the browser's clock. AC5: nothing internal to the event's
+    planning. No defaults (response schema)."""
+
+    id: uuid.UUID
+    event_id: uuid.UUID
+    event_name: str
+    starts_at: datetime
+    ends_at: datetime
+    status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
+    registered_at: datetime
+    withdrawn_at: datetime | None
+    can_withdraw: bool
+
+    @classmethod
+    def from_registration(
+        cls, registration: EventRegistration, *, event: Event, status: str, can_withdraw: bool
+    ) -> MyRegistrationOut:
+        # Registrations are only taken for Confirmed events, and
+        # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
+        assert event.starts_at is not None
+        assert event.ends_at is not None
+        return cls(
+            id=registration.id,
+            event_id=event.id,
+            event_name=event.name,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            status=status,
+            registered_at=registration.registered_at,
+            withdrawn_at=registration.withdrawn_at,
+            can_withdraw=can_withdraw,
         )

@@ -149,7 +149,7 @@ backend/
     equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
-    registrations/      # the events attendees can register for, and registering for one
+    registrations/      # the events attendees can register for, registering, and their own registrations and withdrawing
     safety/             # the Safety Officer's queue of events awaiting the safety check, and each event's check
     venues/             # the venue catalogue, its search and its availability calendar
     common/             # shared by feature areas: the audit log
