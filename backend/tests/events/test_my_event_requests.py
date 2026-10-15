@@ -129,6 +129,13 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PORTFOLIO_REVIEW),
         str(Events.WINE_APPRECIATION),
         str(Events.LUNAR_NEW_YEAR_MARKET),
+        str(Events.POETRY_NIGHT),
+        str(Events.SKETCHING_WALK),
+        str(Events.BOARD_GAMES_SOCIAL),
+        str(Events.SUNSET_YOGA),
+        str(Events.HERITAGE_TRAIL),
+        str(Events.CHARITY_FUN_RUN),
+        str(Events.BOOK_SWAP),
     }
 
 
