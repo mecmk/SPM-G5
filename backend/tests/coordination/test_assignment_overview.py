@@ -181,6 +181,21 @@ def test_assigned_by_names_only_a_lead(login_as, db: Session, assigner):
 
 
 @pytest.mark.story("5.5", ac=1)
+def test_the_overview_lists_events_soonest_first(login_as, db: Session):
+    """Made out of order, listed by start: the order the Lead plans by."""
+    team_of_one = make_user(db, role=COORDINATOR_ROLE, full_name="Ordered Coordinator")
+    soon = datetime.now(UTC) + timedelta(days=30)
+    later, latest, soonest = (
+        _assigned_event(db, team_of_one.id, assigned_by_id=None, starts_at=soon + timedelta(days=d))
+        for d in (10, 20, 0)
+    )
+
+    rows = _overview(login_as(Users.LEAD), coordinator=str(team_of_one.id))
+
+    assert [row["id"] for row in rows] == [str(soonest.id), str(later.id), str(latest.id)]
+
+
+@pytest.mark.story("5.5", ac=1)
 def test_the_overview_filters_by_coordinator(login_as, db: Session):
     chloes = _assigned_event(db, Users.COORDINATOR.id, assigned_by_id=Users.LEAD.id)
     carls = _assigned_event(db, Users.COORDINATOR_2.id, assigned_by_id=Users.LEAD.id)
@@ -319,6 +334,25 @@ def test_workloads_list_each_coordinator_with_their_active_events(login_as, db: 
     assert listed["status"] == EventStatus.CONFIRMED
     assert datetime.fromisoformat(listed["starts_at"]) == second.starts_at
     assert datetime.fromisoformat(listed["ends_at"]) == second.ends_at
+
+
+@pytest.mark.story("5.5", ac=2)
+def test_workloads_list_coordinators_by_name_and_their_events_soonest_first(login_as, db: Session):
+    zed = make_user(db, role=COORDINATOR_ROLE, full_name="Zed Ordering Coordinator")
+    abe = make_user(db, role=COORDINATOR_ROLE, full_name="Abe Ordering Coordinator")
+    soon = datetime.now(UTC) + timedelta(days=30)
+    later = _assigned_event(db, abe.id, assigned_by_id=None, starts_at=soon + timedelta(days=5))
+    sooner = _assigned_event(db, abe.id, assigned_by_id=None, starts_at=soon)
+
+    workloads = _workloads(login_as(Users.LEAD))
+
+    names = [entry["coordinator_name"] for entry in workloads.values()]
+    assert names.index("Abe Ordering Coordinator") < names.index("Zed Ordering Coordinator")
+    assert [event["id"] for event in workloads[str(abe.id)]["events"]] == [
+        str(sooner.id),
+        str(later.id),
+    ]
+    assert workloads[str(zed.id)]["events"] == []
 
 
 @pytest.mark.story("5.5", ac=2)

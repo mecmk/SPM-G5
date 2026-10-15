@@ -1,4 +1,4 @@
-"""Business logic for coordinator assignment (stories 5.1, 5.2 and 5.4).
+"""Business logic for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5).
 
 A submitted event waits unassigned until the Event Coordinator Lead assigns it from the unassigned
 queue (story 5.4, which replaced 5.1's automatic round-robin assignment - 5.4 AC9). Once it has a
@@ -22,6 +22,10 @@ write the audit entry" is written once.
 * 5.4 AC8 of two Leads assigning one event at once, the conditional update in
   ``_create_assignment`` lets only the first through, and the second is told who got it.
 
+Story 5.5 reads it all back for the Lead: every active event with its coordinator and the Lead
+who assigned it (``list_active_events``), and each coordinator's active events
+(``list_workloads``).
+
 Routers translate the exceptions raised here into HTTP statuses (see router.py).
 """
 
@@ -31,7 +35,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Subquery, and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -61,6 +65,10 @@ NOT_PERMITTED_TO_ASSIGN_MESSAGE = (
     "Only the Event Coordinator Lead can assign an event that has no coordinator yet."
 )
 ALREADY_ASSIGNED_MESSAGE = "This event has already been assigned to {coordinator}."
+NOT_AN_ACTIVE_STATUS_MESSAGE = "Filter by one of the active statuses: {statuses}."
+
+# Story 5.5 AC1 (PO decision P5): the coordinator filter's value for events with no coordinator.
+UNASSIGNED = "unassigned"
 
 
 class EventNotFound(LookupError):
@@ -130,6 +138,16 @@ class AlreadyAssigned(RuntimeError):
         self.coordinator = coordinator
 
 
+class NotAnActiveStatus(ValueError):
+    """Story 5.5 AC1: the overview's status filter offers only the active statuses (P1)."""
+
+    def __init__(self, status: str) -> None:
+        super().__init__(
+            NOT_AN_ACTIVE_STATUS_MESSAGE.format(statuses=", ".join(sorted(ASSIGNABLE_STATUSES)))
+        )
+        self.status = status
+
+
 class AssignmentChanged(RuntimeError):
     """Story 5.2 AC7: the event's coordinator changed between when this request read it and when
     it tried to write - another (re)assignment won the race. Never partially applied: nothing
@@ -151,6 +169,18 @@ class CoordinatorWorkload:
     active_event_count: int
 
 
+def _active_event_counts() -> Subquery:
+    """Each coordinator's number of active events (``ASSIGNABLE_STATUSES``, PO decision), as a
+    subquery to outer-join users onto (5.4 AC3, 5.5 AC2). Counted per coordinator here rather than
+    by grouping the users, which would clash with the role ``User`` loads eagerly by a join."""
+    return (
+        select(Event.assigned_coordinator_id, func.count().label("active_event_count"))
+        .where(Event.status.in_(ASSIGNABLE_STATUSES))
+        .group_by(Event.assigned_coordinator_id)
+        .subquery()
+    )
+
+
 def list_coordinators(
     db: Session, *, exclude_event_id: uuid.UUID | None = None
 ) -> list[CoordinatorWorkload]:
@@ -161,14 +191,7 @@ def list_coordinators(
     Story 5.2 AC4: pass ``exclude_event_id`` for the reassignment picker, which must leave that
     event's current coordinator out - they are not a valid target for their own event.
     """
-    # Counted per coordinator in a subquery, then joined on: grouping the users themselves would
-    # clash with the role User loads eagerly by a join.
-    counts = (
-        select(Event.assigned_coordinator_id, func.count().label("active_event_count"))
-        .where(Event.status.in_(ASSIGNABLE_STATUSES))
-        .group_by(Event.assigned_coordinator_id)
-        .subquery()
-    )
+    counts = _active_event_counts()
     query = (
         select(User, func.coalesce(counts.c.active_event_count, 0))
         .outerjoin(counts, counts.c.assigned_coordinator_id == User.id)
@@ -198,6 +221,112 @@ def list_unassigned_events(db: Session) -> list[Event]:
             .order_by(Event.submitted_at, Event.id)
         ).all()
     )
+
+
+@dataclass(frozen=True)
+class ActiveEvent:
+    """Story 5.5 AC1: an active event, and the Lead who assigned its current coordinator - None
+    when nobody is assigned, or when the assigner was not a Lead (PO decision P3)."""
+
+    event: Event
+    assigning_lead: User | None
+
+
+def _assigning_lead(assignment: EventCoordinatorAssignment | None) -> User | None:
+    """P3: the assigner, if they hold ``events:assign`` - checked by permission, not role name."""
+    if assignment is None or assignment.assigned_by is None:
+        return None
+    assigner = assignment.assigned_by
+    return assigner if role_has(assigner.role_code, Permission.EVENTS_ASSIGN) else None
+
+
+def list_active_events(
+    db: Session,
+    *,
+    coordinator: uuid.UUID | str | None = None,
+    status: str | None = None,
+    assigned_by: User | None = None,
+) -> list[ActiveEvent]:
+    """Story 5.5 AC1: every active event (P1: ``ASSIGNABLE_STATUSES``), soonest first, ties broken
+    by id. Each filter narrows the list, and they combine:
+
+    * ``coordinator`` - one coordinator's events, or ``UNASSIGNED`` for those with none (P5);
+    * ``status`` - one of the active statuses; anything else raises ``NotAnActiveStatus``;
+    * ``assigned_by`` - the events whose current assignment this Lead made (P2).
+
+    The current assignment row is joined on in the same query, for who made it."""
+    if status is not None and status not in ASSIGNABLE_STATUSES:
+        raise NotAnActiveStatus(status)
+    current = and_(
+        EventCoordinatorAssignment.event_id == Event.id,
+        EventCoordinatorAssignment.unassigned_at.is_(None),
+    )
+    query = (
+        select(Event, EventCoordinatorAssignment)
+        .outerjoin(EventCoordinatorAssignment, current)
+        .where(Event.status.in_(ASSIGNABLE_STATUSES))
+    )
+    if coordinator == UNASSIGNED:
+        query = query.where(Event.assigned_coordinator_id.is_(None))
+    elif coordinator is not None:
+        query = query.where(Event.assigned_coordinator_id == coordinator)
+    if status is not None:
+        query = query.where(Event.status == status)
+    if assigned_by is not None:
+        query = query.where(EventCoordinatorAssignment.assigned_by_id == assigned_by.id)
+    rows = db.execute(query.order_by(Event.starts_at, Event.id)).all()
+    return [
+        ActiveEvent(event=event, assigning_lead=_assigning_lead(assignment))
+        for event, assignment in rows
+    ]
+
+
+@dataclass(frozen=True)
+class CoordinatorEvents:
+    """Story 5.5 AC2: a coordinator, how many active events they hold, and those events."""
+
+    coordinator: User
+    active_event_count: int
+    events: list[Event]
+
+
+def list_workloads(db: Session) -> list[CoordinatorEvents]:
+    """Story 5.5 AC2: every Event Coordinator with their active events, by name. AC4: one with
+    none is listed with 0 (the outer join keeps them). AC5 (PO decision P4): a deactivated
+    coordinator is listed only while they still hold active events, so the Lead can reassign them;
+    ``is_active`` on the user flags them.
+
+    Two queries whatever the team's size: the coordinators with their counts (the same subquery
+    as 5.4's picker), then their active events, grouped here. The count comes from SQL; the events
+    listed are the same active ones, so the two always agree."""
+    counts = _active_event_counts()
+    active_event_count = func.coalesce(counts.c.active_event_count, 0)
+    coordinators = db.execute(
+        select(User, active_event_count)
+        .outerjoin(counts, counts.c.assigned_coordinator_id == User.id)
+        .where(
+            User.role_code == RoleCode.EVENT_COORDINATOR,
+            or_(User.is_active.is_(True), active_event_count > 0),
+        )
+        .order_by(User.full_name, User.id)
+    ).all()
+    events = db.scalars(
+        select(Event)
+        .where(
+            Event.status.in_(ASSIGNABLE_STATUSES),
+            Event.assigned_coordinator_id.in_([user.id for user, _ in coordinators]),
+        )
+        .order_by(Event.starts_at, Event.id)
+    ).all()
+    by_coordinator: dict[uuid.UUID, list[Event]] = {user.id: [] for user, _ in coordinators}
+    for event in events:
+        by_coordinator[event.assigned_coordinator_id].append(event)
+    return [
+        CoordinatorEvents(
+            coordinator=user, active_event_count=count, events=by_coordinator[user.id]
+        )
+        for user, count in coordinators
+    ]
 
 
 def get_event(db: Session, event_id: uuid.UUID) -> Event:

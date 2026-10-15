@@ -47,6 +47,8 @@ const NOT_YET_ASSIGNED = 'Not yet assigned'
 const DEACTIVATED = 'Deactivated'
 const NO_MATCH_MESSAGE = 'No active events match these filters.'
 const SMART_CITIES_EXPO = 'Smart Cities Expo' // Chloe's, Planning; the 8.4 spec only reads it
+// Carl's, self-assigned (so not assigned by the Lead), Awaiting Safety Check; 21.1 only reads it.
+const HARBOUR_LIGHTS = 'Harbour Lights Concert'
 const [CHLOE, CARL] = COORDINATORS
 const PHONE = { width: 375, height: 667 }
 const TABLET = { width: 768, height: 1024 }
@@ -57,14 +59,14 @@ function overviewItem(page: Page, eventName: string) {
   return page
     .getByRole('list', { name: OVERVIEW_LABEL })
     .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: eventName }) })
+    .filter({ has: page.getByRole('link', { name: eventName, exact: true }) })
 }
 
 function coordinatorItem(page: Page, coordinatorName: string) {
   return page
     .getByRole('list', { name: COORDINATORS_LABEL })
     .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name: coordinatorName }) })
+    .filter({ has: page.getByRole('heading', { name: coordinatorName, exact: true }) })
 }
 
 async function openAsLead(page: Page, query = '') {
@@ -94,6 +96,25 @@ async function assignFromQueue(page: Page, name: string, coordinatorId: string) 
   await dialog.getByLabel('Coordinator').selectOption(coordinatorId)
   await dialog.getByRole('button', { name: 'Assign' }).click()
   await expect(queued).toHaveCount(0)
+}
+
+/**
+ * Change a filter with `action`, then wait until the overview has been fetched with `sent` in its
+ * query and its fresh result is on the page. A filter the page fails to send never gets that
+ * response. Only then is it safe to check what the filter removed: while new results load, the
+ * page hides the old ones, so "not listed" would be true of anything during that gap.
+ */
+async function refilter(page: Page, action: () => Promise<unknown>, sent: string) {
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === OVERVIEW_API && response.url().includes(sent),
+    ),
+    action(),
+  ])
+  await expect(
+    page.getByRole('list', { name: OVERVIEW_LABEL }).or(page.getByText(NO_MATCH_MESSAGE)),
+  ).toBeVisible()
 }
 
 /** Serve one API path with a fixed JSON body, for states the seed cannot reach. */
@@ -190,32 +211,63 @@ test('5.5 AC1/AC5: the overview shows a new event’s coordinator and who assign
 })
 
 test('5.5 AC1: the filters narrow the overview and survive a reload', async ({ page }) => {
-  test.setTimeout(60_000)
+  test.setTimeout(90_000)
+  // Two requests this Lead assigns: one to Carl (the one followed), one to Chloe.
   const name = await submitRequest(page, 'Filtered')
+  const chloes = await submitRequest(page, 'Filtered for Chloe')
   await signIn(page, ACCOUNTS.lead)
   await assignFromQueue(page, name, CARL.id)
+  await assignFromQueue(page, chloes, CHLOE.id)
   await page.goto(PAGE_PATH)
-
-  // By coordinator: Carl's event stays, Chloe's seeded one goes.
-  await page.getByLabel('Coordinator').selectOption(CARL.id)
   await expect(overviewItem(page, name)).toBeVisible()
+
+  // Each filter is proven by what it removes, checked once the filtered result is on the page
+  // (see refilter). Waiting for the request also proves the page sends the filter.
+
+  // By coordinator: Chloe's events go (this Lead's and her seeded one); Carl's stay, including his
+  // self-assigned seeded event.
+  await refilter(
+    page,
+    () => page.getByLabel('Coordinator').selectOption(CARL.id),
+    `coordinator=${CARL.id}`,
+  )
+  await expect(overviewItem(page, name)).toBeVisible()
+  await expect(overviewItem(page, HARBOUR_LIGHTS)).toBeVisible()
+  await expect(overviewItem(page, chloes)).toHaveCount(0)
   await expect(overviewItem(page, SMART_CITIES_EXPO)).toHaveCount(0)
 
-  // Assigned by me: this Lead assigned it.
-  await page.getByLabel('Assigned by me').check()
+  // Assigned by me: Carl's self-assigned event goes; the one this Lead assigned stays.
+  await refilter(page, () => page.getByLabel('Assigned by me').check(), 'assigned_by=me')
   await expect(overviewItem(page, name)).toBeVisible()
+  await expect(overviewItem(page, HARBOUR_LIGHTS)).toHaveCount(0)
 
-  // By status: it is Under Review, so the Planning tab leaves it out and Under Review keeps it.
-  await page.getByRole('tab', { name: /^Planning/ }).click()
-  await expect(overviewItem(page, name)).toHaveCount(0)
-  await page.getByRole('tab', { name: /^Under Review/ }).click()
-  await expect(overviewItem(page, name)).toBeVisible()
-
-  // The filters are in the address, so a reload keeps them.
-  await expect(page).toHaveURL(/status=UNDER_REVIEW/)
+  // The filters are in the address, so a reload shows them and applies them: Chloe's event
+  // proves the coordinator filter, Carl's self-assigned one proves "Assigned by me". The request
+  // being listed first means the fresh result is on the page.
+  await expect(page).toHaveURL(/assigned=me/)
   await page.reload()
   await expect(page.getByLabel('Coordinator')).toHaveValue(CARL.id)
   await expect(page.getByLabel('Assigned by me')).toBeChecked()
+  await expect(overviewItem(page, name)).toBeVisible()
+  await expect(overviewItem(page, chloes)).toHaveCount(0)
+  await expect(overviewItem(page, HARBOUR_LIGHTS)).toHaveCount(0)
+
+  // By status: the request is Under Review, so the Planning tab leaves it out and Under Review
+  // keeps it; the tab survives a reload too.
+  await refilter(
+    page,
+    () => page.getByRole('tab', { name: /^Planning/ }).click(),
+    'status=PLANNING',
+  )
+  await expect(overviewItem(page, name)).toHaveCount(0)
+  await refilter(
+    page,
+    () => page.getByRole('tab', { name: /^Under Review/ }).click(),
+    'status=UNDER_REVIEW',
+  )
+  await expect(overviewItem(page, name)).toBeVisible()
+  await expect(page).toHaveURL(/status=UNDER_REVIEW/)
+  await page.reload()
   await expect(page.getByRole('tab', { name: /^Under Review/ })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -250,7 +302,9 @@ test('5.5 AC4/AC5: an idle coordinator shows 0 and a deactivated one is flagged'
   await stubFetch(page, WORKLOADS_API, STUB_WORKLOADS)
   await openAsLead(page, '?view=coordinators')
 
-  await expect(coordinatorItem(page, 'Idle Coordinator')).toContainText('0 active events')
+  await expect(
+    coordinatorItem(page, 'Idle Coordinator').getByText('0 active events', { exact: true }),
+  ).toBeVisible()
   const gone = coordinatorItem(page, 'Departed Coordinator')
   await expect(gone.getByText(DEACTIVATED, { exact: true })).toBeVisible()
   await expect(gone.getByRole('link', { name: STRANDED_EVENT.name })).toBeVisible()
@@ -275,6 +329,9 @@ test('5.5 AC6: only the Lead reaches the overview', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, ACCOUNTS.coordinator)
+  // The coordinator's own section shows first, so the sidebar has drawn before checking what it
+  // leaves out.
+  await expect(nav.getByRole('link', { name: 'Events inbox' })).toBeVisible()
   await expect(nav.getByRole('link', { name: PAGE_TITLE })).toHaveCount(0)
   await page.goto(PAGE_PATH)
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
