@@ -526,20 +526,23 @@ export function updatePointOfContact(
  * Mirrors `EventReviewCorrection` (story 7.2 AC4): the request's fields as the 2.1 form sends them,
  * plus AC9's `expected_updated_at` - the `updated_at` of the copy being corrected.
  */
-export interface EventReviewCorrectionInput extends EventInput {
+export interface EventReviewCorrectionInput extends Omit<EventInput, 'equipment'> {
+  /** Story 7.2 AC15: left out once the event is approved, which the backend reads as unchanged -
+   *  its equipment is changed in its own section then. */
+  equipment?: EquipmentInput[]
   expected_updated_at: string
 }
 
 /**
- * Story 7.2 AC4-AC9: the coordinator assigned to the event corrects the organiser's request while
- * it is under review or awaiting clarification. Every 409 - approved meanwhile (AC6) or changed
- * since it was opened (AC9) - means the copy on screen is out of date, so it is one code:
- * EVENT_CORRECTION_CONFLICT, which the page answers with a reload. Equipment no longer free for
- * the dates (AC7) is a 422, as in 2.1.
+ * Story 7.2 AC4-AC18: the coordinator assigned to the event corrects the organiser's request at
+ * any point before it is confirmed. Every 409 - confirmed meanwhile (AC12) or changed since it was
+ * opened (AC9) - is one code: EVENT_CORRECTION_CONFLICT, shown with the server's sentence and a
+ * reload. Equipment no longer free for the dates (AC7) and, after approval, a change that no longer
+ * fits a booking or the equipment (AC14, AC15) are 422s, as in 2.1: the copy is not out of date.
  */
 export function correctEventUnderReview(
   eventId: string,
-  input: EventInput,
+  input: Omit<EventReviewCorrectionInput, 'expected_updated_at'>,
   expectedUpdatedAt: string,
 ): Promise<EventDetail> {
   const body: EventReviewCorrectionInput = { ...input, expected_updated_at: expectedUpdatedAt }
@@ -558,8 +561,8 @@ const CORRECTION_PICTURE_ERROR_CODES = {
 } as const
 
 /**
- * Story 7.2 AC4: the coordinator assigned to the event replaces its cover picture while it is
- * under review or awaiting clarification. `expectedUpdatedAt` is AC9's token, as for
+ * Story 7.2 AC4/AC10: the coordinator assigned to the event replaces its cover picture at any
+ * point before it is confirmed. `expectedUpdatedAt` is AC9's token, as for
  * `correctEventUnderReview`, and a 409 means the copy on screen is out of date.
  */
 export function uploadCoverImageUnderReview(
@@ -578,8 +581,8 @@ export function uploadCoverImageUnderReview(
   })
 }
 
-/** Story 7.2 AC4: the coordinator assigned to the event takes its cover picture off while it is
- *  under review or awaiting clarification. The same token and refusals as
+/** Story 7.2 AC4/AC10: the coordinator assigned to the event takes its cover picture off at any
+ *  point before it is confirmed. The same token and refusals as
  *  `uploadCoverImageUnderReview`. */
 export function removeCoverImageUnderReview(
   eventId: string,

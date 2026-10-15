@@ -132,6 +132,9 @@ export function venueEditPath(venueId: string): string {
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
+// Story 5.4: the Event Coordinator Lead's queue of submitted events with no coordinator yet.
+export const EVENTS_UNASSIGNED_PATH = '/events/unassigned'
+
 // Story 12.1: the old Request a venue page. f12.1.1 moved the request into the event's context,
 // so this address is kept only to redirect old links to the Events inbox.
 export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'
@@ -192,6 +195,9 @@ export function safetyCheckPath(eventId: string): string {
   return SAFETY_CHECK_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
 
+// Story 18.1: the events an attendee can browse and register for.
+export const UPCOMING_EVENTS_PATH = '/browse'
+
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'
 
@@ -211,7 +217,7 @@ export function eventPath(eventId: string): string {
 }
 
 // Story 7.2: the assigned Event Coordinator edits an event - its internal notes until it is
-// closed, and the organiser's request too while it is under review or awaiting clarification.
+// closed, and the organiser's request too until it is confirmed (f7.2.4).
 export const EVENT_COORDINATOR_EDIT_PATH = '/events/:eventId/coordinator-edit'
 
 export function eventCoordinatorEditPath(eventId: string): string {

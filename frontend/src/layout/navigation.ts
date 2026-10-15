@@ -4,9 +4,11 @@ import {
   BOOKING_REQUESTS_PATH,
   EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
+  EVENTS_UNASSIGNED_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
   SAFETY_CHECKS_PATH,
+  UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
 } from '../routes'
 
@@ -61,6 +63,15 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: true,
       },
       {
+        to: EVENTS_UNASSIGNED_PATH,
+        label: 'Unassigned events',
+        description: 'Submitted requests waiting for a coordinator. Assign each one from here.',
+        icon: 'inbox',
+        permission: PERMISSIONS.EVENTS_ASSIGN,
+        story: '5.4',
+        isAvailable: true,
+      },
+      {
         to: '/events/all',
         label: 'All events',
         description: 'Every event on record, to plan venues and equipment around.',
@@ -103,7 +114,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Who has registered for the events you manage.',
         icon: 'people',
         permission: PERMISSIONS.REGISTRATIONS_VIEW,
-        story: '18.6',
+        story: '18.3',
         isAvailable: false,
       },
     ],
@@ -194,13 +205,13 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Attend',
     items: [
       {
-        to: '/browse',
+        to: UPCOMING_EVENTS_PATH,
         label: 'Upcoming events',
-        description: 'Search confirmed events and register for them.',
+        description: 'Browse confirmed events and register for them.',
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.1',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: '/registrations',
@@ -208,7 +219,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'The events you have registered for, and your place at each.',
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
-        story: '18.3',
+        story: '18.2',
         isAvailable: false,
       },
     ],

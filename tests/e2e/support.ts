@@ -10,11 +10,15 @@ export const ACCOUNTS = {
   organiser: 'organiser@acme.example',
   organiser2: 'organiser@nimbus.example',
   coordinator: 'coordinator@connectsphere.example',
+  // Story 5.4: the Event Coordinator Lead, who assigns submitted requests to coordinators.
+  lead: 'lead@connectsphere.example',
   coordinator2: 'coordinator2@connectsphere.example',
   venueStaff: 'venue@connectsphere.example',
   techSupport: 'tech@connectsphere.example',
   safetyOfficer: 'safety@connectsphere.example',
   attendee: 'attendee@example.com',
+  // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
+  attendee2: 'attendee2@example.com',
 } as const
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.'
@@ -80,6 +84,11 @@ export const EVENTS = {
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
 export async function signIn(page: Page, email: string, password: string = PASSWORD) {
+  // A Sign out clicked just before may still be waiting on the server: let the app finish it and
+  // open /login itself, since navigating away now would cancel the request.
+  if ((await page.getByRole('button', { name: 'Sign out' }).count()) > 0) {
+    await page.waitForURL((url) => url.pathname === '/login')
+  }
   if (!page.url().endsWith('/login')) await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
@@ -130,26 +139,51 @@ export async function createAndSubmitRequest(page: Page, name: string): Promise<
   return eventId
 }
 
-/** The two seeded Event Coordinators story 5.1's round robin can land a submission on. */
+/** The two seeded Event Coordinators. Since story 5.4 the Lead assigns a submitted request to one
+ *  of them (`assignByLead`), always Chloe, so a spec knows in advance who its coordinator is. */
 export const COORDINATORS = [
-  { account: ACCOUNTS.coordinator, name: 'Chloe Coordinator' },
-  { account: ACCOUNTS.coordinator2, name: 'Carl Coordinator' },
+  {
+    account: ACCOUNTS.coordinator,
+    name: 'Chloe Coordinator',
+    id: '11111111-0000-0000-0000-000000000003',
+  },
+  {
+    account: ACCOUNTS.coordinator2,
+    name: 'Carl Coordinator',
+    id: '11111111-0000-0000-0000-000000000004',
+  },
 ] as const
 
 /**
- * Which seeded coordinator an event page shows as assigned, plus the other one - story 5.1's
- * round robin means a spec that submits a request cannot know in advance. Matched on the e-mail
- * the page prints beside the name, because the stat block it sits in carries no role and specs
- * must not select by CSS class (tests/CLAUDE.md).
+ * Story 5.4 AC9: a submitted request waits unassigned until the Event Coordinator Lead assigns it.
+ * Called on the request's page by its organiser (Olivia), this signs in as the Lead, assigns it to
+ * Chloe from the unassigned queue, then signs Olivia back in on the same page. Returns Chloe, plus
+ * the other coordinator - the shape story 5.1's round-robin helper returned, so specs that went on
+ * as "whoever was assigned" keep working unchanged.
  */
-export async function assignedCoordinator(page: Page) {
-  await expect(page.getByText('Assigned coordinator')).toBeVisible()
-  for (const [index, coordinator] of COORDINATORS.entries()) {
-    if (await page.getByText(coordinator.account, { exact: true }).isVisible()) {
-      return { ...coordinator, other: COORDINATORS[1 - index] }
-    }
-  }
-  throw new Error('no seeded coordinator shown as assigned on the event page')
+export async function assignByLead(page: Page) {
+  const eventPath = new URL(page.url()).pathname
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())?.trim() ?? ''
+  const [chloe, carl] = COORDINATORS
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto('/events/unassigned')
+  const queued = page
+    .getByRole('list', { name: 'Unassigned events' })
+    .getByRole('listitem')
+    .filter({ hasText: name })
+  await queued.getByRole('button', { name: 'Assign' }).click()
+  const dialog = page.getByRole('dialog', { name: `Assign "${name}"?` })
+  await dialog.getByLabel('Coordinator').selectOption(chloe.id)
+  await dialog.getByRole('button', { name: 'Assign' }).click()
+  await expect(queued).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(eventPath)
+  await expect(page.getByText(chloe.account, { exact: true })).toBeVisible()
+  return { ...chloe, other: carl }
 }
 
 /** The clarification thread on an event's detail page (stories 4.2, 4.6). */
