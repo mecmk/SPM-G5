@@ -7,7 +7,6 @@ import {
   type ChangeRequest,
   type ChangeRequestField,
   type ChangeRequestInput,
-  type ChangeRequestStatus,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
 import {
@@ -21,48 +20,18 @@ import {
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
+import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import {
-  formatDate,
-  formatDateTime,
-  formatSchedule,
-  inputToInstant,
-  instantToInput,
-} from '../shared/format'
+  canApproveYet,
+  describeValue,
+  FIELD_LABELS,
+  NOT_YET_APPROVABLE_NOTE,
+  STATUS_LABELS,
+} from './changeRequestValues'
 
-/** Story 19.1 AC1: how each requestable field is named, in the order the form offers them.
- *  Mirrors the backend's `FIELD_LABELS` (app/change_requests/service.py). */
-const FIELD_LABELS: Record<ChangeRequestField, string> = {
-  schedule: 'Date and time',
-  expected_attendance: 'Expected attendance',
-  venue_requirements: 'Venue requirements',
-  equipment: 'Equipment',
-}
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
-
-/** AC1/AC9: how each request status reads on the event page. */
-const STATUS_LABELS: Record<ChangeRequestStatus, string> = {
-  PENDING: 'Pending',
-  APPROVED: 'Approved',
-  REJECTED: 'Rejected',
-  WITHDRAWN: 'Withdrawn',
-}
 const WHOLE_NUMBER = /^\d+$/
-const NOT_RECORDED = 'Not recorded'
-
-/** The canonical value shapes the backend stores (app/change_requests/service.py). */
-interface ScheduleValue {
-  starts_at: string | null
-  ends_at: string | null
-}
-interface RequirementValue {
-  name: string | null
-  capacity: number | null
-  layout_code: string | null
-}
-interface EquipmentValue {
-  equipment_type_code: string
-  quantity: number
-}
 
 /** One venue requirement as the form edits it. An existing one keeps its own times and
  *  facilities, which this form does not edit, so proposing a new name or size never drops them. */
@@ -97,52 +66,6 @@ function newDraftKey(): number {
 
 function isPositiveWholeNumber(value: string): boolean {
   return WHOLE_NUMBER.test(value.trim()) && Number(value) > 0
-}
-
-function namesByCode(items: { code: string; name: string }[] | undefined): Map<string, string> {
-  return new Map((items ?? []).map((item) => [item.code, item.name]))
-}
-
-/** "Wed, 18 Nov 2026 · 09:00–17:00", or both dates when it runs over more than one day. */
-function describeSchedule(value: ScheduleValue): string {
-  if (value.starts_at === null || value.ends_at === null) return NOT_RECORDED
-  if (formatDate(value.starts_at) === formatDate(value.ends_at)) {
-    return formatSchedule(value.starts_at, value.ends_at)
-  }
-  return `${formatDateTime(value.starts_at)} – ${formatDateTime(value.ends_at)}`
-}
-
-/** AC1: a stored value in words, for the request's "now" and "requested" lines. */
-function describeValue(
-  field: ChangeRequestField,
-  value: unknown,
-  references: EventReferenceData | null,
-): string {
-  if (value === null || value === undefined) return NOT_RECORDED
-  if (field === 'schedule') return describeSchedule(value as ScheduleValue)
-  if (field === 'expected_attendance') return `${value as number} people`
-  if (field === 'venue_requirements') {
-    const layouts = namesByCode(references?.layouts)
-    const requirements = value as RequirementValue[]
-    if (requirements.length === 0) return 'No venue requirements'
-    return requirements
-      .map((item) => {
-        const layout = item.layout_code
-          ? `, ${layouts.get(item.layout_code) ?? item.layout_code}`
-          : ''
-        return `${item.name ?? 'Unnamed'} (${item.capacity ?? '?'} people${layout})`
-      })
-      .join('; ')
-  }
-  const types = namesByCode(references?.equipment_types)
-  const lines = value as EquipmentValue[]
-  if (lines.length === 0) return 'No equipment'
-  return lines
-    .map(
-      (line) =>
-        `${types.get(line.equipment_type_code) ?? line.equipment_type_code} ×${line.quantity}`,
-    )
-    .join('; ')
 }
 
 /**
@@ -203,6 +126,16 @@ export interface ChangeRequestsSectionProps {
   canRaise: boolean
   /** AC9: the owning organiser may withdraw their pending requests. */
   canWithdraw: boolean
+  /** Story 19.2 AC6: the assigned coordinator decides pending requests. */
+  canDecide: boolean
+  /** Story 19.2 AC2: an approval changed the event, so the page loads it again. */
+  onDecided: () => void
+}
+
+/** The decision dialog open on the event page: which request, and approving or rejecting it. */
+interface OpenDecision {
+  request: ChangeRequest
+  outcome: 'APPROVED' | 'REJECTED'
 }
 
 /**
@@ -211,13 +144,20 @@ export interface ChangeRequestsSectionProps {
  * While the event is in Planning the organiser asks for one field to change - date and time,
  * expected attendance, venue requirements or equipment - with a reason (AC1, AC4), at most one
  * pending per field (AC5), and withdraws a pending request after confirming (AC9). Nothing
- * changes on the event until the coordinator decides (stories 19.2-19.5). The form checks the
- * reason and the simple value rules before sending; the server re-checks every rule (AC3, AC4).
+ * changes on the event until the coordinator decides. The form checks the reason and the simple
+ * value rules before sending; the server re-checks every rule (AC3, AC4).
+ *
+ * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
+ * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
+ * rejection its reason, to the organiser as well. Phase 1: Approve is offered only where it can be
+ * made yet (`canApproveYet`).
  */
 export function ChangeRequestsSection({
   event,
   canRaise,
   canWithdraw,
+  canDecide,
+  onDecided,
 }: ChangeRequestsSectionProps) {
   const ids = useId()
   const reasonInput = useRef<HTMLTextAreaElement>(null)
@@ -242,6 +182,7 @@ export function ChangeRequestsSection({
   const [pendingWithdraw, setPendingWithdraw] = useState<ChangeRequest | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
+  const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -455,6 +396,18 @@ export function ChangeRequestsSection({
     }
   }
 
+  function closeDecision() {
+    setOpenDecision(null)
+  }
+
+  /** Story 19.2 AC2/AC3: the decision is saved - list it as decided, and load the event again so
+   *  an approved change shows on the page. */
+  function finishDecision() {
+    setOpenDecision(null)
+    reloadRequests()
+    onDecided()
+  }
+
   // Worked out from what is typed now, so it clears as soon as it is fixed once Send was pressed.
   const problem = isChecked ? findProblem() : null
   const problemId = `${ids}-problem`
@@ -498,11 +451,48 @@ export function ChangeRequestsSection({
                   “{request.reason}” · {request.requested_by_name},{' '}
                   {formatDateTime(request.created_at)}
                 </span>
+                {request.decided_by_name !== null && request.decided_at !== null && (
+                  <>
+                    <br />
+                    <span className="small wrap-anywhere">
+                      {STATUS_LABELS[request.status]} by {request.decided_by_name},{' '}
+                      {formatDateTime(request.decided_at)}
+                      {request.decision_reason !== null && `: “${request.decision_reason}”`}
+                    </span>
+                  </>
+                )}
+                {canDecide &&
+                  request.status === 'PENDING' &&
+                  !canApproveYet(request.field, event.status) && (
+                    <>
+                      <br />
+                      <span className="small muted">{NOT_YET_APPROVABLE_NOTE}</span>
+                    </>
+                  )}
               </span>
               <StatusBadge status={request.status} label={STATUS_LABELS[request.status]} />
               {canWithdraw && request.status === 'PENDING' && (
                 <button type="button" className="secondary" onClick={() => askToWithdraw(request)}>
                   Withdraw
+                </button>
+              )}
+              {canDecide &&
+                request.status === 'PENDING' &&
+                canApproveYet(request.field, event.status) && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenDecision({ request, outcome: 'APPROVED' })}
+                  >
+                    Approve
+                  </button>
+                )}
+              {canDecide && request.status === 'PENDING' && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setOpenDecision({ request, outcome: 'REJECTED' })}
+                >
+                  Reject
                 </button>
               )}
             </li>
@@ -729,6 +719,17 @@ export function ChangeRequestsSection({
             </button>
           </div>
         </form>
+      )}
+
+      {openDecision !== null && (
+        <ChangeRequestDecisionDialog
+          request={openDecision.request}
+          outcome={openDecision.outcome}
+          references={references}
+          onCancel={closeDecision}
+          onDecided={finishDecision}
+          onRefused={reloadRequests}
+        />
       )}
 
       {pendingWithdraw && (

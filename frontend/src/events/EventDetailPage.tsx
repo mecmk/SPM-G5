@@ -590,6 +590,10 @@ export function EventDetailPage() {
   const canViewChangeRequests =
     (isOrganiser || isAssignedCoordinator) &&
     CHANGE_REQUESTS_VISIBLE_STATUSES.includes(event.status)
+  /** Story 19.2 AC6: the assigned coordinator decides the pending change requests, mirroring the
+   *  backend's assigned-coordinator check. */
+  const canDecideChangeRequests =
+    can(PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE) && isAssignedCoordinator
   /** Story 19.1 AC2: the owning organiser updates the point of contact directly while the event
    *  is Planning or Confirmed, mirroring the backend's `update_point_of_contact`. */
   const canUpdatePointOfContact =
@@ -1057,6 +1061,8 @@ export function EventDetailPage() {
             event={event}
             canRaise={canRequestChanges}
             canWithdraw={isOrganiser}
+            canDecide={canDecideChangeRequests}
+            onDecided={reloadEvent}
           />
         )}
 

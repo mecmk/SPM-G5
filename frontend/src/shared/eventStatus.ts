@@ -77,6 +77,13 @@ export const DETAILS_LOCKED_HINT =
 export const CHANGE_REQUESTABLE_STATUS: EventStatus = 'PLANNING'
 
 /**
+ * Story 19.2 (Phase 1): the one status a change request can be approved in yet, mirroring the
+ * backend's `_APPROVABLE_STATUS` (backend/app/change_requests/service.py). Approving past Planning
+ * returns the event to Planning for a new safety check (AC8), which Phase 2 adds.
+ */
+export const CHANGE_APPROVABLE_STATUS: EventStatus = 'PLANNING'
+
+/**
  * Story 19.1 AC1: the statuses an event can hold change requests in - approved, whether still
  * running or over - so the organiser and coordinator can still read what was asked.
  */
