@@ -582,6 +582,10 @@ def test_proposed_attendance_leaves_room_for_every_venue_requirement(
 
     assert response.status_code == expected_status, response.text
     assert len(_change_requests(db, event.id)) == (1 if expected_status == 201 else 0)
+    if expected_status == 422:
+        assert response.json()["detail"] == (
+            "Main hall needs room for more people than the new expected attendance."
+        )
 
 
 def _over_attendance(event: Event) -> list:

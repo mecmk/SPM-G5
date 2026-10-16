@@ -528,7 +528,7 @@ def test_approval_refused_by_a_creation_rule_changes_nothing(coordinator_client,
 
     assert response.status_code == 422
     assert response.json()["detail"] == (
-        "Main hall cannot need room for more people than the expected attendance."
+        "Main hall needs room for more people than the new expected attendance."
     )
     assert _attendance(db, event.id) == 200
     _assert_undecided(db, request)
