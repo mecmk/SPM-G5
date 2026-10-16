@@ -6,14 +6,16 @@
  *      its reason; a block off with no description is refused in the backend's own words, and
  *      the month grid's chip names the reason, or the description for Other.
  * AC5  An end not after the start is refused in the form, before anything is sent.
- * AC2  Before Save, the bookings the closure would affect are listed; Save still goes through.
- * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page.
+ * AC2  Before Save, the bookings the closure would affect are listed; Save waits for the list and
+ *      is blocked when it cannot be had; Save still goes through with bookings in the way.
+ * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page, and
+ *      on its request's page whatever its status.
  * AC6  A closure is edited, then ended, from the day it falls on; an ended one shows no actions;
  *      editing one that was removed meanwhile says so.
  * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
  *      Approve is held back.
- * AC9  Only Venue Staff see the controls; the coordinator and the Safety Officer see the reason
- *      on the calendar but no way to change it.
+ * AC9  Only Venue Staff see the Block off time card; the coordinator and the Safety Officer see
+ *      the calendar and no way to change it.
  *
  * The rules - the reasons and the Other description, what overlaps, the event's return to
  * Planning, who is told, the refusal to approve, the races - are backend cases:
@@ -32,7 +34,10 @@
  * one and works on today.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, VENUES, inFuture, signIn, uniqueName } from './support'
+import { ACCOUNTS, EVENTS, VENUES, corsHeaders, inFuture, signIn, uniqueName } from './support'
+
+// The spec pins and reads wall-clock dates in Singapore time, whatever the machine's zone.
+test.use({ timezoneId: 'Asia/Singapore' })
 
 const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
 
@@ -41,9 +46,40 @@ function availability(page: Page) {
   return page.getByRole('region', { name: 'Availability', exact: true })
 }
 
-/** Venue Staff's "Block off time" card, under the calendar: the form, its preview and Save. */
+/**
+ * Venue Staff's "Block off time" card, under the calendar: the form, its preview and Save. While a
+ * closure is being edited the card is named "Edit blocked-off time".
+ */
 function blockOff(page: Page) {
+  return page.getByRole('region', { name: /^(Block off time|Edit blocked-off time)$/ })
+}
+
+/** The card as it is when closed, holding the button that opens the add form. */
+function blockOffCard(page: Page) {
   return page.getByRole('region', { name: 'Block off time', exact: true })
+}
+
+/**
+ * Save the form and, when it would newly flag a booking, confirm the dialog. Called once the
+ * affected list is showing, so whether the dialog comes is known: a booking already marked (a
+ * retry, or another closure over it) is not newly flagged and asks nothing. Waits for the save to
+ * land, so what follows reads the saved state.
+ */
+async function saveClosure(page: Page, buttonName = 'Save closure') {
+  const save = blockOff(page).getByRole('button', { name: buttonName })
+  await expect(save).toBeEnabled()
+  const hasBookings = (await blockOff(page).getByRole('listitem').count()) > 0
+  const wouldFlag = hasBookings && (await blockOff(page).getByText('Already marked').count()) === 0
+  const landed = page.waitForResponse(
+    (response) =>
+      /\/unavailability(\/[^/]+)?$/.test(new URL(response.url()).pathname) &&
+      response.request().method() !== 'GET',
+  )
+  await save.click()
+  if (wouldFlag) {
+    await page.getByRole('dialog').getByRole('button', { name: 'Block off time' }).click()
+  }
+  expect((await landed).ok()).toBe(true)
 }
 
 async function openVenue(page: Page, name: string) {
@@ -75,7 +111,7 @@ interface ClosureForm {
 
 /** Open the add form on the venue's page and fill it. Nothing is saved. */
 async function fillClosure(page: Page, form: ClosureForm) {
-  const section = blockOff(page)
+  const section = blockOffCard(page)
   await section.getByRole('button', { name: 'Block off time' }).click()
   await section.getByLabel('Starts').fill(form.starts)
   await section.getByLabel('Ends').fill(form.ends)
@@ -104,6 +140,7 @@ async function queueCard(page: Page, shortId: string) {
   return card
 }
 
+/** A page signed in as `email` in a context of its own; close it with `page.context().close()`. */
 async function signedInPage(browser: Browser, email: string): Promise<Page> {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -125,8 +162,10 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
     reason: 'Maintenance',
     description,
   })
-  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  // The preview's answer is announced, and Description says it is required.
+  await expect(blockOff(page).getByRole('status')).toContainText('No bookings are affected.')
+  await expect(blockOff(page).getByLabel('Description')).toHaveAttribute('aria-required', 'true')
+  await saveClosure(page)
 
   await dayButton(page, /^3 October 2028/).click()
   const list = dayList(page, /3 Oct 2028/)
@@ -134,13 +173,74 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
   await expect(list).toContainText('Unavailable – Maintenance')
 })
 
-test('9.4 AC2: the bookings a closure would affect are listed before Save, and Save still goes through', async ({
+test('9.4 AC2: Save waits for the affected bookings, and a failed check blocks it', async ({
   page,
 }) => {
   await page.clock.setFixedTime(PINNED_NOW)
   await signIn(page, ACCOUNTS.venueStaff)
-  await openVenue(page, VENUES.harbourPavilion)
+  await openVenue(page, VENUES.gardenAtrium)
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let isFailing = false
+  await page.route(
+    (url) => url.pathname.endsWith('/unavailability/affected-bookings'),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (isFailing) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'The bookings could not be checked.' }),
+          headers: corsHeaders(request),
+        })
+      }
+      await gate
+      return route.fallback()
+    },
+  )
 
+  // While the list is on its way, Save is held back and says why.
+  await fillClosure(page, { starts: '2028-10-27T09:00', ends: '2028-10-27T17:00' })
+  const save = blockOff(page).getByRole('button', { name: 'Save closure' })
+  await expect(save).toBeDisabled()
+  await expect(
+    blockOff(page).getByText('Save is available once the affected bookings have loaded.'),
+  ).toBeVisible()
+  release()
+  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
+  await expect(save).toBeEnabled()
+
+  // A check that fails blocks Save for those dates, with its own reason.
+  isFailing = true
+  await blockOff(page).getByLabel('Ends').fill('2028-10-27T18:00')
+  await expect(blockOff(page).getByRole('alert')).toContainText(
+    'The bookings could not be checked.',
+  )
+  await expect(save).toBeDisabled()
+  await expect(
+    blockOff(page).getByText('Save is unavailable until the affected bookings can be checked.'),
+  ).toBeVisible()
+})
+
+test('9.4 AC2 and AC3: the bookings a closure would affect are listed before Save, and an approved booking it flags shows the flag on its request page', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(PINNED_NOW)
+  await signIn(page, ACCOUNTS.venueStaff)
+
+  // Approve the choir showcase's request first, so the closure hits an approved booking.
+  await page.goto('/venue-staff/booking-requests')
+  const card = await queueCard(page, '00000020')
+  await card.getByRole('button', { name: 'Approve' }).click()
+  const approve = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await approve.getByLabel('Hold expires').fill('2028-10-12T09:00')
+  await approve.getByRole('button', { name: 'Approve' }).click()
+  await expect(approve).not.toBeVisible()
+
+  await openVenue(page, VENUES.harbourPavilion)
   await fillClosure(page, {
     starts: '2028-10-13T08:00',
     ends: '2028-10-15T20:00',
@@ -152,10 +252,19 @@ test('9.4 AC2: the bookings a closure would affect are listed before Save, and S
   await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText('Community Choir Showcase')
+  await expect(dialog).toContainText('Confirmed or awaiting their safety check go back to Planning')
   await dialog.getByRole('button', { name: 'Block off time' }).click()
-
   await dayButton(page, /^14 October 2028/).click()
   await expect(dayList(page, /14 Oct 2028/)).toContainText('Unavailable – Renovation')
+
+  // AC3: the approved request's own page carries the flag, and no "cannot be approved" sentence.
+  await page.goto('/venue-staff/booking-requests')
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  const approved = await queueCard(page, '00000020')
+  await approved.getByRole('link', { name: 'View details' }).click()
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
+  await expect(page.getByText('Venue unavailable – alternative needed')).toBeVisible()
+  await expect(page.getByText(/cannot be approved while the closure stands/)).toHaveCount(0)
 })
 
 test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event, and Venue Staff cannot approve it', async ({
@@ -170,14 +279,17 @@ test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event
     ends: '2028-10-21T17:00',
     reason: 'Safety concern',
   })
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Block off time' }).click()
+  await expect(blockOff(page).getByRole('region', { name: 'Affected bookings' })).toContainText(
+    'Neighbourhood Art Market',
+  )
+  await saveClosure(page)
   await expect(dayButton(page, /^21 October 2028/)).toBeVisible()
 
   // AC3: the coordinator's event page flags the booking.
   const coordinator = await signedInPage(browser, ACCOUNTS.coordinator)
   await coordinator.goto(`/events/${EVENTS.artMarket}`)
   await expect(coordinator.getByText('Venue unavailable – alternative needed')).toBeVisible()
+  await coordinator.context().close()
 
   // AC7: Venue Staff's queue card carries the marker and holds Approve back.
   await page.goto('/venue-staff/booking-requests')
@@ -209,7 +321,7 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
     reason: 'Equipment failure',
     description,
   })
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await saveClosure(page)
 
   const singapore = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const today = new RegExp(
@@ -226,19 +338,67 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
 
   await item.getByRole('button', { name: 'Edit' }).click()
+  await expect(page.getByRole('form', { name: 'Edit blocked-off time' })).toBeVisible()
   await blockOff(page).getByLabel('Reason').selectOption({ label: 'Renovation' })
+  // Only the field that changed is sent.
+  const patched = page.waitForRequest(
+    (request) => request.method() === 'PATCH' && request.url().includes('/unavailability/'),
+  )
   await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  expect((await patched).postDataJSON()).toEqual({ reason: 'RENOVATION' })
   await expect(item).toContainText('Unavailable – Renovation')
 
+  // Ending the closure being edited closes its form.
+  await item.getByRole('button', { name: 'Edit' }).click()
+  await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toBeVisible()
   await item.getByRole('button', { name: 'End now' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'End now' }).click()
   await expect(item.getByRole('button')).toHaveCount(0)
+  await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toHaveCount(0)
 })
 
-test('9.4 AC9: only Venue Staff see the controls; others read the reason and cannot change it', async ({
-  page,
-  browser,
-}) => {
+test('9.4 AC6: a refused End now says why, and the calendar is loaded again', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium handrails')
+  await fillClosure(page, { starts: inFuture(-1, 9), ends: inFuture(4, 18), description })
+  await saveClosure(page)
+  const singapore = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = new RegExp(
+    `^${singapore.getUTCDate()} ${singapore.toLocaleString('en-GB', {
+      month: 'long',
+      timeZone: 'UTC',
+    })} ${singapore.getUTCFullYear()}`,
+  )
+  await dayButton(page, today).click()
+  const item = page.getByRole('listitem').filter({ hasText: description })
+
+  // The server refuses, as if the closure had ended elsewhere: its sentence shows in the dialog and
+  // the calendar is fetched again behind it.
+  await page.route(
+    (url) => /\/unavailability\/[^/]+$/.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.method() !== 'PATCH') return route.fallback()
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'This closure has already ended.' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  const reloaded = page.waitForRequest(
+    (request) => request.method() === 'GET' && request.url().includes('/availability'),
+  )
+  await item.getByRole('button', { name: 'End now' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'End now' }).click()
+  await expect(dialog).toContainText('This closure has already ended.')
+  await reloaded
+})
+
+test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, browser }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await openVenue(page, VENUES.gardenAtrium)
   // The Venue Staff half is what makes this fail before the controls exist: the other two
@@ -251,30 +411,29 @@ test('9.4 AC9: only Venue Staff see the controls; others read the reason and can
     await expect(availability(other)).toBeVisible()
     await expect(blockOff(other)).toHaveCount(0)
     await expect(other.getByRole('button', { name: 'Block off time' })).toHaveCount(0)
+    await other.context().close()
   }
 })
 
-test('9.4 AC1: a block off with no description is refused in the backend\'s own words', async ({
+test("9.4 AC1: the page shows the backend's sentence when a block off has no description", async ({
   page,
 }) => {
   await page.clock.setFixedTime(PINNED_NOW)
   await signIn(page, ACCOUNTS.venueStaff)
   await openVenue(page, VENUES.gardenAtrium)
 
-  // Other first - the reason that used to be the only one needing a description - then another.
-  for (const reason of ['Other', 'Maintenance']) {
-    await fillClosure(page, {
-      starts: '2028-10-08T09:00',
-      ends: '2028-10-08T17:00',
-      reason,
-      description: '',
-    })
-    await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
-    await expect(blockOff(page).getByRole('alert')).toHaveText(
-      'Describe why the venue is blocked off.',
-    )
-    await blockOff(page).getByRole('button', { name: 'Cancel' }).click()
-  }
+  await fillClosure(page, {
+    starts: '2028-10-08T09:00',
+    ends: '2028-10-08T17:00',
+    reason: 'Maintenance',
+    description: '',
+  })
+  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await expect(blockOff(page).getByRole('alert')).toHaveText(
+    'Describe why the venue is blocked off.',
+  )
+  await blockOff(page).getByRole('button', { name: 'Cancel' }).click()
   await expect(dayButton(page, /^8 October 2028/)).toHaveCount(0)
 })
 
@@ -315,7 +474,7 @@ test('9.4 AC1: the month grid names a closure by its reason, and by its descript
     reason: 'Renovation',
     description: renovation,
   })
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await saveClosure(page)
   await dayButton(page, /^5 December 2028/).waitFor()
   await fillClosure(page, {
     starts: '2028-12-06T09:00',
@@ -323,7 +482,7 @@ test('9.4 AC1: the month grid names a closure by its reason, and by its descript
     reason: 'Other',
     description: other,
   })
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await saveClosure(page)
 
   const grid = availability(page)
   await expect(dayButton(page, /^5 December 2028/)).toContainText('Renovation')
@@ -350,7 +509,7 @@ test('9.4 AC6: editing a closure that was removed meanwhile says it is gone, and
     ends: '2028-10-24T18:00',
     description,
   })
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
+  await saveClosure(page)
   await dayButton(page, /^24 October 2028/).click()
   const item = page.getByRole('listitem').filter({ hasText: description })
   await expect(item.getByRole('button', { name: 'Edit' })).toBeVisible()
@@ -364,6 +523,7 @@ test('9.4 AC6: editing a closure that was removed meanwhile says it is gone, and
   await removing.getByRole('button', { name: 'Remove' }).click()
   await other.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
   await expect(dayButton(other, /^24 October 2028/)).toHaveCount(0)
+  await other.context().close()
 
   await item.getByRole('button', { name: 'Edit' }).click()
   await blockOff(page).getByLabel('Description').fill(uniqueName('Atrium carpet again'))
