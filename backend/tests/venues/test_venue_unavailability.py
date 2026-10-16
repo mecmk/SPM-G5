@@ -1,10 +1,10 @@
 """Story 9.4: mark a venue temporarily unavailable.
 
-Slice 1 (migration 022): the reasons a period can carry.
-Slice 2: add, edit, end and remove a period, the preview of what it would affect, and who may.
-Slice 3 (migration 023): the bookings a period affects are marked, and the mark follows it.
-Slice 4: the event goes back to Planning and its coordinator and organiser are told.
-Slice 5: a pending request that overlaps a period cannot be approved while it stands.
+The reasons a period can carry (migration 022).
+Add, edit, end and remove a period, the preview of what it would affect, and who may.
+The bookings a period affects are marked, and the mark follows it (migration 023).
+The event goes back to Planning and its coordinator and organiser are told.
+A pending request that overlaps a period cannot be approved while it stands.
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
      Equipment failure, Renovation, Safety concern or Other, and a description, which every
@@ -234,7 +234,7 @@ def test_a_venue_closed_for_equipment_failure_cannot_be_requested(db, coordinato
 
 
 # =====================================================================================
-# Slice 2: add, edit, end and remove a period; preview what it would affect; who may.
+# Add, edit, end and remove a period; preview what it would affect; who may.
 #
 #   POST   /venues/{id}/unavailability                       add
 #   PATCH  /venues/{id}/unavailability/{period_id}           edit, or {"end_now": true} alone
@@ -1132,7 +1132,7 @@ def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
 
 
 # =====================================================================================
-# Slice 3 (migration 023): marking the bookings a period affects, and clearing the mark.
+# Marking (migration 023): the bookings a period affects, and clearing the mark.
 #
 #   venue_bookings.venue_unavailable_marked_at   timestamptz, nullable
 #   venue_service.recheck_venue_bookings(db, venue_id, *, now, actor) -> RecheckResult
@@ -1696,7 +1696,7 @@ def test_the_preview_says_which_bookings_are_already_marked(db, venue_staff_clie
 
 
 # =====================================================================================
-# Slice 4: the event goes back to Planning, and its coordinator and organiser are told.
+# The event goes back to Planning, and its coordinator and organiser are told.
 #
 # For each event with a booking newly marked in a save (``RecheckResult.newly_marked``):
 #   * CONFIRMED -> PLANNING, once, with an event_status_history row (its reason naming the
@@ -2188,7 +2188,7 @@ def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engin
 
 
 # =====================================================================================
-# Slice 5: a pending request that overlaps a period cannot be approved while it stands.
+# A pending request that overlaps a period cannot be approved while it stands.
 #
 # ``approve_booking`` refuses, right after its not-pending check and as its own query once the
 # row is locked, a request whose held period overlaps a period of its venue
