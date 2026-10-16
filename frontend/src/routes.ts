@@ -144,10 +144,9 @@ export const ASSIGNMENT_SEARCH_PARAMS = {
   coordinator: 'coordinator',
   assignedByMe: 'assigned',
 } as const
-/** The `view` value for the per-coordinator view; without it, the page shows the overview. */
+/** The `view` value for the per-coordinator view; without it, the page shows the overview. The
+ *  `assigned` value for "Assigned by me" is the API's own, `ASSIGNED_BY_ME_FILTER`. */
 export const COORDINATORS_VIEW = 'coordinators'
-/** The `assigned` value for "Assigned by me". */
-export const ASSIGNED_BY_ME = 'me'
 
 // Story 12.1: the old Request a venue page. f12.1.1 moved the request into the event's context,
 // so this address is kept only to redirect old links to the Events inbox.

@@ -46,6 +46,9 @@ const COORDINATORS_VIEW = 'By coordinator'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
 const DEACTIVATED = 'Deactivated'
 const NO_MATCH_MESSAGE = 'No active events match these filters.'
+const LOADING_COORDINATORS = 'Loading coordinators…'
+const UNKNOWN_COORDINATOR = 'Unknown coordinator'
+const UNLISTED_ID = '00000000-0000-0000-0000-000000000559'
 const SMART_CITIES_EXPO = 'Smart Cities Expo' // Chloe's, Planning; the 8.4 spec only reads it
 // Carl's, self-assigned (so not assigned by the Lead), Awaiting Safety Check; 21.1 only reads it.
 const HARBOUR_LIGHTS = 'Harbour Lights Concert'
@@ -279,6 +282,35 @@ test('5.5 AC1: filters with no match say so', async ({ page }) => {
   // Nothing unassigned is ever Confirmed: approving needs a coordinator.
   await openAsLead(page, '?coordinator=unassigned&status=CONFIRMED')
 
+  await expect(page.getByText(NO_MATCH_MESSAGE)).toBeVisible()
+})
+
+test('5.5 AC1: a coordinator filter the list does not offer is named, not shown as all', async ({
+  page,
+}) => {
+  // A deactivated coordinator with no events left drops off the list (P4), so a bookmark to them
+  // names nobody the dropdown offers; an id nobody holds stands in for them. The coordinator list
+  // is held back first, as it is for a moment on any reload.
+  let releaseWorkloads = () => {}
+  const isWorkloadsHeld = new Promise<void>((resolve) => {
+    releaseWorkloads = resolve
+  })
+  await page.route(
+    (url) => url.pathname === WORKLOADS_API,
+    async (route) => {
+      if (route.request().resourceType() === 'fetch') await isWorkloadsHeld
+      return route.fallback()
+    },
+  )
+  await openAsLead(page, `?coordinator=${UNLISTED_ID}`)
+  const filter = page.getByLabel('Coordinator')
+
+  await expect(filter).toHaveValue(UNLISTED_ID)
+  await expect(filter.getByRole('option', { selected: true })).toHaveText(LOADING_COORDINATORS)
+
+  releaseWorkloads()
+  await expect(filter.getByRole('option', { selected: true })).toHaveText(UNKNOWN_COORDINATOR)
+  await expect(filter).toHaveValue(UNLISTED_ID)
   await expect(page.getByText(NO_MATCH_MESSAGE)).toBeVisible()
 })
 

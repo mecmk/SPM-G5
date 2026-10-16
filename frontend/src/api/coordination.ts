@@ -133,6 +133,10 @@ export interface CoordinatorWorkloadEntry {
  *  mirroring `UNASSIGNED` in backend/app/coordination/service.py. */
 export const UNASSIGNED_FILTER = 'unassigned'
 
+/** The `assigned_by` value for "Assigned by me" (story 5.5 AC1, PO decision P2), mirroring the
+ *  `Literal["me"]` that `list_active_events` in backend/app/coordination/router.py accepts. */
+export const ASSIGNED_BY_ME_FILTER = 'me'
+
 /** Story 5.5 AC1: the overview's filters; each one left out widens the list. */
 export interface ActiveEventFilters {
   /** A coordinator's id, or `UNASSIGNED_FILTER`. */
@@ -146,7 +150,7 @@ export function listActiveEvents(filters: ActiveEventFilters): Promise<ActiveEve
   const params = new URLSearchParams()
   if (filters.coordinator) params.set('coordinator', filters.coordinator)
   if (filters.status) params.set('status', filters.status)
-  if (filters.isAssignedByMe) params.set('assigned_by', 'me')
+  if (filters.isAssignedByMe) params.set('assigned_by', ASSIGNED_BY_ME_FILTER)
   const query = params.toString()
   return api<ActiveEventEntry[]>(`/coordination/active-events${query ? `?${query}` : ''}`)
 }

@@ -296,36 +296,29 @@ def list_workloads(db: Session) -> list[CoordinatorEvents]:
     coordinator is listed only while they still hold active events, so the Lead can reassign them;
     ``is_active`` on the user flags them.
 
-    Two queries whatever the team's size: the coordinators with their counts (the same subquery
-    as 5.4's picker), then their active events, grouped here. The count comes from SQL; the events
-    listed are the same active ones, so the two always agree."""
-    counts = _active_event_counts()
-    active_event_count = func.coalesce(counts.c.active_event_count, 0)
-    coordinators = db.execute(
-        select(User, active_event_count)
-        .outerjoin(counts, counts.c.assigned_coordinator_id == User.id)
+    One query whatever the team's size: each coordinator outer-joined to their active events, so
+    the count is the number of events listed and the two cannot disagree, even while an
+    assignment lands between reads."""
+    is_active_event = and_(
+        Event.assigned_coordinator_id == User.id, Event.status.in_(ASSIGNABLE_STATUSES)
+    )
+    rows = db.execute(
+        select(User, Event)
+        .outerjoin(Event, is_active_event)
         .where(
             User.role_code == RoleCode.EVENT_COORDINATOR,
-            or_(User.is_active.is_(True), active_event_count > 0),
+            or_(User.is_active.is_(True), Event.id.is_not(None)),
         )
-        .order_by(User.full_name, User.id)
+        .order_by(User.full_name, User.id, Event.starts_at, Event.id)
     ).all()
-    events = db.scalars(
-        select(Event)
-        .where(
-            Event.status.in_(ASSIGNABLE_STATUSES),
-            Event.assigned_coordinator_id.in_([user.id for user, _ in coordinators]),
-        )
-        .order_by(Event.starts_at, Event.id)
-    ).all()
-    by_coordinator: dict[uuid.UUID, list[Event]] = {user.id: [] for user, _ in coordinators}
-    for event in events:
-        by_coordinator[event.assigned_coordinator_id].append(event)
+    by_coordinator: dict[uuid.UUID, tuple[User, list[Event]]] = {}
+    for user, event in rows:
+        _, events = by_coordinator.setdefault(user.id, (user, []))
+        if event is not None:
+            events.append(event)
     return [
-        CoordinatorEvents(
-            coordinator=user, active_event_count=count, events=by_coordinator[user.id]
-        )
-        for user, count in coordinators
+        CoordinatorEvents(coordinator=user, active_event_count=len(events), events=events)
+        for user, events in by_coordinator.values()
     ]
 
 

@@ -2,6 +2,7 @@ import { useCallback, useState, type ChangeEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { EventStatus } from '../api/events'
 import {
+  ASSIGNED_BY_ME_FILTER,
   listActiveEvents,
   listWorkloads,
   UNASSIGNED_FILTER,
@@ -15,7 +16,6 @@ import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import {
-  ASSIGNED_BY_ME,
   ASSIGNMENT_SEARCH_PARAMS,
   COORDINATORS_VIEW,
   EVENTS_ASSIGNMENTS_PATH,
@@ -33,6 +33,8 @@ const PAGE_TITLE = 'Assignments'
 const DEACTIVATED = 'Deactivated'
 const BACK_TO_PAGE = { from: EVENTS_ASSIGNMENTS_PATH, fromLabel: PAGE_TITLE }
 const ALL_COORDINATORS = ''
+const LOADING_COORDINATORS = 'Loading coordinators…'
+const UNKNOWN_COORDINATOR = 'Unknown coordinator'
 
 /** Story 5.5 AC1 (PO decision P1): 6.1's tabs and labels, for the active statuses only. */
 const ACTIVE_TABS = EVENT_STATUS_TABS.filter(
@@ -94,7 +96,8 @@ export function AssignmentOverviewPage() {
   const isCoordinatorsView = searchParams.get(ASSIGNMENT_SEARCH_PARAMS.view) === COORDINATORS_VIEW
   const status = activeStatus(searchParams.get(ASSIGNMENT_SEARCH_PARAMS.status))
   const coordinator = searchParams.get(ASSIGNMENT_SEARCH_PARAMS.coordinator) ?? ALL_COORDINATORS
-  const isAssignedByMe = searchParams.get(ASSIGNMENT_SEARCH_PARAMS.assignedByMe) === ASSIGNED_BY_ME
+  const isAssignedByMe =
+    searchParams.get(ASSIGNMENT_SEARCH_PARAMS.assignedByMe) === ASSIGNED_BY_ME_FILTER
 
   const loadOverview = useCallback(
     () => listActiveEvents({ coordinator: coordinator || undefined, status, isAssignedByMe }),
@@ -108,6 +111,13 @@ export function AssignmentOverviewPage() {
   const shownStatus = useShownFilter<EventStatusTabKey>(status ?? 'ALL')
   const shownCoordinator = useShownFilter(coordinator)
   const shownAssignedByMe = useShownFilter(isAssignedByMe)
+  // Story 5.5 AC1: a coordinator in the address whom the dropdown does not offer - one
+  // deactivated with no events left (P4), or not loaded yet on a reload - gets an option of their
+  // own, so the dropdown never claims "All coordinators" over a filtered list.
+  const isShownCoordinatorListed =
+    shownCoordinator.value === ALL_COORDINATORS ||
+    shownCoordinator.value === UNASSIGNED_FILTER ||
+    (workloads.data?.some((entry) => entry.coordinator_id === shownCoordinator.value) ?? false)
 
   /** Change one filter in the address, keeping the others; an empty value removes it. */
   function setFilter(name: string, value: string) {
@@ -134,7 +144,10 @@ export function AssignmentOverviewPage() {
 
   function changeAssignedByMe(change: ChangeEvent<HTMLInputElement>) {
     shownAssignedByMe.setValue(change.target.checked)
-    setFilter(ASSIGNMENT_SEARCH_PARAMS.assignedByMe, change.target.checked ? ASSIGNED_BY_ME : '')
+    setFilter(
+      ASSIGNMENT_SEARCH_PARAMS.assignedByMe,
+      change.target.checked ? ASSIGNED_BY_ME_FILTER : '',
+    )
   }
 
   /** The address for the other view, keeping the filters. */
@@ -190,6 +203,11 @@ export function AssignmentOverviewPage() {
                       : `${entry.coordinator_name} (${DEACTIVATED.toLowerCase()})`}
                   </option>
                 ))}
+                {!isShownCoordinatorListed && (
+                  <option value={shownCoordinator.value}>
+                    {workloads.isLoading ? LOADING_COORDINATORS : UNKNOWN_COORDINATOR}
+                  </option>
+                )}
               </select>
             </label>
             <label className="checkbox">
