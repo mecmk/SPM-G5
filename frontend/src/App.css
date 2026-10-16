@@ -3688,3 +3688,42 @@ button.requirement-choice.requirement-covered:hover,
     min-height: 44px;
   }
 }
+
+/* ---------- setup and teardown on a venue request (f12.1.2) ---------- */
+
+/* Story 12.1 AC1: the request step's Setup and Teardown, side by side and one under the other on
+   a phone. Each is a plain group, its legend over its days, hours and minutes. */
+.turnaround-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+.turnaround-fields fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.turnaround-fields legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+}
+
+/* Days, hours and minutes on one line, each about as wide as the figures it takes. */
+.duration-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 6rem));
+  gap: 0.5rem;
+}
+
+.duration-fields label {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .turnaround-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -316,6 +316,16 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Lantern Night Walk', 'Community event', 'A guided evening walk with paper lanterns.', NULL, '2028-09-09 19:00+08', '2028-09-09 22:00+08', 80, 'PLANNING',
      '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+    -- 3333..46: in planning and assigned to Chloe; dedicated to fix f12.1.2's e2e request that is
+    -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1, with a setup that
+    -- starts before the room opens at 08:00. One Main venue for 30 people, Classroom with a
+    -- projector, so the room suits it. Dated February 2027, so its request sits on the first page
+    -- of Venue Staff's Pending tab, which lists the soonest first. That request stays pending, so
+    -- tests/e2e/bookings.spec.ts's Alumni Homecoming Weekend card (3333..17) is at worst tenth on
+    -- that page: no further pending request dated before September 2027 can be added there.
+    ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Supplier Induction Morning', 'Supplier onboarding', 'A morning briefing for newly contracted suppliers.', NULL, '2027-02-03 09:00+08', '2027-02-03 12:00+08', 30, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..60 and 3333..61: story 9.4's e2e spec. Each is Planning with one pending request, at a
     -- venue of its own (2222..07 and 2222..08), so a closure marks only that request.
     ('33333333-0000-0000-0000-000000000060', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
@@ -420,7 +430,8 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM'),
     ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM'),
     -- Story 18.1's jazz evening (3333..39), the one of its events with venues booked.
-    ('cccccccc-0000-0000-0000-000000000039', '33333333-0000-0000-0000-000000000039', 'STANDING');
+    ('cccccccc-0000-0000-0000-000000000039', '33333333-0000-0000-0000-000000000039', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM');
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
@@ -445,7 +456,8 @@ INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
     ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
     ('cccccccc-0000-0000-0000-000000000003', 'STAGE'),
     ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR')
+    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0000-000000000046', 'PROJECTOR')
 ON CONFLICT DO NOTHING;
 
 -- Story 8.4: the Smart Cities Expo (3333..28) records three venue requirements, each with its own
@@ -757,6 +769,8 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000048', '33333333-0000-0000-0000-000000000038', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-09-26 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000049', '33333333-0000-0000-0000-000000000038', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-04 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000050', '33333333-0000-0000-0000-000000000038', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08', 'Add marshals at each road crossing.'),
+    -- 3333..46 (fix f12.1.2's e2e event).
+    ('99999999-0000-0000-0000-000000000051', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-13 09:00+08', NULL),
     -- Story 9.4's e2e events, approved into Planning by Chloe.
     ('99999999-0000-0000-0000-000000000060', '33333333-0000-0000-0000-000000000060', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000061', '33333333-0000-0000-0000-000000000061', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 10:00+08', NULL)
@@ -819,6 +833,8 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-29 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08'),
+    -- 3333..46 (fix f12.1.2's real send with a setup): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000038', '33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-12 09:00+08'),
     -- 3333..60 and 3333..61 (story 9.4's e2e events): self-assigned too, for the same reason.
     ('aaaaaaaa-0000-0000-0000-000000000060', '33333333-0000-0000-0000-000000000060', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000061', '33333333-0000-0000-0000-000000000061', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 10:00+08')

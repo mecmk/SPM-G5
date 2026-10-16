@@ -626,7 +626,7 @@ def find_blocking_unavailability(
 def closed_for(venue: Venue, *, starts_at: datetime, ends_at: datetime) -> bool:
     """Story 8.1 AC3 and 12.1 AC14: whether ``venue``'s recorded opening hours leave out part
     of the period's daily window. A venue with no recorded hours is never closed: no rule can
-    apply."""
+    apply. A booking request passes its own times, never its booked period (12.1 AC16)."""
     if venue.operating_hours_start is None or venue.operating_hours_end is None:
         return False
     window = daily_window(starts_at, ends_at)

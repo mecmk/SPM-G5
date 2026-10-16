@@ -76,6 +76,10 @@ export const EVENTS = {
   // (Planning).
   foodFestival: '33333333-0000-0000-0000-000000000037',
   nightWalk: '33333333-0000-0000-0000-000000000038',
+  // Fix f12.1.2, Planning, organiser: organiser2, coordinator, February 2027: one venue
+  // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
+  // a setup that starts before Seminar Room 2.1 opens.
+  supplierInduction: '33333333-0000-0000-0000-000000000046',
   // Story 9.4, Planning, organiser: organiser2, coordinator, October 2028. Each has one pending
   // request at a venue dedicated to the 9.4 spec (see VENUES below); only that spec saves a
   // closure over them.

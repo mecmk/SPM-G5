@@ -17,10 +17,11 @@ will read: the new row is PENDING, carries no decision, and is immediately reada
 Staff through story 13.2's ``GET /bookings/{id}``.
 
 Excluded, with reason:
-* Setup and teardown minutes - story 12.2 AC1 ("setup and teardown durations can be recorded on
-  the request") owns them. This story leaves both at the column default of 0, so the held period
-  equals the event period; ``test_the_held_period_is_the_event_period_until_story_12_2`` pins
-  that so 12.2 has a test to change rather than a silent assumption to discover.
+* Setup and teardown minutes - f12.1.2's (12.1 AC1, AC5 and AC9 in the backlog's current
+  numbering), tested in ``tests/bookings/test_request_setup_and_teardown.py``. A request here
+  sends neither, so both stay 0 and the held period is the event period, which
+  ``test_setup_and_teardown_default_to_0_so_the_held_period_is_the_event_period`` pins (tagged
+  with the current AC1, not Sprint 1's above).
 * The venue hold - Sprint 2's 12.1 AC3/AC6-AC8/AC12-AC14, built as s12.1: a pending
   request holds its venue, so a request overlapping a pending or approved booking of the same
   venue is refused, in the service and by the database. Its cases are
@@ -401,13 +402,18 @@ def test_details_supplied_by_the_client_are_ignored_in_favour_of_the_events_own(
     assert body["status"] == BookingStatus.PENDING
 
 
-@pytest.mark.story("12.1", ac=2)
-def test_the_held_period_is_the_event_period_until_story_12_2(
-    coordinator_client, nimbus_venue: Venue
+@pytest.mark.story("12.1", ac=1)
+def test_setup_and_teardown_default_to_0_so_the_held_period_is_the_event_period(
+    coordinator_client, db: Session, nimbus_venue: Venue
 ):
-    """Story 12.2 is what records setup and teardown time; this story leaves both at the column
-    default of 0, so the held period the conflict checks use is exactly the event period. When
-    12.2 lands, this test is the one to change."""
+    """AC1 in the backlog's current numbering (f12.1.2): setup and teardown both start at 0, so a
+    request that sends neither holds exactly its own period - even at a venue whose own setup and
+    teardown defaults are not 0, which a request does not take. A request that sends them is
+    test_request_setup_and_teardown.py's."""
+    nimbus_venue.setup_minutes_default = 30
+    nimbus_venue.teardown_minutes_default = 15
+    db.flush()
+
     body = coordinator_client.post(
         "/bookings", json=request_body(venue_id=str(nimbus_venue.id))
     ).json()

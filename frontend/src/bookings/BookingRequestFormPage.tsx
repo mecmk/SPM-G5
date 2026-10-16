@@ -34,6 +34,17 @@ import {
   venueRequirementTerms,
   venueSearchFor,
 } from '../shared/venueRequest'
+import {
+  BOOKED_PERIOD_LABEL,
+  bookedPeriod,
+  durationMinutes,
+  isWithinOpeningHours,
+  outsideHoursFact,
+  turnaroundProblem,
+  VENUE_STAFF_DECIDE,
+  ZERO_DURATION,
+  type DurationDraft,
+} from './turnaround'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -69,6 +80,53 @@ interface RequestSubject {
   venue: Venue
 }
 
+/** f12.1.2 (story 12.1 AC1): one of the units a setup or a teardown is entered in. */
+interface DurationUnit {
+  part: keyof DurationDraft
+  label: string
+}
+
+const DURATION_UNITS: readonly DurationUnit[] = [
+  { part: 'days', label: 'Days' },
+  { part: 'hours', label: 'Hours' },
+  { part: 'minutes', label: 'Minutes' },
+]
+
+interface DurationFieldsProps {
+  /** "Setup" or "Teardown", which names the group. */
+  legend: string
+  draft: DurationDraft
+  onChange: (draft: DurationDraft) => void
+}
+
+/** f12.1.2 (story 12.1 AC1): a setup's or a teardown's days, hours and minutes, as typed. */
+function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
+  function handlePartChange(part: keyof DurationDraft, value: string) {
+    onChange({ ...draft, [part]: value })
+  }
+
+  return (
+    <fieldset>
+      <legend>{legend}</legend>
+      <div className="duration-fields">
+        {DURATION_UNITS.map(({ part, label }) => (
+          <label key={part}>
+            {label}
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              value={draft[part]}
+              onChange={(changeEvent) => handlePartChange(part, changeEvent.target.value)}
+            />
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 /**
  * Story 12.1 - the Event Coordinator raises a venue booking request, and f12.1.1 (AC15) - for the
  * event and venue in the address, reached with Request this venue from the catalogue in that
@@ -89,7 +147,10 @@ interface RequestSubject {
  *
  * Story 12.1 AC14: the venue may have stopped being available since the search. The backend
  * re-checks and refuses with its reason, and the step then offers Back to the results: the same
- * search, which runs again, so the venue has gone from it.
+ * search, which runs again, so the venue has gone from it. f12.1.2: that search covers the
+ * request's own times only, so after a refusal that only the setup or teardown caused - another
+ * hold or a closure in it (AC3, AC14), or a setup starting in the past (AC9) - the venue is still
+ * listed, and the setup or teardown is what to change here.
  *
  * Story 11.1 AC2: once the step knows the coordinator may request the venue, it reads whether the
  * venue suits the event - "Checking…" meanwhile, with Send held back. A venue that suits shows
@@ -114,6 +175,16 @@ interface RequestSubject {
  * and the server withdraws that one and requests this venue together. Opened any other way, the
  * step sends a plain request, which the server refuses with its reason while the requirement
  * has one (AC11).
+ *
+ * f12.1.2, under 12.1's ACs as the backlog numbers them now (the AC1-AC4 above are Sprint 1's):
+ * the coordinator enters a setup and a teardown, each in days, hours and minutes and 0 until
+ * changed, and sees the booked period they make around the request's own times (AC1). A negative,
+ * fractional or over-14-day one is refused under the fields before anything is sent (AC5). The
+ * server refuses those too, and a setup that would start in the past (AC9), with a sentence of its
+ * own shown like any refusal. A setup or teardown that runs outside the venue's opening hours is
+ * said under the booked period, with the hours and that Venue Staff decide whether to allow it,
+ * before anything is sent (AC17). Such a request can still be sent, the hours being checked on its
+ * own times (AC16).
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -179,6 +250,10 @@ export function BookingRequestFormPage() {
   const [reread, setReread] = useState<{ error: string | null } | null>(null)
   // The backend refused a send for want of a justification, and no later read has said otherwise.
   const [serverAskedForJustification, setServerAskedForJustification] = useState(false)
+  // f12.1.2 (story 12.1 AC1): the setup and teardown as typed, 0 until the coordinator changes
+  // them.
+  const [setupDraft, setSetupDraft] = useState(ZERO_DURATION)
+  const [teardownDraft, setTeardownDraft] = useState(ZERO_DURATION)
 
   if (error) {
     return (
@@ -238,6 +313,32 @@ export function BookingRequestFormPage() {
   const isUnsuitable = suitability !== null && !suitability.is_suitable
   const requiresJustification = isUnsuitable || serverAskedForJustification
   const checkError = reread === null ? suitabilityError : reread.error
+  // f12.1.2 (story 12.1 AC1/AC5): the setup and teardown in whole minutes, and the booked period
+  // they make. While either has a problem, the problem shows in place of the booked period and
+  // nothing is sent, so 0 stands in for one that is not a whole number.
+  const turnaroundError = turnaroundProblem(setupDraft, teardownDraft)
+  const setupMinutes = durationMinutes(setupDraft) ?? 0
+  const teardownMinutes = durationMinutes(teardownDraft) ?? 0
+  const period =
+    turnaroundError === null && startsAt && endsAt
+      ? bookedPeriod(startsAt, endsAt, setupMinutes, teardownMinutes)
+      : null
+  // f12.1.2 (story 12.1 AC17): what of the setup and teardown runs outside the venue's opening
+  // hours, said under the booked period, so only while that shows.
+  const outsideFact =
+    period !== null &&
+    startsAt &&
+    endsAt &&
+    isWithinOpeningHours(startsAt, endsAt, venue.operating_hours_start, venue.operating_hours_end)
+      ? outsideHoursFact(
+          startsAt,
+          endsAt,
+          setupMinutes,
+          teardownMinutes,
+          venue.operating_hours_start,
+          venue.operating_hours_end,
+        )
+      : null
 
   /** AC7: the backend judged the venue unsuitable on send, so read it again for the warning. */
   async function rereadSuitability() {
@@ -252,12 +353,23 @@ export function BookingRequestFormPage() {
   }
 
   async function send(reason: string | null) {
+    // f12.1.2 (story 12.1 AC5): every way of sending - Send request, or the justification
+    // dialog's confirm - sends only a setup and teardown the step accepts.
+    if (turnaroundError !== null) {
+      setIsConfirming(false)
+      return
+    }
     setIsSending(true)
     try {
       if (replaced !== null) {
         await switchBookingRequest(
           replaced.id,
-          { venue_id: venue.id, suitability_override_reason: reason ?? undefined },
+          {
+            venue_id: venue.id,
+            suitability_override_reason: reason ?? undefined,
+            setup_minutes: setupMinutes,
+            teardown_minutes: teardownMinutes,
+          },
           venue.name,
           forRequirement,
           replaced.venue_name,
@@ -269,6 +381,8 @@ export function BookingRequestFormPage() {
             venue_id: venue.id,
             venue_requirement_id: requirement?.id,
             suitability_override_reason: reason ?? undefined,
+            setup_minutes: setupMinutes,
+            teardown_minutes: teardownMinutes,
           },
           venue.name,
           forRequirement,
@@ -293,6 +407,8 @@ export function BookingRequestFormPage() {
     submitEvent.preventDefault()
     setSendError(null)
     setCanReturnToResults(false)
+    // f12.1.2 (story 12.1 AC5): the setup's or teardown's problem is already said under its fields.
+    if (turnaroundError !== null) return
     if (!requiresJustification) {
       await send(null)
       return
@@ -376,6 +492,40 @@ export function BookingRequestFormPage() {
               </span>
             </li>
           </ul>
+        </section>
+
+        <section aria-labelledby="booking-turnaround-heading" className="stack">
+          <h2 id="booking-turnaround-heading">Setup and teardown</h2>
+          <p className="muted">
+            How long the venue is needed before the event starts and after it ends. Both stay 0
+            unless you enter more.
+          </p>
+          <div className="turnaround-fields">
+            <DurationFields legend="Setup" draft={setupDraft} onChange={setSetupDraft} />
+            <DurationFields legend="Teardown" draft={teardownDraft} onChange={setTeardownDraft} />
+          </div>
+          {turnaroundError !== null && (
+            <p role="alert" className="error">
+              {ERROR_REGISTRY[turnaroundError].message}
+            </p>
+          )}
+          {period !== null && (
+            <ul className="check-list">
+              <li>
+                <span className="grow-text">{BOOKED_PERIOD_LABEL}</span>
+                <span>{formatSchedule(period.heldFrom, period.heldUntil)}</span>
+              </li>
+            </ul>
+          )}
+          {/* f12.1.2 (story 12.1 AC17): a live region, there from the start, so a screen reader
+           *  says the notice as it appears while the setup or teardown is typed. */}
+          <div role="status">
+            {outsideFact !== null && (
+              <p className="warning">
+                {outsideFact} {VENUE_STAFF_DECIDE}
+              </p>
+            )}
+          </div>
         </section>
 
         <section aria-labelledby="booking-suitability-heading" className="stack">
