@@ -379,7 +379,7 @@ An event request and, once approved, the event itself - one row for the whole li
 | `registration_closes_at` | `timestamp with time zone` | yes | - | - | Registration deadline. Must not be after the proposed start (story 2.1 AC17), and is     re-checked if the start is moved earlier than an already-saved deadline (AC18). |
 | `contact_name` | `text` | yes | - | - | On-the-day contact person. |
 | `contact_email` | `citext` | yes | - | - | Contact e-mail. |
-| `contact_phone` | `text` | yes | - | - | Contact phone. |
+| `contact_phone` | `text` | yes | - | - | The point of contact's phone (story 2.1 AC13): "+", its calling code and the number, without spaces or dashes, e.g. +6591234567 (fix f2.1.4, AC21). 8 to 15 digits, calling code included. One saved before the fix with no calling code keeps its digits; migration 024 removed the spaces and dashes from those saved before it. |
 | `internal_notes` | `text` | yes | - | - | Coordinator-only notes; never shown to organisers or attendees. Routine field. |
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the organiser submitted the request (NULL while DRAFT). |
 | `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) or cancellation was recorded (story 4.4 AC2, 4.5). |
