@@ -33,7 +33,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Venues | [`venue_facilities`](#venue_facilities) | 8.2, 8.3, 10.3, 11.1 | Which facilities each venue offers (many-to-many) |
 | Venues | [`venue_layouts`](#venue_layouts) | 8.2, 8.3, 10.3, 11.1 | Which room layouts each venue supports (many-to-many) |
 | Venues | [`venue_accessibility_features`](#venue_accessibility_features) | 8.2, 8.3, 10.3, 11.1 | Which accessibility features each venue provides (many-to-many) |
-| Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.3, 10.1, 14.1 | Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use) |
+| Venues | [`venue_unavailability_periods`](#venue_unavailability_periods) | 9.1, 9.4, 10.1, 14.1 | Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason), each with a description |
 | Venues | [`venue_images`](#venue_images) | 8.3 (AC5-AC10, bug f8.3.2), 8.1, 8.2 | The pictures of a venue, at most 10, in the order Venue Staff arrange them (a new one goes last) |
 | Events | [`events`](#events) | 2.1, 2.6, 3.x, 4.x, 5.x, 6.x, 7.x, 19.x | An event request and, once approved, the event itself - one row for the whole lifecycle so history is never split across tables |
 | Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
@@ -232,7 +232,7 @@ The venue catalogue: rooms and spaces ConnectSphere owns. Characteristics that a
 | `capacity` | `integer` | no | - | - | Maximum headcount. Positive whole number (story 8.3 AC3). Used by suitability checks (story 11.1). |
 | `description` | `text` | yes | - | - | Free-text description shown in the catalogue. |
 | `floor_area_sqm` | `numeric(8,2)` | yes | - | - | Floor area in square metres (optional). |
-| `operating_hours_start` | `time without time zone` | yes | - | - | Daily opening time (local). NULL = not recorded. Story 9.4 will treat times outside the window as unavailable. |
+| `operating_hours_start` | `time without time zone` | yes | - | - | Daily opening time (local). NULL = not recorded. Booking requests and venue searches refuse times outside the window (stories 8.1 AC3, 12.1 AC14). |
 | `operating_hours_end` | `time without time zone` | yes | - | - | Daily closing time (local). Must be after operating_hours_start when both are set. |
 | `operating_notes` | `text` | yes | - | - | Other operating information, e.g. "closed on public holidays", access instructions. |
 | `setup_minutes_default` | `integer` | no | `0` | - | Default preparation time Venue Staff need before an event here (story 12.2 pre-fills booking requests from this). |
@@ -300,28 +300,29 @@ Which accessibility features each venue provides (many-to-many).
 
 ### venue_unavailability_periods
 
-**Stories:** 9.1, 9.3, 10.1, 14.1
+**Stories:** 9.1, 9.4, 10.1, 14.1
 
-Blocks of time a venue cannot be booked for reasons other than an event booking (maintenance, renovation, safety, internal use). Shown as unavailable on the calendar and excluded from availability searches.
+Blocks of time a venue cannot be booked, set by Venue Staff even while events are booked there (maintenance, equipment failure, renovation, safety concern or another stated reason), each with a description. Shown as unavailable on the calendar and excluded from availability searches. Periods of one venue may overlap.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `venue_id` | `uuid` | no | - | FK → `venues.id` | FK -> venues.id. |
 | `starts_at` | `timestamp with time zone` | no | - | - | Start of the blocked period (inclusive). |
-| `ends_at` | `timestamp with time zone` | no | - | - | End of the blocked period (exclusive). Must be after starts_at (story 9.3 AC3). |
-| `reason` | `text` | no | - | - | Why the venue is blocked: MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE or OTHER. |
-| `notes` | `text` | yes | - | - | Free-text detail. |
-| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who recorded it. |
+| `ends_at` | `timestamp with time zone` | no | - | - | End of the blocked period (exclusive). Must be after starts_at (story 9.4 AC5). |
+| `reason` | `text` | no | - | - | Why the venue is blocked: MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY (shown as Safety concern) or OTHER (story 9.4 AC1). |
+| `notes` | `text` | yes | - | - | The description Venue Staff gave, which every period needs (ck_venue_unavailability_description, story 9.4 AC1). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who recorded it (story 9.4 AC9). NULL for a period written by the seed. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 
 Allowed values:
 
-- `reason`: `MAINTENANCE`, `RENOVATION`, `SAFETY`, `INTERNAL_USE`, `OTHER`
+- `reason`: `MAINTENANCE`, `EQUIPMENT_FAILURE`, `RENOVATION`, `SAFETY`, `OTHER`
 
 Rules and indexes:
 
+- check `ck_venue_unavailability_description`: `CHECK (((notes IS NOT NULL) AND (notes ~ '\S'::text)))`
 - check `ck_venue_unavailability_period`: `CHECK ((ends_at > starts_at))`
 - index `ix_venue_unavailability_venue_period`: `btree (venue_id, starts_at, ends_at)`
 
@@ -658,6 +659,7 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `hold_expiry_change_reason` | `text` | yes | - | - | Why Venue Staff last changed hold_expires_at (story 12.7 AC7, decided 12 Oct 2026): required for every change, shown with who made it on the booking and the event's booking list. NULL until the first change; the audit log keeps every change's reason. |
 | `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
 | `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
+| `venue_unavailable_marked_at` | `timestamp with time zone` | yes | - | - | When the booking was marked "Venue unavailable - alternative needed" (story 9.4 AC3): set while a pending or approved booking's held period overlaps, from the later of now and the period's start to its end, one of its venue's unavailability periods; kept while any still does, and cleared when none does (AC6). Only the part of the held period still to come counts, so a period wholly in the past marks nothing. NULL when unmarked. A value left on a booking that is no longer pending or approved is history: readers ignore it and nothing clears it. |
 
 Allowed values:
 

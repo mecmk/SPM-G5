@@ -45,6 +45,7 @@ import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
@@ -953,6 +954,18 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
+                          the booking stays here for reference and the event needs another venue. */}
+                      {booking.venue_unavailable_marked_at !== null && (
+                        <p>
+                          <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
+                          <br />
+                          <span className="small muted">
+                            Venue Staff marked this venue unavailable for part of the booked period.
+                            The booking is kept for reference.
+                          </span>
+                        </p>
+                      )}
                       {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
                       {openHold && (
                         <p>
