@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ApiError, formatApiError } from '../api/client'
 import { endUnavailabilityNow, removeUnavailability } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -15,6 +15,9 @@ export interface ClosureActionsProps {
 
 type PendingAction = 'end' | 'remove'
 
+/** How often a row looks at the clock again. */
+const CLOCK_TICK_MS = 60_000
+
 /**
  * Story 9.4 AC6: what Venue Staff can do to a closure from its row in the day list. One not yet
  * started can be edited or removed; one in force can be edited or ended now, and the calendar
@@ -28,11 +31,16 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
   const [error, setError] = useState<string | null>(null)
   const [isGone, setIsGone] = useState(false)
 
-  // The clock as of when this row appeared decides which buttons it shows. The page keys this on
-  // the closure's start and end, so a closure that changes gets a fresh one.
-  const [shownAt] = useState(() => Date.now())
-  const hasEnded = Date.parse(closure.endsAt) <= shownAt
-  const hasStarted = Date.parse(closure.startsAt) < shownAt
+  // The row's own clock, moved on every minute, so a row left open across a closure's start
+  // switches from Remove to End now, and one left open across its end loses its buttons, without
+  // a reload. The backend decides again on the press.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
+  const hasEnded = Date.parse(closure.endsAt) <= now
+  const hasStarted = Date.parse(closure.startsAt) < now
   if (hasEnded) return null
 
   /** What a press does is decided by the clock at the press, not by when the row appeared: a
@@ -61,13 +69,13 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
       onChanged()
     } catch (err) {
       setError(formatApiError(err))
-      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') {
-        // The closure is already gone: the day list is loaded again once the dialog, which keeps
-        // the sentence, is closed.
+      // The closure is gone (404) or no longer what the row showed (409): the day list is out of
+      // date, and is loaded again once the dialog, which keeps the backend's sentence, is closed.
+      if (
+        err instanceof ApiError &&
+        (err.code === 'UNAVAILABILITY_NOT_FOUND' || err.status === 409)
+      ) {
         setIsGone(true)
-      } else if (err instanceof ApiError && err.status === 409) {
-        // The closure is no longer what the row showed (ended, or started): load it again.
-        onChanged()
       }
     } finally {
       setIsBusy(false)

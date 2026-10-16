@@ -324,8 +324,8 @@ export interface VenueUnavailableWindow {
   /** Story 12.7 AC1: when an approved booking's open hold expires; null for a pending request, a
    * hold its event's confirmation completed, or a closure. */
   hold_expires_at: string | null
-  /** Story 9.4: a closure's own description, which an edit starts from; null when it has none
-   * (`label` then falls back to the reason's name) and for a booking. */
+  /** Story 9.4: a closure's own description, which an edit starts from, and the `label` it gives
+   * the closure; null for a booking. */
   description: string | null
 }
 
@@ -342,8 +342,7 @@ export function getVenueCalendar(
 }
 
 /** The reasons a venue can be marked unavailable, mirroring `UnavailabilityReason` in
- * backend/app/venues/models.py (migration 022). `SAFETY` is shown as "Safety concern", and
- * `OTHER` needs a description. */
+ * backend/app/venues/models.py (migration 022). `SAFETY` is shown as "Safety concern". */
 export type UnavailabilityReason =
   'MAINTENANCE' | 'EQUIPMENT_FAILURE' | 'RENOVATION' | 'SAFETY' | 'OTHER'
 
@@ -356,7 +355,8 @@ export const UNAVAILABILITY_REASON_NAMES: Record<UnavailabilityReason, string> =
   OTHER: 'Other',
 }
 
-/** Story 9.4 AC1: the reason that must carry a description. */
+/** Story 9.4 AC1: the reason whose description is the month grid's label, since "Other" says
+ * nothing by itself. */
 export const OTHER_UNAVAILABILITY_REASON: UnavailabilityReason = 'OTHER'
 
 /** Mirrors `VenueUnavailabilityOut` (story 9.4): a period a venue is unavailable for. */
@@ -370,7 +370,7 @@ export interface Unavailability {
 }
 
 /** Mirrors `VenueUnavailabilityCreate`: the body of adding a period. `description` is required
- * when the reason is Other. */
+ * whatever the reason (story 9.4 AC1), and the backend refuses it blank. */
 export interface UnavailabilityInput {
   starts_at: string
   ends_at: string
