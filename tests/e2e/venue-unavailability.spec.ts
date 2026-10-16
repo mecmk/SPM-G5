@@ -388,15 +388,52 @@ test('9.4 AC6: a refused End now says why, and the calendar is loaded again', as
       })
     },
   )
-  const reloaded = page.waitForRequest(
-    (request) =>
-      request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/calendar'),
-  )
   await item.getByRole('button', { name: 'End now' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'End now' }).click()
   await expect(dialog).toContainText('This closure has already ended.')
+  // The calendar is loaded again once the dialog, which keeps the sentence, is closed.
+  const reloaded = page.waitForRequest(
+    (request) =>
+      request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/calendar'),
+  )
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
   await reloaded
+})
+
+test('9.4 AC6: a row left open across the start of its closure switches from Remove to End now', async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date() })
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium skylight')
+  // Starts in two minutes by the server's clock, in force for a day after.
+  const inTwoMinutes = new Date(Date.now() + 2 * 60 * 1000 + 8 * 60 * 60 * 1000)
+  const tomorrow = new Date(inTwoMinutes.getTime() + 24 * 60 * 60 * 1000)
+  await fillClosure(page, {
+    starts: inTwoMinutes.toISOString().slice(0, 16),
+    ends: tomorrow.toISOString().slice(0, 16),
+    description,
+  })
+  await saveClosure(page)
+  const singapore = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = new RegExp(
+    `^${singapore.getUTCDate()} ${singapore.toLocaleString('en-GB', {
+      month: 'long',
+      timeZone: 'UTC',
+    })} ${singapore.getUTCFullYear()}`,
+  )
+  await dayButton(page, today).click()
+  const item = page.getByRole('listitem').filter({ hasText: description })
+  await expect(item.getByRole('button', { name: 'Remove' })).toBeVisible()
+  await expect(item.getByRole('button', { name: 'End now' })).toHaveCount(0)
+
+  // Three minutes on, with the page left open: it has started, so it is ended and not removed.
+  await page.clock.runFor(3 * 60 * 1000)
+
+  await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
+  await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
 })
 
 test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, browser }) => {
@@ -463,35 +500,35 @@ test('9.4 AC5: an end that is not after the start is refused in the form, before
 test('9.4 AC1: the month grid names a closure by its reason, and by its description for Other', async ({
   page,
 }) => {
-  await page.clock.setFixedTime(new Date('2028-12-10T10:00:00+08:00'))
+  await page.clock.setFixedTime(PINNED_NOW)
   await signIn(page, ACCOUNTS.venueStaff)
   await openVenue(page, VENUES.gardenAtrium)
   const renovation = uniqueName('Atrium repainting')
   const other = uniqueName('Atrium film shoot')
 
   await fillClosure(page, {
-    starts: '2028-12-05T09:00',
-    ends: '2028-12-05T18:00',
+    starts: '2028-10-25T09:00',
+    ends: '2028-10-25T18:00',
     reason: 'Renovation',
     description: renovation,
   })
   await saveClosure(page)
-  await dayButton(page, /^5 December 2028/).waitFor()
+  await dayButton(page, /^25 October 2028/).waitFor()
   await fillClosure(page, {
-    starts: '2028-12-06T09:00',
-    ends: '2028-12-06T18:00',
+    starts: '2028-10-26T09:00',
+    ends: '2028-10-26T18:00',
     reason: 'Other',
     description: other,
   })
   await saveClosure(page)
 
   const grid = availability(page)
-  await expect(dayButton(page, /^5 December 2028/)).toContainText('Renovation')
-  await expect(dayButton(page, /^5 December 2028/)).not.toContainText(renovation)
-  await expect(dayButton(page, /^6 December 2028/)).toContainText(other)
+  await expect(dayButton(page, /^25 October 2028/)).toContainText('Renovation')
+  await expect(dayButton(page, /^25 October 2028/)).not.toContainText(renovation)
+  await expect(dayButton(page, /^26 October 2028/)).toContainText(other)
   // The day list keeps the kind and the description.
-  await dayButton(page, /^5 December 2028/).click()
-  const list = dayList(page, /5 Dec 2028/)
+  await dayButton(page, /^25 October 2028/).click()
+  const list = dayList(page, /25 Oct 2028/)
   await expect(list).toContainText('Unavailable – Renovation')
   await expect(list).toContainText(renovation)
   await expect(grid).toBeVisible()
