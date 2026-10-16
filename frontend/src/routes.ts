@@ -209,6 +209,9 @@ export function safetyCheckPath(eventId: string): string {
   return SAFETY_CHECK_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
 
+// Story 18.1: the events an attendee can browse and register for.
+export const UPCOMING_EVENTS_PATH = '/browse'
+
 // Story 2.6: the organiser's own list of event requests.
 export const EVENTS_MINE_PATH = '/events/mine'
 
@@ -228,7 +231,7 @@ export function eventPath(eventId: string): string {
 }
 
 // Story 7.2: the assigned Event Coordinator edits an event - its internal notes until it is
-// closed, and the organiser's request too while it is under review or awaiting clarification.
+// closed, and the organiser's request too until it is confirmed (f7.2.4).
 export const EVENT_COORDINATOR_EDIT_PATH = '/events/:eventId/coordinator-edit'
 
 export function eventCoordinatorEditPath(eventId: string): string {

@@ -60,27 +60,43 @@ export const AWAITING_DECISION_STATUSES: readonly EventStatus[] = [
 ]
 
 /**
- * Story 7.2 AC4: the statuses in which the assigned coordinator corrects the organiser's details,
- * mirroring the backend's `_DETAILS_CORRECTABLE_STATUSES`. Clarification Requested was added to
- * AC4 in the backlog's Change Log.
+ * Story 7.2 AC4, AC10 (f7.2.4): the statuses in which the assigned coordinator corrects the
+ * organiser's details - every status before Confirmed - mirroring the backend's
+ * `_DETAILS_CORRECTABLE_STATUSES`.
  */
 export const DETAILS_CORRECTABLE_STATUSES: readonly EventStatus[] = [
   'UNDER_REVIEW',
   'CLARIFICATION_REQUESTED',
+  'PLANNING',
+  'AWAITING_SAFETY_CHECK',
 ]
 
 /**
- * Story 7.2 AC5: approved and still running - the organiser's details are read-only and further
+ * Story 7.2 AC12: confirmed and still running - the organiser's details are read-only and further
  * changes go through a change request (19.1). Mirrors `_DETAILS_LOCKED_STATUSES`.
  */
-export const DETAILS_LOCKED_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
+export const DETAILS_LOCKED_STATUSES: readonly EventStatus[] = ['CONFIRMED']
 
 /**
- * Story 7.2 AC5: why the organiser's details cannot be edited once the event is approved, said to
- * the assigned coordinator on the event details page and on the coordinator's edit page.
+ * Story 7.2 AC12: why the organiser's details cannot be edited once the event is confirmed, said
+ * to the assigned coordinator on the event details page and on the coordinator's edit page.
  */
 export const DETAILS_LOCKED_HINT =
-  'Event details can no longer be edited directly after approval. Further changes must go through the change request process.'
+  'Event details can no longer be edited directly once the event is confirmed. Further changes must go through the change request process.'
+
+/**
+ * Story 7.2 AC14/AC15: approved and not yet confirmed, so the event may hold venue bookings and
+ * Technical Support's equipment decisions, and its equipment is not changed in the edit form.
+ * Mirrors the backend's `_ARRANGED_STATUSES`.
+ */
+export const ARRANGED_STATUSES: readonly EventStatus[] = ['PLANNING', 'AWAITING_SAFETY_CHECK']
+
+/**
+ * Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. Only Planning
+ * opens the Equipment requirements section (15.1 AC9, `EQUIPMENT_OPEN_STATUSES`).
+ */
+export const EQUIPMENT_LOCKED_HINT =
+  'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
 
 /**
  * Story 19.1 AC5: the one status a change request can be raised in, mirroring the backend's

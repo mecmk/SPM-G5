@@ -141,7 +141,7 @@ The app is served at [http://localhost:5173](http://localhost:5173). The backend
 documentation (Swagger UI) is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 Sign in with one of the sample accounts, one per role (password `Password123!` for all). The full
-list, including a second organiser and coordinator, is in
+list, including a second organiser, coordinator and attendee, is in
 [docs/database/README.md](docs/database/README.md#sample-logins).
 
 | Role | Email |
