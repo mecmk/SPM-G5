@@ -807,10 +807,10 @@ def test_a_refused_write_leaves_no_audit_row(db, venue_staff_client):
     assert _venue_audit_count(db, venue.id) == before
 
 
-# --- AC8 (the period itself): in the past ----------------------------------------------------
-@pytest.mark.story("9.4", ac=8)
+# --- AC1 (the period itself): in the past ----------------------------------------------------
+@pytest.mark.story("9.4", ac=1)
 def test_a_period_in_the_past_is_saved_and_shown(db, venue_staff_client):
-    """AC8: nothing beyond AC5 limits the start, so a closure that has happened is
+    """AC1: nothing beyond AC5 limits the start, so a closure that has happened is
     kept and on the calendar."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(-10), _days_from_now(-9)
@@ -3027,9 +3027,10 @@ def test_ending_a_period_early_clears_a_booking_whose_remaining_time_it_no_longe
 
 
 # --- housekeeping: the write endpoints and the preview release lapsed holds -----------------
-@pytest.mark.story("9.4", ac=8)
+@pytest.mark.story("9.4", ac=2)
+@pytest.mark.story("9.4", ac=3)
 def test_a_lapsed_hold_is_released_before_the_preview_and_the_save_look(db, venue_staff_client):
-    """AC8: an approved booking whose hold has lapsed holds nothing, as the calendar already
+    """AC2 and AC3: an approved booking whose hold has lapsed holds nothing, as the calendar already
     treats it; the preview does not list it and the save does not flag it, whichever request
     comes first - the routes release lapsed holds as the calendar's does."""
     venue = make_venue(db)
@@ -3103,11 +3104,13 @@ def test_a_period_ending_exactly_now_cannot_be_edited(db):
 
 
 # --- housekeeping: an edit and a removal release lapsed holds too ---------------------------------
-@pytest.mark.story("9.4", ac=8)
+@pytest.mark.story("9.4", ac=2)
+@pytest.mark.story("9.4", ac=3)
 @pytest.mark.parametrize("method", ["patch", "delete"])
 def test_a_lapsed_hold_is_released_before_an_edit_or_a_removal(db, venue_staff_client, method):
-    """AC8: the edit and the removal release lapsed holds as the add and the preview do. cannot
-    fail first: the dependency is on every write route today; it is pinned beside the add's."""
+    """AC2 and AC3: the edit and the removal release lapsed holds as the add and the preview do.
+    cannot fail first: the dependency is on every write route today; it is pinned beside the
+    add's."""
     venue = make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
     lapsed = _pending_of(
