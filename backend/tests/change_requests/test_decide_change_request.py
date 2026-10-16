@@ -12,14 +12,21 @@ AC7 Conflicting pending requests on the same field, withdrawn requests and dupli
     are handled safely.
 AC8 Approving a change request on a Confirmed event returns it to Planning.
 
-Phase 1 (agreed 16 Oct 2026): the queue, both decisions, who may make them, the reason, and the
-decision's record, notification and atomicity. Only an expected attendance change can be approved
-yet, and only on a Planning event. Every other approval would have to move bookings, equipment
-holds or the event's status, which is Phase 2, so until then it is refused with 409 and changes
-nothing (AC5, AC8 below), rather than applied without those checks. An attendance change is
-judged by the rules that hold today: a venue requirement may not need more room than the
-attendance (2.7 AC6), and a rise a live booking was not made for waits for Phase 2. Rejecting
-works for every field and on Confirmed events too, since it changes nothing.
+Phase 1 (agreed 16 Oct 2026) built the queue, both decisions, who may make them, the reason, and
+the decision's record, notification and atomicity, approving only an attendance change on a
+Planning event. Phase 2 (agreed 16 Oct 2026) approves every field on any event still going ahead:
+* Venue requirements are matched by id, which 19.1 now keeps in the proposal; an older proposal
+  without ids is matched by name.
+* A venue booking the approved change no longer fits (f7.2.4's fit rule) is cancelled, and every
+  active Venue Staff member is told; a booking that still fits is left exactly as it is.
+* Changed or added equipment is held again if stock allows, else flagged Unavailable, and goes
+  back to Requested for the coordinator to resubmit; removed equipment releases its hold, and
+  Technical Support is told of any item they had pending or accepted that is withdrawn. A date
+  change re-checks every item, as 15.1 AC8 does.
+* New dates move every requirement that covered the whole old period to the new one, and shift
+  the others by the same amount; one that no longer fits inside the event refuses the approval.
+* Approving on a Confirmed or Awaiting safety check event returns it to Planning, recording the
+  move, and clears its confirmation, so it must pass a new safety check (21.2) to be confirmed.
 
 Excluded, with reason:
 * What the queue and dialogs show, and the reason box blocking a blank reason before sending
@@ -28,24 +35,28 @@ Excluded, with reason:
   connection, so the other decision is simulated by changing the request just before deciding,
   as 19.1 AC10 does. The event's row lock, which 19.1's withdrawal also takes, serialises the
   real race.
-* Releasing affected bookings and holds (AC5), and returning a Confirmed event to Planning (AC8),
-  are Phase 2.
+* Nothing moves an event to Confirmed or Awaiting safety check yet (21.2), so those tests set the
+  status directly, after the request was raised in Planning, as it would be in practice.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session, object_session
 
+from app.change_requests.models import EventChangeRequest
 from app.events.models import Event, EventStatus
 from tests.support.factories import (
     future_datetime,
     make_booking,
     make_change_request,
+    make_equipment_item,
+    make_equipment_type,
     make_event,
     make_user,
     make_venue,
@@ -173,6 +184,114 @@ def _set_event(db: Session, event_id: uuid.UUID, **values) -> None:
     db.expire_all()
 
 
+def _raise(login_as, db: Session, event: Event, field: str, proposed) -> EventChangeRequest:
+    """Olivia raises a change through 19.1's own endpoint, so the stored values are exactly what
+    19.1 writes. Leaves the client signed in as her."""
+    response = login_as(Users.ORGANISER).post(
+        f"/events/{event.id}/change-requests",
+        json={"field": field, "proposed": proposed, "reason": "Plans have changed."},
+    )
+    assert response.status_code == 201, response.text
+    return db.get(EventChangeRequest, uuid.UUID(response.json()["id"]))
+
+
+def _requirement_body(
+    requirement_id: uuid.UUID | None,
+    *,
+    name: str,
+    capacity: int,
+    starts_at: datetime,
+    ends_at: datetime,
+    layout_code: str | None = None,
+) -> dict:
+    """One venue requirement as 19.1's change form sends it."""
+    return {
+        "id": None if requirement_id is None else str(requirement_id),
+        "name": name,
+        "capacity": capacity,
+        "starts_at": starts_at.isoformat(),
+        "ends_at": ends_at.isoformat(),
+        "layout_code": layout_code,
+        "facilities": [],
+        "notes": None,
+    }
+
+
+def _requirements(db: Session, event_id: uuid.UUID) -> dict[str, tuple]:
+    """The event's venue requirements by name: (id, capacity, starts_at, ends_at)."""
+    rows = db.execute(
+        text(
+            "SELECT id, name, capacity, starts_at, ends_at FROM venue_requirements"
+            " WHERE event_id = :e"
+        ),
+        {"e": event_id},
+    )
+    return {row.name: (row.id, row.capacity, row.starts_at, row.ends_at) for row in rows}
+
+
+def _booking(db: Session, booking_id: uuid.UUID):
+    return db.execute(
+        text(
+            "SELECT status, venue_requirement_id, hold_completed_at FROM venue_bookings"
+            " WHERE id = :b"
+        ),
+        {"b": booking_id},
+    ).one()
+
+
+def _book(db: Session, event: Event, *, requirement_id=None, people: int, **overrides):
+    """An approved booking of a fresh venue for ``event``'s requirement (or an additional venue),
+    over the requirement's or the event's period."""
+    venue = make_venue(db, name=overrides.pop("venue_name", None) or f"Room {uuid.uuid4().hex[:6]}")
+    return make_booking(
+        db,
+        event_id=event.id,
+        venue_id=venue.id,
+        starts_at=overrides.pop("starts_at", event.starts_at),
+        ends_at=overrides.pop("ends_at", event.ends_at),
+        expected_attendance=people,
+        status=overrides.pop("status", "APPROVED"),
+        venue_requirement_id=requirement_id,
+        hold_expires_at=overrides.pop("hold_expires_at", event.starts_at - timedelta(days=1)),
+        **overrides,
+    )
+
+
+def _item(db: Session, item_id: uuid.UUID):
+    return db.execute(
+        text("SELECT status, quantity, decided_by_id FROM event_equipment_requests WHERE id = :i"),
+        {"i": item_id},
+    ).one_or_none()
+
+
+def _holds(db: Session, item_id: uuid.UUID) -> list:
+    return list(
+        db.execute(
+            text(
+                "SELECT status, quantity, starts_at, ends_at FROM equipment_reservations"
+                " WHERE equipment_request_id = :i ORDER BY reserved_at, status"
+            ),
+            {"i": item_id},
+        )
+    )
+
+
+def _reserved(db: Session, item_id: uuid.UUID) -> list:
+    return [hold for hold in _holds(db, item_id) if hold.status == "RESERVED"]
+
+
+def _history(db: Session, event_id: uuid.UUID) -> list:
+    return list(
+        db.execute(
+            text(
+                "SELECT from_status, to_status, changed_by_id, reason FROM event_status_history"
+                " WHERE event_id = :e ORDER BY changed_at"
+            ),
+            {"e": event_id},
+        )
+    )
+
+
 # --- AC1: the coordinator's queue of pending change requests ---------------------------------
 
 
@@ -221,7 +340,7 @@ def test_queue_holds_only_pending_requests_on_my_open_events(coordinator_client,
     listed = {row["id"] for row in coordinator_client.get("/change-requests").json()}
 
     assert str(waiting.id) in listed
-    assert str(confirmed.id) in listed  # it can still be rejected (Phase 1) and decided (Phase 2)
+    assert str(confirmed.id) in listed  # it can still be decided, returning it to Planning (AC8)
     for left_out in (*decided, others, cancelled):
         assert str(left_out.id) not in listed
 
@@ -317,6 +436,7 @@ def test_approving_is_logged_with_the_old_and_new_value(coordinator_client, db: 
         "field": "expected_attendance",
         "from": 100,
         "to": 150,
+        "released_booking_ids": [],
     }
 
 
@@ -465,72 +585,7 @@ def test_rejection_needs_a_non_blank_reason(coordinator_client, db: Session, rea
     _assert_nothing_sent_or_logged(db, request)
 
 
-# --- AC5: approvals that would move arrangements wait for Phase 2 ----------------------------
-
-
-@pytest.mark.story("19.2", ac=5)
-@pytest.mark.parametrize(
-    ("field", "message"),
-    [
-        ("schedule", "A change to the date and time cannot be approved yet."),
-        ("venue_requirements", "A change to the venue requirements cannot be approved yet."),
-        ("equipment", "A change to the equipment cannot be approved yet."),
-    ],
-)
-def test_changes_that_move_arrangements_cannot_be_approved_yet(
-    coordinator_client, db: Session, field, message
-):
-    event = _planning_event(db)
-    request = make_change_request(db, event=event, field=field, current=[], proposed=[])
-
-    response = _approve(coordinator_client, request)
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == message
-    _assert_undecided(db, request)
-    _assert_nothing_sent_or_logged(db, request)
-
-
-@pytest.mark.story("19.2", ac=5)
-@pytest.mark.parametrize("is_for_requirement", [True, False])
-def test_attendance_rise_a_booking_was_not_made_for_cannot_be_approved_yet(
-    coordinator_client, db: Session, is_for_requirement
-):
-    """A requirement with no number of its own, or an additional venue, holds the event's
-    attendance (12.1 AC2), so a rise past what was booked would need the booking released."""
-    event = _planning_event(db, expected_attendance=100)
-    requirement_id = (
-        make_venue_requirement(db, event.id, capacity=None) if is_for_requirement else None
-    )
-    venue = make_venue(db, name="Harbour Room", capacity=300)
-    booking = make_booking(
-        db,
-        event_id=event.id,
-        venue_id=venue.id,
-        starts_at=event.starts_at,
-        ends_at=event.ends_at,
-        expected_attendance=100,
-        status="APPROVED",
-        venue_requirement_id=requirement_id,
-        hold_expires_at=event.starts_at - timedelta(days=1),
-    )
-    request = make_change_request(db, event=event, current=100, proposed=150)
-
-    response = _approve(coordinator_client, request)
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "The booking of Harbour Room holds fewer people than the proposed attendance, so this "
-        "change cannot be approved yet."
-    )
-    assert _attendance(db, event.id) == 100
-    assert (
-        db.execute(
-            text("SELECT status FROM venue_bookings WHERE id = :b"), {"b": booking.id}
-        ).scalar_one()
-        == "APPROVED"
-    )
-    _assert_undecided(db, request)
+# --- AC5: only the arrangements a change affects are released --------------------------------
 
 
 @pytest.mark.story("19.2", ac=5)
@@ -747,7 +802,7 @@ def test_a_request_the_event_has_moved_on_from_cannot_be_approved(coordinator_cl
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "The expected attendance has changed since this request was raised, so it cannot be "
+        "The expected attendance changed since this request was raised, so it cannot be "
         "approved. Reject it so the organiser can ask again."
     )
     assert _attendance(db, event.id) == 120
@@ -799,26 +854,7 @@ def test_one_pending_request_per_field_still_holds_after_a_decision(login_as, db
     assert again.status_code == 201, again.text
 
 
-# --- AC8: Confirmed and Awaiting safety check events wait for Phase 2 ------------------------
-
-
-@pytest.mark.story("19.2", ac=8)
-@pytest.mark.parametrize("status", ["CONFIRMED", "AWAITING_SAFETY_CHECK"])
-def test_approval_past_planning_cannot_be_made_yet(coordinator_client, db: Session, status):
-    """Approving here must return the event to Planning for a new safety check (AC8), which is
-    Phase 2, so for now it is refused and the event keeps its status."""
-    event = _planning_event(db, status=status, expected_attendance=100)
-    request = make_change_request(db, event=event, current=100, proposed=80)
-
-    response = _approve(coordinator_client, request)
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"This event is {status}, so its change requests cannot be approved yet."
-    )
-    assert _event_status(db, event.id) == status
-    assert _attendance(db, event.id) == 100
-    _assert_undecided(db, request)
+# --- AC8: approving past Planning returns the event to Planning ------------------------------
 
 
 @pytest.mark.story("19.2", ac=8)
@@ -829,3 +865,514 @@ def test_rejecting_past_planning_leaves_the_status(coordinator_client, db: Sessi
 
     assert _reject(coordinator_client, request).status_code == 200
     assert _event_status(db, event.id) == status
+
+
+# --- Phase 2, AC2: every field is applied ------------------------------------------------------
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_approving_new_dates_moves_the_event_and_its_requirements(login_as, db: Session):
+    """Whole-event requirements follow the new dates; one for part of the event shifts with the
+    start, keeping its length."""
+    event = _planning_event(db)
+    start, end = event.starts_at, event.ends_at
+    make_venue_requirement(
+        db, event.id, name="Main hall", capacity=50, starts_at=start, ends_at=end
+    )
+    make_venue_requirement(
+        db,
+        event.id,
+        position=1,
+        name="Breakout",
+        capacity=20,
+        starts_at=start + timedelta(hours=2),
+        ends_at=start + timedelta(hours=4),
+    )
+    new_start, new_end = start + timedelta(days=1), end + timedelta(days=1, hours=1)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {"starts_at": new_start.isoformat(), "ends_at": new_end.isoformat()},
+    )
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 200, response.text
+    moved = db.execute(
+        text("SELECT starts_at, ends_at FROM events WHERE id = :e"), {"e": event.id}
+    ).one()
+    assert (moved.starts_at, moved.ends_at) == (new_start, new_end)
+    requirements = _requirements(db, event.id)
+    assert requirements["Main hall"][2:] == (new_start, new_end)
+    assert requirements["Breakout"][2:] == (
+        new_start + timedelta(hours=2),
+        new_start + timedelta(hours=4),
+    )
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_new_dates_a_shifted_requirement_no_longer_fits_are_refused(login_as, db: Session):
+    """A shorter event can leave a part-time requirement outside it: refused by 2.7's rule, and
+    nothing changes."""
+    event = _planning_event(db)
+    start, end = event.starts_at, event.ends_at
+    make_venue_requirement(
+        db,
+        event.id,
+        name="Breakout",
+        capacity=20,
+        starts_at=start + timedelta(hours=5),
+        ends_at=start + timedelta(hours=7),
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {
+            "starts_at": (start + timedelta(hours=1)).isoformat(),
+            "ends_at": (end - timedelta(hours=2)).isoformat(),
+        },
+    )
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Breakout cannot end after the event ends."
+    assert _requirements(db, event.id)["Breakout"][2] == start + timedelta(hours=5)
+    _assert_undecided(db, request)
+    _assert_nothing_sent_or_logged(db, request)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_new_dates_before_registration_closes_are_refused(login_as, db: Session):
+    """2.1 AC18: registration must close no later than the start, so moving the start before the
+    closing date is refused, as moving it on the request would be."""
+    event = _planning_event(
+        db,
+        registration_required=True,
+        registration_opens_at=future_datetime(days=10),
+        registration_closes_at=future_datetime(days=50),
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {
+            "starts_at": future_datetime(days=40).isoformat(),
+            "ends_at": future_datetime(days=40, hours=8).isoformat(),
+        },
+    )
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 422
+    _assert_undecided(db, request)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_approving_venue_requirements_edits_keeps_and_removes_them(login_as, db: Session):
+    event = _planning_event(db)
+    start, end = event.starts_at, event.ends_at
+    kept = make_venue_requirement(
+        db, event.id, name="Main hall", capacity=50, starts_at=start, ends_at=end
+    )
+    make_venue_requirement(
+        db, event.id, position=1, name="Breakout", capacity=20, starts_at=start, ends_at=end
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(kept, name="Grand hall", capacity=60, starts_at=start, ends_at=end),
+            _requirement_body(None, name="Workshop", capacity=30, starts_at=start, ends_at=end),
+        ],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    requirements = _requirements(db, event.id)
+    assert set(requirements) == {"Grand hall", "Workshop"}
+    assert requirements["Grand hall"][:2] == (kept, 60)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_proposed_venue_requirements_keep_their_ids(login_as, db: Session):
+    """So an approval can tell an edited requirement from a removed one and a new one."""
+    event = _planning_event(db)
+    kept = make_venue_requirement(
+        db,
+        event.id,
+        name="Main hall",
+        capacity=50,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    body = _requirement_body(
+        kept, name="Main hall", capacity=60, starts_at=event.starts_at, ends_at=event.ends_at
+    )
+
+    request = _raise(login_as, db, event, "venue_requirements", [body])
+
+    assert [item["id"] for item in json.loads(request.proposed_value)] == [str(kept)]
+    assert [item["id"] for item in json.loads(request.current_value)] == [str(kept)]
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_an_older_proposal_without_ids_is_matched_by_name(coordinator_client, db: Session):
+    """Requests raised before ids were kept still apply, the requirement found by its name."""
+    event = _planning_event(db)
+    kept = make_venue_requirement(
+        db,
+        event.id,
+        name="Main hall",
+        capacity=50,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    stored = {
+        "name": "Main hall",
+        "capacity": 50,
+        "layout_code": None,
+        "notes": None,
+        "starts_at": event.starts_at.astimezone(UTC).isoformat(),
+        "ends_at": event.ends_at.astimezone(UTC).isoformat(),
+        "facilities": [],
+    }
+    request = make_change_request(
+        db,
+        event=event,
+        field="venue_requirements",
+        current=[stored],
+        proposed=[{**stored, "capacity": 70}],
+    )
+
+    assert _approve(coordinator_client, request).status_code == 200
+    assert _requirements(db, event.id)["Main hall"][:2] == (kept, 70)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_approving_equipment_updates_the_items(login_as, db: Session):
+    event = _planning_event(db)
+    kit = make_equipment_type(db, total_quantity=10)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=2)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "equipment",
+        [{"id": str(item.id), "equipment_type_code": kit.code, "quantity": 5}],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+    assert _item(db, item.id).quantity == 5
+
+
+@pytest.mark.story("19.2", ac=7)
+def test_venue_requirements_changed_since_the_request_cannot_be_approved(login_as, db: Session):
+    event = _planning_event(db)
+    kept = make_venue_requirement(
+        db,
+        event.id,
+        name="Main hall",
+        capacity=50,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                kept,
+                name="Main hall",
+                capacity=60,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+            )
+        ],
+    )
+    db.execute(text("UPDATE venue_requirements SET capacity = 55 WHERE id = :r"), {"r": kept})
+    db.expire_all()
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "The venue requirements changed since this request was raised, so it cannot be "
+        "approved. Reject it so the organiser can ask again."
+    )
+    assert _requirements(db, event.id)["Main hall"][1] == 55
+
+
+# --- Phase 2, AC5: only affected bookings and holds are released ---------------------------------
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_attendance_rise_releases_only_the_bookings_too_small_for_it(login_as, db: Session):
+    """An additional venue holds the event's attendance (12.5), so a rise past it releases it; a
+    requirement with its own number of people is unaffected, so its booking stays."""
+    event = _planning_event(db, expected_attendance=100)
+    own_number = make_venue_requirement(
+        db,
+        event.id,
+        name="Main hall",
+        capacity=40,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    stays = _book(db, event, requirement_id=own_number, people=40)
+    released = _book(db, event, people=100, venue_name="Harbour Room")
+    request = _raise(login_as, db, event, "expected_attendance", 150)
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, stays.id).status == "APPROVED"
+    assert _booking(db, released.id).status == "CANCELLED"
+    [notice] = _notifications(db, event.id, "BOOKING_RELEASED")
+    assert notice.recipient_id == Users.VENUE_STAFF.id
+    assert notice.related_entity_id == released.id
+    assert "Harbour Room" in notice.message
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_venue_requirement_change_releases_only_the_bookings_it_affects(login_as, db: Session):
+    event = _planning_event(db)
+    start, end = event.starts_at, event.ends_at
+    renamed = make_venue_requirement(
+        db, event.id, name="Main hall", capacity=50, starts_at=start, ends_at=end
+    )
+    grown = make_venue_requirement(
+        db, event.id, position=1, name="Breakout", capacity=20, starts_at=start, ends_at=end
+    )
+    dropped = make_venue_requirement(
+        db, event.id, position=2, name="Quiet room", capacity=10, starts_at=start, ends_at=end
+    )
+    renamed_booking = _book(db, event, requirement_id=renamed, people=50)
+    grown_booking = _book(db, event, requirement_id=grown, people=20)
+    dropped_booking = _book(db, event, requirement_id=dropped, people=10)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                renamed, name="Grand hall", capacity=50, starts_at=start, ends_at=end
+            ),
+            _requirement_body(grown, name="Breakout", capacity=40, starts_at=start, ends_at=end),
+        ],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    kept = _booking(db, renamed_booking.id)
+    assert (kept.status, kept.venue_requirement_id) == ("APPROVED", renamed)
+    assert _booking(db, grown_booking.id).status == "CANCELLED"
+    assert _booking(db, dropped_booking.id).status == "CANCELLED"
+    assert len(_notifications(db, event.id, "BOOKING_RELEASED")) == 2
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_new_dates_release_the_bookings_and_move_the_equipment(login_as, db: Session):
+    """The booking was for the old period, so it no longer covers the event; the equipment is
+    re-checked for the new dates as 15.1 AC8 does - held again there, and an accepted item goes
+    back to Technical Support, since their decision was for the old dates."""
+    event = _planning_event(db)
+    start, end = event.starts_at, event.ends_at
+    hall = make_venue_requirement(
+        db, event.id, name="Main hall", capacity=50, starts_at=start, ends_at=end
+    )
+    booking = _book(db, event, requirement_id=hall, people=50)
+    kit = make_equipment_type(db, total_quantity=10)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=2, status="ACCEPTED")
+    new_start, new_end = start + timedelta(days=2), end + timedelta(days=2)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {"starts_at": new_start.isoformat(), "ends_at": new_end.isoformat()},
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, booking.id).status == "CANCELLED"
+    [hold] = _reserved(db, item.id)
+    assert (hold.starts_at, hold.ends_at) == (new_start, new_end)
+    assert _item(db, item.id).status == "PENDING"
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_changed_equipment_is_held_again_and_waits_to_be_resent(login_as, db: Session):
+    event = _planning_event(db)
+    steady = make_equipment_type(db, total_quantity=10)
+    changing = make_equipment_type(db, total_quantity=10)
+    untouched = make_equipment_item(
+        db, event=event, equipment_type=steady, quantity=2, status="ACCEPTED"
+    )
+    changed = make_equipment_item(
+        db,
+        event=event,
+        equipment_type=changing,
+        quantity=2,
+        status="ACCEPTED",
+        decided_by_id=Users.TECH_SUPPORT.id,
+        decided_at=future_datetime(days=-1),
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "equipment",
+        [
+            {"id": str(untouched.id), "equipment_type_code": steady.code, "quantity": 2},
+            {"id": str(changed.id), "equipment_type_code": changing.code, "quantity": 4},
+        ],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _item(db, untouched.id).status == "ACCEPTED"
+    assert [hold.quantity for hold in _reserved(db, untouched.id)] == [2]
+    row = _item(db, changed.id)
+    assert (row.status, row.quantity, row.decided_by_id) == ("REQUESTED", 4, None)
+    assert [hold.quantity for hold in _reserved(db, changed.id)] == [4]
+    [notice] = _notifications(db, event.id, "EQUIPMENT_WITHDRAWN")
+    assert notice.recipient_id == Users.TECH_SUPPORT.id
+    assert changing.name in notice.message
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_removed_equipment_releases_its_hold(login_as, db: Session):
+    """A sent item is kept as Cancelled, so Technical Support's record stays whole, and they are
+    told; one never sent is simply removed."""
+    event = _planning_event(db)
+    sent_type = make_equipment_type(db, total_quantity=10)
+    unsent_type = make_equipment_type(db, total_quantity=10)
+    sent = make_equipment_item(
+        db, event=event, equipment_type=sent_type, quantity=2, status="PENDING"
+    )
+    unsent = make_equipment_item(db, event=event, equipment_type=unsent_type, quantity=1)
+    request = _raise(login_as, db, event, "equipment", [])
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _item(db, sent.id).status == "CANCELLED"
+    assert _reserved(db, sent.id) == []
+    assert _item(db, unsent.id) is None
+    assert len(_notifications(db, event.id, "EQUIPMENT_WITHDRAWN")) == 1
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_added_equipment_is_held_or_flagged_when_short(login_as, db: Session):
+    event = _planning_event(db)
+    plenty = make_equipment_type(db, total_quantity=10)
+    scarce = make_equipment_type(db, total_quantity=2)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "equipment",
+        [
+            {"equipment_type_code": plenty.code, "quantity": 3},
+            {"equipment_type_code": scarce.code, "quantity": 3},
+        ],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    added = {
+        row.equipment_type_id: row
+        for row in db.execute(
+            text(
+                "SELECT id, equipment_type_id, status FROM event_equipment_requests"
+                " WHERE event_id = :e"
+            ),
+            {"e": event.id},
+        )
+    }
+    assert added[plenty.id].status == "REQUESTED"
+    assert [hold.quantity for hold in _reserved(db, added[plenty.id].id)] == [3]
+    assert added[scarce.id].status == "UNAVAILABLE"
+    assert _reserved(db, added[scarce.id].id) == []
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_rejecting_releases_nothing(login_as, db: Session):
+    event = _planning_event(db, expected_attendance=100)
+    booking = _book(db, event, people=100)
+    request = _raise(login_as, db, event, "expected_attendance", 150)
+
+    assert _reject(login_as(Users.COORDINATOR), request).status_code == 200
+    assert _booking(db, booking.id).status == "APPROVED"
+    assert _notifications(db, event.id, "BOOKING_RELEASED") == []
+
+
+# --- Phase 2, AC8: back to Planning for a new safety check --------------------------------------
+
+
+@pytest.mark.story("19.2", ac=8)
+@pytest.mark.parametrize("status", ["CONFIRMED", "AWAITING_SAFETY_CHECK"])
+def test_approving_past_planning_returns_the_event_to_planning(login_as, db: Session, status):
+    event = _planning_event(db, expected_attendance=100)
+    hall = make_venue_requirement(
+        db,
+        event.id,
+        name="Main hall",
+        capacity=50,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+    )
+    booking = _book(db, event, requirement_id=hall, people=50)
+    request = _raise(login_as, db, event, "expected_attendance", 80)
+    _set_event(db, event.id, status=status, confirmed_at=future_datetime(days=-1))
+    db.execute(
+        text("UPDATE venue_bookings SET hold_completed_at = now() WHERE id = :b"),
+        {"b": booking.id},
+    )
+    db.execute(
+        text(
+            "INSERT INTO event_safety_reviews (event_id, reviewed_by_id, outcome, facts)"
+            " VALUES (:e, :u, 'APPROVED', '{}')"
+        ),
+        {"e": event.id, "u": Users.SAFETY_OFFICER.id},
+    )
+    db.expire_all()
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 200, response.text
+    row = db.execute(
+        text("SELECT status, confirmed_at, expected_attendance FROM events WHERE id = :e"),
+        {"e": event.id},
+    ).one()
+    assert (row.status, row.confirmed_at, row.expected_attendance) == ("PLANNING", None, 80)
+    [moved] = [entry for entry in _history(db, event.id) if entry.to_status == "PLANNING"]
+    assert (moved.from_status, moved.changed_by_id) == (status, Users.COORDINATOR.id)
+    assert moved.reason == "Change to the expected attendance approved."
+    kept = _booking(db, booking.id)
+    assert kept.status == "APPROVED"
+    assert kept.hold_completed_at is not None
+    assert (
+        db.execute(
+            text("SELECT count(*) FROM event_safety_reviews WHERE event_id = :e"), {"e": event.id}
+        ).scalar_one()
+        == 1
+    )
+
+
+@pytest.mark.story("19.2", ac=8)
+def test_approving_on_a_planning_event_records_no_status_change(coordinator_client, db: Session):
+    event = _planning_event(db)
+    request = make_change_request(db, event=event)
+
+    assert _approve(coordinator_client, request).status_code == 200
+    assert _history(db, event.id) == []

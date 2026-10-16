@@ -7,17 +7,18 @@
  * AC3 rejecting takes a reason, leaves the event as it was, and the organiser reads the reason.
  * AC4 a blank or spaces-only rejection reason is not sent (the client-side half; the server's
  *     refusal is a backend case).
+ * AC5 approving a date change says, before it is applied, what it may release.
  *
- * Who may decide (AC6), duplicate, withdrawn and stale decisions (AC7), what may not be approved
- * until Phase 2 (AC5, AC8), the notifications and the audit record are backend cases:
+ * Who may decide (AC6), duplicate, withdrawn and stale decisions (AC7), which bookings and holds
+ * are released (AC5), the return to Planning (AC8), the notifications and the audit record are
+ * backend cases:
  * backend/tests/change_requests/test_decide_change_request.py.
  *
  * Each test raises its own request on a fresh event (`approvedEvent`), since a pending request
- * blocks its field (19.1 AC6) and other specs share the database. Only an attendance change is
- * approvable in Phase 1, so that is the change every test asks for.
+ * blocks its field (19.1 AC6) and other specs share the database.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, approvedEvent, signIn } from './support'
+import { ACCOUNTS, approvedEvent, inFuture, signIn } from './support'
 
 const CHANGE_REASON = 'More people signed up than expected.'
 const REJECTION_REASON = 'The workshop room cannot take more people.'
@@ -135,4 +136,30 @@ test('19.2 AC4: a blank or spaces-only rejection reason is not sent', async ({ p
   }
   expect(rejectCalls).toBe(0)
   await expect(changeRequests(page).getByRole('listitem')).toContainText('Pending')
+})
+
+test('19.2 AC5: approving a date change says what it may release, then applies it', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { eventId, coordinator } = await approvedEvent(page, 'Date change')
+  await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
+  await changeRequests(page).getByLabel('What to change').selectOption({ label: 'Date and time' })
+  await changeRequests(page).getByLabel('New start').fill(inFuture(31, 9))
+  await changeRequests(page).getByLabel('New end').fill(inFuture(31, 17))
+  await changeRequests(page).getByLabel('Reason for the change').fill(CHANGE_REASON)
+  await changeRequests(page).getByRole('button', { name: 'Send change request' }).click()
+  await expect(changeRequests(page).getByRole('listitem')).toContainText('Pending')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await page.goto(`/events/${eventId}`)
+  await changeRequests(page).getByRole('button', { name: 'Approve' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Approve this change?' })
+  await expect(dialog).toContainText(
+    'Venue bookings that no longer cover the new dates are released',
+  )
+  await dialog.getByRole('button', { name: 'Approve' }).click()
+
+  await expect(changeRequests(page).getByRole('listitem')).toContainText('Approved')
 })
