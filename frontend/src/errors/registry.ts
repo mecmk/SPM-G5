@@ -266,7 +266,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'Fill in every field marked * before saving - a submitted request needs them all.',
   },
   /**
-   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
+   * Story 7.2 AC9/AC12: the event was confirmed, or changed, after the coordinator opened it. The
    * backend's detail sentence says which; either way the page offers a reload.
    */
   EVENT_CORRECTION_CONFLICT: {
