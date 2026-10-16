@@ -8,17 +8,20 @@ import {
 import { fetchEventReferenceData } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventStatusBadge } from '../components/EventStatusBadge'
+import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { eventPath } from '../routes'
-import { formatDateTime, formatSchedule } from '../shared/format'
+import { formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
+import { ChangeRequestChanges } from './ChangeRequestChanges'
 import {
   canApproveYet,
-  describeValue,
-  FIELD_LABELS,
+  changeTitle,
   NOT_YET_APPROVABLE_NOTE,
+  STATUS_LABELS,
 } from './changeRequestValues'
 
 /** The decision dialog open on the queue: which request, and approving or rejecting it. */
@@ -28,7 +31,8 @@ interface OpenDecision {
 }
 
 /**
- * Story 19.2 - the coordinator's queue of change requests waiting for a decision.
+ * Story 19.2 - the coordinator's queue of change requests waiting for a decision, each card laid
+ * out like one in Venue Staff's booking queue (story 13.1).
  * AC1: every pending request on the coordinator's own events, oldest first (the backend's order),
  * each with its event, the field, its value now and the value asked for, the reason, who asked
  * and when. AC2/AC3: Approve and Reject open the shared decision dialog; a decided request leaves
@@ -62,7 +66,7 @@ export function ChangeRequestQueuePage() {
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Change requests"
+        title="Change Requests"
         subtitle="Changes organisers have asked for on your events, waiting for your decision."
       />
 
@@ -79,56 +83,80 @@ export function ChangeRequestQueuePage() {
       )}
 
       {queue !== null && queue.length > 0 && (
-        <ul className="stack" aria-label="Pending change requests">
+        <ul className="stack queue-list" aria-label="Pending change requests">
           {queue.map((entry) => (
             <li key={entry.id} className="card stack">
               <div className="item-card-header">
-                <EventStatusBadge status={entry.event_status} />
+                <div className="cluster">
+                  <StatusBadge status={entry.status} label={STATUS_LABELS[entry.status]} />
+                  <EventStatusBadge status={entry.event_status} />
+                </div>
                 {entry.event_starts_at !== null && entry.event_ends_at !== null && (
-                  <div className="item-card-capacity item-card-period">
-                    <div>{formatSchedule(entry.event_starts_at, entry.event_ends_at)}</div>
+                  <div className="item-card-capacity">
+                    <div>{formatDate(entry.event_starts_at)}</div>
+                    <div className="small muted">
+                      {formatTime(entry.event_starts_at)}–{formatTime(entry.event_ends_at)}
+                    </div>
                   </div>
                 )}
               </div>
 
-              <h3 className="queue-card-title">
-                <Link to={eventPath(entry.event_id)}>{entry.event_name}</Link>
-              </h3>
+              <div>
+                <h3 className="queue-card-title">
+                  <Link to={eventPath(entry.event_id)}>{entry.event_name}</Link>
+                </h3>
+                <p className="muted">{changeTitle(entry.field)}</p>
+              </div>
 
-              <p className="change-request-text">
-                <strong>{FIELD_LABELS[entry.field]}</strong>
-                <br />
-                <span className="small">
-                  Now: {describeValue(entry.field, entry.current_value, references)}
-                </span>
-                <br />
-                <span className="small">
-                  Requested: {describeValue(entry.field, entry.proposed_value, references)}
-                </span>
-                <br />
-                <span className="small muted wrap-anywhere">
-                  “{entry.reason}” · {entry.requested_by_name}, {formatDateTime(entry.created_at)}
-                </span>
-              </p>
+              <div className="fact-grid">
+                <div className="subtle-block">
+                  <p className="fact-label">Requested by</p>
+                  <p className="fact-value">{entry.requested_by_name}</p>
+                </div>
+                <div className="subtle-block">
+                  <p className="fact-label">Requested at</p>
+                  <p className="fact-value">{formatDateTime(entry.created_at)}</p>
+                </div>
+              </div>
 
-              <div className="page-actions">
-                {canApproveYet(entry.field, entry.event_status) ? (
+              <ChangeRequestChanges request={entry} references={references} />
+
+              <div className="change-note">
+                <span className="change-note-icon">
+                  <Icon name="message" />
+                </span>
+                <div>
+                  <p className="change-note-label">Organiser's reason</p>
+                  <p className="wrap-anywhere">{entry.reason}</p>
+                </div>
+              </div>
+
+              {!canApproveYet(entry.field, entry.event_status) && (
+                <p className="small muted">{NOT_YET_APPROVABLE_NOTE}</p>
+              )}
+
+              <div className="item-card-footer">
+                <div className="cluster">
+                  {canApproveYet(entry.field, entry.event_status) && (
+                    <button
+                      type="button"
+                      className="brand button-sm"
+                      onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
+                    >
+                      Approve
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
+                    className="danger-solid button-sm"
+                    onClick={() => setOpenDecision({ entry, outcome: 'REJECTED' })}
                   >
-                    Approve
+                    Reject
                   </button>
-                ) : (
-                  <span className="small muted">{NOT_YET_APPROVABLE_NOTE}</span>
-                )}
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setOpenDecision({ entry, outcome: 'REJECTED' })}
-                >
-                  Reject
-                </button>
+                </div>
+                <Link to={eventPath(entry.event_id)} className="link">
+                  View event →
+                </Link>
               </div>
             </li>
           ))}

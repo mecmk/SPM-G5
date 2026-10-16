@@ -18,13 +18,15 @@ import {
   type VenueRequirementInput,
 } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
+import { ChangeRequestChanges } from './ChangeRequestChanges'
 import {
   canApproveYet,
-  describeValue,
+  changeTitle,
   FIELD_LABELS,
   NOT_YET_APPROVABLE_NOTE,
   STATUS_LABELS,
@@ -418,7 +420,15 @@ export function ChangeRequestsSection({
 
   return (
     <section className="card stack" aria-labelledby={`${ids}-heading`}>
-      <h2 id={`${ids}-heading`}>Change requests</h2>
+      <div>
+        <h2 id={`${ids}-heading`}>{canWithdraw ? 'Your change requests' : 'Change requests'}</h2>
+        <p className="muted">
+          {canWithdraw
+            ? 'Requests you have submitted to change this event. You can withdraw a pending request if needed.'
+            : 'Changes the organiser has asked for on this event.'}
+          {canDecide && ' Approve or reject each pending one.'}
+        </p>
+      </div>
       {listError && (
         <p role="alert" className="error">
           {listError}
@@ -433,70 +443,103 @@ export function ChangeRequestsSection({
         <p className="muted">No change requests for this event.</p>
       )}
       {requests !== null && requests.length > 0 && (
-        <ul className="check-list">
-          {requests.map((request) => (
-            <li key={request.id}>
-              <span className="grow-text change-request-text">
-                <strong>{FIELD_LABELS[request.field]}</strong>
-                <br />
-                <span className="small">
-                  Now: {describeValue(request.field, request.current_value, references)}
-                </span>
-                <br />
-                <span className="small">
-                  Requested: {describeValue(request.field, request.proposed_value, references)}
-                </span>
-                <br />
-                <span className="small muted wrap-anywhere">
-                  “{request.reason}” · {request.requested_by_name},{' '}
-                  {formatDateTime(request.created_at)}
-                </span>
-                {request.decided_by_name !== null && request.decided_at !== null && (
-                  <>
-                    <br />
-                    <span className="small wrap-anywhere">
-                      {STATUS_LABELS[request.status]} by {request.decided_by_name},{' '}
-                      {formatDateTime(request.decided_at)}
-                      {request.decision_reason !== null && `: “${request.decision_reason}”`}
+        <ul className="stack queue-list">
+          {requests.map((request) => {
+            const isPending = request.status === 'PENDING'
+            const canApprove = canDecide && isPending && canApproveYet(request.field, event.status)
+            const isOwnRequest = canWithdraw && request.requested_by_id === event.organiser_id
+            return (
+              <li key={request.id} className="card card-tight stack">
+                <div className="item-card-header">
+                  <div>
+                    <h3 className="change-request-title">{changeTitle(request.field)}</h3>
+                    <p className="small muted">
+                      Requested on {formatDateTime(request.created_at)} by{' '}
+                      {isOwnRequest ? 'you' : request.requested_by_name}
+                    </p>
+                  </div>
+                  <StatusBadge status={request.status} label={STATUS_LABELS[request.status]} />
+                </div>
+
+                <ChangeRequestChanges request={request} references={references} />
+
+                <div className="change-request-footer">
+                  <div className="change-note">
+                    <span className="change-note-icon">
+                      <Icon name="message" />
                     </span>
-                  </>
-                )}
-                {canDecide &&
-                  request.status === 'PENDING' &&
-                  !canApproveYet(request.field, event.status) && (
-                    <>
-                      <br />
-                      <span className="small muted">{NOT_YET_APPROVABLE_NOTE}</span>
-                    </>
+                    <div>
+                      <p className="change-note-label">
+                        {isOwnRequest ? 'Your reason' : "Organiser's reason"}
+                      </p>
+                      <p className="wrap-anywhere">{request.reason}</p>
+                    </div>
+                  </div>
+                  {isPending && (canWithdraw || canDecide) && (
+                    <div className="cluster">
+                      {canWithdraw && (
+                        <button
+                          type="button"
+                          className="secondary button-with-icon"
+                          onClick={() => askToWithdraw(request)}
+                        >
+                          <Icon name="trash" size={16} />
+                          Withdraw request
+                        </button>
+                      )}
+                      {canApprove && (
+                        <button
+                          type="button"
+                          className="brand button-with-icon"
+                          onClick={() => setOpenDecision({ request, outcome: 'APPROVED' })}
+                        >
+                          <Icon name="check-circle" size={16} />
+                          Approve
+                        </button>
+                      )}
+                      {canDecide && (
+                        <button
+                          type="button"
+                          className="secondary button-with-icon"
+                          onClick={() => setOpenDecision({ request, outcome: 'REJECTED' })}
+                        >
+                          <Icon name="x-circle" size={16} />
+                          Reject
+                        </button>
+                      )}
+                    </div>
                   )}
-              </span>
-              <StatusBadge status={request.status} label={STATUS_LABELS[request.status]} />
-              {canWithdraw && request.status === 'PENDING' && (
-                <button type="button" className="secondary" onClick={() => askToWithdraw(request)}>
-                  Withdraw
-                </button>
-              )}
-              {canDecide &&
-                request.status === 'PENDING' &&
-                canApproveYet(request.field, event.status) && (
-                  <button
-                    type="button"
-                    onClick={() => setOpenDecision({ request, outcome: 'APPROVED' })}
+                </div>
+
+                {request.decided_by_name !== null && request.decided_at !== null && (
+                  <div
+                    className={
+                      request.status === 'REJECTED'
+                        ? 'change-note change-note-rejected'
+                        : 'change-note'
+                    }
                   >
-                    Approve
-                  </button>
+                    <span className="change-note-icon">
+                      <Icon name={request.status === 'REJECTED' ? 'x-circle' : 'check-circle'} />
+                    </span>
+                    <div>
+                      <p className="change-note-label">
+                        {STATUS_LABELS[request.status]} by {request.decided_by_name} on{' '}
+                        {formatDateTime(request.decided_at)}
+                      </p>
+                      {request.decision_reason !== null && (
+                        <p className="wrap-anywhere">{request.decision_reason}</p>
+                      )}
+                    </div>
+                  </div>
                 )}
-              {canDecide && request.status === 'PENDING' && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setOpenDecision({ request, outcome: 'REJECTED' })}
-                >
-                  Reject
-                </button>
-              )}
-            </li>
-          ))}
+
+                {canDecide && isPending && !canApprove && (
+                  <p className="small muted">{NOT_YET_APPROVABLE_NOTE}</p>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 

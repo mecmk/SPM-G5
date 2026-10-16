@@ -10,7 +10,8 @@ import { ApiError, formatApiError } from '../api/client'
 import type { EventReferenceData } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { describeValue, FIELD_LABELS } from './changeRequestValues'
+import { ChangeRequestChanges } from './ChangeRequestChanges'
+import { FIELD_LABELS } from './changeRequestValues'
 
 export interface ChangeRequestDecisionDialogProps {
   request: ChangeRequest
@@ -27,7 +28,7 @@ export interface ChangeRequestDecisionDialogProps {
 
 /**
  * Story 19.2 - the Approve and Reject dialogs, shared by the coordinator's queue and the event
- * page. AC2: Approve says what the field changes from and to before applying it. AC3/AC4: Reject
+ * page. AC2: Approve shows what changes, now beside requested, before applying it. AC3/AC4: Reject
  * asks for a reason and refuses a blank or spaces-only one before anything is sent. AC5/AC7/AC8:
  * a refusal stays in the dialog with the backend's sentence, and one caused by the request or its
  * event moving on has the page reload it. The confirm button is disabled while the decision is
@@ -85,12 +86,8 @@ export function ChangeRequestDecisionDialog({
         onConfirm={confirm}
         onCancel={onCancel}
       >
-        <p>
-          The {label} will change from{' '}
-          {describeValue(request.field, request.current_value, references)} to{' '}
-          {describeValue(request.field, request.proposed_value, references)}, and the organiser will
-          be told.
-        </p>
+        <p>This change is applied to the event, and the organiser will be told.</p>
+        <ChangeRequestChanges request={request} references={references} />
       </ConfirmDialog>
     )
   }
