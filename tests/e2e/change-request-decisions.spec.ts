@@ -2,7 +2,8 @@
  * Story 19.2 - fe: review and decide event change requests (Phase 1).
  *
  * AC1 the assigned coordinator sees their events' pending change requests in one queue, each with
- *     the current and proposed value, the reason, who asked and when.
+ *     the current and proposed value, the reason, who asked and when - and, under its other tabs,
+ *     the requests already decided or withdrawn (team request, 16 Oct 2026).
  * AC2 approving a change applies it: the event shows the new value and the request reads Approved.
  * AC3 rejecting takes a reason, leaves the event as it was, and the organiser reads the reason.
  * AC4 a blank or spaces-only rejection reason is not sent (the client-side half; the server's
@@ -28,9 +29,9 @@ function changeRequests(page: Page) {
   return page.getByRole('region', { name: 'Change requests' })
 }
 
-function queueEntry(page: Page, eventName: string) {
+function queueEntry(page: Page, eventName: string, tab = 'Pending') {
   return page
-    .getByRole('list', { name: 'Pending change requests' })
+    .getByRole('list', { name: `${tab} change requests` })
     .getByRole('listitem')
     .filter({ hasText: eventName })
 }
@@ -84,6 +85,8 @@ test('19.2 AC2: the coordinator approves an attendance change and the event take
     .getByRole('button', { name: 'Approve' })
     .click()
   await expect(queueEntry(page, name)).toHaveCount(0)
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  await expect(queueEntry(page, name, 'Approved')).toContainText('Approved by Chloe Coordinator')
 
   await page.goto(`/events/${eventId}`)
   await expect(page.getByText('150', { exact: true })).toBeVisible()
@@ -96,7 +99,7 @@ test('19.2 AC3: the coordinator rejects a change with a reason the organiser the
   page,
 }) => {
   test.setTimeout(90_000)
-  const { eventId } = await pendingAttendanceChange(page, 'Reject change')
+  const { eventId, name } = await pendingAttendanceChange(page, 'Reject change')
 
   const pending = changeRequests(page).getByRole('listitem')
   await pending.getByRole('button', { name: 'Reject' }).click()
@@ -108,6 +111,10 @@ test('19.2 AC3: the coordinator rejects a change with a reason the organiser the
   await expect(pending).toContainText(REJECTION_REASON)
   await expect(pending.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await expect(page.getByText('60', { exact: true })).toBeVisible()
+
+  await page.goto(QUEUE_PATH)
+  await page.getByRole('tab', { name: /^Rejected/ }).click()
+  await expect(queueEntry(page, name, 'Rejected')).toContainText(REJECTION_REASON)
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, ACCOUNTS.organiser)

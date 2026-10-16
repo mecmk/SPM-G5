@@ -118,13 +118,13 @@ def withdraw_change_request(
 
 
 @queue_router.get("", response_model=list[ChangeRequestQueueEntryOut])
-def list_pending_change_requests(
+def list_coordinator_change_requests(
     db: DbSession,
     viewer: Annotated[CurrentUser, CanDecide],
 ) -> list[ChangeRequestQueueEntryOut]:
-    """Story 19.2 AC1: the pending change requests on the coordinator's own events, oldest
-    first."""
-    requests = service.list_pending_change_requests(db, viewer=viewer)
+    """Story 19.2 AC1: the change requests on the coordinator's own events - pending ones first,
+    oldest first, then those decided or withdrawn, latest first."""
+    requests = service.list_coordinator_change_requests(db, viewer=viewer)
     return [ChangeRequestQueueEntryOut.from_queued_request(request) for request in requests]
 
 

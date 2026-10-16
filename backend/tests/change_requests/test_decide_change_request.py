@@ -320,7 +320,10 @@ def test_queue_lists_pending_requests_with_what_was_asked(coordinator_client, db
 
 
 @pytest.mark.story("19.2", ac=1)
-def test_queue_holds_only_pending_requests_on_my_open_events(coordinator_client, db: Session):
+def test_queue_lists_my_requests_of_every_status(coordinator_client, db: Session):
+    """The queue is also the coordinator's record of what they decided (team request, 16 Oct
+    2026): approved, rejected and withdrawn requests stay listed with their status, each tab of
+    the page filtered from the one list. Another coordinator's events are never in it."""
     mine = _planning_event(db)
     waiting = make_change_request(db, event=mine)
     decided = [
@@ -334,15 +337,31 @@ def test_queue_holds_only_pending_requests_on_my_open_events(coordinator_client,
     others = make_change_request(
         db, event=_planning_event(db, assigned_coordinator_id=Users.COORDINATOR_2.id)
     )
-    cancelled = make_change_request(db, event=_planning_event(db, status=EventStatus.CANCELLED))
+
+    listed = {row["id"]: row["status"] for row in coordinator_client.get("/change-requests").json()}
+
+    assert listed[str(waiting.id)] == "PENDING"
+    assert [listed[str(request.id)] for request in decided] == ["APPROVED", "REJECTED", "WITHDRAWN"]
+    assert str(others.id) not in listed
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_queue_leaves_out_what_can_no_longer_be_decided_but_keeps_decisions(
+    coordinator_client, db: Session
+):
+    """A request still pending on a cancelled event can never be decided, so it is not waiting
+    for the coordinator; one decided before the event closed is still part of their record. A
+    Confirmed event's request can still be decided (AC8)."""
+    cancelled = _planning_event(db, status=EventStatus.CANCELLED)
+    stuck = make_change_request(db, event=cancelled)
+    decided_before = make_change_request(db, event=cancelled, field="schedule", status="APPROVED")
     confirmed = make_change_request(db, event=_planning_event(db, status=EventStatus.CONFIRMED))
 
     listed = {row["id"] for row in coordinator_client.get("/change-requests").json()}
 
-    assert str(waiting.id) in listed
-    assert str(confirmed.id) in listed  # it can still be decided, returning it to Planning (AC8)
-    for left_out in (*decided, others, cancelled):
-        assert str(left_out.id) not in listed
+    assert str(stuck.id) not in listed
+    assert str(decided_before.id) in listed
+    assert str(confirmed.id) in listed
 
 
 @pytest.mark.story("19.2", ac=1)
@@ -356,6 +375,38 @@ def test_queue_lists_the_oldest_request_first(coordinator_client, db: Session):
     listed = [row["id"] for row in coordinator_client.get("/change-requests").json()]
 
     assert listed.index(str(older.id)) < listed.index(str(newer.id))
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_queue_lists_pending_requests_before_decisions_latest_first(
+    coordinator_client, db: Session
+):
+    """What waits comes first, oldest first; below it the record, most recently decided first."""
+    event = _planning_event(db)
+    decided_at = future_datetime(days=-3)
+    earlier = make_change_request(
+        db,
+        event=event,
+        field="schedule",
+        status="REJECTED",
+        decided_by_id=Users.COORDINATOR.id,
+        decided_at=decided_at,
+        decision_reason="Not this time.",
+    )
+    later = make_change_request(
+        db,
+        event=event,
+        field="equipment",
+        status="APPROVED",
+        decided_by_id=Users.COORDINATOR.id,
+        decided_at=decided_at + timedelta(days=1),
+    )
+    waiting = make_change_request(db, event=event)
+
+    listed = [row["id"] for row in coordinator_client.get("/change-requests").json()]
+    mine = [entry for entry in listed if entry in {str(r.id) for r in (earlier, later, waiting)}]
+
+    assert mine == [str(waiting.id), str(later.id), str(earlier.id)]
 
 
 @pytest.mark.story("19.2", ac=1)

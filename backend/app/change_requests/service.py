@@ -1,5 +1,5 @@
 """Business rules for story 19.1: raise an event change request, list them, withdraw one; and for
-story 19.2: the coordinator's queue of them, and approving or rejecting one.
+story 19.2: the coordinator's queue and record of them, and approving or rejecting one.
 
 A change request records one field of an event in Planning, its value now, the value proposed
 and why. Raising one changes nothing on the event, its bookings or its equipment holds (AC1/AC3):
@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager
 
@@ -499,9 +499,13 @@ class MissingRejectionReason(InvalidEventRequest):
         super().__init__(REJECTION_REASON_REQUIRED_MESSAGE)
 
 
-def list_pending_change_requests(db: Session, *, viewer: User) -> list[EventChangeRequest]:
-    """AC1: the pending change requests on the events ``viewer`` is assigned to and that are still
-    going ahead, oldest first - the order to work through them in - each with its event."""
+def list_coordinator_change_requests(db: Session, *, viewer: User) -> list[EventChangeRequest]:
+    """AC1: the change requests on the events ``viewer`` is assigned to, each with its event -
+    what waits for their decision first, oldest first, the order to work through it in; then their
+    record of what was decided or withdrawn, latest first (team request, 16 Oct 2026). A request
+    still pending on an event no longer going ahead can never be decided, so it is left out; one
+    decided before the event closed stays in the record."""
+    is_pending = EventChangeRequest.status == ChangeRequestStatus.PENDING
     return list(
         db.scalars(
             select(EventChangeRequest)
@@ -509,10 +513,14 @@ def list_pending_change_requests(db: Session, *, viewer: User) -> list[EventChan
             .options(contains_eager(EventChangeRequest.event))
             .where(
                 Event.assigned_coordinator_id == viewer.id,
-                Event.status.in_(_DECIDABLE_STATUSES),
-                EventChangeRequest.status == ChangeRequestStatus.PENDING,
+                or_(~is_pending, Event.status.in_(_DECIDABLE_STATUSES)),
             )
-            .order_by(EventChangeRequest.created_at, EventChangeRequest.id)
+            .order_by(
+                case((is_pending, 0), else_=1),
+                case((is_pending, EventChangeRequest.created_at)).asc(),
+                func.coalesce(EventChangeRequest.decided_at, EventChangeRequest.updated_at).desc(),
+                EventChangeRequest.id,
+            )
         ).all()
     )
 

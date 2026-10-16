@@ -24,6 +24,7 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
+import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { changeTitle, FIELD_LABELS, STATUS_LABELS } from './changeRequestValues'
 
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
@@ -504,28 +505,7 @@ export function ChangeRequestsSection({
                   )}
                 </div>
 
-                {request.decided_by_name !== null && request.decided_at !== null && (
-                  <div
-                    className={
-                      request.status === 'REJECTED'
-                        ? 'change-note change-note-rejected'
-                        : 'change-note'
-                    }
-                  >
-                    <span className="change-note-icon">
-                      <Icon name={request.status === 'REJECTED' ? 'x-circle' : 'check-circle'} />
-                    </span>
-                    <div>
-                      <p className="change-note-label">
-                        {STATUS_LABELS[request.status]} by {request.decided_by_name} on{' '}
-                        {formatDateTime(request.decided_at)}
-                      </p>
-                      {request.decision_reason !== null && (
-                        <p className="wrap-anywhere">{request.decision_reason}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <ChangeRequestDecision request={request} />
               </li>
             )
           })}
