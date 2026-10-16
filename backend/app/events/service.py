@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -1789,6 +1789,7 @@ def _decide(
     action: str,
     allowed_statuses: tuple[str, ...],
     verb: str,
+    extra_check: Callable[[Event], None] | None = None,
 ) -> None:
     """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
     decide, and only while the request is in one of ``allowed_statuses`` - both callers pass
@@ -1801,9 +1802,14 @@ def _decide(
     (relevant once 4.6's clarification round-trip can return a request here more than once).
     Story 20.1: the organiser's notification is written in the same transaction, so a decision
     that is refused or fails sends none (AC4), and the losing one of two at once sends none (AC6).
+    ``extra_check`` is one decision's own refusal (approval's, fix f2.7.4 story 2.7 AC17), raised
+    after the coordinator and status refusals and before anything is written, so those two always
+    come first and approve and reject give them alike.
     """
     _assert_assigned_coordinator(event, actor, verb="decide")
     _assert_awaiting_decision(event, allowed_statuses, verb=verb)
+    if extra_check is not None:
+        extra_check(event)
 
     from_status = event.status
     decided_at = datetime.now(UTC)
@@ -1844,20 +1850,22 @@ def _decide(
     db.refresh(event)
 
 
+def _refuse_approval_without_venue_requirement(event: Event) -> None:
+    """Fix f2.7.4 (story 2.7 AC17): a request with no venue requirement - only one submitted before
+    the fix can have none - is not approved until its coordinator adds one. Nothing can take a
+    submitted request's last requirement away (AC20), so no approval can race into one without."""
+    if not event.venue_requirements:
+        raise NoVenueRequirementToApprove()
+
+
 def approve_event(db: Session, event: Event, *, actor: User) -> None:
     """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time. Moves it to
     PLANNING; there is no status in between.
 
-    Fix f2.7.4 (story 2.7 AC17): a request with no venue requirement - only one submitted before
-    the fix can have none - is refused until its coordinator adds one. The coordinator and status
-    refusals come first, as ``_decide`` gives them, so a request that is not this coordinator's, or
-    no longer awaiting a decision, is told that. Rejecting needs no venue requirement. Nothing
-    can take a submitted request's last requirement away (AC20), so no approval can race into
-    one without."""
-    _assert_assigned_coordinator(event, actor, verb="decide")
-    _assert_awaiting_decision(event, _AWAITING_DECISION_STATUSES, verb="approved")
-    if not event.venue_requirements:
-        raise NoVenueRequirementToApprove()
+    Fix f2.7.4 (story 2.7 AC17): a request with no venue requirement is refused. ``_decide`` runs
+    that check after its coordinator and status refusals, so a request that is not this
+    coordinator's, or no longer awaiting a decision, is told that. Rejecting needs no venue
+    requirement."""
     _decide(
         db,
         event,
@@ -1867,6 +1875,7 @@ def approve_event(db: Session, event: Event, *, actor: User) -> None:
         action="EVENT_APPROVED",
         allowed_statuses=_AWAITING_DECISION_STATUSES,
         verb="approved",
+        extra_check=_refuse_approval_without_venue_requirement,
     )
 
 
