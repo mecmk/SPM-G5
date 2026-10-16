@@ -5,9 +5,13 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
   CONTACT_PHONE_MAX_LENGTH,
+  composeContactPhone,
+  getContactPhoneProblem,
   isBlankOrEmailAddress,
-  isBlankOrPhoneNumber,
+  splitContactPhone,
 } from './eventRequestForm'
+import { DEFAULT_PHONE_REGION, type PhoneRegion } from './phoneRegions'
+import { PhoneRegionSelect } from './PhoneRegionSelect'
 
 export interface PointOfContactEditorProps {
   event: EventDetail
@@ -24,12 +28,12 @@ function findEmailProblem(email: string): string | null {
   return null
 }
 
-/** What is wrong with the typed phone number, as a registry message, or null. */
-function findPhoneProblem(phone: string): string | null {
-  if (phone.trim() === '' || !isBlankOrPhoneNumber(phone)) {
-    return ERROR_REGISTRY.EVENT_CONTACT_PHONE_INVALID.message
-  }
-  return null
+/** What is wrong with the typed phone number, as a registry message, or null. A submitted event
+ *  keeps its point of contact, so an empty number is wrong too. */
+function findPhoneProblem(region: PhoneRegion, phone: string): string | null {
+  if (phone.trim() === '') return ERROR_REGISTRY.EVENT_CONTACT_PHONE_INVALID.message
+  const problem = getContactPhoneProblem(region, phone)
+  return problem === null ? null : ERROR_REGISTRY[problem].message
 }
 
 /**
@@ -37,6 +41,7 @@ function findPhoneProblem(phone: string): string | null {
  * from the event page, with no change request. Checked here by story 2.1 AC13's rules before
  * anything is sent (AC4); the server re-checks and logs the old and new values. Once Save has been
  * pressed, each field is re-checked as it is typed in, so a problem clears as soon as it is fixed.
+ * Story 2.1 AC24 (f2.1.4): the phone has the request form's country or region picker and checks.
  */
 export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorProps) {
   const ids = useId()
@@ -44,14 +49,17 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
   const phoneInput = useRef<HTMLInputElement>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [email, setEmail] = useState('')
+  const [phoneRegion, setPhoneRegion] = useState<PhoneRegion>(DEFAULT_PHONE_REGION)
   const [phone, setPhone] = useState('')
   const [isChecked, setIsChecked] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   function startEditing() {
+    const saved = splitContactPhone(event.contact_phone)
     setEmail(event.contact_email ?? '')
-    setPhone(event.contact_phone ?? '')
+    setPhoneRegion(saved.region)
+    setPhone(saved.number)
     setIsChecked(false)
     setSaveError(null)
     setIsEditing(true)
@@ -63,7 +71,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
 
   // Worked out from what is typed now, so they follow every keystroke once Save was pressed.
   const emailProblem = isChecked ? findEmailProblem(email) : null
-  const phoneProblem = isChecked ? findPhoneProblem(phone) : null
+  const phoneProblem = isChecked ? findPhoneProblem(phoneRegion, phone) : null
 
   async function handleSave(submitted: FormEvent<HTMLFormElement>) {
     submitted.preventDefault()
@@ -72,14 +80,15 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
       emailInput.current?.focus()
       return
     }
-    if (findPhoneProblem(phone) !== null) {
+    if (findPhoneProblem(phoneRegion, phone) !== null) {
       phoneInput.current?.focus()
       return
     }
     // Only what changed travels, so an unchanged field is never re-judged.
     const input: PointOfContactInput = {}
+    const savedPhone = composeContactPhone(phoneRegion, phone)
     if (email.trim() !== event.contact_email) input.contact_email = email.trim()
-    if (phone.trim() !== event.contact_phone) input.contact_phone = phone.trim()
+    if (savedPhone !== null && savedPhone !== event.contact_phone) input.contact_phone = savedPhone
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -125,25 +134,28 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
             </span>
           )}
         </label>
-        <label>
-          Contact phone number
-          <input
-            ref={phoneInput}
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            maxLength={CONTACT_PHONE_MAX_LENGTH}
-            value={phone}
-            aria-invalid={phoneProblem !== null ? true : undefined}
-            aria-describedby={phoneProblem !== null ? `${ids}-phone-problem` : undefined}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          {phoneProblem !== null && (
-            <span id={`${ids}-phone-problem`} className="field-error">
-              {phoneProblem}
-            </span>
-          )}
-        </label>
+        <div className="phone-field span-2">
+          <PhoneRegionSelect value={phoneRegion} onChange={setPhoneRegion} />
+          <label>
+            Contact phone number
+            <input
+              ref={phoneInput}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              maxLength={CONTACT_PHONE_MAX_LENGTH}
+              value={phone}
+              aria-invalid={phoneProblem !== null ? true : undefined}
+              aria-describedby={phoneProblem !== null ? `${ids}-phone-problem` : undefined}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            {phoneProblem !== null && (
+              <span id={`${ids}-phone-problem`} className="field-error">
+                {phoneProblem}
+              </span>
+            )}
+          </label>
+        </div>
       </div>
       {saveError && (
         <p role="alert" className="error">

@@ -1,6 +1,13 @@
 import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
+import {
+  CALLING_CODES_DIALLED_WITH_LEADING_ZERO,
+  DEFAULT_PHONE_REGION,
+  MAIN_REGION_BY_CALLING_CODE,
+  PHONE_REGIONS,
+  type PhoneRegion,
+} from './phoneRegions'
 
 /**
  * Story 2.1: the event request form's state and rules, kept apart from the page. Numbers and
@@ -59,6 +66,9 @@ export interface EventFormState {
   /** Story 2.1 AC13: the point of contact, all three needed to submit. */
   contactName: string
   contactEmail: string
+  /** Story 2.1 AC21 (f2.1.4): the phone's country or region, in front of the number. */
+  contactPhoneRegion: PhoneRegion
+  /** The phone number as typed, without its calling code. */
   contactPhone: string
   /** Story 2.1 AC4: true is "no venue requirements"; false with none listed is "not specified". */
   hasNoVenueRequirements: boolean
@@ -82,7 +92,10 @@ export const EMPTY_FACILITY: FacilityDraft = { quantity: '', notes: '' }
 const WHOLE_NUMBER = /^\d+$/
 // Story 2.1 AC13: mirrored from the backend's schemas.
 const EMAIL_ADDRESS = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-const PHONE_NUMBER = /^\+?[\d -]+$/
+/** The number as typed, without its calling code since fix f2.1.4: digits, spaces and dashes. */
+const PHONE_NUMBER = /^[\d -]+$/
+/** Fix f2.1.4 (story 2.1 AC21): what a number may be typed with but is saved without. */
+const PHONE_SEPARATORS = /[ -]/g
 export const CONTACT_NAME_MAX_LENGTH = 200
 export const CONTACT_EMAIL_MAX_LENGTH = 254
 export const CONTACT_PHONE_MAX_LENGTH = 50
@@ -117,6 +130,7 @@ export const EMPTY_EVENT_FORM: EventFormState = {
   attendance: '',
   contactName: '',
   contactEmail: '',
+  contactPhoneRegion: DEFAULT_PHONE_REGION,
   contactPhone: '',
   hasNoVenueRequirements: false,
   venueRequirements: [],
@@ -310,6 +324,7 @@ function textOf(value: string | null): string {
 }
 
 export function formFromEvent(event: EventDetail): EventFormState {
+  const phone = splitContactPhone(event.contact_phone)
   return {
     name: event.name,
     purpose: textOf(event.purpose),
@@ -319,7 +334,8 @@ export function formFromEvent(event: EventDetail): EventFormState {
     attendance: event.expected_attendance === null ? '' : String(event.expected_attendance),
     contactName: textOf(event.contact_name),
     contactEmail: textOf(event.contact_email),
-    contactPhone: textOf(event.contact_phone),
+    contactPhoneRegion: phone.region,
+    contactPhone: phone.number,
     hasNoVenueRequirements: event.venue_none_required,
     venueRequirements: event.venue_requirements.map((requirement, index) =>
       venueRequirementDraftFrom(requirement, event, index === 0),
@@ -368,17 +384,64 @@ export function isBlankOrEmailAddress(value: string): boolean {
   )
 }
 
-/** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. */
-export function isBlankOrPhoneNumber(value: string): boolean {
-  const trimmed = value.trim()
-  if (trimmed === '') return true
-  const digitCount = trimmed.replace(/\D/g, '').length
-  return (
-    trimmed.length <= CONTACT_PHONE_MAX_LENGTH &&
-    PHONE_NUMBER.test(trimmed) &&
-    digitCount >= CONTACT_PHONE_MIN_DIGITS &&
-    digitCount <= CONTACT_PHONE_MAX_DIGITS
+/** Story 2.1 AC21 (f2.1.4): a contact phone as the form holds it. */
+export interface ContactPhone {
+  region: PhoneRegion
+  /** As typed, without the calling code. */
+  number: string
+}
+
+/**
+ * Story 2.1 AC23 (f2.1.4): a saved phone split into the region its calling code names and the
+ * number after it. No calling code begins with another, so every region that matches shares one
+ * code; where several do, the phone opens under libphonenumber's main one. A phone saved with no
+ * calling code opens under Singapore with its whole text, so nothing is lost.
+ */
+export function splitContactPhone(saved: string | null): ContactPhone {
+  const text = textOf(saved)
+  const digits = text.replace(PHONE_SEPARATORS, '').slice(1)
+  const matches = text.startsWith('+')
+    ? PHONE_REGIONS.filter((region) => digits.startsWith(region.callingCode))
+    : []
+  if (matches.length === 0) return { region: DEFAULT_PHONE_REGION, number: text }
+  const { callingCode } = matches[0]
+  const mainRegion = matches.find(
+    (region) => region.code === MAIN_REGION_BY_CALLING_CODE[callingCode],
   )
+  return { region: mainRegion ?? matches[0], number: digits.slice(callingCode.length) }
+}
+
+/**
+ * Story 2.1 AC21 (f2.1.4): the phone as it is saved and shown - "+", the region's calling code and
+ * the number without its spaces and dashes, e.g. +6591234567 - or null when no number is typed.
+ * The server removes spaces and dashes too; doing it here lets an unchanged phone compare equal
+ * to the saved one.
+ */
+export function composeContactPhone(region: PhoneRegion, number: string): string | null {
+  const typed = number.trim()
+  return typed === '' ? null : `+${region.callingCode}${typed.replace(PHONE_SEPARATORS, '')}`
+}
+
+/**
+ * Story 2.1 AC13/AC21/AC22 (f2.1.4): what is wrong with the contact phone, or null; blank is fine
+ * on a draft. The picker supplies the calling code, so a "+" in the number is wrong, and so is a 0
+ * at its start unless the region's numbers keep it when dialled from abroad. AC13's 8 to 15 digits
+ * are counted with the calling code, as the phone is saved, so changing the region can change the
+ * answer.
+ */
+export function getContactPhoneProblem(region: PhoneRegion, number: string): ErrorCode | null {
+  const typed = number.trim()
+  if (typed === '') return null
+  if (typed.includes('+')) return 'EVENT_CONTACT_PHONE_CALLING_CODE'
+  if (!PHONE_NUMBER.test(typed)) return 'EVENT_CONTACT_PHONE_INVALID'
+  const digits = typed.replace(PHONE_SEPARATORS, '')
+  if (digits.startsWith('0') && !CALLING_CODES_DIALLED_WITH_LEADING_ZERO.has(region.callingCode)) {
+    return 'EVENT_CONTACT_PHONE_LEADING_ZERO'
+  }
+  const digitCount = region.callingCode.length + digits.length
+  return digitCount >= CONTACT_PHONE_MIN_DIGITS && digitCount <= CONTACT_PHONE_MAX_DIGITS
+    ? null
+    : 'EVENT_CONTACT_PHONE_INVALID'
 }
 
 /**
@@ -447,9 +510,8 @@ export function validateEventForm(
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     return { code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail }
   }
-  if (!isBlankOrPhoneNumber(form.contactPhone)) {
-    return { code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone }
-  }
+  const phoneProblem = getContactPhoneProblem(form.contactPhoneRegion, form.contactPhone)
+  if (phoneProblem !== null) return { code: phoneProblem, fieldId: FIELD_ID.contactPhone }
   return validateRequirements(form, availability, isEquipmentLeftOut)
 }
 
@@ -564,9 +626,8 @@ export function getLiveProblems(
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     problems[FIELD_ID.contactEmail] = 'EVENT_CONTACT_EMAIL_INVALID'
   }
-  if (!isBlankOrPhoneNumber(form.contactPhone)) {
-    problems[FIELD_ID.contactPhone] = 'EVENT_CONTACT_PHONE_INVALID'
-  }
+  const phoneProblem = getContactPhoneProblem(form.contactPhoneRegion, form.contactPhone)
+  if (phoneProblem !== null) problems[FIELD_ID.contactPhone] = phoneProblem
   // Story 2.7: every venue requirement problem, said next to its field as it is typed (AC5, AC6,
   // AC9, AC10) - the same rules a save is refused for.
   for (const problem of getVenueRequirementProblems(form)) {
@@ -801,7 +862,7 @@ export function eventInputFrom(form: EventFormState): EventInput {
     expected_attendance: form.attendance.trim() === '' ? null : Number(form.attendance),
     contact_name: textOrNull(form.contactName),
     contact_email: textOrNull(form.contactEmail),
-    contact_phone: textOrNull(form.contactPhone),
+    contact_phone: composeContactPhone(form.contactPhoneRegion, form.contactPhone),
     venue_requirements: hasNoVenueNeeds
       ? []
       : form.venueRequirements.map((requirement) => ({

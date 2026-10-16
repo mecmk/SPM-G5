@@ -77,6 +77,8 @@ export type ErrorCode =
   | 'EVENT_QUANTITY_INVALID'
   | 'EVENT_CONTACT_EMAIL_INVALID'
   | 'EVENT_CONTACT_PHONE_INVALID'
+  | 'EVENT_CONTACT_PHONE_CALLING_CODE'
+  | 'EVENT_CONTACT_PHONE_LEADING_ZERO'
   | 'EVENT_PICTURE_TYPE_INVALID'
   | 'EVENT_PICTURE_TOO_LARGE'
   | 'EVENT_REGISTRATION_DATE_INCOMPLETE'
@@ -445,6 +447,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_CONTACT_PHONE_INVALID: {
     title: 'Check the contact phone number',
     message: 'Enter a phone number with 8 to 15 digits.',
+  },
+  /** Story 2.1 AC22 (f2.1.4): the picker supplies the calling code, so it is not typed. */
+  EVENT_CONTACT_PHONE_CALLING_CODE: {
+    title: 'Check the contact phone number',
+    message: 'Type the number without its calling code; choose the country or region instead.',
+  },
+  /** Story 2.1 AC22 (f2.1.4): a 0 dialled only inside the country, which the calling code replaces. */
+  EVENT_CONTACT_PHONE_LEADING_ZERO: {
+    title: 'Check the contact phone number',
+    message:
+      'This is not an accepted phone number. Leave out the 0 at the start: it is not dialled after the calling code.',
   },
   /** Story 2.1 AC14. */
   EVENT_PICTURE_TYPE_INVALID: {

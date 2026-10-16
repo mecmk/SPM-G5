@@ -70,6 +70,8 @@ CONTACT_PHONE_INVALID_MESSAGE = "Enter a phone number with 8 to 15 digits."
 CLARIFICATION_MESSAGE_MAX_LENGTH = 2000
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PHONE_PATTERN = re.compile(r"^\+?[\d -]+$")
+# Fix f2.1.4 (story 2.1 AC21): what a phone may be typed with but is saved without.
+_PHONE_SEPARATORS = re.compile(r"[ -]")
 
 
 # --- review queue (story 4.1) --------------------------------------------------------------
@@ -350,6 +352,10 @@ class _EventRequestRules(BaseModel):
     @field_validator("contact_phone", check_fields=False)
     @classmethod
     def _check_contact_phone(cls, value: str | None):
+        """2.1 AC13: judged as typed. Fix f2.1.4 (AC21, AC24): saved without its spaces and dashes,
+        e.g. +6591234567, by every write that shares these rules - the request form, the 7.2
+        correction and the 19.1 point-of-contact update - so the same number typed another way
+        compares equal to the saved one and is no change (AC23)."""
         if value is None:
             return value
         digits = sum(char.isdigit() for char in value)
@@ -360,7 +366,7 @@ class _EventRequestRules(BaseModel):
         )
         if not is_valid:
             raise ValueError(CONTACT_PHONE_INVALID_MESSAGE)
-        return value
+        return _PHONE_SEPARATORS.sub("", value)
 
     @model_validator(mode="after")
     def _check_lists(self):

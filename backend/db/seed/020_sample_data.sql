@@ -132,11 +132,11 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..02: under review, assigned to Chloe, waiting for her decision
     ('33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-08 10:15+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-08 10:15+08', NULL, NULL, NULL),
     -- 3333..03: in planning and assigned; has an approved venue booking
     ('33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Nimbus Developer Conference', 'Annual customer conference', 'Keynotes in the morning, breakout tracks after lunch.', NULL, '2026-11-25 09:00+08', '2026-11-25 18:00+08', 350, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, TRUE, 350, '2026-11-20 18:00+08', 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-01 09:00+08', '2026-09-03 14:30+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..04: rejected with a reason
     ('33333333-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Rooftop Networking Night', 'Networking', NULL, NULL, '2026-10-30 19:00+08', '2026-10-30 23:00+08', 120, 'REJECTED',
@@ -144,64 +144,64 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..05: under review, assigned to Chloe (more review-queue test data)
     ('33333333-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Nimbus Leadership Offsite', 'Internal meeting', 'Quarterly leadership planning session.', NULL, '2026-12-02 09:00+08', '2026-12-02 16:00+08', 25, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-10 08:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-10 08:00+08', NULL, NULL, NULL),
     -- 3333..06: sent back for clarification, assigned to Chloe
     ('33333333-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Diversity & Inclusion Forum', 'Community outreach', 'Panel discussion and workshops on workplace inclusion.', NULL, '2026-11-05 09:30+08', '2026-11-05 15:00+08', 150, 'CLARIFICATION_REQUESTED',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-03 09:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-03 09:00+08', NULL, NULL, NULL),
     -- 3333..07: under review, assigned to Chloe, proposed before Data Literacy Workshop but submitted after it
     ('33333333-0000-0000-0000-000000000007', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Wellness Week Kickoff', 'Wellbeing', 'Morning of fitness taster sessions and a healthy breakfast.', NULL, '2026-10-20 08:00+08', '2026-10-20 12:00+08', 80, 'UNDER_REVIEW',
-     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-15 14:00+08', NULL, NULL, NULL),
+     '11111111-0000-0000-0000-000000000003', 'Exhibition Foyer', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-15 14:00+08', NULL, NULL, NULL),
     -- 3333..08: in planning and assigned to Carl; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Annual Wellness Summit', 'Company-wide wellness and mental health awareness day', 'Talks, workshops and screening booths for staff wellbeing.', NULL, '2026-12-03 09:00+08', '2026-12-03 17:00+08', 180, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-10 09:00+08', '2026-09-12 10:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..09: in planning and assigned to Chloe; has a pending venue booking (story 13.1 queue data)
     ('33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Product Roadmap Townhall', 'Quarterly roadmap briefing for customers and partners', 'Livestreamed briefing with Q&A for remote offices.', NULL, '2027-01-15 10:00+08', '2027-01-15 12:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-14 09:00+08', '2026-09-16 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-14 09:00+08', '2026-09-16 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..10: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (queue card) - no other test/assertion reads this row, since the
     -- e2e run's fullyParallel database is shared and approving it would break story 13.1's
     -- queue assertions if it were one of their rows.
     ('33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Founders Day Fireside Chat', 'A conversation with the founders', 'Casual fireside chat and Q&A for all staff.', NULL, '2027-06-01 15:00+08', '2027-06-01 17:00+08', 200, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-10 09:00+08', '2026-09-12 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..11: in planning and assigned to Carl; pending venue booking dedicated to the story
     -- 13.2 approve e2e test (detail page) - see 3333..10's note.
     ('33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Investor Demo Day', 'Quarterly investor product demo', 'Live product walkthrough for the board and investors.', NULL, '2027-07-01 09:00+08', '2027-07-01 12:00+08', 100, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-11 09:00+08', '2026-09-13 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..16: in planning and assigned to Chloe; pending venue booking dedicated to the story
     -- 13.2.1 reject e2e test (queue card) - see 3333..10's note above for why this needs its
     -- own row rather than reusing an existing PENDING booking.
     ('33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Winter Charity Gala', 'Annual fundraising dinner', 'Formal dinner and silent auction for the winter appeal.', NULL, '2027-08-01 18:00+08', '2027-08-01 22:00+08', 220, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..17: in planning and assigned to Carl; pending venue booking dedicated to the story
     -- 13.2.1 reject e2e test (detail page) - see 3333..16's note.
     ('33333333-0000-0000-0000-000000000017', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Alumni Homecoming Weekend', 'Alumni relations', 'Campus tours and an evening showcase for returning alumni.', NULL, '2027-09-01 09:00+08', '2027-09-01 17:00+08', 100, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..12-15: one event in each of the four statuses story 6.1 adds to the visible/status
     -- model (PLANNING, CONFIRMED, COMPLETED, CANCELLED) - none were seeded before, so the
     -- coordinator's assigned-events list had nothing to show for them.
     ('33333333-0000-0000-0000-000000000012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Regional Sales Summit', 'Sales enablement', 'Two-day summit for the regional sales teams.', NULL, '2026-12-15 09:00+08', '2026-12-16 17:00+08', 220, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..13: confirmed - venue and equipment arranged, event still in the future
     ('33333333-0000-0000-0000-000000000013', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Partner Appreciation Dinner', 'Partner relations', 'A formal dinner thanking key channel partners.', NULL, '2027-02-10 18:30+08', '2027-02-10 22:00+08', 90, 'CONFIRMED',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..14: completed - its date has already passed relative to "today" in this dataset
     ('33333333-0000-0000-0000-000000000014', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'New Year Town Hall', 'All-hands briefing', 'Company-wide briefing on the year ahead.', NULL, '2026-08-01 09:00+08', '2026-08-01 11:00+08', 300, 'COMPLETED',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-06-20 09:00+08', '2026-06-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-06-20 09:00+08', '2026-06-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..15: cancelled after being arranged
     ('33333333-0000-0000-0000-000000000015', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Summer Rooftop Mixer', 'Team social', 'An evening social mixer on the rooftop terrace.', NULL, '2026-10-05 18:00+08', '2026-10-05 21:00+08', 60, 'CANCELLED',
-     '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..18: in planning and assigned to Chloe; dedicated to story 11.1's e2e spec
     -- (tests/e2e/venue-suitability.spec.ts), which judges venues for its one venue requirement
     -- and is refused for want of a justification. Since story 12.5 a requirement takes one
@@ -209,55 +209,55 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- 3333..33, and story 12.1's has 3333..31.
     ('33333333-0000-0000-0000-000000000018', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Quarterly Partner Briefing', 'Partner relations', 'Pricing and roadmap update for channel partners.', NULL, '2027-03-10 09:00+08', '2027-03-10 12:00+08', 60, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-16 09:00+08', '2026-09-18 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..19 and 3333..20: in planning and assigned to Chloe; dedicated to story 15.1's e2e spec
     -- (tests/e2e/equipment-requests.spec.ts). Dated May 2027, clear of the periods backend tests
     -- build relative to today, so their equipment holds change no figure another test asserts.
     -- 19's equipment is changed by that spec's flow; 20's is only read.
     ('33333333-0000-0000-0000-000000000019', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Robotics Hands-on Workshop', 'Staff training', 'A day of building and programming small robots in teams.', NULL, '2027-05-12 09:00+08', '2027-05-12 17:00+08', 40, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000000020', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Product Launch Showcase', 'Product launch', 'Demonstrations of the new product line for key customers.', NULL, '2027-05-19 09:00+08', '2027-05-19 17:00+08', 120, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-21 09:00+08', '2026-09-23 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+6561112233', '2026-09-21 09:00+08', '2026-09-23 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..21: in planning and assigned to Chloe; dedicated to story 15.2's e2e spec
     -- (tests/e2e/equipment-queue.spec.ts), which only reads it. Dated June 2027, clear of 15.1's
     -- events and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000021', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Regional Partner Roadshow', 'Partner relations', 'A day of product sessions for regional reseller partners.', NULL, '2027-06-16 09:00+08', '2027-06-16 17:00+08', 80, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-25 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-24 09:00+08', '2026-09-25 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..22-26: in planning, split between Chloe and Carl, dated July-November 2027; more of
     -- story 15.2's e2e queue, read only. 22 and 23 overlap on 7 July, so each one's wireless
     -- microphones count against the other's.
     ('33333333-0000-0000-0000-000000000022', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Fintech Leaders Breakfast', 'Client networking', 'A breakfast briefing on payments regulation for banking clients.', NULL, '2027-07-07 08:00+08', '2027-07-07 11:00+08', 45, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-27 09:00+08', '2026-09-28 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-27 09:00+08', '2026-09-28 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000023', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Customer Success Forum', 'Customer engagement', 'Talks and workshops on getting the most from the platform.', NULL, '2027-07-07 10:00+08', '2027-07-07 17:00+08', 150, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-27 10:00+08', '2026-09-28 10:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-27 10:00+08', '2026-09-28 10:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000000024', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Annual Sales Kickoff', 'Staff conference', 'The sales team''s yearly kickoff: targets, awards and product training.', NULL, '2027-08-18 09:00+08', '2027-08-18 18:00+08', 220, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-28 09:00+08', '2026-09-29 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-28 09:00+08', '2026-09-29 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000025', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Graduate Recruitment Fair', 'Recruitment', 'Employer booths and talks for final-year students.', NULL, '2027-09-22 10:00+08', '2027-09-22 16:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-09-30 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-29 09:00+08', '2026-09-30 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000000026', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Year-End Partner Gala', 'Partner relations', 'A dinner and awards evening for the year''s top partners.', NULL, '2027-11-26 18:00+08', '2027-11-26 23:00+08', 180, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-30 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-30 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..27: in planning and assigned to Chloe; dedicated to story 16.1's e2e spec
     -- (tests/e2e/equipment-decisions.spec.ts), which accepts and declines its items. Runs over two
     -- days, 8-9 December 2027, so the spec sees a period over more than one day named in full; clear
     -- of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Leadership Offsite', 'Staff conference', 'Two days of strategy sessions for senior leaders.', NULL, '2027-12-08 09:00+08', '2027-12-09 17:00+08', 40, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..28: in planning and assigned to Chloe; dedicated to story 8.4's e2e spec
     -- (tests/e2e/venue-requirement-search.spec.ts), which only reads it. Its three venue
     -- requirements (below) each find different venues, so choosing one visibly changes the results.
     -- Dated March 2028, clear of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Smart Cities Expo', 'Industry exhibition', 'Two days of keynotes, breakout workshops and an exhibition of smart-city projects.', NULL, '2028-03-14 09:00+08', '2028-03-15 18:00+08', 300, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-05 09:00+08', '2026-10-07 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-05 09:00+08', '2026-10-07 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..29 and 3333..30: in planning and assigned to Chloe; dedicated to story 12.5's e2e spec
     -- (tests/e2e/venue-requirement-booking.spec.ts), which sends real requests for them, so 8.4's
     -- read-only Expo above is never changed. 29 records three venue requirements and no bookings;
@@ -265,23 +265,23 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000029', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Urban Mobility Forum', 'Industry forum', 'Two days of exhibits, workshops and an evening of networking on city transport.', NULL, '2028-04-11 09:00+08', '2028-04-12 17:00+08', 200, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 09:00+08', '2026-10-08 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-06 09:00+08', '2026-10-08 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000000030', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Coastal Resilience Workshop', 'Partner workshop', 'A morning working session on flood planning with partner agencies.', NULL, '2028-06-06 09:00+08', '2028-06-06 12:00+08', 12, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 10:00+08', '2026-10-08 10:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-06 10:00+08', '2026-10-08 10:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..31: in planning and assigned to Chloe; dedicated to story 12.1's e2e request that is
     -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1. Since story 12.5 a
     -- venue requirement takes one request at a time, so it has an event of its own rather than
     -- sharing 3333..18's, which story 11.1's spec requests a venue for. Dated May 2028.
     ('33333333-0000-0000-0000-000000000031', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Sales Onboarding Day', 'Staff training', 'A day of product training for new sales starters.', NULL, '2028-05-17 09:00+08', '2028-05-17 17:00+08', 40, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 11:00+08', '2026-10-08 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-06 11:00+08', '2026-10-08 11:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..32: in planning and assigned to Chloe; dedicated to story 12.5's e2e spec, which
     -- requests venues for it and then withdraws and switches them from the catalogue (decided
     -- 11 Oct 2026). Three venue requirements and no bookings, dated July 2028.
     ('33333333-0000-0000-0000-000000000032', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbourfront Trade Fair', 'Trade fair', 'A day of exhibitor stands, buyer training and an evening reception.', NULL, '2028-07-19 09:00+08', '2028-07-19 20:00+08', 150, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-06 12:00+08', '2026-10-08 12:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-06 12:00+08', '2026-10-08 12:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..33: in planning and assigned to Chloe; dedicated to story 11.1's e2e request that is
     -- really sent with a justification (tests/e2e/venue-suitability.spec.ts), to Exhibition
     -- Foyer. Shaped like 3333..18 - one Main venue for 60 people, Classroom with a projector -
@@ -290,32 +290,32 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- where that one's did in Venue Staff's queue, which lists the soonest first.
     ('33333333-0000-0000-0000-000000000033', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Reseller Pricing Clinic', 'Partner relations', 'A morning of pricing questions from reseller partners.', NULL, '2027-03-17 09:00+08', '2027-03-17 12:00+08', 60, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-09 09:00+08', '2026-10-11 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-09 09:00+08', '2026-10-11 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..34: in planning and assigned to Chloe; dedicated to story 12.7's e2e spec
     -- (tests/e2e/venue-hold-expiry.spec.ts). Its one venue requirement's booking expired before
     -- the event was confirmed (below), and the spec requests a venue for it again. Dated July 2028.
     ('33333333-0000-0000-0000-000000000034', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Community Craft Fair', 'Community event', 'Stalls for local makers, with a workshop corner.', NULL, '2028-07-12 10:00+08', '2028-07-12 16:00+08', 120, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..35 and 3333..36: awaiting the Safety Officer's check, for story 21.1. The 35 expects
     -- more people than its one approved venue holds, at a venue whose operating hours are not
     -- recorded. The 36 is within capacity and was sent back once by the officer
     -- (event_safety_reviews below), when it had fewer people and microphones than it has now.
     ('33333333-0000-0000-0000-000000000035', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbour Lights Concert', 'Community event', 'An evening concert on the foyer floor.', NULL, '2028-08-16 18:00+08', '2028-08-16 22:00+08', 300, 'AWAITING_SAFETY_CHECK',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-28 09:00+08', '2026-09-30 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', FALSE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-28 09:00+08', '2026-09-30 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Riverside Book Fair', 'Community event', 'Publisher stalls with author talks through the day.', NULL, '2028-08-23 10:00+08', '2028-08-23 17:00+08', 150, 'AWAITING_SAFETY_CHECK',
-     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..37 and 3333..38: reviewed by the Safety Officer and no longer awaiting the check, for
     -- story 21.1's Accepted and Declined tabs. The 37 was approved and is now Confirmed; the 38
     -- was sent back to Planning and not sent again. Neither has a venue booked.
     ('33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Marina Food Festival', 'Community event', 'Food stalls along the waterfront promenade.', NULL, '2028-09-02 11:00+08', '2028-09-02 21:00+08', 200, 'CONFIRMED',
-     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Lantern Night Walk', 'Community event', 'A guided evening walk with paper lanterns.', NULL, '2028-09-09 19:00+08', '2028-09-09 22:00+08', 80, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..46: in planning and assigned to Chloe; dedicated to fix f12.1.2's e2e request that is
     -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1, with a setup that
     -- starts before the room opens at 08:00. One Main venue for 30 people, Classroom with a
@@ -325,15 +325,15 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- that page: no further pending request dated before September 2027 can be added there.
     ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Supplier Induction Morning', 'Supplier onboarding', 'A morning briefing for newly contracted suppliers.', NULL, '2027-02-03 09:00+08', '2027-02-03 12:00+08', 30, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..60 and 3333..61: story 9.4's e2e spec. Each is Planning with one pending request, at a
     -- venue of its own (2222..07 and 2222..08), so a closure marks only that request.
     ('33333333-0000-0000-0000-000000000060', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Community Choir Showcase', 'Community event', 'An evening of choirs from across the neighbourhood.', NULL, '2028-10-14 18:00+08', '2028-10-14 21:00+08', 150, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Waterfront', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+     '11111111-0000-0000-0000-000000000003', 'Waterfront', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000000061', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Neighbourhood Art Market', 'Community event', 'Local artists sell prints, ceramics and zines.', NULL, '2028-10-21 10:00+08', '2028-10-21 16:00+08', 60, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', 'Tower C', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-01 10:00+08', '2026-10-02 10:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', 'Tower C', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-10-01 10:00+08', '2026-10-02 10:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -363,31 +363,31 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbourfront Jazz Evening', 'Community event', 'Live jazz on the waterfront, with food stalls in the foyer.', '2028-10-07 19:00+08', '2028-10-07 22:00+08', 120, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-05 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
     ('33333333-0000-0000-0000-000000000040', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Design Thinking Masterclass', 'Professional development', 'A hands-on day of design thinking exercises.', '2028-10-14 09:00+08', '2028-10-14 17:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-12 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
     ('33333333-0000-0000-0000-000000000041', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Startup Founders Fireside', 'Community event', 'Three founders on their first five years.', '2028-10-21 18:30+08', '2028-10-21 20:30+08', 80, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-20 12:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
     ('33333333-0000-0000-0000-000000000042', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Career Mentoring Slot', 'Professional development', 'One hour with a senior mentor.', '2028-10-28 10:00+08', '2028-10-28 11:00+08', 1, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-27 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
     ('33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Portfolio Review Slot', 'Professional development', 'One portfolio, reviewed by a design lead.', '2028-11-04 10:00+08', '2028-11-04 11:00+08', 1, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-11-03 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
     ('33333333-0000-0000-0000-000000000044', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Autumn Wine Appreciation', 'Community event', 'Six wines from three regions, with a sommelier.', '2028-11-11 18:00+08', '2028-11-11 21:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-01 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
     ('33333333-0000-0000-0000-000000000045', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Lunar New Year Market', 'Community event', 'Festive stalls, lion dance and calligraphy.', '2028-01-26 10:00+08', '2028-01-26 18:00+08', 250, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, '2028-01-10 10:00+08', '2028-01-24 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08')
+     'Omar Organiser', 'organiser@nimbus.example', '+6562223344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description,
