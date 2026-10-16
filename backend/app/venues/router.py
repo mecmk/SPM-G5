@@ -153,7 +153,7 @@ def get_venue_calendar(
 @router.get(
     "/{venue_id}/unavailability/affected-bookings",
     response_model=list[AffectedBookingOut],
-    dependencies=[CanManageUnavailability],
+    dependencies=[CanManageUnavailability, ReleaseLapsedHolds],
 )
 def list_affected_bookings(
     venue_id: uuid.UUID,
@@ -177,6 +177,7 @@ def list_affected_bookings(
     "/{venue_id}/unavailability",
     response_model=VenueUnavailabilityOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[ReleaseLapsedHolds],
 )
 def add_unavailability(
     venue_id: uuid.UUID,
@@ -191,12 +192,18 @@ def add_unavailability(
         )
     except service.VenueNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
-    except (service.InvalidDateRange, service.DescriptionRequired) as exc:
+    except service.InvalidDateRange as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.DescriptionRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return VenueUnavailabilityOut.from_period(period)
 
 
-@router.patch("/{venue_id}/unavailability/{period_id}", response_model=VenueUnavailabilityOut)
+@router.patch(
+    "/{venue_id}/unavailability/{period_id}",
+    response_model=VenueUnavailabilityOut,
+    dependencies=[ReleaseLapsedHolds],
+)
 def edit_unavailability(
     venue_id: uuid.UUID,
     period_id: uuid.UUID,
@@ -205,21 +212,32 @@ def edit_unavailability(
     actor: Annotated[CurrentUser, CanManageUnavailability],
 ) -> VenueUnavailabilityOut:
     """Story 9.4 AC6/AC9: edit a period, or end one in force with ``{"end_now": true}``, which
-    sets its end to the server's now (409 if it has not started or has already ended)."""
+    sets its end to the server's now (409 if it has not started or has already ended). An ended
+    period is not edited (409), nor is the start of one in force moved (409)."""
     try:
         period = service.edit_unavailability(
             db, venue_id, period_id, payload, actor=actor, now=datetime.now(UTC)
         )
     except service.UnavailabilityNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, UNAVAILABILITY_NOT_FOUND_MESSAGE) from None
-    except (service.InvalidDateRange, service.DescriptionRequired) as exc:
+    except service.InvalidDateRange as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
-    except (service.PeriodNotStarted, service.PeriodAlreadyEnded) as exc:
+    except service.DescriptionRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.PeriodNotStarted as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.PeriodAlreadyEnded as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.PeriodStartLocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return VenueUnavailabilityOut.from_period(period)
 
 
-@router.delete("/{venue_id}/unavailability/{period_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{venue_id}/unavailability/{period_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[ReleaseLapsedHolds],
+)
 def remove_unavailability(
     venue_id: uuid.UUID,
     period_id: uuid.UUID,

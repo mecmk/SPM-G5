@@ -422,6 +422,7 @@ UNKNOWN_REASON_MESSAGE = (
 NOTHING_TO_CHANGE_MESSAGE = "Send at least one change."
 END_NOW_ALONE_MESSAGE = "Ending a period now cannot be combined with other changes."
 FIELD_CANNOT_BE_EMPTY_MESSAGE = "A period's start, end and reason cannot be left empty."
+END_NOW_MUST_BE_TRUE_MESSAGE = "To end a period now, send end_now as true."
 
 
 def _known_reason(value: str) -> str:
@@ -447,7 +448,7 @@ class VenueUnavailabilityCreate(BaseModel):
 
     @field_validator("description", mode="before")
     @classmethod
-    def _normalize_description(cls, value):
+    def _normalize_description(cls, value: str | None) -> str | None:
         return _blank_to_none(value)
 
 
@@ -469,14 +470,16 @@ class VenueUnavailabilityUpdate(BaseModel):
 
     @field_validator("description", mode="before")
     @classmethod
-    def _normalize_description(cls, value):
+    def _normalize_description(cls, value: str | None) -> str | None:
         return _blank_to_none(value)
 
     @model_validator(mode="after")
-    def _check_what_was_sent(self):
+    def _check_what_was_sent(self) -> VenueUnavailabilityUpdate:
         sent = self.model_fields_set
         if not sent:
             raise ValueError(NOTHING_TO_CHANGE_MESSAGE)
+        if "end_now" in sent and self.end_now is None:
+            raise ValueError(END_NOW_MUST_BE_TRUE_MESSAGE)
         if self.end_now is not None:
             if sent != {"end_now"}:
                 raise ValueError(END_NOW_ALONE_MESSAGE)
