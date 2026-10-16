@@ -39,7 +39,7 @@ from app.notifications.models import Notification
 from app.notifications.service import NotificationType
 from app.venues import service as venue_service
 from app.venues.models import Venue, VenueUnavailabilityPeriod
-from app.venues.schemas import VenueUnavailabilityCreate
+from app.venues.schemas import VenueUnavailabilityCreate, VenueUnavailabilityUpdate
 from tests.support.factories import (
     approval_payload,
     make_booking,
@@ -1028,7 +1028,9 @@ def _write(client, method: str, venue_id: uuid.UUID, period_id: uuid.UUID):
 
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.parametrize("method", WRITES)
-@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
+@pytest.mark.parametrize(
+    "role", [Users.COORDINATOR, Users.LEAD, Users.TECH_SUPPORT, Users.SAFETY_OFFICER]
+)
 def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method):
     """AC9: 403, and the period is as it was. A period already exists so PATCH and DELETE
     have something to refuse. The Safety Officer (21.1) is a guard, cannot fail first: 21.1 gives
@@ -1040,7 +1042,9 @@ def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method)
 
     assert response.status_code == 403, response.text
     (stored,) = _periods(db, venue.id)
-    assert (stored.reason, stored.notes) == ("MAINTENANCE", period.notes)
+    # The factory's default description, written out, so the assertion compares with a value
+    # and not with the row it is checking.
+    assert (stored.reason, stored.notes) == ("MAINTENANCE", "Closed for testing")
 
 
 @pytest.mark.story("9.4", ac=9)
@@ -1063,7 +1067,15 @@ def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, 
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.story("9.4", ac=2)
 @pytest.mark.parametrize(
-    "role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER, Users.ORGANISER, None]
+    "role",
+    [
+        Users.COORDINATOR,
+        Users.LEAD,
+        Users.TECH_SUPPORT,
+        Users.SAFETY_OFFICER,
+        Users.ORGANISER,
+        None,
+    ],
 )
 def test_only_venue_staff_may_preview(db, login_as, role):
     """AC2: the preview is part of marking a venue unavailable, so it is Venue Staff's. The
@@ -1081,7 +1093,9 @@ def test_only_venue_staff_may_preview(db, login_as, role):
 
 
 @pytest.mark.story("9.4", ac=9)
-@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
+@pytest.mark.parametrize(
+    "role", [Users.COORDINATOR, Users.LEAD, Users.TECH_SUPPORT, Users.SAFETY_OFFICER]
+)
 def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role):
     """AC9. cannot fail first, for the read half: 9.1 already shows a closure's reason to
     these roles, and the Safety Officer (21.1) has venues:read and venue_calendar:read through
@@ -2099,92 +2113,8 @@ def test_a_completed_events_status_and_notices_are_untouched(db, venue_staff_cli
     assert len(_told(db, reached.id)) == 2
 
 
-# --- 10.5: the save and the confirmation of one event, at the same moment ---------------------
-@pytest.mark.story("9.4", ac=3)
-def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engine):
-    """AC10. Real concurrent transactions, so this test commits and cleans up after
-    itself. The save returns a Confirmed event to Planning; at the same moment another
-    transaction confirms that event again, which fires trg_events_complete_venue_holds and
-    updates the event's approved bookings. The save locks the event before its bookings, as the
-    confirmation does, so neither waits on the other for ever: both finish within the timeout,
-    the booking is marked, the event's return to Planning is recorded, and the hold the
-    confirmation completes stays completed."""
-    expiry = datetime.now(UTC) + timedelta(days=1)
-    with Session(engine) as session:
-        venue = make_venue(session)
-        event = _event_for(session, EventStatus.CONFIRMED)
-        booking = _pending_of(
-            session,
-            event,
-            venue.id,
-            _day(3),
-            status="APPROVED",
-            hold_expires_at=expiry,
-        )
-        session.commit()
-        venue_id, event_id, booking_id = venue.id, event.id, booking.id
-    start = threading.Barrier(2)
-    data = VenueUnavailabilityCreate(
-        starts_at=_day(2), ends_at=_day(7), reason="MAINTENANCE", description="Servicing"
-    )
-
-    def save() -> None:
-        with Session(engine) as session:
-            staff = session.get(User, STAFF_ID)
-            start.wait()
-            venue_service.add_unavailability(
-                session, venue_id, data, actor=staff, now=datetime.now(UTC)
-            )
-
-    def confirm() -> None:
-        with Session(engine) as session:
-            start.wait()
-            session.execute(
-                update(Event).where(Event.id == event_id).values(status=EventStatus.PLANNING)
-            )
-            session.execute(
-                update(Event).where(Event.id == event_id).values(status=EventStatus.CONFIRMED)
-            )
-            session.commit()
-
-    try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            saving = pool.submit(save)
-            confirming = pool.submit(confirm)
-            saving.result(timeout=30)
-            confirming.result(timeout=30)
-
-        with Session(engine) as session:
-            row = session.get(VenueBooking, booking_id)
-            assert row.venue_unavailable_marked_at is not None
-            assert row.hold_completed_at is not None
-            assert session.get(Event, event_id).status in (
-                EventStatus.PLANNING,
-                EventStatus.CONFIRMED,
-            )
-            returned = [
-                history
-                for history in session.scalars(
-                    select(EventStatusHistory).where(EventStatusHistory.event_id == event_id)
-                )
-                if history.changed_by_id == STAFF_ID
-                and (history.from_status, history.to_status)
-                == (EventStatus.CONFIRMED, EventStatus.PLANNING)
-            ]
-            assert len(returned) == 1
-    finally:
-        with Session(engine) as session:
-            session.execute(
-                delete(AuditLog).where(
-                    AuditLog.entity_id.in_([booking_id, event_id])
-                    | (AuditLog.details["venue_id"].astext == str(venue_id))
-                )
-            )
-            session.execute(delete(Notification).where(Notification.event_id == event_id))
-            session.execute(delete(VenueBooking).where(VenueBooking.id == booking_id))
-            session.execute(delete(Event).where(Event.id == event_id))
-            session.execute(delete(Venue).where(Venue.id == venue_id))
-            session.commit()
+# (The save and the confirmation of one event, at the same moment, is with the AC10 races
+# below: it needs their lock-watching helpers.)
 
 
 # =====================================================================================
@@ -2521,6 +2451,132 @@ def test_a_save_that_wins_the_lock_refuses_the_approval_that_waited(engine):
 
 
 @pytest.mark.story("9.4", ac=10)
+def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engine):
+    """AC10. Real concurrent transactions, so this test commits and cleans up after itself. The
+    confirmation holds the event's row (it sets the event to Confirmed again, which fires
+    trg_events_complete_venue_holds and updates its approved bookings); the save, which returns a
+    Confirmed event to Planning, waits on that row; the confirmation commits and the save goes on.
+    The save locks the event before its bookings, as the confirmation does, so neither waits on
+    the other for ever: both finish, the booking is marked, the event's return to Planning is
+    recorded once, and the hold the confirmation completed stays completed."""
+    expiry = datetime.now(UTC) + timedelta(days=1)
+    with Session(engine) as session:
+        venue = make_venue(session)
+        event = _event_for(session, EventStatus.CONFIRMED)
+        booking = _pending_of(
+            session, event, venue.id, _day(3), status="APPROVED", hold_expires_at=expiry
+        )
+        session.commit()
+        venue_id, event_id, booking_id = venue.id, event.id, booking.id
+    data = VenueUnavailabilityCreate(
+        starts_at=_day(2), ends_at=_day(7), reason="MAINTENANCE", description="Servicing"
+    )
+    pids: dict[str, int] = {}
+    holding = threading.Event()
+
+    def confirm() -> None:
+        with Session(engine) as session:
+            pids["confirm"] = _backend_pid(session)
+            for status in (EventStatus.PLANNING, EventStatus.CONFIRMED):
+                session.execute(update(Event).where(Event.id == event_id).values(status=status))
+            holding.set()
+            _wait_until(engine, pids, "save")
+            session.commit()
+
+    def save() -> None:
+        with Session(engine) as session:
+            pids["save"] = _backend_pid(session)
+            assert holding.wait(LOCK_WAIT_SECONDS)
+            venue_service.add_unavailability(
+                session, venue_id, data, actor=session.get(User, STAFF_ID), now=datetime.now(UTC)
+            )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            confirming = pool.submit(confirm)
+            saving = pool.submit(save)
+            confirming.result(timeout=40)
+            saving.result(timeout=40)
+
+        with Session(engine) as session:
+            row = session.get(VenueBooking, booking_id)
+            assert row.venue_unavailable_marked_at is not None
+            assert row.hold_completed_at is not None
+            assert session.get(Event, event_id).status == EventStatus.PLANNING
+            returned = [
+                history
+                for history in session.scalars(
+                    select(EventStatusHistory).where(EventStatusHistory.event_id == event_id)
+                )
+                if history.changed_by_id == STAFF_ID
+                and (history.from_status, history.to_status)
+                == (EventStatus.CONFIRMED, EventStatus.PLANNING)
+            ]
+            assert len(returned) == 1
+    finally:
+        _remove_race_rows(engine, venue_id, event_id, booking_id)
+
+
+@pytest.mark.story("9.4", ac=10)
+def test_two_saves_at_once_leave_a_booking_flagged_while_a_period_still_covers_it(engine):
+    """AC10, two saves on one venue. cannot fail first: the events are locked in a statement of
+    their own before the overlap is read, so a save that waited reads what the other committed.
+    One save adds a second period over a flagged booking and holds; the other shortens the first
+    period off the booking and waits; once the first commits, the booking stays flagged, for the
+    second period still covers it."""
+    venue_id, event_id, booking_id = _committed_pending_request(engine)
+    with Session(engine) as session:
+        first = VenueUnavailabilityPeriod(
+            venue_id=venue_id,
+            starts_at=_day(1),
+            ends_at=_day(8),
+            reason="MAINTENANCE",
+            notes="Floors",
+            created_by_id=STAFF_ID,
+        )
+        session.add(first)
+        session.flush()
+        first_id = first.id
+        _mark_in_sql(session, booking_id, datetime.now(UTC))
+        session.commit()
+    pids: dict[str, int] = {}
+    holding = threading.Event()
+
+    def add_second() -> None:
+        with Session(engine) as session:
+            pids["add"] = _backend_pid(session)
+            _save_period(session, venue_id)
+            holding.set()
+            _wait_until(engine, pids, "shorten")
+            session.commit()
+
+    def shorten_first() -> None:
+        with Session(engine) as session:
+            pids["shorten"] = _backend_pid(session)
+            assert holding.wait(LOCK_WAIT_SECONDS)
+            venue_service.edit_unavailability(
+                session,
+                venue_id,
+                first_id,
+                VenueUnavailabilityUpdate(ends_at=_day(2)),
+                actor=session.get(User, STAFF_ID),
+                now=datetime.now(UTC),
+            )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            adding = pool.submit(add_second)
+            shortening = pool.submit(shorten_first)
+            adding.result(timeout=40)
+            shortening.result(timeout=40)
+
+        with Session(engine) as session:
+            assert session.get(VenueBooking, booking_id).venue_unavailable_marked_at is not None
+    finally:
+        _remove_race_rows(engine, venue_id, event_id, booking_id)
+
+
+@pytest.mark.story("9.4", ac=10)
 def test_a_request_that_slipped_in_unmarked_cannot_be_approved_and_the_next_save_marks_it(
     db, login_as
 ):
@@ -2539,3 +2595,427 @@ def test_a_request_that_slipped_in_unmarked_cannot_be_approved_and_the_next_save
     assert refused.status_code == 409, refused.text
     assert _stored(db, slipped.id).status == "PENDING"
     assert _marked_at(db, slipped.id) is not None
+
+
+# =====================================================================================
+# Review follow-ups: what an edit may not do, the horizon, which period a notice names, which
+# events are candidates, and the rule that only the part of a period still to come counts.
+# =====================================================================================
+def _stored_period(db: Session, period_id: uuid.UUID) -> VenueUnavailabilityPeriod:
+    db.expire_all()
+    return db.get(VenueUnavailabilityPeriod, period_id)
+
+
+# --- AC6: what an edit may not do ---------------------------------------------------------
+@pytest.mark.story("9.4", ac=6)
+def test_an_ended_period_cannot_be_edited(db, venue_staff_client):
+    """AC6: 409, as End now gives for a period already over, and the period is as it was."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _days_from_now(-3), _days_from_now(-1), notes="Painted")
+
+    response = venue_staff_client.patch(
+        _url(venue.id, period.id), json={"description": "Painted again"}
+    )
+
+    assert response.status_code == 409, response.text
+    assert _stored_period(db, period.id).notes == "Painted"
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_the_start_of_a_period_in_force_cannot_be_moved(db, venue_staff_client):
+    """AC6: moving a started period's start later would make it removable, which a period in
+    force is not (Remove would be sidestepped): 409, and the period is as it was."""
+    venue = make_venue(db)
+    period = _started(db, venue.id)
+    start = period.starts_at
+
+    response = venue_staff_client.patch(
+        _url(venue.id, period.id), json={"starts_at": _days_from_now(0.5).isoformat()}
+    )
+
+    assert response.status_code == 409, response.text
+    assert _stored_period(db, period.id).starts_at == start
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_a_period_in_force_may_still_change_its_end_reason_and_description(db, venue_staff_client):
+    """AC6. cannot fail first: it passes before the 409 above; it pins that only the start of a
+    period in force is locked, and that sending the start it already has is not moving it."""
+    venue = make_venue(db)
+    period = _started(db, venue.id)
+
+    response = venue_staff_client.patch(
+        _url(venue.id, period.id),
+        json={
+            "starts_at": period.starts_at.isoformat(),
+            "ends_at": _days_from_now(3).isoformat(),
+            "reason": "RENOVATION",
+            "description": "Longer than planned",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+
+# --- AC1/AC5: validation -------------------------------------------------------------------
+@pytest.mark.story("9.4", ac=6)
+def test_end_now_null_is_refused(db, venue_staff_client):
+    """AC6: ``{"end_now": null}`` is 422, not an edit that changes nothing."""
+    venue = make_venue(db)
+    period = _started(db, venue.id)
+
+    response = venue_staff_client.patch(_url(venue.id, period.id), json={"end_now": None})
+
+    assert response.status_code == 422, response.text
+    assert _stored_period(db, period.id).ends_at == period.ends_at
+
+
+@pytest.mark.story("9.4", ac=5)
+@pytest.mark.parametrize(
+    ("offset", "expected_status"),
+    [(timedelta(minutes=-1), 201), (timedelta(minutes=1), 422)],
+    ids=["just-inside", "just-over"],
+)
+def test_a_period_may_end_at_most_as_far_ahead_as_an_event_may(
+    db, venue_staff_client, offset, expected_status
+):
+    """AC5: the end is at most two years and a longest event (14 days) from now - the latest an
+    event a venue could be booked for can end. A year 9999 is a 422, not a 500."""
+    from app.events.service import latest_end_allowed
+
+    venue = make_venue(db)
+    limit = latest_end_allowed(datetime.now(UTC))
+
+    response = venue_staff_client.post(
+        _url(venue.id), json=_body(_days_from_now(1), limit + offset)
+    )
+
+    assert response.status_code == expected_status, response.text
+
+
+@pytest.mark.story("9.4", ac=5)
+def test_a_period_ending_in_the_year_9999_is_refused_on_add_and_on_edit(db, venue_staff_client):
+    """AC5: 422 each way, and nothing is saved or changed."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
+    far = datetime(9999, 12, 31, 12, tzinfo=UTC)
+
+    added = venue_staff_client.post(_url(venue.id), json=_body(_days_from_now(1), far))
+    edited = venue_staff_client.patch(_url(venue.id, period.id), json={"ends_at": far.isoformat()})
+
+    assert (added.status_code, edited.status_code) == (422, 422), (added.text, edited.text)
+    assert len(_periods(db, venue.id)) == 1
+    assert _stored_period(db, period.id).ends_at == period.ends_at
+
+
+# --- AC3/AC4: which period a notice names; ending and removing settle too ---------------------
+def _unmarked_booking_under_a_period(
+    db: Session, venue_id: uuid.UUID, status=EventStatus.CONFIRMED
+):
+    """A booking in 3 days of an event with the given status, and a period over it written
+    straight to the table, so the booking is overlapped and not marked: the state a request that
+    slipped in during a save leaves, which the next change to the venue's periods settles."""
+    event = _event_for(db, status)
+    booking = _pending_of(db, event, venue_id, _day(3))
+    over = _period(db, venue_id, _day(2), _day(7), notes="Wiring")
+    assert _marked_at(db, booking.id) is None
+    return event, booking, over
+
+
+@pytest.mark.story("9.4", ac=4)
+def test_a_notice_names_the_period_that_overlaps_the_booking_not_the_one_just_saved(
+    db, venue_staff_client
+):
+    """AC4: the booking is overlapped by a period saved earlier, and a save of another period,
+    far from the booking, is what flags it. The history reason and both notices name the period
+    over the booking."""
+    venue = make_venue(db)
+    event, _booking_, over = _unmarked_booking_under_a_period(db, venue.id)
+
+    _add(venue_staff_client, venue.id, _day(30), _day(31), description="Unrelated painting")
+
+    reason = _returned(db, event.id)[0].reason
+    assert "Wiring" in reason and "Unrelated painting" not in reason
+    for notice in _told(db, event.id):
+        assert _on_singapore_date(over.starts_at) in notice.message
+        assert _on_singapore_date(_day(30)) not in notice.message
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_ending_a_period_settles_a_booking_it_newly_flags(db, venue_staff_client):
+    """AC6: the re-check after an end flags a booking that slipped in unmarked, so the event
+    goes back to Planning and its people are told, as after an add or an edit."""
+    venue = make_venue(db)
+    event, booking, over = _unmarked_booking_under_a_period(db, venue.id)
+    ending = _started(db, venue.id)
+
+    response = venue_staff_client.patch(_url(venue.id, ending.id), json={"end_now": True})
+
+    assert response.status_code == 200, response.text
+    assert _marked_at(db, booking.id) is not None
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    notices = _told(db, event.id)
+    assert len(notices) == 2
+    assert all(_on_singapore_date(over.starts_at) in notice.message for notice in notices)
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_removing_a_period_settles_a_booking_it_newly_flags(db, venue_staff_client):
+    """AC6: the same after a removal."""
+    venue = make_venue(db)
+    event, booking, _over = _unmarked_booking_under_a_period(db, venue.id)
+    removing = _period(db, venue.id, _days_from_now(20), _days_from_now(21))
+
+    response = venue_staff_client.delete(_url(venue.id, removing.id))
+
+    assert response.status_code == 204, response.text
+    assert _marked_at(db, booking.id) is not None
+    assert _status_of(db, event.id) == EventStatus.PLANNING
+    assert len(_told(db, event.id)) == 2
+
+
+# --- AC4: who sees the description -------------------------------------------------------------
+@pytest.mark.story("9.4", ac=4)
+def test_the_organisers_notice_leaves_out_the_description_and_the_coordinators_keeps_it(
+    db, venue_staff_client
+):
+    """AC4 (PO decision): the organiser's notice names the venue, the period and the reason;
+    the coordinator's names the description too."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    _pending_of(db, event, venue.id, _day(3))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7), description="Asbestos found in ceiling")
+
+    by_recipient = {notice.recipient_id: notice.message for notice in _told(db, event.id)}
+    coordinator, organiser = by_recipient[Users.COORDINATOR.id], by_recipient[event.organiser_id]
+    assert "Asbestos found in ceiling" in coordinator
+    assert "Asbestos" not in organiser
+    assert venue.name in organiser and "Maintenance" in organiser
+    assert _on_singapore_date(_day(2)) in organiser
+
+
+# --- AC8: which events are candidates ----------------------------------------------------------
+@pytest.mark.story("9.4", ac=8)
+@pytest.mark.parametrize(
+    "event_status",
+    [
+        EventStatus.DRAFT,
+        EventStatus.UNDER_REVIEW,
+        EventStatus.CLARIFICATION_REQUESTED,
+        EventStatus.CANCELLED,
+        EventStatus.REJECTED,
+    ],
+)
+def test_only_planning_awaiting_and_confirmed_events_are_candidates(
+    db, venue_staff_client, event_status
+):
+    """AC8: a booking of an event in any other status is neither listed nor marked - a list of
+    the statuses that count, so a status added later is left out until someone says it counts."""
+    venue = make_venue(db)
+    booking = _booking(
+        db, venue.id, _day(3), _day(3, 12), status="PENDING", event_status=event_status
+    )
+
+    preview = _preview(venue_staff_client, venue.id, _day(2), _day(7))
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert preview.status_code == 200, preview.text
+    assert str(booking.id) not in _ids(preview)
+    assert _marked_at(db, booking.id) is None
+
+
+@pytest.mark.story("9.4", ac=8)
+@pytest.mark.parametrize(
+    "event_status",
+    [EventStatus.PLANNING, EventStatus.AWAITING_SAFETY_CHECK, EventStatus.CONFIRMED],
+)
+def test_planning_awaiting_and_confirmed_events_are_candidates(
+    db, venue_staff_client, event_status
+):
+    """AC8. cannot fail first: they are marked today; pinned beside the exclusions above."""
+    venue = make_venue(db)
+    booking = _booking(
+        db, venue.id, _day(3), _day(3, 12), status="PENDING", event_status=event_status
+    )
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _marked_at(db, booking.id) is not None
+
+
+# --- the preview, scoped and half-open ------------------------------------------------------
+@pytest.mark.story("9.4", ac=2)
+def test_the_preview_leaves_out_a_booking_that_only_touches_the_end_of_the_period(
+    db, venue_staff_client
+):
+    """AC2. cannot fail first: the overlap is half-open already; this is the end's side of the
+    pair, the start's side being in the held-period case. The booking is held from exactly the
+    period's end."""
+    venue = make_venue(db)
+    touching = _booking(db, venue.id, _day(7, 10), _day(7, 12), status="PENDING")
+    inside = _booking(db, venue.id, _day(6, 10), _day(6, 12), status="PENDING")
+
+    response = _preview(venue_staff_client, venue.id, _day(2, 10), _day(7, 10))
+
+    assert _ids(response) == {str(inside.id)}
+    assert str(touching.id) not in _ids(response)
+
+
+@pytest.mark.story("9.4", ac=3)
+def test_a_save_leaves_another_venues_unmarked_booking_alone(db, venue_staff_client):
+    """AC3. cannot fail first: the re-check is scoped to its venue; pinned so a change to its
+    query cannot sweep the whole table. Another venue's booking sits inside a closure of its own
+    that was written without a re-check, so it is overlapped and unmarked."""
+    venue, elsewhere = make_venue(db), make_venue(db)
+    stranger = _live(db, elsewhere.id, _day(3))
+    _period(db, elsewhere.id, _day(2), _day(7))
+
+    _add(venue_staff_client, venue.id, _day(2), _day(7))
+
+    assert _marked_at(db, stranger.id) is None
+
+
+# --- AC7: the refusal counts setup and teardown ----------------------------------------------
+@pytest.mark.story("9.4", ac=7)
+@pytest.mark.parametrize(
+    ("period", "expected_status"),
+    [
+        # booking 10:00-12:00 with 60 minutes' setup and 30 minutes' teardown: held 09:00-12:30
+        (((9, 15), (9, 45)), 409),  # only the setup
+        (((12, 15), (13, 0)), 409),  # only the teardown
+        (((8, 0), (9, 0)), 200),  # touches held_from
+        (((12, 30), (14, 0)), 200),  # touches held_until
+    ],
+)
+def test_the_approval_refusal_is_measured_against_the_held_period(
+    db, login_as, period, expected_status
+):
+    """AC7: the guard reads the held period, setup and teardown included, half-open at both
+    edges, as the marking does. The period is written straight to the table, so it is the
+    guard, not the mark, that decides."""
+    venue = make_venue(db)
+    booking = _booking(
+        db,
+        venue.id,
+        _day(3, 10),
+        _day(3, 12),
+        status="PENDING",
+        setup_minutes=60,
+        teardown_minutes=30,
+    )
+    (start_h, start_m), (end_h, end_m) = period
+    _period(
+        db,
+        venue.id,
+        _day(3, start_h) + timedelta(minutes=start_m),
+        _day(3, end_h) + timedelta(minutes=end_m),
+    )
+
+    response = _approve(login_as(Users.VENUE_STAFF), booking.id)
+
+    assert response.status_code == expected_status, response.text
+
+
+# --- AC8/AC6: only the part of a period still to come counts -----------------------------------
+def _in_progress(db: Session, venue_id: uuid.UUID) -> VenueBooking:
+    """A pending booking that began an hour ago and ends in two."""
+    now = datetime.now(UTC)
+    return _booking(
+        db, venue_id, now - timedelta(hours=1), now + timedelta(hours=2), status="PENDING"
+    )
+
+
+@pytest.mark.story("9.4", ac=8)
+def test_a_period_wholly_in_the_past_flags_nothing_and_the_preview_lists_nothing(
+    db, venue_staff_client
+):
+    """AC8 (PO decision): only the time still to come counts. A period that began three days ago
+    and ended yesterday overlapped part of a booking that is in progress, but that part is
+    already over, so the booking is neither flagged nor listed."""
+    venue = make_venue(db)
+    booking = _booking(
+        db,
+        venue.id,
+        _days_from_now(-2),
+        _days_from_now(2),
+        status="PENDING",
+    )
+
+    preview = _preview(venue_staff_client, venue.id, _days_from_now(-3), _days_from_now(-1))
+    _add(venue_staff_client, venue.id, _days_from_now(-3), _days_from_now(-1))
+
+    assert _ids(preview) == set()
+    assert _marked_at(db, booking.id) is None
+
+
+@pytest.mark.story("9.4", ac=8)
+def test_a_period_in_force_flags_a_booking_in_progress_and_the_preview_lists_it(
+    db, venue_staff_client
+):
+    """AC8. cannot fail first: the period covers the booking's remaining time, so it counts;
+    paired with the wholly-past case above."""
+    venue = make_venue(db)
+    booking = _in_progress(db, venue.id)
+
+    preview = _preview(venue_staff_client, venue.id, _days_from_now(-1), _days_from_now(1))
+    _add(venue_staff_client, venue.id, _days_from_now(-1), _days_from_now(1))
+
+    assert _ids(preview) == {str(booking.id)}
+    assert _marked_at(db, booking.id) is not None
+
+
+@pytest.mark.story("9.4", ac=6)
+def test_ending_a_period_early_clears_a_booking_whose_remaining_time_it_no_longer_covers(
+    db, venue_staff_client
+):
+    """AC6 (PO decision): the period began yesterday and runs until tomorrow, so it covers all
+    the time still to come of a booking in progress. Ending it now leaves nothing of the
+    booking's remaining time covered, so the flag clears."""
+    venue = make_venue(db)
+    booking = _in_progress(db, venue.id)
+    period = _add(venue_staff_client, venue.id, _days_from_now(-1), _days_from_now(1))
+    assert _marked_at(db, booking.id) is not None
+
+    response = venue_staff_client.patch(
+        _url(venue.id, uuid.UUID(period["id"])), json={"end_now": True}
+    )
+
+    assert response.status_code == 200, response.text
+    assert _marked_at(db, booking.id) is None
+
+
+# --- housekeeping: the write endpoints and the preview release lapsed holds -----------------
+@pytest.mark.story("9.4", ac=8)
+def test_a_lapsed_hold_is_released_before_the_preview_and_the_save_look(db, venue_staff_client):
+    """AC8: an approved booking whose hold has lapsed holds nothing, as the calendar already
+    treats it; the preview does not list it and the save does not flag it, whichever request
+    comes first - the routes release lapsed holds as the calendar's does."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    lapsed = _pending_of(
+        db,
+        event,
+        venue.id,
+        _day(3),
+        status="APPROVED",
+        hold_expires_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+
+    preview = _preview(venue_staff_client, venue.id, _day(2), _day(7))
+    assert str(lapsed.id) not in _ids(preview)
+    # A second venue's lapsed hold meets the save, with no preview before it.
+    other_venue = make_venue(db)
+    lapsed2 = _pending_of(
+        db,
+        _event_for(db),
+        other_venue.id,
+        _day(4),
+        status="APPROVED",
+        hold_expires_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    _add(venue_staff_client, other_venue.id, _day(2), _day(7))
+
+    assert _marked_at(db, lapsed2.id) is None
+    assert _stored(db, lapsed.id).status == "EXPIRED"
+    assert _stored(db, lapsed2.id).status == "EXPIRED"
