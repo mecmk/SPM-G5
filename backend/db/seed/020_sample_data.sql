@@ -1027,9 +1027,9 @@ WHERE NOT EXISTS (
 -- (its Grand Hall booking was already for 150, in the Exhibition layout that holds 300),
 -- where it now expects 150 and has four, so the next check shows both as changed.
 -- ---------------------------------------------------------------------
-INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, notes, facts) VALUES
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
     ('ffffffff-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000009', '2026-10-07 15:00+08',
-     'CHANGES_REQUESTED', 'Confirm the attendance and the microphones.',
+     'CHANGES_REQUESTED',
      '{"description": "Publisher stalls with author talks through the day.",
        "expected_attendance": 120,
        "starts_at": "2028-08-23T02:00:00+00:00", "ends_at": "2028-08-23T09:00:00+00:00",
@@ -1040,17 +1040,130 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
     -- The Marina Food Festival (3333..37), approved, and the Lantern Night Walk (3333..38), sent
     -- back: story 21.1's Accepted and Declined tabs.
     ('ffffffff-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000009', '2026-10-09 10:00+08',
-     'APPROVED', NULL,
+     'APPROVED',
      '{"description": "Food stalls along the waterfront promenade.",
        "expected_attendance": 200,
        "starts_at": "2028-09-02T03:00:00+00:00", "ends_at": "2028-09-02T13:00:00+00:00",
        "venues": [], "accessibility": [], "accessibility_notes": null, "equipment": []}'),
     ('ffffffff-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08',
-     'CHANGES_REQUESTED', 'Add marshals at each road crossing.',
+     'CHANGES_REQUESTED',
      '{"description": "A guided evening walk with paper lanterns.",
        "expected_attendance": 80,
        "starts_at": "2028-09-09T11:00:00+00:00", "ends_at": "2028-09-09T14:00:00+00:00",
        "venues": [], "accessibility": [], "accessibility_notes": null, "equipment": []}')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
-    outcome = EXCLUDED.outcome, notes = EXCLUDED.notes, facts = EXCLUDED.facts;
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+-- ---------------------------------------------------------------------
+-- Story 21.2: tests/e2e/safety-decision.spec.ts. Each flow the spec clicks through has an event
+-- of its own, so specs running in parallel never share one: the coding bootcamp (3333..46) is
+-- secured and never reviewed, for requesting a review; the cyber clinic (47) awaits the check,
+-- for requesting changes; the data summit (48) was sent back with its venue flagged and still
+-- has the same venue, for the unchanged warning; the AI workshop (49) awaits the check, for
+-- approving then confirming. Organiser 1, coordinator 1, each with one requirement booked at
+-- Seminar Room 2.1 in November 2028, and no equipment.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Coding Bootcamp Day', 'Training', 'A day of hands-on coding exercises.', '2028-11-06 10:00+08', '2028-11-06 16:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000000047', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Cyber Security Clinic', 'Training', 'Drop-in advice sessions on staying safe online.', '2028-11-07 10:00+08', '2028-11-07 16:00+08', 60, 'AWAITING_SAFETY_CHECK',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000000048', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Open Data Summit', 'Conference', 'Talks on publishing and using open data.', '2028-11-08 10:00+08', '2028-11-08 16:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000000049', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Applied AI Workshop', 'Training', 'Building small models with real data.', '2028-11-09 10:00+08', '2028-11-09 16:00+08', 60, 'AWAITING_SAFETY_CHECK',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0046-000000000001', '33333333-0000-0000-0000-000000000046', 0, 'Training room', 60,
+     '2028-11-06 10:00+08', '2028-11-06 16:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0047-000000000001', '33333333-0000-0000-0000-000000000047', 0, 'Training room', 60,
+     '2028-11-07 10:00+08', '2028-11-07 16:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0048-000000000001', '33333333-0000-0000-0000-000000000048', 0, 'Talks room', 60,
+     '2028-11-08 10:00+08', '2028-11-08 16:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0049-000000000001', '33333333-0000-0000-0000-000000000049', 0, 'Training room', 60,
+     '2028-11-09 10:00+08', '2028-11-09 16:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at) VALUES
+    ('44444444-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000046', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2028-11-06 10:00+08', '2028-11-06 16:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0046-000000000001', '2028-11-06 10:00+08'),
+    ('44444444-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000047', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2028-11-07 10:00+08', '2028-11-07 16:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0047-000000000001', '2028-11-07 10:00+08'),
+    ('44444444-0000-0000-0000-000000000017', '33333333-0000-0000-0000-000000000048', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2028-11-08 10:00+08', '2028-11-08 16:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0048-000000000001', '2028-11-08 10:00+08'),
+    ('44444444-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000049', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2028-11-09 10:00+08', '2028-11-09 16:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0049-000000000001', '2028-11-09 10:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0021-000000000001', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000002', '33333333-0000-0000-0000-000000000047', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000003', '33333333-0000-0000-0000-000000000047', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-12 15:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000004', '33333333-0000-0000-0000-000000000048', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000005', '33333333-0000-0000-0000-000000000048', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-05 12:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000006', '33333333-0000-0000-0000-000000000048', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08', 'The talks room is too tight.'),
+    ('99999999-0000-0000-0021-000000000007', '33333333-0000-0000-0000-000000000049', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000008', '33333333-0000-0000-0000-000000000049', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-13 15:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- The data summit's (3333..48) review: changes requested, its venue flagged. The facts are the
+-- event's as it stands, so its venue is unchanged and resubmitting warns (21.2 AC12).
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
+    ('ffffffff-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000048', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08',
+     'CHANGES_REQUESTED',
+     '{"description": "Talks on publishing and using open data.",
+       "expected_attendance": 60,
+       "starts_at": "2028-11-08T02:00:00+00:00", "ends_at": "2028-11-08T08:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 60,
+                   "layout": "CLASSROOM", "layout_name": "Classroom"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+INSERT INTO event_safety_review_findings (id, review_id, position, factor_code, arrangement, required_change) VALUES
+    ('ffffffff-0000-0000-0001-000000000001', 'ffffffff-0000-0000-0000-000000000004', 0, 'CROWD_MOVEMENT', 'VENUE_BOOKINGS',
+     'Book a room with a second exit; the seminar room has one door for sixty people.')
+ON CONFLICT (id) DO UPDATE SET
+    review_id = EXCLUDED.review_id, position = EXCLUDED.position, factor_code = EXCLUDED.factor_code,
+    arrangement = EXCLUDED.arrangement, required_change = EXCLUDED.required_change;

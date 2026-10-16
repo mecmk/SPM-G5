@@ -70,3 +70,15 @@ INSERT INTO equipment_types (id, code, name, description, total_quantity, storag
 ON CONFLICT (id) DO UPDATE SET
     code = EXCLUDED.code, name = EXCLUDED.name, description = EXCLUDED.description,
     total_quantity = EXCLUDED.total_quantity, storage_location = EXCLUDED.storage_location;
+
+-- Story 21.2: the factors a safety review considers.
+INSERT INTO safety_review_factors (code, name, description, sort_order) VALUES
+    ('EXPECTED_ATTENDANCE',  'Expected attendance',        'How many people are expected, against what the event can safely hold.', 10),
+    ('CAPACITY_AND_LAYOUT',  'Venue capacity and layout',  'Whether each venue holds its people in the booked layout.', 20),
+    ('EMERGENCY_ACCESS',     'Emergency access',           'Exits, evacuation routes and access for emergency services.', 30),
+    ('ACCESSIBILITY',        'Accessibility requirements', 'Whether the accessibility needs can be met safely.', 40),
+    ('EQUIPMENT_PLACEMENT',  'Equipment placement',        'Where equipment, cables and staging go, and what they obstruct.', 50),
+    ('CROWD_MOVEMENT',       'Crowd movement',             'Queues, entry and exit flow, and pinch points.', 60),
+    ('VENUE_RESTRICTIONS',   'Known venue restrictions',   'Any restriction the venue is known to have.', 70)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description, sort_order = EXCLUDED.sort_order;
