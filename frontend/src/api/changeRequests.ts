@@ -62,13 +62,6 @@ export interface ChangeRequestQueueEntry extends ChangeRequest {
   event_ends_at: string | null
 }
 
-/**
- * Story 19.2 (Phase 1): the fields a change request may be approved for yet, mirroring the
- * backend's `_APPROVABLE_FIELDS` (app/change_requests/service.py). Approving any other would move
- * bookings or equipment holds, which Phase 2 adds; until then it can only be rejected.
- */
-export const APPROVABLE_FIELDS: readonly ChangeRequestField[] = ['expected_attendance']
-
 /** The registry codes change request writes give their refusals; each arrives with the backend's
  * own sentence. */
 const CHANGE_REQUEST_ERRORS = {

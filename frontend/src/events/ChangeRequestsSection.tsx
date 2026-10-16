@@ -24,13 +24,7 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
-import {
-  canApproveYet,
-  changeTitle,
-  FIELD_LABELS,
-  NOT_YET_APPROVABLE_NOTE,
-  STATUS_LABELS,
-} from './changeRequestValues'
+import { changeTitle, FIELD_LABELS, STATUS_LABELS } from './changeRequestValues'
 
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
 const WHOLE_NUMBER = /^\d+$/
@@ -151,8 +145,7 @@ interface OpenDecision {
  *
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
- * rejection its reason, to the organiser as well. Phase 1: Approve is offered only where it can be
- * made yet (`canApproveYet`).
+ * rejection its reason, to the organiser as well.
  */
 export function ChangeRequestsSection({
   event,
@@ -446,7 +439,7 @@ export function ChangeRequestsSection({
         <ul className="stack queue-list">
           {requests.map((request) => {
             const isPending = request.status === 'PENDING'
-            const canApprove = canDecide && isPending && canApproveYet(request.field, event.status)
+            const canDecideThis = canDecide && isPending
             const isOwnRequest = canWithdraw && request.requested_by_id === event.organiser_id
             return (
               <li key={request.id} className="card card-tight stack">
@@ -487,7 +480,7 @@ export function ChangeRequestsSection({
                           Withdraw request
                         </button>
                       )}
-                      {canApprove && (
+                      {canDecideThis && (
                         <button
                           type="button"
                           className="brand button-with-icon"
@@ -497,7 +490,7 @@ export function ChangeRequestsSection({
                           Approve
                         </button>
                       )}
-                      {canDecide && (
+                      {canDecideThis && (
                         <button
                           type="button"
                           className="secondary button-with-icon"
@@ -532,10 +525,6 @@ export function ChangeRequestsSection({
                       )}
                     </div>
                   </div>
-                )}
-
-                {canDecide && isPending && !canApprove && (
-                  <p className="small muted">{NOT_YET_APPROVABLE_NOTE}</p>
                 )}
               </li>
             )
@@ -769,6 +758,7 @@ export function ChangeRequestsSection({
           request={openDecision.request}
           outcome={openDecision.outcome}
           references={references}
+          eventStatus={event.status}
           onCancel={closeDecision}
           onDecided={finishDecision}
           onRefused={reloadRequests}

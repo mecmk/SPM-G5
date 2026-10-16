@@ -1,11 +1,6 @@
-import {
-  APPROVABLE_FIELDS,
-  type ChangeRequestField,
-  type ChangeRequestStatus,
-} from '../api/changeRequests'
-import type { EventReferenceData, EventStatus } from '../api/events'
+import type { ChangeRequestField, ChangeRequestStatus } from '../api/changeRequests'
+import type { EventReferenceData } from '../api/events'
 import type { IconName } from '../components/Icon'
-import { CHANGE_APPROVABLE_STATUS } from '../shared/eventStatus'
 import { formatDate, formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
 
 /**
@@ -44,6 +39,7 @@ export interface ChangeLine {
 
 /** The icon beside each part of a venue requirement. */
 const REQUIREMENT_PART_ICONS: Record<string, IconName> = {
+  name: 'pencil',
   people: 'people',
   layout: 'grid',
   time: 'calendar',
@@ -67,6 +63,8 @@ interface FacilityValue {
   notes: string | null
 }
 interface RequirementValue extends ScheduleValue {
+  /** Story 19.2: kept since then; absent from a request raised before it. */
+  id?: string | null
   name: string | null
   capacity: number | null
   layout_code: string | null
@@ -134,7 +132,7 @@ function describeRequirement(requirement: RequirementValue, names: Names): strin
   ].join(' · ')
 }
 
-function requirementKey(requirement: RequirementValue): string {
+function nameKey(requirement: RequirementValue): string {
   return (requirement.name ?? '').trim().toLowerCase()
 }
 
@@ -146,6 +144,7 @@ function requirementChanges(
 ): ChangeLine[] {
   const name = requested.name ?? 'Unnamed'
   const parts: [string, string, string][] = [
+    ['name', now.name ?? 'Unnamed', name],
     ['people', `${now.capacity ?? '?'}`, `${requested.capacity ?? '?'}`],
     [
       'layout',
@@ -170,36 +169,48 @@ function requirementChanges(
     }))
 }
 
-/** Requirements are matched by name, which is unique on an event (2.7 AC9); one renamed reads as
- *  one removed and one added, since the stored values carry no ids (story 19.1). */
+/** The requirement in `now` that `requested` edits: the one with its id, or - for a request
+ *  raised before ids were kept - the one of the same name; undefined for a new requirement. */
+function requirementEdited(
+  requested: RequirementValue,
+  now: RequirementValue[],
+): RequirementValue | undefined {
+  if (requested.id !== undefined) {
+    return requested.id === null ? undefined : now.find((item) => item.id === requested.id)
+  }
+  return now.find((item) => nameKey(item) === nameKey(requested))
+}
+
+/** Requirements are matched as the backend applies them (story 19.2): by id, or by name for a
+ *  request raised before ids were kept. A renamed requirement reads as a change of name. */
 function venueRequirementChanges(
   now: RequirementValue[],
   requested: RequirementValue[],
   names: Names,
 ): ChangeLine[] {
-  const requestedByKey = new Map(requested.map((item) => [requirementKey(item), item]))
-  const nowKeys = new Set(now.map(requirementKey))
   const lines: ChangeLine[] = []
-  for (const item of now) {
-    const kept = requestedByKey.get(requirementKey(item))
-    if (kept === undefined) {
-      lines.push({
-        icon: 'building',
-        what: item.name ?? 'Unnamed',
-        now: describeRequirement(item, names),
-        requested: NOT_THERE_REQUESTED,
-      })
-    } else {
-      lines.push(...requirementChanges(item, kept, names))
-    }
-  }
+  const edited = new Set<RequirementValue>()
   for (const item of requested) {
-    if (!nowKeys.has(requirementKey(item))) {
+    const before = requirementEdited(item, now)
+    if (before === undefined) {
       lines.push({
         icon: 'building',
         what: item.name ?? 'Unnamed',
         now: NOT_THERE_NOW,
         requested: describeRequirement(item, names),
+      })
+      continue
+    }
+    edited.add(before)
+    lines.push(...requirementChanges(before, item, names))
+  }
+  for (const item of now) {
+    if (!edited.has(item)) {
+      lines.push({
+        icon: 'building',
+        what: item.name ?? 'Unnamed',
+        now: describeRequirement(item, names),
+        requested: NOT_THERE_REQUESTED,
       })
     }
   }
@@ -308,16 +319,3 @@ export function describeChanges(
   }
   return equipmentChanges((current ?? []) as EquipmentValue[], proposed as EquipmentValue[], names)
 }
-
-/**
- * Story 19.2 (Phase 1): whether a pending request on an event in `eventStatus` can be approved
- * yet - as the backend decides it, so Approve is not offered only to be refused. Any pending
- * request can be rejected.
- */
-export function canApproveYet(field: ChangeRequestField, eventStatus: EventStatus): boolean {
-  return APPROVABLE_FIELDS.includes(field) && eventStatus === CHANGE_APPROVABLE_STATUS
-}
-
-/** Story 19.2 (Phase 1): why Approve is not offered on a request `canApproveYet` refuses. */
-export const NOT_YET_APPROVABLE_NOTE =
-  'This change cannot be approved yet. Reject it, or leave it pending.'

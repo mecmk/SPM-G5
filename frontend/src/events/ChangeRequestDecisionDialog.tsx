@@ -4,14 +4,27 @@ import {
   CHANGE_REASON_MAX_LENGTH,
   rejectChangeRequest,
   type ChangeRequest,
+  type ChangeRequestField,
   type ChangeRequestStatus,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
-import type { EventReferenceData } from '../api/events'
+import type { EventReferenceData, EventStatus } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { FIELD_LABELS } from './changeRequestValues'
+
+/** Story 19.2 AC5: what approving each field may release, said before it is applied. */
+const RELEASE_NOTES: Record<ChangeRequestField, string> = {
+  schedule:
+    'Venue bookings that no longer cover the new dates are released, and the equipment is held again for them.',
+  expected_attendance: 'Venue bookings made for fewer people than the new attendance are released.',
+  venue_requirements:
+    'Bookings of venue requirements that are removed, or that no longer fit what was booked, are released.',
+  equipment:
+    'Changed or removed equipment gives back its hold, and Technical Support is told; changed items wait to be sent again.',
+}
 
 export interface ChangeRequestDecisionDialogProps {
   request: ChangeRequest
@@ -19,6 +32,8 @@ export interface ChangeRequestDecisionDialogProps {
   outcome: Extract<ChangeRequestStatus, 'APPROVED' | 'REJECTED'>
   /** For the field's values in words - layout and equipment names. */
   references: EventReferenceData | null
+  /** AC8: an event past Planning goes back to it when a change is approved. */
+  eventStatus: EventStatus
   onCancel: () => void
   onDecided: (decided: ChangeRequest) => void
   /** AC7: refused because the request or its event moved on meanwhile - decided, withdrawn, gone
@@ -28,7 +43,8 @@ export interface ChangeRequestDecisionDialogProps {
 
 /**
  * Story 19.2 - the Approve and Reject dialogs, shared by the coordinator's queue and the event
- * page. AC2: Approve shows what changes, now beside requested, before applying it. AC3/AC4: Reject
+ * page. AC2: Approve shows what changes, now beside requested, before applying it; AC5/AC8: it
+ * says what the change may release, and that an event past Planning goes back to it. AC3/AC4: Reject
  * asks for a reason and refuses a blank or spaces-only one before anything is sent. AC5/AC7/AC8:
  * a refusal stays in the dialog with the backend's sentence, and one caused by the request or its
  * event moving on has the page reload it. The confirm button is disabled while the decision is
@@ -38,6 +54,7 @@ export function ChangeRequestDecisionDialog({
   request,
   outcome,
   references,
+  eventStatus,
   onCancel,
   onDecided,
   onRefused,
@@ -88,6 +105,13 @@ export function ChangeRequestDecisionDialog({
       >
         <p>This change is applied to the event, and the organiser will be told.</p>
         <ChangeRequestChanges request={request} references={references} />
+        <p className="small muted">{RELEASE_NOTES[request.field]}</p>
+        {CHANGE_RETURNS_TO_PLANNING_STATUSES.includes(eventStatus) && (
+          <p className="warning">
+            The event goes back to Planning and needs a new safety check before it is confirmed
+            again.
+          </p>
+        )}
       </ConfirmDialog>
     )
   }

@@ -93,11 +93,14 @@ export const EQUIPMENT_LOCKED_HINT =
 export const CHANGE_REQUESTABLE_STATUS: EventStatus = 'PLANNING'
 
 /**
- * Story 19.2 (Phase 1): the one status a change request can be approved in yet, mirroring the
- * backend's `_APPROVABLE_STATUS` (backend/app/change_requests/service.py). Approving past Planning
- * returns the event to Planning for a new safety check (AC8), which Phase 2 adds.
+ * Story 19.2 AC8: the statuses an approved change request returns an event from, to Planning, for
+ * a new safety check - mirroring the backend's `_RETURNS_TO_PLANNING`
+ * (backend/app/change_requests/service.py).
  */
-export const CHANGE_APPROVABLE_STATUS: EventStatus = 'PLANNING'
+export const CHANGE_RETURNS_TO_PLANNING_STATUSES: readonly EventStatus[] = [
+  'AWAITING_SAFETY_CHECK',
+  'CONFIRMED',
+]
 
 /**
  * Story 19.1 AC1: the statuses an event can hold change requests in - approved, whether still
@@ -105,6 +108,7 @@ export const CHANGE_APPROVABLE_STATUS: EventStatus = 'PLANNING'
  */
 export const CHANGE_REQUESTS_VISIBLE_STATUSES: readonly EventStatus[] = [
   'PLANNING',
+  'AWAITING_SAFETY_CHECK',
   'CONFIRMED',
   'COMPLETED',
   'CANCELLED',

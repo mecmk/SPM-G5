@@ -17,12 +17,7 @@ import { formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
-import {
-  canApproveYet,
-  changeTitle,
-  NOT_YET_APPROVABLE_NOTE,
-  STATUS_LABELS,
-} from './changeRequestValues'
+import { changeTitle, STATUS_LABELS } from './changeRequestValues'
 
 /** The decision dialog open on the queue: which request, and approving or rejecting it. */
 interface OpenDecision {
@@ -37,7 +32,6 @@ interface OpenDecision {
  * each with its event, the field, its value now and the value asked for, the reason, who asked
  * and when. AC2/AC3: Approve and Reject open the shared decision dialog; a decided request leaves
  * the queue, and one refused because it moved on meanwhile has the queue load again (AC7).
- * Phase 1: Approve is offered only where it can be made yet (`canApproveYet`).
  */
 export function ChangeRequestQueuePage() {
   const { data: queue, error, isLoading, setData: setQueue } = useLoaded(listPendingChangeRequests)
@@ -131,21 +125,15 @@ export function ChangeRequestQueuePage() {
                 </div>
               </div>
 
-              {!canApproveYet(entry.field, entry.event_status) && (
-                <p className="small muted">{NOT_YET_APPROVABLE_NOTE}</p>
-              )}
-
               <div className="item-card-footer">
                 <div className="cluster">
-                  {canApproveYet(entry.field, entry.event_status) && (
-                    <button
-                      type="button"
-                      className="brand button-sm"
-                      onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
-                    >
-                      Approve
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="brand button-sm"
+                    onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
+                  >
+                    Approve
+                  </button>
                   <button
                     type="button"
                     className="danger-solid button-sm"
@@ -168,6 +156,7 @@ export function ChangeRequestQueuePage() {
           request={openDecision.entry}
           outcome={openDecision.outcome}
           references={references}
+          eventStatus={openDecision.entry.event_status}
           onCancel={closeDecision}
           onDecided={removeDecided}
           onRefused={reloadQueue}
