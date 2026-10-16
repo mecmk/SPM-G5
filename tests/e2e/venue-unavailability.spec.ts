@@ -389,7 +389,8 @@ test('9.4 AC6: a refused End now says why, and the calendar is loaded again', as
     },
   )
   const reloaded = page.waitForRequest(
-    (request) => request.method() === 'GET' && request.url().includes('/availability'),
+    (request) =>
+      request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/calendar'),
   )
   await item.getByRole('button', { name: 'End now' }).click()
   const dialog = page.getByRole('dialog')
