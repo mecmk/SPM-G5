@@ -319,9 +319,10 @@ export function BookingRequestDetailPage() {
         )}
       </div>
 
-      {/* Story 9.4 AC3/AC7: the venue is unavailable for part of this request's held period, so
-          it cannot be approved while the closure stands; it can still be rejected. */}
-      {isPending && isVenueUnavailable && booking.venue_unavailable_marked_at !== null && (
+      {/* Story 9.4 AC3: the venue is unavailable for part of this request's held period, pending or
+          approved alike. AC7: a pending request cannot be approved while the closure stands; it can
+          still be rejected. */}
+      {booking.venue_unavailable_marked_at !== null && (
         <section
           id="booking-unavailable-notice"
           className="subtle-block booking-hold"
@@ -331,8 +332,8 @@ export function BookingRequestDetailPage() {
             <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
             <p>
               This venue is unavailable for part of this request&apos;s held period (flagged{' '}
-              {formatDateTime(booking.venue_unavailable_marked_at)}). It cannot be approved while
-              the closure stands.
+              {formatDateTime(booking.venue_unavailable_marked_at)}).
+              {isPending && ' It cannot be approved while the closure stands.'}
             </p>
           </div>
         </section>
