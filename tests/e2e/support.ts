@@ -85,6 +85,14 @@ export const EVENTS = {
   // closure over them.
   choirShowcase: '33333333-0000-0000-0000-000000000060',
   artMarket: '33333333-0000-0000-0000-000000000061',
+  // Story 21.2, organiser: organiser, coordinator, each with Seminar Room 2.1 booked in November
+  // 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
+  // the clinic and the workshop await the check; the summit was sent back with its venue flagged
+  // and still has the same venue.
+  codingBootcamp: '33333333-0000-0000-0000-000000000050',
+  cyberClinic: '33333333-0000-0000-0000-000000000047',
+  dataSummit: '33333333-0000-0000-0000-000000000048',
+  aiWorkshop: '33333333-0000-0000-0000-000000000049',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
