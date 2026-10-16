@@ -1943,7 +1943,8 @@ td.num {
   grid-template-columns: 6.5rem 1fr auto;
   grid-template-areas:
     'time name kind'
-    '. note note';
+    '. note note'
+    '. actions actions';
   align-items: baseline;
   gap: 0.25rem 0.75rem;
   padding-bottom: 0.5rem;
@@ -1957,7 +1958,8 @@ td.num {
     grid-template-areas:
       'time time'
       'name kind'
-      'note note';
+      'note note'
+      'actions actions';
   }
 }
 
@@ -1984,6 +1986,14 @@ td.num {
 
 .calendar-day-note {
   grid-area: note;
+}
+
+/* Story 9.4 AC6: Edit, End now and Remove on a closure's row. */
+.calendar-day-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 /* "+3 more" on a day that opens: dark and underlined, so it reads as something to press. */
@@ -2643,6 +2653,10 @@ tbody tr:hover td {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .form-grid > label {
   margin: 0;
 }
@@ -2945,6 +2959,7 @@ tbody tr:hover td {
   }
 
   .form-grid,
+  .form-grid-2,
   .form-grid-4 {
     grid-template-columns: minmax(0, 1fr);
   }

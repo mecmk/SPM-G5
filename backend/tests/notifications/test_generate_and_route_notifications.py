@@ -21,9 +21,10 @@ their own tests: 4.2's ``test_the_organiser_is_notified``, 4.3's
 ``test_the_assigned_coordinator_is_notified`` and 12.2's
 ``test_withdrawing_notifies_every_active_venue_staff_member`` pin their recipients exactly, and
 5.2's reassignment is tested here under AC3. Change decisions (19.2), registration changes
-(18.x), cancellation (6.2) and the Week 7 triggers belong to stories not built yet, which send
-their own through ``notify``. AC2 is tested at the API, ``GET /notifications``: the list in the
-app is story 20.2.
+(18.x), cancellation (6.2) and the other Week 7 triggers belong to stories not built yet,
+which send their own through ``notify``. 9.4's - a venue marked unavailable tells the coordinator
+and organiser of each event it affects - is tested in tests/venues/test_venue_unavailability.py.
+AC2 is tested at the API, ``GET /notifications``: the list in the app is story 20.2.
 """
 
 from __future__ import annotations

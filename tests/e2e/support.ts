@@ -80,6 +80,22 @@ export const EVENTS = {
   // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
   // a setup that starts before Seminar Room 2.1 opens.
   supplierInduction: '33333333-0000-0000-0000-000000000046',
+  // Story 9.4, Planning, organiser: organiser2, coordinator, October 2028. Each has one pending
+  // request at a venue dedicated to the 9.4 spec (see VENUES below); only that spec saves a
+  // closure over them.
+  choirShowcase: '33333333-0000-0000-0000-000000000060',
+  artMarket: '33333333-0000-0000-0000-000000000061',
+} as const
+
+/** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
+ *  backend/tests/support/seed.py::Venues). The three below are dedicated to the 9.4 spec. */
+export const VENUES = {
+  // No booking: the spec adds, edits and ends closures here.
+  gardenAtrium: 'Garden Atrium',
+  // One pending request, the choir showcase's, at 14 October 2028: the preview lists it.
+  harbourPavilion: 'Harbour Pavilion',
+  // One pending request, the art market's, at 21 October 2028: a closure marks it.
+  sunriseStudio: 'Sunrise Studio',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

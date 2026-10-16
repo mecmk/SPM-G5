@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, time
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import (
     AwareDatetime,
@@ -18,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.venues.models import Venue
+from app.venues.models import UnavailabilityReason, Venue, VenueUnavailabilityPeriod
 from app.venues.suitability import Suitability
 
 # "Positive whole numbers only" (story 8.3 AC3): StrictInt rejects 12.5 and "12"; gt=0 rejects 0.
@@ -379,9 +380,9 @@ class VenueSearchResult(BaseModel):
 # --- calendar (story 9.1) ----------------------------------------------------------------
 # Sentinel `reason` values for the two kinds of booking on the calendar: an approved booking
 # (BOOKED) and a pending request that soft-locks the venue (HELD, story 9.1 AC2). Neither is a
-# value of venue_unavailability_periods.reason (MAINTENANCE, RENOVATION, SAFETY, INTERNAL_USE,
-# OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries either
-# vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
+# value of venue_unavailability_periods.reason (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION,
+# SAFETY, OTHER, see UnavailabilityReason in models.py) - the calendar's `reason` field carries
+# either vocabulary, so it is not a single enum and a closure's reason is never BOOKED or HELD.
 BOOKING_REASON = "BOOKED"
 HELD_REASON = "HELD"
 
@@ -397,8 +398,13 @@ class VenueUnavailableWindowOut(BaseModel):
     schedule - so a day's list can show both; None for a closure, which has no booking.
 
     Story 12.7 AC1: ``hold_expires_at`` is when an approved booking's open hold (BOOKED) expires;
-    None for a pending request, a hold its event's confirmation completed, or a closure."""
+    None for a pending request, a hold its event's confirmation completed, or a closure.
 
+    Story 9.4: ``id`` is a closure's id, so Venue Staff's page can edit or end it; None for a
+    booking. ``description`` is the closure's own text, which an edit starts from and which is its
+    ``label``; every closure has one (AC1), so None is a booking's."""
+
+    id: uuid.UUID | None
     starts_at: datetime
     ends_at: datetime
     booking_starts_at: datetime | None
@@ -406,3 +412,115 @@ class VenueUnavailableWindowOut(BaseModel):
     reason: str
     label: str
     hold_expires_at: datetime | None
+    description: str | None
+
+
+# --- unavailability (story 9.4) ----------------------------------------------------------
+UNKNOWN_REASON_MESSAGE = (
+    "Choose one of Maintenance, Equipment failure, Renovation, Safety concern or Other."
+)
+NOTHING_TO_CHANGE_MESSAGE = "Send at least one change."
+END_NOW_ALONE_MESSAGE = "Ending a period now cannot be combined with other changes."
+FIELD_CANNOT_BE_EMPTY_MESSAGE = "A period's start, end and reason cannot be left empty."
+END_NOW_MUST_BE_TRUE_MESSAGE = "To end a period now, send end_now as true."
+
+
+def _known_reason(value: str) -> str:
+    if value not in UnavailabilityReason.ALL:
+        raise ValueError(UNKNOWN_REASON_MESSAGE)
+    return value
+
+
+class VenueUnavailabilityCreate(BaseModel):
+    """Story 9.4 AC1/AC5: a period a venue is closed, with its reason. ``description`` is
+    required, for every reason (PO decision, 14 Oct 2026); the service checks it with the
+    end-after-start rule, since an edit needs both against the period as it would become."""
+
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    reason: str
+    description: str | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_is_known(cls, value: str) -> str:
+        return _known_reason(value)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _normalize_description(cls, value: str | None) -> str | None:
+        return _blank_to_none(value)
+
+
+class VenueUnavailabilityUpdate(BaseModel):
+    """Story 9.4 AC6: change any of a period's start, end, reason and description, or send
+    ``end_now`` alone to end a period in force at the server's own now. Only the fields present
+    change."""
+
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
+    reason: str | None = None
+    description: str | None = None
+    end_now: Literal[True] | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_is_known(cls, value: str | None) -> str | None:
+        return None if value is None else _known_reason(value)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _normalize_description(cls, value: str | None) -> str | None:
+        return _blank_to_none(value)
+
+    @model_validator(mode="after")
+    def _check_what_was_sent(self) -> VenueUnavailabilityUpdate:
+        sent = self.model_fields_set
+        if not sent:
+            raise ValueError(NOTHING_TO_CHANGE_MESSAGE)
+        if "end_now" in sent and self.end_now is None:
+            raise ValueError(END_NOW_MUST_BE_TRUE_MESSAGE)
+        if self.end_now is not None:
+            if sent != {"end_now"}:
+                raise ValueError(END_NOW_ALONE_MESSAGE)
+            return self
+        if any(getattr(self, name) is None for name in sent & {"starts_at", "ends_at", "reason"}):
+            raise ValueError(FIELD_CANNOT_BE_EMPTY_MESSAGE)
+        return self
+
+
+class VenueUnavailabilityOut(BaseModel):
+    """Story 9.4 AC1: a period as Venue Staff see it. ``description`` is the column ``notes``."""
+
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+    description: str | None
+
+    @classmethod
+    def from_period(cls, period: VenueUnavailabilityPeriod) -> VenueUnavailabilityOut:
+        return cls(
+            id=period.id,
+            venue_id=period.venue_id,
+            starts_at=period.starts_at,
+            ends_at=period.ends_at,
+            reason=period.reason,
+            description=period.notes,
+        )
+
+
+class AffectedBookingOut(BaseModel):
+    """Story 9.4 AC2: a pending or approved booking whose held period (setup and teardown
+    included) overlaps a period about to be saved."""
+
+    booking_id: uuid.UUID
+    event_id: uuid.UUID
+    event_name: str
+    status: str
+    held_from: datetime
+    held_until: datetime
+    # True when the booking already carries the mark, from any of the venue's periods - so an
+    # edit's preview can tell the bookings it newly reaches from those already marked.
+    already_marked: bool

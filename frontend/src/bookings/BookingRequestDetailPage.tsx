@@ -24,6 +24,7 @@ import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
   formatDate,
@@ -287,6 +288,7 @@ export function BookingRequestDetailPage() {
     event.venue_requirements.find((requirement) => requirement.id === booking.venue_requirement_id)
       ?.facilities ?? []
   const isPending = booking.status === PENDING_BOOKING_STATUS
+  const isVenueUnavailable = booking.venue_unavailable_marked_at !== null
   // Story 12.7 AC1/AC3: an approved booking's open hold, or the one an expired booking lost.
   const openHold = openHoldExpiry(booking)
   const shownHold =
@@ -311,7 +313,13 @@ export function BookingRequestDetailPage() {
         </div>
         {isPending && (
           <div className="cluster">
-            <button type="button" className="brand button-sm" onClick={askToApprove}>
+            <button
+              type="button"
+              className="brand button-sm"
+              disabled={isVenueUnavailable}
+              aria-describedby={isVenueUnavailable ? 'booking-unavailable-notice' : undefined}
+              onClick={askToApprove}
+            >
               Approve
             </button>
             <button type="button" className="danger-solid button-sm" onClick={askToReject}>
@@ -322,6 +330,25 @@ export function BookingRequestDetailPage() {
       </div>
 
       {outsideHoursNotice !== null && <p className="warning">{outsideHoursNotice}</p>}
+      {/* Story 9.4 AC3: the venue is unavailable for part of this request's held period, pending or
+          approved alike. AC7: a pending request cannot be approved while the closure stands; it can
+          still be rejected. */}
+      {booking.venue_unavailable_marked_at !== null && (
+        <section
+          id="booking-unavailable-notice"
+          className="subtle-block booking-hold"
+          role="status"
+        >
+          <div>
+            <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
+            <p>
+              This venue is unavailable for part of this request&apos;s held period (flagged{' '}
+              {formatDateTime(booking.venue_unavailable_marked_at)}).
+              {isPending && ' It cannot be approved while the closure stands.'}
+            </p>
+          </div>
+        </section>
+      )}
 
       {shownHold && (
         <section className="subtle-block booking-hold" aria-labelledby="booking-hold-heading">

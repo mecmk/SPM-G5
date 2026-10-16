@@ -198,7 +198,10 @@ def make_unavailability(
     reason: str = "MAINTENANCE",
     notes: str | None = None,
 ) -> VenueUnavailabilityPeriod:
-    """A period a venue is closed (story 9.1's calendar, 8.1's availability filter)."""
+    """A period a venue is closed (story 9.1's calendar, 8.1's availability filter). Without
+    ``notes`` it is given a description, as story 9.4 AC1 requires one of every closure."""
+    if notes is None:
+        notes = "Closed for testing"
     period = VenueUnavailabilityPeriod(
         venue_id=venue_id, starts_at=starts_at, ends_at=ends_at, reason=reason, notes=notes
     )

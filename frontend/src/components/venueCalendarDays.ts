@@ -1,4 +1,10 @@
-import { BOOKING_REASON, HELD_REASON, type VenueUnavailableWindow } from '../api/venues'
+import {
+  BOOKING_REASON,
+  HELD_REASON,
+  OTHER_UNAVAILABILITY_REASON,
+  UNAVAILABILITY_REASON_NAMES,
+  type VenueUnavailableWindow,
+} from '../api/venues'
 import { HOLD_EXPIRES_LABEL } from '../shared/bookingStatus'
 import { formatDateTime, inputToInstant } from '../shared/format'
 import type { CalendarEntry, CalendarEntryTone } from './Calendar'
@@ -8,8 +14,10 @@ import { eachDate } from './calendarGrid'
  *  called - in words as well as colour. */
 export const BOOKED_LABEL = 'Booked'
 export const HELD_LABEL = 'Held – pending'
+/** Story 9.4 AC1: what a closed period is called, as the legend names it and as a closure's row
+ *  starts ("Unavailable – Maintenance"). */
+export const UNAVAILABLE_LABEL = 'Unavailable'
 
-const CLOSED_PREFIX = 'Closed'
 const HELD_ENTRY_PREFIX = 'Held'
 // Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
 // (setup before it, teardown after it, or both), which side names the second line.
@@ -21,14 +29,8 @@ const TURNAROUND_BOTH_LABEL = 'Setup and teardown included'
 const TURNAROUND_ONLY_LABEL = 'Setup and teardown only'
 const HELD_TURNAROUND_ONLY_LABEL = `${HELD_LABEL}, setup and teardown only`
 
-/** Mirrors `UnavailabilityReason` in backend/app/venues/models.py: a closure's `reason`. */
-const CLOSURE_REASON_NAMES: Record<string, string> = {
-  MAINTENANCE: 'Maintenance',
-  RENOVATION: 'Renovation',
-  SAFETY: 'Safety',
-  INTERNAL_USE: 'Internal use',
-  OTHER: 'Other',
-}
+/** A closure's `reason` by name, from the one list `api/venues.ts` mirrors. */
+const CLOSURE_REASON_NAMES: Record<string, string> = UNAVAILABILITY_REASON_NAMES
 
 // Every event runs on Singapore time, which has no daylight saving, so a day is always 24 hours
 // (see shared/format.ts).
@@ -47,13 +49,23 @@ interface DaySlice {
  * Story 9.1 AC5/AC9: one window's part of one Singapore day, ready to list. A booking that runs
  * over several days has one of these on each, holding only the part that falls on that day.
  */
+/** Story 9.4 AC6: the closure a day item is a part of, so Venue Staff can edit or end it from
+ *  the day it falls on. `description` is the closure's own text, or null when it has none. */
+export interface DayClosure {
+  id: string
+  startsAt: string
+  endsAt: string
+  reason: string
+  description: string | null
+}
+
 export interface DayItem {
   id: string
   /** `YYYY-MM-DD`, Singapore time. */
   date: string
   /** The event's name, or a closure's notes. */
   label: string
-  /** "Booked", "Held – pending" or "Closed – Maintenance"; on a day only a booking's setup or
+  /** "Booked", "Held – pending" or "Unavailable – Maintenance"; on a day only a booking's setup or
    *  teardown reaches, "Setup and teardown only" or "Held – pending, setup and teardown only". */
   kindLabel: string
   tone: CalendarEntryTone
@@ -72,6 +84,8 @@ export interface DayItem {
   sortStart: number
   /** The item as a calendar cell shows it. */
   entryLabel: string
+  /** The closure this item is a part of; null for a booking or a hold. */
+  closure: DayClosure | null
 }
 
 function startOfDay(date: string): number {
@@ -102,8 +116,16 @@ function isSameSlice(first: DaySlice, second: DaySlice): boolean {
   return first.start === second.start && first.end === second.end
 }
 
+/** Story 9.4 AC1: what a closure's chip says in the month grid, where there is room for a few
+ *  words: its reason's name, or - for Other, which says nothing by itself - its description. The
+ *  day list keeps "Unavailable – <reason>" and the description both. */
+function closureEntryLabel(window: VenueUnavailableWindow): string {
+  if (window.reason === OTHER_UNAVAILABILITY_REASON) return window.label
+  return CLOSURE_REASON_NAMES[window.reason] ?? window.label
+}
+
 function closureKindLabel(reason: string): string {
-  return `${CLOSED_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
+  return `${UNAVAILABLE_LABEL} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
 
 function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
@@ -118,6 +140,24 @@ function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string 
   const hasTeardown = blocked.end > bookingSlice.end
   if (hasSetup && hasTeardown) return TURNAROUND_BOTH_LABEL
   return hasSetup ? TURNAROUND_SETUP_LABEL : TURNAROUND_TEARDOWN_LABEL
+}
+
+/** The closure a calendar window is, or null for a booking or a hold. */
+function closureOf(window: VenueUnavailableWindow): DayClosure | null {
+  // A booking or hold has no id; a stubbed window in a spec may lack the field altogether.
+  if (typeof window.id !== 'string') return null
+  return {
+    id: window.id,
+    startsAt: window.starts_at,
+    endsAt: window.ends_at,
+    reason: window.reason,
+    description: window.description,
+  }
+}
+
+function entryLabelOf(window: VenueUnavailableWindow, isBooking: boolean, isHeld: boolean): string {
+  if (isHeld) return `${HELD_ENTRY_PREFIX} – ${window.label}`
+  return isBooking ? window.label : closureEntryLabel(window)
 }
 
 function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
@@ -153,7 +193,8 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[
           ? `${HOLD_EXPIRES_LABEL} ${formatDateTime(window.hold_expires_at)}`
           : null,
         sortStart: (bookingSlice ?? blocked).start,
-        entryLabel: isHeld ? `${HELD_ENTRY_PREFIX} – ${window.label}` : window.label,
+        entryLabel: entryLabelOf(window, isBooking, isHeld),
+        closure: closureOf(window),
       },
     ]
   })

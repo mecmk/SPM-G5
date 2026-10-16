@@ -764,7 +764,7 @@ test("13.1.3 AC1/AC2: the request detail page opens the venue calendar on the re
   // AC1: story 9.1's legend, and the rest of the month - here, the room's seeded closure.
   await expect(calendar.getByText('Unavailable', { exact: true })).toBeVisible()
   await expect(
-    calendar.getByRole('button', { name: /^2 November 2026.*Annual air-con servicing/ }),
+    calendar.getByRole('button', { name: /^2 November 2026.*Maintenance/ }),
   ).toBeVisible()
 
   // AC2: the request's own day is already open, listing the request as a hold.

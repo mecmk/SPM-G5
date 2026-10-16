@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { formatDate, inputToInstant } from '../shared/format'
 import { Chip } from './Chip'
-import type { DayItem } from './venueCalendarDays'
+import type { DayClosure, DayItem } from './venueCalendarDays'
 
 export interface VenueDayPanelProps {
   /** The id the day's button points at with `aria-controls`. */
@@ -12,12 +12,15 @@ export interface VenueDayPanelProps {
   /** Whether opening (or switching to) a day brings the list into view. Off for a day open on
    *  arrival, which the user has not asked to see yet. */
   scrollIntoView?: boolean
+  /** Story 9.4 AC6: what Venue Staff can do to a closure from its row - edit it, end it or remove
+   *  it - given by the page that may offer them. Rows of bookings and holds never take any. */
+  renderClosureActions?: (closure: DayClosure) => ReactNode
 }
 
 /**
  * Story 9.1 AC5: the list a pressed calendar day opens - every booking, hold and closure that
  * falls on it, in time order. Each row gives the time first, then the event's name, then a text
- * label ("Booked", "Held – pending", "Closed – Maintenance") so the difference is never carried
+ * label ("Booked", "Held – pending", "Unavailable – Maintenance") so the difference is never carried
  * by colour alone, then, when the venue is blocked for longer than the event runs, the whole
  * blocked stretch. AC7/AC8: rows are separate, so several events on one day, or two that meet at
  * 12:00, are each listed. AC9: a multi-day booking's row holds only the part on this day. Story
@@ -27,7 +30,13 @@ export interface VenueDayPanelProps {
  * switching to) a day scrolls it into view - only as far as needed. Focus is left on the day's
  * button, so pressing it again still closes the list.
  */
-export function VenueDayPanel({ id, date, items, scrollIntoView = true }: VenueDayPanelProps) {
+export function VenueDayPanel({
+  id,
+  date,
+  items,
+  scrollIntoView = true,
+  renderClosureActions,
+}: VenueDayPanelProps) {
   const headingId = `${id}-heading`
   const panelRef = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -52,6 +61,9 @@ export function VenueDayPanel({ id, date, items, scrollIntoView = true }: VenueD
                 {item.turnaround !== null && item.holdExpiry !== null && <br />}
                 {item.holdExpiry}
               </span>
+            )}
+            {item.closure !== null && renderClosureActions !== undefined && (
+              <span className="calendar-day-actions">{renderClosureActions(item.closure)}</span>
             )}
           </li>
         ))}

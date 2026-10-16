@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { mediaUrl } from '../api/client'
+import { useAuth } from '../auth/authContext'
+import { PERMISSIONS } from '../auth/permissions'
 import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
+import type { DayClosure } from '../components/venueCalendarDays'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH, venueRequestPath, venueSwitchPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
@@ -13,6 +16,9 @@ import { useVenueCalendar } from '../shared/useVenueCalendar'
 import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
+import { blockOffLabel } from './blockOffLabels'
+import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
+import { ClosureActions } from './ClosureActions'
 
 const DAY_PANEL_ID = 'venue-calendar-day-panel'
 
@@ -57,7 +63,41 @@ export function VenueDetailPage() {
     (startsAt: string, endsAt: string) => getVenueCalendar(venueId, startsAt, endsAt),
     [venueId],
   )
-  const calendar = useVenueCalendar(loadWindows, new Date())
+  /** Story 9.4: Venue Staff may mark the venue unavailable; nobody else is offered the controls. */
+  const { can } = useAuth()
+  const canManageUnavailability = can(PERMISSIONS.VENUE_UNAVAILABILITY_MANAGE)
+  /** Story 9.4: counts the closures saved from this page, so the calendar loads them again. */
+  const [closureVersion, setClosureVersion] = useState(0)
+  const calendar = useVenueCalendar(loadWindows, new Date(), String(closureVersion))
+
+  /** Story 9.4 AC6: the closure whose row's Edit was pressed, while the form is open on it. */
+  const [editingClosure, setEditingClosure] = useState<DayClosure | null>(null)
+
+  function handleClosureSaved() {
+    setClosureVersion((version) => version + 1)
+  }
+
+  function handleEditFinished() {
+    setEditingClosure(null)
+  }
+
+  function renderClosureActions(closure: DayClosure) {
+    /** Ended or removed from its row: if its form is open, there is nothing left to edit. */
+    function handleClosureChanged() {
+      if (editingClosure?.id === closure.id) setEditingClosure(null)
+      handleClosureSaved()
+    }
+
+    return (
+      <ClosureActions
+        key={`${closure.id}:${closure.startsAt}:${closure.endsAt}`}
+        venueId={venueId}
+        closure={closure}
+        onEdit={setEditingClosure}
+        onChanged={handleClosureChanged}
+      />
+    )
+  }
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   /** Story 8.3 AC6: the gallery picture the carousel is open on, if it is open. */
@@ -281,8 +321,30 @@ export function VenueDetailPage() {
               error={calendar.error}
               isLoading={calendar.isLoading}
               dayPanelId={DAY_PANEL_ID}
+              renderClosureActions={canManageUnavailability ? renderClosureActions : undefined}
             />
           </section>
+
+          {/* Story 9.4 AC1/AC9: Venue Staff's own controls, apart from the calendar everyone sees. */}
+          {canManageUnavailability && (
+            <section className="card stack" aria-labelledby="venue-block-off-heading">
+              <p className="eyebrow" id="venue-block-off-heading">
+                {blockOffLabel(editingClosure !== null)}
+              </p>
+              <p className="muted">
+                Close this venue for a period, for example for maintenance. Any bookings in that
+                period will be flagged and their coordinators told.
+              </p>
+              <VenueUnavailabilitySection
+                key={editingClosure?.id ?? 'new'}
+                venueId={venue.id}
+                venueName={venue.name}
+                onSaved={handleClosureSaved}
+                editing={editingClosure}
+                onEditFinished={handleEditFinished}
+              />
+            </section>
+          )}
         </div>
 
         <aside className="card stack" aria-labelledby="venue-quick-facts-heading">

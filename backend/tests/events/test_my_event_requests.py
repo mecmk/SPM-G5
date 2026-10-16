@@ -122,6 +122,8 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.BOOK_FAIR),
         str(Events.FOOD_FESTIVAL),
         str(Events.NIGHT_WALK),
+        str(Events.CHOIR_SHOWCASE),
+        str(Events.ART_MARKET),
         str(Events.JAZZ_EVENING),
         str(Events.DESIGN_MASTERCLASS),
         str(Events.FOUNDERS_FIRESIDE),
