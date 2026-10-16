@@ -9,15 +9,13 @@ Values are stored as canonical JSON text - keys sorted, moments in UTC - so the 
 reads the same: a proposal identical to the current value is recognised and refused (AC4), and
 story 19.2 can show both sides as they were when the request was raised.
 
-Deciding (story 19.2, Phase 1). The assigned coordinator approves or rejects a pending request, in
-one transaction under the event's row lock - the lock 19.1's raise and withdrawal take - so a
+Deciding (story 19.2). The assigned coordinator approves or rejects a pending request, in one
+transaction under the event's row lock - the lock 19.1's raise and withdrawal take - so a
 withdrawal, a reassignment and a second decision are each serialised with it (AC6, AC7). The
 request is claimed first by a conditional update, so of two decisions only one lands; every check
-made after the claim rolls it back with everything else when it refuses (AC2). Only an expected
-attendance change on a Planning event can be approved yet: every other approval would move
-bookings, equipment holds or the event's status, which Phase 2 adds (AC5, AC8), so until then it
-is refused and changes nothing. Rejecting works for every field while the event is still going
-ahead, since it changes nothing on the event (AC3).
+made after the claim rolls it back with everything else when it refuses (AC2). Approving applies
+the change by the creation rules, releases only the bookings and equipment it affects (AC5), and
+returns an event past Planning to Planning (AC8). Rejecting changes nothing on the event (AC3).
 """
 
 from __future__ import annotations
@@ -34,7 +32,6 @@ from sqlalchemy.orm import Session, contains_eager
 
 from app.auth.models import User
 from app.bookings import service as bookings_service
-from app.bookings.models import VenueBooking
 from app.change_requests.models import ChangeRequestField, ChangeRequestStatus, EventChangeRequest
 from app.change_requests.schemas import (
     AttendanceChangeIn,
@@ -45,6 +42,7 @@ from app.change_requests.schemas import (
     VenueRequirementsChangeIn,
 )
 from app.common.audit import record_audit
+from app.equipment import service as equipment_service
 from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement
 from app.events.schemas import VenueRequirementIn
@@ -166,14 +164,17 @@ def _requirement_value(
     requirement: VenueRequirement | VenueRequirementIn, event: Event
 ) -> dict[str, Any]:
     """One venue requirement, stored or proposed, in one shape. A requirement given no times of
-    its own is needed for the whole event (2.7 AC2), so it reads with the event's times. Ids are
-    left out: they identify rows, not part of what is being asked for."""
+    its own is needed for the whole event (2.7 AC2), so it reads with the event's times. Story
+    19.2: its ``id`` is kept - None for a new one - so an approval can tell an edited requirement
+    from a removed one and a new one; it identifies a row, not part of what is being asked for,
+    so ``_without_ids`` leaves it out wherever two values are compared."""
     if isinstance(requirement, VenueRequirement):
         facilities = [(f.facility_code, f.quantity, f.notes) for f in requirement.facilities]
     else:
         facilities = [(f.code, f.quantity, f.notes) for f in requirement.facilities]
     is_timed = requirement.starts_at is not None
     return {
+        "id": None if requirement.id is None else str(requirement.id),
         "name": requirement.name,
         "capacity": requirement.capacity,
         "layout_code": requirement.layout_code,
@@ -194,35 +195,53 @@ def _equipment_value(lines: list[tuple[str, int, str | None]]) -> list[dict[str,
     ]
 
 
+def _current_value(event: Event, field: str) -> Any:
+    """The field's value on ``event`` as it stands, canonical - what a request raised now would
+    record, and what an approval checks is still there (story 19.2 AC7)."""
+    if field == ChangeRequestField.SCHEDULE:
+        return _schedule_value(event.starts_at, event.ends_at)
+    if field == ChangeRequestField.EXPECTED_ATTENDANCE:
+        return event.expected_attendance
+    if field == ChangeRequestField.VENUE_REQUIREMENTS:
+        return [_requirement_value(item, event) for item in event.venue_requirements]
+    if field == ChangeRequestField.EQUIPMENT:
+        return _equipment_value(
+            [
+                (line.equipment_type.code, line.quantity, line.technical_notes)
+                for line in event.equipment_requests
+            ]
+        )
+    raise TypeError(f"unhandled change request field: {field}")
+
+
+def _without_ids(field: str, value: Any) -> Any:
+    """``value`` with each venue requirement's id left out, so two values compare on what they
+    ask for (AC4) - and a value stored before ids were kept compares with one stored after."""
+    if field != ChangeRequestField.VENUE_REQUIREMENTS or value is None:
+        return value
+    return [{key: item[key] for key in item if key != "id"} for item in value]
+
+
 def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> tuple[Any, Any]:
     """AC3/AC4: check the proposed value by the creation rules for its field, then return the
     field's current value and the proposed one, both canonical."""
+    current = _current_value(event, data.field)
     if isinstance(data, ScheduleChangeIn):
         proposed = data.proposed
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
-        return (
-            _schedule_value(event.starts_at, event.ends_at),
-            _schedule_value(proposed.starts_at, proposed.ends_at),
-        )
+        return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
-        return event.expected_attendance, data.proposed
+        return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)
-        return (
-            [_requirement_value(item, event) for item in event.venue_requirements],
-            [_requirement_value(item, event) for item in data.proposed],
-        )
+        return current, [_requirement_value(item, event) for item in data.proposed]
     if isinstance(data, EquipmentChangeIn):
         events_service.check_proposed_equipment(db, event, data.proposed)
-        current = [
-            (line.equipment_type.code, line.quantity, line.technical_notes)
-            for line in event.equipment_requests
-        ]
         proposed = [
             (item.equipment_type_code, item.quantity, item.technical_notes)
             for item in data.proposed
         ]
-        return _equipment_value(current), _equipment_value(proposed)
+        return current, _equipment_value(proposed)
     raise TypeError(f"unhandled change request field: {data.field}")
 
 
@@ -277,7 +296,7 @@ def raise_change_request(
     event = events_service.get_own_event_for_update(db, event_id, actor=actor)
     _refuse_unless_requestable(event)
     current, proposed = _current_and_proposed(db, event, data)
-    if current == proposed:
+    if _without_ids(data.field, current) == _without_ids(data.field, proposed):
         raise UnchangedValue(data.field)
 
     request = EventChangeRequest(
@@ -415,10 +434,9 @@ _DECIDABLE_STATUSES = (
     EventStatus.AWAITING_SAFETY_CHECK,
     EventStatus.CONFIRMED,
 )
-# Phase 1: approving on a Confirmed or Awaiting safety check event returns it to Planning (AC8),
-# and every field but the attendance moves bookings or equipment holds (AC5). Both are Phase 2.
-_APPROVABLE_STATUS = EventStatus.PLANNING
-_APPROVABLE_FIELDS = (ChangeRequestField.EXPECTED_ATTENDANCE,)
+# AC8: an approved change sends an event past Planning back to it, for a new safety check (21.2).
+_RETURNS_TO_PLANNING = (EventStatus.AWAITING_SAFETY_CHECK, EventStatus.CONFIRMED)
+_RETURNED_TO_PLANNING_REASON = "Change to the {label} approved."
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can decide its change requests."
@@ -432,17 +450,9 @@ ALREADY_DECIDED_MESSAGES = {
 DECISIONS_CLOSED_MESSAGE = (
     "This event is {status}, so its change requests can no longer be decided."
 )
-FIELD_NOT_YET_APPROVABLE_MESSAGE = "A change to the {label} cannot be approved yet."
-STATUS_NOT_YET_APPROVABLE_MESSAGE = (
-    "This event is {status}, so its change requests cannot be approved yet."
-)
 CHANGED_SINCE_REQUESTED_MESSAGE = (
-    "The {label} has changed since this request was raised, so it cannot be approved. Reject it "
-    "so the organiser can ask again."
-)
-BOOKING_TOO_SMALL_MESSAGE = (
-    "The booking of {venue} holds fewer people than the proposed attendance, so this change "
-    "cannot be approved yet."
+    "The {label} changed since this request was raised, so it cannot be approved. Reject it so "
+    "the organiser can ask again."
 )
 REJECTION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this change request."
 
@@ -473,34 +483,12 @@ class DecisionsClosed(EventStateConflict):
         super().__init__(DECISIONS_CLOSED_MESSAGE.format(status=status))
 
 
-class FieldNotYetApprovable(EventStateConflict):
-    """AC5 (Phase 1): approving this field would move bookings or equipment holds."""
-
-    def __init__(self, field: str) -> None:
-        super().__init__(FIELD_NOT_YET_APPROVABLE_MESSAGE.format(label=FIELD_LABELS[field]))
-
-
-class StatusNotYetApprovable(EventStateConflict):
-    """AC8 (Phase 1): approving would have to return the event to Planning."""
-
-    def __init__(self, status: str) -> None:
-        super().__init__(STATUS_NOT_YET_APPROVABLE_MESSAGE.format(status=status))
-
-
 class ChangedSinceRequested(EventStateConflict):
     """AC7: the field no longer holds the value the organiser asked to change, so approving would
     overwrite a change made since (another request, or the coordinator's correction)."""
 
     def __init__(self, field: str) -> None:
         super().__init__(CHANGED_SINCE_REQUESTED_MESSAGE.format(label=FIELD_LABELS[field]))
-
-
-class BookingTooSmall(EventStateConflict):
-    """AC5 (Phase 1): a live booking was made for fewer people than the change asks for, so it
-    would have to be released, which is Phase 2."""
-
-    def __init__(self, venue: str) -> None:
-        super().__init__(BOOKING_TOO_SMALL_MESSAGE.format(venue=venue))
 
 
 class MissingRejectionReason(InvalidEventRequest):
@@ -583,45 +571,109 @@ def _claim_for_decision(
     return _Claim(event=event, request=request)
 
 
-def _people_to_hold_with(booking: VenueBooking, attendance: int) -> int:
-    """How many people ``booking``'s venue would have to hold with the event's attendance at
-    ``attendance``: its requirement's own number, else the attendance - the rule
-    ``venues.service.people_to_hold`` applies to the event as it stands (12.1 AC2)."""
-    requirement = booking.venue_requirement
-    if requirement is not None and requirement.capacity is not None:
-        return requirement.capacity
-    return attendance
+def _proposed_requirements(
+    event: Event, proposed: list[dict[str, Any]]
+) -> list[VenueRequirementIn]:
+    """AC2: the stored proposal as the requirements 2.7 edits. Each keeps the id 19.1 recorded;
+    one stored before ids were kept is matched to the event's requirement of the same name - names
+    are unique on an event (2.7 AC9) - or else is new."""
+    by_name = {
+        (requirement.name or "").strip().lower(): requirement.id
+        for requirement in event.venue_requirements
+    }
+    items = []
+    for value in proposed:
+        if "id" in value:
+            requirement_id = value["id"]
+        else:
+            requirement_id = by_name.get((value["name"] or "").strip().lower())
+        items.append(
+            VenueRequirementIn(
+                id=requirement_id,
+                name=value["name"],
+                capacity=value["capacity"],
+                starts_at=value["starts_at"],
+                ends_at=value["ends_at"],
+                layout_code=value["layout_code"],
+                notes=value["notes"],
+                facilities=value["facilities"],
+            )
+        )
+    return items
 
 
-def _apply_attendance(db: Session, event: Event, request: EventChangeRequest) -> dict[str, Any]:
-    """AC2/AC5/AC7: set the event's expected attendance to the proposed figure, unless the figure
-    it holds is no longer the one the organiser asked to change, a venue requirement would need
-    more room than the new attendance (2.7 AC6), or a live booking was made for fewer people than
-    it would now have to hold. A booking that still holds everyone is left exactly as it is.
-    Returns the change, ``{"from": ..., "to": ...}``, for the audit log."""
-    current = json.loads(request.current_value)
+def _apply_field(db: Session, event: Event, request: EventChangeRequest, *, actor: User) -> None:
+    """AC2: write what ``request`` asks for to ``event``, re-checked against the event as it now
+    stands by the same creation rules 19.1 checked when it was raised."""
     proposed = json.loads(request.proposed_value)
-    if event.expected_attendance != current:
-        raise ChangedSinceRequested(request.field_name)
-    events_service.check_proposed_attendance(event, proposed)
-    for booking in bookings_service.list_holding_bookings(db, event.id):
-        if _people_to_hold_with(booking, proposed) > booking.expected_attendance:
-            raise BookingTooSmall(booking.venue.name)
-    event.expected_attendance = proposed
-    db.flush()
-    return {"from": current, "to": proposed}
+    field = request.field_name
+    if field == ChangeRequestField.EXPECTED_ATTENDANCE:
+        events_service.check_proposed_attendance(event, proposed)
+        event.expected_attendance = proposed
+        db.flush()
+    elif field == ChangeRequestField.SCHEDULE:
+        events_service.apply_proposed_schedule(
+            db,
+            event,
+            datetime.fromisoformat(proposed["starts_at"]),
+            datetime.fromisoformat(proposed["ends_at"]),
+        )
+        # 15.1 AC8: every item is re-checked, and held again, for the new dates.
+        equipment_service.recheck_equipment_for_new_dates(db, event, actor=actor)
+    elif field == ChangeRequestField.VENUE_REQUIREMENTS:
+        events_service.apply_proposed_venue_requirements(
+            db, event, _proposed_requirements(event, proposed)
+        )
+    else:
+        equipment_service.apply_equipment_change(
+            db,
+            event,
+            [
+                equipment_service.ProposedEquipmentLine(
+                    equipment_type_code=line["equipment_type_code"],
+                    quantity=line["quantity"],
+                    technical_notes=line["technical_notes"],
+                )
+                for line in proposed
+            ],
+            actor=actor,
+        )
 
 
 def _apply_approved_change(
-    db: Session, event: Event, request: EventChangeRequest
+    db: Session, event: Event, request: EventChangeRequest, *, actor: User
 ) -> dict[str, Any]:
-    """AC2: apply what ``request`` asks for, or refuse what Phase 1 cannot apply safely (AC5,
-    AC8)."""
-    if event.status != _APPROVABLE_STATUS:
-        raise StatusNotYetApprovable(event.status)
-    if request.field_name not in _APPROVABLE_FIELDS:
-        raise FieldNotYetApprovable(request.field_name)
-    return _apply_attendance(db, event, request)
+    """AC2/AC5/AC7/AC8: apply what ``request`` asks for, releasing only what it affects.
+
+    Refused, changing nothing, when the field no longer holds the value the organiser asked to
+    change (AC7), or the change breaks a creation rule. The event's bookings are read before the
+    change and judged after it by f7.2.4's fit rule: each one it no longer fits is released and
+    Venue Staff told (AC5); equipment is released and held again by the equipment service. An
+    event past Planning goes back to it (AC8). Returns the audit details: the change, the bookings
+    released, and the status left, if any."""
+    field = request.field_name
+    current = _current_value(event, field)
+    if _without_ids(field, json.loads(request.current_value)) != _without_ids(field, current):
+        raise ChangedSinceRequested(field)
+
+    booked = events_service.live_bookings(db, event)
+    _apply_field(db, event, request, actor=actor)
+    label = FIELD_LABELS[field]
+    released = [
+        str(booking.id)
+        for booking in events_service.bookings_no_longer_fitting(event, booked)
+        if bookings_service.release_booking(db, booking, actor=actor, change=label)
+    ]
+    details: dict[str, Any] = {
+        "from": _without_ids(field, current),
+        "to": _without_ids(field, json.loads(request.proposed_value)),
+        "released_booking_ids": released,
+    }
+    if event.status in _RETURNS_TO_PLANNING:
+        details["returned_from_status"] = events_service.return_to_planning(
+            db, event, actor=actor, reason=_RETURNED_TO_PLANNING_REASON.format(label=label)
+        )
+    return details
 
 
 def _notify_organiser(
@@ -666,7 +718,7 @@ def approve_change_request(
     )
     event, request = claim.event, claim.request
     try:
-        change = _apply_approved_change(db, event, request)
+        change = _apply_approved_change(db, event, request, actor=actor)
     except InvalidEventRequest:
         db.rollback()
         raise

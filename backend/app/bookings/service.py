@@ -92,7 +92,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -482,18 +482,58 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     )
 
 
-def list_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
-    """Story 19.2: the event's bookings that hold a venue now - pending or approved (12.1 AC3) -
-    oldest first, with each one's venue and venue requirement, so a change to the event can be
-    judged against what was booked."""
-    return list(
-        db.scalars(
-            select(VenueBooking)
-            .where(VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES))
-            .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.venue_requirement))
-            .order_by(VenueBooking.created_at, VenueBooking.id)
-        ).all()
+def _notify_venue_staff_of_release(
+    db: Session, booking: VenueBooking, *, actor: User, change: str
+) -> None:
+    """Story 19.2 AC5: every active Venue Staff member is told a booking was released, as they are
+    of a withdrawal (12.2 AC2), since their schedule changes with it."""
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_RELEASED,
+            event_id=booking.event_id,
+            title="A venue booking was released",
+            message=(
+                f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
+                f"an approved change to the event's {change} no longer fits it."
+            ),
+            related_entity_type="venue_booking",
+            related_entity_id=booking.id,
+            commit=False,
+        )
+
+
+def release_booking(db: Session, booking: VenueBooking, *, actor: User, change: str) -> bool:
+    """Story 19.2 AC5: an approved change to its event (``change`` names the field) no longer fits
+    ``booking``, so it is cancelled, freeing its venue, and Venue Staff are told. Who approved it
+    and when stay on the record. The update is conditional on the booking still holding its venue,
+    so one Venue Staff rejected, or the sweep expired, meanwhile is left alone; returns whether it
+    was released. Written, not committed: the caller's decision commits it."""
+    released = db.execute(
+        update(VenueBooking)
+        .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
+        .values(status=BookingStatus.CANCELLED)
     )
+    if released.rowcount == 0:
+        return False
+    db.refresh(booking)
+    record_audit(
+        db,
+        actor=actor,
+        action="BOOKING_RELEASED",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={
+            "venue_id": str(booking.venue_id),
+            "event_id": str(booking.event_id),
+            "change": change,
+        },
+        commit=False,
+    )
+    _notify_venue_staff_of_release(db, booking, actor=actor, change=change)
+    return True
 
 
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
