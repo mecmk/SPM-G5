@@ -152,6 +152,11 @@ class Events:
     # request each at a venue dedicated to that spec.
     CHOIR_SHOWCASE = _e(60)  # Harbour Pavilion
     ART_MARKET = _e(61)  # Sunrise Studio
+    # Story 21.2's e2e events: organiser 1, coordinator 1, Seminar Room 2.1 booked, Nov 2028.
+    CODING_BOOTCAMP = _e(50)  # PLANNING, secured, never reviewed
+    CYBER_CLINIC = _e(47)  # AWAITING_SAFETY_CHECK; the spec requests changes
+    DATA_SUMMIT = _e(48)  # PLANNING; sent back with its venue flagged, venue unchanged
+    AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
 
 
 class Bookings:
@@ -177,6 +182,11 @@ class Bookings:
     # Story 18.1: Events.JAZZ_EVENING's two venues, approved, each hold completed.
     APPROVED_JAZZ_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000013")
     APPROVED_JAZZ_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000014")  # extra venue
+    # Story 21.2's, each at Seminar Room 2.1.
+    APPROVED_BOOTCAMP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000015")
+    APPROVED_CYBER_CLINIC_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000016")
+    APPROVED_DATA_SUMMIT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000017")
+    APPROVED_AI_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000018")
 
 
 class Registrations:
@@ -271,3 +281,5 @@ class SafetyReviews:
     BOOK_FAIR_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
     FOOD_FESTIVAL_APPROVED = uuid.UUID("ffffffff-0000-0000-0000-000000000002")
     NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")
+    # Story 21.2: Events.DATA_SUMMIT's, with one finding flagging its venue bookings.
+    DATA_SUMMIT_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000004")

@@ -88,6 +88,10 @@ def test_organiser_sees_every_request_they_own(organiser_client):
         str(Events.COMPLETED),
         str(Events.EQUIPMENT_WORKSHOP),
         str(Events.EQUIPMENT_SHOWCASE),
+        str(Events.CODING_BOOTCAMP),
+        str(Events.CYBER_CLINIC),
+        str(Events.DATA_SUMMIT),
+        str(Events.AI_WORKSHOP),
     }
 
 
@@ -270,15 +274,15 @@ def test_limit_caps_the_page_and_total_counts_every_request_i_own(organiser_clie
     page = _page(organiser_client, "?limit=2")
 
     assert len(page["items"]) == 2
-    assert page["total"] == 11  # the eleven seeded requests Olivia owns
+    assert page["total"] == 15  # the fifteen seeded requests Olivia owns
 
 
 @pytest.mark.story("2.6", ac=9)
 def test_pages_follow_on_from_each_other_without_overlap(organiser_client):
     everything = _ids(organiser_client)
 
-    first = _ids(organiser_client, "?limit=6&offset=0")
-    second = _ids(organiser_client, "?limit=6&offset=6")
+    first = _ids(organiser_client, "?limit=8&offset=0")
+    second = _ids(organiser_client, "?limit=8&offset=8")
 
     assert first + second == everything
 
@@ -297,7 +301,7 @@ def test_an_offset_past_the_end_is_an_empty_page_not_an_error(organiser_client):
     page = _page(organiser_client, "?offset=100")
 
     assert page["items"] == []
-    assert page["total"] == 11
+    assert page["total"] == 15
 
 
 @pytest.mark.story("2.6", ac=9)

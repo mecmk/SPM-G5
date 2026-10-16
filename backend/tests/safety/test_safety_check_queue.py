@@ -69,7 +69,6 @@ def _review(db: Session, event: Event, outcome: str, at: datetime) -> None:
             reviewed_by_id=Users.SAFETY_OFFICER.id,
             reviewed_at=at,
             outcome=outcome,
-            notes=None,
             facts={},
         )
     )
@@ -80,8 +79,14 @@ def _review(db: Session, event: Event, outcome: str, at: datetime) -> None:
 @pytest.mark.story("21.1", ac=2)
 def test_queue_lists_the_awaiting_events_oldest_first(safety_client):
     """The concert entered on 10 Oct; the book fair first entered on 6 Oct but was sent back and
-    re-entered on 11 Oct, so its latest entry counts."""
-    assert _ids(safety_client) == [str(Events.HARBOUR_CONCERT), str(Events.BOOK_FAIR)]
+    re-entered on 11 Oct, so its latest entry counts. Story 21.2's cyber clinic and AI workshop
+    entered on 12 and 13 Oct."""
+    assert _ids(safety_client) == [
+        str(Events.HARBOUR_CONCERT),
+        str(Events.BOOK_FAIR),
+        str(Events.CYBER_CLINIC),
+        str(Events.AI_WORKSHOP),
+    ]
 
 
 @pytest.mark.story("21.1", ac=2)
@@ -89,12 +94,14 @@ def test_queue_orders_by_when_each_event_entered_the_check(safety_client, db: Se
     earliest = make_event(db, status=EventStatus.AWAITING_SAFETY_CHECK)
     _entered_check(db, earliest, datetime(2026, 10, 9, 1, 0, tzinfo=UTC))
     latest = make_event(db, status=EventStatus.AWAITING_SAFETY_CHECK)
-    _entered_check(db, latest, datetime(2026, 10, 12, 1, 0, tzinfo=UTC))
+    _entered_check(db, latest, datetime(2026, 10, 14, 1, 0, tzinfo=UTC))
 
     assert _ids(safety_client) == [
         str(earliest.id),
         str(Events.HARBOUR_CONCERT),
         str(Events.BOOK_FAIR),
+        str(Events.CYBER_CLINIC),
+        str(Events.AI_WORKSHOP),
         str(latest.id),
     ]
 
@@ -177,19 +184,24 @@ def test_accepted_tab_lists_events_whose_latest_review_approved_them(safety_clie
 
 @pytest.mark.story("21.1", ac=2)
 def test_declined_tab_lists_events_sent_back_and_not_yet_resent(safety_client):
-    """The book fair was sent back too, but it awaits the check again, so it is Pending."""
-    assert _ids(safety_client, "DECLINED") == [str(Events.NIGHT_WALK)]
+    """The book fair was sent back too, but it awaits the check again, so it is Pending. Story
+    21.2's data summit was sent back on 6 Oct, after entering on 5 Oct."""
+    assert _ids(safety_client, "DECLINED") == [str(Events.NIGHT_WALK), str(Events.DATA_SUMMIT)]
 
 
 @pytest.mark.story("21.1", ac=2)
 def test_all_tab_lists_every_tab_oldest_first(safety_client):
-    """By when each last entered the check: night walk 4 Oct, food festival 5 Oct, concert 10 Oct,
-    book fair 11 Oct."""
+    """By when each last entered the check: night walk 4 Oct, food festival 5 Oct 09:00, data
+    summit 5 Oct 12:00, concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct, AI workshop 13 Oct.
+    """
     assert _ids(safety_client, tab=None) == [
         str(Events.NIGHT_WALK),
         str(Events.FOOD_FESTIVAL),
+        str(Events.DATA_SUMMIT),
         str(Events.HARBOUR_CONCERT),
         str(Events.BOOK_FAIR),
+        str(Events.CYBER_CLINIC),
+        str(Events.AI_WORKSHOP),
     ]
 
 
@@ -202,6 +214,9 @@ def test_each_entry_says_which_tab_it_belongs_to(safety_client):
         str(Events.FOOD_FESTIVAL): "ACCEPTED",
         str(Events.HARBOUR_CONCERT): "PENDING",
         str(Events.BOOK_FAIR): "PENDING",
+        str(Events.DATA_SUMMIT): "DECLINED",
+        str(Events.CYBER_CLINIC): "PENDING",
+        str(Events.AI_WORKSHOP): "PENDING",
     }
 
 
@@ -329,7 +344,6 @@ def test_previous_reviews_are_newest_first(safety_client, db: Session):
         reviewed_by_id=Users.SAFETY_OFFICER.id,
         reviewed_at=datetime(2026, 10, 8, 1, 0, tzinfo=UTC),
         outcome=SafetyReviewOutcome.CHANGES_REQUESTED,
-        notes=None,
         facts={},
     )
     db.add(newer)
@@ -346,7 +360,8 @@ def test_previous_reviews_are_newest_first(safety_client, db: Session):
         "reviewed_at": "2026-10-07T07:00:00Z",
         "reviewed_by_name": "Sam Safety",
         "outcome": SafetyReviewOutcome.CHANGES_REQUESTED,
-        "notes": "Confirm the attendance and the microphones.",
+        "findings": [],
+        "flagged_arrangements": [],
     }
 
 

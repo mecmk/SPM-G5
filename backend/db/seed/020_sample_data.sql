@@ -1057,7 +1057,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- ---------------------------------------------------------------------
 -- Story 21.2: tests/e2e/safety-decision.spec.ts. Each flow the spec clicks through has an event
--- of its own, so specs running in parallel never share one: the coding bootcamp (3333..46) is
+-- of its own, so specs running in parallel never share one: the coding bootcamp (3333..50) is
 -- secured and never reviewed, for requesting a review; the cyber clinic (47) awaits the check,
 -- for requesting changes; the data summit (48) was sent back with its venue flagged and still
 -- has the same venue, for the unchanged warning; the AI workshop (49) awaits the check, for
@@ -1067,7 +1067,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
                     contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
-    ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+    ('33333333-0000-0000-0000-000000000050', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Coding Bootcamp Day', 'Training', 'A day of hands-on coding exercises.', '2028-11-06 10:00+08', '2028-11-06 16:00+08', 60, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
      '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
@@ -1093,7 +1093,7 @@ ON CONFLICT (id) DO UPDATE SET
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
-    ('cccccccc-0000-0000-0046-000000000001', '33333333-0000-0000-0000-000000000046', 0, 'Training room', 60,
+    ('cccccccc-0000-0000-0050-000000000001', '33333333-0000-0000-0000-000000000050', 0, 'Training room', 60,
      '2028-11-06 10:00+08', '2028-11-06 16:00+08', 'CLASSROOM'),
     ('cccccccc-0000-0000-0047-000000000001', '33333333-0000-0000-0000-000000000047', 0, 'Training room', 60,
      '2028-11-07 10:00+08', '2028-11-07 16:00+08', 'CLASSROOM'),
@@ -1109,10 +1109,10 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             venue_requirement_id, hold_expires_at) VALUES
-    ('44444444-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000046', '22222222-0000-0000-0000-000000000002',
+    ('44444444-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000050', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2028-11-06 10:00+08', '2028-11-06 16:00+08', 0, 0,
      60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
-     'cccccccc-0000-0000-0046-000000000001', '2028-11-06 10:00+08'),
+     'cccccccc-0000-0000-0050-000000000001', '2028-11-06 10:00+08'),
     ('44444444-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000047', '22222222-0000-0000-0000-000000000002',
      '11111111-0000-0000-0000-000000000003', '2028-11-07 10:00+08', '2028-11-07 16:00+08', 0, 0,
      60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
@@ -1136,7 +1136,7 @@ ON CONFLICT (id) DO UPDATE SET
     hold_reminded_at = NULL, hold_completed_at = NULL;
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
-    ('99999999-0000-0000-0021-000000000001', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0021-000000000001', '33333333-0000-0000-0000-000000000050', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
     ('99999999-0000-0000-0021-000000000002', '33333333-0000-0000-0000-000000000047', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
     ('99999999-0000-0000-0021-000000000003', '33333333-0000-0000-0000-000000000047', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-12 15:00+08', NULL),
     ('99999999-0000-0000-0021-000000000004', '33333333-0000-0000-0000-000000000048', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
