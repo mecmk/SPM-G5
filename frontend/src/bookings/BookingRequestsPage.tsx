@@ -41,6 +41,7 @@ import {
 } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
+import { venueStaffOutsideHoursNotice } from './turnaround'
 
 const SHORT_ID_LENGTH = 8
 /** Story 13.1.2 AC4: requests per numbered page. */
@@ -79,6 +80,19 @@ function OpenHoldFact({ entry }: { entry: BookingQueueEntry }) {
       <p className="fact-value">{formatDateTime(openHold)}</p>
     </div>
   )
+}
+
+/** f12.1.2 (story 12.1 AC17): when the request's setup or teardown runs outside its venue's
+ * opening hours, the card says so, with the booked period; nothing otherwise, nor for an entry
+ * that gives no hours. */
+function OutsideHoursNotice({ entry }: { entry: BookingQueueEntry }) {
+  const notice = venueStaffOutsideHoursNotice(
+    entry,
+    entry.venue_operating_hours_start,
+    entry.venue_operating_hours_end,
+  )
+  if (notice === null) return null
+  return <p className="warning">{notice}</p>
 }
 
 /** Under All, `queue` once `decided` - the request it names - was decided on this page: the
@@ -125,6 +139,10 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * the booked period starts before sending (AC5). An approved booking's card shows when its open
  * hold expires. AC3: one whose hold expired leaves Approved for the Expired tab, showing when it
  * was approved and when it expired.
+ *
+ * f12.1.2 (story 12.1 AC17): a request can be approved from its card (13.2 AC1), so a card whose
+ * setup or teardown runs outside the venue's opening hours says so under the venue, with the
+ * booked period.
  */
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
@@ -300,6 +318,8 @@ export function BookingRequestsPage() {
                       {entry.venue_name} · {entry.venue_location}
                     </p>
                   </div>
+
+                  <OutsideHoursNotice entry={entry} />
 
                   <div className="fact-grid">
                     <div className="subtle-block">

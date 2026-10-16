@@ -76,6 +76,10 @@ export const EVENTS = {
   // (Planning).
   foodFestival: '33333333-0000-0000-0000-000000000037',
   nightWalk: '33333333-0000-0000-0000-000000000038',
+  // Fix f12.1.2, Planning, organiser: organiser2, coordinator, February 2027: one venue
+  // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
+  // a setup that starts before Seminar Room 2.1 opens.
+  supplierInduction: '33333333-0000-0000-0000-000000000046',
 } as const
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */

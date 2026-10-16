@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, time
 from enum import StrEnum
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.bookings.models import BookingStatus, VenueBooking
 
@@ -46,21 +46,34 @@ class BookingReferenceData(BaseModel):
 # frontend/src/api/bookings.ts, which the request step's textarea uses.
 SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 
+# Story 12.1 AC5, decided for f12.1.2 (14 Oct 2026) and not in the backlog: setup and teardown are
+# each at most 14 days, the longest an event may run. Keep in step by hand with
+# TURNAROUND_MAX_MINUTES in frontend/src/api/bookings.ts, which the request step's Setup and
+# Teardown inputs use.
+TURNAROUND_MAX_MINUTES = 14 * 24 * 60
+
 
 class BookingRequestIn(BaseModel):
     """Story 12.1 AC1: one event, against one venue - so one ``venue_id``, not a list.
 
     AC2 requires the request to carry *the event's* schedule, attendance, layout and required
-    facilities, so the service copies those from the event row; a client cannot book a period or
-    an attendance the event was not approved for.
+    facilities, so the service copies those from the event row; a client cannot change the
+    request's own times or its attendance, only widen its booked period around those times by the
+    setup and teardown below (f12.1.2).
 
     Story 12.5 AC1: ``venue_requirement_id`` names the event's venue requirement the request is
     for, and the service copies that requirement's own period, number of people, layout and
     facilities. None makes an additional venue (AC5, AC7), which carries the event's own.
 
-    The one other thing a client sends is story 11.1's ``suitability_override_reason``: why it is
-    requesting a venue that does not suit the event. Trimmed, and blank counts as not given; the
-    service decides whether one is needed.
+    A client also sends story 11.1's ``suitability_override_reason``: why it is requesting a
+    venue that does not suit the event. Trimmed, and blank counts as not given; the service
+    decides whether one is needed.
+
+    f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): a client sends the setup and
+    teardown as well, in whole minutes, which widen the booked period before the request's own
+    start and after its own end. Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES``
+    (14 days), so a negative, fractional or longer value is refused (422) - and, as the event's
+    own whole numbers are (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
     """
 
     event_id: uuid.UUID
@@ -69,6 +82,8 @@ class BookingRequestIn(BaseModel):
     suitability_override_reason: str | None = Field(
         default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
     )
+    setup_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
 
     @field_validator("suitability_override_reason", mode="before")
     @classmethod
@@ -80,14 +95,20 @@ class BookingRequestIn(BaseModel):
 
 class BookingSwitchIn(BaseModel):
     """Story 12.5, decided 11 Oct 2026: the venue a pending request is switched to. The event and
-    the venue requirement are the switched request's own, so only the venue is sent - with story
-    11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+    the venue requirement are the switched request's own, so neither is sent; the venue is, with
+    story 11.1's justification when it does not suit, read as ``BookingRequestIn`` reads it.
+
+    f12.1.2 (story 12.1 AC1/AC5): the new request's setup and teardown are sent as well, read as
+    ``BookingRequestIn`` reads them. A switch is a new request, so it carries what it sends - 0
+    when it sends none - never the replaced request's.
     """
 
     venue_id: uuid.UUID
     suitability_override_reason: str | None = Field(
         default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
     )
+    setup_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes: StrictInt = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
 
     @field_validator("suitability_override_reason", mode="before")
     @classmethod
@@ -204,7 +225,9 @@ class BookingQueueEntry(BaseModel):
     """Story 13.1 AC2: event name, requested venue, period, expected attendance and stated
     requirements. Story 13.1.2 AC2: when the request was raised. 13.1.2 AC3: ``decision_reason``
     and ``decided_at``, so a decided entry shows why and when it was decided without a second
-    request. No defaults (response schema)."""
+    request. f12.1.2 (story 12.1 AC17): the setup and teardown, the booked period and the venue's
+    opening hours, so the card can say when the setup or teardown runs outside them. No defaults
+    (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -229,6 +252,14 @@ class BookingQueueEntry(BaseModel):
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
     held_from: datetime
+    # f12.1.2 (story 12.1 AC17): what the card needs to say whether the setup or teardown runs
+    # outside the venue's opening hours, which Venue Staff weigh when approving (13.2; Q51), and
+    # to name the booked period; the hours are None when the venue has none recorded.
+    setup_minutes: int
+    teardown_minutes: int
+    held_until: datetime
+    venue_operating_hours_start: time | None
+    venue_operating_hours_end: time | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -253,6 +284,11 @@ class BookingQueueEntry(BaseModel):
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
             held_from=booking.held_from,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            held_until=booking.held_until,
+            venue_operating_hours_start=booking.venue.operating_hours_start,
+            venue_operating_hours_end=booking.venue.operating_hours_end,
         )
 
 

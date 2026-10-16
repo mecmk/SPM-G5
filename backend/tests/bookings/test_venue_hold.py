@@ -15,9 +15,10 @@ AC14 The server re-runs the conflict check at submission and creates the request
      even if the form was bypassed.
 
 The bug this fixes (27 Sep 2026): a coordinator could request a venue already booked for the
-period, and Venue Staff could then never approve it. Setup and teardown stay 0 until the rest of
-12.1, so a request's held period is its event's period. Most cases use a fresh venue and fresh
-Planning events assigned to Chloe, so no seeded booking is in the way.
+period, and Venue Staff could then never approve it. No request here sends a setup or teardown,
+so each one's held period is its event's period; the held period with them is f12.1.2's
+(test_request_setup_and_teardown.py). Most cases use a fresh venue and fresh Planning events
+assigned to Chloe, so no seeded booking is in the way.
 """
 
 from __future__ import annotations
