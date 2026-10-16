@@ -433,7 +433,7 @@ def _known_reason(value: str) -> str:
 
 class VenueUnavailabilityCreate(BaseModel):
     """Story 9.4 AC1/AC5: a period a venue is closed, with its reason. ``description`` is
-    required, for every reason (PO decision, 13 Oct 2026); the service checks it with the
+    required, for every reason (PO decision, 14 Oct 2026); the service checks it with the
     end-after-start rule, since an edit needs both against the period as it would become."""
 
     starts_at: AwareDatetime

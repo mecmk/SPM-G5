@@ -125,7 +125,7 @@ class UnavailabilityNotFound(LookupError):
 
 
 class DescriptionRequired(ValueError):
-    """Story 9.4 AC1 (PO decision, 13 Oct 2026): every block off says why, whatever its reason."""
+    """Story 9.4 AC1 (PO decision, 14 Oct 2026): every block off says why, whatever its reason."""
 
     def __init__(self) -> None:
         super().__init__(DESCRIPTION_REQUIRED_MESSAGE)

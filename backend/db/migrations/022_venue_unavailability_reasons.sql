@@ -2,7 +2,7 @@
 -- Migration 022 - story 9.4: the reasons a venue can be marked unavailable.
 --
 -- Story 9.4 AC1 gives Venue Staff exactly five reasons: Maintenance, Equipment failure,
--- Renovation, Safety concern and Other, each with a description (PO decision, 13 Oct 2026: the
+-- Renovation, Safety concern and Other, each with a description (PO decision, 14 Oct 2026: the
 -- description was first required for Other only). Until now the table allowed MAINTENANCE,
 -- RENOVATION, SAFETY, INTERNAL_USE and OTHER, and no period needed a description. From here on:
 --

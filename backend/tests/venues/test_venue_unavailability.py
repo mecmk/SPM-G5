@@ -8,7 +8,7 @@ A pending request that overlaps a period cannot be approved while it stands.
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
      Equipment failure, Renovation, Safety concern or Other, and a description, which every
-     reason needs (PO decision, 13 Oct 2026). It shows on the venue's calendar and is excluded
+     reason needs (PO decision, 14 Oct 2026). It shows on the venue's calendar and is excluded
      from venue searches.
 
 The table's own rules: the CHECK constraints refuse a reason outside the five and a period
@@ -125,7 +125,7 @@ def test_internal_use_is_no_longer_a_reason(db, notes):
 @pytest.mark.parametrize("reason", REASONS)
 @pytest.mark.parametrize("notes", [None, "", "   ", "\t\n"])
 def test_every_reason_needs_a_description_in_the_table_itself(db, reason, notes):
-    """AC1 (PO decision, 13 Oct 2026): a period with no description is refused whatever wrote
+    """AC1 (PO decision, 14 Oct 2026): a period with no description is refused whatever wrote
     it, for any reason. A description makes it valid."""
     refusal = _refused(db, reason, notes)
 
@@ -379,7 +379,7 @@ def test_other_with_a_description_is_accepted(db, venue_staff_client):
 @pytest.mark.parametrize("reason", REASONS)
 @pytest.mark.parametrize("description", [None, "", "   ", "\t\n", "<omitted>"])
 def test_a_block_off_without_a_description_is_refused(db, venue_staff_client, reason, description):
-    """AC1 (PO decision, 13 Oct 2026): 422 and nothing saved, for a missing, empty or blank
+    """AC1 (PO decision, 14 Oct 2026): 422 and nothing saved, for a missing, empty or blank
     description, whichever reason is given - every block off says why."""
     venue = make_venue(db)
     body = _future_body(reason=reason, description=description)
@@ -653,7 +653,7 @@ def test_an_edit_changes_start_end_reason_and_description(db, venue_staff_client
 @pytest.mark.story("9.4", ac=1)
 @pytest.mark.story("9.4", ac=6)
 def test_an_edit_may_not_leave_a_closure_without_its_description(db, venue_staff_client):
-    """AC1 on edit (PO decision, 13 Oct 2026): clearing the description of a closure of any
+    """AC1 on edit (PO decision, 14 Oct 2026): clearing the description of a closure of any
     reason is refused, and the period is unchanged."""
     venue = make_venue(db)
     plain = _period(db, venue.id, _days_from_now(10), _days_from_now(12), notes="Servicing")
