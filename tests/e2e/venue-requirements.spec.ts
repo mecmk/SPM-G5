@@ -22,9 +22,11 @@
  * AC14/AC16 the only one cannot be removed: while it is the last, its Remove is disabled and a
  *     hint says why (a client-side check, the AGENTS.md exception; nothing is sent).
  * AC17 a draft saved with "No venue requirements" before the fix opens with one to fill in, and the
- *     coordinator's form for a request submitted without one says one is needed. No seeded event
- *     records that answer, so both answer the event's own GET with it set, as 12.1 AC15's case for
- *     Nimbus does, and save nothing.
+ *     coordinator's form for a request submitted without one says one is needed. Until a decision,
+ *     the event page shows such a request's venue requirements as not recorded, not as "No venue
+ *     is required" (an event approved with it keeps that line, AC19: 8.4 AC6's case in
+ *     venue-requirement-search.spec.ts). No seeded event records that answer, so each case answers
+ *     the event's own GET with it set, as 12.1 AC15's case for Nimbus does, and saves nothing.
  * AC18 the change request form (19.1) keeps the event's last requirement, and starts an event
  *     with none with one to fill in.
  * Rule detail, refusals (401/403/404/409/422), the migration (AC7), the server's refusal of a
@@ -58,6 +60,9 @@ const LAST_REQUIREMENT_HINT =
 const STILL_NEEDED_A_REQUIREMENT = 'Still needed: venue requirements (at least one).'
 // The change request form's line for an empty list, which f2.7.4 takes away.
 const NO_VENUE_NEEDED_LINE = 'No venue requirements - the event will need no venue.'
+// The event page's line for "No venue requirements", and its line for nothing recorded.
+const NO_VENUE_IS_REQUIRED = 'No venue is required for this event.'
+const NOT_RECORDED = 'Not recorded'
 
 function requirement(page: Page, position: number): Locator {
   return page.getByRole('group', { name: `Venue requirement ${position}` })
@@ -594,6 +599,35 @@ test("2.7 AC17: the coordinator's form for a request submitted without a venue r
   ).toBeDisabled()
   await expect(page.getByText(LAST_REQUIREMENT_HINT)).toBeVisible()
   await expect(save).toBeEnabled()
+})
+
+test('2.7 AC17: the page of a request submitted with "No venue requirements" before this fix shows none recorded', async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's Data Literacy Workshop, under review with Chloe, is only looked at.
+  // Approving it is refused until it has a venue requirement, so its page must not say none is
+  // needed.
+  await answerAsMarkedNone(page, EVENTS.submitted)
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.submitted}`)
+
+  const venue = page.getByRole('region', { name: 'Venue requirements' })
+  await expect(venue.getByText(NOT_RECORDED, { exact: true })).toBeVisible()
+  await expect(page.getByText(NO_VENUE_IS_REQUIRED)).toHaveCount(0)
+})
+
+test('2.7 AC17: the page of a draft saved with "No venue requirements" before this fix shows none recorded', async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's seeded draft is only looked at. It cannot be submitted until it has
+  // a venue requirement.
+  await answerAsMarkedNone(page, EVENTS.draft)
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.draft}`)
+
+  const venue = page.getByRole('region', { name: 'Venue requirements' })
+  await expect(venue.getByText(NOT_RECORDED, { exact: true })).toBeVisible()
+  await expect(page.getByText(NO_VENUE_IS_REQUIRED)).toHaveCount(0)
 })
 
 test("2.7 AC18: the change request form keeps the event's last venue requirement", async ({
