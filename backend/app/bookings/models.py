@@ -91,8 +91,10 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     hold_expiry_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 9.4 AC3/AC6: when the booking was marked "Venue unavailable - alternative needed",
     # while a period its venue is unavailable for overlaps its held period; NULL when unmarked.
-    # Read it through ``venue_unavailable_mark``, which leaves out a booking that no longer holds
-    # the venue.
+    # Only the part of the held period still to come counts: it overlaps a period from the later
+    # of now and the period's start to its end, so a period wholly in the past marks nothing
+    # (PO decision, AC6/AC8). Read it through ``venue_unavailable_mark``, which leaves out a
+    # booking that no longer holds the venue.
     venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
