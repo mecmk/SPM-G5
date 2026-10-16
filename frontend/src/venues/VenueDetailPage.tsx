@@ -16,6 +16,7 @@ import { useVenueCalendar } from '../shared/useVenueCalendar'
 import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
+import { blockOffLabel } from './blockOffLabels'
 import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
 import { ClosureActions } from './ClosureActions'
 
@@ -328,7 +329,7 @@ export function VenueDetailPage() {
           {canManageUnavailability && (
             <section className="card stack" aria-labelledby="venue-block-off-heading">
               <p className="eyebrow" id="venue-block-off-heading">
-                {editingClosure === null ? 'Block off time' : 'Edit blocked-off time'}
+                {blockOffLabel(editingClosure !== null)}
               </p>
               <p className="muted">
                 Close this venue for a period, for example for maintenance. Any bookings in that

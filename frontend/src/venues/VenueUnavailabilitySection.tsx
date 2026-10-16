@@ -17,6 +17,12 @@ import type { DayClosure } from '../components/venueCalendarDays'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { bookingRequestPath } from '../routes'
 import { formatDateTime, instantToInput, inputToInstant } from '../shared/format'
+import {
+  BLOCK_OFF_LABEL,
+  EDIT_BLOCK_OFF_LABEL,
+  blockOffLabel,
+  blockOffTitle,
+} from './blockOffLabels'
 
 export interface VenueUnavailabilitySectionProps {
   venueId: string
@@ -30,18 +36,29 @@ export interface VenueUnavailabilitySectionProps {
   onEditFinished?: () => void
 }
 
-/** The fields of `input` that differ from the closure being edited. */
+/** What the form held when it opened on a closure, as the form holds it: the inputs' own strings. */
+interface OpenedForm {
+  starts: string
+  ends: string
+  reason: string
+  description: string
+}
+
+/**
+ * The fields of `input` the person changed since the form opened. The form's own strings are
+ * compared, not instants: a closure made through the API may start at a second the form's minutes
+ * cannot show, and an instant rebuilt from them would look like a move of its start.
+ */
 function changedFields(
-  closure: DayClosure,
+  opened: OpenedForm,
+  form: OpenedForm,
   input: UnavailabilityInput,
 ): Partial<UnavailabilityInput> {
   const changes: Partial<UnavailabilityInput> = {}
-  if (Date.parse(input.starts_at) !== Date.parse(closure.startsAt)) {
-    changes.starts_at = input.starts_at
-  }
-  if (Date.parse(input.ends_at) !== Date.parse(closure.endsAt)) changes.ends_at = input.ends_at
-  if (input.reason !== closure.reason) changes.reason = input.reason
-  if (input.description !== (closure.description ?? null)) changes.description = input.description
+  if (form.starts !== opened.starts) changes.starts_at = input.starts_at
+  if (form.ends !== opened.ends) changes.ends_at = input.ends_at
+  if (form.reason !== opened.reason) changes.reason = input.reason
+  if (form.description.trim() !== opened.description.trim()) changes.description = input.description
   return changes
 }
 
@@ -83,6 +100,19 @@ export function VenueUnavailabilitySection({
     editing === null ? DEFAULT_REASON : (editing.reason as UnavailabilityReason),
   )
   const [description, setDescription] = useState(editing?.description ?? '')
+  /** What an edit opened with, to tell what the person changed. */
+  const [opened] = useState<OpenedForm | null>(() =>
+    editing === null
+      ? null
+      : {
+          starts: instantToInput(editing.startsAt),
+          ends: instantToInput(editing.endsAt),
+          reason: editing.reason,
+          description: editing.description ?? '',
+        },
+  )
+  /** Counts the preview's retries, so "Check again" asks once more for the same dates. */
+  const [previewAttempt, setPreviewAttempt] = useState(0)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [isConfirming, setIsConfirming] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -116,7 +146,7 @@ export function VenueUnavailabilitySection({
     return () => {
       cancelled = true
     }
-  }, [venueId, period, previewKey])
+  }, [venueId, period, previewKey, previewAttempt])
 
   const isPreviewCurrent = preview !== null && preview.key === previewKey
   const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
@@ -137,6 +167,11 @@ export function VenueUnavailabilitySection({
     setPreview(null)
     setIsConfirming(false)
     setSaveError(null)
+  }
+
+  function checkAgain() {
+    setPreview(null)
+    setPreviewAttempt((attempt) => attempt + 1)
   }
 
   function open() {
@@ -161,11 +196,11 @@ export function VenueUnavailabilitySection({
         reason,
         description: description.trim() === '' ? null : description.trim(),
       }
-      if (editing === null) {
+      if (editing === null || opened === null) {
         await addUnavailability(venueId, venueName, input)
       } else {
         // Only what changed is sent, so an edit never overwrites a field someone else changed.
-        const changes = changedFields(editing, input)
+        const changes = changedFields(opened, { starts, ends, reason, description }, input)
         if (Object.keys(changes).length > 0) {
           await editUnavailability(venueId, editing.id, changes)
         }
@@ -175,8 +210,14 @@ export function VenueUnavailabilitySection({
     } catch (err) {
       setSaveError(formatApiError(err))
       setIsConfirming(false)
-      // The closure is gone - removed or ended elsewhere - so the page's calendar is out of date.
-      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') onSaved()
+      // The closure is gone (404) or no longer what the form opened on (409), so the page's
+      // calendar is out of date.
+      if (
+        err instanceof ApiError &&
+        (err.code === 'UNAVAILABILITY_NOT_FOUND' || err.status === 409)
+      ) {
+        onSaved()
+      }
     } finally {
       setIsSaving(false)
     }
@@ -201,7 +242,7 @@ export function VenueUnavailabilitySection({
     return (
       <div className="cluster">
         <button type="button" className="secondary button-sm" onClick={open}>
-          Block off time
+          {BLOCK_OFF_LABEL}
         </button>
       </div>
     )
@@ -214,7 +255,7 @@ export function VenueUnavailabilitySection({
         className="stack"
         onSubmit={handleSubmit}
         noValidate
-        aria-label={editing === null ? `Block off time at ${venueName}` : 'Edit blocked-off time'}
+        aria-label={editing === null ? blockOffTitle(false, venueName) : EDIT_BLOCK_OFF_LABEL}
       >
         <div className="form-grid form-grid-2">
           <label>
@@ -292,7 +333,10 @@ export function VenueUnavailabilitySection({
             </div>
             {isPreviewCurrent && preview.error !== null && (
               <p role="alert" className="error">
-                {preview.error}
+                {preview.error}{' '}
+                <button type="button" className="secondary button-sm" onClick={checkAgain}>
+                  Check again
+                </button>
               </p>
             )}
             {affected.length > 0 && (
@@ -341,8 +385,8 @@ export function VenueUnavailabilitySection({
 
       {isConfirming && (
         <ConfirmDialog
-          title={`Block off time at ${venueName}`}
-          confirmLabel="Block off time"
+          title={blockOffTitle(editing !== null, venueName)}
+          confirmLabel={blockOffLabel(editing !== null)}
           tone="primary"
           isBusy={isSaving}
           error={saveError}
