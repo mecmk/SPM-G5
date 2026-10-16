@@ -105,6 +105,8 @@ export function VenueUnavailabilitySection({
   const isPreviewCurrent = preview !== null && preview.key === previewKey
   const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
   const newlyAffected = affected.filter((booking) => !booking.already_marked)
+  /** Story 9.4 AC2: the form saves only once the list for these very dates has answered. */
+  const canSave = period !== null && isPreviewCurrent && preview.error === null
   /** Story 9.4 AC5: both ends given and the end not after the start. */
   const isEndBeforeStart =
     starts !== '' &&
@@ -159,6 +161,7 @@ export function VenueUnavailabilitySection({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canSave) return
     if (newlyAffected.length > 0) {
       setSaveError(null)
       setIsConfirming(true)
@@ -285,13 +288,21 @@ export function VenueUnavailabilitySection({
         )}
 
         <div className="cluster">
-          <button type="submit" className="brand" disabled={isSaving || period === null}>
+          <button type="submit" className="brand" disabled={isSaving || !canSave}>
             {editing === null ? 'Save closure' : 'Save changes'}
           </button>
           <button type="button" className="secondary" onClick={close} disabled={isSaving}>
             Cancel
           </button>
         </div>
+        {period !== null && !isPreviewCurrent && (
+          <p className="muted small">Save is available once the affected bookings have loaded.</p>
+        )}
+        {isPreviewCurrent && preview.error !== null && (
+          <p className="muted small">
+            Save is unavailable until the affected bookings can be checked.
+          </p>
+        )}
       </form>
 
       {isConfirming && (
