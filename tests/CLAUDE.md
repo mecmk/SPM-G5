@@ -55,11 +55,14 @@ concurrently. So give every created record a unique name (`E2E Room ${Date.now()
 
 The same sharing applies to lists: other specs create requests as the seeded organisers, so a page
 listing a user's records is asserted **by name**, never by how many rows it has
-(`e2e/my-event-requests.spec.ts`). Submitting a request auto-assigns it (story 5.1) to one of
-the two seeded coordinators round robin, so **any** spec that submits a request can land it in
-either coordinator's inbox/review-queue tabs. A spec asserting on those tabs must filter to the
-titles it created or seeded, never assert the tab holds only those (`review-queue.spec.ts`'s
-"Under Review" ordering test filters to its three seeded titles before checking their order).
+(`e2e/my-event-requests.spec.ts`). A submitted request waits unassigned in the Event Coordinator
+Lead's queue (story 5.4), so **any** spec that submits a request adds to that queue: a spec
+asserting on it finds its own requests by name, never by the queue's length
+(`unassigned-queue.spec.ts`). A spec that needs the request to have a coordinator calls
+`assignByLead` in `e2e/support.ts`, which always assigns Chloe. A spec asserting on a
+coordinator's inbox/review-queue tabs must still filter to the titles it created or seeded, never
+assert the tab holds only those (`review-queue.spec.ts`'s "Under Review" ordering test filters to
+its three seeded titles before checking their order).
 
 Accounts a spec signs in with (`e2e/support.ts`) are rows in `backend/db/seed/020_sample_data.sql`,
 which is also mirrored in `backend/tests/support/seed.py`. A seed change means editing all three.

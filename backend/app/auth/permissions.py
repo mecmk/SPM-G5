@@ -34,6 +34,8 @@ class RoleCode(StrEnum):
     TECH_SUPPORT_STAFF = "TECH_SUPPORT_STAFF"
     ATTENDEE = "ATTENDEE"
     SAFETY_OFFICER = "SAFETY_OFFICER"
+    # Story 5.4: reviews newly submitted requests and assigns each to an Event Coordinator.
+    EVENT_COORDINATOR_LEAD = "EVENT_COORDINATOR_LEAD"
 
 
 class Permission(StrEnum):
@@ -52,7 +54,9 @@ class Permission(StrEnum):
     EVENTS_CREATE = "events:create"  # raise / submit requests, answer clarification (2.1, 3.x, 4.3)
     EVENTS_READ_OWN = "events:read_own"  # organiser sees own events (2.6, 7.1)
     EVENTS_READ_ALL = "events:read_all"  # internal staff see every event (7.1)
-    EVENTS_REVIEW = "events:review"  # queue, clarify, approve, reject, assign (4.x, 5.x)
+    EVENTS_REVIEW = "events:review"  # queue, clarify, approve, reject, reassign (4.x, 5.2)
+    # The unassigned queue, and assigning an unassigned event to a coordinator (5.4).
+    EVENTS_ASSIGN = "events:assign"
     EVENTS_EDIT_ROUTINE = "events:edit_routine"  # routine field edits (7.2)
     EVENTS_CANCEL = "events:cancel"  # cancel event (6.5)
     EVENT_CHANGE_REQUESTS_CREATE = "event_change_requests:create"  # organiser (19.1)
@@ -69,8 +73,8 @@ class Permission(StrEnum):
     EQUIPMENT_MANAGE = "equipment:manage"  # availability, reservations, out-of-service (15.4-17.x)
 
     # --- Attendee registration (18.x) ---
-    REGISTRATIONS_SELF = "registrations:self"  # browse, register, withdraw (18.1-18.4)
-    REGISTRATIONS_VIEW = "registrations:view"  # organiser / coordinator view list (18.6)
+    REGISTRATIONS_SELF = "registrations:self"  # browse and register (18.1), withdraw (18.2)
+    REGISTRATIONS_VIEW = "registrations:view"  # organiser / coordinator view list (18.3)
 
     # --- Operational safety checks (21.x) ---
     SAFETY_REVIEW = "safety:review"  # queue and detail of events awaiting the check (21.1)
@@ -125,6 +129,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     RoleCode.ATTENDEE: frozenset(
         {Permission.REGISTRATIONS_SELF, Permission.NOTIFICATIONS_READ_OWN}
     ),
+    # Story 5.4 AC1/AC7: reads every event and the coordinators like other internal staff, and
+    # alone assigns an unassigned event. Not events:review - the Lead never decides an event (AC6).
+    RoleCode.EVENT_COORDINATOR_LEAD: frozenset(_INTERNAL_COMMON | {Permission.EVENTS_ASSIGN}),
 }
 
 

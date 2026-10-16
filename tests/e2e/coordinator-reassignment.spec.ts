@@ -17,13 +17,7 @@
  * round robin lands on is discovered from the page itself, the same way a person would look.
  */
 import { expect, test } from '@playwright/test'
-import {
-  ACCOUNTS,
-  assignedCoordinator,
-  createAndSubmitRequest,
-  signIn,
-  uniqueName,
-} from './support'
+import { ACCOUNTS, assignByLead, createAndSubmitRequest, signIn, uniqueName } from './support'
 
 test('5.2 AC3: a coordinator reassigns an event to another coordinator', async ({ page }) => {
   // Two full sign-in cycles (organiser, then the auto-assigned coordinator) genuinely take
@@ -36,7 +30,7 @@ test('5.2 AC3: a coordinator reassigns an event to another coordinator', async (
   const eventId = await createAndSubmitRequest(page, name)
 
   await page.goto(`/events/${eventId}`)
-  const { account, other } = await assignedCoordinator(page)
+  const { account, other } = await assignByLead(page)
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, account)

@@ -35,6 +35,7 @@ import {
 } from '../shared/format'
 import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
 import { holdExpiryRefusal } from './holdExpiry'
+import { venueStaffOutsideHoursNotice } from './turnaround'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -108,6 +109,9 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  * when its hold expired instead (AC3). Decided 12 Oct 2026: every change needs a reason, refused
  * blank before sending, and the latest change - who made it, when and why - shows beside the
  * expiry.
+ *
+ * f12.1.2 (story 12.1 AC17): a request whose setup or teardown runs outside the venue's opening
+ * hours says so under its title, with the booked period, so Venue Staff weigh it as they decide.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
@@ -287,6 +291,12 @@ export function BookingRequestDetailPage() {
   const openHold = openHoldExpiry(booking)
   const shownHold =
     openHold ?? (booking.status === EXPIRED_BOOKING_STATUS ? booking.hold_expires_at : null)
+  // f12.1.2 (story 12.1 AC17): a setup or teardown outside the venue's opening hours, if any.
+  const outsideHoursNotice = venueStaffOutsideHoursNotice(
+    booking,
+    venue.operating_hours_start,
+    venue.operating_hours_end,
+  )
 
   return (
     <div className="page page-wide">
@@ -310,6 +320,8 @@ export function BookingRequestDetailPage() {
           </div>
         )}
       </div>
+
+      {outsideHoursNotice !== null && <p className="warning">{outsideHoursNotice}</p>}
 
       {shownHold && (
         <section className="subtle-block booking-hold" aria-labelledby="booking-hold-heading">

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 import app.auth.models  # noqa: F401  (register models on Base.metadata)
 import app.common.audit  # noqa: F401
 import app.events.models  # noqa: F401
+import app.registrations.models  # noqa: F401
 import app.safety.models  # noqa: F401
 import app.venues.models  # noqa: F401
 from app.db import Base
@@ -26,6 +27,7 @@ from tests.support.seed import (
     EquipmentItems,
     EquipmentOutOfService,
     Events,
+    Registrations,
     Users,
     Venues,
 )
@@ -173,11 +175,29 @@ def test_seed_constants_match_database(db: Session):
         (Events.CRAFT_FAIR, "PLANNING"),
         (Events.HARBOUR_CONCERT, "AWAITING_SAFETY_CHECK"),
         (Events.BOOK_FAIR, "AWAITING_SAFETY_CHECK"),
+        (Events.JAZZ_EVENING, "CONFIRMED"),
+        (Events.DESIGN_MASTERCLASS, "CONFIRMED"),
+        (Events.FOUNDERS_FIRESIDE, "CONFIRMED"),
+        (Events.MENTORING_SLOT, "CONFIRMED"),
+        (Events.PORTFOLIO_REVIEW, "CONFIRMED"),
+        (Events.WINE_APPRECIATION, "CONFIRMED"),
+        (Events.LUNAR_NEW_YEAR_MARKET, "CONFIRMED"),
+        (Events.SUPPLIER_INDUCTION, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
             == status
         )
+    # Story 18.1: Bella's place, the only one at the Portfolio Review Slot.
+    assert (
+        db.execute(
+            text(
+                "SELECT attendee_id FROM event_registrations WHERE id = :id AND event_id = :event"
+            ),
+            {"id": Registrations.PORTFOLIO_REVIEW, "event": Events.PORTFOLIO_REVIEW},
+        ).scalar()
+        == Users.ATTENDEE_2.id
+    )
     for clarification_id in (Clarifications.REQUEST, Clarifications.RESPONSE):
         assert db.execute(
             text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}

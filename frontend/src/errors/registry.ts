@@ -85,6 +85,8 @@ export type ErrorCode =
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
+  | 'BOOKING_TURNAROUND_INVALID'
+  | 'BOOKING_TURNAROUND_TOO_LONG'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
@@ -107,6 +109,8 @@ export type ErrorCode =
   | 'CHANGE_REQUEST_REASON_REQUIRED'
   | 'CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID'
   | 'EVENT_CONTACT_EDIT_CLOSED'
+  | 'REGISTRATION_EVENT_NOT_OPEN'
+  | 'REGISTRATION_REFUSED'
 
 export interface ErrorEntry {
   title: string
@@ -262,7 +266,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'Fill in every field marked * before saving - a submitted request needs them all.',
   },
   /**
-   * Story 7.2 AC6/AC9: the event was approved, or changed, after the coordinator opened it. The
+   * Story 7.2 AC9/AC12: the event was confirmed, or changed, after the coordinator opened it. The
    * backend's detail sentence says which; either way the page offers a reload.
    */
   EVENT_CORRECTION_CONFLICT: {
@@ -498,6 +502,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
       "This venue requirement is not one of the event's. Go back to the catalogue and select " +
       'one of its venue requirements.',
   },
+  // f12.1.2 (story 12.1 AC5): checks the request step makes on a setup and a teardown before
+  // anything is sent - never wired into an `errorCodes` map, same precedent as
+  // EVENT_REJECTION_REASON_REQUIRED. The server refuses the same values.
+  BOOKING_TURNAROUND_INVALID: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.',
+  },
+  /** Keep in step with TURNAROUND_MAX_MINUTES in src/api/bookings.ts. */
+  BOOKING_TURNAROUND_TOO_LONG: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown can each be at most 14 days.',
+  },
 
   // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own
   // sentence - BOOKING_CONFLICT covers a double-booking and a request already decided alike,
@@ -630,6 +646,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_CONTACT_EDIT_CLOSED: {
     title: 'Cannot update the point of contact',
     message: 'The point of contact can no longer be updated on this event.',
+  },
+
+  // Story 18.1: an attendee registering for an event.
+  /** AC3/AC4: the event is no longer open to attendees - cancelled, sent back to Planning, or
+   *  never listed. Worded as the backend's REGISTRATION_EVENT_NOT_FOUND_MESSAGE. */
+  REGISTRATION_EVENT_NOT_OPEN: {
+    title: 'Cannot register',
+    message: 'This event is not open for registration.',
+  },
+  /** AC2/AC6: not yet open, closed, full, or already registered. The backend's own sentence
+   *  (always sent) says which. */
+  REGISTRATION_REFUSED: {
+    title: 'Cannot register',
+    message: 'This registration could not be taken.',
   },
 }
 

@@ -2,7 +2,7 @@
 (coordinator review queue), story 4.2 (request clarification from the organiser), story 4.3
 (the organiser's response), stories 4.4/4.5 (approve / reject an event request), story 4.6 (the
 decision /clarification history an organiser sees), story 7.2 (routine information edits and
-correcting a request under review or awaiting clarification), story 6.1 (the coordinator's
+correcting a request until it is confirmed, fix f7.2.4), story 6.1 (the coordinator's
 assigned events in any status), story 2.1 AC14 (the cover picture), and story 19.1 AC2 (the
 organiser's point of contact on an approved event)."""
 
@@ -388,11 +388,12 @@ def correct_event_under_review(
     db: DbSession,
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
-    """Story 7.2 AC4-AC9: the coordinator assigned to this event corrects the organiser's request
-    while it is under review or awaiting clarification. 403 for anyone else (AC8); 409 once it is
-    approved or closed (AC5, AC6) or when the copy being saved is stale (AC9); 422 for anything
-    the 2.1 and 2.7 checks refuse, including equipment no longer available for the new dates (AC4,
-    AC7), with a refused venue requirement located as on the organiser's edit."""
+    """Story 7.2 AC4-AC18: the coordinator assigned to this event corrects the organiser's request
+    at any point before it is confirmed. 403 for anyone else (AC8); 409 once it is confirmed or
+    closed (AC12), or when the copy being saved is stale (AC9); 422 for anything the 2.1 and 2.7
+    checks refuse, including equipment no longer available for the new dates (AC4, AC7), and,
+    after approval, a change that no longer fits a booking or changes or outruns the equipment
+    (AC14, AC15), with a refused venue requirement located as on the organiser's edit."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:
@@ -418,8 +419,8 @@ def set_cover_image_under_review(
     db: DbSession,
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
-    """Story 7.2 AC4: the coordinator assigned to this event replaces its cover picture while it is
-    under review or awaiting clarification. The same refusals as the JSON correction (403/409),
+    """Story 7.2 AC4/AC10: the coordinator assigned to this event replaces its cover picture at any
+    point before it is confirmed. The same refusals as the JSON correction (403/409),
     plus 2.1 AC14's file checks (413/422)."""
     # As set_cover_image: bounds what is read into memory; one byte past the limit is enough.
     content = file.file.read(service.MAX_COVER_IMAGE_BYTES + 1)
@@ -451,8 +452,8 @@ def remove_cover_image_under_review(
     db: DbSession,
     actor: Annotated[CurrentUser, CanEditRoutine],
 ) -> EventDetailOut:
-    """Story 7.2 AC4: the coordinator assigned to this event takes its cover picture off while it
-    is under review or awaiting clarification. The same refusals as the JSON correction
+    """Story 7.2 AC4/AC10: the coordinator assigned to this event takes its cover picture off at
+    any point before it is confirmed. The same refusals as the JSON correction
     (403/409)."""
     try:
         event = service.get_event(db, event_id, viewer=actor)

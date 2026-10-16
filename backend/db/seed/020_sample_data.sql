@@ -8,7 +8,8 @@
 --                  6666.. equipment requests   7777.. equipment types (010)
 --                  bbbb.. event clarifications   cccc.. venue requirements
 --                  dddd.. equipment out of service   eeee.. equipment holds
---                  ffff.. safety reviews
+--                  ffff.. safety reviews   aaaa.. coordinator assignments
+--                  1818.. event registrations (story 18.1)
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -38,7 +39,11 @@ INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_
     ('11111111-0000-0000-0000-000000000006', 'tech@connectsphere.example',         'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Theo Tech',         'TECH_SUPPORT_STAFF', NULL, '+65 9400 0001', 'Technical Support'),
     ('11111111-0000-0000-0000-000000000007', 'attendee@example.com',               'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Aiden Attendee',    'ATTENDEE',           NULL, NULL, NULL),
     ('11111111-0000-0000-0000-000000000008', 'inactive@connectsphere.example',     'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Ian Inactive',      'VENUE_STAFF',        NULL, NULL, 'Venues'),
-    ('11111111-0000-0000-0000-000000000009', 'safety@connectsphere.example',       'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Sam Safety',        'SAFETY_OFFICER',     NULL, '+65 9500 0001', 'Safety')
+    ('11111111-0000-0000-0000-000000000009', 'safety@connectsphere.example',       'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Sam Safety',        'SAFETY_OFFICER',     NULL, '+65 9500 0001', 'Safety'),
+    ('11111111-0000-0000-0000-000000000010', 'lead@connectsphere.example',         'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Lena Lead',         'EVENT_COORDINATOR_LEAD', NULL, '+65 9200 0009', 'Events'),
+    -- Story 18.1: a second attendee, who holds the one place at the Portfolio Review Slot and
+    -- takes the last place at the Career Mentoring Slot in the e2e spec.
+    ('11111111-0000-0000-0000-000000000011', 'attendee2@example.com',              'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Bella Attendee',    'ATTENDEE',           NULL, NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
     role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
@@ -304,7 +309,17 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     ('33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Lantern Night Walk', 'Community event', 'A guided evening walk with paper lanterns.', NULL, '2028-09-09 19:00+08', '2028-09-09 22:00+08', 80, 'PLANNING',
-     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL)
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
+    -- 3333..46: in planning and assigned to Chloe; dedicated to fix f12.1.2's e2e request that is
+    -- really sent (tests/e2e/booking-requests.spec.ts), to Seminar Room 2.1, with a setup that
+    -- starts before the room opens at 08:00. One Main venue for 30 people, Classroom with a
+    -- projector, so the room suits it. Dated February 2027, so its request sits on the first page
+    -- of Venue Staff's Pending tab, which lists the soonest first. That request stays pending, so
+    -- tests/e2e/bookings.spec.ts's Alumni Homecoming Weekend card (3333..17) is at worst tenth on
+    -- that page: no further pending request dated before September 2027 can be added there.
+    ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Supplier Induction Morning', 'Supplier onboarding', 'A morning briefing for newly contracted suppliers.', NULL, '2027-02-03 09:00+08', '2027-02-03 12:00+08', 30, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -317,6 +332,60 @@ ON CONFLICT (id) DO UPDATE SET
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason;
+
+-- Story 18.1: Confirmed, Public events taking registrations - the attendee's Upcoming events, and
+-- tests/e2e/attendee-registration.spec.ts. Every case the spec clicks through has an event of its
+-- own, so tests running in parallel never share a place: the jazz evening (3333..39) is only read;
+-- the masterclass (40), the fireside chat (41) and the mentoring slot (42, one place) are each
+-- registered for once per run; the portfolio review (43, one place) is full with Bella's place
+-- below; the wine appreciation (44) closed on 1 Oct 2026; the Lunar New Year market (45) opens on
+-- 10 Jan 2028. Organiser 2, coordinator 2. Only the jazz evening has its venues booked (below): the
+-- others show "Venue to be confirmed", as a Confirmed event with no approved booking does, and Venue Staff's
+-- Approved tab stays on one page (tests/e2e/bookings.spec.ts, 13.1.2 AC1).
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, accessibility_none_required, is_public,
+                    registration_required, registration_opens_at, registration_closes_at,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at) VALUES
+    ('33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Harbourfront Jazz Evening', 'Community event', 'Live jazz on the waterfront, with food stalls in the foyer.', '2028-10-07 19:00+08', '2028-10-07 22:00+08', 120, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-05 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000000040', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Design Thinking Masterclass', 'Professional development', 'A hands-on day of design thinking exercises.', '2028-10-14 09:00+08', '2028-10-14 17:00+08', 60, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-12 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000000041', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Startup Founders Fireside', 'Community event', 'Three founders on their first five years.', '2028-10-21 18:30+08', '2028-10-21 20:30+08', 80, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-20 12:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000000042', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Career Mentoring Slot', 'Professional development', 'One hour with a senior mentor.', '2028-10-28 10:00+08', '2028-10-28 11:00+08', 1, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-27 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Portfolio Review Slot', 'Professional development', 'One portfolio, reviewed by a design lead.', '2028-11-04 10:00+08', '2028-11-04 11:00+08', 1, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-11-03 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000000044', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Autumn Wine Appreciation', 'Community event', 'Six wines from three regions, with a sommelier.', '2028-11-11 18:00+08', '2028-11-11 21:00+08', 40, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-01 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
+    ('33333333-0000-0000-0000-000000000045', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Lunar New Year Market', 'Community event', 'Festive stalls, lion dance and calligraphy.', '2028-01-26 10:00+08', '2028-01-26 18:00+08', 250, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, '2028-01-10 10:00+08', '2028-01-24 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, is_public = EXCLUDED.is_public,
+    registration_required = EXCLUDED.registration_required,
+    registration_opens_at = EXCLUDED.registration_opens_at, registration_closes_at = EXCLUDED.registration_closes_at,
+    contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
+    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
 
 -- Venue requirements (story 2.7). Each sample event that records venue requirements keeps them
 -- as one "Main venue" (story 2.7 AC7), with the event's own times and expected attendance - read
@@ -345,7 +414,10 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000014', 'THEATRE'),
     ('cccccccc-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000015', 'STANDING'),
     ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM'),
-    ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM');
+    ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM'),
+    -- Story 18.1's jazz evening (3333..39), the one of its events with venues booked.
+    ('cccccccc-0000-0000-0000-000000000039', '33333333-0000-0000-0000-000000000039', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM');
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
@@ -370,7 +442,8 @@ INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
     ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
     ('cccccccc-0000-0000-0000-000000000003', 'STAGE'),
     ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR')
+    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR'),
+    ('cccccccc-0000-0000-0000-000000000046', 'PROJECTOR')
 ON CONFLICT DO NOTHING;
 
 -- Story 8.4: the Smart Cities Expo (3333..28) records three venue requirements, each with its own
@@ -681,7 +754,9 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000047', '33333333-0000-0000-0000-000000000037', 'AWAITING_SAFETY_CHECK', 'CONFIRMED', '11111111-0000-0000-0000-000000000009', '2026-10-09 10:00+08', NULL),
     ('99999999-0000-0000-0000-000000000048', '33333333-0000-0000-0000-000000000038', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-09-26 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000049', '33333333-0000-0000-0000-000000000038', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-04 09:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000050', '33333333-0000-0000-0000-000000000038', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08', 'Add marshals at each road crossing.')
+    ('99999999-0000-0000-0000-000000000050', '33333333-0000-0000-0000-000000000038', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08', 'Add marshals at each road crossing.'),
+    -- 3333..46 (fix f12.1.2's e2e event).
+    ('99999999-0000-0000-0000-000000000051', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-13 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -740,7 +815,9 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000035', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-28 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000036', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-29 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
-    ('aaaaaaaa-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08'),
+    -- 3333..46 (fix f12.1.2's real send with a setup): self-assigned too.
+    ('aaaaaaaa-0000-0000-0000-000000000038', '33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-12 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
@@ -873,6 +950,45 @@ FROM (VALUES
     ('44444444-0000-0000-0000-000000000008'::uuid, 'cccccccc-0000-0000-0000-000000000017'::uuid)
 ) AS link (booking_id, requirement_id)
 WHERE b.id = link.booking_id;
+
+-- Story 18.1: the jazz evening's (3333..39) two venues, approved by Vera, each hold completed when
+-- the event was confirmed (story 12.7 AC4): its Main venue, Grand Hall, and the Exhibition Foyer
+-- for food stalls as an additional venue.
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0000-000000000013', '33333333-0000-0000-0000-000000000039', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000004', '2028-10-07 19:00+08', '2028-10-07 22:00+08', 0, 0,
+     120, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     'cccccccc-0000-0000-0000-000000000039', '2028-10-07 19:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000039', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-10-07 20:00+08', '2028-10-07 22:00+08', 0, 0,
+     120, 'EXHIBITION', 'Food stalls.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     NULL, '2028-10-07 20:00+08', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+
+-- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
+-- is listed as Full. On a database where she has since withdrawn and registered again, the row is
+-- left as it is: making it REGISTERED again would give her two active registrations, which
+-- uq_event_registrations_active refuses, and db:ready would fail.
+INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at) VALUES
+    ('18181818-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000011',
+     'REGISTERED', '2026-10-11 10:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
+    registered_at = EXCLUDED.registered_at, withdrawn_at = NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_registrations AS newer
+    WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
+      AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
 -- ---------------------------------------------------------------------
 -- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)

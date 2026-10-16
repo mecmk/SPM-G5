@@ -128,7 +128,8 @@ also run them, but don't rely on CI to catch what you could catch locally.
 - Auth: cookie sessions (`app/auth`), `CurrentUser` dependency for "signed in",
   `require_permission(Permission.X)` for role checks. Add new permissions to
   `app/auth/permissions.py`; relationship rules ("only my events") go in the feature service.
-- Tests: one file per story under `backend/tests/<feature>/`, every test tagged
+- Tests: one file per story under `backend/tests/<feature>/` (or one per level, `_unit` and
+  `_integration`; see `docs/testing/README.md`), every test tagged
   `@pytest.mark.story("<id>", ac=<n>)`; `npm run test:trace` produces the traceability matrix
   (git-ignored; CI uploads it as an artifact).
 
@@ -148,6 +149,7 @@ backend/
     equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
+    registrations/      # the events attendees can register for, and registering for one
     safety/             # the Safety Officer's queue of events awaiting the safety check, and each event's check
     venues/             # the venue catalogue, its search and its availability calendar
     common/             # shared by feature areas: the audit log
@@ -160,7 +162,7 @@ frontend/
   src/
     api/                # one <feature>.ts per backend feature area, plus the shared client
     auth/               # the sign-in page, the session, route guards, permission codes
-    bookings/, equipment/, events/, safety/, venues/   # the pages of each feature area
+    bookings/, equipment/, events/, registrations/, safety/, venues/   # the pages of each feature area
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the notification centre
