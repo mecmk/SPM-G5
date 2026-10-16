@@ -233,12 +233,7 @@ def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> t
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
         return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
-        try:
-            events_service.check_proposed_attendance(event, data.proposed)
-        except InvalidVenueRequirement as exc:
-            # The refusal names a requirement, not the attendance field the form shows, so it is
-            # sent as a plain sentence rather than located on a requirement's field.
-            raise InvalidEventRequest(str(exc)) from exc
+        events_service.check_proposed_attendance(event, data.proposed)
         return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)

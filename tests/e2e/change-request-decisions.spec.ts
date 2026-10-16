@@ -69,6 +69,10 @@ test('19.2 AC1: the coordinator sees a pending change in their queue with what w
   await expect(entry.getByText('150 people', { exact: true })).toBeVisible()
   await expect(entry).toContainText(CHANGE_REASON)
   await expect(entry).toContainText('Olivia Organiser')
+
+  await entry.getByRole('link', { name: 'View event →' }).click()
+  await page.getByRole('link', { name: '← Change requests' }).click()
+  await expect(page).toHaveURL(QUEUE_PATH)
 })
 
 test('19.2 AC2: the coordinator approves an attendance change and the event takes it', async ({

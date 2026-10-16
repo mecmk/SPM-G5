@@ -98,6 +98,10 @@ REQUIREMENT_ENDS_AFTER_EVENT_MESSAGE = "{requirement} cannot end after the event
 REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
     "{requirement} cannot need room for more people than the expected attendance."
 )
+# Story 19.2: the same rule, said of a change to the attendance rather than of the form's field.
+ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
+    "{requirement} needs room for more people than the new expected attendance."
+)
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.
 DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE = (
@@ -347,6 +351,14 @@ class ContradictoryAccessibility(InvalidEventRequest):
 class ContradictoryVenueRequirements(InvalidEventRequest):
     def __init__(self):
         super().__init__(VENUE_CONTRADICTION_MESSAGE)
+
+
+class AttendanceBelowRequirement(InvalidEventRequest):
+    """Story 19.2 AC2: a proposed attendance smaller than a venue requirement needs room for
+    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance."""
+
+    def __init__(self, requirement: str) -> None:
+        super().__init__(ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement))
 
 
 class InvalidVenueRequirement(InvalidEventRequest):
@@ -2415,13 +2427,10 @@ def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> E
 def check_proposed_attendance(event: Event, attendance: int) -> None:
     """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
     room for more people than the event's expected attendance - judged with the proposed
-    figure against the requirements as they stand."""
-    _check_venue_requirement_rules(
-        event.venue_requirements,
-        event_starts_at=event.starts_at,
-        event_ends_at=event.ends_at,
-        attendance=attendance,
-    )
+    figure against the requirements as they stand. Also checked when the request is raised."""
+    for requirement in sorted(event.venue_requirements, key=lambda item: item.position):
+        if requirement.capacity is not None and requirement.capacity > attendance:
+            raise AttendanceBelowRequirement(requirement.name or "A venue requirement")
 
 
 def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:

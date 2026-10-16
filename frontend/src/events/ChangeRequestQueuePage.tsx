@@ -8,13 +8,14 @@ import {
 } from '../api/changeRequests'
 import { fetchEventReferenceData } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
+import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
-import { eventPath } from '../routes'
+import { CHANGE_REQUEST_QUEUE_PATH, eventPath } from '../routes'
 import { formatDate, formatDateTime, formatTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
@@ -34,6 +35,12 @@ const QUEUE_TABS: { key: QueueTabKey; label: string }[] = [
   { key: 'REJECTED', label: 'Rejected' },
   { key: 'WITHDRAWN', label: 'Withdrawn' },
 ]
+
+/** An event opened from a card here leads back to the queue, not to Home (story 7.1's back link). */
+const BACK_TO_QUEUE: EventCardBackState = {
+  from: CHANGE_REQUEST_QUEUE_PATH,
+  fromLabel: 'Change requests',
+}
 
 /** What each tab says when it has nothing in it. */
 const EMPTY_TAB_MESSAGES: Record<QueueTabKey, string> = {
@@ -158,7 +165,9 @@ export function ChangeRequestQueuePage() {
                   {/* The event's status sits with its name, apart from the request's own. */}
                   <div className="cluster">
                     <h3 className="queue-card-title">
-                      <Link to={eventPath(entry.event_id)}>{entry.event_name}</Link>
+                      <Link to={eventPath(entry.event_id)} state={BACK_TO_QUEUE}>
+                        {entry.event_name}
+                      </Link>
                     </h3>
                     <EventStatusBadge status={entry.event_status} />
                   </div>
@@ -215,7 +224,7 @@ export function ChangeRequestQueuePage() {
                       </button>
                     </div>
                   )}
-                  <Link to={eventPath(entry.event_id)} className="link">
+                  <Link to={eventPath(entry.event_id)} state={BACK_TO_QUEUE} className="link">
                     View event →
                   </Link>
                 </div>
