@@ -263,6 +263,8 @@ export function VenueUnavailabilitySection({
             </span>
             <textarea
               rows={2}
+              required
+              aria-required="true"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               disabled={isSaving}
@@ -275,14 +277,23 @@ export function VenueUnavailabilitySection({
             <h3 id="affected-bookings-heading" className="eyebrow">
               Affected bookings
             </h3>
-            {!isPreviewCurrent && <p className="muted">Checking the venue&apos;s bookings…</p>}
+            <div role="status" aria-live="polite" className="stack">
+              {!isPreviewCurrent && <p className="muted">Checking the venue&apos;s bookings…</p>}
+              {isPreviewCurrent && preview.error === null && affected.length === 0 && (
+                <p className="muted">No bookings are affected.</p>
+              )}
+              {isPreviewCurrent && preview.error === null && affected.length > 0 && (
+                <p className="muted">
+                  {affected.length === 1
+                    ? '1 booking is affected.'
+                    : `${affected.length} bookings are affected.`}
+                </p>
+              )}
+            </div>
             {isPreviewCurrent && preview.error !== null && (
               <p role="alert" className="error">
                 {preview.error}
               </p>
-            )}
-            {isPreviewCurrent && preview.error === null && affected.length === 0 && (
-              <p className="muted">No bookings are affected.</p>
             )}
             {affected.length > 0 && (
               <ul className="check-list">
