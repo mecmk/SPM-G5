@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   approveChangeRequest,
   CHANGE_REASON_MAX_LENGTH,
@@ -62,6 +62,9 @@ export function ChangeRequestDecisionDialog({
   const [reason, setReason] = useState('')
   const [isDeciding, setIsDeciding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isReasonMissing, setIsReasonMissing] = useState(false)
+  const reasonInput = useRef<HTMLTextAreaElement>(null)
+  const errorId = useId()
   const label = FIELD_LABELS[request.field].toLowerCase()
   const isApprove = outcome === 'APPROVED'
 
@@ -87,8 +90,11 @@ export function ChangeRequestDecisionDialog({
     const trimmed = reason.trim()
     if (trimmed === '') {
       setError(ERROR_REGISTRY.CHANGE_REQUEST_REJECTION_REASON_REQUIRED.message)
+      setIsReasonMissing(true)
+      reasonInput.current?.focus()
       return
     }
+    setIsReasonMissing(false)
     await decide(() => rejectChangeRequest(request.event_id, request.id, trimmed, label))
   }
 
@@ -122,6 +128,7 @@ export function ChangeRequestDecisionDialog({
       confirmLabel="Reject"
       isBusy={isDeciding}
       error={error}
+      errorId={errorId}
       onConfirm={confirm}
       onCancel={onCancel}
     >
@@ -129,6 +136,9 @@ export function ChangeRequestDecisionDialog({
       <label>
         Reason for rejecting
         <textarea
+          ref={reasonInput}
+          aria-invalid={isReasonMissing}
+          aria-describedby={isReasonMissing ? errorId : undefined}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           rows={3}

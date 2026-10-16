@@ -27,7 +27,9 @@ export function ChangeRequestChanges({ request, references }: ChangeRequestChang
       {lines.map((line, index) => {
         const labelClass = index === 0 ? 'change-diff-label' : 'visually-hidden'
         return (
-          <div key={line.what} className="change-diff-row">
+          // Two rows can share a label (two unnamed rooms, or one removed and one added under the
+          // same name), and the list is never reordered, so the index keeps each key apart.
+          <div key={`${index}-${line.what}`} className="change-diff-row">
             <span className="change-diff-icon">
               <Icon name={line.icon} />
             </span>

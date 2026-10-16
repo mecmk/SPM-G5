@@ -73,7 +73,7 @@ export function ChangeRequestQueuePage() {
     isLoading,
     setData: setQueue,
   } = useLoaded(listCoordinatorChangeRequests)
-  const { data: references } = useLoaded(fetchEventReferenceData)
+  const { data: references, error: referencesError } = useLoaded(fetchEventReferenceData)
   const [tab, setTab] = useState<QueueTabKey>('PENDING')
   const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
   const entries = queue?.filter((entry) => inTab(entry, tab)) ?? null
@@ -88,7 +88,9 @@ export function ChangeRequestQueuePage() {
   }
 
   /** AC2/AC3: the decided request takes its new status in place, so it leaves Pending for its
-   *  own tab, with who decided, when and why. */
+   *  own tab, with who decided, when and why. An approval may also have changed the event - its
+   *  dates, or its status back to Planning (AC8) - which every card for it shows, so the queue
+   *  loads again. */
   function recordDecision(decided: ChangeRequest) {
     setQueue(
       (current) =>
@@ -96,6 +98,7 @@ export function ChangeRequestQueuePage() {
         current.map((entry) => (entry.id === decided.id ? { ...entry, ...decided } : entry)),
     )
     setOpenDecision(null)
+    if (decided.status === 'APPROVED') void reloadQueue()
   }
 
   /** AC7: a decision refused for the request's state - load the queue again, so it shows what
@@ -120,6 +123,11 @@ export function ChangeRequestQueuePage() {
           {error}
         </p>
       )}
+      {referencesError && (
+        <p role="alert" className="error">
+          {referencesError}
+        </p>
+      )}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
@@ -135,10 +143,7 @@ export function ChangeRequestQueuePage() {
             {entries.map((entry) => (
               <li key={entry.id} className="card stack">
                 <div className="item-card-header">
-                  <div className="cluster">
-                    <StatusBadge status={entry.status} label={STATUS_LABELS[entry.status]} />
-                    <EventStatusBadge status={entry.event_status} />
-                  </div>
+                  <StatusBadge status={entry.status} label={STATUS_LABELS[entry.status]} />
                   {entry.event_starts_at !== null && entry.event_ends_at !== null && (
                     <div className="item-card-capacity">
                       <div>{formatDate(entry.event_starts_at)}</div>
@@ -150,9 +155,13 @@ export function ChangeRequestQueuePage() {
                 </div>
 
                 <div>
-                  <h3 className="queue-card-title">
-                    <Link to={eventPath(entry.event_id)}>{entry.event_name}</Link>
-                  </h3>
+                  {/* The event's status sits with its name, apart from the request's own. */}
+                  <div className="cluster">
+                    <h3 className="queue-card-title">
+                      <Link to={eventPath(entry.event_id)}>{entry.event_name}</Link>
+                    </h3>
+                    <EventStatusBadge status={entry.event_status} />
+                  </div>
                   <p className="muted">{changeTitle(entry.field)}</p>
                 </div>
 

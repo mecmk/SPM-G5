@@ -32,8 +32,10 @@ export type ChangeRequestInput =
  * Mirrors `ChangeRequestOut`: story 19.1 AC1, a change request as the organiser and the assigned
  * coordinator see it. `current_value` and `proposed_value` are in the canonical shape the backend
  * stores (app/change_requests/service.py): a schedule as `{ starts_at, ends_at }` in UTC, the
- * attendance as a number, and each list without ids. Story 19.2 AC2/AC3: once decided, who
- * decided, when, and a rejection's reason; all null while it waits or once withdrawn.
+ * attendance as a number, each venue requirement with its `id` (null for a new one; absent on a
+ * request raised before ids were kept), and equipment by type, without ids. Story 19.2 AC2/AC3:
+ * once decided, who decided, when, and a rejection's reason; all null while it waits or once
+ * withdrawn.
  */
 export interface ChangeRequest {
   id: string

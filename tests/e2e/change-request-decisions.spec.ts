@@ -1,5 +1,5 @@
 /**
- * Story 19.2 - fe: review and decide event change requests (Phase 1).
+ * Story 19.2 - fe: review and decide event change requests.
  *
  * AC1 the assigned coordinator sees their events' pending change requests in one queue, each with
  *     the current and proposed value, the reason, who asked and when - and, under its other tabs,

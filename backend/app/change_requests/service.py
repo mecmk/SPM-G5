@@ -44,7 +44,7 @@ from app.change_requests.schemas import (
 from app.common.audit import record_audit
 from app.equipment import service as equipment_service
 from app.events import service as events_service
-from app.events.models import Event, EventStatus, VenueRequirement
+from app.events.models import EquipmentRequestStatus, Event, EventStatus, VenueRequirement
 from app.events.schemas import VenueRequirementIn
 from app.notifications.service import NotificationType, notify
 
@@ -197,7 +197,8 @@ def _equipment_value(lines: list[tuple[str, int, str | None]]) -> list[dict[str,
 
 def _current_value(event: Event, field: str) -> Any:
     """The field's value on ``event`` as it stands, canonical - what a request raised now would
-    record, and what an approval checks is still there (story 19.2 AC7)."""
+    record, and what an approval checks is still there (story 19.2 AC7). An equipment item kept,
+    Cancelled, after a change removed it (story 19.2 AC5) is no longer the event's."""
     if field == ChangeRequestField.SCHEDULE:
         return _schedule_value(event.starts_at, event.ends_at)
     if field == ChangeRequestField.EXPECTED_ATTENDANCE:
@@ -209,6 +210,7 @@ def _current_value(event: Event, field: str) -> Any:
             [
                 (line.equipment_type.code, line.quantity, line.technical_notes)
                 for line in event.equipment_requests
+                if line.status != EquipmentRequestStatus.CANCELLED
             ]
         )
     raise TypeError(f"unhandled change request field: {field}")
@@ -231,6 +233,12 @@ def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> t
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
         return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
+        try:
+            events_service.check_proposed_attendance(event, data.proposed)
+        except InvalidVenueRequirement as exc:
+            # The refusal names a requirement, not the attendance field the form shows, so it is
+            # sent as a plain sentence rather than located on a requirement's field.
+            raise InvalidEventRequest(str(exc)) from exc
         return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)

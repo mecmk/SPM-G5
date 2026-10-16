@@ -125,7 +125,8 @@ export interface ChangeRequestsSectionProps {
   canWithdraw: boolean
   /** Story 19.2 AC6: the assigned coordinator decides pending requests. */
   canDecide: boolean
-  /** Story 19.2 AC2: an approval changed the event, so the page loads it again. */
+  /** Story 19.2 AC2/AC7: an approval changed the event, or a refusal found it changed meanwhile,
+   *  so the page loads it again. */
   onDecided: () => void
 }
 
@@ -237,14 +238,18 @@ export function ChangeRequestsSection({
     setEndsAt(event.ends_at ? instantToInput(event.ends_at) : '')
     setAttendance(event.expected_attendance === null ? '' : String(event.expected_attendance))
     setRequirements(event.venue_requirements.map(requirementDraftFrom))
+    // An item kept, Cancelled, after an approved change removed it is no longer the event's
+    // (story 19.2 AC5), as the backend's current value leaves it out.
     setEquipment(
-      event.equipment.map((line) => ({
-        key: newDraftKey(),
-        sourceId: line.id,
-        code: line.equipment_type_code,
-        quantity: String(line.quantity),
-        notes: line.technical_notes,
-      })),
+      event.equipment
+        .filter((line) => line.status !== 'CANCELLED')
+        .map((line) => ({
+          key: newDraftKey(),
+          sourceId: line.id,
+          code: line.equipment_type_code,
+          quantity: String(line.quantity),
+          notes: line.technical_notes,
+        })),
     )
   }
 
@@ -400,6 +405,13 @@ export function ChangeRequestsSection({
    *  an approved change shows on the page. */
   function finishDecision() {
     setOpenDecision(null)
+    reloadRequests()
+    onDecided()
+  }
+
+  /** Story 19.2 AC7: a decision refused because the request or its event moved on meanwhile -
+   *  load both again, so the page shows what happened. */
+  function refreshAfterRefusal() {
     reloadRequests()
     onDecided()
   }
@@ -741,7 +753,7 @@ export function ChangeRequestsSection({
           eventStatus={event.status}
           onCancel={closeDecision}
           onDecided={finishDecision}
-          onRefused={reloadRequests}
+          onRefused={refreshAfterRefusal}
         />
       )}
 

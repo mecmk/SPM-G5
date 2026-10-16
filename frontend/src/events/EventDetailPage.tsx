@@ -48,6 +48,7 @@ import {
 } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
+  CHANGE_DECIDABLE_STATUSES,
   CHANGE_REQUESTABLE_STATUS,
   CHANGE_REQUESTS_VISIBLE_STATUSES,
   CONTACT_EDITABLE_STATUSES,
@@ -589,10 +590,12 @@ export function EventDetailPage() {
   const canViewChangeRequests =
     (isOrganiser || isAssignedCoordinator) &&
     CHANGE_REQUESTS_VISIBLE_STATUSES.includes(event.status)
-  /** Story 19.2 AC6: the assigned coordinator decides the pending change requests, mirroring the
-   *  backend's assigned-coordinator check. */
+  /** Story 19.2 AC6/AC7: the assigned coordinator decides the pending change requests while the
+   *  event is still going ahead, mirroring the backend's assigned-coordinator and status checks. */
   const canDecideChangeRequests =
-    can(PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE) && isAssignedCoordinator
+    can(PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE) &&
+    isAssignedCoordinator &&
+    CHANGE_DECIDABLE_STATUSES.includes(event.status)
   /** Story 19.1 AC2: the owning organiser updates the point of contact directly while the event
    *  is Planning or Confirmed, mirroring the backend's `update_point_of_contact`. */
   const canUpdatePointOfContact =

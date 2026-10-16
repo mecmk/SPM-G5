@@ -139,8 +139,8 @@ def approve_change_request(
     actor: Annotated[CurrentUser, CanDecide],
 ) -> ChangeRequestOut:
     """Story 19.2 AC2: the assigned coordinator (AC6) approves a pending request, applying it.
-    409 when it was already decided or withdrawn, has gone stale, or cannot be approved until
-    Phase 2 (AC5, AC7, AC8); 422 when the change breaks a creation rule."""
+    409 when it was already decided or withdrawn, has gone stale, or its event is closed (AC7);
+    422 when the change breaks a creation rule."""
     try:
         request = service.approve_change_request(db, event_id, change_request_id, actor=actor)
     except service.EventNotFound:
