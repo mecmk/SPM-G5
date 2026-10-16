@@ -58,6 +58,7 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
+import { SAFETY_REVIEW_STATUSES } from '../shared/safetyReview'
 import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
@@ -67,6 +68,7 @@ import {
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
+import { SafetyReviewSection } from './SafetyReviewSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_ASSIGNED = 'Not yet assigned'
@@ -1063,6 +1065,14 @@ export function EventDetailPage() {
           canChange={canChangeEquipment}
           onChanged={reloadEvent}
         />
+
+        {SAFETY_REVIEW_STATUSES.includes(event.status) && (
+          <SafetyReviewSection
+            eventId={event.id}
+            eventName={event.name}
+            onStatusChanged={reloadEvent}
+          />
+        )}
 
         {canViewChangeRequests && (
           <ChangeRequestsSection

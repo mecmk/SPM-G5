@@ -7,7 +7,9 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { SAFETY_CHECKS_PATH } from '../routes'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { ARRANGEMENT_LABELS } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
+import { SafetyDecisionForm } from './SafetyDecisionForm'
 
 /** The shapes `safety_facts` (backend/app/safety/service.py) writes its list facts in. */
 interface VenueFact {
@@ -104,13 +106,15 @@ function ChangesList({ changes }: { changes: FactChange[] }) {
  * AC3: the event and its description, each approved venue with its record (story 8.2) and the
  * layout booked, accessibility needs, accepted equipment with technical notes, and the previous
  * reviews, newest first. AC4: a venue whose booking must hold more people than the venue holds
- * in the booked layout is flagged Over capacity, with both figures shown. AC5: a detail never recorded says so, and what changed since the last review is
- * listed, fact by fact.
+ * in the booked layout is flagged Over capacity, with both figures shown. AC5: a detail never
+ * recorded says so, and what changed since the last review is listed, fact by fact.
+ * Story 21.2 AC2: the review factors, and the decision form while the event awaits the check;
+ * AC4: each previous review lists its findings.
  */
 export function SafetyCheckDetailPage() {
   const { eventId = '' } = useParams()
   const loadCheck = useCallback(() => getSafetyCheck(eventId), [eventId])
-  const { data: check, error, isLoading } = useLoaded(loadCheck)
+  const { data: check, error, isLoading, setData } = useLoaded(loadCheck)
 
   return (
     <div className="page page-wide">
@@ -254,6 +258,22 @@ export function SafetyCheckDetailPage() {
             )}
           </section>
 
+          <section className="card stack" aria-labelledby="safety-factors-heading">
+            <h2 id="safety-factors-heading">Review factors</h2>
+            <ul className="stack safety-fact-list">
+              {check.factors.map((factor) => (
+                <li key={factor.code} className="subtle-block">
+                  <p className="fact-label">{factor.name}</p>
+                  {factor.description && <p>{factor.description}</p>}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {check.status === 'AWAITING_SAFETY_CHECK' && (
+            <SafetyDecisionForm key={check.id} check={check} onDecided={setData} />
+          )}
+
           <section className="card stack" aria-labelledby="safety-reviews-heading">
             <h2 id="safety-reviews-heading">Previous reviews</h2>
             {check.previous_reviews.length === 0 ? (
@@ -268,7 +288,20 @@ export function SafetyCheckDetailPage() {
                         {formatDateTime(review.reviewed_at)} by {review.reviewed_by_name}
                       </span>
                     </div>
-                    <p>{review.notes ?? NOT_RECORDED}</p>
+                    {review.findings.length > 0 && (
+                      <ol className="stack">
+                        {review.findings.map((finding, index) => (
+                          <li key={index}>
+                            <p className="fact-label">
+                              {finding.factor_name}
+                              {finding.arrangement &&
+                                ` · ${ARRANGEMENT_LABELS[finding.arrangement]} must change`}
+                            </p>
+                            <p>{finding.required_change}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                   </li>
                 ))}
               </ul>

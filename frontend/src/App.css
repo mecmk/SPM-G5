@@ -1017,6 +1017,11 @@ label + label {
   margin-top: 1.25rem;
 }
 
+/* Side-by-side choices (radios in a .cluster) sit on one line - the gap spaces them. */
+.cluster > label + label {
+  margin-top: 0;
+}
+
 label input,
 label select,
 label textarea {

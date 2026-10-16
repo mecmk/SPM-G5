@@ -54,6 +54,9 @@ export type ErrorCode =
   | 'EVENT_NOT_AWAITING_CLARIFICATION'
   | 'EVENT_CLARIFICATION_MESSAGE_REQUIRED'
   | 'EVENT_NOT_AWAITING_RESPONSE'
+  | 'SAFETY_REVIEW_CONFLICT'
+  | 'SAFETY_DECISION_CONFLICT'
+  | 'SAFETY_FINDING_CHANGE_REQUIRED'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -334,6 +337,24 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_NOT_AWAITING_RESPONSE: {
     title: 'Cannot send response',
     message: 'This request is no longer awaiting your response, so it was not sent.',
+  },
+  /** Story 21.2 AC12/AC14/AC19/AC21: a safety review request or a confirmation was refused. The
+   *  backend's own sentence (always sent) names what is missing, or which flagged arrangement is
+   *  unchanged. */
+  SAFETY_REVIEW_CONFLICT: {
+    title: 'Not ready yet',
+    message: 'This event is not ready for that yet.',
+  },
+  /** Story 21.2 AC20: the event no longer awaits the safety check, or another officer decided it
+   *  first. */
+  SAFETY_DECISION_CONFLICT: {
+    title: 'Cannot record the decision',
+    message: 'This event is no longer awaiting the safety check.',
+  },
+  /** Story 21.2 AC10: a finding that does not say what must change, checked before sending. */
+  SAFETY_FINDING_CHANGE_REQUIRED: {
+    title: 'Finding incomplete',
+    message: 'Say what must change for each finding.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.
