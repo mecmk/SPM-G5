@@ -339,8 +339,9 @@ export function VenueUnavailabilitySection({
           onCancel={cancelConfirm}
         >
           <p>
-            These bookings fall in that period. They are kept for reference, and each event goes
-            back to Planning for its coordinator to find another venue.
+            These bookings fall in that period. They are kept for reference. Events that were
+            Confirmed or awaiting their safety check go back to Planning for their coordinators to
+            find another venue; the others stay as they are.
           </p>
           <ul>
             {newlyAffected.map((booking) => (
