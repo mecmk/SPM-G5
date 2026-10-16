@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.venues.models import UnavailabilityReason, Venue
+from app.venues.models import UnavailabilityReason, Venue, VenueUnavailabilityPeriod
 from app.venues.suitability import Suitability
 
 # "Positive whole numbers only" (story 8.3 AC3): StrictInt rejects 12.5 and "12"; gt=0 rejects 0.
@@ -500,7 +500,7 @@ class VenueUnavailabilityOut(BaseModel):
     description: str | None
 
     @classmethod
-    def from_period(cls, period) -> VenueUnavailabilityOut:
+    def from_period(cls, period: VenueUnavailabilityPeriod) -> VenueUnavailabilityOut:
         return cls(
             id=period.id,
             venue_id=period.venue_id,

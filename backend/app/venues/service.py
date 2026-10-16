@@ -1003,11 +1003,18 @@ def _check_horizon(ends_at: datetime, *, now: datetime) -> None:
 def _get_period(
     db: Session, venue_id: uuid.UUID, period_id: uuid.UUID
 ) -> VenueUnavailabilityPeriod:
+    """The period, locked for this transaction (``FOR UPDATE``) and read afresh. Every caller
+    edits, ends or removes it, and each decides from what it reads: two of them at once must take
+    turns, the second reading what the first committed - or finding the period gone - not what it
+    read before the first committed."""
     period = db.scalar(
-        select(VenueUnavailabilityPeriod).where(
+        select(VenueUnavailabilityPeriod)
+        .where(
             VenueUnavailabilityPeriod.id == period_id,
             VenueUnavailabilityPeriod.venue_id == venue_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if period is None:
         raise UnavailabilityNotFound(period_id)
@@ -1186,11 +1193,11 @@ def _settle_marked_events(
             details={"venue_id": str(venue.id), "period_id": str(period.id)},
         )
         coordinator_message = (
-            f"{actor.full_name} marked {venue.name} unavailable {when} ({with_description}). Its "
+            f"{venue.name} is unavailable {when} ({with_description}). Its "
             f'booking for "{event.name}" falls in that period, so the event needs another venue.'
         )
         organiser_message = (
-            f"{actor.full_name} marked {venue.name} unavailable {when} ({reason_name}). Its "
+            f"{venue.name} is unavailable {when} ({reason_name}). Its "
             f'booking for "{event.name}" falls in that period, so the event needs another venue.'
         )
         for recipient, message in (
