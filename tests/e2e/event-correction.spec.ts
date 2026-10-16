@@ -92,7 +92,7 @@ async function submittedRequestWithLaptops(
   await page.getByLabel('Expected attendance').fill('60')
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
-  await page.getByLabel('Contact phone number').fill('+65 9123 4567')
+  await page.getByLabel('Contact phone number').fill('9123 4567')
   await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await page.getByRole('button', { name: 'Add equipment' }).click()
