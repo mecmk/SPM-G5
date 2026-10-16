@@ -142,6 +142,8 @@ class Events:
     PORTFOLIO_REVIEW = _e(43)  # 1 place, held by Users.ATTENDEE_2 (Registrations.PORTFOLIO_REVIEW)
     WINE_APPRECIATION = _e(44)  # registration closed on 1 Oct 2026
     LUNAR_NEW_YEAR_MARKET = _e(45)  # registration opens on 10 Jan 2028
+    # Fix f12.1.2's real send with a setup, PLANNING, dated 3 February 2027.
+    SUPPLIER_INDUCTION = _e(46)  # organiser 2, coordinator 1, one Main venue (Classroom, 30)
 
 
 class Bookings:

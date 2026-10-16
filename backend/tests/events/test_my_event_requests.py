@@ -129,6 +129,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PORTFOLIO_REVIEW),
         str(Events.WINE_APPRECIATION),
         str(Events.LUNAR_NEW_YEAR_MARKET),
+        str(Events.SUPPLIER_INDUCTION),
     }
 
 
