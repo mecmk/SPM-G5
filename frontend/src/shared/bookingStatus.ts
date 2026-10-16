@@ -6,6 +6,10 @@ export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 
  * Reject only for it. */
 export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 
+/** Story 9.4 AC3: how every page names a booking whose venue was marked unavailable for part of
+ * its held period - the event's page, Venue Staff's queue card and the request's own page. */
+export const VENUE_UNAVAILABLE_LABEL = 'Venue unavailable – alternative needed'
+
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */
 export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
 

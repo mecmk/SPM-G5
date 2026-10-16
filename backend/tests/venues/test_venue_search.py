@@ -69,10 +69,18 @@ def _names(result: dict) -> list[str]:
 def test_no_filters_lists_every_venue_in_service(coordinator_client):
     result = _search(coordinator_client)
 
-    assert _names(result) == ["Boardroom 3.4", "Exhibition Foyer", "Grand Hall", "Seminar Room 2.1"]
-    assert result["total"] == 4
+    assert _names(result) == [
+        "Boardroom 3.4",
+        "Exhibition Foyer",
+        "Garden Atrium",
+        "Grand Hall",
+        "Harbour Pavilion",
+        "Seminar Room 2.1",
+        "Sunrise Studio",
+    ]
+    assert result["total"] == 7
     assert result["relax"] == []
-    grand_hall = result["venues"][2]
+    grand_hall = result["venues"][3]
     assert grand_hall == {
         "id": str(Venues.GRAND_HALL),
         "name": "Grand Hall",
@@ -90,12 +98,15 @@ def test_no_filters_lists_every_venue_in_service(coordinator_client):
     assert _names(with_withdrawn) == [
         "Boardroom 3.4",
         "Exhibition Foyer",
+        "Garden Atrium",
         "Grand Hall",
+        "Harbour Pavilion",
         "Old Annex Room",
         "Seminar Room 2.1",
+        "Sunrise Studio",
     ]
-    assert with_withdrawn["total"] == 5
-    assert with_withdrawn["venues"][3]["status"] == "WITHDRAWN"
+    assert with_withdrawn["total"] == 8
+    assert with_withdrawn["venues"][5]["status"] == "WITHDRAWN"
 
 
 # --- AC3: each filter ----------------------------------------------------------------------

@@ -58,7 +58,13 @@ INSERT INTO venues (id, name, location, capacity, description, floor_area_sqm, o
     ('22222222-0000-0000-0000-000000000002', 'Seminar Room 2.1',  'Tower A, Level 2',  80,  'Tiered seminar room with fixed desks.',          140.00, '08:00', '20:00', NULL,                                  30, 15, 'ACTIVE',    '11111111-0000-0000-0000-000000000005'),
     ('22222222-0000-0000-0000-000000000003', 'Boardroom 3.4',     'Tower B, Level 3',  16,  'Executive boardroom.',                            45.00,  '08:00', '18:00', NULL,                                  15, 15, 'ACTIVE',    '11111111-0000-0000-0000-000000000005'),
     ('22222222-0000-0000-0000-000000000004', 'Exhibition Foyer',  'Tower B, Level 1',  250, 'Open-plan foyer suitable for exhibitions.',       380.00, NULL,    NULL,    'Operating hours not yet confirmed.',   45, 45, 'ACTIVE',    '11111111-0000-0000-0000-000000000005'),
-    ('22222222-0000-0000-0000-000000000005', 'Old Annex Room',    'Annex, Level 1',    40,  'Withdrawn pending renovation.',                   NULL,   NULL,    NULL,    NULL,                                  0,  0,  'WITHDRAWN', '11111111-0000-0000-0000-000000000005')
+    ('22222222-0000-0000-0000-000000000005', 'Old Annex Room',    'Annex, Level 1',    40,  'Withdrawn pending renovation.',                   NULL,   NULL,    NULL,    NULL,                                  0,  0,  'WITHDRAWN', '11111111-0000-0000-0000-000000000005'),
+    -- Story 9.4's e2e spec: three venues dedicated to it, so a closure on one cannot touch any
+    -- other test's calendar or approvals. The first has no booking, for adding, editing and
+    -- ending a closure; the other two each carry one pending request (3333..60 and 3333..61).
+    ('22222222-0000-0000-0000-000000000006', 'Garden Atrium',    'Tower C, Level 1',   120, 'Glass-roofed atrium opening onto the garden.',     180.00, NULL, NULL, NULL, 30, 30, 'ACTIVE', '11111111-0000-0000-0000-000000000005'),
+    ('22222222-0000-0000-0000-000000000007', 'Harbour Pavilion', 'Waterfront, Level 1', 200, 'Open pavilion by the harbour for community events.', 260.00, NULL, NULL, NULL, 30, 30, 'ACTIVE', '11111111-0000-0000-0000-000000000005'),
+    ('22222222-0000-0000-0000-000000000008', 'Sunrise Studio',   'Tower C, Level 3',   60,  'Bright studio for workshops and markets.',         90.00,  NULL, NULL, NULL, 15, 15, 'ACTIVE', '11111111-0000-0000-0000-000000000005')
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name, location = EXCLUDED.location, capacity = EXCLUDED.capacity,
     description = EXCLUDED.description, floor_area_sqm = EXCLUDED.floor_area_sqm,
@@ -319,7 +325,15 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     -- that page: no further pending request dated before September 2027 can be added there.
     ('33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Supplier Induction Morning', 'Supplier onboarding', 'A morning briefing for newly contracted suppliers.', NULL, '2027-02-03 09:00+08', '2027-02-03 12:00+08', 30, 'PLANNING',
-     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
+     '11111111-0000-0000-0000-000000000003', NULL, TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-12 09:00+08', '2026-10-13 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    -- 3333..60 and 3333..61: story 9.4's e2e spec. Each is Planning with one pending request, at a
+    -- venue of its own (2222..07 and 2222..08), so a closure marks only that request.
+    ('33333333-0000-0000-0000-000000000060', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Community Choir Showcase', 'Community event', 'An evening of choirs from across the neighbourhood.', NULL, '2028-10-14 18:00+08', '2028-10-14 21:00+08', 150, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Waterfront', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
+    ('33333333-0000-0000-0000-000000000061', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Neighbourhood Art Market', 'Community event', 'Local artists sell prints, ceramics and zines.', NULL, '2028-10-21 10:00+08', '2028-10-21 16:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower C', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-01 10:00+08', '2026-10-02 10:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
@@ -756,7 +770,10 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000049', '33333333-0000-0000-0000-000000000038', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-04 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000050', '33333333-0000-0000-0000-000000000038', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08', 'Add marshals at each road crossing.'),
     -- 3333..46 (fix f12.1.2's e2e event).
-    ('99999999-0000-0000-0000-000000000051', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-13 09:00+08', NULL)
+    ('99999999-0000-0000-0000-000000000051', '33333333-0000-0000-0000-000000000046', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-13 09:00+08', NULL),
+    -- Story 9.4's e2e events, approved into Planning by Chloe.
+    ('99999999-0000-0000-0000-000000000060', '33333333-0000-0000-0000-000000000060', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000061', '33333333-0000-0000-0000-000000000061', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 10:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
@@ -817,7 +834,10 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
     ('aaaaaaaa-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08'),
     -- 3333..46 (fix f12.1.2's real send with a setup): self-assigned too.
-    ('aaaaaaaa-0000-0000-0000-000000000038', '33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-12 09:00+08')
+    ('aaaaaaaa-0000-0000-0000-000000000038', '33333333-0000-0000-0000-000000000046', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-12 09:00+08'),
+    -- 3333..60 and 3333..61 (story 9.4's e2e events): self-assigned too, for the same reason.
+    ('aaaaaaaa-0000-0000-0000-000000000060', '33333333-0000-0000-0000-000000000060', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000061', '33333333-0000-0000-0000-000000000061', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-02 10:00+08')
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
@@ -923,7 +943,18 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000000012', '33333333-0000-0000-0000-000000000036', '22222222-0000-0000-0000-000000000001',
      '11111111-0000-0000-0000-000000000004', '2028-08-23 10:00+08', '2028-08-23 17:00+08', 0, 0,
      150, 'EXHIBITION', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-02 15:00+08', NULL, '2026-10-02 11:00+08',
-     'cccccccc-0000-0000-0036-000000000001', '2028-08-23 10:00+08')
+     'cccccccc-0000-0000-0036-000000000001', '2028-08-23 10:00+08'),
+    -- Story 9.4: the Community Choir Showcase's request for Harbour Pavilion and the Art Market's
+    -- for Sunrise Studio, each pending at a venue dedicated to 9.4's e2e spec (2222..07, 2222..08).
+    -- Its spec marks them by saving a closure, so nothing else may approve or reject them.
+    ('44444444-0000-0000-0000-000000000020', '33333333-0000-0000-0000-000000000060', '22222222-0000-0000-0000-000000000007',
+     '11111111-0000-0000-0000-000000000003', '2028-10-14 18:00+08', '2028-10-14 21:00+08', 30, 30,
+     150, 'THEATRE', 'Risers for the choirs and a sound system.', 'PENDING', NULL, NULL, NULL, '2026-10-03 09:00+08',
+     NULL, NULL),
+    ('44444444-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000061', '22222222-0000-0000-0000-000000000008',
+     '11111111-0000-0000-0000-000000000003', '2028-10-21 10:00+08', '2028-10-21 16:00+08', 15, 15,
+     60, 'EXHIBITION', 'Trestle tables for twenty stalls.', 'PENDING', NULL, NULL, NULL, '2026-10-03 10:00+08',
+     NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,

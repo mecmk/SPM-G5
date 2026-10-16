@@ -175,9 +175,9 @@ _SINGAPORE = timezone(timedelta(hours=8))
 VENUE_BLOCKED_MESSAGE = "{venue} is closed{reason} {period}."
 VENUE_BLOCKED_REASONS = {
     UnavailabilityReason.MAINTENANCE: " for maintenance",
+    UnavailabilityReason.EQUIPMENT_FAILURE: " for equipment failure",
     UnavailabilityReason.RENOVATION: " for renovation",
     UnavailabilityReason.SAFETY: " for safety reasons",
-    UnavailabilityReason.INTERNAL_USE: " for internal use",
     UnavailabilityReason.OTHER: "",
 }
 VENUE_CLOSED_MESSAGE = (
@@ -571,8 +571,11 @@ def approve_booking(
     hold_expires_at: datetime,
 ) -> None:
     """13.2 AC1: approve ``booking``, recording the approver and time. Refuses a request that
-    is not PENDING (``BookingNotPending``) or whose period would double-book its venue
-    (``BookingConflict``, AC4 / 14.2 AC1-AC2).
+    is not PENDING (``BookingNotPending``), whose venue is unavailable for part of its held period
+    (``VenueBlocked``, story 9.4 AC7: the same refusal the request step gives, read in a query of
+    its own once the row is locked so a period saved a moment ago is seen, and from the live
+    periods, not the mark) or whose period would double-book its venue (``BookingConflict``,
+    AC4 / 14.2 AC1-AC2). The refusals come in that order, then the hold's own (12.7 AC5).
 
     Since the venue hold (migration 010) a pending request already holds its slot, so no other
     pending or approved booking can overlap it and the conflict branch below is a safety net
@@ -591,6 +594,11 @@ def approve_booking(
     moment = datetime.now(UTC)
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="approved")
+    closure = venue_service.find_blocking_unavailability(
+        db, booking.venue_id, starts_at=booking.held_from, ends_at=booking.held_until
+    )
+    if closure is not None:
+        raise VenueBlocked(booking.venue, closure)
     if booking.held_from <= moment:
         raise HoldPeriodStarted()
     _check_hold_expiry(booking, hold_expires_at, now=moment)
