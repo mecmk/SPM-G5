@@ -33,7 +33,7 @@
  * test that ends a closure needs one already started by the server's clock, so it keeps the real
  * one and works on today.
  */
-import { expect, test, type Browser, type Page } from '@playwright/test'
+import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, VENUES, corsHeaders, inFuture, signIn, uniqueName } from './support'
 
 // The spec pins and reads wall-clock dates in Singapore time, whatever the machine's zone.
@@ -59,14 +59,24 @@ function blockOffCard(page: Page) {
   return page.getByRole('region', { name: 'Block off time', exact: true })
 }
 
+interface SaveOptions {
+  /** The form's own button: "Save closure" when adding, "Save changes" when editing. */
+  saveName?: string
+  /** The confirmation's button, which says what the form says: "Block off time" or "Edit blocked-off time". */
+  confirmName?: string
+  /** Read the confirmation, if it comes, before it is confirmed. */
+  onDialog?: (dialog: Locator) => Promise<void>
+}
+
 /**
  * Save the form and, when it would newly flag a booking, confirm the dialog. Called once the
  * affected list is showing, so whether the dialog comes is known: a booking already marked (a
  * retry, or another closure over it) is not newly flagged and asks nothing. Waits for the save to
  * land, so what follows reads the saved state.
  */
-async function saveClosure(page: Page, buttonName = 'Save closure') {
-  const save = blockOff(page).getByRole('button', { name: buttonName })
+async function saveClosure(page: Page, options: SaveOptions = {}) {
+  const { saveName = 'Save closure', confirmName = 'Block off time', onDialog } = options
+  const save = blockOff(page).getByRole('button', { name: saveName })
   await expect(save).toBeEnabled()
   const hasBookings = (await blockOff(page).getByRole('listitem').count()) > 0
   const wouldFlag = hasBookings && (await blockOff(page).getByText('Already marked').count()) === 0
@@ -77,7 +87,9 @@ async function saveClosure(page: Page, buttonName = 'Save closure') {
   )
   await save.click()
   if (wouldFlag) {
-    await page.getByRole('dialog').getByRole('button', { name: 'Block off time' }).click()
+    const dialog = page.getByRole('dialog')
+    await onDialog?.(dialog)
+    await dialog.getByRole('button', { name: confirmName }).click()
   }
   expect((await landed).ok()).toBe(true)
 }
@@ -223,37 +235,70 @@ test('9.4 AC2: Save waits for the affected bookings, and a failed check blocks i
   await expect(
     blockOff(page).getByText('Save is unavailable until the affected bookings can be checked.'),
   ).toBeVisible()
+
+  // Check again asks once more, and a good answer lets Save through.
+  isFailing = false
+  await blockOff(page).getByRole('button', { name: 'Check again' }).click()
+  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
+  await expect(save).toBeEnabled()
 })
 
-test('9.4 AC2 and AC3: the bookings a closure would affect are listed before Save, and an approved booking it flags shows the flag on its request page', async ({
+test('9.4 AC2 and AC3: an edit that reaches a booking lists it, asks first, and the approved request shows the flag', async ({
   page,
 }) => {
   await page.clock.setFixedTime(PINNED_NOW)
   await signIn(page, ACCOUNTS.venueStaff)
 
-  // Approve the choir showcase's request first, so the closure hits an approved booking.
+  // Approve the choir showcase's request, so the closure hits an approved booking. A retry finds
+  // it approved already: look under Approved first.
   await page.goto('/venue-staff/booking-requests')
-  const card = await queueCard(page, '00000020')
-  await card.getByRole('button', { name: 'Approve' }).click()
-  const approve = page.getByRole('dialog', { name: 'Approve this booking?' })
-  await approve.getByLabel('Hold expires').fill('2028-10-12T09:00')
-  await approve.getByRole('button', { name: 'Approve' }).click()
-  await expect(approve).not.toBeVisible()
+  await page.getByRole('tab', { name: /^Approved/ }).click()
+  if ((await (await queueCard(page, '00000020')).count()) === 0) {
+    await page.getByRole('tab', { name: /^Pending/ }).click()
+    const card = await queueCard(page, '00000020')
+    await card.getByRole('button', { name: 'Approve' }).click()
+    const approve = page.getByRole('dialog', { name: 'Approve this booking?' })
+    await approve.getByLabel('Hold expires').fill('2028-10-12T09:00')
+    await approve.getByRole('button', { name: 'Approve' }).click()
+    await expect(approve).not.toBeVisible()
+  }
 
+  // A closure that stops short of the booking: nothing is affected, and it saves.
   await openVenue(page, VENUES.harbourPavilion)
+  const description = uniqueName('Pavilion roof')
   await fillClosure(page, {
-    starts: '2028-10-13T08:00',
-    ends: '2028-10-15T20:00',
+    starts: '2028-10-12T08:00',
+    ends: '2028-10-13T08:00',
     reason: 'Renovation',
+    description,
   })
+  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
+  await saveClosure(page)
 
-  const affected = blockOff(page).getByRole('region', { name: 'Affected bookings' })
-  await expect(affected).toContainText('Community Choir Showcase')
-  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('Community Choir Showcase')
-  await expect(dialog).toContainText('Confirmed or awaiting their safety check go back to Planning')
-  await dialog.getByRole('button', { name: 'Block off time' }).click()
+  // Editing it to run over the booking lists the booking before Save, and asks first.
+  await dayButton(page, /^12 October 2028/).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: description })
+    .getByRole('button', { name: 'Edit' })
+    .click()
+  await blockOff(page).getByLabel('Ends').fill('2028-10-15T20:00')
+  await expect(blockOff(page).getByRole('region', { name: 'Affected bookings' })).toContainText(
+    'Community Choir Showcase',
+  )
+  await saveClosure(page, {
+    saveName: 'Save changes',
+    confirmName: 'Edit blocked-off time',
+    onDialog: async (dialog) => {
+      await expect(
+        page.getByRole('dialog', { name: 'Edit blocked-off time at Harbour Pavilion' }),
+      ).toBeVisible()
+      await expect(dialog).toContainText('Community Choir Showcase')
+      await expect(dialog).toContainText(
+        'Confirmed or awaiting their safety check go back to Planning',
+      )
+    },
+  })
   await dayButton(page, /^14 October 2028/).click()
   await expect(dayList(page, /14 Oct 2028/)).toContainText('Unavailable – Renovation')
 
@@ -263,8 +308,11 @@ test('9.4 AC2 and AC3: the bookings a closure would affect are listed before Sav
   const approved = await queueCard(page, '00000020')
   await approved.getByRole('link', { name: 'View details' }).click()
   await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  await expect(page.getByText('Venue unavailable – alternative needed')).toBeVisible()
-  await expect(page.getByText(/cannot be approved while the closure stands/)).toHaveCount(0)
+  const notice = page
+    .getByRole('status')
+    .filter({ hasText: 'Venue unavailable – alternative needed' })
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toContainText('cannot be approved while the closure stands')
 })
 
 test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event, and Venue Staff cannot approve it', async ({
@@ -383,7 +431,7 @@ test('9.4 AC6: a refused End now says why, and the calendar is loaded again', as
       return route.fulfill({
         status: 409,
         contentType: 'application/json',
-        body: JSON.stringify({ detail: 'This closure has already ended.' }),
+        body: JSON.stringify({ detail: 'This period has already ended.' }),
         headers: corsHeaders(request),
       })
     },
@@ -391,7 +439,7 @@ test('9.4 AC6: a refused End now says why, and the calendar is loaded again', as
   await item.getByRole('button', { name: 'End now' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'End now' }).click()
-  await expect(dialog).toContainText('This closure has already ended.')
+  await expect(dialog).toContainText('This period has already ended.')
   // The calendar is loaded again once the dialog, which keeps the sentence, is closed.
   const reloaded = page.waitForRequest(
     (request) =>
@@ -569,4 +617,94 @@ test('9.4 AC6: editing a closure that was removed meanwhile says it is gone, and
 
   await expect(blockOff(page).getByRole('alert')).toHaveText('Unavailability period not found.')
   await expect(dayButton(page, /^24 October 2028/)).toHaveCount(0)
+})
+
+test('9.4 AC6: an edit the server refuses says why in the form, and the calendar is loaded again', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(PINNED_NOW)
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium doors')
+  await fillClosure(page, {
+    starts: '2028-10-22T09:00',
+    ends: '2028-10-22T18:00',
+    description,
+  })
+  await saveClosure(page)
+  await dayButton(page, /^22 October 2028/).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: description })
+    .getByRole('button', { name: 'Edit' })
+    .click()
+
+  // The server refuses, as if the closure had ended elsewhere.
+  await page.route(
+    (url) => /\/unavailability\/[^/]+$/.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.method() !== 'PATCH') return route.fallback()
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'This period has already ended.' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  const reloaded = page.waitForRequest(
+    (request) =>
+      request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/calendar'),
+  )
+  await blockOff(page).getByLabel('Description').fill(uniqueName('Atrium doors again'))
+  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+
+  await expect(blockOff(page).getByRole('alert')).toHaveText('This period has already ended.')
+  await reloaded
+})
+
+test('9.4 AC6: a closure whose start has seconds is edited by the field that changed, and nothing else', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium lifts')
+  await fillClosure(page, { starts: inFuture(-1, 9), ends: inFuture(3, 18), description })
+  await saveClosure(page)
+
+  // Made through the API, a closure's start may have seconds, which the form's minutes cannot show.
+  await page.route(
+    (url) => url.pathname.endsWith('/calendar'),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      const windows = await response.json()
+      for (const window of windows) {
+        if (window.description === description) {
+          window.starts_at = new Date(Date.parse(window.starts_at) + 30_000).toISOString()
+        }
+      }
+      return route.fulfill({ response, json: windows })
+    },
+  )
+  await page.reload()
+  await expect(availability(page)).toBeVisible()
+  const singapore = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = new RegExp(
+    `^${singapore.getUTCDate()} ${singapore.toLocaleString('en-GB', {
+      month: 'long',
+      timeZone: 'UTC',
+    })} ${singapore.getUTCFullYear()}`,
+  )
+  await dayButton(page, today).click()
+  const item = page.getByRole('listitem').filter({ hasText: description })
+  await item.getByRole('button', { name: 'Edit' }).click()
+
+  await blockOff(page).getByLabel('Reason').selectOption({ label: 'Renovation' })
+  const patched = page.waitForRequest(
+    (request) => request.method() === 'PATCH' && request.url().includes('/unavailability/'),
+  )
+  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  expect((await patched).postDataJSON()).toEqual({ reason: 'RENOVATION' })
 })
