@@ -200,7 +200,7 @@ def test_the_assigned_coordinator_corrects_details_under_review(coordinator_clie
     assert after["name"] == "Data Literacy Workshop (corrected)"
     assert after["description"] == "A one-day workshop."
     assert after["expected_attendance"] == 65
-    assert after["contact_phone"] == "+65 6123 4567"
+    assert after["contact_phone"] == "+6561234567"  # saved without spaces (f2.1.4)
 
 
 @pytest.mark.story("7.2", ac=4)

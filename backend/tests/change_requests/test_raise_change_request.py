@@ -74,7 +74,8 @@ _REASON = "The keynote speaker can only attend a day later."
 _EVENT_NOT_FOUND = "Event not found."
 _CHANGE_REQUEST_NOT_FOUND = "Change request not found."
 _CURRENT_EMAIL = "olivia.events@acme.example"
-_CURRENT_PHONE = "+65 6111 2233"
+# As saved since fix f2.1.4: without spaces or dashes (story 2.1 AC21).
+_CURRENT_PHONE = "+6561112233"
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -294,10 +295,10 @@ def test_organiser_updates_point_of_contact_directly(organiser_client, db: Sessi
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["contact_email"] == "events@acme.example"
-    assert body["contact_phone"] == "+65 6999 0000"
+    assert body["contact_phone"] == "+6569990000"
     db.refresh(event)
     assert event.contact_email == "events@acme.example"
-    assert event.contact_phone == "+65 6999 0000"
+    assert event.contact_phone == "+6569990000"
     assert _change_requests(db, event.id) == []
 
 
@@ -321,7 +322,7 @@ def test_point_of_contact_update_is_logged_with_old_and_new_values(organiser_cli
     assert entry.actor_id == Users.ORGANISER.id
     assert entry.details == {
         "contact_email": {"from": _CURRENT_EMAIL, "to": "events@acme.example"},
-        "contact_phone": {"from": _CURRENT_PHONE, "to": "+65 6999 0000"},
+        "contact_phone": {"from": _CURRENT_PHONE, "to": "+6569990000"},
     }
 
 
@@ -335,7 +336,7 @@ def test_point_of_contact_can_be_updated_once_confirmed(organiser_client, db: Se
 
     assert response.status_code == 200, response.text
     db.refresh(event)
-    assert event.contact_phone == "+65 6999 0000"
+    assert event.contact_phone == "+6569990000"
 
 
 @pytest.mark.story("19.1", ac=2)

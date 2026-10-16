@@ -29,7 +29,7 @@ from tests.support.seed import Users
 POC = {
     "contact_name": "Priya Nair",
     "contact_email": "priya.nair@example.com",
-    "contact_phone": "+65 9123 4567",
+    "contact_phone": "+6591234567",  # as saved since fix f2.1.4 (2.1 AC21)
 }
 # Each thing the submit gate requires of the POC: how the refusal names it, and how to leave just
 # that one out of an otherwise submittable request.
@@ -173,13 +173,22 @@ def test_a_malformed_phone_is_refused(organiser_client, phone):
 
 @pytest.mark.story("2.1", ac=13)
 @pytest.mark.parametrize(
-    "phone", ["91234567", "9123 4567", "9123-4567", "+6591234567", "+65 9123 4567", "1" * 15]
+    ("phone", "saved"),
+    [
+        ("91234567", "91234567"),
+        ("9123 4567", "91234567"),
+        ("9123-4567", "91234567"),
+        ("+6591234567", "+6591234567"),
+        ("+65 9123 4567", "+6591234567"),
+        ("1" * 15, "1" * 15),
+    ],
 )
-def test_the_phone_formats_people_type_are_accepted(organiser_client, phone):
+def test_the_phone_formats_people_type_are_accepted(organiser_client, phone, saved):
     response = _create(organiser_client, contact_phone=phone)
 
     assert response.status_code == 201, response.text
-    assert response.json()["contact_phone"] == phone
+    # Fix f2.1.4 (2.1 AC21): saved without the spaces and dashes typed.
+    assert response.json()["contact_phone"] == saved
 
 
 @pytest.mark.story("2.1", ac=13)
