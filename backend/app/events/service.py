@@ -608,6 +608,13 @@ def latest_start_allowed(now: datetime) -> datetime:
         return local.replace(year=local.year + _MAX_LEAD_YEARS, day=28) + timedelta(days=1)
 
 
+def latest_end_allowed(now: datetime) -> datetime:
+    """Story 9.4 AC5: the latest an event can end - it starts at most two years ahead
+    (``latest_start_allowed``) and runs at most 14 days - so the latest a period a venue is
+    unavailable for has any use being asked to end."""
+    return latest_start_allowed(now) + _MAX_EVENT_DURATION
+
+
 def _check_schedule(
     starts_at: datetime | None,
     ends_at: datetime | None,

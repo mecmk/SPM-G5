@@ -1864,8 +1864,12 @@ def test_an_event_awaiting_its_safety_check_goes_back_to_planning_and_its_people
     notices = _told(db, event.id)
     assert _recipients(notices) == sorted([Users.COORDINATOR.id, Users.ORGANISER.id])
     for notice in notices:
-        for text_wanted in (venue.name, "Safety concern", "Wiring"):
+        for text_wanted in (venue.name, "Safety concern"):
             assert text_wanted in notice.message
+    # The description is the coordinator's to read; the organiser's notice leaves it out.
+    by_recipient = {notice.recipient_id: notice.message for notice in notices}
+    assert "Wiring" in by_recipient[Users.COORDINATOR.id]
+    assert "Wiring" not in by_recipient[Users.ORGANISER.id]
 
 
 @pytest.mark.story("9.4", ac=3)
@@ -1931,10 +1935,12 @@ def test_the_coordinator_and_the_organiser_are_each_told_naming_venue_period_and
             _on_singapore_date(starts_at),
             _on_singapore_date(ends_at),
             "Renovation",
-            "Floor relaid",
         ):
             assert text_wanted in notice.message
         assert (notice.related_entity_type, notice.related_entity_id) == ("event", event.id)
+    by_recipient = {notice.recipient_id: notice.message for notice in notices}
+    assert "Floor relaid" in by_recipient[Users.COORDINATOR.id]
+    assert "Floor relaid" not in by_recipient[Users.ORGANISER.id]
 
 
 @pytest.mark.story("9.4", ac=4)
