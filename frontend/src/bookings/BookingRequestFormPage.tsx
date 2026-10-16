@@ -438,7 +438,7 @@ export function BookingRequestFormPage() {
         subtitle={`For ${event.name}. Venue Staff decide whether to hold it.`}
       />
 
-      <form className="card stack" onSubmit={handleSubmit} noValidate>
+      <form className="card stack" onSubmit={handleSubmit}>
         <section aria-labelledby="booking-venue-heading" className="stack">
           <h2 id="booking-venue-heading">Venue</h2>
           <ul className="check-list">
