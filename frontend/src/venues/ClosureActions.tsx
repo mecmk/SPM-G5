@@ -28,21 +28,18 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
   const [error, setError] = useState<string | null>(null)
   const [isGone, setIsGone] = useState(false)
 
-  // The clock as of when this row appeared. The page keys this on the closure's start and end, so
-  // a closure that changes gets a fresh clock, and the backend decides again on the press.
-  const [now] = useState(() => Date.now())
-  const hasEnded = Date.parse(closure.endsAt) <= now
-  const hasStarted = Date.parse(closure.startsAt) < now
+  // The clock as of when this row appeared decides which buttons it shows. The page keys this on
+  // the closure's start and end, so a closure that changes gets a fresh one.
+  const [shownAt] = useState(() => Date.now())
+  const hasEnded = Date.parse(closure.endsAt) <= shownAt
+  const hasStarted = Date.parse(closure.startsAt) < shownAt
   if (hasEnded) return null
 
-  function askToEnd() {
+  /** What a press does is decided by the clock at the press, not by when the row appeared: a
+   *  closure that started since is ended, one still ahead is removed. The backend decides again. */
+  function askToEndOrRemove() {
     setError(null)
-    setPending('end')
-  }
-
-  function askToRemove() {
-    setError(null)
-    setPending('remove')
+    setPending(Date.parse(closure.startsAt) < Date.now() ? 'end' : 'remove')
   }
 
   function cancel() {
@@ -64,9 +61,14 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
       onChanged()
     } catch (err) {
       setError(formatApiError(err))
-      // The closure is already gone, so the day list is out of date: it is loaded again once the
-      // dialog, which keeps the sentence, is closed.
-      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') setIsGone(true)
+      if (err instanceof ApiError && err.code === 'UNAVAILABILITY_NOT_FOUND') {
+        // The closure is already gone: the day list is loaded again once the dialog, which keeps
+        // the sentence, is closed.
+        setIsGone(true)
+      } else if (err instanceof ApiError && err.status === 409) {
+        // The closure is no longer what the row showed (ended, or started): load it again.
+        onChanged()
+      }
     } finally {
       setIsBusy(false)
     }
@@ -78,11 +80,11 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
         Edit
       </button>
       {hasStarted ? (
-        <button type="button" className="secondary button-sm" onClick={askToEnd}>
+        <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
           End now
         </button>
       ) : (
-        <button type="button" className="secondary button-sm" onClick={askToRemove}>
+        <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
           Remove
         </button>
       )}
