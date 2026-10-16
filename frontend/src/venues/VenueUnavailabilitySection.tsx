@@ -7,6 +7,7 @@ import {
   fetchAffectedBookings,
   UNAVAILABILITY_REASON_NAMES,
   type AffectedBooking,
+  type UnavailabilityInput,
   type UnavailabilityReason,
 } from '../api/venues'
 import { Chip } from '../components/Chip'
@@ -27,6 +28,21 @@ export interface VenueUnavailabilitySectionProps {
   editing?: DayClosure | null
   /** Called when an edit is saved or abandoned, so the page stops editing. */
   onEditFinished?: () => void
+}
+
+/** The fields of `input` that differ from the closure being edited. */
+function changedFields(
+  closure: DayClosure,
+  input: UnavailabilityInput,
+): Partial<UnavailabilityInput> {
+  const changes: Partial<UnavailabilityInput> = {}
+  if (Date.parse(input.starts_at) !== Date.parse(closure.startsAt)) {
+    changes.starts_at = input.starts_at
+  }
+  if (Date.parse(input.ends_at) !== Date.parse(closure.endsAt)) changes.ends_at = input.ends_at
+  if (input.reason !== closure.reason) changes.reason = input.reason
+  if (input.description !== (closure.description ?? null)) changes.description = input.description
+  return changes
 }
 
 const REASON_CODES = Object.keys(UNAVAILABILITY_REASON_NAMES) as UnavailabilityReason[]
@@ -145,8 +161,15 @@ export function VenueUnavailabilitySection({
         reason,
         description: description.trim() === '' ? null : description.trim(),
       }
-      if (editing === null) await addUnavailability(venueId, venueName, input)
-      else await editUnavailability(venueId, editing.id, input)
+      if (editing === null) {
+        await addUnavailability(venueId, venueName, input)
+      } else {
+        // Only what changed is sent, so an edit never overwrites a field someone else changed.
+        const changes = changedFields(editing, input)
+        if (Object.keys(changes).length > 0) {
+          await editUnavailability(venueId, editing.id, changes)
+        }
+      }
       close()
       onSaved()
     } catch (err) {
@@ -191,7 +214,7 @@ export function VenueUnavailabilitySection({
         className="stack"
         onSubmit={handleSubmit}
         noValidate
-        aria-label={editing === null ? `Block off time at ${venueName}` : 'Edit closure'}
+        aria-label={editing === null ? `Block off time at ${venueName}` : 'Edit blocked-off time'}
       >
         <div className="form-grid form-grid-2">
           <label>

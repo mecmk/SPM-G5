@@ -81,13 +81,19 @@ export function VenueDetailPage() {
   }
 
   function renderClosureActions(closure: DayClosure) {
+    /** Ended or removed from its row: if its form is open, there is nothing left to edit. */
+    function handleClosureChanged() {
+      if (editingClosure?.id === closure.id) setEditingClosure(null)
+      handleClosureSaved()
+    }
+
     return (
       <ClosureActions
         key={`${closure.id}:${closure.startsAt}:${closure.endsAt}`}
         venueId={venueId}
         closure={closure}
         onEdit={setEditingClosure}
-        onChanged={handleClosureSaved}
+        onChanged={handleClosureChanged}
       />
     )
   }
@@ -322,7 +328,7 @@ export function VenueDetailPage() {
           {canManageUnavailability && (
             <section className="card stack" aria-labelledby="venue-block-off-heading">
               <p className="eyebrow" id="venue-block-off-heading">
-                Block off time
+                {editingClosure === null ? 'Block off time' : 'Edit blocked-off time'}
               </p>
               <p className="muted">
                 Close this venue for a period, for example for maintenance. Any bookings in that
