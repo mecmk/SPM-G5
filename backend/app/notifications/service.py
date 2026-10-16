@@ -73,6 +73,11 @@ class NotificationType(StrEnum):
     # 9.4: the event's coordinator, if it has one, and its organiser - a venue it has booked was
     # marked unavailable for the period of a booking
     BOOKING_VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
+    # 21.2: Safety Officers and the organiser
+    SAFETY_REVIEW_REQUESTED = "SAFETY_REVIEW_REQUESTED"
+    SAFETY_APPROVED = "SAFETY_APPROVED"  # 21.2: the coordinator and the organiser
+    SAFETY_CHANGES_REQUESTED = "SAFETY_CHANGES_REQUESTED"  # 21.2: the coordinator and organiser
+    EVENT_CONFIRMED = "EVENT_CONFIRMED"  # 21.2: the organiser and Safety Officers
 
 
 def notify(

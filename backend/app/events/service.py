@@ -1342,7 +1342,7 @@ def _missing_for_submission(event: Event) -> list[str]:
     return missing
 
 
-def _record_transition(
+def record_transition(
     db: Session,
     event: Event,
     *,
@@ -1391,7 +1391,7 @@ def return_event_to_planning(
     from_status = event.status
     event.status = EventStatus.PLANNING
     db.flush()
-    _record_transition(
+    record_transition(
         db,
         event,
         from_status=from_status,
@@ -1474,7 +1474,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     if submitted.rowcount == 0:
         db.rollback()
         raise EventAlreadySubmitted()
-    _record_transition(
+    record_transition(
         db,
         event,
         from_status=EventStatus.DRAFT,
@@ -1783,7 +1783,7 @@ def _decide(
         db.rollback()
         db.refresh(event)
         raise EventNotAwaitingDecision(event, verb=verb)
-    _record_transition(
+    record_transition(
         db,
         event,
         from_status=from_status,
@@ -1904,7 +1904,7 @@ def request_clarification(
     )
     db.add(entry)
     if is_first_round:
-        _record_transition(
+        record_transition(
             db,
             event,
             from_status=EventStatus.UNDER_REVIEW,
