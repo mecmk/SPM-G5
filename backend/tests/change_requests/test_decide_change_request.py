@@ -1323,6 +1323,35 @@ def test_removed_equipment_releases_its_hold(login_as, db: Session):
 
 
 @pytest.mark.story("19.2", ac=5)
+def test_removed_equipment_kept_as_cancelled_is_not_current_equipment(login_as, db: Session):
+    """A removed item kept, Cancelled, for Technical Support's record is no longer the event's:
+    the organiser may ask for it back as it was, and asking to remove it again changes nothing."""
+    event = _planning_event(db)
+    sent_type = make_equipment_type(db, total_quantity=10)
+    make_equipment_item(db, event=event, equipment_type=sent_type, quantity=2, status="PENDING")
+    removal = _raise(login_as, db, event, "equipment", [])
+    assert _approve(login_as(Users.COORDINATOR), removal).status_code == 200
+    organiser = login_as(Users.ORGANISER)
+    url = f"/events/{event.id}/change-requests"
+
+    removed_again = organiser.post(
+        url, json={"field": "equipment", "proposed": [], "reason": "Plans have changed."}
+    )
+    added_back = organiser.post(
+        url,
+        json={
+            "field": "equipment",
+            "proposed": [{"equipment_type_code": sent_type.code, "quantity": 2}],
+            "reason": "Plans have changed.",
+        },
+    )
+
+    assert removed_again.status_code == 422, removed_again.text
+    assert added_back.status_code == 201, added_back.text
+    assert added_back.json()["current_value"] == []
+
+
+@pytest.mark.story("19.2", ac=5)
 def test_added_equipment_is_held_or_flagged_when_short(login_as, db: Session):
     event = _planning_event(db)
     plenty = make_equipment_type(db, total_quantity=10)

@@ -568,6 +568,22 @@ def test_proposed_attendance_must_be_a_positive_whole_number(organiser_client, d
     assert response.status_code == 422, response.text
 
 
+@pytest.mark.story("19.1", ac=4)
+@pytest.mark.parametrize(("proposed", "expected_status"), [(79, 422), (80, 201)])
+def test_proposed_attendance_leaves_room_for_every_venue_requirement(
+    organiser_client, db: Session, proposed, expected_status
+):
+    """2.7 AC6, checked when the request is raised, not only when it is approved: a requirement
+    may need room for exactly the expected attendance, never more."""
+    event = _planning_event(db)
+    make_venue_requirement(db, event.id, name="Main hall", capacity=80)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", proposed)
+
+    assert response.status_code == expected_status, response.text
+    assert len(_change_requests(db, event.id)) == (1 if expected_status == 201 else 0)
+
+
 def _over_attendance(event: Event) -> list:
     return [{"name": "Hall", "capacity": 101}]
 
