@@ -14,8 +14,10 @@ import { eachDate } from './calendarGrid'
  *  called - in words as well as colour. */
 export const BOOKED_LABEL = 'Booked'
 export const HELD_LABEL = 'Held – pending'
+/** Story 9.4 AC1: what a closed period is called, as the legend names it and as a closure's row
+ *  starts ("Unavailable – Maintenance"). */
+export const UNAVAILABLE_LABEL = 'Unavailable'
 
-const UNAVAILABLE_PREFIX = 'Unavailable'
 const HELD_ENTRY_PREFIX = 'Held'
 // Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
 // (setup before it, teardown after it, or both), which side names the second line.
@@ -123,7 +125,7 @@ function closureEntryLabel(window: VenueUnavailableWindow): string {
 }
 
 function closureKindLabel(reason: string): string {
-  return `${UNAVAILABLE_PREFIX} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
+  return `${UNAVAILABLE_LABEL} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
 
 function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {

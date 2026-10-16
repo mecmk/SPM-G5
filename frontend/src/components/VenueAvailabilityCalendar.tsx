@@ -7,12 +7,13 @@ import {
   groupDayItemsByDate,
   HELD_LABEL,
   toCalendarEntry,
+  UNAVAILABLE_LABEL,
   type DayClosure,
 } from './venueCalendarDays'
 
 // Story 9.1 AC2: a pending request that holds the venue has a style of its own.
 const CALENDAR_LEGEND: CalendarLegendItem[] = [
-  { tone: 'danger', label: 'Unavailable' },
+  { tone: 'danger', label: UNAVAILABLE_LABEL },
   { tone: 'warning', label: HELD_LABEL },
 ]
 
