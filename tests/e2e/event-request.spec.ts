@@ -1563,7 +1563,8 @@ test('2.1 AC22: a 0 that cannot be dialled after the calling code is refused bef
   // Italy's numbers keep their 0 when dialled from abroad, so it stays.
   await phoneRegionPicker(page).selectOption({ label: 'Italy (+39)' })
   await phone.fill('06 1234 5678')
-  await expect(page.getByText(LEADING_ZERO_PROBLEM)).toHaveCount(0)
+  // The refused save's alert stays until the next save; the field's own message goes.
+  await expect(phone).not.toHaveAttribute('aria-invalid', 'true')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
   await page.goto(page.url().replace(/\/edit$/, ''))
