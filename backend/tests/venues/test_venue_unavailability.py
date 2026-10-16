@@ -340,7 +340,7 @@ def _period(
 @pytest.mark.story("9.4", ac=1)
 @pytest.mark.parametrize("reason", ["MAINTENANCE", "EQUIPMENT_FAILURE", "RENOVATION", "SAFETY"])
 def test_venue_staff_add_a_period_for_each_reason(db, venue_staff_client, reason):
-    """Plan 1.1: 201, the period as stored, the Venue Staff member who made it."""
+    """AC1: 201, the period as stored, the Venue Staff member who made it."""
     venue = make_venue(db)
 
     response = venue_staff_client.post(_url(venue.id), json=_future_body(reason=reason))
@@ -357,7 +357,7 @@ def test_venue_staff_add_a_period_for_each_reason(db, venue_staff_client, reason
 
 @pytest.mark.story("9.4", ac=1)
 def test_other_with_a_description_is_accepted(db, venue_staff_client):
-    """Plan 1.3."""
+    """AC1."""
     venue = make_venue(db)
 
     response = venue_staff_client.post(
@@ -373,7 +373,7 @@ def test_other_with_a_description_is_accepted(db, venue_staff_client):
 @pytest.mark.parametrize("reason", REASONS)
 @pytest.mark.parametrize("description", [None, "", "   ", "\t\n", "<omitted>"])
 def test_a_block_off_without_a_description_is_refused(db, venue_staff_client, reason, description):
-    """Plan 1.4 (PO decision, 13 Oct 2026): 422 and nothing saved, for a missing, empty or blank
+    """AC1 (PO decision, 13 Oct 2026): 422 and nothing saved, for a missing, empty or blank
     description, whichever reason is given - every block off says why."""
     venue = make_venue(db)
     body = _future_body(reason=reason, description=description)
@@ -389,7 +389,7 @@ def test_a_block_off_without_a_description_is_refused(db, venue_staff_client, re
 @pytest.mark.story("9.4", ac=1)
 @pytest.mark.parametrize("reason", ["INTERNAL_USE", "WEATHER", "", "maintenance"])
 def test_a_reason_outside_the_five_is_refused(db, venue_staff_client, reason):
-    """Plan 1.2b and 1.7: 422, nothing saved. Codes are exact, so lower case is refused too."""
+    """AC1: 422, nothing saved. Codes are exact, so lower case is refused too."""
     venue = make_venue(db)
 
     response = venue_staff_client.post(
@@ -402,7 +402,7 @@ def test_a_reason_outside_the_five_is_refused(db, venue_staff_client, reason):
 
 @pytest.mark.story("9.4", ac=1)
 def test_the_refusal_of_a_missing_description_says_what_is_needed(db, venue_staff_client):
-    """Plan 1.6: the sentence the page shows, in the backend's own words."""
+    """AC1: the sentence the page shows, in the backend's own words."""
     venue = make_venue(db)
 
     response = venue_staff_client.post(_url(venue.id), json=_future_body(description=None))
@@ -413,7 +413,7 @@ def test_the_refusal_of_a_missing_description_says_what_is_needed(db, venue_staf
 
 @pytest.mark.story("9.4", ac=1)
 def test_an_unknown_venue_is_not_found(db, venue_staff_client):
-    """Plan 1.8: 404 for a venue that is not there; a known venue takes the same body (201), so
+    """AC1: 404 for a venue that is not there; a known venue takes the same body (201), so
     the 404 is the venue's and not the route's."""
     known = make_venue(db)
     assert venue_staff_client.post(_url(known.id), json=_future_body()).status_code == 201
@@ -425,7 +425,7 @@ def test_an_unknown_venue_is_not_found(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=1)
 def test_a_withdrawn_venue_can_be_marked_unavailable(db, venue_staff_client):
-    """Plan 1.9 (D14): editing a withdrawn venue is allowed today, so marking it is too."""
+    """AC1: editing a withdrawn venue is allowed today, so marking it is too."""
     venue = make_venue(db, status="WITHDRAWN")
 
     response = venue_staff_client.post(_url(venue.id), json=_future_body())
@@ -437,7 +437,7 @@ def test_a_withdrawn_venue_can_be_marked_unavailable(db, venue_staff_client):
 def test_the_calendar_shows_the_new_period_with_its_reason_description_and_id(
     db, venue_staff_client
 ):
-    """Plan 1.10: AC1's "shows on the venue's calendar", and the period's id so the page can
+    """AC1: AC1's "shows on the venue's calendar", and the period's id so the page can
     target it for an edit."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(10), _days_from_now(12)
@@ -462,7 +462,7 @@ def test_the_calendar_shows_the_new_period_with_its_reason_description_and_id(
 
 @pytest.mark.story("9.4", ac=1)
 def test_the_calendar_carries_a_closures_description_apart_from_its_label(db, venue_staff_client):
-    """Review of slice 6: the page's Edit prefills from the closure's own description, so the
+    """AC1: the page's Edit prefills from the closure's own description, so the
     window says it, as the label does; a booking's window has none, and its label is its event."""
     venue = make_venue(db)
     described = _period(
@@ -500,7 +500,7 @@ def test_the_calendar_carries_a_closures_description_apart_from_its_label(db, ve
 
 @pytest.mark.story("9.4", ac=1)
 def test_a_period_added_through_the_api_keeps_the_venue_out_of_a_search(db, venue_staff_client):
-    """Plan 1.11. cannot fail first, for the search half: 8.1 already leaves a blocked venue out
+    """AC1. cannot fail first, for the search half: 8.1 already leaves a blocked venue out
     and keeps one a closure only touches. Written through the new POST so it is red with it."""
     venue = make_venue(db)
     starts_at = _days_from_now(10).replace(hour=9, minute=0, second=0)
@@ -528,7 +528,7 @@ def test_a_period_added_through_the_api_keeps_the_venue_out_of_a_search(db, venu
 @pytest.mark.story("9.4", ac=5)
 @pytest.mark.parametrize("offset_minutes", [0, -1, -24 * 60])
 def test_a_period_must_end_after_it_starts(db, venue_staff_client, offset_minutes):
-    """Plan 5.1: end equal to or before start is 422 on create - not the database's 500."""
+    """AC5: end equal to or before start is 422 on create - not the database's 500."""
     venue = make_venue(db)
     starts_at = _days_from_now(10)
 
@@ -550,7 +550,7 @@ def test_a_period_must_end_after_it_starts(db, venue_staff_client, offset_minute
     ],
 )
 def test_an_edit_may_not_leave_the_end_before_the_start(db, venue_staff_client, edit):
-    """Plan 5.1 on edit: the rule applies to the period as it would be after the edit, so moving
+    """AC5 on edit: the rule applies to the period as it would be after the edit, so moving
     only the start past the end is refused too. The period is left as it was."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(10), _days_from_now(12)
@@ -572,7 +572,7 @@ def test_an_edit_may_not_leave_the_end_before_the_start(db, venue_staff_client, 
 @pytest.mark.story("9.4", ac=5)
 @pytest.mark.parametrize("missing", ["starts_at", "ends_at"])
 def test_both_ends_are_required_and_must_carry_a_timezone(db, venue_staff_client, missing):
-    """Plan 5.6: a missing end, or a moment with no timezone, is 422."""
+    """AC5: a missing end, or a moment with no timezone, is 422."""
     venue = make_venue(db)
     body = _future_body()
     del body[missing]
@@ -586,7 +586,7 @@ def test_both_ends_are_required_and_must_carry_a_timezone(db, venue_staff_client
 # --- AC6 (the period itself): end, remove, shorten, extend -----------------------------------
 @pytest.mark.story("9.4", ac=6)
 def test_end_now_ends_a_started_period_at_the_servers_now(db, venue_staff_client):
-    """Plan 6.1a: the server sets ``ends_at`` to its own now, not a moment the client names - it
+    """AC6: the server sets ``ends_at`` to its own now, not a moment the client names - it
     lies between a timestamp taken just before the request and one taken just after."""
     venue = make_venue(db)
     period = _started(db, venue.id)
@@ -602,7 +602,7 @@ def test_end_now_ends_a_started_period_at_the_servers_now(db, venue_staff_client
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_period_not_yet_started_is_removed(db, venue_staff_client):
-    """Plan 6.2a: the row is gone."""
+    """AC6: the row is gone."""
     venue = make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
 
@@ -614,7 +614,7 @@ def test_a_period_not_yet_started_is_removed(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=6)
 def test_an_edit_changes_start_end_reason_and_description(db, venue_staff_client):
-    """Plan 6.3a and 6.11: the four fields each change, shortening and extending included."""
+    """AC6: the four fields each change, shortening and extending included."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(10), _days_from_now(12)
     period = _period(db, venue.id, starts_at, ends_at)
@@ -645,7 +645,7 @@ def test_an_edit_changes_start_end_reason_and_description(db, venue_staff_client
 
 @pytest.mark.story("9.4", ac=6)
 def test_an_edit_may_not_leave_a_closure_without_its_description(db, venue_staff_client):
-    """Plan 1.4 on edit (PO decision, 13 Oct 2026): clearing the description of a closure of any
+    """AC1 on edit (PO decision, 13 Oct 2026): clearing the description of a closure of any
     reason is refused, and the period is unchanged."""
     venue = make_venue(db)
     plain = _period(db, venue.id, _days_from_now(10), _days_from_now(12), notes="Servicing")
@@ -664,7 +664,7 @@ def test_an_edit_may_not_leave_a_closure_without_its_description(db, venue_staff
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_period_starting_exactly_now_counts_as_not_started(db):
-    """Plan 6.8: ``starts_at == now`` is not started - ending it would break
+    """AC6: ``starts_at == now`` is not started - ending it would break
     ``ends_at > starts_at`` - so it cannot be ended, and it can be removed. Called on the service
     with a chosen ``now``, as 12.7's tests do."""
     venue = make_venue(db)
@@ -681,7 +681,7 @@ def test_a_period_starting_exactly_now_counts_as_not_started(db):
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_period_ending_exactly_now_has_ended(db):
-    """Plan 6.9 at its boundary: ``ends_at == now`` is ended, and it is left as it was."""
+    """AC6 at its boundary: ``ends_at == now`` is ended, and it is left as it was."""
     venue = make_venue(db)
     now = _days_from_now(10)
     period = _period(db, venue.id, now - timedelta(days=3), now)
@@ -693,7 +693,7 @@ def test_a_period_ending_exactly_now_has_ended(db):
 
 @pytest.mark.story("9.4", ac=6)
 def test_an_already_ended_period_cannot_be_ended_again(db, venue_staff_client):
-    """Plan 6.9: a period that ended a day ago. 409, and the row is exactly as it was."""
+    """AC6: a period that ended a day ago. 409, and the row is exactly as it was."""
     venue = make_venue(db)
     ends_at = _days_from_now(-1)
     period = _period(db, venue.id, ends_at - timedelta(days=3), ends_at)
@@ -706,7 +706,7 @@ def test_an_already_ended_period_cannot_be_ended_again(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_started_period_cannot_be_removed(db, venue_staff_client):
-    """Plan 6.12: a period in force is ended, not removed, so the calendar keeps its history.
+    """AC6: a period in force is ended, not removed, so the calendar keeps its history.
     409, and the row is left."""
     venue = make_venue(db)
     period = _started(db, venue.id)
@@ -722,7 +722,7 @@ def test_a_started_period_cannot_be_removed(db, venue_staff_client):
     "extra", [{"reason": "RENOVATION"}, {"description": "x"}, {"ends_at": "2030-01-01T00:00:00Z"}]
 )
 def test_end_now_stands_alone(db, venue_staff_client, extra):
-    """Plan 6.13: ``end_now`` with any other field is 422 and changes nothing."""
+    """AC6: ``end_now`` with any other field is 422 and changes nothing."""
     venue = make_venue(db)
     period = _started(db, venue.id)
     ends_at = period.ends_at
@@ -735,7 +735,7 @@ def test_end_now_stands_alone(db, venue_staff_client, extra):
 
 @pytest.mark.story("9.4", ac=6)
 def test_an_unknown_period_and_one_of_another_venue_are_not_found(db, venue_staff_client):
-    """Plan 6.10: 404 for edit and removal alike. The period's own venue takes the same edit
+    """AC6: 404 for edit and removal alike. The period's own venue takes the same edit
     (200), so the 404 is the period's and not the route's."""
     venue, other = make_venue(db), make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
@@ -751,8 +751,8 @@ def test_an_unknown_period_and_one_of_another_venue_are_not_found(db, venue_staf
 
 @pytest.mark.story("9.4", ac=6)
 def test_every_write_leaves_an_audit_row(db, venue_staff_client):
-    """Plan 6.11 and X.2a: creation, edit, end and removal each write one row, naming the actor,
-    and an edit keeps what it replaced so the log is the history (D3)."""
+    """AC6: creation, edit, end and removal each write one row, naming the actor,
+    and an edit keeps what it replaced so the log is the history."""
     venue = make_venue(db)
     created = venue_staff_client.post(
         _url(venue.id), json=_body(_days_from_now(5), _days_from_now(6))
@@ -785,9 +785,9 @@ def test_every_write_leaves_an_audit_row(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_refused_write_leaves_no_audit_row(db, venue_staff_client):
-    """Plan X.2a, the refused half. cannot fail first: no route writes an audit row today, so
-    the count cannot change; it guards the refused paths once the routes exist, and is paired
-    with the audit-row case above."""
+    """AC6, the refused half of the audit trail. cannot fail first: no route wrote an audit row
+    before, so the count could not change; it guards the refused paths, and is paired with the
+    audit-row case above."""
     venue = make_venue(db)
     period = _started(db, venue.id)
     before = _audit_count(db)
@@ -802,7 +802,7 @@ def test_a_refused_write_leaves_no_audit_row(db, venue_staff_client):
 # --- AC8 (the period itself): in the past ----------------------------------------------------
 @pytest.mark.story("9.4", ac=8)
 def test_a_period_in_the_past_is_saved_and_shown(db, venue_staff_client):
-    """Plan 8.4 (D5): nothing beyond AC5 limits the start, so a closure that has happened is
+    """AC8: nothing beyond AC5 limits the start, so a closure that has happened is
     kept and on the calendar."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(-10), _days_from_now(-9)
@@ -850,7 +850,7 @@ def _ids(response) -> set[str]:
 
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_lists_pending_and_approved_bookings_that_overlap(db, venue_staff_client):
-    """Plan 2.1: each with its event, status and held period."""
+    """AC2: each with its event, status and held period."""
     venue = make_venue(db)
     day = _days_from_now(20).replace(hour=9, minute=0, second=0)
     pending = _booking(db, venue.id, day, day + timedelta(hours=2), status="PENDING")
@@ -877,7 +877,7 @@ def test_the_preview_lists_pending_and_approved_bookings_that_overlap(db, venue_
 
 @pytest.mark.story("9.4", ac=2)
 def test_a_booking_overlapped_only_by_its_teardown_is_listed(db, venue_staff_client):
-    """Plan 2.2: the held period, not the event's own, is what is measured; a window that only
+    """AC2: the held period, not the event's own, is what is measured; a window that only
     touches the end of it is not an overlap."""
     venue = make_venue(db)
     day = _days_from_now(20).replace(hour=10, minute=0, second=0)
@@ -906,7 +906,7 @@ def test_a_booking_overlapped_only_by_its_teardown_is_listed(db, venue_staff_cli
 
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_leaves_out_bookings_that_no_longer_hold_the_venue(db, venue_staff_client):
-    """Plan 2.3: rejected, withdrawn, cancelled and expired ones hold nothing, so they are not
+    """AC2: rejected, withdrawn, cancelled and expired ones hold nothing, so they are not
     listed; the live booking beside them is, which is what makes this red."""
     venue = make_venue(db)
     day = _days_from_now(20).replace(hour=9, minute=0, second=0)
@@ -931,7 +931,7 @@ def test_the_preview_leaves_out_bookings_that_no_longer_hold_the_venue(db, venue
 
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_is_for_this_venue_only(db, venue_staff_client):
-    """Plan 2.4."""
+    """AC2."""
     venue, elsewhere = make_venue(db), make_venue(db)
     day = _days_from_now(20).replace(hour=9, minute=0, second=0)
     mine = _booking(db, venue.id, day, day + timedelta(hours=2), status="APPROVED")
@@ -947,7 +947,7 @@ def test_the_preview_is_for_this_venue_only(db, venue_staff_client):
 @pytest.mark.story("9.4", ac=2)
 @pytest.mark.story("9.4", ac=8)
 def test_the_preview_leaves_out_completed_events_and_periods_already_over(db, venue_staff_client):
-    """Plan 2.5 (D12): a COMPLETED event's booking, and one whose held period has ended, are not
+    """AC2: a COMPLETED event's booking, and one whose held period has ended, are not
     candidates. A Confirmed event's booking on the same days is, which is what makes this red."""
     venue = make_venue(db)
     future = _days_from_now(20).replace(hour=9, minute=0, second=0)
@@ -979,7 +979,7 @@ def test_the_preview_leaves_out_completed_events_and_periods_already_over(db, ve
 
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_writes_nothing(db, venue_staff_client):
-    """Plan 2.6: 200, no period, no audit row, no booking or event touched."""
+    """AC2: 200, no period, no audit row, no booking or event touched."""
     venue = make_venue(db)
     day = _days_from_now(20).replace(hour=9, minute=0, second=0)
     booking = _booking(db, venue.id, day, day + timedelta(hours=2), status="PENDING")
@@ -998,8 +998,8 @@ def test_the_preview_writes_nothing(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=2)
 def test_a_period_may_be_saved_with_bookings_in_the_way(db, venue_staff_client):
-    """Plan 2.7: AC2's "saving is allowed even when there are some". The booking stays as it
-    was - marking it is slice 3's."""
+    """AC2: "saving is allowed even when there are some". The period is saved and the booking
+    is not cancelled or moved; its mark is AC3's and is asserted there."""
     venue = make_venue(db)
     day = _days_from_now(20).replace(hour=9, minute=0, second=0)
     booking = _booking(db, venue.id, day, day + timedelta(hours=2), status="APPROVED")
@@ -1030,7 +1030,7 @@ def _write(client, method: str, venue_id: uuid.UUID, period_id: uuid.UUID):
 @pytest.mark.parametrize("method", WRITES)
 @pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
 def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method):
-    """Plan 9.1: 403, and the period is as it was. A period already exists so PATCH and DELETE
+    """AC9: 403, and the period is as it was. A period already exists so PATCH and DELETE
     have something to refuse. The Safety Officer (21.1) is a guard, cannot fail first: 21.1 gives
     that role no manage permission, so the refusal is already in place."""
     venue = make_venue(db)
@@ -1047,7 +1047,7 @@ def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method)
 @pytest.mark.parametrize("method", WRITES)
 @pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE, None])
 def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, role, method):
-    """Plan 9.2: 403 for a signed-in organiser or attendee, 401 when signed out."""
+    """AC9: 403 for a signed-in organiser or attendee, 401 when signed out."""
     venue = make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
     client = login_as(role) if role is not None else login_as(Users.VENUE_STAFF)
@@ -1066,7 +1066,7 @@ def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, 
     "role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER, Users.ORGANISER, None]
 )
 def test_only_venue_staff_may_preview(db, login_as, role):
-    """Plan 2.9: the preview is part of marking a venue unavailable, so it is Venue Staff's. The
+    """AC2: the preview is part of marking a venue unavailable, so it is Venue Staff's. The
     Safety Officer (21.1) is a guard, cannot fail first: 21.1 gives that role no manage
     permission, so it is already refused."""
     venue = make_venue(db)
@@ -1083,7 +1083,7 @@ def test_only_venue_staff_may_preview(db, login_as, role):
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.parametrize("role", [Users.COORDINATOR, Users.TECH_SUPPORT, Users.SAFETY_OFFICER])
 def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role):
-    """Plan 9.3. cannot fail first, for the read half: 9.1 already shows a closure's reason to
+    """AC9. cannot fail first, for the read half: 9.1 already shows a closure's reason to
     these roles, and the Safety Officer (21.1) has venues:read and venue_calendar:read through
     the internal roles' common set. Written through the new POST so it is red with it."""
     venue = make_venue(db)
@@ -1113,7 +1113,7 @@ def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE])
 def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
-    """Plan 9.4. cannot fail first: they hold neither venues:read nor venue_calendar:read today
+    """AC9. cannot fail first: they hold neither venues:read nor venue_calendar:read today
     (9.1 AC13), so the refusal is already in place; pinned so a later change cannot expose a
     closure's reason to them."""
     venue = make_venue(db)
@@ -1140,7 +1140,8 @@ def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
 # The mark is set while a PENDING or APPROVED booking's held period overlaps a period of its
 # venue, and cleared when none does. The re-check runs after every add, edit, end and removal.
 # A booking that is no longer pending or approved keeps whatever value it had: history, which
-# readers ignore. The event's status and the notifications are slice 4's, not asserted here.
+# readers ignore. The event's status and the notifications are asserted in the AC3 and AC4
+# sections below, not here.
 # =====================================================================================
 MARKED = "BOOKING_VENUE_UNAVAILABLE_MARKED"
 CLEARED = "BOOKING_VENUE_UNAVAILABLE_CLEARED"
@@ -1189,7 +1190,7 @@ def _add(client, venue_id: uuid.UUID, starts_at: datetime, ends_at: datetime, **
 # --- AC3: the mark ---------------------------------------------------------------------------
 @pytest.mark.story("9.4", ac=3)
 def test_saving_a_period_marks_each_booking_it_overlaps(db, venue_staff_client):
-    """Plan 3.1: pending and approved alike. Status, venue and period are untouched, and the
+    """AC3: pending and approved alike. Status, venue and period are untouched, and the
     event is not cancelled."""
     venue = make_venue(db)
     pending = _live(db, venue.id, _day(3))
@@ -1212,7 +1213,7 @@ def test_saving_a_period_marks_each_booking_it_overlaps(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=3)
 def test_two_bookings_of_one_event_are_both_marked(db, venue_staff_client):
-    """Plan 3.5a: the event has two bookings on the venue; both carry the mark."""
+    """AC3: the event has two bookings on the venue; both carry the mark."""
     venue = make_venue(db)
     event = make_event(
         db, status=EventStatus.PLANNING, assigned_coordinator_id=Users.COORDINATOR.id
@@ -1232,7 +1233,7 @@ def test_two_bookings_of_one_event_are_both_marked(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=3)
 def test_a_booking_outside_the_period_is_not_marked(db, venue_staff_client):
-    """Plan 3.6. cannot fail first: it passes on an implementation that marks nothing; it is
+    """AC3. cannot fail first: it passes on an implementation that marks nothing; it is
     paired with the marking case above, which carries the red. Another event's booking on the
     same venue, and the same venue's booking on another venue, are left alone."""
     venue, elsewhere = make_venue(db), make_venue(db)
@@ -1251,7 +1252,7 @@ def test_a_booking_outside_the_period_is_not_marked(db, venue_staff_client):
 def test_the_mark_is_the_time_of_the_save_and_a_second_period_does_not_move_it(
     db, venue_staff_client
 ):
-    """Plan 3.8: the timestamp lies between a moment before the save and one after; a second
+    """AC3: the timestamp lies between a moment before the save and one after; a second
     period overlapping the same booking leaves it where it was."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
@@ -1269,7 +1270,7 @@ def test_the_mark_is_the_time_of_the_save_and_a_second_period_does_not_move_it(
 @pytest.mark.story("9.4", ac=3)
 @pytest.mark.parametrize("status", ["REJECTED", "WITHDRAWN", "CANCELLED", "EXPIRED"])
 def test_a_leftover_mark_on_a_closed_booking_is_history_readers_ignore(db, login_as, status):
-    """Plan 3.10 (A1): no mark in ``BookingOut``, ``BookingOutcome`` or the queue entry, and the
+    """AC3: no mark in ``BookingOut``, ``BookingOutcome`` or the queue entry, and the
     re-check neither clears nor re-marks the value."""
     venue = make_venue(db)
     extra = {"hold_expires_at": _day(1)} if status == "EXPIRED" else {}
@@ -1294,7 +1295,7 @@ def test_a_leftover_mark_on_a_closed_booking_is_history_readers_ignore(db, login
 
 @pytest.mark.story("9.4", ac=3)
 def test_a_booking_carries_its_mark_in_the_booking_record(db, login_as):
-    """Plan 3.11: ``BookingOut`` has the field for a live booking - the timestamp when marked,
+    """AC3: ``BookingOut`` has the field for a live booking - the timestamp when marked,
     null (present, not absent) when not."""
     venue = make_venue(db)
     marked = _live(db, venue.id, _day(3))
@@ -1311,7 +1312,7 @@ def test_a_booking_carries_its_mark_in_the_booking_record(db, login_as):
 
 @pytest.mark.story("9.4", ac=3)
 def test_the_queue_entry_carries_the_mark_and_the_queue_still_counts(db, login_as):
-    """Plan 3.12: ``BookingQueueEntry`` has the field; the tab's total and the counts are what
+    """AC3: ``BookingQueueEntry`` has the field; the tab's total and the counts are what
     they were without it."""
     venue = make_venue(db)
     marked = _live(db, venue.id, _day(3))
@@ -1329,7 +1330,7 @@ def test_the_queue_entry_carries_the_mark_and_the_queue_still_counts(db, login_a
 
 @pytest.mark.story("9.4", ac=3)
 def test_the_event_page_outcome_carries_the_mark(db, login_as):
-    """Plan 3.13: ``BookingOutcome`` has the field, for the coordinator's event page."""
+    """AC3: ``BookingOutcome`` has the field, for the coordinator's event page."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
     _add(login_as(Users.VENUE_STAFF), venue.id, _day(2), _day(7))
@@ -1342,7 +1343,7 @@ def test_the_event_page_outcome_carries_the_mark(db, login_as):
 
 @pytest.mark.story("9.4", ac=3)
 def test_the_mark_is_a_nullable_timestamp_column(db):
-    """Plan X.1: migration 023's column, as the ORM and the dictionary describe it."""
+    """AC3: migration 023's column, as the ORM and the dictionary describe it."""
     row = db.execute(
         text(
             "SELECT data_type, is_nullable FROM information_schema.columns"
@@ -1357,7 +1358,7 @@ def test_the_mark_is_a_nullable_timestamp_column(db):
 
 @pytest.mark.story("9.4", ac=3)
 def test_marking_and_clearing_each_leave_an_audit_row(db, venue_staff_client):
-    """Plan X.2b: one row per booking marked, one per booking cleared, naming the actor, the
+    """AC3: one row per booking marked, one per booking cleared, naming the actor, the
     venue and the event."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
@@ -1376,7 +1377,7 @@ def test_marking_and_clearing_each_leave_an_audit_row(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=3)
 def test_the_recheck_says_what_it_marked_and_what_it_cleared(db):
-    """The re-check's contract, for slice 4: a typed result with the bookings newly marked and
+    """AC3: the re-check's contract - a typed result with the bookings newly marked and
     the ones cleared; a second run on the same state changes nothing. Called with a ``now`` of
     its own, as 12.7's hold functions are."""
     venue = make_venue(db)
@@ -1400,7 +1401,7 @@ def test_the_recheck_says_what_it_marked_and_what_it_cleared(db):
 # --- AC5: touching and overlapping, against the held period ----------------------------------
 @pytest.mark.story("9.4", ac=5)
 def test_overlapping_a_held_period_by_one_minute_marks_the_booking(db, venue_staff_client):
-    """Plan 5.4: the least overlap there is."""
+    """AC5: the least overlap there is."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3, 10))
 
@@ -1411,7 +1412,7 @@ def test_overlapping_a_held_period_by_one_minute_marks_the_booking(db, venue_sta
 
 @pytest.mark.story("9.4", ac=5)
 def test_a_period_that_only_touches_the_booking_does_not_mark_it(db, venue_staff_client):
-    """Plan 5.2 and 5.3. cannot fail first: it passes on an implementation that marks nothing;
+    """AC5. cannot fail first: it passes on an implementation that marks nothing;
     paired with the one-minute case above. A period ending exactly where the booking's held
     period starts, and one starting exactly where it ends, leave it unmarked."""
     venue = make_venue(db)
@@ -1437,7 +1438,7 @@ def test_a_period_that_only_touches_the_booking_does_not_mark_it(db, venue_staff
 def test_the_overlap_is_measured_against_the_held_period(
     db, venue_staff_client, period, expected_marked
 ):
-    """Plan 5.5: setup and teardown count, and the held period's own edges are half-open."""
+    """AC5: setup and teardown count, and the held period's own edges are half-open."""
     venue = make_venue(db)
     booking = _booking(
         db,
@@ -1463,7 +1464,7 @@ def test_the_overlap_is_measured_against_the_held_period(
 # --- AC6: end, remove, shorten, extend: the marks follow -------------------------------------
 @pytest.mark.story("9.4", ac=6)
 def test_ending_a_period_clears_the_marks_of_bookings_no_longer_overlapped(db, venue_staff_client):
-    """Plan 6.1b: the period began yesterday and runs ten days; ending it now frees a booking
+    """AC6: the period began yesterday and runs ten days; ending it now frees a booking
     three days away."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
@@ -1480,7 +1481,7 @@ def test_ending_a_period_clears_the_marks_of_bookings_no_longer_overlapped(db, v
 
 @pytest.mark.story("9.4", ac=6)
 def test_removing_a_period_clears_its_marks(db, venue_staff_client):
-    """Plan 6.2b."""
+    """AC6."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
     period = _add(venue_staff_client, venue.id, _day(2), _day(7))
@@ -1494,7 +1495,7 @@ def test_removing_a_period_clears_its_marks(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=6)
 def test_shortening_clears_only_the_bookings_that_drop_out(db, venue_staff_client):
-    """Plan 6.3b: the one still inside keeps its mark and its timestamp."""
+    """AC6: the one still inside keeps its mark and its timestamp."""
     venue = make_venue(db)
     kept = _live(db, venue.id, _day(3))
     dropped = _live(db, venue.id, _day(8))
@@ -1513,7 +1514,7 @@ def test_shortening_clears_only_the_bookings_that_drop_out(db, venue_staff_clien
 
 @pytest.mark.story("9.4", ac=6)
 def test_extending_marks_the_bookings_it_newly_reaches(db, venue_staff_client):
-    """Plan 6.4a: the booking already marked keeps its timestamp; the one reached is marked."""
+    """AC6: the booking already marked keeps its timestamp; the one reached is marked."""
     venue = make_venue(db)
     inside = _live(db, venue.id, _day(3))
     beyond = _live(db, venue.id, _day(8))
@@ -1532,7 +1533,7 @@ def test_extending_marks_the_bookings_it_newly_reaches(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=6)
 def test_a_booking_another_period_still_overlaps_keeps_its_mark(db, venue_staff_client):
-    """Plan 6.5 (D4): periods may overlap, so removing one frees nothing the other still holds,
+    """AC6: periods may overlap, so removing one frees nothing the other still holds,
     and the timestamp does not change."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
@@ -1548,7 +1549,7 @@ def test_a_booking_another_period_still_overlaps_keeps_its_mark(db, venue_staff_
 
 @pytest.mark.story("9.4", ac=6)
 def test_one_edit_can_clear_one_booking_and_mark_another(db, venue_staff_client):
-    """Plan 6.6: moving a period off one booking and onto another."""
+    """AC6: moving a period off one booking and onto another."""
     venue = make_venue(db)
     freed = _live(db, venue.id, _day(3))
     reached = _live(db, venue.id, _day(8))
@@ -1568,7 +1569,7 @@ def test_one_edit_can_clear_one_booking_and_mark_another(db, venue_staff_client)
 # --- AC8: which bookings are candidates ------------------------------------------------------
 @pytest.mark.story("9.4", ac=8)
 def test_a_booking_in_progress_is_marked(db, venue_staff_client):
-    """Plan 8.3: its held period began an hour ago and ends in two, and it is still to come."""
+    """AC8: its held period began an hour ago and ends in two, and it is still to come."""
     venue = make_venue(db)
     now = datetime.now(UTC)
     booking = _booking(
@@ -1587,7 +1588,7 @@ def test_a_booking_in_progress_is_marked(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=8)
 def test_a_completed_events_booking_is_not_marked(db, venue_staff_client):
-    """Plan 8.1a. cannot fail first: it passes on an implementation that marks nothing; paired
+    """AC8. cannot fail first: it passes on an implementation that marks nothing; paired
     with the in-progress case above, whose period covers both."""
     venue = make_venue(db)
     now = datetime.now(UTC)
@@ -1607,7 +1608,7 @@ def test_a_completed_events_booking_is_not_marked(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=8)
 def test_a_booking_whose_held_period_is_over_is_not_marked(db, venue_staff_client):
-    """Plan 8.2 (D12). cannot fail first, as above: a period saved over days already gone
+    """AC8. cannot fail first, as above: a period saved over days already gone
     marks nothing, though the booking was inside it."""
     venue = make_venue(db)
     gone = _booking(db, venue.id, _day(-6), _day(-6, 12), status="APPROVED")
@@ -1619,7 +1620,7 @@ def test_a_booking_whose_held_period_is_over_is_not_marked(db, venue_staff_clien
 
 @pytest.mark.story("9.4", ac=8)
 def test_a_stale_mark_on_a_booking_that_is_over_is_left_alone(db, venue_staff_client):
-    """Plan 8.5 (C8). cannot fail first: it passes on an implementation that clears nothing; it
+    """AC8. cannot fail first: it passes on an implementation that clears nothing; it
     is paired with the clearing cases in AC6. A re-check leaves the value on a booking whose held
     period has ended, as history."""
     venue = make_venue(db)
@@ -1635,7 +1636,7 @@ def test_a_stale_mark_on_a_booking_that_is_over_is_left_alone(db, venue_staff_cl
 # --- 12.7 alongside the mark -----------------------------------------------------------------
 @pytest.mark.story("9.4", ac=3)
 def test_a_marked_hold_that_expires_keeps_its_timestamp_but_shows_no_mark(db, login_as):
-    """Plan X.3 (A1, D7): the sweep still expires it; the value stays on the row as history and
+    """AC3: the sweep still expires it; the value stays on the row as history and
     the booking record no longer reports it."""
     venue = make_venue(db)
     expiry = _day(1)
@@ -1657,7 +1658,7 @@ def test_a_marked_hold_that_expires_keeps_its_timestamp_but_shows_no_mark(db, lo
 
 @pytest.mark.story("9.4", ac=3)
 def test_a_marked_hold_is_still_warned_before_it_expires(db):
-    """Plan X.4 (D7). cannot fail first, for its behaviour: 12.7's reminder already runs for
+    """AC3. cannot fail first, for its behaviour: 12.7's reminder already runs for
     every open hold, so it is red only for the column the mark is written to."""
     venue = make_venue(db)
     expiry = _day(2)
@@ -1677,10 +1678,10 @@ def test_a_marked_hold_is_still_warned_before_it_expires(db):
     assert len(warned) == 1
 
 
-# --- AC2 (slice 3): the preview knows which bookings are already marked ----------------------
+# --- AC2: the preview knows which bookings are already marked ----------------------
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_says_which_bookings_are_already_marked(db, venue_staff_client):
-    """Plan 2.8: ``already_marked`` per entry, so an edit's preview can tell the bookings a
+    """AC2: ``already_marked`` per entry, so an edit's preview can tell the bookings a
     venue's marks already cover from the ones the new window would newly reach."""
     venue = make_venue(db)
     marked = _live(db, venue.id, _day(3))
@@ -1779,7 +1780,7 @@ def _on_singapore_date(moment: datetime) -> str:
 # --- AC3: the event's status -----------------------------------------------------------------
 @pytest.mark.story("9.4", ac=3)
 def test_a_planning_event_stays_in_planning(db, venue_staff_client):
-    """Plan 3.2. cannot fail first: nothing changes an event's status today, so it passes before
+    """AC3. cannot fail first: nothing changes an event's status today, so it passes before
     the change; it is paired with the Confirmed case below, which carries the red. No history
     row, no audit entry."""
     venue = make_venue(db)
@@ -1796,7 +1797,7 @@ def test_a_planning_event_stays_in_planning(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=3)
 def test_a_confirmed_event_goes_back_to_planning(db, venue_staff_client):
-    """Plan 3.3: with a status-history row naming the venue, written by the Venue Staff member,
+    """AC3: with a status-history row naming the venue, written by the Venue Staff member,
     and an audit entry that says where it came from. Its booking is still approved: the event is
     not cancelled and keeps its details."""
     venue = make_venue(db)
@@ -1822,7 +1823,7 @@ def test_a_confirmed_event_goes_back_to_planning(db, venue_staff_client):
 def test_an_event_awaiting_its_safety_check_goes_back_to_planning_and_its_people_are_told(
     db, venue_staff_client
 ):
-    """Plan 3.4 (21.1): the same as for a Confirmed event - once, with a history row naming the
+    """AC3 (21.1): the same as for a Confirmed event - once, with a history row naming the
     venue and an EVENT_RETURNED_TO_PLANNING audit entry saying where it came from - and its
     coordinator and organiser are told exactly as for a Confirmed one."""
     venue = make_venue(db)
@@ -1855,7 +1856,7 @@ def test_an_event_awaiting_its_safety_check_goes_back_to_planning_and_its_people
 
 @pytest.mark.story("9.4", ac=3)
 def test_two_marked_bookings_of_one_event_move_it_once(db, venue_staff_client):
-    """Plan 3.5b: one status change, one history row, one audit entry."""
+    """AC3: one status change, one history row, one audit entry."""
     venue = make_venue(db)
     event = _event_for(db, EventStatus.CONFIRMED)
     _pending_of(db, event, venue.id, _day(3), status="APPROVED")
@@ -1870,7 +1871,8 @@ def test_two_marked_bookings_of_one_event_move_it_once(db, venue_staff_client):
 
 @pytest.mark.story("9.4", ac=3)
 def test_an_event_whose_booking_is_not_reached_is_not_moved(db, venue_staff_client):
-    """Plan 3.3's other half. cannot fail first: passes on a no-op; paired with 3.3 above."""
+    """AC3's other half. cannot fail first: passes on a no-op; paired with the case above that
+    returns a reached event to Planning."""
     venue = make_venue(db)
     reached = _event_for(db, EventStatus.CONFIRMED)
     untouched = _event_for(db, EventStatus.CONFIRMED)
@@ -1889,7 +1891,7 @@ def test_an_event_whose_booking_is_not_reached_is_not_moved(db, venue_staff_clie
 def test_the_coordinator_and_the_organiser_are_each_told_naming_venue_period_and_reason(
     db, venue_staff_client
 ):
-    """Plan 4.1: the type is defined, one notice each, about the event, with the venue, the period
+    """AC4: the type is defined, one notice each, about the event, with the venue, the period
     and the reason - and the description when there is one."""
     venue = make_venue(db)
     event = _event_for(db)
@@ -1923,7 +1925,7 @@ def test_the_coordinator_and_the_organiser_are_each_told_naming_venue_period_and
 
 @pytest.mark.story("9.4", ac=4)
 def test_two_newly_marked_bookings_of_one_event_tell_it_once(db, venue_staff_client):
-    """Plan 4.2 (D11, N2): one notice each to the coordinator and the organiser, not one per
+    """AC4: one notice each to the coordinator and the organiser, not one per
     booking."""
     venue = make_venue(db)
     event = _event_for(db)
@@ -1937,7 +1939,7 @@ def test_two_newly_marked_bookings_of_one_event_tell_it_once(db, venue_staff_cli
 
 @pytest.mark.story("9.4", ac=4)
 def test_an_event_with_no_coordinator_still_tells_its_organiser(db, venue_staff_client):
-    """Plan 4.3: nobody is assigned yet, so the organiser alone is told, and nothing fails."""
+    """AC4: nobody is assigned yet, so the organiser alone is told, and nothing fails."""
     venue = make_venue(db)
     event = _event_for(db, assigned_coordinator_id=None)
     _pending_of(db, event, venue.id, _day(3))
@@ -1949,7 +1951,7 @@ def test_an_event_with_no_coordinator_still_tells_its_organiser(db, venue_staff_
 
 @pytest.mark.story("9.4", ac=4)
 def test_after_a_reassignment_the_new_coordinator_is_told(db, venue_staff_client):
-    """Plan 4.4 (20.1 AC4): whoever coordinates the event when the period is saved, not whoever
+    """AC4 (20.1 AC4): whoever coordinates the event when the period is saved, not whoever
     did when the booking was requested."""
     venue = make_venue(db)
     event = _event_for(db)
@@ -1964,7 +1966,7 @@ def test_after_a_reassignment_the_new_coordinator_is_told(db, venue_staff_client
 
 @pytest.mark.story("9.4", ac=4)
 def test_only_the_events_own_people_are_told_and_never_the_one_who_saved(db, venue_staff_client):
-    """Plan 4.5. cannot fail first: nothing notifies today; paired with the notice above. Other
+    """AC4. cannot fail first: nothing notifies today; paired with the notice above. Other
     users get none, and when the Venue Staff member who saves is also the event's assigned
     coordinator, they are not told of their own action."""
     venue = make_venue(db)
@@ -1993,7 +1995,7 @@ def test_only_the_events_own_people_are_told_and_never_the_one_who_saved(db, ven
 
 @pytest.mark.story("9.4", ac=4)
 def test_a_refused_save_tells_nobody(db, login_as):
-    """Plan 4.6. cannot fail first: no route notifies today; paired with the notice above. A
+    """AC4. cannot fail first: no route notifies today; paired with the notice above. A
     save refused for its body (422), or by role (403), leaves no notification and no mark."""
     venue = make_venue(db)
     event = _event_for(db, EventStatus.CONFIRMED)
@@ -2012,7 +2014,7 @@ def test_a_refused_save_tells_nobody(db, login_as):
 
 @pytest.mark.story("9.4", ac=4)
 def test_a_reason_only_edit_tells_nobody_and_a_later_save_tells_again(db, venue_staff_client):
-    """Plan 4.7 (A6): editing the reason or description of a period that affects the same
+    """AC4: editing the reason or description of a period that affects the same
     bookings sends nothing; a later save that newly affects another booking of the same event
     sends that event's people another notice; bookings already marked are not told twice."""
     venue = make_venue(db)
@@ -2041,7 +2043,7 @@ def test_a_reason_only_edit_tells_nobody_and_a_later_save_tells_again(db, venue_
 
 @pytest.mark.story("9.4", ac=6)
 def test_extending_tells_only_the_event_of_the_booking_it_newly_reaches(db, venue_staff_client):
-    """Plan 6.4b: the event already told is not told again."""
+    """AC6: the event already told is not told again."""
     venue = make_venue(db)
     inside = _event_for(db)
     beyond = _event_for(db)
@@ -2060,8 +2062,9 @@ def test_extending_tells_only_the_event_of_the_booking_it_newly_reaches(db, venu
 
 @pytest.mark.story("9.4", ac=6)
 def test_clearing_a_mark_sends_nothing_and_leaves_the_status_alone(db, venue_staff_client):
-    """Plan 6.7 (D6, D11). cannot fail first: nothing changes status or notifies on clearing
-    today; paired with 3.3 above, which puts the event in Planning for the clearing to leave."""
+    """AC6. cannot fail first: nothing changes status or notifies on clearing
+    today; paired with the case that returns an event to Planning, which gives the clearing
+    something to leave."""
     venue = make_venue(db)
     event = _event_for(db, EventStatus.CONFIRMED)
     _pending_of(db, event, venue.id, _day(3), status="APPROVED")
@@ -2080,7 +2083,7 @@ def test_clearing_a_mark_sends_nothing_and_leaves_the_status_alone(db, venue_sta
 
 @pytest.mark.story("9.4", ac=8)
 def test_a_completed_events_status_and_notices_are_untouched(db, venue_staff_client):
-    """Plan 8.1b. cannot fail first: its booking is not a candidate, so nothing reaches the
+    """AC8. cannot fail first: its booking is not a candidate, so nothing reaches the
     event; paired with the notice above, whose period covers both."""
     venue = make_venue(db)
     now = datetime.now(UTC)
@@ -2099,7 +2102,7 @@ def test_a_completed_events_status_and_notices_are_untouched(db, venue_staff_cli
 # --- 10.5: the save and the confirmation of one event, at the same moment ---------------------
 @pytest.mark.story("9.4", ac=3)
 def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engine):
-    """Plan 10.5 (N1). Real concurrent transactions, so this test commits and cleans up after
+    """AC10. Real concurrent transactions, so this test commits and cleans up after
     itself. The save returns a Confirmed event to Planning; at the same moment another
     transaction confirms that event again, which fires trg_events_complete_venue_holds and
     updates the event's approved bookings. The save locks the event before its bookings, as the
@@ -2208,7 +2211,7 @@ def _stored(db: Session, booking_id: uuid.UUID) -> VenueBooking:
 # --- AC7: the refusal ------------------------------------------------------------------------
 @pytest.mark.story("9.4", ac=7)
 def test_a_request_overlapping_a_period_cannot_be_approved_until_it_ends(db, login_as):
-    """Plan 7.1 (with 7.4): 409, still pending with no hold and nobody's decision; once the
+    """AC7: 409, still pending with no hold and nobody's decision; once the
     period is removed the same request is approved."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
@@ -2231,7 +2234,7 @@ def test_a_request_overlapping_a_period_cannot_be_approved_until_it_ends(db, log
 
 @pytest.mark.story("9.4", ac=7)
 def test_the_refusal_uses_the_live_overlap_not_the_mark(db, login_as):
-    """Plan 7.2: a period written straight to the table leaves its booking unmarked and the
+    """AC7: a period written straight to the table leaves its booking unmarked and the
     request is still refused; a stale mark on a request no period overlaps does not refuse it."""
     venue, elsewhere = make_venue(db), make_venue(db)
     unmarked = _live(db, venue.id, _day(3))
@@ -2247,7 +2250,7 @@ def test_the_refusal_uses_the_live_overlap_not_the_mark(db, login_as):
 
 @pytest.mark.story("9.4", ac=7)
 def test_the_refusal_names_the_venue_and_the_period(db, login_as):
-    """Plan 7.5: the sentence the request step gives (12.1 AC14), not a new one."""
+    """AC7: the sentence the request step gives (12.1 AC14), not a new one."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3))
     starts_at, ends_at = _day(2), _day(7)
@@ -2264,7 +2267,7 @@ def test_the_refusal_names_the_venue_and_the_period(db, login_as):
 
 @pytest.mark.story("9.4", ac=7)
 def test_a_period_that_only_touches_the_request_does_not_stop_its_approval(db, login_as):
-    """Plan 7.3. cannot fail first: no guard exists yet, so every approval passes; it pins the
+    """AC7. cannot fail first: no guard exists yet, so every approval passes; it pins the
     half-open rule beside the refusal above. A period ending exactly where the request's held
     period starts, and one starting exactly where it ends."""
     venue = make_venue(db)
@@ -2283,7 +2286,7 @@ def test_a_period_that_only_touches_the_request_does_not_stop_its_approval(db, l
 def test_a_marked_booking_can_still_be_rejected_withdrawn_or_given_a_new_expiry(
     db, login_as, action
 ):
-    """Plan 7.6 (A1). cannot fail first: the guard touches approval only, and these already
+    """AC7. cannot fail first: the guard touches approval only, and these already
     work; it pins that nothing else refuses a marked booking."""
     venue = make_venue(db)
     staff = login_as(Users.VENUE_STAFF)
@@ -2323,7 +2326,7 @@ def test_a_marked_booking_can_still_be_rejected_withdrawn_or_given_a_new_expiry(
     ],
 )
 def test_the_refusals_keep_their_order(db, login_as, case, expected_status, expected_in_detail):
-    """Plan 7.7: not pending, then venue closed, then hold period started, then expiry. Only
+    """AC7: not pending, then venue closed, then hold period started, then expiry. Only
     ``closed_and_started`` fails before the guard - the others cannot fail first: they are the
     existing refusals, pinned so the guard slots in without reordering them."""
     venue = make_venue(db)
@@ -2418,10 +2421,11 @@ def _save_period(session: Session, venue_id: uuid.UUID):
 
 @pytest.mark.story("9.4", ac=10)
 def test_an_approval_that_wins_the_lock_is_approved_and_the_save_then_marks_it(engine):
-    """Plan 10.1, approve first, with 10.6. The approval holds the request's row; the save, which
+    """AC10, approve first. The approval holds the request's row; the save, which
     loaded the request as pending, waits on it; the approval commits and the save marks the
     request as it now stands - approved - rather than as it loaded it. cannot fail first: the
-    save's re-read (``populate_existing``) is slice 3's; it pins the order the guard must keep."""
+    save's re-read (``populate_existing``) is already in place; it pins the order the guard
+    must keep."""
     venue_id, event_id, booking_id = _committed_pending_request(engine)
     pids: dict[str, int] = {}
     holding = threading.Event()
@@ -2467,7 +2471,7 @@ def test_an_approval_that_wins_the_lock_is_approved_and_the_save_then_marks_it(e
 
 @pytest.mark.story("9.4", ac=10)
 def test_a_save_that_wins_the_lock_refuses_the_approval_that_waited(engine):
-    """Plan 10.1, save first. The save marks the request and holds its row; the approval waits on
+    """AC10, save first. The save marks the request and holds its row; the approval waits on
     it; the save commits the period and the mark together, and the approval, reading the period
     in a query of its own once the lock is its, is refused as the request step would: still
     pending, still marked, nobody's decision."""
@@ -2520,7 +2524,7 @@ def test_a_save_that_wins_the_lock_refuses_the_approval_that_waited(engine):
 def test_a_request_that_slipped_in_unmarked_cannot_be_approved_and_the_next_save_marks_it(
     db, login_as
 ):
-    """Plan 10.2, the known gap, on one connection: a request raised at the instant of a save
+    """AC10, the known gap, on one connection: a request raised at the instant of a save
     sits pending inside the period, unmarked. Its approval is refused; the next save on the venue
     - any - marks it."""
     venue = make_venue(db)

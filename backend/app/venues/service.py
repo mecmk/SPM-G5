@@ -991,7 +991,8 @@ def _get_period(
 @dataclass(frozen=True)
 class RecheckResult:
     """What ``recheck_venue_bookings`` changed: the bookings it newly marked and the ones it
-    cleared, each in id order. Story 9.4 slice 4 tells the coordinators of the first."""
+    cleared, each in id order. The caller tells the people of the events the newly marked
+    bookings belong to (``_settle_marked_events``)."""
 
     newly_marked: list[VenueBooking]
     cleared: list[VenueBooking]

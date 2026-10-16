@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 022 - story 9.4 (slice 1): the reasons a venue can be marked unavailable.
+-- Migration 022 - story 9.4: the reasons a venue can be marked unavailable.
 --
 -- Story 9.4 AC1 gives Venue Staff exactly five reasons: Maintenance, Equipment failure,
 -- Renovation, Safety concern and Other, each with a description (PO decision, 13 Oct 2026: the
