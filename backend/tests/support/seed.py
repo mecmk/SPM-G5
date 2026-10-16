@@ -38,6 +38,10 @@ class Users:
     ATTENDEE = SeedUser(_u(7), "attendee@example.com", "ATTENDEE", "Aiden Attendee")
     INACTIVE = SeedUser(_u(8), "inactive@connectsphere.example", "VENUE_STAFF", "Ian Inactive")
     SAFETY_OFFICER = SeedUser(_u(9), "safety@connectsphere.example", "SAFETY_OFFICER", "Sam Safety")
+    # Story 5.4: reviews the unassigned queue and assigns events to coordinators.
+    LEAD = SeedUser(_u(10), "lead@connectsphere.example", "EVENT_COORDINATOR_LEAD", "Lena Lead")
+    # Story 18.1: holds the one place at Events.PORTFOLIO_REVIEW.
+    ATTENDEE_2 = SeedUser(_u(11), "attendee2@example.com", "ATTENDEE", "Bella Attendee")
 
     ALL_ACTIVE = (
         ORGANISER,
@@ -48,8 +52,18 @@ class Users:
         TECH_SUPPORT,
         ATTENDEE,
         SAFETY_OFFICER,
+        LEAD,
+        ATTENDEE_2,
     )
-    ONE_PER_ROLE = (ORGANISER, COORDINATOR, VENUE_STAFF, TECH_SUPPORT, ATTENDEE, SAFETY_OFFICER)
+    ONE_PER_ROLE = (
+        ORGANISER,
+        COORDINATOR,
+        VENUE_STAFF,
+        TECH_SUPPORT,
+        ATTENDEE,
+        SAFETY_OFFICER,
+        LEAD,
+    )
 
 
 def _v(n: int) -> uuid.UUID:
@@ -122,6 +136,16 @@ class Events:
     # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
     FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
+    # Story 18.1's, all CONFIRMED, Public and taking registrations: organiser 2, coordinator 2.
+    # Each is one case of tests/e2e/attendee-registration.spec.ts. Only the jazz evening has venues
+    # booked.
+    JAZZ_EVENING = _e(39)  # open, 120 places, two venues; only read
+    DESIGN_MASTERCLASS = _e(40)  # open, 60 places; the spec registers for it
+    FOUNDERS_FIRESIDE = _e(41)  # open, 80 places; the spec double-clicks Register
+    MENTORING_SLOT = _e(42)  # open, 1 place; the spec's two attendees race for it
+    PORTFOLIO_REVIEW = _e(43)  # 1 place, held by Users.ATTENDEE_2 (Registrations.PORTFOLIO_REVIEW)
+    WINE_APPRECIATION = _e(44)  # registration closed on 1 Oct 2026
+    LUNAR_NEW_YEAR_MARKET = _e(45)  # registration opens on 10 Jan 2028
     # Story 9.4's e2e events, organiser 2, coordinator 1, PLANNING, October 2028, one pending
     # request each at a venue dedicated to that spec.
     CHOIR_SHOWCASE = _e(60)  # Harbour Pavilion
@@ -148,6 +172,15 @@ class Bookings:
     # Story 21.1: each safety-check event's one venue, approved.
     APPROVED_CONCERT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000011")
     APPROVED_BOOK_FAIR_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000012")
+    # Story 18.1: Events.JAZZ_EVENING's two venues, approved, each hold completed.
+    APPROVED_JAZZ_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000013")
+    APPROVED_JAZZ_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000014")  # extra venue
+
+
+class Registrations:
+    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one."""
+
+    PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
 
 
 class Unavailability:

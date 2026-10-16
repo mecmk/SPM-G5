@@ -29,6 +29,7 @@ C4Context
     title Level 1 - System context for ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact who requests an event and follows its progress")
+    Person(lead, "Event Coordinator Lead", "ConnectSphere staff member who assigns each submitted request to a coordinator")
     Person(coordinator, "Event Coordinator", "ConnectSphere staff member who owns the planning of one event")
     Person(venueStaff, "Venue Staff", "Keeps the venue catalogue accurate and decides booking requests")
     Person(techStaff, "Technical Support Staff", "Looks after equipment and decides what can be reserved")
@@ -38,6 +39,7 @@ C4Context
     System(connectsphere, "ConnectSphere", "Event planning and venue booking: event requests, coordinator review, venue bookings, equipment reservations, attendee registration and notifications")
 
     Rel(organiser, connectsphere, "Submits event requests, answers clarifications, requests changes")
+    Rel(lead, connectsphere, "Assigns submitted requests to coordinators")
     Rel(coordinator, connectsphere, "Reviews requests, books venues, orders equipment, confirms events")
     Rel(venueStaff, connectsphere, "Maintains venues, approves or rejects bookings")
     Rel(techStaff, connectsphere, "Checks equipment availability, reserves equipment")
@@ -56,7 +58,7 @@ C4Container
     title Level 2 - Containers inside ConnectSphere
 
     Person(organiser, "Event Organiser", "External client contact")
-    Person(staff, "ConnectSphere staff", "Coordinators, Venue Staff, Technical Support Staff, Safety Officers")
+    Person(staff, "ConnectSphere staff", "Coordinator Leads, Coordinators, Venue Staff, Technical Support Staff, Safety Officers")
     Person(attendee, "Attendee", "Registers for events")
 
     System_Boundary(connectsphere, "ConnectSphere") {
@@ -140,11 +142,11 @@ C4Component
     Container_Boundary(api, "API application") {
         Component(shared, "Shared services", "app/auth, app/common, app/db.py", "Sign-in and access control, the audit log writer, the database session")
         Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits")
-        Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject, coordinator assignment and reassignment")
+        Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject. The Lead's unassigned queue and first assignment, and a coordinator's reassignment")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout. Venue Staff's closures: each saved change re-checks the venue's pending and approved bookings, flags the ones it overlaps, returns their events to planning and tells their people")
         Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period. An approved booking's hold until its event is confirmed: the expiry Venue Staff set as they approve and their changes to it, and the sweep that warns coordinators and expires lapsed holds, run on the API's timer and before any answer a lapsed hold would change. The database completes the holds when an event becomes Confirmed")
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
-        Component(registration, "Registration service", "epic 18", "Browsing open events, registering, withdrawing, capacity and deadline")
+        Component(registration, "Registration service", "app/registrations, epic 18", "The Confirmed, Public events taking registrations, each with its booked venues, places left and state for the attendee, and registering: the opening and closing times, capacity and one registration per attendee checked while holding the event's row, with the database's one-active-registration index behind it. An event's registration settings are recorded in app/events")
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the event's own validation is reused from app/events. The arrangements each change affects are still to come")
         Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
@@ -165,7 +167,6 @@ C4Component
     Rel(bookings, notifications, "Raises requests, withdrawals, decisions and hold expiries through")
     Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
-    Rel(registration, notifications, "Raises confirmations through")
     Rel(changes, notifications, "Raises change requests and withdrawals through")
     Rel(shared, db, "Reads and writes")
     Rel(events, db, "Reads and writes")
@@ -306,7 +307,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 15 | Equipment request management | Equipment service | `event_equipment_requests`, `equipment_types` | `app/equipment`; `app/events` for requests made with an event |
 | 16 | Equipment availability checking | Equipment service | `equipment_types.total_quantity`, `equipment_reservations`, `equipment_unavailability_periods` | `app/events` for any dates; `app/equipment` for an event, counting what it holds |
 | 17 | Equipment reservation | Equipment service | `equipment_reservations` | `app/events` for the hold made on submission; `app/equipment` for the coordinator's holds |
-| 18 | Attendee registration | Registration service | `event_registrations`, registration columns on `events` | — (an event's registration settings are in `app/events`) |
+| 18 | Attendee registration | Registration service | `event_registrations`, registration columns on `events` | `app/registrations`; `app/events` for an event's registration settings |
 | 19 | Event change requests | Change request service | `event_change_requests` | `app/change_requests`; `app/events` for the point of contact updated directly |
 | 20 | Notification system | Notification service | `notifications` | `app/notifications` |
 

@@ -16,6 +16,9 @@ export interface EventCardProps {
   to?: string
   /** Passed through to the link, so the page it opens knows where "back" goes. */
   state?: EventCardBackState
+  /** Story 5.4: a control beside the details, such as the unassigned queue's Assign button. A
+   *  click on it is its own, never the card's. On a phone it drops below the details. */
+  action?: ReactNode
 }
 
 /** Anything a click on it is meant for, so the card does not also open. */
@@ -34,7 +37,7 @@ const INTERACTIVE_ELEMENTS =
  * inside it (a button, another link) keeps its own click. The handler steps aside for those, for a
  * click with a modifier key, and whenever text has been selected.
  */
-export function EventCard({ title, imageUrl, details, to, state }: EventCardProps) {
+export function EventCard({ title, imageUrl, details, to, state, action }: EventCardProps) {
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const navigate = useNavigate()
 
@@ -81,10 +84,16 @@ export function EventCard({ title, imageUrl, details, to, state }: EventCardProp
           ))}
         </ul>
       </div>
+      {action !== undefined && <div className="event-card-action">{action}</div>}
     </li>
   )
 }
 
-export function EventCardGrid({ children }: { children: ReactNode }) {
-  return <ul className="event-grid">{children}</ul>
+/** `label` names the list for a screen reader, when the page holds more than one (story 5.4). */
+export function EventCardGrid({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <ul className="event-grid" aria-label={label}>
+      {children}
+    </ul>
+  )
 }

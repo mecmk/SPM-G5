@@ -22,7 +22,7 @@
 import { expect, test } from '@playwright/test'
 import {
   ACCOUNTS,
-  assignedCoordinator,
+  assignByLead,
   clarificationsSection,
   createAndSubmitRequest,
   signIn,
@@ -39,7 +39,7 @@ test('4.3 AC1/AC2/AC4/AC6: the organiser answers a clarification request, twice'
   await signIn(page, ACCOUNTS.organiser)
   const eventId = await createAndSubmitRequest(page, name)
   await page.goto(`/events/${eventId}`)
-  const coordinator = await assignedCoordinator(page)
+  const coordinator = await assignByLead(page)
 
   // The coordinator asks a question.
   const question = 'Could you confirm the expected headcount?'

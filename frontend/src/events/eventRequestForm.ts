@@ -434,6 +434,7 @@ export function validateEventForm(
   form: EventFormState,
   saved: EventDetail | null,
   availability: Record<string, number> | null,
+  { isEquipmentLeftOut = false }: { isEquipmentLeftOut?: boolean } = {},
 ): FormProblem | null {
   if (!form.name.trim()) return { code: 'EVENT_NAME_REQUIRED', fieldId: FIELD_ID.name }
   if (!isBlankOrPositiveWholeNumber(form.attendance)) {
@@ -449,7 +450,7 @@ export function validateEventForm(
   if (!isBlankOrPhoneNumber(form.contactPhone)) {
     return { code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone }
   }
-  return validateRequirements(form, availability)
+  return validateRequirements(form, availability, isEquipmentLeftOut)
 }
 
 /**
@@ -745,13 +746,19 @@ export function findServerProblemField(
   return null
 }
 
-/** The first problem with the venue requirements and equipment, or null. */
+/**
+ * The first problem with the venue requirements and equipment, or null. Story 7.2 AC15: equipment
+ * a save leaves out is not judged - an approved event's lines are Technical Support's to decide,
+ * and can hold one type twice (a declined item requested again, 15.1).
+ */
 function validateRequirements(
   form: EventFormState,
   availability: Record<string, number> | null,
+  isEquipmentLeftOut: boolean,
 ): FormProblem | null {
   const [venueProblem] = getVenueRequirementProblems(form)
   if (venueProblem) return venueProblem
+  if (isEquipmentLeftOut) return null
   const untypedLine = form.equipment.find((line) => line.typeCode === NO_EQUIPMENT_TYPE)
   if (untypedLine) {
     return { code: 'EVENT_EQUIPMENT_TYPE_REQUIRED', fieldId: getEquipmentTypeId(untypedLine.key) }
