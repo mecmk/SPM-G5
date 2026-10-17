@@ -135,6 +135,19 @@ export const EVENTS_INBOX_PATH = '/events/inbox'
 // Story 5.4: the Event Coordinator Lead's queue of submitted events with no coordinator yet.
 export const EVENTS_UNASSIGNED_PATH = '/events/unassigned'
 
+// Story 5.5: the Lead's overview of every active event and each coordinator's assignments. Its
+// view and filters live in the address (AC1), so a link or a reload keeps them.
+export const EVENTS_ASSIGNMENTS_PATH = '/events/assignments'
+export const ASSIGNMENT_SEARCH_PARAMS = {
+  view: 'view',
+  status: 'status',
+  coordinator: 'coordinator',
+  assignedByMe: 'assigned',
+} as const
+/** The `view` value for the per-coordinator view; without it, the page shows the overview. The
+ *  `assigned` value for "Assigned by me" is the API's own, `ASSIGNED_BY_ME_FILTER`. */
+export const COORDINATORS_VIEW = 'coordinators'
+
 // Story 12.1: the old Request a venue page. f12.1.1 moved the request into the event's context,
 // so this address is kept only to redirect old links to the Events inbox.
 export const BOOKING_REQUEST_NEW_PATH = '/bookings/new'

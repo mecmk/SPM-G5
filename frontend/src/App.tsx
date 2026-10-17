@@ -12,6 +12,7 @@ import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
+import { AssignmentOverviewPage } from './events/AssignmentOverviewPage'
 import { UnassignedQueuePage } from './events/UnassignedQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
@@ -36,6 +37,7 @@ import {
   EVENTS_INBOX_PATH,
   EVENTS_MINE_PATH,
   EVENTS_UNASSIGNED_PATH,
+  EVENTS_ASSIGNMENTS_PATH,
   HOME_PATH,
   LOGIN_PATH,
   SAFETY_CHECK_PATH,
@@ -128,9 +130,11 @@ function App() {
                 <Route path={EVENTS_INBOX_PATH} element={<ReviewQueuePage />} />
               </Route>
 
-              {/* Story 5.4: the Event Coordinator Lead's unassigned queue. */}
+              {/* Story 5.4: the Event Coordinator Lead's unassigned queue. Story 5.5: their overview
+                  of every coordinator's assignments. */}
               <Route element={<RequirePermission permission={PERMISSIONS.EVENTS_ASSIGN} />}>
                 <Route path={EVENTS_UNASSIGNED_PATH} element={<UnassignedQueuePage />} />
+                <Route path={EVENTS_ASSIGNMENTS_PATH} element={<AssignmentOverviewPage />} />
               </Route>
 
               {/* Story 13.1: the venue staff booking requests queue. */}

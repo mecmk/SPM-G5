@@ -1,6 +1,8 @@
-"""HTTP endpoints for coordinator assignment (stories 5.1, 5.2 and 5.4).
+"""HTTP endpoints for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5).
 
 ``GET /coordination/unassigned-events`` - the Lead's unassigned queue (5.4 AC2)
+``GET /coordination/active-events``     - the Lead's overview of every active event (5.5 AC1)
+``GET /coordination/workloads``         - each coordinator's active events (5.5 AC2, AC4, AC5)
 ``GET /coordinators``                   - the selectable coordinators, with their active events
                                           (5.1 AC2, 5.4 AC3)
 ``GET /events/{event_id}/coordinator``  - who currently owns the event (5.1 AC4)
@@ -14,7 +16,7 @@ Assigning an unassigned event needs ``events:assign`` (the Lead, 5.4 AC7); reass
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -23,8 +25,10 @@ from app.auth.deps import CurrentUser, require_any_permission, require_permissio
 from app.auth.permissions import Permission
 from app.coordination import service
 from app.coordination.schemas import (
+    ActiveEventEntry,
     AssignCoordinatorIn,
     CoordinatorOption,
+    CoordinatorWorkloadEntry,
     EventCoordinatorOut,
     UnassignedEventEntry,
 )
@@ -50,6 +54,49 @@ def list_unassigned_events(
     """Story 5.4 AC2: the submitted events waiting for a coordinator, oldest submission first.
     AC7: only the Lead (``events:assign``); everyone else gets 403 from the dependency."""
     return [UnassignedEventEntry.from_event(event) for event in service.list_unassigned_events(db)]
+
+
+@router.get("/coordination/active-events", response_model=list[ActiveEventEntry])
+def list_active_events(
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanAssign],
+    coordinator: Annotated[uuid.UUID | Literal["unassigned"] | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+    assigned_by: Annotated[Literal["me"] | None, Query()] = None,
+) -> list[ActiveEventEntry]:
+    """Story 5.5 AC1: every active event with its coordinator and the Lead who assigned it,
+    narrowed by coordinator (an id, or ``unassigned``), by one active status, and to the events
+    this Lead assigned (``assigned_by=me``). A malformed filter is 422. AC6: only the Lead
+    (``events:assign``); everyone else gets 403 from the dependency."""
+    try:
+        active = service.list_active_events(
+            db,
+            coordinator=coordinator,
+            status=status_filter,
+            assigned_by=actor if assigned_by == "me" else None,
+        )
+    except service.NotAnActiveStatus as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return [
+        ActiveEventEntry.from_event(item.event, assigning_lead=item.assigning_lead)
+        for item in active
+    ]
+
+
+@router.get("/coordination/workloads", response_model=list[CoordinatorWorkloadEntry])
+def list_workloads(
+    db: DbSession,
+    _actor: Annotated[CurrentUser, CanAssign],
+) -> list[CoordinatorWorkloadEntry]:
+    """Story 5.5 AC2/AC4: every Event Coordinator with their active events, 0 included. AC5: a
+    deactivated coordinator still holding events is listed and flagged. AC6: only the Lead
+    (``events:assign``); everyone else gets 403 from the dependency."""
+    return [
+        CoordinatorWorkloadEntry.from_coordinator(
+            item.coordinator, active_event_count=item.active_event_count, events=item.events
+        )
+        for item in service.list_workloads(db)
+    ]
 
 
 @router.get("/coordinators", response_model=list[CoordinatorOption])
