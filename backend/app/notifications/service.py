@@ -74,6 +74,9 @@ class NotificationType(StrEnum):
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
     EVENT_CHANGE_APPROVED = "EVENT_CHANGE_APPROVED"  # 19.2: the organiser
     EVENT_CHANGE_REJECTED = "EVENT_CHANGE_REJECTED"  # 19.2: the organiser
+    # 9.4: the event's coordinator, if it has one, and its organiser - a venue it has booked was
+    # marked unavailable for the period of a booking
+    BOOKING_VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
 
 
 def notify(

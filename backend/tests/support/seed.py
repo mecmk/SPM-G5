@@ -76,6 +76,10 @@ class Venues:
     BOARDROOM = _v(3)  # 16 seats
     EXHIBITION_FOYER = _v(4)  # 250, operating hours not recorded
     OLD_ANNEX = _v(5)  # WITHDRAWN
+    # Story 9.4's e2e spec; each dedicated to it, with no operating hours.
+    GARDEN_ATRIUM = _v(6)  # no booking: a closure is added, edited and ended here
+    HARBOUR_PAVILION = _v(7)  # one pending request (Events.CHOIR_SHOWCASE), for the preview
+    SUNRISE_STUDIO = _v(8)  # one pending request (Events.ART_MARKET), for the marked request
 
 
 def _e(n: int) -> uuid.UUID:
@@ -142,6 +146,12 @@ class Events:
     PORTFOLIO_REVIEW = _e(43)  # 1 place, held by Users.ATTENDEE_2 (Registrations.PORTFOLIO_REVIEW)
     WINE_APPRECIATION = _e(44)  # registration closed on 1 Oct 2026
     LUNAR_NEW_YEAR_MARKET = _e(45)  # registration opens on 10 Jan 2028
+    # Fix f12.1.2's real send with a setup, PLANNING, dated 3 February 2027.
+    SUPPLIER_INDUCTION = _e(46)  # organiser 2, coordinator 1, one Main venue (Classroom, 30)
+    # Story 9.4's e2e events, organiser 2, coordinator 1, PLANNING, October 2028, one pending
+    # request each at a venue dedicated to that spec.
+    CHOIR_SHOWCASE = _e(60)  # Harbour Pavilion
+    ART_MARKET = _e(61)  # Sunrise Studio
 
 
 class Bookings:

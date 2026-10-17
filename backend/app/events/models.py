@@ -290,8 +290,9 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
 
-    # venue requirements (story 2.1 AC4): each one is a VenueRequirement row (story 2.7), or the
-    # organiser marks none required
+    # venue requirements (story 2.1 AC4): each one is a VenueRequirement row (story 2.7), at least
+    # one since fix f2.7.4 (story 2.7 AC14); venue_none_required is true only on a request saved
+    # with "No venue requirements" before that fix and given no venue requirement since
     preferred_location: Mapped[str | None] = mapped_column(Text)
     venue_none_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")

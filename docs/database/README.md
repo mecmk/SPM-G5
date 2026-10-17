@@ -126,7 +126,7 @@ file, and mirror any row tests need in `backend/tests/support/seed.py`. Keep eve
 | Reference tables for facilities / layouts / accessibility / equipment types / roles | The customer said these lists will grow; adding a value is data, not a schema change. |
 | One `events` row for the whole lifecycle (draft to completed) | Status history lives in `event_status_history`; nothing is copied between "request" and "event" tables, so information can never diverge (a pain point in the briefing). |
 | `venue_bookings` exclusion constraint on PENDING and APPROVED bookings | Stories 14.2 and 12.1 (a pending request holds its venue): the database itself makes double-booking impossible, even under concurrent requests. Half-open ranges mean back-to-back bookings are fine (14.1 AC3). |
-| Held period = event time + setup/teardown (`held_from`/`held_until`, trigger-maintained) | Story 12.2 and the briefing's turnaround-time concern, without every query re-deriving it. |
+| Held period = event time + setup/teardown (`held_from`/`held_until`, trigger-maintained) | Story 12.1 (the coordinator's setup and teardown, f12.1.2) and the briefing's turnaround-time concern, without every query re-deriving it. |
 | Pooled equipment stock per type, not per unit | Matches how the backlog phrases availability ("quantity available for a period"). Per-unit tracking can be added as a child table later. |
 | `audit_log` with JSONB details | Auditability requirement; any entity can be audited without new tables. |
 | Docker host port **5433** | A locally installed PostgreSQL commonly occupies 5432 and silently hijacks connections (that happened during setup). |

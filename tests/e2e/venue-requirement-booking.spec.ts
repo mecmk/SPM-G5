@@ -327,8 +327,9 @@ test("12.5 AC11: a request step naming another event's requirement offers no req
 test('12.5 AC7: an event marked "No venue requirements" keeps Find a venue as it is', async ({
   page,
 }) => {
-  // No seeded Planning event records "No venue requirements", so Summit's real record is answered
-  // with it set, as 12.1 AC15's case for Nimbus does.
+  // Only an event approved before f2.7.4 can still be marked "No venue requirements" (2.7 AC19),
+  // and no seeded Planning event is, so Summit's real record is answered with it set, as 12.1
+  // AC15's case for Nimbus does.
   await page.route(`**/events/${SUMMIT.id}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()

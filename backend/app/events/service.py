@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -49,7 +49,6 @@ from app.events.models import (
 from app.events.schemas import (
     ACCESSIBILITY_CONTRADICTION_MESSAGE,
     REGISTRATION_CONTRADICTION_MESSAGE,
-    VENUE_CONTRADICTION_MESSAGE,
     EquipmentAvailabilityOut,
     EventAccessibilityNeedIn,
     EventCreate,
@@ -108,6 +107,8 @@ DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE = (
     "Two venue requirements on this request cannot share a name."
 )
 UNKNOWN_REQUIREMENT_MESSAGE = "A venue requirement does not belong to this request."
+# Fix f2.7.4 (story 2.7 AC14, AC20): no create, edit or 7.2 correction leaves a request without one.
+NO_VENUE_REQUIREMENT_MESSAGE = "A request needs at least one venue requirement."
 _UNNAMED_REQUIREMENT_LABEL = "Venue requirement {position}"
 _REQUIREMENT_MISSING_NAME_LABEL = "venue requirement {position}: name"
 _REQUIREMENT_MISSING_CAPACITY_LABEL = "venue requirement {position}: number of people"
@@ -230,7 +231,9 @@ _REQUIRED_DETAILS_FOR_SUBMISSION = (
     ("contact_email", "point of contact email"),
     ("contact_phone", "point of contact phone number"),
 )
-_VENUE_ANSWER_LABEL = "venue requirements (choose some, or mark none)"
+# Fix f2.7.4 (story 2.7 AC15): "none" is no longer an answer for venues. The frontend's
+# getMissingForSubmission repeats this word for word.
+_VENUE_ANSWER_LABEL = "venue requirements (at least one)"
 _ACCESSIBILITY_ANSWER_LABEL = "accessibility needs (choose some, or mark none)"
 
 
@@ -348,9 +351,13 @@ class ContradictoryAccessibility(InvalidEventRequest):
         super().__init__(ACCESSIBILITY_CONTRADICTION_MESSAGE)
 
 
-class ContradictoryVenueRequirements(InvalidEventRequest):
+class MissingVenueRequirement(InvalidEventRequest):
+    """Fix f2.7.4 (story 2.7 AC14, AC16, AC20): a create, an edit or a 7.2 correction would leave
+    the request with no venue requirement - one sent with none, the last one removed, or one saved
+    before the fix with none, saved again without adding one."""
+
     def __init__(self):
-        super().__init__(VENUE_CONTRADICTION_MESSAGE)
+        super().__init__(NO_VENUE_REQUIREMENT_MESSAGE)
 
 
 class AttendanceBelowRequirement(InvalidEventRequest):
@@ -427,6 +434,10 @@ class SubmittedDetailsMissing(InvalidEventRequest):
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = "Only the coordinator assigned to this request may {verb} it."
 EVENT_NOT_AWAITING_DECISION_MESSAGE = "This request is {status}, so it cannot be {verb}."
+# Fix f2.7.4 (story 2.7 AC17): a request submitted with no venue requirement, before the fix.
+NO_VENUE_REQUIREMENT_TO_APPROVE_MESSAGE = (
+    "This request has no venue requirement, so it cannot be approved."
+)
 DECISION_REASON_REQUIRED_MESSAGE = "A reason is required to reject this request."
 EVENT_NOT_AWAITING_CLARIFICATION_MESSAGE = (
     "You can no longer ask for clarification on this request."
@@ -620,6 +631,13 @@ def latest_start_allowed(now: datetime) -> datetime:
         return local.replace(year=local.year + _MAX_LEAD_YEARS, day=28) + timedelta(days=1)
 
 
+def latest_end_allowed(now: datetime) -> datetime:
+    """Story 9.4 AC5: the latest an event can end - it starts at most two years ahead
+    (``latest_start_allowed``) and runs at most 14 days - so the latest a period a venue is
+    unavailable for has any use being asked to end."""
+    return latest_start_allowed(now) + _MAX_EVENT_DURATION
+
+
 def _check_schedule(
     starts_at: datetime | None,
     ends_at: datetime | None,
@@ -650,10 +668,14 @@ def _check_accessibility(*, is_none_required: bool, has_needs: bool, notes: str 
         raise ContradictoryAccessibility()
 
 
-def _check_venue_requirements(*, is_none_required: bool, has_requirements: bool) -> None:
-    """2.1 AC4 / 2.7 AC3: "no venue requirements" cannot sit beside a listed requirement."""
-    if is_none_required and has_requirements:
-        raise ContradictoryVenueRequirements()
+def _check_has_venue_requirement(
+    requirements: Sequence[VenueRequirementIn | VenueRequirement],
+) -> None:
+    """Fix f2.7.4 (story 2.7 AC14, AC16, AC20): every request keeps at least one venue requirement,
+    which a draft may still leave empty (AC8). ``requirements`` are the ones the save would leave.
+    "No venue requirements" itself is refused by the request schemas."""
+    if not requirements:
+        raise MissingVenueRequirement()
 
 
 def _describe_requirement(name: str | None, index: int) -> str:
@@ -936,7 +958,13 @@ def _replace_venue_requirements(db: Session, event: Event, items: list[VenueRequ
     The unique name index (AC9) is checked row by row, so the removals and the names being
     changed are written first: otherwise two requirements swapping names, or a removed one's
     name reused, would clash with a row that is about to change. Positions clash the same way,
-    which is why their constraint is checked only at commit."""
+    which is why their constraint is checked only at commit.
+
+    Fix f2.7.4 (story 2.7 AC17): a request given a venue requirement no longer holds a "No venue
+    requirements" saved before the fix, so it is cleared here, wherever the list is written from -
+    and a 7.2 correction's change history records it going."""
+    if items:
+        event.venue_none_required = False
     existing = {requirement.id: requirement for requirement in event.venue_requirements}
     kept_ids = {item.id for item in items if item.id is not None}
     for removed in [r for r in event.venue_requirements if r.id not in kept_ids]:
@@ -1011,7 +1039,9 @@ def _replace_equipment(
 
 
 def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
-    """AC1-AC6: record a new request as a draft owned by ``actor``."""
+    """AC1-AC6: record a new request as a draft owned by ``actor``. Fix f2.7.4 (story 2.7 AC14,
+    AC20): with at least one venue requirement - checked after every 2.1 check made before the
+    insert, so those refusals come first (AC20's duplicate index still fires only at the insert)."""
     _check_schedule(
         data.starts_at, data.ends_at, supplied_start=data.starts_at, supplied_end=data.ends_at
     )
@@ -1050,6 +1080,7 @@ def create_event(db: Session, data: EventCreate, *, actor: User) -> Event:
         data.ends_at,
         [(types[e.equipment_type_code], e.quantity) for e in data.equipment],
     )
+    _check_has_venue_requirement(data.venue_requirements)
 
     event = Event(
         organiser_id=actor.id,
@@ -1189,10 +1220,6 @@ def _validate_request_edit(
     requirements = (
         data.venue_requirements if data.venue_requirements is not None else event.venue_requirements
     )
-    _check_venue_requirements(
-        is_none_required=details.get("venue_none_required", event.venue_none_required),
-        has_requirements=bool(requirements),
-    )
     if data.venue_requirements is not None:
         _check_venue_requirement_references(
             db,
@@ -1248,6 +1275,10 @@ def _validate_request_edit(
         is_hold_changed = _is_hold_changed(event, starts_at, ends_at, data.equipment, types)
         if is_stock_checked and (recheck_resent_equipment or is_hold_changed):
             _check_equipment_available(db, starts_at, ends_at, lines, exclude_event_id=event.id)
+    # Fix f2.7.4 (story 2.7 AC14, AC16, AC20): after the other checks, as on a create, so their
+    # refusals come first. A request saved before the fix with none is saved again only once it
+    # has one.
+    _check_has_venue_requirement(requirements)
     return _RequestEdit(details=details, equipment_types=types, is_hold_changed=is_hold_changed)
 
 
@@ -1318,8 +1349,8 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
 
 
 def _missing_for_submission(event: Event) -> list[str]:
-    """AC10/AC13/AC17: every event detail and the point of contact must be filled in, venue
-    requirements and accessibility needs each answered - something chosen or written, or marked
+    """AC10/AC13/AC17: every event detail and the point of contact must be filled in, at least one
+    venue requirement given, accessibility needs answered - something chosen or written, or marked
     "none required" - and, only when Registration required is Yes, a registration closing date.
     Registration capacity needs no check of its own: it is always expected attendance, already
     covered by the event-detail check above."""
@@ -1328,9 +1359,10 @@ def _missing_for_submission(event: Event) -> list[str]:
     ]
     if event.registration_required and event.registration_closes_at is None:
         missing.append("registration closing date")
-    # 2.7 AC8: at least one requirement, or "none"; and every requirement listed has a name and
-    # a number of people, each pointed out by its place in the list.
-    if not (event.venue_none_required or event.venue_requirements):
+    # 2.7 AC8/AC15 (fix f2.7.4): at least one requirement - "No venue requirements" is no longer
+    # an answer - and every requirement has a name and a number of people, each pointed out by
+    # its place in the list.
+    if not event.venue_requirements:
         missing.append(_VENUE_ANSWER_LABEL)
     for index, requirement in enumerate(event.venue_requirements):
         if requirement.name is None:
@@ -1370,6 +1402,51 @@ def _record_transition(
             reason=reason,
         )
     )
+
+
+# Story 9.4 AC3: the statuses a closed venue sends an event back to Planning from.
+_RETURNED_TO_PLANNING_FROM = (EventStatus.CONFIRMED, EventStatus.AWAITING_SAFETY_CHECK)
+
+
+def return_event_to_planning(
+    db: Session,
+    event: Event,
+    *,
+    actor: User,
+    at: datetime,
+    reason: str,
+    details: dict[str, Any],
+) -> bool:
+    """Story 9.4 AC3: a Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to
+    Planning because a venue it has booked was marked unavailable - recorded in the status history
+    with ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside
+    where it came from. Any other status is left as it is (Planning is already where it should
+    be), and False says nothing changed. The caller holds the event's row lock and commits, so
+    this leaves no notice of its own."""
+    if event.status not in _RETURNED_TO_PLANNING_FROM:
+        return False
+    from_status = event.status
+    event.status = EventStatus.PLANNING
+    db.flush()
+    _record_transition(
+        db,
+        event,
+        from_status=from_status,
+        to_status=EventStatus.PLANNING,
+        actor=actor,
+        at=at,
+        reason=reason,
+    )
+    record_audit(
+        db,
+        actor=actor,
+        action="EVENT_RETURNED_TO_PLANNING",
+        entity_type="event",
+        entity_id=event.id,
+        details={"from_status": from_status, **details},
+        commit=False,
+    )
+    return True
 
 
 def _notify_leads_of_submission(db: Session, event: Event, *, actor: User) -> None:
@@ -1619,6 +1696,16 @@ class EventNotAwaitingDecision(EventStateConflict):
         self.event = event
 
 
+class NoVenueRequirementToApprove(EventStateConflict):
+    """Fix f2.7.4 (story 2.7 AC17): a request submitted with no venue requirement, before the fix,
+    waits for its coordinator to add one through a correction (7.2 AC4) before it can be
+    approved. The body of the approval is fine; the request's state is what refuses it, as with
+    ``EventNotAwaitingDecision``."""
+
+    def __init__(self) -> None:
+        super().__init__(NO_VENUE_REQUIREMENT_TO_APPROVE_MESSAGE)
+
+
 class MissingDecisionReason(InvalidEventRequest):
     """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
     with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
@@ -1714,6 +1801,7 @@ def _decide(
     action: str,
     allowed_statuses: tuple[str, ...],
     verb: str,
+    extra_check: Callable[[Event], None] | None = None,
 ) -> None:
     """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
     decide, and only while the request is in one of ``allowed_statuses`` - both callers pass
@@ -1726,9 +1814,14 @@ def _decide(
     (relevant once 4.6's clarification round-trip can return a request here more than once).
     Story 20.1: the organiser's notification is written in the same transaction, so a decision
     that is refused or fails sends none (AC4), and the losing one of two at once sends none (AC6).
+    ``extra_check`` is one decision's own refusal (approval's, fix f2.7.4 story 2.7 AC17), raised
+    after the coordinator and status refusals and before anything is written, so those two always
+    come first and approve and reject give them alike.
     """
     _assert_assigned_coordinator(event, actor, verb="decide")
     _assert_awaiting_decision(event, allowed_statuses, verb=verb)
+    if extra_check is not None:
+        extra_check(event)
 
     from_status = event.status
     decided_at = datetime.now(UTC)
@@ -1769,9 +1862,22 @@ def _decide(
     db.refresh(event)
 
 
+def _refuse_approval_without_venue_requirement(event: Event) -> None:
+    """Fix f2.7.4 (story 2.7 AC17): a request with no venue requirement - only one submitted before
+    the fix can have none - is not approved until its coordinator adds one. Nothing can take a
+    submitted request's last requirement away (AC20), so no approval can race into one without."""
+    if not event.venue_requirements:
+        raise NoVenueRequirementToApprove()
+
+
 def approve_event(db: Session, event: Event, *, actor: User) -> None:
     """4.4 AC1-AC3: approve ``event``, recording the deciding coordinator and time. Moves it to
-    PLANNING; there is no status in between."""
+    PLANNING; there is no status in between.
+
+    Fix f2.7.4 (story 2.7 AC17): a request with no venue requirement is refused. ``_decide`` runs
+    that check after its coordinator and status refusals, so a request that is not this
+    coordinator's, or no longer awaiting a decision, is told that. Rejecting needs no venue
+    requirement."""
     _decide(
         db,
         event,
@@ -1781,6 +1887,7 @@ def approve_event(db: Session, event: Event, *, actor: User) -> None:
         action="EVENT_APPROVED",
         allowed_statuses=_AWAITING_DECISION_STATUSES,
         verb="approved",
+        extra_check=_refuse_approval_without_venue_requirement,
     )
 
 
@@ -2390,6 +2497,10 @@ def remove_cover_image_under_review(
 
 REQUIREMENT_NAME_REQUIRED_MESSAGE = "{requirement} needs a name."
 REQUIREMENT_CAPACITY_REQUIRED_MESSAGE = "{requirement} needs a number of people."
+# Fix f2.7.4 (story 2.7 AC18): a change proposing no venue requirements at all.
+CHANGE_LEAVES_NO_VENUE_REQUIREMENT_MESSAGE = (
+    "A change cannot leave this event without a venue requirement."
+)
 CONTACT_EDIT_CLOSED_MESSAGE = (
     "This event is {status}, so its point of contact cannot be updated directly."
 )
@@ -2398,6 +2509,14 @@ CONTACT_EDIT_CLOSED_MESSAGE = (
 # organiser's request is edited as a draft or corrected through clarification instead.
 _CONTACT_EDITABLE_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
 _CONTACT_FIELDS = ("contact_email", "contact_phone")
+
+
+class ChangeLeavesNoVenueRequirement(InvalidEventRequest):
+    """Fix f2.7.4 (story 2.7 AC18, AC20): a change to the venue requirements proposes the event's
+    whole list (19.1), so proposing none would remove the last one."""
+
+    def __init__(self) -> None:
+        super().__init__(CHANGE_LEAVES_NO_VENUE_REQUIREMENT_MESSAGE)
 
 
 class PointOfContactClosed(EventStateConflict):
@@ -2528,7 +2647,13 @@ def check_proposed_venue_requirements(
 ) -> None:
     """Story 19.1 AC3/AC4: proposed venue requirements are complete, as a submitted request's must
     be (2.7 AC8), and follow 2.7's rules judged against the event as it stands (PO decision,
-    Checkpoint 1: the effect of other pending changes is story 19.3's)."""
+    Checkpoint 1: the effect of other pending changes is story 19.3's).
+
+    Fix f2.7.4 (story 2.7 AC18): never an empty list, refused before anything else - and before
+    19.1 AC4 compares the proposal with the current value - so an event approved before the fix
+    with none is told why, not that nothing would change."""
+    if not items:
+        raise ChangeLeavesNoVenueRequirement()
     for index, item in enumerate(items):
         label = _describe_requirement(item.name, index)
         if item.name is None:

@@ -156,17 +156,19 @@ class UnavailabilityReason:
     """Values allowed by ``ck_venue_unavailability_reason``."""
 
     MAINTENANCE = "MAINTENANCE"
+    EQUIPMENT_FAILURE = "EQUIPMENT_FAILURE"
     RENOVATION = "RENOVATION"
-    SAFETY = "SAFETY"
-    INTERNAL_USE = "INTERNAL_USE"
+    SAFETY = "SAFETY"  # shown as "Safety concern"
     OTHER = "OTHER"
+
+    ALL = (MAINTENANCE, EQUIPMENT_FAILURE, RENOVATION, SAFETY, OTHER)
 
 
 class VenueUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A block of time a venue cannot be booked for a reason other than an event booking
-    (maintenance, renovation, safety, internal use). Read by story 9.1's calendar; managed by
-    story 9.3, not yet built. ``ends_at`` is required - every period is bounded, with no
-    open-ended case."""
+    (maintenance, equipment failure, renovation, safety concern, or another stated reason). Read by
+    story 9.1's calendar; managed by story 9.4. ``ends_at`` is required - every period is bounded,
+    with no open-ended case."""
 
     __tablename__ = "venue_unavailability_periods"
 

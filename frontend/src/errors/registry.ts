@@ -26,6 +26,10 @@ export type ErrorCode =
   | 'VENUE_NOT_FOUND'
   | 'VENUE_NAME_TAKEN'
   | 'VENUE_IN_USE'
+  | 'UNAVAILABILITY_NOT_FOUND'
+  | 'UNAVAILABILITY_CANNOT_BE_ENDED'
+  | 'UNAVAILABILITY_CANNOT_BE_REMOVED'
+  | 'UNAVAILABILITY_END_BEFORE_START'
   | 'VENUE_NAME_REQUIRED'
   | 'VENUE_LOCATION_REQUIRED'
   | 'VENUE_CAPACITY_INVALID'
@@ -85,6 +89,8 @@ export type ErrorCode =
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
+  | 'BOOKING_TURNAROUND_INVALID'
+  | 'BOOKING_TURNAROUND_TOO_LONG'
   | 'BOOKING_NOT_FOUND'
   | 'BOOKING_CONFLICT'
   | 'BOOKING_REJECT_REFUSED'
@@ -176,6 +182,25 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_IN_USE: {
     title: 'Venue has bookings',
     message: 'You cannot delete a venue that has bookings. Withdraw it from service instead.',
+  },
+
+  // Story 9.4: a venue marked unavailable. These usually arrive with the backend's own sentence.
+  UNAVAILABILITY_NOT_FOUND: {
+    title: 'Closure not found',
+    message: 'This closure no longer exists. It may have been removed.',
+  },
+  UNAVAILABILITY_CANNOT_BE_ENDED: {
+    title: 'Closure cannot be ended',
+    message: 'This closure has not started, or has already ended. Reload the page to see it.',
+  },
+  UNAVAILABILITY_CANNOT_BE_REMOVED: {
+    title: 'Closure cannot be removed',
+    message: 'This closure has already started. End it instead.',
+  },
+  // Checked in the form before anything is sent; the backend refuses it too, in its own words.
+  UNAVAILABILITY_END_BEFORE_START: {
+    title: 'Check the dates',
+    message: 'The end must be after the start.',
   },
 
   // Story 8.3: checks the venue form makes before anything is sent.
@@ -277,7 +302,9 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is
    * still a draft. One code for both actions, same precedent as BOOKING_CONFLICT: the backend
    * gives each its own detail sentence naming which verb was refused and the request's current
-   * status.
+   * status. Fix f2.7.4 (story 2.7 AC17): also approving a request that is still awaiting a
+   * decision but has no venue requirement; that sentence names no status, and reloading does not
+   * clear it - the coordinator adds a venue requirement first.
    */
   EVENT_NOT_AWAITING_DECISION: {
     title: 'Cannot decide this request',
@@ -499,6 +526,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message:
       "This venue requirement is not one of the event's. Go back to the catalogue and select " +
       'one of its venue requirements.',
+  },
+  // f12.1.2 (story 12.1 AC5): checks the request step makes on a setup and a teardown before
+  // anything is sent - never wired into an `errorCodes` map, same precedent as
+  // EVENT_REJECTION_REASON_REQUIRED. The server refuses the same values.
+  BOOKING_TURNAROUND_INVALID: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.',
+  },
+  /** Keep in step with TURNAROUND_MAX_MINUTES in src/api/bookings.ts. */
+  BOOKING_TURNAROUND_TOO_LONG: {
+    title: 'Check setup and teardown',
+    message: 'Setup and teardown can each be at most 14 days.',
   },
 
   // Story 13.2: approving a venue booking request. Both usually arrive with the backend's own

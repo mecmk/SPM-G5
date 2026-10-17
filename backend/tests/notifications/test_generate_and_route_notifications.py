@@ -21,9 +21,10 @@ their own tests: 4.2's ``test_the_organiser_is_notified``, 4.3's
 ``test_the_assigned_coordinator_is_notified`` and 12.2's
 ``test_withdrawing_notifies_every_active_venue_staff_member`` pin their recipients exactly, and
 5.2's reassignment is tested here under AC3. Change decisions (19.2), registration changes
-(18.x), cancellation (6.2) and the Week 7 triggers belong to stories not built yet, which send
-their own through ``notify``. AC2 is tested at the API, ``GET /notifications``: the list in the
-app is story 20.2.
+(18.x), cancellation (6.2) and the other Week 7 triggers belong to stories not built yet,
+which send their own through ``notify``. 9.4's - a venue marked unavailable tells the coordinator
+and organiser of each event it affects - is tested in tests/venues/test_venue_unavailability.py.
+AC2 is tested at the API, ``GET /notifications``: the list in the app is story 20.2.
 """
 
 from __future__ import annotations
@@ -55,6 +56,7 @@ from tests.support.factories import (
     make_equipment_type,
     make_event,
     make_user,
+    make_venue_requirement,
 )
 from tests.support.seed import Bookings, Events, SeedUser, Users, Venues
 
@@ -857,6 +859,9 @@ def test_simultaneous_event_decisions_notify_once(engine: Engine):
         event = make_event(
             session, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=Users.COORDINATOR.id
         )
+        # Since fix f2.7.4 a request without a venue requirement cannot be approved (story 2.7
+        # AC17). It is removed with the event (ON DELETE CASCADE).
+        make_venue_requirement(session, event.id)
         session.commit()
         event_id = event.id
     start = threading.Barrier(2)

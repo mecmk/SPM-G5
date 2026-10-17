@@ -73,6 +73,9 @@ def create_booking_request(
     be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC5: a
     pending request has no expiry - its hold starts when Venue Staff approve it - but a booked
     period already started cannot be requested, since it could never be approved (409).
+    f12.1.2 (story 12.1 AC1/AC5/AC9 in the backlog's current numbering): it carries the setup and
+    teardown sent with it, whole minutes up to 14 days (422 otherwise), which widen its booked
+    period; a setup that would start in the past is refused (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -97,7 +100,10 @@ def create_booking_request(
         # 12.1 AC14: a recorded closure covers part of the period.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
-        # 12.1 AC14: the venue is not open at those hours.
+        # 12.1 AC14/AC16: the venue is not open at the request's own hours.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.SetupStartsInThePast as exc:
+        # 12.1 AC9: the setup would start the booked period in the past.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
@@ -190,6 +196,10 @@ def approve_booking(
     Story 12.7 AC1/AC5: the approval starts the booking's hold, with the expiry Venue Staff give
     (422 without one, or with one in the past or after the booked period starts); a booked period
     that has already started can no longer be held (409).
+
+    Story 9.4 AC7: refused (409) while a period its venue is unavailable for overlaps the
+    request's held period, with the sentence the request step gives; it is approved once the
+    period no longer overlaps it.
     """
     try:
         booking = service.get_booking_for_decision(db, booking_id)
@@ -200,6 +210,8 @@ def approve_booking(
             db, booking, actor_id=actor.id, hold_expires_at=payload.hold_expires_at
         )
     except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.VenueBlocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
@@ -269,7 +281,10 @@ def switch_booking_request(
     neither. Refused (403) for anyone but the event's assigned coordinator, (409) once the
     request is no longer pending, and as a new request is (409, or 422 for a venue that does
     not suit without a justification) when the new venue cannot take it. Story 12.7 (Q26): a
-    booked period that has started is refused too (409), as for any new request.
+    booked period that has started is refused too (409), as for any new request. f12.1.2 (story
+    12.1 AC1/AC5/AC9): the new request carries the setup and teardown sent with the switch, never
+    the replaced request's (422 when out of range), and a setup that would start in the past is
+    refused (409).
     """
     try:
         replaced = service.get_booking_for_decision(db, booking_id)
@@ -294,6 +309,9 @@ def switch_booking_request(
     except service.VenueBlocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.VenueClosed as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.SetupStartsInThePast as exc:
+        # 12.1 AC9: the setup would start the booked period in the past.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.HoldPeriodStarted as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None

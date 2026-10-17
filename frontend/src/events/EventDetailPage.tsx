@@ -45,6 +45,7 @@ import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
   AWAITING_DECISION_STATUSES,
@@ -574,6 +575,14 @@ export function EventDetailPage() {
     bookings !== null &&
     event.venue_requirements.length > 0 &&
     firstRequirementNeedingVenue(event, bookings) === null
+  /** Fix f2.7.4 (story 2.7 AC17, AC19): "No venue requirements", saved before the fix, still
+   *  stands once a request is past its decision - an event approved with it keeps the paths for
+   *  none (AC19). Before then it no longer does: such a request cannot be submitted or approved
+   *  until it has a venue requirement, so it shows as nothing recorded. */
+  const isNoVenueAnswerKept =
+    event.venue_none_required &&
+    event.status !== 'DRAFT' &&
+    !AWAITING_DECISION_STATUSES.includes(event.status)
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
@@ -817,10 +826,8 @@ export function EventDetailPage() {
                 </Link>
               )}
             </div>
-            {event.venue_none_required && (
-              <p className="muted">No venue is required for this event.</p>
-            )}
-            {!event.venue_none_required && event.venue_requirements.length === 0 && (
+            {isNoVenueAnswerKept && <p className="muted">No venue is required for this event.</p>}
+            {!isNoVenueAnswerKept && event.venue_requirements.length === 0 && (
               <p className="muted">{NOT_RECORDED}</p>
             )}
             {event.venue_requirements.length > 0 && (
@@ -960,6 +967,18 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
+                          the booking stays here for reference and the event needs another venue. */}
+                      {booking.venue_unavailable_marked_at !== null && (
+                        <p>
+                          <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
+                          <br />
+                          <span className="small muted">
+                            Venue Staff marked this venue unavailable for part of the booked period.
+                            The booking is kept for reference.
+                          </span>
+                        </p>
+                      )}
                       {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
                       {openHold && (
                         <p>

@@ -263,8 +263,9 @@ test('8.4 AC5: an event with one requirement shows it alone, with nothing to swi
 test('8.4 AC6: an event marked "No venue requirements" opens from its dates and attendance, listing none', async ({
   page,
 }) => {
-  // No seeded event in Planning records "No venue requirements" (story 2.1 AC4), so Summit's real
-  // record is answered with it set, as 12.1 AC15's case for Nimbus does.
+  // Only an event approved before f2.7.4 can still be marked "No venue requirements" (2.7 AC19),
+  // and no seeded event in Planning is, so Summit's real record is answered with it set, as 12.1
+  // AC15's case for Nimbus does.
   await page.route(`**/events/${SUMMIT.id}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()

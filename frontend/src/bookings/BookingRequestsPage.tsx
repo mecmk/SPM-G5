@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Pagination } from '../components/Pagination'
+import { Chip } from '../components/Chip'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { ERROR_REGISTRY } from '../errors/registry'
@@ -28,6 +29,7 @@ import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  VENUE_UNAVAILABLE_LABEL,
   withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
@@ -41,6 +43,7 @@ import {
 } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
+import { venueStaffOutsideHoursNotice } from './turnaround'
 
 const SHORT_ID_LENGTH = 8
 /** Story 13.1.2 AC4: requests per numbered page. */
@@ -79,6 +82,19 @@ function OpenHoldFact({ entry }: { entry: BookingQueueEntry }) {
       <p className="fact-value">{formatDateTime(openHold)}</p>
     </div>
   )
+}
+
+/** f12.1.2 (story 12.1 AC17): when the request's setup or teardown runs outside its venue's
+ * opening hours, the card says so, with the booked period; nothing otherwise, nor for an entry
+ * that gives no hours. */
+function OutsideHoursNotice({ entry }: { entry: BookingQueueEntry }) {
+  const notice = venueStaffOutsideHoursNotice(
+    entry,
+    entry.venue_operating_hours_start,
+    entry.venue_operating_hours_end,
+  )
+  if (notice === null) return null
+  return <p className="warning">{notice}</p>
 }
 
 /** Under All, `queue` once `decided` - the request it names - was decided on this page: the
@@ -125,6 +141,10 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * the booked period starts before sending (AC5). An approved booking's card shows when its open
  * hold expires. AC3: one whose hold expired leaves Approved for the Expired tab, showing when it
  * was approved and when it expired.
+ *
+ * f12.1.2 (story 12.1 AC17): a request can be approved from its card (13.2 AC1), so a card whose
+ * setup or teardown runs outside the venue's opening hours says so under the venue, with the
+ * booked period.
  */
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
@@ -283,6 +303,10 @@ export function BookingRequestsPage() {
                       <span className="small muted mono">
                         #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
                       </span>
+                      {/* Story 9.4 AC3: its venue is unavailable for part of the request. */}
+                      {entry.venue_unavailable_marked_at !== null && (
+                        <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
+                      )}
                     </div>
                     <div className="item-card-capacity">
                       <div>{formatDate(entry.starts_at)}</div>
@@ -300,6 +324,8 @@ export function BookingRequestsPage() {
                       {entry.venue_name} · {entry.venue_location}
                     </p>
                   </div>
+
+                  <OutsideHoursNotice entry={entry} />
 
                   <div className="fact-grid">
                     <div className="subtle-block">
@@ -347,12 +373,26 @@ export function BookingRequestsPage() {
                     </div>
                   )}
 
+                  {entry.status === PENDING_BOOKING_STATUS &&
+                    entry.venue_unavailable_marked_at !== null && (
+                      <p id={`unavailable-${entry.id}`} className="small muted">
+                        This venue is unavailable for part of this request. It cannot be approved
+                        while the closure stands.
+                      </p>
+                    )}
+
                   <div className="item-card-footer">
                     {entry.status === PENDING_BOOKING_STATUS && (
                       <div className="cluster">
                         <button
                           type="button"
                           className="brand button-sm"
+                          disabled={entry.venue_unavailable_marked_at !== null}
+                          aria-describedby={
+                            entry.venue_unavailable_marked_at !== null
+                              ? `unavailable-${entry.id}`
+                              : undefined
+                          }
                           onClick={() => askToApprove(entry)}
                         >
                           Approve
