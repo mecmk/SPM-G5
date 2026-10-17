@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { EventStatus } from './events'
 
 /** Mirrors `CoordinatorOption` (story 5.1 AC2): an Event Coordinator selectable for assignment,
  *  with how many active events they already hold (story 5.4 AC3). */
@@ -92,4 +93,69 @@ export function assignCoordinator(
       message: 'The event was handed to its new coordinator.',
     },
   })
+}
+
+/** Mirrors `ActiveEventEntry` (story 5.5 AC1): an active event in the Lead's overview. The
+ *  coordinator fields are all null while nobody is assigned; `assigned_by_name` is null when the
+ *  assigner was not a Lead. AC5: `coordinator_is_active` false flags a deactivated coordinator. */
+export interface ActiveEventEntry {
+  id: string
+  name: string
+  starts_at: string
+  ends_at: string
+  status: EventStatus
+  coordinator_id: string | null
+  coordinator_name: string | null
+  coordinator_is_active: boolean | null
+  assigned_by_name: string | null
+}
+
+/** Mirrors `WorkloadEvent` (story 5.5 AC2): one of a coordinator's active events. */
+export interface WorkloadEvent {
+  id: string
+  name: string
+  starts_at: string
+  ends_at: string
+  status: EventStatus
+}
+
+/** Mirrors `CoordinatorWorkloadEntry` (story 5.5 AC2/AC4/AC5): a coordinator, their number of
+ *  active events (0 included) and the events. `is_active` false flags a deactivated one. */
+export interface CoordinatorWorkloadEntry {
+  coordinator_id: string
+  coordinator_name: string
+  is_active: boolean
+  active_event_count: number
+  events: WorkloadEvent[]
+}
+
+/** The coordinator filter's value for events with no coordinator (story 5.5, PO decision P5),
+ *  mirroring `UNASSIGNED` in backend/app/coordination/service.py. */
+export const UNASSIGNED_FILTER = 'unassigned'
+
+/** The `assigned_by` value for "Assigned by me" (story 5.5 AC1, PO decision P2), mirroring the
+ *  `Literal["me"]` that `list_active_events` in backend/app/coordination/router.py accepts. */
+export const ASSIGNED_BY_ME_FILTER = 'me'
+
+/** Story 5.5 AC1: the overview's filters; each one left out widens the list. */
+export interface ActiveEventFilters {
+  /** A coordinator's id, or `UNASSIGNED_FILTER`. */
+  coordinator?: string
+  status?: EventStatus
+  isAssignedByMe?: boolean
+}
+
+/** Story 5.5 AC1: every active event, soonest first, narrowed by `filters`. */
+export function listActiveEvents(filters: ActiveEventFilters): Promise<ActiveEventEntry[]> {
+  const params = new URLSearchParams()
+  if (filters.coordinator) params.set('coordinator', filters.coordinator)
+  if (filters.status) params.set('status', filters.status)
+  if (filters.isAssignedByMe) params.set('assigned_by', ASSIGNED_BY_ME_FILTER)
+  const query = params.toString()
+  return api<ActiveEventEntry[]>(`/coordination/active-events${query ? `?${query}` : ''}`)
+}
+
+/** Story 5.5 AC2: every coordinator with their active events, by name. */
+export function listWorkloads(): Promise<CoordinatorWorkloadEntry[]> {
+  return api<CoordinatorWorkloadEntry[]>('/coordination/workloads')
 }

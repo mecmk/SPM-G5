@@ -1,4 +1,4 @@
-"""Request / response shapes for coordinator assignment (stories 5.1, 5.2 and 5.4)."""
+"""Request / response shapes for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5)."""
 
 from __future__ import annotations
 
@@ -98,4 +98,84 @@ class UnassignedEventEntry(BaseModel):
             expected_attendance=expected_attendance,
             organiser_name=event.organiser.full_name,
             submitted_at=event.submitted_at,
+        )
+
+
+class ActiveEventEntry(BaseModel):
+    """Story 5.5 AC1: one active event in the Lead's overview - name, dates, status, its
+    coordinator (all null when nobody is assigned yet) and the Lead who assigned them (null when
+    the assigner was not a Lead, PO decision P3). AC5: ``coordinator_is_active`` false flags a
+    deactivated coordinator whose events need reassigning. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime  # non-null for every non-DRAFT row (ck_events_submitted_fields_complete)
+    ends_at: datetime
+    status: str
+    coordinator_id: uuid.UUID | None
+    coordinator_name: str | None
+    coordinator_is_active: bool | None
+    assigned_by_name: str | None
+
+    @classmethod
+    def from_event(cls, event: Event, *, assigning_lead: User | None) -> ActiveEventEntry:
+        # The overview holds no drafts, so ck_events_submitted_fields_complete guarantees these.
+        starts_at, ends_at = event.starts_at, event.ends_at
+        assert starts_at is not None
+        assert ends_at is not None
+        coordinator = event.assigned_coordinator
+        return cls(
+            id=event.id,
+            name=event.name,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            status=event.status,
+            coordinator_id=coordinator.id if coordinator is not None else None,
+            coordinator_name=coordinator.full_name if coordinator is not None else None,
+            coordinator_is_active=coordinator.is_active if coordinator is not None else None,
+            assigned_by_name=assigning_lead.full_name if assigning_lead is not None else None,
+        )
+
+
+class WorkloadEvent(BaseModel):
+    """Story 5.5 AC2: one of a coordinator's active events. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime  # non-null for every non-DRAFT row (ck_events_submitted_fields_complete)
+    ends_at: datetime
+    status: str
+
+    @classmethod
+    def from_event(cls, event: Event) -> WorkloadEvent:
+        # Only active events are listed, so ck_events_submitted_fields_complete guarantees these.
+        starts_at, ends_at = event.starts_at, event.ends_at
+        assert starts_at is not None
+        assert ends_at is not None
+        return cls(
+            id=event.id, name=event.name, starts_at=starts_at, ends_at=ends_at, status=event.status
+        )
+
+
+class CoordinatorWorkloadEntry(BaseModel):
+    """Story 5.5 AC2: one Event Coordinator, their number of active events (AC4: 0 included) and
+    the events themselves. AC5: ``is_active`` false flags a deactivated coordinator who still holds
+    events. No defaults (response schema)."""
+
+    coordinator_id: uuid.UUID
+    coordinator_name: str
+    is_active: bool
+    active_event_count: int
+    events: list[WorkloadEvent]
+
+    @classmethod
+    def from_coordinator(
+        cls, user: User, *, active_event_count: int, events: list[Event]
+    ) -> CoordinatorWorkloadEntry:
+        return cls(
+            coordinator_id=user.id,
+            coordinator_name=user.full_name,
+            is_active=user.is_active,
+            active_event_count=active_event_count,
+            events=[WorkloadEvent.from_event(event) for event in events],
         )

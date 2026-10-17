@@ -16,9 +16,10 @@
  * AC6 another role cannot reach the pages. The API's 401/403 refusals are backend cases:
  *     backend/tests/safety/test_safety_check_queue.py.
  *
- * Both seeded events (EVENTS.harbourConcert, EVENTS.bookFair) are dedicated to this spec and
- * only read here. The concert expects 300 at the 250-seat Exhibition Foyer, whose operating hours
- * are not recorded, and has never been reviewed. The book fair was sent back once, when it
+ * Both seeded events (EVENTS.harbourConcert, EVENTS.bookFair) are only read here; the concert is
+ * also read by event-correction.spec.ts and assignment-overview.spec.ts. The concert expects 300
+ * at the 250-seat Exhibition Foyer, whose operating hours are not recorded, and has never been
+ * reviewed. The book fair was sent back once, when it
  * expected 120 people and two microphones. The food festival (approved) and the night walk (sent
  * back) are the Accepted and Declined tabs' seeded events, also only read here.
  */
