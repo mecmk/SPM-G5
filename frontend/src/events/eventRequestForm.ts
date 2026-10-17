@@ -98,6 +98,10 @@ const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
 // The largest value the backend's INTEGER columns hold.
 const MAX_WHOLE_NUMBER = 2_147_483_647
+/** Fix f2.1.5 (story 2.1 AC21/AC22): the most people a request can expect, and the most of one
+ * facility or equipment type it can ask for - no venue holds more people. Mirrored from the
+ * backend's schemas. */
+const MAX_ATTENDANCE_OR_QUANTITY = 100_000
 const NO_EQUIPMENT_TYPE = ''
 /** Story 2.7, mirrored from the backend's schemas: a requirement's name is short, and a request
  * lists a bounded number of requirements. */
@@ -185,6 +189,8 @@ export function getEquipmentQuantityId(key: number): string {
 /**
  * Story 2.1 AC6: more of an item than is free for the dates. Unknown until both dates are chosen
  * and the backend has answered, and then nothing is judged here (the backend judges on save).
+ * AC21 (fix f2.1.5): a quantity above the most a request accepts is more than any stock, so it is
+ * judged here too, rather than called a wrong number.
  */
 export function isOverAvailable(
   line: EquipmentDraft,
@@ -193,7 +199,7 @@ export function isOverAvailable(
   return (
     availability !== null &&
     line.typeCode in availability &&
-    isPositiveWholeNumber(line.quantity) &&
+    (isPositiveWholeNumber(line.quantity) || isAboveRequestLimit(line.quantity)) &&
     Number(line.quantity) > availability[line.typeCode]
   )
 }
@@ -411,6 +417,30 @@ function isBlankOrPositiveWholeNumber(value: string): boolean {
   return value.trim() === '' || isPositiveWholeNumber(value)
 }
 
+/** Fix f2.1.5 (story 2.1 AC21/AC22): a whole number above the most a request accepts, however
+ * many digits it has. Its only fault is its size, so it is told the limit, not that it must be a
+ * positive whole number. */
+function isAboveRequestLimit(value: string): boolean {
+  const trimmed = value.trim()
+  return WHOLE_NUMBER.test(trimmed) && Number(trimmed) > MAX_ATTENDANCE_OR_QUANTITY
+}
+
+/** Story 2.1 AC3, and AC22 (fix f2.1.5): what is wrong with the expected attendance, or null.
+ * Blank is fine on a draft. */
+function getAttendanceProblem(attendance: string): ErrorCode | null {
+  if (isAboveRequestLimit(attendance)) return 'EVENT_ATTENDANCE_TOO_LARGE'
+  if (!isBlankOrPositiveWholeNumber(attendance)) return 'EVENT_ATTENDANCE_INVALID'
+  return null
+}
+
+/** Story 2.1 AC3, and AC22 (fix f2.1.5): what is wrong with a facility quantity, or null. Blank is
+ * fine: how many is optional. */
+function getFacilityQuantityProblem(quantity: string): ErrorCode | null {
+  if (isAboveRequestLimit(quantity)) return 'EVENT_FACILITY_QUANTITY_TOO_LARGE'
+  if (!isBlankOrPositiveWholeNumber(quantity)) return 'EVENT_FACILITY_QUANTITY_INVALID'
+  return null
+}
+
 /** Story 2.1 AC13: blank is fine on a draft; anything typed must look like an email address. */
 export function isBlankOrEmailAddress(value: string): boolean {
   const trimmed = value.trim()
@@ -488,9 +518,8 @@ export function validateEventForm(
   { isEquipmentLeftOut = false }: { isEquipmentLeftOut?: boolean } = {},
 ): FormProblem | null {
   if (!form.name.trim()) return { code: 'EVENT_NAME_REQUIRED', fieldId: FIELD_ID.name }
-  if (!isBlankOrPositiveWholeNumber(form.attendance)) {
-    return { code: 'EVENT_ATTENDANCE_INVALID', fieldId: FIELD_ID.attendance }
-  }
+  const attendanceProblem = getAttendanceProblem(form.attendance)
+  if (attendanceProblem) return { code: attendanceProblem, fieldId: FIELD_ID.attendance }
   const dateProblem = validateDates(form, saved)
   if (dateProblem) return dateProblem
   const registrationDateProblem = validateRegistrationDates(form, saved)
@@ -609,9 +638,8 @@ export function getLiveProblems(
   availability: Record<string, number> | null,
 ): Record<string, ErrorCode> {
   const problems: Record<string, ErrorCode> = {}
-  if (!isBlankOrPositiveWholeNumber(form.attendance)) {
-    problems[FIELD_ID.attendance] = 'EVENT_ATTENDANCE_INVALID'
-  }
+  const attendanceProblem = getAttendanceProblem(form.attendance)
+  if (attendanceProblem) problems[FIELD_ID.attendance] = attendanceProblem
   if (!isBlankOrEmailAddress(form.contactEmail)) {
     problems[FIELD_ID.contactEmail] = 'EVENT_CONTACT_EMAIL_INVALID'
   }
@@ -623,11 +651,15 @@ export function getLiveProblems(
   for (const problem of getVenueRequirementProblems(form)) {
     problems[problem.fieldId] ??= problem.code
   }
+  // Fix f2.1.5 (story 2.1 AC21): a quantity above the limit is more than is available once the
+  // stock for the dates is known, and is told the limit until then.
   for (const line of form.equipment) {
-    if (!isPositiveWholeNumber(line.quantity)) {
-      problems[getEquipmentQuantityId(line.key)] = 'EVENT_QUANTITY_INVALID'
-    } else if (isOverAvailable(line, availability)) {
+    if (isOverAvailable(line, availability)) {
       problems[getEquipmentQuantityId(line.key)] = 'EVENT_EQUIPMENT_UNAVAILABLE'
+    } else if (isAboveRequestLimit(line.quantity)) {
+      problems[getEquipmentQuantityId(line.key)] = 'EVENT_QUANTITY_TOO_LARGE'
+    } else if (!isPositiveWholeNumber(line.quantity)) {
+      problems[getEquipmentQuantityId(line.key)] = 'EVENT_QUANTITY_INVALID'
     }
   }
   return problems
@@ -743,9 +775,10 @@ export function getVenueRequirementProblems(form: EventFormState): FormProblem[]
     if (timesProblem)
       problems.push({ code: timesProblem.code, fieldId: fieldId(timesProblem.field) })
     for (const [code, facility] of Object.entries(requirement.facilities)) {
-      if (!isBlankOrPositiveWholeNumber(facility.quantity)) {
+      const quantityProblem = getFacilityQuantityProblem(facility.quantity)
+      if (quantityProblem) {
         problems.push({
-          code: 'EVENT_FACILITY_QUANTITY_INVALID',
+          code: quantityProblem,
           fieldId: getFacilityQuantityId(requirement.key, code),
         })
       }
@@ -819,7 +852,9 @@ function validateRequirements(
   if (repeatedLine) {
     return { code: 'EVENT_EQUIPMENT_DUPLICATE', fieldId: getEquipmentTypeId(repeatedLine.key) }
   }
-  const badQuantityLine = form.equipment.find((line) => !isPositiveWholeNumber(line.quantity))
+  const badQuantityLine = form.equipment.find(
+    (line) => !isPositiveWholeNumber(line.quantity) && !isAboveRequestLimit(line.quantity),
+  )
   if (badQuantityLine) {
     return {
       code: 'EVENT_QUANTITY_INVALID',
@@ -829,6 +864,12 @@ function validateRequirements(
   const overLine = form.equipment.find((line) => isOverAvailable(line, availability))
   if (overLine) {
     return { code: 'EVENT_EQUIPMENT_UNAVAILABLE', fieldId: getEquipmentQuantityId(overLine.key) }
+  }
+  // Fix f2.1.5 (story 2.1 AC21): with no stock known for its dates, a quantity above the limit is
+  // told the limit.
+  const tooLargeLine = form.equipment.find((line) => isAboveRequestLimit(line.quantity))
+  if (tooLargeLine) {
+    return { code: 'EVENT_QUANTITY_TOO_LARGE', fieldId: getEquipmentQuantityId(tooLargeLine.key) }
   }
   return null
 }
