@@ -46,6 +46,12 @@
  *     requests is refused, naming the conflict. No frontend logic of its own - the backend's
  *     sentence surfaces through the form's existing save-error handling. Rule detail (scoping,
  *     boundaries, dead statuses) is a backend case: test_event_request_duplicate.py.
+ * AC21 (fix f2.1.5) an equipment quantity above 100,000 is more than is available once the dates
+ *     are chosen, and before then is told the largest number accepted - never a wrong number.
+ * AC22 (fix f2.1.5) an expected attendance or a facility quantity above 100,000 is told the largest
+ *     number accepted, as it is typed and on a save that stops before anything is sent; 100,000
+ *     saves. The server's own refusal, and AC23's other ways in (the coordinator's correction, a
+ *     change request), are backend cases: test_event_request_number_limit.py.
  * Rule detail, refusals (401/403/404/409/422) and the rest of what the coordinator sees
  * (AC8, AC12) are backend cases: backend/tests/events/test_event_request_*.py.
  */
@@ -1411,4 +1417,133 @@ test('2.1 AC20: a request with the same name and dates as another live request i
   await page.getByRole('button', { name: 'Save draft' }).click()
 
   await expect(page.getByRole('alert')).toContainText('already have a request')
+})
+
+test('2.1 AC21: once the dates are chosen, an equipment quantity above 100,000 is more than is available', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await fillEssentials(page, uniqueName('Huge quantity'))
+  await setDates(page, 340)
+  // The number from the bug report: it was told it must be a positive whole number.
+  await addEquipment(page, 1, 'Presentation laptop', '11111111111')
+  const item = equipmentItem(page, 1)
+  const quantity = item.getByLabel('Quantity')
+
+  await expect(item.getByText('Request no more than is available for these dates.')).toBeVisible()
+  await expect(item.getByText(/positive whole number|100,000 or less/)).toHaveCount(0)
+  await expect(quantity).toHaveAttribute('aria-invalid', 'true')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByRole('alert')).toContainText(
+    'Request no more than is available for these dates.',
+  )
+  await expect(quantity).toBeFocused()
+  expect(createCalls).toBe(0)
+})
+
+test('2.1 AC21: before the dates are chosen, an equipment quantity above 100,000 is told the largest accepted', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await page.getByLabel('Event name').fill(uniqueName('Huge quantity, no dates'))
+  await addEquipment(page, 1, 'Presentation laptop', '100001')
+  const item = equipmentItem(page, 1)
+  const quantity = item.getByLabel('Quantity')
+  const tooLarge = item.getByText('Equipment quantity must be 100,000 or less.')
+
+  await expect(tooLarge).toBeVisible()
+  await expect(item.getByText('positive whole number')).toHaveCount(0)
+  await expect(quantity).toHaveAttribute('aria-invalid', 'true')
+  await quantity.fill('11111111111')
+  await expect(tooLarge).toBeVisible()
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByRole('alert')).toContainText('Equipment quantity must be 100,000 or less.')
+  await expect(quantity).toBeFocused()
+  expect(createCalls).toBe(0)
+
+  // 100,000 itself is not refused for its size.
+  await quantity.fill('100000')
+  await expect(tooLarge).toHaveCount(0)
+  await expect(quantity).not.toHaveAttribute('aria-invalid', 'true')
+})
+
+test('2.1 AC22: an expected attendance above 100,000 is told the largest accepted, and 100,000 saves', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await fillEssentials(page, uniqueName('Huge attendance'))
+  const attendance = page.getByLabel('Expected attendance')
+  const tooLarge = page.getByText('Expected attendance must be 100,000 or less.')
+  const wrongNumber = page.getByText('Expected attendance must be a positive whole number.')
+
+  // Said as it is typed, however many digits: one over, the bug report's number, and 20 nines.
+  for (const value of ['100001', '11111111111', '99999999999999999999']) {
+    await attendance.fill(value)
+    await expect(tooLarge).toBeVisible()
+    await expect(wrongNumber).toHaveCount(0)
+    await expect(attendance).toHaveAttribute('aria-invalid', 'true')
+  }
+
+  // A wrong number is still a wrong number, however large.
+  await attendance.fill('-100001')
+  await expect(wrongNumber).toBeVisible()
+  await expect(tooLarge).toHaveCount(0)
+
+  await attendance.fill('100001')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByRole('alert')).toContainText('Expected attendance must be 100,000 or less.')
+  await expect(attendance).toBeFocused()
+  expect(createCalls).toBe(0)
+
+  await attendance.fill('100000')
+  await expect(attendance).not.toHaveAttribute('aria-invalid', 'true')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  await expect(page.getByLabel('Expected attendance')).toHaveValue('100000')
+})
+
+test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, and 100,000 saves', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
+  })
+  await fillEssentials(page, uniqueName('Huge rooms'))
+  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
+  const rooms = page.getByLabel('Breakout rooms quantity')
+
+  await rooms.fill('100001')
+  await expect(page.getByText('A facility quantity must be 100,000 or less.')).toBeVisible()
+  await expect(
+    page.getByText('A facility quantity must be a positive whole number, or left empty.'),
+  ).toHaveCount(0)
+  await expect(rooms).toHaveAttribute('aria-invalid', 'true')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByRole('alert')).toContainText('A facility quantity must be 100,000 or less.')
+  await expect(rooms).toBeFocused()
+  expect(createCalls).toBe(0)
+
+  await rooms.fill('100000')
+  await expect(rooms).not.toHaveAttribute('aria-invalid', 'true')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('100000')
 })
