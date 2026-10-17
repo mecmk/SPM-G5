@@ -150,7 +150,7 @@ backend/
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
     registrations/      # the events attendees can register for, and registering for one
-    safety/             # the Safety Officer's queue of events awaiting the safety check, and each event's check
+    safety/             # requesting a safety review, the Safety Officer's queue and decision, confirming an approved event
     venues/             # the venue catalogue, its search and its availability calendar
     common/             # shared by feature areas: the audit log
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)

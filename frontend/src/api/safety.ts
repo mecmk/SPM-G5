@@ -1,4 +1,4 @@
-import { api } from './client'
+import { ApiError, api } from './client'
 import type { AccessibilityNeed, EquipmentLine, EventStatus } from './events'
 import type { Venue } from './venues'
 
@@ -30,13 +30,34 @@ export interface SafetyVenue {
   over_capacity: boolean
 }
 
-/** Mirrors `SafetyReviewOut`: story 21.1 AC3, one previous review of the event. */
+/** Values of `SafetyArrangement` (backend/app/safety/models.py): what a finding says must be
+ * rebooked (story 21.2 AC4). */
+export type SafetyArrangement = 'VENUE_BOOKINGS' | 'EQUIPMENT'
+
+/** Mirrors `SafetyFactorOut`: story 21.2 AC2, a factor the review considers. */
+export interface SafetyFactor {
+  code: string
+  name: string
+  description: string | null
+}
+
+/** Mirrors `SafetyFindingOut`: story 21.2 AC4, one thing the officer requires changed. */
+export interface SafetyFinding {
+  factor_code: string
+  factor_name: string
+  required_change: string
+  arrangement: SafetyArrangement | null
+}
+
+/** Mirrors `SafetyReviewOut`: story 21.1 AC3, one previous review of the event, with its findings
+ * and the arrangements they flag (story 21.2 AC4). */
 export interface SafetyReview {
   id: string
   reviewed_at: string
   reviewed_by_name: string
   outcome: SafetyReviewOutcome
-  notes: string | null
+  findings: SafetyFinding[]
+  flagged_arrangements: SafetyArrangement[]
 }
 
 /** Values of `outcome` on `event_safety_reviews`. */
@@ -78,7 +99,44 @@ export interface SafetyCheckDetail {
   equipment: EquipmentLine[]
   changes_since_last_review: FactChange[]
   previous_reviews: SafetyReview[]
+  /** Story 21.2 AC2: the factors the review considers, in order. */
+  factors: SafetyFactor[]
+  /** Story 21.2 AC20: sent back with the decision, so it is refused if the facts moved since. */
+  facts_fingerprint: string
 }
+
+/** Mirrors `SafetyFindingIn`: story 21.2 AC4/AC10. */
+export interface SafetyFindingInput {
+  factor_code: string
+  required_change: string
+  arrangement: SafetyArrangement | null
+}
+
+/** Mirrors `SafetyDecisionIn`: story 21.2 AC2-AC5. Findings only with CHANGES_REQUESTED.
+ * AC20: `facts_fingerprint` is the one the page was read with (`SafetyCheckDetail`). */
+export interface SafetyDecisionInput {
+  outcome: SafetyReviewOutcome
+  findings: SafetyFindingInput[]
+  facts_fingerprint: string
+}
+
+/** Mirrors `EventSafetyOut`: story 21.2 AC4/AC7, the event page's safety summary. The blockers
+ * are null unless the viewer is the assigned coordinator (AC18); an empty list offers the action.
+ * AC12: `unchanged_warning` is the warning a request would raise, so the page asks first. */
+export interface EventSafety {
+  event_id: string
+  status: EventStatus
+  latest_review: SafetyReview | null
+  request_blockers: string[] | null
+  confirm_blockers: string[] | null
+  unchanged_warning: string | null
+}
+
+/** Story 21.2 AC9: the longest required change the officer may write, mirroring
+ * `MAX_SAFETY_TEXT_LENGTH` in backend/app/safety/schemas.py. */
+export const MAX_SAFETY_TEXT_LENGTH = 2000
+
+const SAFETY_ACTION_ERROR_CODES = { 404: 'EVENT_NOT_FOUND', 409: 'SAFETY_REVIEW_CONFLICT' } as const
 
 /** Story 21.1 AC2: the events in one tab, or in every tab when `status` is null, oldest first. */
 export function listSafetyChecks(status: SafetyQueueStatus | null): Promise<SafetyQueueEntry[]> {
@@ -89,4 +147,72 @@ export function listSafetyChecks(status: SafetyQueueStatus | null): Promise<Safe
 /** Story 21.1 AC3: one event's safety details, while it awaits the check or once reviewed. */
 export function getSafetyCheck(eventId: string): Promise<SafetyCheckDetail> {
   return api<SafetyCheckDetail>(`/safety-checks/${eventId}`, { errorCodes: { 404: 'NOT_FOUND' } })
+}
+
+/** Story 21.2 AC4/AC7: the latest review and what stops the coordinator acting, for the event
+ * page. */
+export function getEventSafety(eventId: string): Promise<EventSafety> {
+  return api<EventSafety>(`/events/${eventId}/safety-review`, {
+    errorCodes: { 404: 'EVENT_NOT_FOUND' },
+  })
+}
+
+/** Story 21.2 AC1/AC12: send a secured event for the safety check. `acknowledgeUnchanged` sends
+ * it although an arrangement the last review flagged is unchanged. */
+export function requestSafetyReview(
+  eventId: string,
+  name: string,
+  acknowledgeUnchanged: boolean,
+): Promise<EventSafety> {
+  return api<EventSafety>(`/safety-checks/${eventId}/request`, {
+    method: 'POST',
+    body: { acknowledge_unchanged: acknowledgeUnchanged },
+    errorCodes: SAFETY_ACTION_ERROR_CODES,
+    notify: {
+      title: 'Safety review requested',
+      message: `"${name}" was sent to the Safety Officer.`,
+    },
+  })
+}
+
+/** Story 21.2 AC12: the arrangements a refused request found unchanged, or null when the refusal
+ * was something else. */
+export function unchangedArrangementsOf(error: unknown): SafetyArrangement[] | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null
+  const { detail } = error
+  if (detail && typeof detail === 'object' && 'unchanged_arrangements' in detail) {
+    return detail.unchanged_arrangements as SafetyArrangement[]
+  }
+  return null
+}
+
+/** Story 21.2 AC2-AC5: record the officer's decision. */
+export function decideSafetyCheck(
+  eventId: string,
+  name: string,
+  decision: SafetyDecisionInput,
+): Promise<SafetyCheckDetail> {
+  return api<SafetyCheckDetail>(`/safety-checks/${eventId}/decision`, {
+    method: 'POST',
+    body: decision,
+    errorCodes: { 404: 'EVENT_NOT_FOUND', 409: 'SAFETY_DECISION_CONFLICT' },
+    notify: {
+      title: 'Safety decision recorded',
+      message: `Your decision on "${name}" was recorded.`,
+      importance: 'important',
+    },
+  })
+}
+
+/** Story 21.2 AC7: confirm a safety-approved event. */
+export function confirmEvent(eventId: string, name: string): Promise<EventSafety> {
+  return api<EventSafety>(`/events/${eventId}/confirm`, {
+    method: 'POST',
+    errorCodes: SAFETY_ACTION_ERROR_CODES,
+    notify: {
+      title: 'Event confirmed',
+      message: `"${name}" is confirmed.`,
+      importance: 'important',
+    },
+  })
 }

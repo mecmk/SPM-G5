@@ -1,5 +1,6 @@
-"""ORM model for the Safety Officer's reviews of an event (story 21.1 reads them; the review and
-decision story writes them). Mirrors ``event_safety_reviews`` in backend/db/migrations (019).
+"""ORM models for the Safety Officer's reviews of an event: story 21.1 reads them, story 21.2
+writes them with their findings. Mirrors ``event_safety_reviews``, ``safety_review_factors`` and
+``event_safety_review_findings`` in backend/db/migrations (019, 024).
 """
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Text, text
+from sqlalchemy import DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,9 +24,52 @@ class SafetyReviewOutcome:
     CHANGES_REQUESTED = "CHANGES_REQUESTED"
 
 
+class SafetyArrangement:
+    """Values allowed by ``ck_event_safety_review_findings_arrangement``: the arrangement a finding
+    says must change (21.2 AC4), each compared on resubmission with the fact of the same name in
+    the review's snapshot (``FACT_KEY``, 21.2 AC12)."""
+
+    VENUE_BOOKINGS = "VENUE_BOOKINGS"
+    EQUIPMENT = "EQUIPMENT"
+
+    FACT_KEY = {VENUE_BOOKINGS: "venues", EQUIPMENT: "equipment"}
+
+
+class SafetyReviewFactor(Base):
+    """A factor a safety review considers (21.2 AC2). Reference data."""
+
+    __tablename__ = "safety_review_factors"
+
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("100"))
+
+
+class SafetyReviewFinding(UUIDPrimaryKeyMixin, Base):
+    """One thing the officer requires changed (21.2 AC4). Append-only, with its review."""
+
+    __tablename__ = "event_safety_review_findings"
+
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("event_safety_reviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    factor_code: Mapped[str] = mapped_column(
+        Text, ForeignKey("safety_review_factors.code"), nullable=False
+    )
+    arrangement: Mapped[str | None] = mapped_column(Text)
+    required_change: Mapped[str] = mapped_column(Text, nullable=False)
+
+    factor: Mapped[SafetyReviewFactor] = relationship(lazy="joined")
+
+
 class EventSafetyReview(UUIDPrimaryKeyMixin, Base):
-    """One safety review of an event, with a snapshot of the facts reviewed (21.1 AC3, AC5).
-    Append-only, so no ``created_at``/``updated_at``: ``reviewed_at`` is the only timestamp."""
+    """One safety review of an event, with a snapshot of the facts reviewed (21.1 AC3, AC5) and,
+    when it requested changes, its findings (21.2 AC4). Append-only, so no
+    ``created_at``/``updated_at``: ``reviewed_at`` is the only timestamp."""
 
     __tablename__ = "event_safety_reviews"
 
@@ -39,7 +83,16 @@ class EventSafetyReview(UUIDPrimaryKeyMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     outcome: Mapped[str] = mapped_column(Text, nullable=False)
-    notes: Mapped[str | None] = mapped_column(Text)
     facts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     reviewed_by: Mapped[User] = relationship(lazy="joined")
+    findings: Mapped[list[SafetyReviewFinding]] = relationship(
+        order_by=SafetyReviewFinding.position, cascade="all, delete-orphan"
+    )
+
+    @property
+    def flagged_arrangements(self) -> list[str]:
+        """21.2 AC4: the arrangements any finding says must change, in the order first named."""
+        return list(
+            dict.fromkeys(f.arrangement for f in self.findings if f.arrangement is not None)
+        )

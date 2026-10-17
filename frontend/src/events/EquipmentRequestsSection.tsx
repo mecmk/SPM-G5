@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { NOT_RECORDED, formatDateTime } from '../shared/format'
+import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
 /** Story 15.1 AC1: how each item status reads on the event page. */
 const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
@@ -58,6 +59,8 @@ export interface EquipmentRequestsSectionProps {
   /** AC9: the event's assigned coordinator, while it is Under Review, Clarification Requested or
    *  Planning. Everyone else who can see the event gets the list alone. */
   canChange: boolean
+  /** Story 21.2 AC4: the latest safety review says the equipment must change. */
+  isFlagged: boolean
   /** Reloads the event after a change, so every item shows its new status. */
   onChanged: () => Promise<void>
 }
@@ -73,11 +76,14 @@ export interface EquipmentRequestsSectionProps {
  * Story 16.1 AC1/AC2: an item Technical Support accepted reads Accepted, and one it declined shows
  * the reason in a callout on its own line under the item, so the coordinator knows whether to
  * plan for something else. AC3: a decided item says when, and by whom.
+ * Story 21.2 AC4: while the latest safety review asks for the equipment to change, the section is
+ * highlighted and says so.
  */
 export function EquipmentRequestsSection({
   eventId,
   equipment,
   canChange,
+  isFlagged,
   onChanged,
 }: EquipmentRequestsSectionProps) {
   const ids = useId()
@@ -240,8 +246,12 @@ export function EquipmentRequestsSection({
   }
 
   return (
-    <section className="card stack" aria-labelledby="equipment-heading">
+    <section
+      className={`card stack${isFlagged ? ' card-flagged' : ''}`}
+      aria-labelledby="equipment-heading"
+    >
       <h2 id="equipment-heading">Equipment requirements</h2>
+      {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (

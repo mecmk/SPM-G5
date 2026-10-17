@@ -52,10 +52,13 @@ test('21.1 AC2: the Safety Officer opens the queue and sees each awaiting event,
   await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`))
   await expect(page.getByRole('heading', { name: 'Safety Checks', level: 1 })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Pending' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tab', { name: 'Pending (2)' })).toBeVisible()
 
   const concert = queueCard(page, CONCERT)
   await expect(concert).toContainText('16 Aug 2028')
+  // Story 21.2's spec moves its own events through the queue in parallel, so the count is the
+  // cards in this same view (one load feeds both) rather than a fixed number.
+  const pending = await page.getByRole('main').getByRole('heading', { level: 3 }).count()
+  await expect(page.getByRole('tab', { name: `Pending (${pending})` })).toBeVisible()
   await expect(concert).toContainText('300')
   await expect(concert).toContainText('Exhibition Foyer')
   await expect(concert).toContainText('Awaiting safety check')

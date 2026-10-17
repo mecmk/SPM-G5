@@ -148,7 +148,7 @@ C4Component
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "app/registrations, epic 18", "The Confirmed, Public events taking registrations, each with its booked venues, places left and state for the attendee, and registering: the opening and closing times, capacity and one registration per attendee checked while holding the event's row, with the database's one-active-registration index behind it. An event's registration settings are recorded in app/events")
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the event's own validation is reused from app/events. The arrangements each change affects are still to come")
-        Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest")
+        Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest. The coordinator's request for a review once every arrangement is secured, the officer's decision against the review factors with findings of what must change, and confirming an approved event")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
@@ -168,6 +168,7 @@ C4Component
     Rel(equipment, notifications, "Raises submissions through")
     Rel(review, notifications, "Raises decisions through")
     Rel(changes, notifications, "Raises change requests and withdrawals through")
+    Rel(safety, notifications, "Raises review requests, decisions and confirmations through")
     Rel(shared, db, "Reads and writes")
     Rel(events, db, "Reads and writes")
     Rel(review, db, "Reads and writes")
@@ -176,7 +177,7 @@ C4Component
     Rel(equipment, db, "Reads and writes")
     Rel(registration, db, "Reads and writes")
     Rel(changes, db, "Reads and writes")
-    Rel(safety, db, "Reads")
+    Rel(safety, db, "Reads and writes")
     Rel(notifications, db, "Reads and writes")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
