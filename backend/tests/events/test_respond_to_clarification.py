@@ -46,7 +46,7 @@ from app.auth.models import User
 from app.events import service
 from app.events.models import Event, EventStatus
 from app.events.schemas import CLARIFICATION_MESSAGE_MAX_LENGTH
-from tests.support.factories import make_clarification, make_event
+from tests.support.factories import make_clarification, make_event, make_venue_requirement
 from tests.support.seed import Events, Users
 
 
@@ -329,6 +329,8 @@ def test_the_coordinator_can_decide_after_a_response(
     login_as, db: Session, action, body, to_status
 ):
     event = _awaiting_response(db)
+    # Since fix f2.7.4 a request without a venue requirement cannot be approved (story 2.7 AC17).
+    make_venue_requirement(db, event.id)
     assert _respond(login_as(Users.ORGANISER), event.id).status_code == 201
 
     decided = login_as(Users.COORDINATOR).post(f"/events/{event.id}/{action}", json=body)

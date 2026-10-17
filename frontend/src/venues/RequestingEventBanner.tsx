@@ -150,7 +150,8 @@ interface RequestingEventBannerProps {
  * Story 8.4: it also lists the event's venue requirements, for anyone who may read the event
  * (AC10). With several, each is a choice that sets the filters from that requirement (AC3), the
  * selected one pressed (AC1); with one, it is shown alone, with nothing to switch between (AC5);
- * with "No venue requirements", none are listed (AC6). Once the filters are changed by hand, it
+ * with none - an event approved before fix f2.7.4 (story 2.7 AC19) - none are listed (AC6). Once
+ * the filters are changed by hand, it
  * says how to restore the selected requirement's own (AC7).
  *
  * Story 12.5 AC2: for whoever may read the event's bookings, each requirement also says whether it

@@ -87,8 +87,9 @@
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
  * 15-16 Dec 2026), Sales Onboarding Day (Planning: Classroom, a projector, 40 people, 17 May
  * 2028 09:00-17:00) and Data Literacy Workshop (Under Review, so it cannot take a booking yet).
- * Carl is the other coordinator, and Omar organises Nimbus. No seeded event records "No venue
- * requirements", so that case sets the flag on Nimbus's real response with `page.route`.
+ * Carl is the other coordinator, and Omar organises Nimbus. Since f2.7.4 only an event approved
+ * before that fix can still be marked "No venue requirements" (2.7 AC19), and no seeded event is,
+ * so that case sets the flag on Nimbus's real response with `page.route`.
  */
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
@@ -370,8 +371,9 @@ test('12.1 AC15: only what the event recorded goes into the catalogue address', 
 test('12.1 AC15: an event with no venue requirements still finds a venue by date and capacity', async ({
   page,
 }) => {
-  // No seeded event records "No venue requirements" (story 2.1 AC4), so Nimbus's real record is
-  // answered with it set: no layout, no facilities, no other requirements.
+  // Only an event approved before f2.7.4 can still be marked "No venue requirements" (2.7 AC19),
+  // and no seeded event is, so Nimbus's real record is answered with it set: no layout, no
+  // facilities, no other requirements.
   await page.route(`**/events/${NIMBUS.id}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()

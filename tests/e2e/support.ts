@@ -130,7 +130,12 @@ export function inFuture(days: number, hour = 9): string {
   return `${date}T${String(hour).padStart(2, '0')}:00`
 }
 
-/** Create and submit a fresh, minimal request as the signed-in organiser; returns its id. */
+/**
+ * Create and submit a fresh, minimal request with one venue requirement as the signed-in
+ * organiser; returns its id. A new request starts with one venue requirement (story 2.7 AC14,
+ * f2.7.4), so it is only named: its number of people follows the expected attendance of 60, and
+ * its times the event's.
+ */
 export async function createAndSubmitRequest(page: Page, name: string): Promise<string> {
   await page.goto('/events/new')
   await page.getByLabel('Event name').fill(name)
@@ -142,7 +147,10 @@ export async function createAndSubmitRequest(page: Page, name: string): Promise<
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
   await page.getByLabel('Contact phone number').fill('+65 9123 4567')
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
+  await page
+    .getByRole('group', { name: 'Venue requirement 1' })
+    .getByLabel('Requirement name')
+    .fill('Main venue')
   await page.getByRole('checkbox', { name: 'No accessibility needs' }).check()
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}\/edit$/)

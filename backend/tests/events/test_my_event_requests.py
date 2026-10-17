@@ -183,7 +183,10 @@ def test_seeded_draft_is_listed_with_no_dates(organiser_client):
 
 @pytest.mark.story("2.6", ac=4)
 def test_a_draft_saved_with_only_a_name_is_listed(organiser_client):
-    response = organiser_client.post("/events", json={"name": "Only a name"})
+    # With the one venue requirement every request has since fix f2.7.4 (story 2.7 AC14).
+    response = organiser_client.post(
+        "/events", json={"name": "Only a name", "venue_requirements": [{}]}
+    )
     assert response.status_code == 201, response.text
 
     entry = _entry(organiser_client, response.json()["id"])
