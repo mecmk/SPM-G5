@@ -256,6 +256,17 @@
   padding: 1rem;
 }
 
+/* Story 21.2 AC4: an event page section the latest safety review says must change. */
+.card-flagged {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.flag-note {
+  color: var(--warning-deep);
+  font-weight: 600;
+}
+
 /* ---------- venue booking card (story 13.2.1 AC4) ---------- */
 .booking-status-pill {
   display: inline-flex;
@@ -1023,6 +1034,11 @@ label {
 
 label + label {
   margin-top: 1.25rem;
+}
+
+/* Side-by-side choices (radios in a .cluster) sit on one line - the gap spaces them. */
+.cluster > label + label {
+  margin-top: 0;
 }
 
 label input,

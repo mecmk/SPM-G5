@@ -1,17 +1,23 @@
-"""Response models for story 21.1: the Safety Officer's safety check queue and detail."""
+"""Request and response models for story 21.1 (the Safety Officer's safety check queue and
+detail) and story 21.2 (requesting a review, the officer's decision, confirming)."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.bookings.models import VenueBooking
 from app.events.models import Event, EventEquipmentRequest
 from app.events.schemas import AccessibilityNeedOut, EquipmentLineOut
-from app.safety.models import EventSafetyReview
+from app.safety.models import (
+    EventSafetyReview,
+    SafetyReviewFactor,
+    SafetyReviewFinding,
+    SafetyReviewOutcome,
+)
 from app.venues.schemas import VenueOut
 
 
@@ -75,14 +81,57 @@ class SafetyVenueOut(BaseModel):
     over_capacity: bool
 
 
+class SafetyFactorOut(BaseModel):
+    """21.2 AC2: a factor the review considers."""
+
+    code: str
+    name: str
+    description: str | None
+
+    @classmethod
+    def from_factor(cls, factor: SafetyReviewFactor) -> SafetyFactorOut:
+        return cls(code=factor.code, name=factor.name, description=factor.description)
+
+
+class SafetyFindingOut(BaseModel):
+    """21.2 AC4: one thing the officer requires changed."""
+
+    factor_code: str
+    factor_name: str
+    required_change: str
+    arrangement: str | None
+
+    @classmethod
+    def from_finding(cls, finding: SafetyReviewFinding) -> SafetyFindingOut:
+        return cls(
+            factor_code=finding.factor_code,
+            factor_name=finding.factor.name,
+            required_change=finding.required_change,
+            arrangement=finding.arrangement,
+        )
+
+
 class SafetyReviewOut(BaseModel):
-    """AC3: one previous review of the event."""
+    """21.1 AC3: one previous review of the event. 21.2 AC4: with its findings and the
+    arrangements they flag."""
 
     id: uuid.UUID
     reviewed_at: datetime
     reviewed_by_name: str
     outcome: str
-    notes: str | None
+    findings: list[SafetyFindingOut]
+    flagged_arrangements: list[str]
+
+    @classmethod
+    def from_review(cls, review: EventSafetyReview) -> SafetyReviewOut:
+        return cls(
+            id=review.id,
+            reviewed_at=review.reviewed_at,
+            reviewed_by_name=review.reviewed_by.full_name,
+            outcome=review.outcome,
+            findings=[SafetyFindingOut.from_finding(f) for f in review.findings],
+            flagged_arrangements=review.flagged_arrangements,
+        )
 
 
 class FactChangeOut(BaseModel):
@@ -109,6 +158,8 @@ class SafetyCheckDetail(BaseModel):
     equipment: list[EquipmentLineOut]
     changes_since_last_review: list[FactChangeOut]
     previous_reviews: list[SafetyReviewOut]
+    factors: list[SafetyFactorOut]  # 21.2 AC2
+    facts_fingerprint: str  # 21.2 AC20: returned with the decision, as what the officer read
 
     @classmethod
     def from_event(
@@ -119,6 +170,8 @@ class SafetyCheckDetail(BaseModel):
         accepted_equipment: list[EventEquipmentRequest],
         reviews: list[EventSafetyReview],
         changes: list[FactChangeOut],
+        factors: list[SafetyReviewFactor],
+        facts_fingerprint: str,
     ) -> SafetyCheckDetail:
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
         assert event.starts_at is not None
@@ -155,14 +208,72 @@ class SafetyCheckDetail(BaseModel):
             ],
             equipment=[EquipmentLineOut.from_line(item) for item in accepted_equipment],
             changes_since_last_review=changes,
-            previous_reviews=[
-                SafetyReviewOut(
-                    id=review.id,
-                    reviewed_at=review.reviewed_at,
-                    reviewed_by_name=review.reviewed_by.full_name,
-                    outcome=review.outcome,
-                    notes=review.notes,
-                )
-                for review in reviews
-            ],
+            previous_reviews=[SafetyReviewOut.from_review(review) for review in reviews],
+            factors=[SafetyFactorOut.from_factor(factor) for factor in factors],
+            facts_fingerprint=facts_fingerprint,
         )
+
+
+# --- story 21.2: requesting a review, the decision, the event page's summary ---------------------
+# AC9: the longest required change the officer may write.
+MAX_SAFETY_TEXT_LENGTH = 2000
+FINDINGS_REQUIRED_MESSAGE = "Add at least one finding saying what must change."
+FINDINGS_NOT_ALLOWED_MESSAGE = "Only a request for changes has findings."
+REQUIRED_CHANGE_BLANK_MESSAGE = "Say what must change for each finding."
+
+SafetyText = Annotated[str, Field(max_length=MAX_SAFETY_TEXT_LENGTH)]
+
+
+class SafetyReviewRequestIn(BaseModel):
+    """21.2 AC1/AC12: ``acknowledge_unchanged`` submits even though an arrangement the last
+    review flagged has not changed."""
+
+    acknowledge_unchanged: bool = False
+
+
+class SafetyFindingIn(BaseModel):
+    """21.2 AC4/AC10: one finding - a factor, exactly what must change, and optionally the
+    arrangement to rebook. An unknown factor is refused by the service (its foreign key)."""
+
+    factor_code: str
+    required_change: SafetyText
+    arrangement: Literal["VENUE_BOOKINGS", "EQUIPMENT"] | None = None
+
+    @field_validator("required_change")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(REQUIRED_CHANGE_BLANK_MESSAGE)
+        return value
+
+
+class SafetyDecisionIn(BaseModel):
+    """21.2 AC2-AC5, AC9, AC10: the officer's decision - approve or request changes, nothing
+    else, with no notes. Only a request for changes carries findings, at least one. AC20:
+    ``facts_fingerprint`` is the one on the page the officer read (``SafetyCheckDetail``)."""
+
+    outcome: Literal["APPROVED", "CHANGES_REQUESTED"]
+    findings: list[SafetyFindingIn] = []
+    facts_fingerprint: str
+
+    @model_validator(mode="after")
+    def _check_outcome(self) -> SafetyDecisionIn:
+        if self.outcome == SafetyReviewOutcome.CHANGES_REQUESTED and not self.findings:
+            raise ValueError(FINDINGS_REQUIRED_MESSAGE)
+        if self.outcome != SafetyReviewOutcome.CHANGES_REQUESTED and self.findings:
+            raise ValueError(FINDINGS_NOT_ALLOWED_MESSAGE)
+        return self
+
+
+class EventSafetyOut(BaseModel):
+    """21.2 AC4/AC7: the safety review as the event page shows it - the latest review with its
+    findings, and for the assigned coordinator only (AC18), what stops them requesting a review or
+    confirming (``[]`` offers the action; ``None`` for anyone else) and the AC12 warning a request
+    would raise. No defaults (response schema)."""
+
+    event_id: uuid.UUID
+    status: str
+    latest_review: SafetyReviewOut | None
+    request_blockers: list[str] | None
+    confirm_blockers: list[str] | None
+    unchanged_warning: str | None

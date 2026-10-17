@@ -9,6 +9,7 @@ from __future__ import annotations
 import itertools
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
@@ -35,7 +36,7 @@ from app.venues.models import (
     VenueLayout,
     VenueUnavailabilityPeriod,
 )
-from tests.support.seed import Events, Users
+from tests.support.seed import Events, Users, Venues
 
 _counter = itertools.count(1)
 
@@ -452,3 +453,53 @@ def make_change_request(
     db.flush()
     db.refresh(request)
     return request
+
+
+@dataclass(frozen=True)
+class SecuredEvent:
+    """A Planning event whose every arrangement is secured (story 21.2 AC1): one venue
+    requirement with its approved booking, and one accepted equipment item."""
+
+    event: Event
+    requirement_id: uuid.UUID
+    booking: VenueBooking
+    equipment: EventEquipmentRequest
+
+
+def make_secured_event(
+    db: Session, *, status: str = EventStatus.PLANNING, **overrides
+) -> SecuredEvent:
+    """A secured event (``SecuredEvent``) in ``status``, coordinated by Users.COORDINATOR, dated
+    in 2030 so no seeded booking holds its venue."""
+    starts_at = overrides.pop("starts_at", datetime(2030, 3, 4, 1, 0, tzinfo=UTC))
+    ends_at = overrides.pop("ends_at", datetime(2030, 3, 4, 9, 0, tzinfo=UTC))
+    venue_id = overrides.pop("venue_id", Venues.GRAND_HALL)
+    event = make_event(
+        db,
+        status=status,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        assigned_coordinator_id=overrides.pop("assigned_coordinator_id", Users.COORDINATOR.id),
+        **overrides,
+    )
+    requirement_id = make_venue_requirement(
+        db, event.id, starts_at=starts_at, ends_at=ends_at, capacity=event.expected_attendance
+    )
+    booking = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=venue_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        status="APPROVED",
+        venue_requirement_id=requirement_id,
+        expected_attendance=event.expected_attendance,
+        hold_expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    equipment = make_equipment_item(
+        db, event=event, equipment_type=make_equipment_type(db), quantity=2, status="ACCEPTED"
+    )
+    db.refresh(event)
+    return SecuredEvent(
+        event=event, requirement_id=requirement_id, booking=booking, equipment=equipment
+    )
