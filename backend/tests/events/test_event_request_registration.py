@@ -61,7 +61,10 @@ def _stored_registration(db: Session, event_id) -> tuple[bool, object]:
 # --- AC17: recording the choice --------------------------------------------------------------
 @pytest.mark.story("2.1", ac=17)
 def test_a_draft_defaults_to_registration_not_required(organiser_client):
-    response = organiser_client.post("/events", json={"name": "Name only"})
+    # With the one venue requirement every request has since fix f2.7.4 (story 2.7 AC14).
+    response = organiser_client.post(
+        "/events", json={"name": "Name only", "venue_requirements": [{}]}
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()

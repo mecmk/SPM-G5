@@ -33,7 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.events.models import EventStatus
-from tests.support.factories import make_event
+from tests.support.factories import make_event, make_venue_requirement
 from tests.support.seed import Events, Users
 
 
@@ -183,6 +183,8 @@ def test_approving_a_request_clears_a_stale_decision_reason(coordinator_client, 
         assigned_coordinator_id=Users.COORDINATOR.id,
         decision_reason="No outdoor venues are available after 22:00.",
     )
+    # Since fix f2.7.4 a request without a venue requirement cannot be approved (story 2.7 AC17).
+    make_venue_requirement(db, event.id)
 
     response = coordinator_client.post(f"/events/{event.id}/approve")
 

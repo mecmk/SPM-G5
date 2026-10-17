@@ -5,7 +5,8 @@
  * AC2 a new requirement's start and end default to the event's (Singapore time) and can be
  *     changed; while they still match the event they keep following it, before and after a save
  *     (CL-087).
- * AC3 requirements are added, edited and removed on a draft; "No venue requirements" clears them.
+ * AC3 requirements are added, edited and removed on a draft. (f2.7.4 took away "No venue
+ *     requirements", which cleared them.)
  * AC4 every requirement, with its times, is shown to the reviewing coordinator on the event page,
  *     with both dates when it runs over more than one day.
  * AC5/AC9/AC10 a requirement outside the event, a repeated name, or an event moved past a
@@ -16,10 +17,27 @@
  * AC8 an incomplete requirement is listed as still needed before submitting.
  * AC11 the requirement field to fix is marked and focused when a save is refused - in the browser,
  *     or by the server, which says which requirement and field in its refusal.
+ * f2.7.4 - every request has at least one venue requirement:
+ * AC14 a new request starts with one, and the form no longer offers "No venue requirements".
+ * AC14/AC16 the only one cannot be removed: while it is the last, its Remove is disabled and a
+ *     hint says why (a client-side check, the AGENTS.md exception; nothing is sent).
+ * AC17 a draft saved with "No venue requirements" before the fix opens with one to fill in, and the
+ *     coordinator's form for a request submitted without one says one is needed. Until a decision,
+ *     the event page shows such a request's venue requirements as not recorded, not as "No venue
+ *     is required" (an event approved with it keeps that line, AC19: 8.4 AC6's case in
+ *     venue-requirement-search.spec.ts). No seeded event records that answer, so each case answers
+ *     the event's own GET with it set, as 12.1 AC15's case for Nimbus does, and saves nothing.
+ * AC18 the change request form (19.1) keeps the event's last requirement, and starts an event
+ *     with none with one to fill in.
  * Rule detail, refusals (401/403/404/409/422), the migration (AC7), the server's refusal of a
  * repeated name (AC9) or a moved event (AC10), the race with a submission (AC12) and what a booking
  * request carries (AC13) are backend cases:
- * backend/tests/events/test_multiple_venue_requirements.py.
+ * backend/tests/events/test_multiple_venue_requirements.py. So are f2.7.4's server rules: a save,
+ * submission, correction or approval without a requirement, and the refused "none" answer
+ * (AC14-AC17, AC20), in backend/tests/events/test_at_least_one_venue_requirement.py; a change
+ * request that would leave none (AC18, AC20), in
+ * backend/tests/change_requests/test_keep_a_venue_requirement.py. AC15's list of what is still
+ * needed is event-request.spec.ts's.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
@@ -33,7 +51,18 @@ import {
 } from './support'
 
 const EDIT_PATH = /\/events\/[0-9a-f-]{36}\/edit$/
+const COORDINATOR_EDIT_PATH = /\/events\/[0-9a-f-]{36}\/coordinator-edit$/
 const MY_EVENTS_PATH = /\/events\/mine$/
+// f2.7.4: what the forms say, word for word.
+const NO_VENUE_REQUIREMENTS = 'No venue requirements'
+const LAST_REQUIREMENT_HINT =
+  'Every event needs at least one venue requirement, so the last one cannot be removed.'
+const STILL_NEEDED_A_REQUIREMENT = 'Still needed: venue requirements (at least one).'
+// The change request form's line for an empty list, which f2.7.4 takes away.
+const NO_VENUE_NEEDED_LINE = 'No venue requirements - the event will need no venue.'
+// The event page's line for "No venue requirements", and its line for nothing recorded.
+const NO_VENUE_IS_REQUIRED = 'No venue is required for this event.'
+const NOT_RECORDED = 'Not recorded'
 
 function requirement(page: Page, position: number): Locator {
   return page.getByRole('group', { name: `Venue requirement ${position}` })
@@ -50,8 +79,10 @@ async function startNewRequest(page: Page, name: string, attendance = '60') {
   await page.getByLabel('Expected attendance').fill(attendance)
 }
 
+/** Name the venue requirement at `position`, first adding a card for it unless it is the first:
+ * a new request starts with one (f2.7.4, AC14). */
 async function addRequirement(page: Page, position: number, name: string, people?: string) {
-  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  if (position > 1) await page.getByRole('button', { name: 'Add a venue requirement' }).click()
   const added = requirement(page, position)
   await added.getByLabel('Requirement name').fill(name)
   if (people !== undefined) await added.getByLabel('Number of people').fill(people)
@@ -74,6 +105,49 @@ async function saveEdits(page: Page) {
     ),
     page.getByRole('button', { name: 'Save draft' }).click(),
   ])
+}
+
+/**
+ * f2.7.4 (AC17): the event as one saved with "No venue requirements" before the fix. No seeded
+ * event records that answer, so its real record is answered with it set and no requirement, as
+ * 12.1 AC15's case for Nimbus does. Only the record's GET is answered: the page's own navigation
+ * and any save go through untouched.
+ */
+async function answerAsMarkedNone(page: Page, eventId: string) {
+  await page.route(`**/events/${eventId}`, async (route) => {
+    const request = route.request()
+    if (request.resourceType() !== 'fetch' || request.method() !== 'GET') return route.fallback()
+    const response = await route.fetch()
+    const event = await response.json()
+    return route.fulfill({
+      response,
+      json: { ...event, venue_none_required: true, venue_requirements: [] },
+    })
+  })
+}
+
+/** Every POST or PATCH the page sends to an /events address from now on, so a test can show that
+ * nothing was saved or sent. */
+function eventWrites(page: Page): string[] {
+  const sent: string[] = []
+  page.on('request', (request) => {
+    const isWrite = request.method() === 'POST' || request.method() === 'PATCH'
+    if (isWrite && new URL(request.url()).pathname.startsWith('/events')) {
+      sent.push(`${request.method()} ${request.url()}`)
+    }
+  })
+  return sent
+}
+
+/** Story 19.1's change requests on the event page, opened for one field as
+ * change-requests.spec.ts opens them. */
+function changeRequests(page: Page) {
+  return page.getByRole('region', { name: 'Change requests' })
+}
+
+async function openChangeForm(page: Page, field: string) {
+  await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
+  await changeRequests(page).getByLabel('What to change').selectOption({ label: field })
 }
 
 test('2.7 AC1: the organiser adds two venue requirements, each with its own details', async ({
@@ -124,9 +198,7 @@ test("2.7 AC2: a new requirement starts with the event's times, which can be cha
   await expect(requirement(page, 1).getByLabel('Needed until')).toHaveValue(inFuture(30, 17))
 })
 
-test('2.7 AC3: requirements are added, edited and removed on a draft, and "No venue requirements" clears them', async ({
-  page,
-}) => {
+test('2.7 AC3: requirements are added, edited and removed on a draft', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page, uniqueName('Edit rooms'))
   await addRequirement(page, 1, 'Plenary hall', '60')
@@ -143,14 +215,6 @@ test('2.7 AC3: requirements are added, edited and removed on a draft, and "No ve
   await page.reload()
   await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Breakout rooms')
   await expect(requirement(page, 2)).toHaveCount(0)
-
-  // "No venue requirements" clears every requirement, and stays that way once saved.
-  await page.getByRole('checkbox', { name: 'No venue requirements' }).check()
-  await expect(requirement(page, 1)).toHaveCount(0)
-  await saveEdits(page)
-  await page.reload()
-  await expect(page.getByRole('checkbox', { name: 'No venue requirements' })).toBeChecked()
-  await expect(requirement(page, 1)).toHaveCount(0)
 })
 
 test('2.7 AC4: the event page lists each venue requirement with its times', async ({ page }) => {
@@ -190,7 +254,7 @@ test("2.7 AC6: the first requirement's number of people starts at the expected a
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page, uniqueName('Default people'), '75')
 
-  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  // The card a new request starts with (f2.7.4) is the first requirement.
   await expect(requirement(page, 1).getByLabel('Number of people')).toHaveValue('75')
 
   // Only the first: a second room is rarely the whole audience, so it is left for the organiser.
@@ -203,7 +267,7 @@ test('2.7 AC8: an incomplete requirement is pointed out before submitting', asyn
   await startNewRequest(page, uniqueName('Incomplete room'))
   const needed = page.getByText(/To submit, still needed:/)
 
-  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  // The card a new request starts with (f2.7.4), its number of people cleared.
   await requirement(page, 1).getByLabel('Number of people').fill('')
   await expect(needed).toContainText('venue requirement 1: name')
   await expect(needed).toContainText('venue requirement 1: number of people')
@@ -344,8 +408,8 @@ test("2.7 AC2/AC6: a new requirement's times and number follow the event's until
   await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
   await page.getByLabel('Event name').fill(uniqueName('Follow defaults'))
 
-  // Added before the event's dates and attendance are known: the defaults arrive with them.
-  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  // The card a new request starts with (f2.7.4), and one added before the event's dates and
+  // attendance are known: the defaults arrive with them.
   await page.getByRole('button', { name: 'Add a venue requirement' }).click()
   await page.getByLabel('Proposed start').fill(inFuture(30, 9))
   await page.getByLabel('Proposed end').fill(inFuture(30, 17))
@@ -437,4 +501,210 @@ test('2.7 AC4: a requirement spanning two days shows both dates', async ({ page 
   await expect(mainVenue).toContainText('16 Dec 2026')
   await expect(mainVenue).toContainText('09:00')
   await expect(mainVenue).toContainText('17:00')
+})
+
+test('2.7 AC14: a new request starts with one venue requirement and offers no "No venue requirements"', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Starting room'))
+
+  await expect(requirement(page, 1)).toBeVisible()
+  await expect(requirement(page, 2)).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: NO_VENUE_REQUIREMENTS })).toHaveCount(0)
+
+  await requirement(page, 1).getByLabel('Requirement name').fill('Main hall')
+  await saveDraft(page)
+  await page.reload()
+  await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Main hall')
+  await expect(requirement(page, 2)).toHaveCount(0)
+})
+
+test('2.7 AC14/AC16: the only venue requirement cannot be removed', async ({ page }) => {
+  await signIn(page, ACCOUNTS.organiser)
+  const sent = eventWrites(page)
+  await startNewRequest(page, uniqueName('Last room'))
+  const removeFirst = page.getByRole('button', { name: 'Remove venue requirement 1', exact: true })
+  const removeSecond = page.getByRole('button', { name: 'Remove venue requirement 2', exact: true })
+  const hint = page.getByText(LAST_REQUIREMENT_HINT)
+
+  // The card a new request starts with is its only one.
+  await expect(removeFirst).toBeDisabled()
+  await expect(hint).toBeVisible()
+  await addRequirement(page, 1, 'Plenary hall')
+
+  // With a second, either can go.
+  await addRequirement(page, 2, 'Breakout', '20')
+  await expect(removeFirst).toBeEnabled()
+  await expect(removeSecond).toBeEnabled()
+  await expect(hint).toHaveCount(0)
+
+  // Removing one leaves the other as the only one, which cannot be removed in turn.
+  await removeFirst.click()
+  await expect(requirement(page, 1).getByLabel('Requirement name')).toHaveValue('Breakout')
+  await expect(requirement(page, 2)).toHaveCount(0)
+  await expect(removeFirst).toBeDisabled()
+  await expect(hint).toBeVisible()
+  expect(sent).toEqual([])
+})
+
+test('2.7 AC17: a draft saved with "No venue requirements" before this fix opens with one to fill in', async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's seeded draft, with no dates or attendance yet, is only looked at.
+  await answerAsMarkedNone(page, EVENTS.draft)
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.draft}/edit`)
+  await expect(page.getByLabel('Event name')).toHaveValue('Q1 Sales Kick-off (draft)')
+
+  const added = requirement(page, 1)
+  await expect(added).toBeVisible()
+  await expect(requirement(page, 2)).toHaveCount(0)
+  await expect(added.getByLabel('Requirement name')).toHaveValue('')
+  await expect(added.getByLabel('Number of people')).toHaveValue('')
+  await expect(page.getByRole('checkbox', { name: NO_VENUE_REQUIREMENTS })).toHaveCount(0)
+  await expect(page.getByText(/To submit, still needed:/)).toContainText(
+    'venue requirement 1: name',
+  )
+
+  // It is the card a new request starts with: its number of people follows the attendance.
+  await page.getByLabel('Expected attendance').fill('75')
+  await expect(added.getByLabel('Number of people')).toHaveValue('75')
+})
+
+test("2.7 AC17: the coordinator's form for a request submitted without a venue requirement says one is needed", async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's Data Literacy Workshop, under review with Chloe, is only looked at.
+  await answerAsMarkedNone(page, EVENTS.submitted)
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.submitted}`)
+  await page.getByRole('link', { name: 'Edit event' }).click()
+  await expect(page).toHaveURL(COORDINATOR_EDIT_PATH)
+  await expect(page.getByLabel('Purpose')).toBeEnabled()
+  const save = page.getByRole('button', { name: 'Save changes' })
+
+  // No card is made up for it: the request as submitted has none, which is what is missing.
+  await expect(page.getByText(STILL_NEEDED_A_REQUIREMENT)).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: NO_VENUE_REQUIREMENTS })).toHaveCount(0)
+  await expect(requirement(page, 1)).toHaveCount(0)
+  await expect(save).toBeDisabled()
+
+  // The coordinator adds one, the only one, so it cannot be removed.
+  await page.getByRole('button', { name: 'Add a venue requirement' }).click()
+  await expect(requirement(page, 1)).toBeVisible()
+  await expect(requirement(page, 2)).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Remove venue requirement 1', exact: true }),
+  ).toBeDisabled()
+  await expect(page.getByText(LAST_REQUIREMENT_HINT)).toBeVisible()
+  await expect(save).toBeEnabled()
+})
+
+test('2.7 AC17: the page of a request submitted with "No venue requirements" before this fix shows none recorded', async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's Data Literacy Workshop, under review with Chloe, is only looked at.
+  // Approving it is refused until it has a venue requirement, so its page must not say none is
+  // needed.
+  await answerAsMarkedNone(page, EVENTS.submitted)
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.submitted}`)
+
+  const venue = page.getByRole('region', { name: 'Venue requirements' })
+  await expect(venue.getByText(NOT_RECORDED, { exact: true })).toBeVisible()
+  await expect(page.getByText(NO_VENUE_IS_REQUIRED)).toHaveCount(0)
+})
+
+test('2.7 AC17: the page of a draft saved with "No venue requirements" before this fix shows none recorded', async ({
+  page,
+}) => {
+  // Nothing is saved: Olivia's seeded draft is only looked at. It cannot be submitted until it has
+  // a venue requirement.
+  await answerAsMarkedNone(page, EVENTS.draft)
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.draft}`)
+
+  const venue = page.getByRole('region', { name: 'Venue requirements' })
+  await expect(venue.getByText(NOT_RECORDED, { exact: true })).toBeVisible()
+  await expect(page.getByText(NO_VENUE_IS_REQUIRED)).toHaveCount(0)
+})
+
+test("2.7 AC18: the change request form keeps the event's last venue requirement", async ({
+  page,
+}) => {
+  // Nothing is sent: Olivia's Regional Sales Summit, with its one Main venue, is only looked at.
+  await signIn(page, ACCOUNTS.organiser)
+  const sent = eventWrites(page)
+  await page.goto(`/events/${EVENTS.planning}`)
+  const section = changeRequests(page)
+  const removeFirst = section.getByRole('button', { name: 'Remove requirement 1', exact: true })
+  const removeSecond = section.getByRole('button', { name: 'Remove requirement 2', exact: true })
+  const hint = section.getByText(LAST_REQUIREMENT_HINT)
+
+  await openChangeForm(page, 'Venue requirements')
+  await expect(section.getByLabel('Requirement 1 name')).toHaveValue('Main venue')
+  await expect(removeFirst).toBeDisabled()
+  await expect(hint).toBeVisible()
+
+  await section.getByRole('button', { name: 'Add a venue requirement' }).click()
+  await expect(removeFirst).toBeEnabled()
+  await expect(removeSecond).toBeEnabled()
+  await expect(hint).toHaveCount(0)
+
+  await removeSecond.click()
+  await expect(section.getByLabel('Requirement 2 name')).toHaveCount(0)
+  await expect(section.getByLabel('Requirement 1 name')).toHaveValue('Main venue')
+  await expect(removeFirst).toBeDisabled()
+  await expect(hint).toBeVisible()
+  expect(sent).toEqual([])
+})
+
+test('2.7 AC18: an event with no venue requirement starts the change form with one to fill in', async ({
+  page,
+}) => {
+  // Nothing is sent: Olivia's Product Launch Showcase, approved with no venue requirement, is only
+  // looked at.
+  await signIn(page, ACCOUNTS.organiser)
+  const sent = eventWrites(page)
+  await page.goto(`/events/${EVENTS.equipmentShowcase}`)
+  const section = changeRequests(page)
+
+  await openChangeForm(page, 'Venue requirements')
+  await expect(section.getByLabel('Requirement 1 name')).toHaveValue('')
+  await expect(section.getByLabel('Requirement 1 number of people')).toHaveValue('')
+  await expect(section.getByLabel('Requirement 2 name')).toHaveCount(0)
+  await expect(
+    section.getByRole('button', { name: 'Remove requirement 1', exact: true }),
+  ).toBeDisabled()
+  await expect(section.getByText(LAST_REQUIREMENT_HINT)).toBeVisible()
+  await expect(section.getByText(NO_VENUE_NEEDED_LINE)).toHaveCount(0)
+  expect(sent).toEqual([])
+})
+
+test("2.7 AC2/AC14: the starting venue requirement takes the event's times only once they are a valid start and end", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto('/events/new')
+  await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
+  const neededFrom = requirement(page, 1).getByLabel('Needed from')
+  const neededUntil = requirement(page, 1).getByLabel('Needed until')
+
+  // An end before the start is the event's own mistake, said once, under its dates: the card it
+  // starts with does not copy it and get marked as well.
+  await page.getByLabel('Proposed start').fill(inFuture(30, 17))
+  await page.getByLabel('Proposed end').fill(inFuture(30, 9))
+  await expect(
+    page.getByText('The proposed end date and time must be after the start date and time.'),
+  ).toBeVisible()
+  await expect(neededFrom).toHaveValue('')
+  await expect(neededUntil).toHaveValue('')
+  await expect(neededUntil).not.toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('A venue requirement must end after it starts.')).toHaveCount(0)
+
+  // Once the dates are right, the card takes them.
+  await page.getByLabel('Proposed end').fill(inFuture(30, 18))
+  await expect(neededFrom).toHaveValue(inFuture(30, 17))
+  await expect(neededUntil).toHaveValue(inFuture(30, 18))
 })

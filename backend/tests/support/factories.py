@@ -260,7 +260,9 @@ def future_datetime(*, days: int = 30, hours: int = 0) -> datetime:
 
 
 def event_request_payload(**overrides) -> dict:
-    """A valid, complete POST /events body (story 2.1) with optional overrides."""
+    """A valid, complete POST /events body (story 2.1) with optional overrides. It has one venue
+    requirement, named only, since no request is saved without one (story 2.7 AC14, fix
+    f2.7.4); pass ``venue_requirements`` to give it others."""
     n = next(_counter)
     starts_at = future_datetime(days=30)
     body = {
@@ -270,24 +272,32 @@ def event_request_payload(**overrides) -> dict:
         "starts_at": starts_at.isoformat(),
         "ends_at": (starts_at + timedelta(hours=8)).isoformat(),
         "expected_attendance": 40,
+        "venue_requirements": [{"name": "Main venue"}],
     }
     body.update(overrides)
     return body
 
 
 def submittable_event_request_payload(**overrides) -> dict:
-    """A request that can be submitted: every event detail filled in, and both venue requirements
-    and accessibility answered with "none required" and a full point of contact (story 2.1
-    AC10, AC13). Override a flag to False
-    when the test supplies real requirements instead."""
+    """A request that can be submitted: every event detail filled in, venue requirements answered
+    with one complete requirement - "Main venue", for as many people as the expected attendance,
+    or 40 when that is not an integer (story 2.7 AC15, fix f2.7.4) - accessibility answered with
+    "none required", and a full point of contact (story 2.1 AC10, AC13). Pass
+    ``venue_requirements`` when the test supplies its own."""
     answers = {
-        "venue_none_required": True,
         "accessibility_none_required": True,
         "contact_name": "Priya Nair",
         "contact_email": "priya.nair@example.com",
         "contact_phone": "+65 9123 4567",
     }
-    return event_request_payload(**{**answers, **overrides})
+    body = event_request_payload(**{**answers, **overrides})
+    if "venue_requirements" not in overrides:
+        attendance = body["expected_attendance"]
+        is_integer = isinstance(attendance, int) and not isinstance(attendance, bool)
+        body["venue_requirements"] = [
+            {"name": "Main venue", "capacity": attendance if is_integer else 40}
+        ]
+    return body
 
 
 def create_event_request(client: Any, **overrides) -> dict:

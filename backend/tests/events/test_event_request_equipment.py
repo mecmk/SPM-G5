@@ -326,14 +326,21 @@ def test_saving_a_draft_holds_nothing_so_two_drafts_can_ask_for_the_same_stock(l
 def test_availability_is_only_checked_once_both_dates_are_known(organiser_client):
     start, _ = _period()
 
+    # Each with the one venue requirement every request has since fix f2.7.4 (story 2.7 AC14).
     without_dates = organiser_client.post(
-        "/events", json={"name": "No dates yet", "equipment": [_equipment("LAPTOP", 100)]}
+        "/events",
+        json={
+            "name": "No dates yet",
+            "venue_requirements": [{}],
+            "equipment": [_equipment("LAPTOP", 100)],
+        },
     )
     with_only_a_start = organiser_client.post(
         "/events",
         json={
             "name": "Start only",
             "starts_at": start.isoformat(),
+            "venue_requirements": [{}],
             "equipment": [_equipment("LAPTOP", 100)],
         },
     )
