@@ -19,7 +19,8 @@ PO decisions at Checkpoint 1 these tests rely on:
 * P1 "Active" is 5.4's five statuses (Under Review, Clarification Requested, Planning, Awaiting
   Safety Check, Confirmed). A draft is not active.
 * P2 "Assigned by me" is the event's current assignment's assigner.
-* P3 "Assigned by" names the assigner only when they hold the Lead role; otherwise it is null.
+* P3 "Assigned by" names the assigner only when they hold ``events:assign`` - the Lead's
+  permission, checked as a permission rather than a role name; otherwise it is null.
 * P4 A deactivated coordinator is listed only while they hold active events.
 * P5 ``coordinator=unassigned`` selects the events with no coordinator.
 * P6 Both views are gated on ``events:assign``.
@@ -104,6 +105,12 @@ def _ids(rows: list[dict]) -> set[str]:
     return {row["id"] for row in rows}
 
 
+def _sorting_id(n: int) -> uuid.UUID:
+    """A fixed id that sorts by ``n``, for ordering tests: given the reverse of the order a test
+    expects, so a list that came out in id order (or by chance) fails."""
+    return uuid.UUID(int=0x55_0000 + n)
+
+
 def _workloads(client) -> dict[str, dict]:
     response = client.get(WORKLOADS_PATH)
     assert response.status_code == 200, response.text
@@ -164,13 +171,18 @@ def test_an_unassigned_event_is_listed_without_a_coordinator(login_as, db: Sessi
 
 
 @pytest.mark.story("5.5", ac=1)
-@pytest.mark.parametrize("assigner", ["the Lead", "the coordinator themselves", "nobody recorded"])
+@pytest.mark.parametrize(
+    "assigner",
+    ["the Lead", "the coordinator themselves", "another coordinator", "nobody recorded"],
+)
 def test_assigned_by_names_only_a_lead(login_as, db: Session, assigner):
-    """P3: events assigned before 5.4 were self-assigned or have no assigner; neither is "the Lead
-    who assigned it", so neither is named."""
+    """P3: events assigned before 5.4 were self-assigned or have no assigner, and a coordinator's
+    handover (5.2) was made by the coordinator handing over; none is "the Lead who assigned it", so
+    none is named."""
     assigned_by_id, expected = {
         "the Lead": (Users.LEAD.id, Users.LEAD.full_name),
         "the coordinator themselves": (Users.COORDINATOR.id, None),
+        "another coordinator": (Users.COORDINATOR_2.id, None),
         "nobody recorded": (None, None),
     }[assigner]
     event = _assigned_event(db, Users.COORDINATOR.id, assigned_by_id=assigned_by_id)
@@ -182,12 +194,19 @@ def test_assigned_by_names_only_a_lead(login_as, db: Session, assigner):
 
 @pytest.mark.story("5.5", ac=1)
 def test_the_overview_lists_events_soonest_first(login_as, db: Session):
-    """Made out of order, listed by start: the order the Lead plans by."""
+    """Made out of order, listed by start: the order the Lead plans by. The ids run the other way,
+    so a list in id order fails."""
     team_of_one = make_user(db, role=COORDINATOR_ROLE, full_name="Ordered Coordinator")
     soon = datetime.now(UTC) + timedelta(days=30)
     later, latest, soonest = (
-        _assigned_event(db, team_of_one.id, assigned_by_id=None, starts_at=soon + timedelta(days=d))
-        for d in (10, 20, 0)
+        _assigned_event(
+            db,
+            team_of_one.id,
+            assigned_by_id=None,
+            id=_sorting_id(n),
+            starts_at=soon + timedelta(days=days),
+        )
+        for days, n in ((10, 2), (20, 1), (0, 3))
     )
 
     rows = _overview(login_as(Users.LEAD), coordinator=str(team_of_one.id))
@@ -338,11 +357,18 @@ def test_workloads_list_each_coordinator_with_their_active_events(login_as, db: 
 
 @pytest.mark.story("5.5", ac=2)
 def test_workloads_list_coordinators_by_name_and_their_events_soonest_first(login_as, db: Session):
-    zed = make_user(db, role=COORDINATOR_ROLE, full_name="Zed Ordering Coordinator")
-    abe = make_user(db, role=COORDINATOR_ROLE, full_name="Abe Ordering Coordinator")
+    """The ids run the other way from the names and the dates, so a list in id order fails."""
+    zed = make_user(
+        db, role=COORDINATOR_ROLE, full_name="Zed Ordering Coordinator", id=_sorting_id(1)
+    )
+    abe = make_user(
+        db, role=COORDINATOR_ROLE, full_name="Abe Ordering Coordinator", id=_sorting_id(2)
+    )
     soon = datetime.now(UTC) + timedelta(days=30)
-    later = _assigned_event(db, abe.id, assigned_by_id=None, starts_at=soon + timedelta(days=5))
-    sooner = _assigned_event(db, abe.id, assigned_by_id=None, starts_at=soon)
+    later = _assigned_event(
+        db, abe.id, assigned_by_id=None, id=_sorting_id(3), starts_at=soon + timedelta(days=5)
+    )
+    sooner = _assigned_event(db, abe.id, assigned_by_id=None, id=_sorting_id(4), starts_at=soon)
 
     workloads = _workloads(login_as(Users.LEAD))
 
@@ -353,6 +379,19 @@ def test_workloads_list_coordinators_by_name_and_their_events_soonest_first(logi
         str(later.id),
     ]
     assert workloads[str(zed.id)]["events"] == []
+
+
+@pytest.mark.story("5.5", ac=2)
+def test_workloads_list_only_event_coordinators(login_as, db: Session):
+    """AC2 is each Event Coordinator's workload: the Lead and the other roles are not listed,
+    even holding an event as its coordinator, which only a coordinator should."""
+    _assigned_event(db, Users.LEAD.id, assigned_by_id=Users.LEAD.id)
+
+    listed = _workloads(login_as(Users.LEAD))
+
+    for user in REFUSED_ROLES + [Users.LEAD]:
+        if user.role != COORDINATOR_ROLE:
+            assert str(user.id) not in listed, user.role
 
 
 @pytest.mark.story("5.5", ac=2)
@@ -418,7 +457,10 @@ def test_both_views_show_the_new_coordinator_after_a_reassignment(
     lead = login_as(Users.LEAD)
 
     assert reassigned.status_code == 200, reassigned.text
-    assert _row(_overview(lead), event)["coordinator_id"] == str(Users.COORDINATOR_2.id)
+    row = _row(_overview(lead), event)
+    assert row["coordinator_id"] == str(Users.COORDINATOR_2.id)
+    # P3: Chloe made this assignment, and she is not a Lead.
+    assert row["assigned_by_name"] is None
     workloads = _workloads(lead)
     assert str(event.id) in {e["id"] for e in workloads[str(Users.COORDINATOR_2.id)]["events"]}
     assert str(event.id) not in {e["id"] for e in workloads[str(Users.COORDINATOR.id)]["events"]}

@@ -171,7 +171,7 @@ class CoordinatorWorkload:
 
 def _active_event_counts() -> Subquery:
     """Each coordinator's number of active events (``ASSIGNABLE_STATUSES``, PO decision), as a
-    subquery to outer-join users onto (5.4 AC3, 5.5 AC2). Counted per coordinator here rather than
+    subquery to outer-join users onto (5.4 AC3). Counted per coordinator here rather than
     by grouping the users, which would clash with the role ``User`` loads eagerly by a join."""
     return (
         select(Event.assigned_coordinator_id, func.count().label("active_event_count"))

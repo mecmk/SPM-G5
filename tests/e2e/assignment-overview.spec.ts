@@ -20,11 +20,12 @@
  * refusals (401/403/422) and fresh reads after a reassignment - are backend cases:
  * backend/tests/coordination/test_assignment_overview.py.
  *
- * Other specs submit requests too, so lists are asserted by name, never by length. An idle and a
- * deactivated coordinator are states the seed cannot reach, so those tests stub the one fetch, as
- * tests/CLAUDE.md allows.
+ * Other specs submit requests too, so lists are asserted by name, never by length. Some states are
+ * ones the seed cannot reach, so those tests answer a fetch themselves, as tests/CLAUDE.md allows:
+ * an idle and a deactivated coordinator (the workloads fetch), the responsive checks (both
+ * fetches, so every flag is on the page), a slow coordinator list, and a failed load.
  */
-import { expect, test, type Page, type Request } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 import {
   ACCOUNTS,
   COORDINATORS,
@@ -48,9 +49,13 @@ const DEACTIVATED = 'Deactivated'
 const NO_MATCH_MESSAGE = 'No active events match these filters.'
 const LOADING_COORDINATORS = 'Loading coordinators…'
 const UNKNOWN_COORDINATOR = 'Unknown coordinator'
+const SELECTED_COORDINATOR = 'Selected coordinator'
+const LOADING_EVENTS = 'Loading active events…'
 const UNLISTED_ID = '00000000-0000-0000-0000-000000000559'
-const SMART_CITIES_EXPO = 'Smart Cities Expo' // Chloe's, Planning; the 8.4 spec only reads it
-// Carl's, self-assigned (so not assigned by the Lead), Awaiting Safety Check; 21.1 only reads it.
+// Chloe's, Planning; only read, here and by the 8.4 spec.
+const SMART_CITIES_EXPO = 'Smart Cities Expo'
+// Carl's, self-assigned (so not assigned by the Lead), Awaiting Safety Check; only read, here and
+// by the 21.1 and 7.2 specs.
 const HARBOUR_LIGHTS = 'Harbour Lights Concert'
 const [CHLOE, CARL] = COORDINATORS
 const PHONE = { width: 375, height: 667 }
@@ -137,6 +142,23 @@ async function stubFetch(page: Page, path: string, body: unknown) {
   )
 }
 
+/** Fail one API path's fetches with a 500, or only those whose query includes `when`. */
+async function failFetch(page: Page, path: string, when = '') {
+  await page.route(
+    (url) => url.pathname === path && url.search.includes(when),
+    (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Internal Server Error' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+}
+
 const IDLE_ID = '00000000-0000-0000-0000-000000000551'
 const GONE_ID = '00000000-0000-0000-0000-000000000552'
 const STRANDED_EVENT = {
@@ -186,6 +208,16 @@ const STUB_OVERVIEW = [
   },
 ]
 
+/** A flag shown whole: its text on one line, not wrapped onto a second. */
+async function expectOnOneLine(flag: Locator) {
+  const lineCount = await flag.evaluate((el) => {
+    const text = document.createRange()
+    text.selectNodeContents(el)
+    return new Set([...text.getClientRects()].map((rect) => Math.round(rect.top))).size
+  })
+  expect(lineCount).toBe(1)
+}
+
 async function expectNoSidewaysScroll(page: Page) {
   const fits = await page.evaluate(
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -200,8 +232,9 @@ test('5.5 AC1/AC5: the overview shows a new event’s coordinator and who assign
   const name = await submitRequest(page, 'Overseen')
   await openAsLead(page)
 
-  // AC1: not assigned yet.
+  // AC1: not assigned yet, so nobody assigned it either.
   await expect(overviewItem(page, name)).toContainText(NOT_YET_ASSIGNED)
+  await expect(overviewItem(page, name)).not.toContainText('Assigned by')
 
   // AC5: once the Lead assigns it, a reload shows the coordinator and who assigned it.
   await assignFromQueue(page, name, CHLOE.id)
@@ -211,6 +244,8 @@ test('5.5 AC1/AC5: the overview shows a new event’s coordinator and who assign
   await expect(item).toContainText(CHLOE.name)
   await expect(item).toContainText('Lena Lead')
   await expect(item).not.toContainText(NOT_YET_ASSIGNED)
+  // AC5's flag is for a deactivated coordinator only; Chloe is active.
+  await expect(item.getByText(DEACTIVATED, { exact: true })).toHaveCount(0)
 })
 
 test('5.5 AC1: the filters narrow the overview and survive a reload', async ({ page }) => {
@@ -314,6 +349,46 @@ test('5.5 AC1: a coordinator filter the list does not offer is named, not shown 
   await expect(page.getByText(NO_MATCH_MESSAGE)).toBeVisible()
 })
 
+test('5.5 AC1: a coordinator list that fails to load is said on the overview, not taken for an unknown coordinator', async ({
+  page,
+}) => {
+  // The overview still loads Carl's events; only the list that names the coordinators fails, so
+  // the filter keeps Carl as the one chosen without claiming he is unknown.
+  await failFetch(page, WORKLOADS_API)
+  await openAsLead(page, `?coordinator=${CARL.id}`)
+  const filter = page.getByLabel('Coordinator')
+
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(filter).toHaveValue(CARL.id)
+  await expect(filter.getByRole('option', { selected: true })).toHaveText(SELECTED_COORDINATOR)
+})
+
+test('5.5 AC1: a coordinator in the address that cannot be anyone matches no event', async ({
+  page,
+}) => {
+  // Not an id at all - a mangled bookmark - so nobody holds it: the same as an id nobody holds.
+  await openAsLead(page, '?coordinator=not-an-id')
+
+  await expect(page.getByText(NO_MATCH_MESSAGE)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByLabel('Coordinator').getByRole('option', { selected: true })).toHaveText(
+    UNKNOWN_COORDINATOR,
+  )
+})
+
+test('5.5 AC1: a filter whose events fail to load says so, with no loader left spinning', async ({
+  page,
+}) => {
+  await failFetch(page, OVERVIEW_API, 'status=PLANNING')
+  await openAsLead(page)
+  await expect(page.getByRole('list', { name: OVERVIEW_LABEL })).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Planning/ }).click()
+
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByText(LOADING_EVENTS)).toHaveCount(0)
+})
+
 test('5.5 AC2: the per-coordinator view lists each coordinator’s active events', async ({
   page,
 }) => {
@@ -334,9 +409,9 @@ test('5.5 AC4/AC5: an idle coordinator shows 0 and a deactivated one is flagged'
   await stubFetch(page, WORKLOADS_API, STUB_WORKLOADS)
   await openAsLead(page, '?view=coordinators')
 
-  await expect(
-    coordinatorItem(page, 'Idle Coordinator').getByText('0 active events', { exact: true }),
-  ).toBeVisible()
+  const idle = coordinatorItem(page, 'Idle Coordinator')
+  await expect(idle.getByText('0 active events', { exact: true })).toBeVisible()
+  await expect(idle.getByText(DEACTIVATED, { exact: true })).toHaveCount(0)
   const gone = coordinatorItem(page, 'Departed Coordinator')
   await expect(gone.getByText(DEACTIVATED, { exact: true })).toBeVisible()
   await expect(gone.getByRole('link', { name: STRANDED_EVENT.name })).toBeVisible()
@@ -352,6 +427,20 @@ test('5.5 AC3: an event opens read-only from the overview', async ({ page }) => 
   for (const action of ['Approve', 'Reject', 'Reassign']) {
     await expect(page.getByRole('button', { name: action })).toHaveCount(0)
   }
+})
+
+test('5.5 AC3: the way back from an event keeps the view and filters', async ({ page }) => {
+  await openAsLead(page, '?status=PLANNING')
+
+  await overviewItem(page, SMART_CITIES_EXPO).getByRole('link', { name: SMART_CITIES_EXPO }).click()
+  await expect(page).toHaveURL(new RegExp(`/events/${EVENTS.smartCitiesExpo}$`))
+  await page.getByRole('link', { name: `← ${PAGE_TITLE}` }).click()
+
+  await expect(page).toHaveURL(/\/events\/assignments\?status=PLANNING$/)
+  await expect(page.getByRole('tab', { name: /^Planning/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
 })
 
 test('5.5 AC6: only the Lead reaches the overview', async ({ page }) => {
@@ -395,8 +484,7 @@ for (const { device, viewport } of [
       waiting.getByText(NOT_YET_ASSIGNED, { exact: true }),
     ]) {
       await expect(flag).toBeVisible()
-      const isWhole = await flag.evaluate((el) => el.scrollWidth <= el.clientWidth)
-      expect(isWhole).toBe(true)
+      await expectOnOneLine(flag)
     }
     const tabs = (await page.getByRole('tablist').boundingBox())!
     expect(tabs.x + tabs.width).toBeLessThanOrEqual(viewport.width)
@@ -421,5 +509,6 @@ for (const { device, viewport } of [
     const card = (await gone.boundingBox())!
     expect(card.x + card.width).toBeLessThanOrEqual(viewport.width)
     await expect(gone.getByText(DEACTIVATED, { exact: true })).toBeVisible()
+    await expectOnOneLine(gone.getByText(DEACTIVATED, { exact: true }))
   })
 }

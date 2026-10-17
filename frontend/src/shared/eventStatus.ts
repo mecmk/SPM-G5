@@ -36,7 +36,7 @@ export const EQUIPMENT_OPEN_STATUSES: readonly EventStatus[] = [
 /**
  * Story 5.4 AC3 / 5.5 AC1: an event's "active" statuses - submitted and not yet closed - mirroring
  * `ASSIGNABLE_STATUSES` in backend/app/coordination/service.py. The Lead's overview offers a tab
- * for each, and counts a coordinator's events in them.
+ * for each; the backend counts a coordinator's events in them.
  */
 export const ACTIVE_EVENT_STATUSES: readonly EventStatus[] = [
   'UNDER_REVIEW',

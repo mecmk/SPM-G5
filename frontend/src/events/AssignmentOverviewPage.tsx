@@ -10,7 +10,7 @@ import {
   type CoordinatorWorkloadEntry,
 } from '../api/coordination'
 import { EmptyState } from '../components/EmptyState'
-import { EventCard, EventCardGrid } from '../components/EventCard'
+import { EventCard, EventCardGrid, type EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
@@ -31,10 +31,12 @@ import { useLoaded } from '../shared/useLoaded'
 
 const PAGE_TITLE = 'Assignments'
 const DEACTIVATED = 'Deactivated'
-const BACK_TO_PAGE = { from: EVENTS_ASSIGNMENTS_PATH, fromLabel: PAGE_TITLE }
 const ALL_COORDINATORS = ''
 const LOADING_COORDINATORS = 'Loading coordinators…'
 const UNKNOWN_COORDINATOR = 'Unknown coordinator'
+const SELECTED_COORDINATOR = 'Selected coordinator'
+/** A coordinator's id, as the backend's `uuid.UUID` reads it. */
+const COORDINATOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Story 5.5 AC1 (PO decision P1): 6.1's tabs and labels, for the active statuses only. */
 const ACTIVE_TABS = EVENT_STATUS_TABS.filter(
@@ -44,6 +46,22 @@ const ACTIVE_TABS = EVENT_STATUS_TABS.filter(
 /** A status from the address, if it is one of the active ones; anything else shows them all. */
 function activeStatus(value: string | null): EventStatus | undefined {
   return ACTIVE_EVENT_STATUSES.find((status) => status === value)
+}
+
+/** This page's address with `params`, so a link keeps the view and filters. */
+function pagePath(params: URLSearchParams): string {
+  const query = params.toString()
+  return query ? `${EVENTS_ASSIGNMENTS_PATH}?${query}` : EVENTS_ASSIGNMENTS_PATH
+}
+
+/** Story 5.5 AC1: whether a coordinator filter could name anyone - all, nobody yet, or an id. A
+ * mangled bookmark cannot, so it matches no event, as an id nobody holds does. */
+function isPossibleCoordinatorFilter(coordinator: string): boolean {
+  return (
+    coordinator === ALL_COORDINATORS ||
+    coordinator === UNASSIGNED_FILTER ||
+    COORDINATOR_ID_PATTERN.test(coordinator)
+  )
 }
 
 function countLabel(count: number): string {
@@ -100,7 +118,10 @@ export function AssignmentOverviewPage() {
     searchParams.get(ASSIGNMENT_SEARCH_PARAMS.assignedByMe) === ASSIGNED_BY_ME_FILTER
 
   const loadOverview = useCallback(
-    () => listActiveEvents({ coordinator: coordinator || undefined, status, isAssignedByMe }),
+    () =>
+      isPossibleCoordinatorFilter(coordinator)
+        ? listActiveEvents({ coordinator: coordinator || undefined, status, isAssignedByMe })
+        : Promise.resolve<ActiveEventEntry[]>([]),
     [coordinator, status, isAssignedByMe],
   )
   const overview = useLoaded(loadOverview)
@@ -108,12 +129,17 @@ export function AssignmentOverviewPage() {
   // While a changed filter loads, the previous filter's events are hidden rather than shown under
   // the new one (`useLoaded`'s isStale).
   const freshEvents = overview.isStale ? null : overview.data
+  // A failed load is said instead, with no loader beside it.
+  const isOverviewLoading = overview.isLoading || (overview.isStale && overview.error === null)
+  // Story 5.5 AC3: an event's back link returns to this view, with its filters.
+  const backToPage = { from: pagePath(searchParams), fromLabel: PAGE_TITLE }
   const shownStatus = useShownFilter<EventStatusTabKey>(status ?? 'ALL')
   const shownCoordinator = useShownFilter(coordinator)
   const shownAssignedByMe = useShownFilter(isAssignedByMe)
   // Story 5.5 AC1: a coordinator in the address whom the dropdown does not offer - one
   // deactivated with no events left (P4), or not loaded yet on a reload - gets an option of their
-  // own, so the dropdown never claims "All coordinators" over a filtered list.
+  // own, so the dropdown never claims "All coordinators" over a filtered list. While the list is
+  // loading, or if it failed, nobody can say whether they are unknown.
   const isShownCoordinatorListed =
     shownCoordinator.value === ALL_COORDINATORS ||
     shownCoordinator.value === UNASSIGNED_FILTER ||
@@ -155,8 +181,7 @@ export function AssignmentOverviewPage() {
     const next = new URLSearchParams(searchParams)
     if (isCoordinators) next.set(ASSIGNMENT_SEARCH_PARAMS.view, COORDINATORS_VIEW)
     else next.delete(ASSIGNMENT_SEARCH_PARAMS.view)
-    const query = next.toString()
-    return query ? `${EVENTS_ASSIGNMENTS_PATH}?${query}` : EVENTS_ASSIGNMENTS_PATH
+    return pagePath(next)
   }
 
   return (
@@ -185,7 +210,11 @@ export function AssignmentOverviewPage() {
       </nav>
 
       {isCoordinatorsView ? (
-        <CoordinatorsView workloads={workloads.data} error={workloads.error} />
+        <CoordinatorsView
+          workloads={workloads.data}
+          error={workloads.error}
+          backToPage={backToPage}
+        />
       ) : (
         <div className="stack">
           <Tabs tabs={ACTIVE_TABS} activeKey={shownStatus.value} onChange={changeTab} />
@@ -205,7 +234,11 @@ export function AssignmentOverviewPage() {
                 ))}
                 {!isShownCoordinatorListed && (
                   <option value={shownCoordinator.value}>
-                    {workloads.isLoading ? LOADING_COORDINATORS : UNKNOWN_COORDINATOR}
+                    {workloads.isLoading
+                      ? LOADING_COORDINATORS
+                      : workloads.error
+                        ? SELECTED_COORDINATOR
+                        : UNKNOWN_COORDINATOR}
                   </option>
                 )}
               </select>
@@ -220,14 +253,17 @@ export function AssignmentOverviewPage() {
             </label>
           </div>
 
+          {workloads.error && (
+            <p role="alert" className="error">
+              {workloads.error}
+            </p>
+          )}
           {overview.error && (
             <p role="alert" className="error">
               {overview.error}
             </p>
           )}
-          {(overview.isLoading || overview.isStale) && (
-            <LoadingState label="Loading active events…" />
-          )}
+          {isOverviewLoading && <LoadingState label="Loading active events…" />}
           {freshEvents !== null && freshEvents.length === 0 && (
             <EmptyState>No active events match these filters.</EmptyState>
           )}
@@ -239,12 +275,15 @@ export function AssignmentOverviewPage() {
                   title={entry.name}
                   imageUrl={null}
                   to={eventPath(entry.id)}
-                  state={BACK_TO_PAGE}
+                  state={backToPage}
                   details={[
                     <EventStatusBadge key="status" status={entry.status} />,
                     formatSchedule(entry.starts_at, entry.ends_at),
                     <span key="coordinator">{coordinatorDetail(entry)}</span>,
-                    `Assigned by ${entry.assigned_by_name ?? NOT_RECORDED}`,
+                    // Nobody assigned an event that has no coordinator yet.
+                    ...(entry.coordinator_id === null
+                      ? []
+                      : [`Assigned by ${entry.assigned_by_name ?? NOT_RECORDED}`]),
                   ]}
                 />
               ))}
@@ -259,10 +298,12 @@ export function AssignmentOverviewPage() {
 interface CoordinatorsViewProps {
   workloads: CoordinatorWorkloadEntry[] | null
   error: string | null
+  /** Where an event's back link returns: this view, with its filters (AC3). */
+  backToPage: EventCardBackState
 }
 
 /** Story 5.5 AC2/AC4/AC5: each coordinator, their count (0 included), flag and events. */
-function CoordinatorsView({ workloads, error }: CoordinatorsViewProps) {
+function CoordinatorsView({ workloads, error, backToPage }: CoordinatorsViewProps) {
   if (error) {
     return (
       <p role="alert" className="error">
@@ -285,7 +326,7 @@ function CoordinatorsView({ workloads, error }: CoordinatorsViewProps) {
             <ul className="workload-events">
               {entry.events.map((event) => (
                 <li key={event.id} className="workload-event">
-                  <Link to={eventPath(event.id)} state={BACK_TO_PAGE}>
+                  <Link to={eventPath(event.id)} state={backToPage}>
                     {event.name}
                   </Link>
                   <span className="cluster small muted">
