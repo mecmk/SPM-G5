@@ -22,6 +22,7 @@ from app.events.router import router as events_router
 from app.events.router import uploads_router
 from app.notifications.router import router as notifications_router
 from app.registrations.router import router as registrations_router
+from app.safety.router import events_router as safety_events_router
 from app.safety.router import router as safety_router
 from app.venues.router import router as venues_router
 from app.venues.router import uploads_router as venue_uploads_router
@@ -93,6 +94,7 @@ app.include_router(events_router)
 app.include_router(notifications_router)
 app.include_router(registrations_router)
 app.include_router(safety_router)
+app.include_router(safety_events_router)
 app.include_router(uploads_router)
 app.include_router(venues_router)
 app.include_router(venue_uploads_router)

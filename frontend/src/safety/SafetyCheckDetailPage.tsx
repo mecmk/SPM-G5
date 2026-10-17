@@ -3,11 +3,13 @@ import { Link, useParams } from 'react-router'
 import { getSafetyCheck, type FactChange, type SafetyFact } from '../api/safety'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
+import { SafetyFindingsList } from '../components/SafetyFindingsList'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { SAFETY_CHECKS_PATH } from '../routes'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { SafetyDecisionForm } from './SafetyDecisionForm'
 
 /** The shapes `safety_facts` (backend/app/safety/service.py) writes its list facts in. */
 interface VenueFact {
@@ -104,13 +106,21 @@ function ChangesList({ changes }: { changes: FactChange[] }) {
  * AC3: the event and its description, each approved venue with its record (story 8.2) and the
  * layout booked, accessibility needs, accepted equipment with technical notes, and the previous
  * reviews, newest first. AC4: a venue whose booking must hold more people than the venue holds
- * in the booked layout is flagged Over capacity, with both figures shown. AC5: a detail never recorded says so, and what changed since the last review is
- * listed, fact by fact.
+ * in the booked layout is flagged Over capacity, with both figures shown. AC5: a detail never
+ * recorded says so, and what changed since the last review is listed, fact by fact.
+ * Story 21.2 AC2: the review factors, and the decision form while the event awaits the check;
+ * AC4: each previous review lists its findings.
  */
 export function SafetyCheckDetailPage() {
   const { eventId = '' } = useParams()
   const loadCheck = useCallback(() => getSafetyCheck(eventId), [eventId])
-  const { data: check, error, isLoading } = useLoaded(loadCheck)
+  const { data: check, error, isLoading, setData } = useLoaded(loadCheck)
+
+  /** Story 21.2 AC20: after a refused decision, show the event as it now stands. A failed reload
+   *  keeps the page as it was; the form already shows the refusal. */
+  function reloadCheck() {
+    getSafetyCheck(eventId).then(setData, () => {})
+  }
 
   return (
     <div className="page page-wide">
@@ -254,6 +264,27 @@ export function SafetyCheckDetailPage() {
             )}
           </section>
 
+          <section className="card stack" aria-labelledby="safety-factors-heading">
+            <h2 id="safety-factors-heading">Review factors</h2>
+            <ul className="stack safety-fact-list">
+              {check.factors.map((factor) => (
+                <li key={factor.code} className="subtle-block">
+                  <p className="fact-label">{factor.name}</p>
+                  {factor.description && <p>{factor.description}</p>}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {check.status === 'AWAITING_SAFETY_CHECK' && (
+            <SafetyDecisionForm
+              key={check.facts_fingerprint}
+              check={check}
+              onDecided={setData}
+              onRefused={reloadCheck}
+            />
+          )}
+
           <section className="card stack" aria-labelledby="safety-reviews-heading">
             <h2 id="safety-reviews-heading">Previous reviews</h2>
             {check.previous_reviews.length === 0 ? (
@@ -268,7 +299,7 @@ export function SafetyCheckDetailPage() {
                         {formatDateTime(review.reviewed_at)} by {review.reviewed_by_name}
                       </span>
                     </div>
-                    <p>{review.notes ?? NOT_RECORDED}</p>
+                    <SafetyFindingsList findings={review.findings} />
                   </li>
                 ))}
               </ul>

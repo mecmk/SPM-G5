@@ -44,7 +44,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
-| Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5) |
+| Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1, 21.2 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
@@ -52,6 +52,8 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
 | Notifications & audit | [`audit_log`](#audit_log) | 7.4 and the auditability requirement (who changed what, when) | Generic append-only record of significant actions |
 | Infrastructure | [`schema_migrations`](#schema_migrations) | - | Infrastructure |
+| Other (add to GROUPS in app/dbtool/docs.py) | [`event_safety_review_findings`](#event_safety_review_findings) | 21.2 | What the Safety Officer requires changed, one row per finding of a CHANGES_REQUESTED review (21.2 AC4) |
+| Other (add to GROUPS in app/dbtool/docs.py) | [`safety_review_factors`](#safety_review_factors) | 21.2 | The factors a safety review considers (expected attendance, venue capacity and layout, emergency access, ...) |
 
 ## Identity & access
 
@@ -599,9 +601,9 @@ Rules and indexes:
 
 ### event_safety_reviews
 
-**Stories:** 21.1
+**Stories:** 21.1, 21.2
 
-One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5). Append-only.
+One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7). Append-only.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -609,8 +611,7 @@ One row per safety review of an event by the Safety Officer, kept so a later che
 | `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. The event reviewed. |
 | `reviewed_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. The Safety Officer who made the review. |
 | `reviewed_at` | `timestamp with time zone` | no | `now()` | - | When the review was made. Previous reviews are listed newest first by it (story 21.1 AC3). |
-| `outcome` | `text` | no | - | - | APPROVED: the event passed the check. CHANGES_REQUESTED: the officer sent it back for changes. |
-| `notes` | `text` | yes | - | - | The officer's notes on the review. Optional. |
+| `outcome` | `text` | no | - | - | APPROVED: the event passed the check and may be confirmed. CHANGES_REQUESTED: sent back to Planning, with findings (event_safety_review_findings). |
 | `facts` | `jsonb` | no | - | - | Snapshot of the safety-relevant facts reviewed, as app/safety/service.py::safety_facts builds them: description, expected_attendance, starts_at and ends_at (UTC), venues (approved bookings: id, name, capacity in the booked layout, people_to_hold, layout code and layout_name), accessibility (each need: feature code, feature_name, notes), accessibility_notes, and equipment (accepted items: equipment_type code, equipment_type_name, quantity, technical_notes). The next check lists the top-level keys that differ (story 21.1 AC5). |
 
 Allowed values:
@@ -831,6 +832,45 @@ Infrastructure. One row per migration file applied by app.dbtool; the checksum d
 | `name` | `text` | no | - | - | Migration file name. |
 | `checksum` | `text` | no | - | - | SHA-256 of the file contents when applied. |
 | `applied_at` | `timestamp with time zone` | no | `now()` | - | When it was applied. |
+
+## Other (add to GROUPS in app/dbtool/docs.py)
+
+### event_safety_review_findings
+
+**Stories:** 21.2
+
+What the Safety Officer requires changed, one row per finding of a CHANGES_REQUESTED review (21.2 AC4). Append-only, with its review.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | Primary key. |
+| `review_id` | `uuid` | no | - | FK → `event_safety_reviews.id` | FK -> event_safety_reviews.id. The review the finding belongs to. |
+| `position` | `integer` | no | - | - | Order the officer entered the findings in, from 0. |
+| `factor_code` | `text` | no | - | FK → `safety_review_factors.code` | FK -> safety_review_factors.code. The factor the finding is about. |
+| `arrangement` | `text` | yes | - | - | VENUE_BOOKINGS or EQUIPMENT: the arrangement the officer says must change, flagged on the event page; resubmitting with it unchanged warns the coordinator (21.2 AC12). NULL when the finding needs no rebooking. |
+| `required_change` | `text` | no | - | - | Exactly what must change, in the officer's words. Non-blank, at most 2000 characters (21.2 AC10). |
+
+Allowed values:
+
+- `arrangement`: `VENUE_BOOKINGS`, `EQUIPMENT`
+
+Rules and indexes:
+
+- unique `uq_event_safety_review_findings_position`: `UNIQUE (review_id, "position")`
+- check `ck_event_safety_review_findings_required_change`: `CHECK (((btrim(required_change) <> ''::text) AND (char_length(required_change) <= 2000)))`
+
+### safety_review_factors
+
+**Stories:** 21.2
+
+The factors a safety review considers (expected attendance, venue capacity and layout, emergency access, ...). Each finding names one.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `code` | `text` | no | - | PK | Stable identifier, e.g. EMERGENCY_ACCESS. |
+| `name` | `text` | no | - | - | Display name. |
+| `description` | `text` | yes | - | - | Optional longer description: what the officer checks. |
+| `sort_order` | `integer` | no | `100` | - | Display ordering on the review page (ascending). |
 
 ## Seeded reference values
 
