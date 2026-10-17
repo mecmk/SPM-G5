@@ -360,7 +360,14 @@ def test_previous_reviews_are_newest_first(safety_client, db: Session):
         "reviewed_at": "2026-10-07T07:00:00Z",
         "reviewed_by_name": "Sam Safety",
         "outcome": SafetyReviewOutcome.CHANGES_REQUESTED,
-        "findings": [],
+        "findings": [
+            {
+                "factor_code": "EXPECTED_ATTENDANCE",
+                "factor_name": "Expected attendance",
+                "required_change": "Confirm the attendance and the microphones.",
+                "arrangement": None,
+            }
+        ],
         "flagged_arrangements": [],
     }
 

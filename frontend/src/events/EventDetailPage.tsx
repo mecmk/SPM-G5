@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import {
   listBookingsForEvent,
@@ -21,6 +21,7 @@ import {
   type RequiredFacility,
   type VenueRequirement,
 } from '../api/events'
+import { getEventSafety } from '../api/safety'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { Chip } from '../components/Chip'
@@ -58,7 +59,12 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
-import { SAFETY_REVIEW_STATUSES } from '../shared/safetyReview'
+import {
+  FLAGGED_BY_SAFETY_REVIEW,
+  SAFETY_REVIEW_STATUSES,
+  flaggedArrangements,
+} from '../shared/safetyReview'
+import { useLoaded } from '../shared/useLoaded'
 import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
@@ -230,6 +236,9 @@ export function EventDetailPage() {
   const { user, can } = useAuth()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Story 21.2: the safety review, loaded here so the sections it flags can say so (AC4).
+  const loadSafety = useCallback(() => getEventSafety(eventId), [eventId])
+  const { data: safety, error: safetyError, setData: setSafety } = useLoaded(loadSafety)
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
@@ -339,10 +348,14 @@ export function EventDetailPage() {
     setHasImageFailed(true)
   }
 
-  /** Story 15.1: after an equipment change, show every item's new status. A failed reload keeps
-   *  the page as it was rather than replacing it with an error. */
-  function reloadEvent(): Promise<void> {
-    return getEvent(eventId).then(setEvent, () => {})
+  /** Story 15.1: after an equipment change, show every item's new status. Story 21.2: with the
+   *  safety review's blockers as they now stand. A failed reload keeps the page as it was rather
+   *  than replacing it with an error. */
+  async function reloadEvent(): Promise<void> {
+    await Promise.all([
+      getEvent(eventId).then(setEvent, () => {}),
+      getEventSafety(eventId).then(setSafety, () => {}),
+    ])
   }
 
   function askToApprove() {
@@ -560,6 +573,9 @@ export function EventDetailPage() {
   /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
    *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
    *  mirroring the backend's own checks. Everyone else sees the list alone. */
+  // Story 21.2 AC4: the sections the latest review says must change.
+  const flagged = flaggedArrangements(safety)
+  const isVenueFlagged = flagged.includes('VENUE_BOOKINGS')
   const canChangeEquipment =
     can(PERMISSIONS.EQUIPMENT_REQUEST) &&
     isAssignedCoordinator &&
@@ -904,11 +920,15 @@ export function EventDetailPage() {
         )}
 
         {canReadBooking && bookings && bookings.length > 0 && (
-          <section className="card stack" aria-labelledby="venue-booking-heading">
+          <section
+            className={`card stack${isVenueFlagged ? ' card-flagged' : ''}`}
+            aria-labelledby="venue-booking-heading"
+          >
             <h2 id="venue-booking-heading" className="cluster">
               <Icon name="building" size={20} />
               Venue booking
             </h2>
+            {isVenueFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
@@ -1069,6 +1089,7 @@ export function EventDetailPage() {
           eventId={event.id}
           equipment={event.equipment}
           canChange={canChangeEquipment}
+          isFlagged={flagged.includes('EQUIPMENT')}
           onChanged={reloadEvent}
         />
 
@@ -1076,7 +1097,9 @@ export function EventDetailPage() {
           <SafetyReviewSection
             eventId={event.id}
             eventName={event.name}
-            onStatusChanged={reloadEvent}
+            safety={safety}
+            loadError={safetyError}
+            onChanged={reloadEvent}
           />
         )}
 

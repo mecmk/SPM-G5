@@ -3,11 +3,11 @@ import { Link, useParams } from 'react-router'
 import { getSafetyCheck, type FactChange, type SafetyFact } from '../api/safety'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
+import { SafetyFindingsList } from '../components/SafetyFindingsList'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { SAFETY_CHECKS_PATH } from '../routes'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
-import { ARRANGEMENT_LABELS } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
 import { SafetyDecisionForm } from './SafetyDecisionForm'
 
@@ -115,6 +115,12 @@ export function SafetyCheckDetailPage() {
   const { eventId = '' } = useParams()
   const loadCheck = useCallback(() => getSafetyCheck(eventId), [eventId])
   const { data: check, error, isLoading, setData } = useLoaded(loadCheck)
+
+  /** Story 21.2 AC20: after a refused decision, show the event as it now stands. A failed reload
+   *  keeps the page as it was; the form already shows the refusal. */
+  function reloadCheck() {
+    getSafetyCheck(eventId).then(setData, () => {})
+  }
 
   return (
     <div className="page page-wide">
@@ -271,7 +277,12 @@ export function SafetyCheckDetailPage() {
           </section>
 
           {check.status === 'AWAITING_SAFETY_CHECK' && (
-            <SafetyDecisionForm key={check.id} check={check} onDecided={setData} />
+            <SafetyDecisionForm
+              key={check.facts_fingerprint}
+              check={check}
+              onDecided={setData}
+              onRefused={reloadCheck}
+            />
           )}
 
           <section className="card stack" aria-labelledby="safety-reviews-heading">
@@ -288,20 +299,7 @@ export function SafetyCheckDetailPage() {
                         {formatDateTime(review.reviewed_at)} by {review.reviewed_by_name}
                       </span>
                     </div>
-                    {review.findings.length > 0 && (
-                      <ol className="stack">
-                        {review.findings.map((finding, index) => (
-                          <li key={index}>
-                            <p className="fact-label">
-                              {finding.factor_name}
-                              {finding.arrangement &&
-                                ` · ${ARRANGEMENT_LABELS[finding.arrangement]} must change`}
-                            </p>
-                            <p>{finding.required_change}</p>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
+                    <SafetyFindingsList findings={review.findings} />
                   </li>
                 ))}
               </ul>

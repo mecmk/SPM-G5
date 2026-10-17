@@ -1,25 +1,34 @@
-"""Story 21.2 - the coordinator requests a safety review (AC1, AC6, AC11-AC13, AC17-AC19).
+"""Story 21.2 - the coordinator requests a safety review. The backlog's ACs, as written:
 
-AC1  The assigned coordinator requests a review of a Planning event whose every venue requirement
-     has an approved booking and every equipment item is accepted; it moves to Awaiting Safety
-     Check, and the Safety Officers and organiser are told (AC8).
-AC6  After rebooking a flagged arrangement, resubmitting raises no warning.
-AC11 An event with no equipment can be submitted; one with no approved booking cannot.
-AC12 Resubmitting with a flagged arrangement unchanged is refused with a warning, unless the
-     coordinator acknowledges it.
-AC13 An unflagged arrangement, or a finding tied to no arrangement, never warns.
-AC17 Only the event's assigned coordinator may request the review.
-AC18 Signed out is a 401.
-AC19 Not in Planning, or arrangements not secured, is a 409 naming what is missing.
+AC1  The assigned coordinator sends a safety review request for a Planning event whose every venue
+     requirement has an approved booking and every equipment item is accepted. The event moves to
+     Awaiting Safety Check.
+AC6  After rebooking the flagged arrangements, the coordinator resubmits with no warning. [...]
+AC8  Every status change notifies.
+AC11 An event with no equipment items can be submitted; an event with zero approved bookings
+     cannot.
+AC12 Resubmitting with a flagged arrangement unchanged shows a warning; the coordinator can go back
+     or submit anyway.
+AC13 An unflagged arrangement left unchanged, or a finding with no arrangement (e.g. crowd
+     movement), never triggers the warning.
+AC17 Only the event's assigned coordinator requests a review or confirms; another coordinator, the
+     organiser or the officer gets 403.
+AC18 Signed out -> 401 on every new endpoint. [...]
+AC19 A request for an event not in Planning (already awaiting, confirmed, cancelled), or a double
+     submit -> 409. Arrangements not secured -> 409 naming each missing one.
+
+A declined equipment item no longer counts towards "every equipment item" (it can never be
+accepted, and story 15.1 AC7 locks it); only an open one - requested, pending or unavailable -
+blocks the request.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus, VenueBooking
@@ -207,7 +216,61 @@ def test_a_second_request_is_refused(coordinator_client, db: Session):
     response = coordinator_client.post(_request_path(secured.event.id), json={})
 
     assert response.status_code == 409
-    assert len(_recipients(db, secured.event.id, "SAFETY_REVIEW_REQUESTED")) == 2
+    sent = db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.event_id == secured.event.id,
+            Notification.notification_type == "SAFETY_REVIEW_REQUESTED",
+        )
+    )
+    assert sent == 2
+
+
+@pytest.mark.story("21.2", ac=19)
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (EquipmentRequestStatus.REQUESTED, 409),
+        (EquipmentRequestStatus.PENDING, 409),
+        (EquipmentRequestStatus.UNAVAILABLE, 409),
+        (EquipmentRequestStatus.DECLINED, 200),
+    ],
+)
+def test_each_open_equipment_item_blocks_and_a_declined_one_does_not(
+    coordinator_client, db: Session, status, expected
+):
+    """A declined item can never be accepted (story 15.1 AC7 locks it), so it no longer counts."""
+    secured = make_secured_event(db)
+    make_equipment_item(
+        db,
+        event=secured.event,
+        equipment_type=make_equipment_type(db, name="Fog machine"),
+        quantity=1,
+        status=status,
+        is_held=status != EquipmentRequestStatus.DECLINED,
+    )
+
+    response = coordinator_client.post(_request_path(secured.event.id), json={})
+
+    assert response.status_code == expected, response.text
+    if expected == 409:
+        assert "Fog machine is not accepted yet." in response.json()["detail"]
+
+
+@pytest.mark.story("21.2", ac=19)
+def test_a_lapsed_hold_not_yet_swept_does_not_count(coordinator_client, db: Session):
+    """Story 12.7 AC4/AC6: from its expiry the hold has expired, though the timer has not run."""
+    secured = make_secured_event(db)
+    secured.booking.hold_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    db.flush()
+
+    response = coordinator_client.post(_request_path(secured.event.id), json={})
+
+    assert response.status_code == 409
+    assert "Main venue has no approved venue booking." in response.json()["detail"]
+    db.refresh(secured.booking)
+    assert secured.booking.status == BookingStatus.EXPIRED
 
 
 # --- AC12, AC13, AC6: the unchanged-arrangement warning ------------------------------------------
@@ -230,6 +293,9 @@ def test_resubmitting_with_flagged_venue_unchanged_warns(coordinator_client, db:
 def test_acknowledging_the_warning_submits_anyway(coordinator_client, db: Session):
     secured = make_secured_event(db)
     _changes_requested(db, secured.event, arrangement=SafetyArrangement.EQUIPMENT)
+    warned = coordinator_client.post(_request_path(secured.event.id), json={})
+    assert warned.status_code == 409
+    assert warned.json()["detail"]["unchanged_arrangements"] == [SafetyArrangement.EQUIPMENT]
 
     response = coordinator_client.post(
         _request_path(secured.event.id), json={"acknowledge_unchanged": True}
@@ -267,16 +333,34 @@ def test_rebooking_the_flagged_venue_submits_without_warning(coordinator_client,
 def test_no_warning_unless_a_flagged_arrangement_is_unchanged(
     coordinator_client, db: Session, arrangement
 ):
-    """The equipment is unchanged but was never flagged; the venue was flagged (first case) and
-    has changed, or nothing was flagged at all (second case)."""
+    """The equipment is unchanged but was never flagged; the venue was flagged and has changed
+    (first case), or the finding flags no arrangement and nothing has changed (second case)."""
     secured = make_secured_event(db)
     _changes_requested(db, secured.event, arrangement=arrangement)
-    secured.booking.expected_attendance += 5
-    db.flush()
+    if arrangement is not None:
+        secured.booking.expected_attendance += 5
+        db.flush()
 
     response = coordinator_client.post(_request_path(secured.event.id), json={})
 
     assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("21.2", ac=12)
+def test_event_page_carries_the_warning_before_sending(coordinator_client, db: Session):
+    """The page asks before sending, so the warning never arrives as a failed request."""
+    secured = make_secured_event(db)
+    _changes_requested(db, secured.event, arrangement=SafetyArrangement.VENUE_BOOKINGS)
+    summary_path = f"/events/{secured.event.id}/safety-review"
+
+    warning = coordinator_client.get(summary_path).json()["unchanged_warning"]
+
+    assert warning == (
+        "The venue bookings the Safety Officer flagged have not changed since their review."
+    )
+    secured.booking.expected_attendance += 5
+    db.flush()
+    assert coordinator_client.get(summary_path).json()["unchanged_warning"] is None
 
 
 @pytest.mark.story("21.2", ac=12)

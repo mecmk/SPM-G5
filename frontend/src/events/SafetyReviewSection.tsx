@@ -1,23 +1,25 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { formatApiError } from '../api/client'
 import {
   confirmEvent,
-  getEventSafety,
   requestSafetyReview,
   unchangedArrangementsOf,
   type EventSafety,
 } from '../api/safety'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { SafetyFindingsList } from '../components/SafetyFindingsList'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDateTime } from '../shared/format'
-import { ARRANGEMENT_LABELS } from '../shared/safetyReview'
-import { useLoaded } from '../shared/useLoaded'
 
 interface SafetyReviewSectionProps {
   eventId: string
   eventName: string
-  /** Called once a request or confirmation has moved the event on, so the page reloads it. */
-  onStatusChanged: () => void
+  /** The event's safety summary, loaded by the page so the sections it flags can say so. */
+  safety: EventSafety | null
+  loadError: string | null
+  /** Reloads the event and its safety summary: after a request or confirmation, after a refusal
+   *  (whatever was out of date is shown as it is now), and after any other change on the page. */
+  onChanged: () => Promise<void>
 }
 
 function BlockerList({ intro, blockers }: { intro: string; blockers: string[] }) {
@@ -38,15 +40,16 @@ function BlockerList({ intro, blockers }: { intro: string; blockers: string[] })
  * AC4: the latest review, with each finding and the arrangement it says must change, for anyone
  * who may see the event. AC1/AC19: the assigned coordinator requests a review once everything is
  * secured, or reads what is missing. AC12: when a flagged arrangement is unchanged, a warning asks
- * before sending anyway. AC7/AC14: the coordinator confirms an approved event, or reads why not.
+ * before anything is sent, and the coordinator can go back or submit anyway. AC7/AC14: the
+ * coordinator confirms an approved event, or reads why not. AC18: no one else is offered either.
  */
 export function SafetyReviewSection({
   eventId,
   eventName,
-  onStatusChanged,
+  safety,
+  loadError,
+  onChanged,
 }: SafetyReviewSectionProps) {
-  const loadSafety = useCallback(() => getEventSafety(eventId), [eventId])
-  const { data: safety, error: loadError, setData } = useLoaded(loadSafety)
   const [isBusy, setIsBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [unchangedWarning, setUnchangedWarning] = useState<string | null>(null)
@@ -55,19 +58,21 @@ export function SafetyReviewSection({
     setIsBusy(true)
     setActionError(null)
     try {
-      setData(await action())
+      await action()
       setUnchangedWarning(null)
-      onStatusChanged()
     } catch (caught) {
       if (unchangedArrangementsOf(caught) !== null) setUnchangedWarning(formatApiError(caught))
       else setActionError(formatApiError(caught))
     } finally {
+      await onChanged()
       setIsBusy(false)
     }
   }
 
   function handleRequestReview() {
-    void act(() => requestSafetyReview(eventId, eventName, false))
+    setActionError(null)
+    if (safety?.unchanged_warning) setUnchangedWarning(safety.unchanged_warning)
+    else void act(() => requestSafetyReview(eventId, eventName, false))
   }
 
   function handleSubmitAnyway() {
@@ -76,6 +81,7 @@ export function SafetyReviewSection({
 
   function handleCancelWarning() {
     setUnchangedWarning(null)
+    setActionError(null)
   }
 
   function handleConfirm() {
@@ -109,20 +115,7 @@ export function SafetyReviewSection({
                   {formatDateTime(review.reviewed_at)} by {review.reviewed_by_name}
                 </span>
               </div>
-              {review.findings.length > 0 && (
-                <ol className="stack">
-                  {review.findings.map((finding, index) => (
-                    <li key={index}>
-                      <p className="fact-label">
-                        {finding.factor_name}
-                        {finding.arrangement &&
-                          ` · ${ARRANGEMENT_LABELS[finding.arrangement]} must change`}
-                      </p>
-                      <p>{finding.required_change}</p>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <SafetyFindingsList findings={review.findings} />
             </div>
           )}
 
@@ -160,7 +153,7 @@ export function SafetyReviewSection({
               />
             )}
 
-          {actionError && (
+          {actionError && unchangedWarning === null && (
             <p role="alert" className="error">
               {actionError}
             </p>
@@ -174,7 +167,7 @@ export function SafetyReviewSection({
           confirmLabel="Submit anyway"
           tone="primary"
           isBusy={isBusy}
-          error={null}
+          error={actionError}
           onConfirm={handleSubmitAnyway}
           onCancel={handleCancelWarning}
         >

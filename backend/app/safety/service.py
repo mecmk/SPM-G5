@@ -10,6 +10,8 @@ Story 21.2's flow::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -151,6 +153,7 @@ class SafetyCheck:
     facts: dict[str, Any]
     changes: list[FactChangeOut]
     factors: list[SafetyReviewFactor]  # 21.2 AC2
+    facts_fingerprint: str  # 21.2 AC20: what the officer's decision says it read
 
 
 def safety_facts(
@@ -212,6 +215,36 @@ def _accepted_equipment(db: Session, event_id: uuid.UUID) -> list[EventEquipment
     )
 
 
+# The names stored beside each code, for the change list to read in words. A rename is not a change
+# to what was reviewed, so comparisons leave them out (``comparable_facts``).
+_DISPLAY_NAME_KEYS = frozenset({"name", "layout_name", "feature_name", "equipment_type_name"})
+
+
+def comparable_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    """``facts`` without the display names: the ids, codes and figures a review judged, so a
+    renamed venue, layout, feature or equipment type compares equal (21.2 AC14)."""
+    return {
+        key: (
+            [
+                {k: v for k, v in item.items() if k not in _DISPLAY_NAME_KEYS}
+                if isinstance(item, dict)
+                else item
+                for item in value
+            ]
+            if isinstance(value, list)
+            else value
+        )
+        for key, value in facts.items()
+    }
+
+
+def facts_fingerprint(facts: dict[str, Any]) -> str:
+    """21.2 AC20: a digest of ``comparable_facts``, sent with the officer's page and returned with
+    the decision, so the facts stored as reviewed are the facts the officer read."""
+    canonical = json.dumps(comparable_facts(facts), sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def current_facts(db: Session, event: Event) -> dict[str, Any]:
     """The event's safety facts as they stand now (``safety_facts``): what a review stores
     (21.2 AC2) and what a resubmission (AC12) or a confirmation (AC14) compares with it."""
@@ -270,6 +303,7 @@ def get_safety_check(db: Session, event_id: uuid.UUID) -> SafetyCheck:
         factors=list(
             db.scalars(select(SafetyReviewFactor).order_by(SafetyReviewFactor.sort_order))
         ),
+        facts_fingerprint=facts_fingerprint(facts),
     )
 
 
@@ -285,7 +319,27 @@ REQUIREMENT_NOT_BOOKED = "{name} has no approved venue booking."
 EQUIPMENT_NOT_ACCEPTED = "{name} is not accepted yet."
 NOT_SAFETY_APPROVED = "The event has not been approved by the Safety Officer."
 APPROVAL_OUT_OF_DATE = (
-    "The event has changed since the safety approval; request a safety review again."
+    "The event's {facts} changed after the safety approval; request a safety review again."
+)
+# AC14: each fact a stale approval names, in words.
+_FACT_NAMES = {
+    "description": "description",
+    "expected_attendance": "expected attendance",
+    "starts_at": "start",
+    "ends_at": "end",
+    "venues": "venue bookings",
+    "accessibility": "accessibility needs",
+    "accessibility_notes": "accessibility notes",
+    "equipment": "equipment",
+}
+# AC1/AC19: the equipment items still open and not accepted. A declined one can never be accepted
+# and is locked (15.1 AC7), and a cancelled one takes up nothing, so neither blocks.
+_UNSECURED_ITEM_STATUSES = frozenset(
+    {
+        EquipmentRequestStatus.REQUESTED,
+        EquipmentRequestStatus.PENDING,
+        EquipmentRequestStatus.UNAVAILABLE,
+    }
 )
 UNKNOWN_FACTOR_MESSAGE = "Choose a review factor from the list."
 UNCHANGED_MESSAGE = "The {names} the Safety Officer flagged have not changed since their review."
@@ -349,7 +403,8 @@ class UnknownSafetyFactor(ValueError):
 
 def missing_arrangements(db: Session, event: Event) -> list[str]:
     """AC1/AC11: what is not yet secured - each venue requirement without an approved booking,
-    no approved booking at all, and each equipment item not accepted. ``[]`` is secured."""
+    no approved booking at all, and each equipment item still open and not accepted. ``[]`` is
+    secured."""
     approved = _approved_bookings(db, [event.id])[event.id]
     booked = {booking.venue_requirement_id for booking in approved}
     missing = [
@@ -362,7 +417,7 @@ def missing_arrangements(db: Session, event: Event) -> list[str]:
     missing += [
         EQUIPMENT_NOT_ACCEPTED.format(name=item.equipment_type.name)
         for item in event.equipment_requests
-        if item.status != EquipmentRequestStatus.ACCEPTED
+        if item.status in _UNSECURED_ITEM_STATUSES
     ]
     return missing
 
@@ -392,31 +447,46 @@ def confirm_blockers(db: Session, event: Event) -> list[str]:
     review = latest_review(db, event.id)
     if review is None or review.outcome != SafetyReviewOutcome.APPROVED:
         blockers.append(NOT_SAFETY_APPROVED)
-    elif review.facts != current_facts(db, event):
-        blockers.append(APPROVAL_OUT_OF_DATE)
+        return blockers
+    approved = comparable_facts(review.facts)
+    now = comparable_facts(current_facts(db, event))
+    changed = [_FACT_NAMES[key] for key in _FACT_NAMES if approved.get(key) != now.get(key)]
+    if changed:
+        blockers.append(APPROVAL_OUT_OF_DATE.format(facts=" and ".join(changed)))
     return blockers
 
 
 @dataclass(frozen=True)
 class EventSafety:
-    """The event page's safety summary (AC4, AC7). The blockers are ``None`` unless the viewer
-    is the assigned coordinator."""
+    """The event page's safety summary (AC4, AC7). The blockers and the warning are ``None``
+    unless the viewer is the assigned coordinator (AC18)."""
 
     event: Event
     latest_review: EventSafetyReview | None
     request_blockers: list[str] | None
     confirm_blockers: list[str] | None
+    unchanged_warning: str | None  # AC12, asked before the request is sent
 
 
 def get_event_safety(db: Session, event: Event, *, viewer: User) -> EventSafety:
     """AC4: the latest review and its findings, for anyone who may see the event. AC1/AC7: what
-    stops the assigned coordinator requesting a review or confirming."""
-    is_coordinator = event.assigned_coordinator_id == viewer.id
+    stops the assigned coordinator requesting a review or confirming; AC18: no one else is
+    offered either. AC12: the warning the request would raise, so the page asks first."""
+    if event.assigned_coordinator_id != viewer.id:
+        return EventSafety(
+            event=event,
+            latest_review=latest_review(db, event.id),
+            request_blockers=None,
+            confirm_blockers=None,
+            unchanged_warning=None,
+        )
+    unchanged = _unchanged_flags(db, event) if event.status == EventStatus.PLANNING else []
     return EventSafety(
         event=event,
         latest_review=latest_review(db, event.id),
-        request_blockers=request_blockers(db, event) if is_coordinator else None,
-        confirm_blockers=confirm_blockers(db, event) if is_coordinator else None,
+        request_blockers=request_blockers(db, event),
+        confirm_blockers=confirm_blockers(db, event),
+        unchanged_warning=str(FlaggedArrangementsUnchanged(unchanged)) if unchanged else None,
     )
 
 
@@ -486,12 +556,13 @@ def _unchanged_flags(db: Session, event: Event) -> list[str]:
     review = latest_review(db, event.id)
     if review is None or review.outcome != SafetyReviewOutcome.CHANGES_REQUESTED:
         return []
-    facts = current_facts(db, event)
+    now = comparable_facts(current_facts(db, event))
+    flagged = comparable_facts(review.facts)
     return [
         arrangement
         for arrangement in review.flagged_arrangements
-        if facts[SafetyArrangement.FACT_KEY[arrangement]]
-        == review.facts.get(SafetyArrangement.FACT_KEY[arrangement])
+        if now[SafetyArrangement.FACT_KEY[arrangement]]
+        == flagged.get(SafetyArrangement.FACT_KEY[arrangement])
     ]
 
 
@@ -565,8 +636,9 @@ def decide_safety_check(
     db: Session, event_id: uuid.UUID, data: SafetyDecisionIn, *, actor: User
 ) -> None:
     """AC2-AC5: record the officer's decision with the facts reviewed - Approve or Request
-    changes, each returning the event to Planning. AC8:
-    the coordinator and organiser are told. AC20: refused unless awaiting the check, and of two
+    changes, each returning the event to Planning. AC6: the round keeps who, when and the facts.
+    AC8: the coordinator and organiser are told. AC20: refused unless awaiting the check, or if
+    the facts moved since the officer read them (``data.facts_fingerprint``), and of two
     decisions at once only one is written."""
     event = db.get(Event, event_id)
     if event is None:
@@ -574,6 +646,8 @@ def decide_safety_check(
     if event.status != EventStatus.AWAITING_SAFETY_CHECK:
         raise SafetyStateConflict(NOT_AWAITING_SAFETY_CHECK_MESSAGE)
     facts = current_facts(db, event)  # read while still awaiting: what was reviewed
+    if facts_fingerprint(facts) != data.facts_fingerprint:
+        raise EventStatusChanged()
 
     _change_status(
         db,
@@ -637,6 +711,14 @@ def confirm_event(db: Session, event: Event, *, actor: User) -> None:
     venue holds. AC14/AC21: refused, naming each blocker. AC8: the organiser and Safety Officers
     are told."""
     _assert_assigned_coordinator(event, actor, verb="confirm")
+    # 12.7 AC10: lock the approved bookings first, so a sweep at the same moment either waits for
+    # this confirmation (and the trigger completes their holds) or has already expired them (and
+    # the blockers name the lost booking). Whichever is saved first wins.
+    db.scalars(
+        select(VenueBooking.id)
+        .where(VenueBooking.event_id == event.id, VenueBooking.status == BookingStatus.APPROVED)
+        .with_for_update()
+    ).all()
     blockers = confirm_blockers(db, event)
     if blockers:
         raise EventNotConfirmable(blockers)

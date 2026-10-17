@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import {
   MAX_SAFETY_TEXT_LENGTH,
   decideSafetyCheck,
@@ -25,18 +25,24 @@ interface FindingDraft {
 interface SafetyDecisionFormProps {
   check: SafetyCheckDetail
   onDecided: (check: SafetyCheckDetail) => void
+  /** AC20: the decision was refused - decided by someone else meanwhile, or the facts moved since
+   * the page was read - so the page loads the event again. */
+  onRefused: () => void
 }
+
+const FINDING_ERROR_ID = 'safety-finding-error'
 
 /**
  * Story 21.2 - the Safety Officer's decision on an event awaiting the check.
- * AC2/AC5: Approve or Request changes, nothing else. AC4: requesting changes takes findings, each
- * a review factor, exactly what must change and optionally the arrangement to rebook. AC9: no
- * notes. AC10: each finding must say what must change - checked here before
- * anything is sent.
+ * AC2/AC5: Approve or Request changes, nothing else, and neither is chosen until the officer picks
+ * one. AC4: requesting changes takes findings, each a review factor, exactly what must change and
+ * optionally the arrangement to rebook. AC9: no notes. AC10: each finding must say what must
+ * change - checked here before anything is sent. AC20: the decision carries the facts the page was
+ * read with, and a refusal has the page load the event again.
  */
-export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps) {
+export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisionFormProps) {
   const firstFactor = check.factors[0]?.code ?? ''
-  const [outcome, setOutcome] = useState<SafetyReviewOutcome>('APPROVED')
+  const [outcome, setOutcome] = useState<SafetyReviewOutcome | null>(null)
   const [findings, setFindings] = useState<FindingDraft[]>([
     { key: 1, factorCode: firstFactor, requiredChange: '', arrangement: '' },
   ])
@@ -47,6 +53,8 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
   const isRequestingChanges = outcome === 'CHANGES_REQUESTED'
   const isFindingBlank =
     isRequestingChanges && findings.some((finding) => !finding.requiredChange.trim())
+  const showsOutcomeError = hasTriedToSubmit && outcome === null
+  const showsFindingError = hasTriedToSubmit && isFindingBlank
 
   function updateFinding(key: number, change: Partial<FindingDraft>) {
     setFindings((drafts) =>
@@ -70,12 +78,13 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
     setFindings((drafts) => drafts.filter((draft) => draft.key !== key))
   }
 
-  async function sendDecision() {
+  async function sendDecision(chosen: SafetyReviewOutcome) {
     setIsSubmitting(true)
     setError(null)
     try {
       const updated = await decideSafetyCheck(check.id, check.name, {
-        outcome,
+        outcome: chosen,
+        facts_fingerprint: check.facts_fingerprint,
         findings: isRequestingChanges
           ? findings.map((finding) => ({
               factor_code: finding.factorCode,
@@ -88,14 +97,17 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
     } catch (caught) {
       setError(formatApiError(caught))
       setIsSubmitting(false)
+      if (caught instanceof ApiError && (caught.status === 409 || caught.status === 404)) {
+        onRefused()
+      }
     }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setHasTriedToSubmit(true)
-    if (isFindingBlank) return
-    void sendDecision()
+    if (outcome === null || isFindingBlank) return
+    void sendDecision(outcome)
   }
 
   return (
@@ -117,6 +129,11 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
             </label>
           ))}
         </fieldset>
+        {showsOutcomeError && (
+          <p role="alert" className="error">
+            {ERROR_REGISTRY.SAFETY_OUTCOME_REQUIRED.message}
+          </p>
+        )}
 
         {isRequestingChanges && (
           <div className="stack">
@@ -147,6 +164,12 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
                     }
                     maxLength={MAX_SAFETY_TEXT_LENGTH}
                     rows={2}
+                    aria-invalid={showsFindingError && !finding.requiredChange.trim()}
+                    aria-describedby={
+                      showsFindingError && !finding.requiredChange.trim()
+                        ? FINDING_ERROR_ID
+                        : undefined
+                    }
                   />
                 </label>
                 <label>
@@ -178,8 +201,8 @@ export function SafetyDecisionForm({ check, onDecided }: SafetyDecisionFormProps
                 )}
               </fieldset>
             ))}
-            {hasTriedToSubmit && isFindingBlank && (
-              <p role="alert" className="error">
+            {showsFindingError && (
+              <p id={FINDING_ERROR_ID} role="alert" className="error">
                 {ERROR_REGISTRY.SAFETY_FINDING_CHANGE_REQUIRED.message}
               </p>
             )}

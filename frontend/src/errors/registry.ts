@@ -57,6 +57,7 @@ export type ErrorCode =
   | 'SAFETY_REVIEW_CONFLICT'
   | 'SAFETY_DECISION_CONFLICT'
   | 'SAFETY_FINDING_CHANGE_REQUIRED'
+  | 'SAFETY_OUTCOME_REQUIRED'
   | 'EVENT_NAME_REQUIRED'
   | 'EVENT_END_BEFORE_START'
   | 'EVENT_DATE_IN_PAST'
@@ -357,6 +358,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   SAFETY_FINDING_CHANGE_REQUIRED: {
     title: 'Finding incomplete',
     message: 'Say what must change for each finding.',
+  },
+  /** Story 21.2 AC5: neither Approve nor Request changes is chosen, checked before sending. */
+  SAFETY_OUTCOME_REQUIRED: {
+    title: 'Decision incomplete',
+    message: 'Choose Approve or Request changes.',
   },
 
   // Story 2.1: checks the request form makes before anything is sent.

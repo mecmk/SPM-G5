@@ -159,6 +159,7 @@ class SafetyCheckDetail(BaseModel):
     changes_since_last_review: list[FactChangeOut]
     previous_reviews: list[SafetyReviewOut]
     factors: list[SafetyFactorOut]  # 21.2 AC2
+    facts_fingerprint: str  # 21.2 AC20: returned with the decision, as what the officer read
 
     @classmethod
     def from_event(
@@ -170,6 +171,7 @@ class SafetyCheckDetail(BaseModel):
         reviews: list[EventSafetyReview],
         changes: list[FactChangeOut],
         factors: list[SafetyReviewFactor],
+        facts_fingerprint: str,
     ) -> SafetyCheckDetail:
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
         assert event.starts_at is not None
@@ -208,11 +210,12 @@ class SafetyCheckDetail(BaseModel):
             changes_since_last_review=changes,
             previous_reviews=[SafetyReviewOut.from_review(review) for review in reviews],
             factors=[SafetyFactorOut.from_factor(factor) for factor in factors],
+            facts_fingerprint=facts_fingerprint,
         )
 
 
 # --- story 21.2: requesting a review, the decision, the event page's summary ---------------------
-# AC10: the longest required change the officer may write.
+# AC9: the longest required change the officer may write.
 MAX_SAFETY_TEXT_LENGTH = 2000
 FINDINGS_REQUIRED_MESSAGE = "Add at least one finding saying what must change."
 FINDINGS_NOT_ALLOWED_MESSAGE = "Only a request for changes has findings."
@@ -246,13 +249,15 @@ class SafetyFindingIn(BaseModel):
 
 class SafetyDecisionIn(BaseModel):
     """21.2 AC2-AC5, AC9, AC10: the officer's decision - approve or request changes, nothing
-    else, with no notes. Only a request for changes carries findings, at least one."""
+    else, with no notes. Only a request for changes carries findings, at least one. AC20:
+    ``facts_fingerprint`` is the one on the page the officer read (``SafetyCheckDetail``)."""
 
     outcome: Literal["APPROVED", "CHANGES_REQUESTED"]
     findings: list[SafetyFindingIn] = []
+    facts_fingerprint: str
 
     @model_validator(mode="after")
-    def _check_outcome(self):
+    def _check_outcome(self) -> SafetyDecisionIn:
         if self.outcome == SafetyReviewOutcome.CHANGES_REQUESTED and not self.findings:
             raise ValueError(FINDINGS_REQUIRED_MESSAGE)
         if self.outcome != SafetyReviewOutcome.CHANGES_REQUESTED and self.findings:
@@ -262,12 +267,13 @@ class SafetyDecisionIn(BaseModel):
 
 class EventSafetyOut(BaseModel):
     """21.2 AC4/AC7: the safety review as the event page shows it - the latest review with its
-    findings, and for the assigned coordinator only, what stops them requesting a review or
-    confirming (``[]`` offers the action; ``None`` for anyone else). No defaults (response
-    schema)."""
+    findings, and for the assigned coordinator only (AC18), what stops them requesting a review or
+    confirming (``[]`` offers the action; ``None`` for anyone else) and the AC12 warning a request
+    would raise. No defaults (response schema)."""
 
     event_id: uuid.UUID
     status: str
     latest_review: SafetyReviewOut | None
     request_blockers: list[str] | None
     confirm_blockers: list[str] | None
+    unchanged_warning: str | None

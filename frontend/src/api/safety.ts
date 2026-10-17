@@ -101,6 +101,8 @@ export interface SafetyCheckDetail {
   previous_reviews: SafetyReview[]
   /** Story 21.2 AC2: the factors the review considers, in order. */
   factors: SafetyFactor[]
+  /** Story 21.2 AC20: sent back with the decision, so it is refused if the facts moved since. */
+  facts_fingerprint: string
 }
 
 /** Mirrors `SafetyFindingIn`: story 21.2 AC4/AC10. */
@@ -110,23 +112,27 @@ export interface SafetyFindingInput {
   arrangement: SafetyArrangement | null
 }
 
-/** Mirrors `SafetyDecisionIn`: story 21.2 AC2-AC5. Findings only with CHANGES_REQUESTED. */
+/** Mirrors `SafetyDecisionIn`: story 21.2 AC2-AC5. Findings only with CHANGES_REQUESTED.
+ * AC20: `facts_fingerprint` is the one the page was read with (`SafetyCheckDetail`). */
 export interface SafetyDecisionInput {
   outcome: SafetyReviewOutcome
   findings: SafetyFindingInput[]
+  facts_fingerprint: string
 }
 
 /** Mirrors `EventSafetyOut`: story 21.2 AC4/AC7, the event page's safety summary. The blockers
- * are null unless the viewer is the assigned coordinator; an empty list offers the action. */
+ * are null unless the viewer is the assigned coordinator (AC18); an empty list offers the action.
+ * AC12: `unchanged_warning` is the warning a request would raise, so the page asks first. */
 export interface EventSafety {
   event_id: string
   status: EventStatus
   latest_review: SafetyReview | null
   request_blockers: string[] | null
   confirm_blockers: string[] | null
+  unchanged_warning: string | null
 }
 
-/** Story 21.2 AC2/AC20: the longest required change the officer may write, mirroring
+/** Story 21.2 AC9: the longest required change the officer may write, mirroring
  * `MAX_SAFETY_TEXT_LENGTH` in backend/app/safety/schemas.py. */
 export const MAX_SAFETY_TEXT_LENGTH = 2000
 

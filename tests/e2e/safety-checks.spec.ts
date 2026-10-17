@@ -22,208 +22,159 @@
  * expected 120 people and two microphones. The food festival (approved) and the night walk (sent
  * back) are the Accepted and Declined tabs' seeded events, also only read here.
  */
-import { expect, test, type Page } from "@playwright/test";
-import { ACCOUNTS, EVENTS, signIn } from "./support";
+import { expect, test, type Page } from '@playwright/test'
+import { ACCOUNTS, EVENTS, signIn } from './support'
 
-const QUEUE_PATH = "/safety-checks";
-const CONCERT = "Harbour Lights Concert";
-const BOOK_FAIR = "Riverside Book Fair";
-const FOOD_FESTIVAL = "Marina Food Festival";
-const NIGHT_WALK = "Lantern Night Walk";
-const SEEDED_TITLES = /Harbour|Riverside|Marina|Lantern/;
+const QUEUE_PATH = '/safety-checks'
+const CONCERT = 'Harbour Lights Concert'
+const BOOK_FAIR = 'Riverside Book Fair'
+const FOOD_FESTIVAL = 'Marina Food Festival'
+const NIGHT_WALK = 'Lantern Night Walk'
+const SEEDED_TITLES = /Harbour|Riverside|Marina|Lantern/
 
 function queueCard(page: Page, name: string) {
-  return page
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("heading", { name }) });
+  return page.getByRole('listitem').filter({ has: page.getByRole('heading', { name }) })
 }
 
 function section(page: Page, name: string) {
-  return page.getByRole("region", { name, exact: true });
+  return page.getByRole('region', { name, exact: true })
 }
 
-test("21.1 AC2: the Safety Officer opens the queue and sees each awaiting event, oldest first", async ({
+test('21.1 AC2: the Safety Officer opens the queue and sees each awaiting event, oldest first', async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
+  await signIn(page, ACCOUNTS.safetyOfficer)
   await page
-    .getByRole("navigation", { name: "Main" })
-    .getByRole("link", { name: "Safety checks", exact: true })
-    .click();
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Safety checks', exact: true })
+    .click()
 
-  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`));
-  await expect(
-    page.getByRole("heading", { name: "Safety Checks", level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Pending" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  // Story 21.2's spec moves its own events through the queue in parallel, so the count varies.
-  await expect(
-    page.getByRole("tab", { name: /^Pending \(\d+\)$/ }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`))
+  await expect(page.getByRole('heading', { name: 'Safety Checks', level: 1 })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Pending' })).toHaveAttribute('aria-selected', 'true')
 
-  const concert = queueCard(page, CONCERT);
-  await expect(concert).toContainText("16 Aug 2028");
-  await expect(concert).toContainText("300");
-  await expect(concert).toContainText("Exhibition Foyer");
-  await expect(concert).toContainText("Awaiting safety check");
-  await expect(queueCard(page, BOOK_FAIR)).toContainText("Grand Hall");
+  const concert = queueCard(page, CONCERT)
+  await expect(concert).toContainText('16 Aug 2028')
+  // Story 21.2's spec moves its own events through the queue in parallel, so the count is the
+  // cards in this same view (one load feeds both) rather than a fixed number.
+  const pending = await page.getByRole('main').getByRole('heading', { level: 3 }).count()
+  await expect(page.getByRole('tab', { name: `Pending (${pending})` })).toBeVisible()
+  await expect(concert).toContainText('300')
+  await expect(concert).toContainText('Exhibition Foyer')
+  await expect(concert).toContainText('Awaiting safety check')
+  await expect(queueCard(page, BOOK_FAIR)).toContainText('Grand Hall')
 
-  const titles = page
-    .getByRole("heading", { level: 3 })
-    .filter({ hasText: SEEDED_TITLES });
-  await expect(titles).toHaveText([CONCERT, BOOK_FAIR]);
-});
+  const titles = page.getByRole('heading', { level: 3 }).filter({ hasText: SEEDED_TITLES })
+  await expect(titles).toHaveText([CONCERT, BOOK_FAIR])
+})
 
-test("21.1 AC2: the Accepted, Declined and All tabs list reviewed events by their latest review", async ({
+test('21.1 AC2: the Accepted, Declined and All tabs list reviewed events by their latest review', async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
-  await page.goto(QUEUE_PATH);
-  const titles = page
-    .getByRole("heading", { level: 3 })
-    .filter({ hasText: SEEDED_TITLES });
-  await expect(titles).toHaveText([CONCERT, BOOK_FAIR]);
+  await signIn(page, ACCOUNTS.safetyOfficer)
+  await page.goto(QUEUE_PATH)
+  const titles = page.getByRole('heading', { level: 3 }).filter({ hasText: SEEDED_TITLES })
+  await expect(titles).toHaveText([CONCERT, BOOK_FAIR])
 
-  await page.getByRole("tab", { name: "Accepted" }).click();
-  await expect(titles).toHaveText([FOOD_FESTIVAL]);
+  await page.getByRole('tab', { name: 'Accepted' }).click()
+  await expect(titles).toHaveText([FOOD_FESTIVAL])
 
-  await page.getByRole("tab", { name: "Declined" }).click();
-  await expect(titles).toHaveText([NIGHT_WALK]);
+  await page.getByRole('tab', { name: 'Declined' }).click()
+  await expect(titles).toHaveText([NIGHT_WALK])
 
-  await page.getByRole("tab", { name: "All" }).click();
-  await expect(titles).toHaveText([
-    NIGHT_WALK,
-    FOOD_FESTIVAL,
-    CONCERT,
-    BOOK_FAIR,
-  ]);
-  await expect(queueCard(page, FOOD_FESTIVAL)).toContainText("Confirmed");
-  await expect(queueCard(page, NIGHT_WALK)).toContainText("Planning");
-});
+  await page.getByRole('tab', { name: 'All' }).click()
+  await expect(titles).toHaveText([NIGHT_WALK, FOOD_FESTIVAL, CONCERT, BOOK_FAIR])
+  await expect(queueCard(page, FOOD_FESTIVAL)).toContainText('Confirmed')
+  await expect(queueCard(page, NIGHT_WALK)).toContainText('Planning')
+})
 
-test("21.1 AC3: a declined event opens with the review that sent it back", async ({
+test('21.1 AC3: a declined event opens with the review that sent it back', async ({ page }) => {
+  await signIn(page, ACCOUNTS.safetyOfficer)
+  await page.goto(QUEUE_PATH)
+
+  await page.getByRole('tab', { name: 'Declined' }).click()
+  await queueCard(page, NIGHT_WALK).getByRole('link', { name: NIGHT_WALK }).click()
+
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}/${EVENTS.nightWalk}$`))
+  await expect(page.getByRole('heading', { name: NIGHT_WALK, level: 1 })).toBeVisible()
+  await expect(section(page, 'Previous reviews')).toContainText(
+    'Add marshals at each road crossing.',
+  )
+})
+
+test('21.1 AC3/AC5: an event shows what affects its safety and what changed since its last review', async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
-  await page.goto(QUEUE_PATH);
+  await signIn(page, ACCOUNTS.safetyOfficer)
+  await page.goto(QUEUE_PATH)
 
-  await page.getByRole("tab", { name: "Declined" }).click();
-  await queueCard(page, NIGHT_WALK)
-    .getByRole("link", { name: NIGHT_WALK })
-    .click();
+  await queueCard(page, BOOK_FAIR).getByRole('link', { name: BOOK_FAIR }).click()
 
-  await expect(page).toHaveURL(
-    new RegExp(`${QUEUE_PATH}/${EVENTS.nightWalk}$`),
-  );
-  await expect(
-    page.getByRole("heading", { name: NIGHT_WALK, level: 1 }),
-  ).toBeVisible();
-  await expect(section(page, "Previous reviews")).toContainText(
-    "Changes requested",
-  );
-});
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}/${EVENTS.bookFair}$`))
+  await expect(page.getByRole('heading', { name: BOOK_FAIR, level: 1 })).toBeVisible()
+  await expect(section(page, 'Event')).toContainText(
+    'Publisher stalls with author talks through the day.',
+  )
+  await expect(section(page, 'Event')).toContainText('150')
+  await expect(section(page, 'Venues')).toContainText('Grand Hall')
+  await expect(section(page, 'Venues')).toContainText('Exhibition')
+  await expect(section(page, 'Equipment')).toContainText('Author talks')
 
-test("21.1 AC3/AC5: an event shows what affects its safety and what changed since its last review", async ({
+  const changes = section(page, 'Changes since last review')
+  await expect(changes).toContainText('Expected attendance')
+  await expect(changes).toContainText('120')
+  await expect(changes).toContainText('Equipment')
+  await expect(changes).toContainText('2 × Wireless microphone')
+  await expect(changes).not.toContainText('WIRELESS_MIC')
+  await expect(changes).not.toContainText('Description')
+
+  const reviews = section(page, 'Previous reviews')
+  await expect(reviews).toContainText('Changes requested')
+  await expect(reviews).toContainText('Confirm the attendance and the microphones.')
+  await expect(reviews).toContainText('Sam Safety')
+
+  await page.getByRole('link', { name: '← Safety Checks' }).click()
+  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`))
+})
+
+test('21.1 AC3/AC4: a venue the event outgrows is flagged Over capacity', async ({ page }) => {
+  await signIn(page, ACCOUNTS.safetyOfficer)
+
+  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`)
+  await expect(section(page, 'Venues')).toContainText('Exhibition Foyer')
+  await expect(section(page, 'Venues').getByText('Over capacity')).toBeVisible()
+  await expect(section(page, 'Venues')).toContainText('Capacity in this layout250')
+  await expect(section(page, 'Venues')).toContainText('People to hold300')
+  await expect(section(page, 'Accessibility')).toContainText('A ramp up to the viewing area')
+  await expect(section(page, 'Equipment')).toContainText('Stage left and right; cables taped down')
+
+  await page.goto(`${QUEUE_PATH}/${EVENTS.bookFair}`)
+  await expect(section(page, 'Venues')).toContainText('Grand Hall')
+  await expect(section(page, 'Venues').getByText('Over capacity')).toHaveCount(0)
+})
+
+test('21.1 AC5: details never recorded show Not recorded, and a first check has no changes', async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
-  await page.goto(QUEUE_PATH);
+  await signIn(page, ACCOUNTS.safetyOfficer)
+  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`)
 
-  await queueCard(page, BOOK_FAIR)
-    .getByRole("link", { name: BOOK_FAIR })
-    .click();
+  await expect(section(page, 'Venues')).toContainText('Operating hours')
+  await expect(section(page, 'Venues')).toContainText('Not recorded')
+  await expect(section(page, 'Changes since last review')).toContainText(
+    'Not reviewed before, so there is nothing to compare.',
+  )
+  await expect(section(page, 'Previous reviews')).toContainText('No previous reviews.')
+})
 
-  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}/${EVENTS.bookFair}$`));
-  await expect(
-    page.getByRole("heading", { name: BOOK_FAIR, level: 1 }),
-  ).toBeVisible();
-  await expect(section(page, "Event")).toContainText(
-    "Publisher stalls with author talks through the day.",
-  );
-  await expect(section(page, "Event")).toContainText("150");
-  await expect(section(page, "Venues")).toContainText("Grand Hall");
-  await expect(section(page, "Venues")).toContainText("Exhibition");
-  await expect(section(page, "Equipment")).toContainText("Author talks");
+test('21.1 AC6: another role is refused the safety check pages', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
 
-  const changes = section(page, "Changes since last review");
-  await expect(changes).toContainText("Expected attendance");
-  await expect(changes).toContainText("120");
-  await expect(changes).toContainText("Equipment");
-  await expect(changes).toContainText("2 × Wireless microphone");
-  await expect(changes).not.toContainText("WIRELESS_MIC");
-  await expect(changes).not.toContainText("Description");
+  await page.goto(QUEUE_PATH)
+  await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Safety Checks' })).toHaveCount(0)
 
-  const reviews = section(page, "Previous reviews");
-  await expect(reviews).toContainText("Changes requested");
-  await expect(reviews).toContainText("Sam Safety");
-
-  await page.getByRole("link", { name: "← Safety Checks" }).click();
-  await expect(page).toHaveURL(new RegExp(`${QUEUE_PATH}$`));
-});
-
-test("21.1 AC3/AC4: a venue the event outgrows is flagged Over capacity", async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
-
-  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`);
-  await expect(section(page, "Venues")).toContainText("Exhibition Foyer");
-  await expect(
-    section(page, "Venues").getByText("Over capacity"),
-  ).toBeVisible();
-  await expect(section(page, "Venues")).toContainText(
-    "Capacity in this layout250",
-  );
-  await expect(section(page, "Venues")).toContainText("People to hold300");
-  await expect(section(page, "Accessibility")).toContainText(
-    "A ramp up to the viewing area",
-  );
-  await expect(section(page, "Equipment")).toContainText(
-    "Stage left and right; cables taped down",
-  );
-
-  await page.goto(`${QUEUE_PATH}/${EVENTS.bookFair}`);
-  await expect(section(page, "Venues")).toContainText("Grand Hall");
-  await expect(section(page, "Venues").getByText("Over capacity")).toHaveCount(
-    0,
-  );
-});
-
-test("21.1 AC5: details never recorded show Not recorded, and a first check has no changes", async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.safetyOfficer);
-  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`);
-
-  await expect(section(page, "Venues")).toContainText("Operating hours");
-  await expect(section(page, "Venues")).toContainText("Not recorded");
-  await expect(section(page, "Changes since last review")).toContainText(
-    "Not reviewed before, so there is nothing to compare.",
-  );
-  await expect(section(page, "Previous reviews")).toContainText(
-    "No previous reviews.",
-  );
-});
-
-test("21.1 AC6: another role is refused the safety check pages", async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.coordinator);
-
-  await page.goto(QUEUE_PATH);
-  await expect(
-    page.getByRole("heading", { name: "Not permitted" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Safety Checks" }),
-  ).toHaveCount(0);
-
-  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`);
-  await expect(
-    page.getByRole("heading", { name: "Not permitted" }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: CONCERT })).toHaveCount(0);
-});
+  await page.goto(`${QUEUE_PATH}/${EVENTS.harbourConcert}`)
+  await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: CONCERT })).toHaveCount(0)
+})

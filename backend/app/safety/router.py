@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_any_permission, require_permission
 from app.auth.permissions import Permission
+from app.bookings.deps import ReleaseLapsedHolds
 from app.db import get_db
 from app.events import service as events_service
 from app.events.models import Event
@@ -35,13 +36,19 @@ EVENT_NOT_FOUND_MESSAGE = "Event not found."
 CanReviewSafety = Depends(require_permission(Permission.SAFETY_REVIEW))
 # 21.2 AC17: only a coordinator requests a review or confirms; which one is the service's rule.
 CanCoordinate = Depends(require_permission(Permission.EVENTS_REVIEW))
+# Story 12.7 AC4/AC6: a lapsed hold counts for nothing from its expiry, so every route here sweeps
+# before answering - the timer only runs once a minute.
 CanReadEvent = Depends(
     require_any_permission(Permission.EVENTS_READ_OWN, Permission.EVENTS_READ_ALL)
 )
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-@router.get("", response_model=list[SafetyQueueEntry], dependencies=[CanReviewSafety])
+@router.get(
+    "",
+    response_model=list[SafetyQueueEntry],
+    dependencies=[CanReviewSafety, ReleaseLapsedHolds],
+)
 def list_safety_queue(
     db: DbSession,
     queue_status: Annotated[service.SafetyQueueStatus | None, Query(alias="status")] = None,
@@ -70,10 +77,15 @@ def _safety_check_detail(db: Session, event_id: uuid.UUID) -> SafetyCheckDetail:
         reviews=check.reviews,
         changes=check.changes,
         factors=check.factors,
+        facts_fingerprint=check.facts_fingerprint,
     )
 
 
-@router.get("/{event_id}", response_model=SafetyCheckDetail, dependencies=[CanReviewSafety])
+@router.get(
+    "/{event_id}",
+    response_model=SafetyCheckDetail,
+    dependencies=[CanReviewSafety, ReleaseLapsedHolds],
+)
 def get_safety_check(event_id: uuid.UUID, db: DbSession) -> SafetyCheckDetail:
     """AC3-AC5: everything about one event that affects safety, with what changed since its last
     review. An event neither awaiting the check nor reviewed is a 404. AC6: safety:review only.
@@ -82,7 +94,9 @@ def get_safety_check(event_id: uuid.UUID, db: DbSession) -> SafetyCheckDetail:
 
 
 @router.post(
-    "/{event_id}/decision", response_model=SafetyCheckDetail, dependencies=[CanReviewSafety]
+    "/{event_id}/decision",
+    response_model=SafetyCheckDetail,
+    dependencies=[CanReviewSafety, ReleaseLapsedHolds],
 )
 def decide_safety_check(
     event_id: uuid.UUID,
@@ -116,6 +130,7 @@ def _event_safety(db: Session, event: Event, viewer: CurrentUser) -> EventSafety
         ),
         request_blockers=summary.request_blockers,
         confirm_blockers=summary.confirm_blockers,
+        unchanged_warning=summary.unchanged_warning,
     )
 
 
@@ -126,7 +141,9 @@ def _get_event(db: Session, event_id: uuid.UUID, viewer: CurrentUser) -> Event:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
 
 
-@router.post("/{event_id}/request", response_model=EventSafetyOut)
+@router.post(
+    "/{event_id}/request", response_model=EventSafetyOut, dependencies=[ReleaseLapsedHolds]
+)
 def request_safety_review(
     event_id: uuid.UUID,
     payload: SafetyReviewRequestIn,
@@ -154,15 +171,20 @@ def request_safety_review(
 
 
 @events_router.get(
-    "/{event_id}/safety-review", response_model=EventSafetyOut, dependencies=[CanReadEvent]
+    "/{event_id}/safety-review",
+    response_model=EventSafetyOut,
+    dependencies=[CanReadEvent, ReleaseLapsedHolds],
 )
 def get_event_safety(event_id: uuid.UUID, db: DbSession, viewer: CurrentUser) -> EventSafetyOut:
     """21.2 AC4: the latest review and its findings, for anyone who may see the event. AC1/AC7:
-    what stops the assigned coordinator requesting a review or confirming."""
+    what stops the assigned coordinator requesting a review or confirming, and AC12 the warning a
+    request would raise; AC18: no one else gets them."""
     return _event_safety(db, _get_event(db, event_id, viewer), viewer)
 
 
-@events_router.post("/{event_id}/confirm", response_model=EventSafetyOut)
+@events_router.post(
+    "/{event_id}/confirm", response_model=EventSafetyOut, dependencies=[ReleaseLapsedHolds]
+)
 def confirm_event(
     event_id: uuid.UUID,
     db: DbSession,

@@ -1,20 +1,22 @@
-"""Story 21.2 - the coordinator confirms a safety-approved event (AC7, AC8, AC14, AC17, AC18,
-AC21).
+"""Story 21.2 - the coordinator confirms a safety-approved event. The backlog's ACs, as written:
 
-AC7  The assigned coordinator confirms a Planning event whose latest review approved it with the
-     facts it still has; it moves to Confirmed and its venue holds are completed.
-AC8  The organiser and the Safety Officers are told.
-AC14 If the facts changed after the approval, or an arrangement was lost, Confirm is refused,
-     naming why.
-AC17 Only the assigned coordinator may confirm.
-AC18 Signed out is a 401.
-AC21 No approval, a later request for changes, or a second confirm is a 409.
+AC7  The assigned coordinator confirms an approved event; it moves to Confirmed and its venue
+     holds are completed.
+AC8  Every status change notifies.
+AC14 If facts change after approval (attendance edited, a booking lost), Confirm is blocked, naming
+     why; the coordinator must request a review again.
+AC17 Only the event's assigned coordinator requests a review or confirms; another coordinator, the
+     organiser or the officer gets 403.
+AC18 Signed out -> 401 on every new endpoint. [...]
+AC21 Confirm without a valid approval -> 409 naming each blocker; a double confirm -> 409.
+
+A booking lost includes a hold that lapsed before the timer swept it (story 12.7 AC4/AC6).
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -25,6 +27,7 @@ from app.events.models import EventStatus, EventStatusHistory
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import current_facts
+from app.venues.models import Venue
 from tests.support.factories import SecuredEvent, make_secured_event
 from tests.support.seed import Users
 
@@ -105,9 +108,44 @@ def test_attendance_changed_after_approval_blocks_confirm(coordinator_client, db
     response = coordinator_client.post(_confirm_path(approved.event.id))
 
     assert response.status_code == 409
-    assert "changed since the safety approval" in response.json()["detail"]
+    assert (
+        "The event's expected attendance changed after the safety approval"
+        in response.json()["detail"]
+    )
     db.refresh(approved.event)
     assert approved.event.status == EventStatus.PLANNING
+
+
+@pytest.mark.story("21.2", ac=14)
+def test_renaming_the_venue_after_approval_does_not_block_confirm(
+    coordinator_client, db: Session, approved
+):
+    """Names are kept for display; the venue, its layout and its figures are what was approved."""
+    venue = db.get(Venue, approved.booking.venue_id)
+    assert venue is not None
+    venue.name = "Grand Hall (renamed)"
+    db.flush()
+
+    response = coordinator_client.post(_confirm_path(approved.event.id))
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("21.2", ac=14)
+def test_a_lapsed_hold_not_yet_swept_blocks_confirm(coordinator_client, db: Session, approved):
+    """Story 12.7 AC4: from its expiry the hold has expired, and the event can no longer be
+    confirmed with it - though the timer has not run yet."""
+    approved.booking.hold_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    db.flush()
+
+    response = coordinator_client.post(_confirm_path(approved.event.id))
+
+    assert response.status_code == 409
+    assert "Main venue has no approved venue booking." in response.json()["detail"]
+    db.refresh(approved.event)
+    db.refresh(approved.booking)
+    assert approved.event.status == EventStatus.PLANNING
+    assert approved.booking.status == BookingStatus.EXPIRED
 
 
 @pytest.mark.story("21.2", ac=14)
@@ -128,7 +166,7 @@ def test_event_page_lists_the_confirm_blockers(coordinator_client, db: Session, 
 
     summary = coordinator_client.get(f"/events/{approved.event.id}/safety-review").json()
 
-    assert any("changed since the safety approval" in b for b in summary["confirm_blockers"])
+    assert any("changed after the safety approval" in b for b in summary["confirm_blockers"])
 
 
 # --- AC21: no valid approval, double confirm -----------------------------------------------------
