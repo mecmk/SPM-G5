@@ -2,7 +2,7 @@
 
 A change request names one field and the value proposed for it. The body is a union tagged by
 ``field``, so each field's value is checked by the very types story 2.1/2.7 use when a request is
-created - ``PositiveWholeNumber``, ``VenueRequirementIn``, ``EventEquipmentIn`` - rather than by
+created - ``ExpectedAttendance``, ``VenueRequirementIn``, ``EventEquipmentIn`` - rather than by
 rules of its own (19.1 AC4). An unknown ``field`` matches no member and is refused with a 422.
 """
 
@@ -21,7 +21,7 @@ from app.events.schemas import (
     DUPLICATE_EQUIPMENT_MESSAGE,
     MAX_VENUE_REQUIREMENTS,
     EventEquipmentIn,
-    PositiveWholeNumber,
+    ExpectedAttendance,
     VenueRequirementIn,
 )
 
@@ -64,7 +64,7 @@ class ScheduleChangeIn(_ChangeRequestIn):
 
 class AttendanceChangeIn(_ChangeRequestIn):
     field: Literal["expected_attendance"]
-    proposed: PositiveWholeNumber
+    proposed: ExpectedAttendance
 
 
 class VenueRequirementsChangeIn(_ChangeRequestIn):
