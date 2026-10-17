@@ -62,14 +62,18 @@ class NotificationType(StrEnum):
     EVENT_REASSIGNED_ORGANISER = "EVENT_REASSIGNED_ORGANISER"  # 5.2: the organiser
     BOOKING_REQUESTED = "BOOKING_REQUESTED"  # 12.1: Venue Staff
     BOOKING_WITHDRAWN = "BOOKING_WITHDRAWN"  # 12.2: Venue Staff
+    BOOKING_RELEASED = "BOOKING_RELEASED"  # 19.2: Venue Staff, when an approved change unfits it
     BOOKING_APPROVED = "BOOKING_APPROVED"  # 13.2: the coordinator
     BOOKING_REJECTED = "BOOKING_REJECTED"  # 13.2.1: the coordinator
     BOOKING_HOLD_EXPIRING = "BOOKING_HOLD_EXPIRING"  # 12.7: the coordinator, from the system
     BOOKING_HOLD_EXPIRED = "BOOKING_HOLD_EXPIRED"  # 12.7: the coordinator, from the system
     BOOKING_HOLD_EXPIRY_CHANGED = "BOOKING_HOLD_EXPIRY_CHANGED"  # 12.7: the coordinator
     EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
+    EQUIPMENT_WITHDRAWN = "EQUIPMENT_WITHDRAWN"  # 19.2: Technical Support, items changed or removed
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
+    EVENT_CHANGE_APPROVED = "EVENT_CHANGE_APPROVED"  # 19.2: the organiser
+    EVENT_CHANGE_REJECTED = "EVENT_CHANGE_REJECTED"  # 19.2: the organiser
     # 9.4: the event's coordinator, if it has one, and its organiser - a venue it has booked was
     # marked unavailable for the period of a booking
     BOOKING_VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"

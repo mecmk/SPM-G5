@@ -49,7 +49,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -829,3 +829,145 @@ def recheck_equipment_for_new_dates(
         commit=False,
     )
     return flagged
+
+
+# --- story 19.2: an approved change to the event's equipment ------------------------------------
+
+# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from.
+_WITH_TECHNICAL_SUPPORT = frozenset(
+    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
+)
+# Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
+_EVER_SENT_STATUSES = _WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
+_CHANGED_HOLD_NOTE = "Held again for an approved change request."
+
+
+@dataclass(frozen=True)
+class ProposedEquipmentLine:
+    """Story 19.2: one line of an approved equipment change - a type, how many, and notes."""
+
+    equipment_type_code: str
+    quantity: int
+    technical_notes: str | None
+
+
+def _notify_technical_support_of_withdrawal(
+    db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User
+) -> None:
+    """Story 19.2 AC5: items Technical Support had pending or accepted were changed or removed by
+    an approved change request, so every active member is told which, as they are told of a new
+    submission (story 20.1)."""
+    message = (
+        f'An approved change to "{event.name}" withdrew equipment sent to you: '
+        f"{_describe_items(items)}."
+    )
+    for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.EQUIPMENT_WITHDRAWN,
+            event_id=event.id,
+            title=f'Equipment withdrawn from "{event.name}"',
+            message=message,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
+def _hold_or_flag(
+    db: Session,
+    event: Event,
+    item: EventEquipmentRequest,
+    available: dict[uuid.UUID, int],
+    *,
+    actor: User,
+) -> None:
+    """Story 19.2 AC5: hold ``item`` for the event's period if ``available`` still has the units,
+    taking them from it, and leave it Requested for the coordinator to send (15.1); otherwise flag
+    it Unavailable, holding nothing, as 15.1 AC8 flags an item new dates no longer fit."""
+    if item.quantity > available.get(item.equipment_type_id, 0):
+        item.status = EquipmentRequestStatus.UNAVAILABLE
+        return
+    available[item.equipment_type_id] -= item.quantity
+    db.add(_new_hold(event, item, actor=actor, notes=_CHANGED_HOLD_NOTE))
+    item.status = EquipmentRequestStatus.REQUESTED
+
+
+def apply_equipment_change(
+    db: Session, event: Event, lines: list[ProposedEquipmentLine], *, actor: User
+) -> None:
+    """Story 19.2 AC2/AC5: make ``event``'s equipment match an approved change, releasing only
+    what it affects. Items are matched by type, which an event lists once (2.1 AC6).
+
+    * An item whose quantity and notes are unchanged keeps its status, decision and hold.
+    * A changed item releases its hold, takes the new quantity, loses the decision made for the
+      old one, and is held again if stock allows - Requested, for the coordinator to resubmit
+      (15.1) - or flagged Unavailable.
+    * A removed item releases its hold; one ever sent to Technical Support is kept as Cancelled
+      for their record, one never sent is deleted.
+    * A new type is added the same way a changed item is held.
+
+    Technical Support are told of any item they had pending or accepted that was changed or
+    removed. The types are locked first, as every other hold takes them (AC10). Written, not
+    committed."""
+    items = list(event.equipment_requests)
+    wanted = {line.equipment_type_code: line for line in lines}
+    types = {
+        equipment_type.code: equipment_type
+        for equipment_type in db.scalars(
+            select(EquipmentType).where(EquipmentType.code.in_(set(wanted)))
+        )
+    }
+    _lock_types(db, {item.equipment_type_id for item in items} | {t.id for t in types.values()})
+
+    withdrawn: list[EventEquipmentRequest] = []
+    to_hold: list[EventEquipmentRequest] = []
+    by_type: dict[str, EventEquipmentRequest] = {}
+    for item in items:
+        code = item.equipment_type.code
+        line = wanted.get(code)
+        if line is None:
+            _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+            if item.status in _WITH_TECHNICAL_SUPPORT:
+                withdrawn.append(item)
+            if item.status in _EVER_SENT_STATUSES:
+                item.status = EquipmentRequestStatus.CANCELLED
+            elif item.status != EquipmentRequestStatus.CANCELLED:
+                event.equipment_requests.remove(item)
+            continue
+        by_type[code] = item
+        if (line.quantity, line.technical_notes) == (item.quantity, item.technical_notes):
+            continue
+        _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+        if item.status in _WITH_TECHNICAL_SUPPORT:
+            withdrawn.append(item)
+        item.quantity = line.quantity
+        item.technical_notes = line.technical_notes
+        item.decided_by_id = None
+        item.decided_at = None
+        item.status_notes = None
+        to_hold.append(item)
+
+    added_at = datetime.now(UTC)
+    for position, (code, line) in enumerate(wanted.items()):
+        if code in by_type:
+            continue
+        item = EventEquipmentRequest(
+            equipment_type=types[code],
+            quantity=line.quantity,
+            technical_notes=line.technical_notes,
+            created_by_id=actor.id,
+            created_at=added_at + timedelta(microseconds=position),
+        )
+        event.equipment_requests.append(item)
+        to_hold.append(item)
+    db.flush()
+
+    available = available_for_event(db, event)
+    for item in to_hold:
+        _hold_or_flag(db, event, item, available, actor=actor)
+    if withdrawn:
+        _notify_technical_support_of_withdrawal(db, event, withdrawn, actor=actor)
+    db.flush()

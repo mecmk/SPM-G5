@@ -470,6 +470,14 @@
   text-decoration: none;
 }
 
+/* Story 19.2: a list of queue cards (change requests), without bullets or the list's indent, so
+   each card lines up with the page heading. */
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* Story 21.1: the boxed items on an event's safety details, without bullets. */
 .safety-fact-list {
   list-style: none;
@@ -1232,6 +1240,121 @@ label.checkbox input {
 .decline-reason .fact-label {
   display: block;
   margin-bottom: 0.125rem;
+  color: var(--danger-deep);
+}
+
+/* Story 19.1/19.2: a change request - on the event page, in the coordinator's queue and in the
+   Approve dialog. Its differences sit in one inset block, a row each: an icon, what changes, the
+   value now, an arrow and the value requested. The column names show on the first row only. */
+.change-request-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+}
+
+.change-diff {
+  padding: 0.25rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+.change-diff-row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(8rem, 1.2fr) minmax(0, 1fr) 1.5rem minmax(0, 1fr);
+  align-items: end;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 0.875rem;
+}
+
+.change-diff-row:last-child {
+  border-bottom: none;
+}
+
+.change-diff-icon,
+.change-diff-arrow {
+  display: flex;
+  color: var(--text-muted);
+}
+
+.change-diff-what {
+  color: var(--text-h);
+}
+
+.change-diff-value {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-wrap: anywhere;
+}
+
+.change-diff-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.change-diff-requested > span:last-child {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* On a phone what changes takes the first line, and the two values the second. */
+@media (max-width: 640px) {
+  .change-diff-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr) 1rem minmax(0, 1fr);
+  }
+
+  .change-diff-what {
+    grid-column: 2 / -1;
+  }
+
+  .change-diff-row > .change-diff-value:not(.change-diff-requested) {
+    grid-column: 2;
+  }
+}
+
+/* The reason a request was made, or the decision on it, beside the request's actions. */
+.change-request-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.change-request-footer .change-note {
+  flex: 1 1 20rem;
+}
+
+.change-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+.change-note p {
+  margin: 0;
+}
+
+.change-note-icon {
+  display: flex;
+  padding-top: 0.125rem;
+  color: var(--text-muted);
+}
+
+.change-note-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.change-note-rejected {
+  border-left: 3px solid var(--danger);
+  background: var(--danger-bg);
+}
+
+.change-note-rejected .change-note-icon {
   color: var(--danger-deep);
 }
 
@@ -3687,14 +3810,6 @@ button.requirement-choice.requirement-covered:hover,
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-h);
-}
-
-/* Story 19.1: on a phone a change request's text takes the whole row, with its status and
-   Withdraw beneath it, rather than being squeezed into a narrow column beside them. */
-@media (max-width: 640px) {
-  .change-request-text {
-    flex-basis: 100%;
-  }
 }
 
 /* Story 18.1: on a phone each event's Register button - the card's action, full width below its

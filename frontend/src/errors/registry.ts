@@ -116,6 +116,8 @@ export type ErrorCode =
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
   | 'CHANGE_REQUEST_REASON_REQUIRED'
   | 'CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID'
+  | 'CHANGE_REQUEST_DECISION_REFUSED'
+  | 'CHANGE_REQUEST_REJECTION_REASON_REQUIRED'
   | 'EVENT_CONTACT_EDIT_CLOSED'
   | 'REGISTRATION_EVENT_NOT_OPEN'
   | 'REGISTRATION_REFUSED'
@@ -691,6 +693,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID: {
     title: 'Check the number of people',
     message: 'Give every venue requirement a number of people, as a whole number from 1.',
+  },
+  // Story 19.2: the coordinator deciding change requests.
+  /** AC5/AC7/AC8: a decision refused for the state it found - already decided or withdrawn, the
+   *  event closed or changed since the request, or a change not approvable until Phase 2. The
+   *  backend's own sentence (always sent) says which. */
+  CHANGE_REQUEST_DECISION_REFUSED: {
+    title: 'Decision not made',
+    message: 'This change request can no longer be decided this way.',
+  },
+  /** AC3/AC4: the reject dialog's own pre-check before calling the API - never wired into an
+   *  errorCodes map, same precedent as CHANGE_REQUEST_REASON_REQUIRED. */
+  CHANGE_REQUEST_REJECTION_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for rejecting this change.',
   },
   /** AC2: the point of contact is updated directly only while the event is Planning or Confirmed. */
   EVENT_CONTACT_EDIT_CLOSED: {

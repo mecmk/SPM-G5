@@ -1,4 +1,5 @@
-"""Request and response shapes for event change requests (story 19.1).
+"""Request and response shapes for event change requests (story 19.1), and their decisions (story
+19.2).
 
 A change request names one field and the value proposed for it. The body is a union tagged by
 ``field``, so each field's value is checked by the very types story 2.1/2.7 use when a request is
@@ -99,9 +100,39 @@ ChangeRequestIn = Annotated[
 ]
 
 
+class ChangeRequestRejectionIn(_ChangeRequestIn):
+    """Story 19.2 AC3/AC4: rejecting needs a reason, trimmed, and blank or whitespace-only does
+    not count - the same rule, and the same ceiling, as the organiser's reason for asking."""
+
+
+def _change_request_fields(request: EventChangeRequest) -> dict[str, Any]:
+    """Every ``ChangeRequestOut`` field of ``request``, so the queue entry repeats none of them."""
+    return {
+        "id": request.id,
+        "event_id": request.event_id,
+        "field": request.field_name,
+        "current_value": (
+            None if request.current_value is None else json.loads(request.current_value)
+        ),
+        "proposed_value": json.loads(request.proposed_value),
+        "reason": request.reason,
+        "status": request.status,
+        "requested_by_id": request.requested_by_id,
+        "requested_by_name": request.requested_by.full_name,
+        "decided_by_id": request.decided_by_id,
+        "decided_by_name": None if request.decided_by is None else request.decided_by.full_name,
+        "decided_at": request.decided_at,
+        "decision_reason": request.decision_reason,
+        "created_at": request.created_at,
+        "updated_at": request.updated_at,
+    }
+
+
 class ChangeRequestOut(BaseModel):
     """AC1: a change request as the organiser and the assigned coordinator see it. The values are
-    returned as JSON, in the same canonical shape they are stored in (see the service)."""
+    returned as JSON, in the same canonical shape they are stored in (see the service). Story 19.2
+    AC2/AC3: once decided, who decided, when, and the reason for a rejection; all None while it
+    waits or once withdrawn."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -112,23 +143,34 @@ class ChangeRequestOut(BaseModel):
     status: str
     requested_by_id: uuid.UUID
     requested_by_name: str
+    decided_by_id: uuid.UUID | None
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_reason: str | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
     def from_change_request(cls, request: EventChangeRequest) -> ChangeRequestOut:
+        return cls(**_change_request_fields(request))
+
+
+class ChangeRequestQueueEntryOut(ChangeRequestOut):
+    """Story 19.2 AC1: a change request in the coordinator's queue - pending, or in their record of
+    decisions - with the event it is for, so the queue reads without opening each event."""
+
+    event_name: str
+    event_status: str
+    event_starts_at: datetime | None
+    event_ends_at: datetime | None
+
+    @classmethod
+    def from_queued_request(cls, request: EventChangeRequest) -> ChangeRequestQueueEntryOut:
+        event = request.event
         return cls(
-            id=request.id,
-            event_id=request.event_id,
-            field=request.field_name,
-            current_value=(
-                None if request.current_value is None else json.loads(request.current_value)
-            ),
-            proposed_value=json.loads(request.proposed_value),
-            reason=request.reason,
-            status=request.status,
-            requested_by_id=request.requested_by_id,
-            requested_by_name=request.requested_by.full_name,
-            created_at=request.created_at,
-            updated_at=request.updated_at,
+            **_change_request_fields(request),
+            event_name=event.name,
+            event_status=event.status,
+            event_starts_at=event.starts_at,
+            event_ends_at=event.ends_at,
         )

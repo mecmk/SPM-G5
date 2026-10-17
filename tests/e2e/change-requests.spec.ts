@@ -19,15 +19,7 @@
  * so a retried test, or a parallel one, would otherwise collide with a request left behind.
  */
 import { expect, test, type Page } from '@playwright/test'
-import {
-  ACCOUNTS,
-  assignByLead,
-  createAndSubmitRequest,
-  EVENTS,
-  inFuture,
-  signIn,
-  uniqueName,
-} from './support'
+import { ACCOUNTS, approvedEvent, EVENTS, inFuture, signIn } from './support'
 
 // Confirmed, Omar's (organiser 2) - only read here, never changed.
 const CONFIRMED_DINNER = '33333333-0000-0000-0000-000000000013'
@@ -35,30 +27,6 @@ const REASON = 'The keynote speaker can only attend a day later.'
 
 function changeRequests(page: Page) {
   return page.getByRole('region', { name: 'Change requests' })
-}
-
-/** A fresh event of the organiser's, approved by whichever coordinator it was assigned to, with
- *  the organiser signed back in on its page. Returns its id and that coordinator's account. */
-async function approvedEvent(page: Page, label: string) {
-  await signIn(page, ACCOUNTS.organiser)
-  const eventId = await createAndSubmitRequest(page, uniqueName(label))
-  await page.goto(`/events/${eventId}`)
-  const { account } = await assignByLead(page)
-
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, account)
-  await page.goto(`/events/${eventId}`)
-  await page.getByRole('button', { name: 'Approve' }).click()
-  await page
-    .getByRole('dialog', { name: 'Approve this request?' })
-    .getByRole('button', { name: 'Approve' })
-    .click()
-  await expect(page.getByText('Planning', { exact: true }).first()).toBeVisible()
-
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, ACCOUNTS.organiser)
-  await page.goto(`/events/${eventId}`)
-  return { eventId, coordinator: account }
 }
 
 async function openChangeForm(page: Page, field: string) {

@@ -218,6 +218,32 @@ export async function assignByLead(page: Page) {
   return { ...chloe, other: carl }
 }
 
+/** A fresh event of the organiser's, approved by whichever coordinator it was assigned to, with
+ *  the organiser signed back in on its page. Returns its id, its name and that coordinator's
+ *  account. Stories 19.1 and 19.2 raise and decide change requests on it. */
+export async function approvedEvent(page: Page, label: string) {
+  await signIn(page, ACCOUNTS.organiser)
+  const name = uniqueName(label)
+  const eventId = await createAndSubmitRequest(page, name)
+  await page.goto(`/events/${eventId}`)
+  const { account } = await assignByLead(page)
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, account)
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await page
+    .getByRole('dialog', { name: 'Approve this request?' })
+    .getByRole('button', { name: 'Approve' })
+    .click()
+  await expect(page.getByText('Planning', { exact: true }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${eventId}`)
+  return { eventId, name, coordinator: account }
+}
+
 /** The clarification thread on an event's detail page (stories 4.2, 4.6). */
 export function clarificationsSection(page: Page) {
   return page.getByRole('region', { name: 'Clarifications', exact: true })
