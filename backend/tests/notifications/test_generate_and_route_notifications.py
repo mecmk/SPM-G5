@@ -56,6 +56,7 @@ from tests.support.factories import (
     make_equipment_type,
     make_event,
     make_user,
+    make_venue_requirement,
 )
 from tests.support.seed import Bookings, Events, SeedUser, Users, Venues
 
@@ -858,6 +859,9 @@ def test_simultaneous_event_decisions_notify_once(engine: Engine):
         event = make_event(
             session, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=Users.COORDINATOR.id
         )
+        # Since fix f2.7.4 a request without a venue requirement cannot be approved (story 2.7
+        # AC17). It is removed with the event (ON DELETE CASCADE).
+        make_venue_requirement(session, event.id)
         session.commit()
         event_id = event.id
     start = threading.Barrier(2)

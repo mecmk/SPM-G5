@@ -576,6 +576,14 @@ export function EventDetailPage() {
     bookings !== null &&
     event.venue_requirements.length > 0 &&
     firstRequirementNeedingVenue(event, bookings) === null
+  /** Fix f2.7.4 (story 2.7 AC17, AC19): "No venue requirements", saved before the fix, still
+   *  stands once a request is past its decision - an event approved with it keeps the paths for
+   *  none (AC19). Before then it no longer does: such a request cannot be submitted or approved
+   *  until it has a venue requirement, so it shows as nothing recorded. */
+  const isNoVenueAnswerKept =
+    event.venue_none_required &&
+    event.status !== 'DRAFT' &&
+    !AWAITING_DECISION_STATUSES.includes(event.status)
   /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
    *  history, mirroring the backend's `_can_view_clarifications`. */
   const canViewClarifications =
@@ -813,10 +821,8 @@ export function EventDetailPage() {
                 </Link>
               )}
             </div>
-            {event.venue_none_required && (
-              <p className="muted">No venue is required for this event.</p>
-            )}
-            {!event.venue_none_required && event.venue_requirements.length === 0 && (
+            {isNoVenueAnswerKept && <p className="muted">No venue is required for this event.</p>}
+            {!isNoVenueAnswerKept && event.venue_requirements.length === 0 && (
               <p className="muted">{NOT_RECORDED}</p>
             )}
             {event.venue_requirements.length > 0 && (

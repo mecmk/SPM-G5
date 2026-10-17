@@ -77,6 +77,9 @@ PICTURE_ROUTE = "/events/{event_id}/review-details/cover-image"
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 SEEDED_PICTURE = "/images/events/cat.jpg"
 LAPTOP_STOCK = 6
+# Fix f2.7.4's refusal (story 2.7 AC14, AC20), written out so a red run shows what the server
+# answers instead.
+_NEEDS_A_VENUE_REQUIREMENT = "A request needs at least one venue requirement."
 
 
 def _read(client, event_id) -> dict:
@@ -140,6 +143,18 @@ def _requirement_in(requirement: dict) -> dict:
             for f in requirement["facilities"]
         ],
         "notes": requirement["notes"],
+    }
+
+
+def _moved_to(event: dict, period: tuple[datetime, datetime]) -> dict:
+    """A correction moving ``event`` (a GET body) to ``period``, its one venue requirement with it,
+    as the form moves one that kept the event's times (story 2.7 AC10 refuses an event moved away
+    from its requirement). Since fix f2.7.4 every request has one, and submission gave it the
+    event's times (2.7 AC2)."""
+    (main_venue,) = event["venue_requirements"]
+    return {
+        **_dates(period),
+        "venue_requirements": [{**_requirement_in(main_venue), **_dates(period)}],
     }
 
 
@@ -423,13 +438,17 @@ def test_a_requirement_added_without_times_is_needed_for_the_whole_event(coordin
 
 
 @pytest.mark.story("7.2", ac=4)
-def test_the_venue_requirements_cannot_all_be_removed_without_marking_none(coordinator_client):
+@pytest.mark.story("2.7", ac=16)
+@pytest.mark.story("2.7", ac=20)
+def test_the_venue_requirements_cannot_all_be_removed(coordinator_client):
+    """Fix f2.7.4: a request's only venue requirement can be edited, not removed (2.7 AC16), and
+    the server holds a correction to that as it holds every save (AC20)."""
     event = _read(coordinator_client, Events.SUBMITTED)
 
     response = _correct(coordinator_client, event, venue_requirements=[])
 
     assert response.status_code == 422
-    assert "venue requirements (choose some, or mark none)" in response.text
+    assert _NEEDS_A_VENUE_REQUIREMENT in response.text
     assert len(_read(coordinator_client, Events.SUBMITTED)["venue_requirements"]) == 1
 
 
@@ -749,7 +768,7 @@ def test_moving_the_dates_moves_the_equipment_holds(login_as, db: Session):
     old, new = _period(40), _period(60)
     event = _submitted_with_equipment(login_as, db, old, _equipment("LAPTOP", 2))
 
-    response = _correct(login_as(Users.COORDINATOR), event, **_dates(new))
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, new))
 
     assert response.status_code == 200, response.text
     assert _held(db, event["id"]) == {("LAPTOP", 2, new[0], new[1])}
@@ -811,7 +830,7 @@ def test_the_events_own_holds_do_not_count_against_it(login_as, db: Session):
     event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", LAPTOP_STOCK))
     shifted = (period[0] + timedelta(hours=1), period[1] + timedelta(hours=1))
 
-    response = _correct(login_as(Users.COORDINATOR), event, **_dates(shifted))
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, shifted))
 
     assert response.status_code == 200, response.text
     assert _held(db, event["id"]) == {("LAPTOP", LAPTOP_STOCK, shifted[0], shifted[1])}
@@ -851,7 +870,7 @@ def test_moving_into_a_period_without_enough_stock_is_refused_and_changes_nothin
     make_equipment_hold(db, type_code="LAPTOP", quantity=5, starts_at=new[0], ends_at=new[1])
     db.commit()
 
-    response = _correct(login_as(Users.COORDINATOR), event, name="Moved", **_dates(new))
+    response = _correct(login_as(Users.COORDINATOR), event, name="Moved", **_moved_to(event, new))
 
     assert response.status_code == 422
     assert "presentation laptop" in response.text.lower()
@@ -874,7 +893,7 @@ def test_stock_taken_between_the_check_and_the_hold_is_refused_as_unavailable(
     db.commit()
     monkeypatch.setattr(service, "_check_equipment_available", lambda *args, **kwargs: None)
 
-    response = _correct(login_as(Users.COORDINATOR), event, **_dates(new))
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, new))
 
     assert response.status_code == 422
     assert "presentation laptop" in response.text.lower()

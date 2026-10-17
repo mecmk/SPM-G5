@@ -165,7 +165,8 @@ def create_event(
     actor: Annotated[CurrentUser, CanCreate],
 ) -> EventDetailOut:
     """Story 2.1 AC1-AC6: an organiser records a request; it starts as a draft. Story 2.7:
-    with any number of venue requirements, each checked as it would be on an edit."""
+    with one or more venue requirements (at least one since fix f2.7.4, AC14), each checked as it
+    would be on an edit."""
     try:
         event = service.create_event(db, payload, actor=actor)
     except service.InvalidVenueRequirement as exc:
@@ -493,7 +494,9 @@ def approve_event(
     db: DbSession,
     actor: Annotated[CurrentUser, CanReview],
 ) -> EventDetailOut:
-    """4.4 AC1-AC3: approves the request, recording the deciding coordinator and time."""
+    """4.4 AC1-AC3: approves the request, recording the deciding coordinator and time. A request
+    with no venue requirement - one submitted before fix f2.7.4 - is a 409 until its coordinator
+    adds one (story 2.7 AC17)."""
     try:
         event = service.get_event(db, event_id, viewer=actor)
     except service.EventNotFound:

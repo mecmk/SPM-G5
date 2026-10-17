@@ -5,7 +5,7 @@ AC1  The organiser can add more than one venue requirement, each with a short na
      other requirements in free text.
 AC2  Each requirement has its own start and end, defaulting to the event's (Singapore time).
 AC3  Requirements can be added, edited and removed while a draft; "No venue requirements" clears
-     them all.
+     them all. Fix f2.7.4 (AC14) replaced "No venue requirements": the last one cannot be removed.
 AC4  Every requirement, with its times, is shown to the reviewing coordinator and other internal
      roles.
 AC5  A requirement's times fall within the event's, inclusive, and its end is after its start.
@@ -15,6 +15,7 @@ AC7  A request recorded before this story keeps its venue requirements as one re
      "Main venue", with the event's times and expected attendance.
 AC8  To submit, the request needs at least one requirement with a name and a number of people, or
      "No venue requirements"; an incomplete requirement blocks submission, a draft may hold one.
+     Fix f2.7.4 (AC15) replaced "No venue requirements": a complete requirement is the only answer.
 AC9  Two requirements on one request cannot share a name (trimmed, case-insensitive).
 AC10 An edit to the event's start or end that would leave a requirement outside is refused,
      naming it; moving the requirement in the same edit is accepted.
@@ -254,7 +255,8 @@ def test_the_old_single_set_of_venue_fields_is_no_longer_accepted(organiser_clie
         ("required_facilities", [{"code": "WIFI"}]),
         ("venue_requirement_notes", "Near the lifts"),
     ):
-        # Sent on its own, without venue_requirements, so the refusal can only be the old field.
+        # Sent beside only the factory's valid venue requirement, so the refusal can only be the
+        # old field.
         response = organiser_client.post(
             "/events", json=event_request_payload(**{old_field: value})
         )
@@ -388,7 +390,7 @@ def test_a_requirement_needs_both_times_or_neither(organiser_client, given):
     assert one.status_code == 422
 
 
-# --- AC3: added, edited and removed while a draft; "No venue requirements" clears them -----------
+# --- AC3: added, edited and removed while a draft; "No venue requirements" is refused (f2.7.4) ---
 @pytest.mark.story("2.7", ac=3)
 def test_an_edited_requirement_keeps_its_id(organiser_client):
     """A requirement is edited in place, never deleted and re-created, so a booking that later
@@ -485,21 +487,6 @@ def test_the_same_requirement_sent_twice_in_one_save_is_refused(organiser_client
 
     assert response.status_code == 422
     assert _names(organiser_client.get(f"/events/{created['id']}").json()) == ["Plenary hall"]
-
-
-@pytest.mark.story("2.7", ac=3)
-def test_no_venue_requirements_clears_every_requirement(organiser_client):
-    created = _create(
-        organiser_client, [_requirement("Plenary hall"), _requirement("Breakout", 20)]
-    )
-
-    response = _patch(
-        organiser_client, created["id"], venue_none_required=True, venue_requirements=[]
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["venue_none_required"] is True
-    assert response.json()["venue_requirements"] == []
 
 
 @pytest.mark.story("2.7", ac=3)
@@ -902,16 +889,6 @@ def test_one_incomplete_requirement_blocks_submission_beside_a_complete_one(orga
 
     assert response.status_code == 422
     assert "venue requirement 1" in response.text.lower()
-
-
-@pytest.mark.story("2.7", ac=8)
-def test_no_requirements_and_not_marked_none_blocks_submission(organiser_client):
-    created = _create_submittable(organiser_client, [])
-
-    response = _submit(organiser_client, created["id"])
-
-    assert response.status_code == 422
-    assert "venue requirements" in response.text.lower()
 
 
 @pytest.mark.story("2.7", ac=8)

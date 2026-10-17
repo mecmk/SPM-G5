@@ -8,7 +8,8 @@ AC2 The proposed end must be after the start, and a date in the past is rejected
 AC3 Expected attendance, equipment quantities and facility quantities accept positive whole
     numbers only.
 AC4 Venue requirements (room layout, facilities with a quantity, other requirements) can be
-    recorded, or marked "no venue requirements", which is stored distinguishably from left empty.
+    recorded. Marking them "no venue requirements", stored apart from left empty, was withdrawn
+    by fix f2.7.4: every request now has at least one venue requirement (story 2.7 AC14).
 AC5 Accessibility needs can be selected or described, or marked "none required"; leaving them
     empty is stored distinguishably from "none required" (a draft may stay unanswered; a
     submitted request may not, AC10).
@@ -109,8 +110,13 @@ def test_organiser_records_name_purpose_description_dates_and_attendance(
 
 
 @pytest.mark.story("2.1", ac=1)
-def test_a_name_alone_is_enough_for_a_draft(organiser_client):
-    response = organiser_client.post("/events", json={"name": "Just a name"})
+@pytest.mark.story("2.7", ac=14)
+def test_a_name_and_one_empty_venue_requirement_are_enough_for_a_draft(organiser_client):
+    """Since fix f2.7.4 a request always has a venue requirement (2.7 AC14), but a draft may leave
+    everything in it empty (2.7 AC8)."""
+    response = organiser_client.post(
+        "/events", json={"name": "Just a name", "venue_requirements": [{}]}
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -646,25 +652,6 @@ def test_venue_requirements_are_recorded_with_their_names(organiser_client):
 
 
 @pytest.mark.story("2.1", ac=4)
-def test_leaving_venue_requirements_empty_is_stored_as_not_yet_specified(organiser_client):
-    created = create_event_request(organiser_client)
-
-    assert created["venue_none_required"] is False
-    assert created["venue_requirements"] == []
-
-
-@pytest.mark.story("2.1", ac=4)
-def test_no_venue_requirements_is_stored_distinguishably_from_left_empty(organiser_client):
-    unspecified = create_event_request(organiser_client)
-    none_required = create_event_request(organiser_client, venue_none_required=True)
-
-    assert none_required["venue_none_required"] is True
-    assert none_required["venue_requirements"] == []
-    assert none_required["venue_none_required"] != unspecified["venue_none_required"]
-    assert organiser_client.get(f"/events/{none_required['id']}").json() == none_required
-
-
-@pytest.mark.story("2.1", ac=4)
 @pytest.mark.parametrize(
     "extra",
     [
@@ -683,40 +670,6 @@ def test_no_venue_requirements_contradicts_a_stated_requirement(organiser_client
 
     assert response.status_code == 422
     assert "none required" in _detail(response)
-
-
-@pytest.mark.story("2.1", ac=4)
-def test_an_edit_is_checked_against_the_stored_venue_none_required(organiser_client):
-    created = create_event_request(organiser_client, venue_none_required=True)
-
-    contradiction = organiser_client.patch(
-        f"/events/{created['id']}",
-        json={"venue_requirements": [_main_venue(layout_code="THEATRE")]},
-    )
-    consistent = organiser_client.patch(
-        f"/events/{created['id']}",
-        json={
-            "venue_none_required": False,
-            "venue_requirements": [_main_venue(layout_code="THEATRE")],
-        },
-    )
-
-    assert contradiction.status_code == 422
-    assert consistent.status_code == 200, consistent.text
-    assert consistent.json()["venue_none_required"] is False
-
-
-@pytest.mark.story("2.1", ac=4)
-def test_venue_requirements_can_be_returned_to_not_yet_specified(organiser_client):
-    created = create_event_request(organiser_client, venue_none_required=True)
-
-    response = organiser_client.patch(
-        f"/events/{created['id']}", json={"venue_none_required": False}
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["venue_none_required"] is False
-    assert response.json()["venue_requirements"] == []
 
 
 @pytest.mark.story("2.1", ac=4)

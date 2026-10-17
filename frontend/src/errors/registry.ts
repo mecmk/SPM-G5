@@ -303,7 +303,9 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is
    * still a draft. One code for both actions, same precedent as BOOKING_CONFLICT: the backend
    * gives each its own detail sentence naming which verb was refused and the request's current
-   * status.
+   * status. Fix f2.7.4 (story 2.7 AC17): also approving a request that is still awaiting a
+   * decision but has no venue requirement; that sentence names no status, and reloading does not
+   * clear it - the coordinator adds a venue requirement first.
    */
   EVENT_NOT_AWAITING_DECISION: {
     title: 'Cannot decide this request',
