@@ -50,6 +50,8 @@ const BREAKOUT_ROOM = 'Breakout room'
 const MAIN_HALL_OF_LANTERN = 'cccccccc-0000-0000-0062-000000000001'
 
 const FIND_REPLACEMENT = 'Find a replacement venue'
+// How the seed stamps the awards evening's original, as the event page writes it.
+const ORIGINAL_APPROVED_AT = 'Sat, 10 Oct 2026, 09:00'
 const FIND_ANOTHER = 'Find another venue'
 const FIND_A_VENUE = 'Find a venue'
 const ALL_BOOKED = 'All required venues booked'
@@ -227,6 +229,10 @@ test('12.6 AC2: Request this venue raises a pending replacement shown on the eve
   await expect(page.getByText(`Replaces ${FOYER}`)).toBeVisible()
   // The original's setup and teardown are the step's, and can be changed.
   const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
+  await expect(turnaround).toContainText(
+    'Copied from the booking it replaces; change them if needed.',
+  )
+  await expect(turnaround).not.toContainText('Both stay 0 unless you enter more.')
   for (const part of ['Setup', 'Teardown']) {
     await expect(
       turnaround.getByRole('group', { name: part, exact: true }).getByLabel('Minutes'),
@@ -290,6 +296,10 @@ test.describe('12.6 AC3 on the awards evening', () => {
     await expect(bookings).toContainText(`Replaces ${FOYER}`)
     await expect(bookings).toContainText('Cancelled')
     await expect(page.getByRole('link', { name: FIND_REPLACEMENT })).toHaveCount(0)
+    // The released original closed when its replacement was approved, not when it was approved
+    // itself (the seed approves it at 09:00 on 10 Oct 2026).
+    await expect(bookings).toContainText('Closed at')
+    await expect(bookings).not.toContainText(ORIGINAL_APPROVED_AT)
   })
 
   for (const [size, viewport] of [
@@ -328,9 +338,15 @@ test('12.6 AC4/AC5/AC10: the banner follows the replacement, and a withdrawn one
   await expect(banner).toContainText(`Replacement requested: ${GRAND_HALL}`)
   await expect(page.getByRole('link', { name: SWITCH_TO })).toHaveCount(0)
   await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
+  // AC4/AC10: the booked panel keeps saying what was asked for, and offers no second search.
+  const booked = page.getByRole('region', { name: `Booked for ${MAIN_HALL}` })
+  await expect(booked).toContainText(UNAVAILABLE_LABEL)
+  await expect(booked.getByRole('link', { name: FIND_REPLACEMENT })).toHaveCount(0)
 
   // AC5: withdrawn from the event's page, the original stays marked and a new one can be asked for.
   await openEvent(page, PITCH_NIGHT)
+  await expect(bookingList(page)).toContainText(`Replacement requested: ${GRAND_HALL}`)
+  await expect(page.getByRole('link', { name: FIND_REPLACEMENT })).toHaveCount(0)
   await page.getByRole('button', { name: `Withdraw ${GRAND_HALL} for ${MAIN_HALL}` }).click()
   const dialog = page.getByRole('dialog', { name: 'Withdraw this booking request?' })
   await dialog.getByRole('button', { name: 'Withdraw' }).click()

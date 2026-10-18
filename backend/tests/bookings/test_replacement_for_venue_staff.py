@@ -18,8 +18,11 @@ from app.bookings.models import BookingStatus
 from tests.support.replacement import (
     BOOKINGS_PATH,
     add_pending_replacement,
+    approve,
+    created,
     end_the_closure,
     make_scenario,
+    replace,
     set_status,
 )
 from tests.support.seed import Users
@@ -101,3 +104,25 @@ def test_an_ordinary_request_shows_no_replacement_facts(venue_staff_client, db):
     entry = _queue_entry(venue_staff_client, scene.original.id)
 
     assert [entry[field] for field in FIELDS] == [None, None, None]
+    assert entry["released_at"] is None
+
+
+@pytest.mark.story("12.6", ac=3)
+def test_the_queue_carries_the_time_a_released_original_was_released(login_as, db):
+    """The queue card of a released original says "Closed at": the release, which is when its
+    replacement was approved, not the original's own approval."""
+    scene = make_scenario(db)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    staff = login_as(Users.VENUE_STAFF)
+    assert approve(staff, body["id"]).status_code == 200
+
+    def entry(status: str, booking_id: str) -> dict:
+        response = staff.get(BOOKINGS_PATH, params={"status": status, "limit": 100})
+        assert response.status_code == 200, response.text
+        return next(each for each in response.json()["items"] if each["id"] == booking_id)
+
+    original = entry("CANCELLED", str(scene.original.id))
+    replacement = entry("APPROVED", body["id"])
+    assert original["released_at"] == replacement["decided_at"]
+    assert original["released_at"] != original["decided_at"]
+    assert replacement["released_at"] is None

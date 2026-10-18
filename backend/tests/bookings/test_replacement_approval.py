@@ -285,6 +285,25 @@ def test_two_approvals_at_once_release_the_original_once(engine):
         purge(engine, event_ids=[event_id], venue_ids=venue_ids)
 
 
+@pytest.mark.story("12.6", ac=3)
+def test_a_released_original_carries_the_time_it_was_released(login_as, db):
+    """ "Closed at" on the event page is when the replacement was approved, not the original's own
+    approval, which its decided_at still is: the outcome carries the release time, derived from
+    the replacement that released it, and only for an original that was released."""
+    scene = make_scenario(db)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    before = _listed(login_as(Users.COORDINATOR), scene)
+    assert before[str(scene.original.id)]["released_at"] is None
+
+    assert approve(login_as(Users.VENUE_STAFF), body["id"]).status_code == 200
+
+    listed = _listed(login_as(Users.COORDINATOR), scene)
+    original, replacement = listed[str(scene.original.id)], listed[body["id"]]
+    assert original["released_at"] == replacement["decided_at"]
+    assert original["released_at"] != original["decided_at"]
+    assert replacement["released_at"] is None
+
+
 # --- AC6: approved after the unavailability ended ------------------------------------------------
 @pytest.mark.story("12.6", ac=6)
 def test_approving_a_replacement_after_the_mark_cleared_still_replaces_the_original(login_as, db):
