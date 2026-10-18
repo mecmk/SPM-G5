@@ -1,7 +1,8 @@
 /**
  * Story 9.4: mark a venue temporarily unavailable, even with events booked there.
  *
- * AC1  Venue Staff add a closure from the venue's page - a start, an end, a reason and a
+ * AC1  Venue Staff add a closure from the venue's Edit venue page (story 12.6 AC12 moved the
+ *      controls there from its details page) - a start, an end, a reason and a
  *      description, which every reason needs - and the calendar shows it as "Unavailable" with
  *      its reason; a block off with no description is refused in the backend's own words, and
  *      the month grid's chip names the reason, or the description for Other.
@@ -15,7 +16,7 @@
  * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
  *      Approve is held back.
  * AC9  Only Venue Staff see the Block off time card; the coordinator and the Safety Officer see
- *      the calendar and no way to change it.
+ *      the calendar, on the venue's details page, and no way to change it.
  *
  * The rules - the reasons and the Other description, what overlaps, the event's return to
  * Planning, who is told, the refusal to approve, the races - are backend cases:
@@ -34,7 +35,16 @@
  * one and works on today.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, VENUES, corsHeaders, inFuture, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  EVENTS,
+  VENUES,
+  corsHeaders,
+  inFuture,
+  signIn,
+  uniqueName,
+  venueCard,
+} from './support'
 
 // The spec pins and reads wall-clock dates in Singapore time, whatever the machine's zone.
 test.use({ timezoneId: 'Asia/Singapore' })
@@ -94,7 +104,19 @@ async function saveClosure(page: Page, options: SaveOptions = {}) {
   expect((await landed).ok()).toBe(true)
 }
 
+/**
+ * Venue Staff's way to the controls: the venue's Edit venue page, from its card in the catalogue
+ * (story 12.6 AC12). Waits for the calendar the controls act on.
+ */
 async function openVenue(page: Page, name: string) {
+  await page.goto('/venues')
+  await venueCard(page, name).getByRole('link', { name: 'Edit' }).click()
+  await expect(availability(page)).toBeVisible()
+  await expect(page.getByText('Loading availability…')).toHaveCount(0)
+}
+
+/** The venue's details page, which every internal role may open and which has the calendar alone. */
+async function openVenueRecord(page: Page, name: string) {
   await page.goto('/venues')
   await page.getByRole('link', { name }).click()
   await expect(availability(page)).toBeVisible()
@@ -493,7 +515,7 @@ test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, bro
 
   for (const email of [ACCOUNTS.coordinator, ACCOUNTS.safetyOfficer]) {
     const other = await signedInPage(browser, email)
-    await openVenue(other, VENUES.gardenAtrium)
+    await openVenueRecord(other, VENUES.gardenAtrium)
     await expect(availability(other)).toBeVisible()
     await expect(blockOff(other)).toHaveCount(0)
     await expect(other.getByRole('button', { name: 'Block off time' })).toHaveCount(0)
