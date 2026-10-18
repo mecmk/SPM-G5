@@ -109,3 +109,45 @@ export function withdrawRegistration(registration: MyRegistration): Promise<MyRe
     },
   })
 }
+
+/** Mirrors `EventRegistrationOut`: story 18.3 AC1/AC4, one registration in an event's list,
+ *  withdrawn and cancelled ones included. */
+export interface EventRegistration {
+  id: string
+  attendee_name: string
+  attendee_email: string
+  registered_at: string
+  status: string
+  withdrawn_at: string | null
+}
+
+/** Mirrors `EventRegistrationListOut`: story 18.3 AC1-AC3/AC7, the list and the count of its
+ *  active registrations against capacity, both worked out on the server. */
+export interface EventRegistrationList {
+  items: EventRegistration[]
+  active_count: number
+  capacity: number | null
+  is_full: boolean
+}
+
+/** Mirrors `ManagedRegistrationEventOut`: story 18.3 AC5, one event on the registrations
+ *  report's picker. */
+export interface ManagedRegistrationEvent {
+  id: string
+  name: string
+  starts_at: string
+  ends_at: string
+}
+
+/** Story 18.3 AC5: the events taking registrations that the signed-in user organises or
+ *  coordinates, soonest first. */
+export function listManagedRegistrationEvents(): Promise<ManagedRegistrationEvent[]> {
+  return api<ManagedRegistrationEvent[]>('/registrations/managed')
+}
+
+/** Story 18.3: the registrations for an event the signed-in user organises or coordinates. */
+export function listEventRegistrations(eventId: string): Promise<EventRegistrationList> {
+  return api<EventRegistrationList>(`/events/${eventId}/registrations`, {
+    errorCodes: { 404: 'REGISTRATION_LIST_NOT_FOUND' },
+  })
+}

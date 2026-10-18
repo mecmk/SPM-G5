@@ -21,6 +21,7 @@ import {
   type RequiredFacility,
   type VenueRequirement,
 } from '../api/events'
+import { listEventRegistrations, type EventRegistrationList } from '../api/registrations'
 import { getEventSafety } from '../api/safety'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -37,6 +38,7 @@ import {
   eventCoordinatorEditPath,
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
+  registrationsReportPath,
   venueSearchPath,
 } from '../routes'
 import {
@@ -242,6 +244,9 @@ function formatHeroMeta(event: EventDetail): string {
  *
  * Story 15.1: the Equipment requirements section is where the assigned coordinator records the
  * event's equipment and submits it to Technical Support (`EquipmentRequestsSection`).
+ *
+ * Story 18.3: for the organiser and assigned coordinator of an event that takes registrations, the
+ * Registration card shows only the count, with a link to the registrations report for who registered.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -279,6 +284,14 @@ export function EventDetailPage() {
   const [reassignError, setReassignError] = useState<string | null>(null)
   const [eligibleCoordinators, setEligibleCoordinators] = useState<CoordinatorOption[] | null>(null)
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
+  const [registrations, setRegistrations] = useState<EventRegistrationList | null>(null)
+  const [registrationsError, setRegistrationsError] = useState<string | null>(null)
+  /** Story 18.3 AC5: only the organiser and the assigned coordinator see who registered. */
+  const canSeeRegistrations =
+    event !== null &&
+    event.registration_required &&
+    user !== null &&
+    (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
 
   useEffect(() => {
     let cancelled = false
@@ -326,6 +339,22 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, canReadBooking])
+
+  /** Story 18.3 AC1: the count, for the Registration card. */
+  useEffect(() => {
+    if (!canSeeRegistrations) return undefined
+    let cancelled = false
+    listEventRegistrations(eventId)
+      .then((data) => {
+        if (!cancelled) setRegistrations(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRegistrationsError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, canSeeRegistrations])
 
   /** Story 5.2 AC4: loaded only once the Reassign dialog opens, leaving the event's current
    *  coordinator out - they are not a valid target for their own event. */
@@ -846,7 +875,29 @@ export function EventDetailPage() {
                 </div>
               </>
             )}
+            {/* Story 18.3 AC1: the count here; who registered is on the registrations report. */}
+            {canSeeRegistrations && registrations !== null && (
+              <div>
+                <p className="eyebrow">Registered</p>
+                <p className="cluster">
+                  {registrations.active_count} / {registrations.capacity ?? '–'}
+                  {registrations.is_full && <Chip label="Full" tone="warning" />}
+                </p>
+              </div>
+            )}
           </div>
+          {canSeeRegistrations && registrationsError && (
+            <p role="alert" className="error">
+              {registrationsError}
+            </p>
+          )}
+          {canSeeRegistrations && (
+            <div className="cluster">
+              <Link to={registrationsReportPath(event.id)} className="button secondary button-sm">
+                View registrations
+              </Link>
+            </div>
+          )}
         </section>
 
         <div className="layout-half">
