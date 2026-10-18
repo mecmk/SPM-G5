@@ -19,15 +19,11 @@
  * so a retried test, or a parallel one, would otherwise collide with a request left behind.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, approvedEvent, EVENTS, inFuture, signIn } from './support'
+import { ACCOUNTS, approvedEvent, changeRequests, EVENTS, inFuture, signIn } from './support'
 
 // Confirmed, Omar's (organiser 2) - only read here, never changed.
 const CONFIRMED_DINNER = '33333333-0000-0000-0000-000000000013'
 const REASON = 'The keynote speaker can only attend a day later.'
-
-function changeRequests(page: Page) {
-  return page.getByRole('region', { name: 'Change requests' })
-}
 
 async function openChangeForm(page: Page, field: string) {
   await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
