@@ -1567,6 +1567,12 @@ td.num {
   border-color: var(--danger-border);
 }
 
+.chip-muted {
+  color: var(--text-faint);
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
 /* ---------- tabs and filter pills ---------- */
 
 .tabs {
@@ -1826,6 +1832,11 @@ td.num {
   color: var(--success);
 }
 
+.calendar-entry-muted {
+  background: var(--surface-alt);
+  color: var(--text-faint);
+}
+
 .calendar-more,
 .calendar-hint {
   font-family: var(--font-mono);
@@ -2009,7 +2020,16 @@ td.num {
   grid-area: actions;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+/* An action and what it will do, kept together when the row wraps. */
+.closure-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
 }
 
 /* "+3 more" on a day that opens: dark and underlined, so it reads as something to press. */

@@ -6,6 +6,11 @@
 export const BLOCK_OFF_LABEL = 'Block off time'
 export const EDIT_BLOCK_OFF_LABEL = 'Edit blocked-off time'
 
+/** Story 9.4 AC6: said beside the button each belongs to, so Venue Staff know what it will do
+ * before pressing it: Remove is for a closure not yet started, End now for one in force. */
+export const REMOVE_CLOSURE_HINT = 'Not started yet: removes it completely'
+export const END_CLOSURE_HINT = 'Ends the whole closure now; the time already passed is kept'
+
 /** Story 12.6 AC12: said under the form's Save changes, above the closure sections, which are not
  * part of the form: a closure is saved by its own Save closure, not by the venue's Save changes. */
 export const CLOSURES_SAVED_NOTE =
