@@ -15,16 +15,16 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  *     because the event started meanwhile says so.
  * AC4 After withdrawing, the attendee can register again from Upcoming events, and the event is
  *     listed once, as Registered.
- * AC5 Attendees see only their own registrations, and only attendees can open the page (the API's
- *     401/403 are backend cases).
+ * AC5 Only attendees can open the page. Whose registrations the API sends, and its 401/403, are
+ *     backend cases: the page shows what it is sent and filters nothing itself.
  * AC6 A withdrawal answered "not found" says so (whose registrations the API answers for is a
  *     backend case).
  * AC7 A double-click withdraws once.
  * AC8 A registration for a cancelled event shows as Event cancelled, with no Withdraw.
  *
  * Every test is independent: each case that withdraws has a seeded registration of its own
- * (backend/db/seed/020_sample_data.sql, 1818..02-08 for events 3333..70-76), so tests running in
- * parallel never share one, and every other case only reads. Those that withdraw never retry: a
+ * (backend/db/seed/020_sample_data.sql, 1818..02-09 for events 3333..70-77), so tests running in
+ * parallel never withdraw the same one, and every other case only reads. Those that withdraw never retry: a
  * retry could only fail on what the first attempt changed, and would hide that attempt's trace.
  * States the seed cannot reach - no registrations at all, a slow or failed load, an event starting
  * mid-visit, a registration gone mid-visit - stub the one call with `page.route`.
@@ -39,18 +39,24 @@ const POETRY_NIGHT = 'Riverside Poetry Night' // one place, Aiden's; withdrawn o
 const SKETCHING_WALK = 'Urban Sketching Walk' // withdrawn and registered for again
 const BOARD_GAMES_SOCIAL = 'Board Games Social' // Withdraw double-clicked once
 const SUNSET_YOGA = 'Sunset Yoga by the Bay' // only read
+const LANTERN_PAINTING = 'Lantern Painting Workshop' // withdrawn once the server answers again
 const HERITAGE_TRAIL = 'Heritage Trail Tour' // Aiden withdrew
 const CHARITY_FUN_RUN = 'Charity Fun Run' // cancelled, Aiden's registration still active
 const BOOK_SWAP = 'Autumn Book Swap' // started on 3 Oct 2026
-const PORTFOLIO_REVIEW = 'Portfolio Review Slot' // Bella's (story 18.1), never Aiden's
 
 const EVENT_STARTED_MESSAGE = 'This event has started, so you can no longer withdraw.'
 const NOT_FOUND_MESSAGE = 'This registration was not found.'
 const UNREACHABLE_MESSAGE = 'The server could not be reached. Check your connection and try again.'
 const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
-// The yoga's cover picture (2.1 AC14). A card's picture is decorative - no alt text, hidden
-// from assistive technology - so it has no role or name, and is found by its tag.
+// A card's picture (2.1 AC14) is decorative - no alt text, hidden from assistive technology - so
+// it has no role or name, and is found by its tag. The yoga has the seeded one; an uploaded one
+// is served by the API (mediaUrl).
 const YOGA_PICTURE = '/images/events/cat.jpg'
+const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-harbourfront.png'
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 const LOADING_LABEL = 'Loading your registrations…'
 const EMPTY_MESSAGE = 'You have not registered for any events yet.'
 
@@ -163,6 +169,8 @@ test('18.2 AC1: an attendee opens My registrations from the sidebar and sees eac
   await expect(trail.getByText('Withdrawn', { exact: true })).toHaveClass(/\bbadge-withdrawn\b/)
   await expect(trail).toContainText('Sat, 3 Apr 2027 · 09:00–12:00')
   await expect(trail).toContainText('You withdrew on Thu, 8 Oct 2026, 20:45')
+  // Withdrawn, not started: the started note is only for an active registration (AC3).
+  await expect(trail).not.toContainText(STARTED_NOTE)
   await expect(trail.getByRole('button')).toHaveCount(0)
 
   // With registrations to show, neither the loading state nor the empty one is left on the page.
@@ -301,7 +309,18 @@ test.describe('on an iPhone 12 Pro', () => {
     page,
   }) => {
     // Wider details than any seeded registration has: a card whose details no longer fit beside
-    // its picture is where the layout would break. Only the list call is stubbed.
+    // its picture is where the layout would break. The list call is stubbed, and so is its
+    // uploaded picture, which the API would serve.
+    await page.route(
+      (url) => url.pathname === UPLOADED_PICTURE_PATH,
+      (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG_BYTES }),
+    )
+    const listRequest = page.waitForRequest(
+      (request) =>
+        request.resourceType() === 'fetch' &&
+        request.method() === 'GET' &&
+        new URL(request.url()).pathname === MINE_API_PATH,
+    )
     await stubCall(page, 'GET', (pathname) => pathname === MINE_API_PATH, {
       status: 200,
       body: [
@@ -309,7 +328,7 @@ test.describe('on an iPhone 12 Pro', () => {
           id: '00000000-0000-4000-8000-000000000183',
           event_id: '00000000-0000-4000-8000-000000000184',
           event_name: 'E2E Harbourfront Jazz and Food Festival Evening',
-          cover_image_url: YOGA_PICTURE,
+          cover_image_url: UPLOADED_PICTURE_PATH,
           starts_at: '2029-03-01T11:00:00Z',
           ends_at: '2029-03-01T14:00:00Z',
           status: 'REGISTERED',
@@ -322,6 +341,9 @@ test.describe('on an iPhone 12 Pro', () => {
     await openMyRegistrations(page)
 
     const card = eventCard(page, 'E2E Harbourfront Jazz and Food Festival Evening')
+    // An uploaded picture comes from the API, not the app's own origin.
+    const apiOrigin = new URL((await listRequest).url()).origin
+    await expect(card.locator('img')).toHaveAttribute('src', `${apiOrigin}${UPLOADED_PICTURE_PATH}`)
     const picture = await card.locator('img').boundingBox()
     const title = await card.getByRole('heading', { level: 3 }).boundingBox()
     const withdraw = await card.getByRole('button', { name: /^Withdraw from / }).boundingBox()
@@ -389,33 +411,100 @@ test('18.2 AC3: a withdrawal refused because the event started meanwhile says wh
   await expect(page.getByRole('status').filter({ hasText: EVENT_STARTED_MESSAGE })).toContainText(
     'Cannot withdraw',
   )
-  // Refused for good, so Withdraw is no longer offered: only Close.
+  // Refused for good, so Withdraw is no longer offered: only Close, which has the focus, so the
+  // keyboard is still in the dialog and Escape closes it.
   await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toHaveCount(0)
-  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused()
+  await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(eventCard(page, SUNSET_YOGA).getByText('Registered', { exact: true })).toBeVisible()
   await expect(eventCard(page, SUNSET_YOGA)).toContainText(STARTED_NOTE)
   await expect(withdrawButton(page, SUNSET_YOGA)).toHaveCount(0)
 })
 
-test('18.2 AC1: a withdrawal that cannot reach the server says so, and can be tried again', async ({
-  page,
-}) => {
-  await page.route(
-    (url) => WITHDRAW_API_PATH.test(url.pathname),
-    (route) =>
-      route.request().resourceType() === 'fetch'
-        ? route.abort('connectionrefused')
-        : route.fallback(),
-  )
-  await openMyRegistrations(page)
+test.describe('withdraws its seeded registration once', () => {
+  test.describe.configure({ retries: 0 })
 
-  await confirmWithdrawal(page, SUNSET_YOGA)
+  test('18.2 AC1: a withdrawal that cannot reach the server says so, and can be tried again', async ({
+    page,
+  }) => {
+    await openMyRegistrations(page)
+    const card = eventCard(page, LANTERN_PAINTING)
+    await expect(card.getByText('Registered', { exact: true })).toBeVisible()
 
-  const dialog = withdrawDialog(page, SUNSET_YOGA)
-  await expect(dialog.getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE)
-  await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toBeEnabled()
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
+    // The first two withdrawals never reach the server; the third does. Each one loads the list
+    // again: the first reload fails too, and the second reads the list before the third
+    // withdrawal and answers only after it, as a slow connection would.
+    let withdrawals = 0
+    let reloads = 0
+    let markStaleListRead: () => void = () => {}
+    const staleListRead = new Promise<void>((resolve) => {
+      markStaleListRead = resolve
+    })
+    let releaseStaleList: () => void = () => {}
+    const staleListHeld = new Promise<void>((resolve) => {
+      releaseStaleList = resolve
+    })
+    await page.route(
+      (url) => url.pathname === MINE_API_PATH || WITHDRAW_API_PATH.test(url.pathname),
+      async (route) => {
+        const request: Request = route.request()
+        if (request.resourceType() !== 'fetch') return route.fallback()
+        if (request.method() === 'POST') {
+          withdrawals += 1
+          return withdrawals <= 2 ? route.abort('connectionrefused') : route.fallback()
+        }
+        if (request.method() !== 'GET') return route.fallback()
+        reloads += 1
+        if (reloads === 1) return route.abort('connectionrefused')
+        if (reloads > 2) return route.fallback()
+        const response = await route.fetch()
+        markStaleListRead()
+        await staleListHeld
+        return route.fulfill({ response })
+      },
+    )
+
+    await confirmWithdrawal(page, LANTERN_PAINTING)
+    const dialog = withdrawDialog(page, LANTERN_PAINTING)
+    const withdraw = dialog.getByRole('button', { name: 'Withdraw', exact: true })
+    await expect(dialog.getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE)
+    // The reload failed as well, so the page says so behind the dialog.
+    await expect(page.getByRole('alert').filter({ hasText: UNREACHABLE_MESSAGE })).toHaveCount(2)
+    await expect(withdraw).toBeEnabled()
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
+
+    await withdraw.click()
+    await expect(withdraw).toBeEnabled()
+    await staleListRead
+
+    await withdraw.click()
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByRole('status').filter({ hasText: `You have withdrawn from ${LANTERN_PAINTING}.` }),
+    ).toContainText('Withdrawn')
+    await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
+    // The list loaded after the withdrawal that went through clears the earlier failure.
+    await expect(page.getByRole('alert')).toHaveCount(0)
+
+    // The slow list, read before that withdrawal, lands last, and changes nothing.
+    const staleListAnswered = page.waitForEvent(
+      'requestfinished',
+      (request) =>
+        request.resourceType() === 'fetch' &&
+        request.method() === 'GET' &&
+        new URL(request.url()).pathname === MINE_API_PATH,
+    )
+    releaseStaleList()
+    await staleListAnswered
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    )
+    await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(card.getByRole('button')).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(withdrawals).toBe(3)
+  })
 })
 
 // --- AC4: registering again ------------------------------------------------------------------
@@ -448,14 +537,6 @@ test.describe('withdraws its seeded registration once', () => {
   })
 })
 
-// --- AC5: only the attendee's own ------------------------------------------------------------
-test("18.2 AC5: an attendee does not see another attendee's registrations", async ({ page }) => {
-  await openMyRegistrations(page)
-
-  await expect(eventCard(page, SUNSET_YOGA)).toBeVisible()
-  await expect(eventCard(page, PORTFOLIO_REVIEW)).toHaveCount(0)
-})
-
 test('18.2 AC6: a withdrawal of a registration that is no longer found says so', async ({
   page,
 }) => {
@@ -475,8 +556,18 @@ test('18.2 AC6: a withdrawal of a registration that is no longer found says so',
   await expect(page.getByRole('status').filter({ hasText: NOT_FOUND_MESSAGE })).toContainText(
     'Cannot withdraw',
   )
+
+  // The refusal was for that attempt: Withdraw opens the dialog afresh, with no message and its
+  // own Withdraw. (The reload shows the yoga still registered, since only the call was stubbed.)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toHaveCount(0)
+  await withdrawButton(page, SUNSET_YOGA).click()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
 })
 
+// --- AC5: attendees only -----------------------------------------------------------------------
 test('18.2 AC5: an organiser who opens My registrations is told it is not permitted', async ({
   page,
 }) => {
@@ -517,9 +608,11 @@ test('18.2 AC8: a registration for a cancelled event shows Event cancelled, with
 
   const card = eventCard(page, CHARITY_FUN_RUN)
   await expect(card.getByText('Event cancelled', { exact: true })).toBeVisible()
+  // A cancelled event's colour, as every event status shows it - not a cancelled booking's.
   await expect(card.getByText('Event cancelled', { exact: true })).toHaveClass(
-    /\bbadge-cancelled\b/,
+    /\bbadge-event_cancelled\b/,
   )
   await expect(card).toContainText('Sat, 10 Apr 2027 · 07:00–10:00')
+  await expect(card).not.toContainText(STARTED_NOTE)
   await expect(card.getByRole('button')).toHaveCount(0)
 })

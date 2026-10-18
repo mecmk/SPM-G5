@@ -14,14 +14,22 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { UPCOMING_EVENTS_PATH } from '../routes'
+import { eventBadgeStatus } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import {
+  REGISTERED_BADGE,
+  describeRegisteredAt,
+  type RegistrationBadge,
+} from './registrationLabels'
 
-/** Story 18.2 AC1/AC8: each status's label, and the badge colour it takes (App.css). */
-const STANDING_BADGES: Record<RegistrationStanding, { status: string; label: string }> = {
-  REGISTERED: { status: 'registered', label: 'Registered' },
+/** Story 18.2 AC1/AC8: each status's label, and the badge colour it takes (App.css). Registered is
+ *  18.1's badge; Event cancelled is a cancelled event's colour, as every event status page shows
+ *  it, not a cancelled booking's (shared/eventStatus.ts keeps the two apart). */
+const STANDING_BADGES: Record<RegistrationStanding, RegistrationBadge> = {
+  REGISTERED: REGISTERED_BADGE,
   WITHDRAWN: { status: 'withdrawn', label: 'Withdrawn' },
-  EVENT_CANCELLED: { status: 'cancelled', label: 'Event cancelled' },
+  EVENT_CANCELLED: { status: eventBadgeStatus('CANCELLED'), label: 'Event cancelled' },
 }
 
 /** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
@@ -30,7 +38,7 @@ const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 /** Story 18.2 AC1/AC3: when the attendee registered, when they withdrew if they did, and why an
  *  active registration can no longer be withdrawn. */
 function describeRegistration(registration: MyRegistration): string[] {
-  const lines = [`You registered on ${formatDateTime(registration.registered_at)}`]
+  const lines = [describeRegisteredAt(registration.registered_at)]
   if (registration.withdrawn_at !== null) {
     lines.push(`You withdrew on ${formatDateTime(registration.withdrawn_at)}`)
   }
@@ -101,17 +109,19 @@ function MyRegistrationCard({ registration, onWithdraw }: MyRegistrationCardProp
  * AC1: the attendee's registrations, one per event, with its name, date and time, status and when
  *      they registered or withdrew. Withdraw asks first; confirming marks it Withdrawn, with the
  *      notification centre's "Withdrawn" as the confirmation, and its place is free again.
- * AC3: a refused withdrawal (the event started meanwhile, or it was already withdrawn or
- *      cancelled) shows the backend's reason in the dialog, which then offers only Close, and
- *      the list is loaded again so every card shows where it now stands. A registration whose
- *      event has started says why it offers no Withdraw.
+ * AC1/AC3: after every withdrawal, whether it went through, was refused or never reached the
+ *      server, the list is loaded again, so every card shows where it now stands and an earlier
+ *      failed load's message goes once the new list lands. A refused withdrawal (the event
+ *      started meanwhile, or it was already withdrawn or cancelled) shows the backend's reason in
+ *      the dialog, which then offers only Close. A registration whose event has started says why
+ *      it offers no Withdraw.
  * AC5: attendees only - App.tsx guards the route, and the backend sends only their own.
  * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
  *      one.
  */
 export function MyRegistrationsPage() {
-  // Replaced by a fresh loader after a refused withdrawal, so useLoaded loads the list again; it
-  // keeps showing the cards until the new list arrives.
+  // Replaced by a fresh loader after every withdrawal, so useLoaded loads the list again; it keeps
+  // showing the cards until the new list arrives, and drops the answer of a load still in flight.
   const [loadRegistrations, setLoadRegistrations] = useState(() => listMyRegistrations)
   const { data: registrations, error, isLoading, setData } = useLoaded(loadRegistrations)
   const [pending, setPending] = useState<MyRegistration | null>(null)
@@ -139,9 +149,11 @@ export function MyRegistrationsPage() {
       setPending(null)
     } catch (err) {
       setRefusal({ message: formatApiError(err), isFinal: isFinalRefusal(err) })
-      setLoadRegistrations(freshListLoader)
     } finally {
       setIsWithdrawing(false)
+      // React calls a function given to a state setter as an updater: freshListLoader is called,
+      // and the new loader it returns becomes the state.
+      setLoadRegistrations(freshListLoader)
     }
   }
 
@@ -186,7 +198,7 @@ export function MyRegistrationsPage() {
           isBusy={isWithdrawing}
           error={refusal?.message ?? null}
           canConfirm={refusal === null || !refusal.isFinal}
-          cancelLabel={refusal?.isFinal ? 'Close' : 'Cancel'}
+          cancelLabel={refusal?.isFinal ? 'Close' : undefined}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >
