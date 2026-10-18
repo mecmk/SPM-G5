@@ -14,6 +14,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -32,6 +33,18 @@ class BookingStatus:
     WITHDRAWN = "WITHDRAWN"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
+
+
+def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
+    """Story 9.4 AC3 / story 12.6 AC11, AC13: the booking still holds its venue - pending or
+    approved - and is marked "Venue unavailable - alternative needed". One definition for every
+    reader of the mark: the coordinator's list (``Venue unavailable`` tab) and the safety review
+    and confirmation, which refuse while an event has such a booking. A mark left on a closed
+    booking is history and is not one."""
+    return (
+        VenueBooking.status.in_((BookingStatus.PENDING, BookingStatus.APPROVED)),
+        VenueBooking.venue_unavailable_marked_at.is_not(None),
+    )
 
 
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):

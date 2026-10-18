@@ -28,7 +28,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import Permission, RoleCode, role_has
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
 from app.common.audit import record_audit
 from app.config import settings
 from app.events.models import (
@@ -501,11 +501,7 @@ _VENUE_UNAVAILABLE_EVENT_STATUSES = (
 def _has_marked_booking() -> ColumnElement[bool]:
     """Story 12.6 AC11: the event has a booking that still holds its venue and is marked "Venue
     unavailable - alternative needed" (9.4). A mark left on a closed booking is history."""
-    return exists().where(
-        VenueBooking.event_id == Event.id,
-        VenueBooking.status.in_((BookingStatus.PENDING, BookingStatus.APPROVED)),
-        VenueBooking.venue_unavailable_marked_at.is_not(None),
-    )
+    return exists().where(VenueBooking.event_id == Event.id, *marked_booking_conditions())
 
 
 @dataclass(frozen=True)
