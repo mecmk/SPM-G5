@@ -62,6 +62,9 @@ class NotificationType(StrEnum):
     EVENT_REASSIGNED_ORGANISER = "EVENT_REASSIGNED_ORGANISER"  # 5.2: the organiser
     BOOKING_REQUESTED = "BOOKING_REQUESTED"  # 12.1: Venue Staff
     BOOKING_WITHDRAWN = "BOOKING_WITHDRAWN"  # 12.2: Venue Staff
+    # 12.6: every other active Venue Staff member, when approving a replacement released the
+    # booking it replaces
+    BOOKING_REPLACED = "BOOKING_REPLACED"
     BOOKING_APPROVED = "BOOKING_APPROVED"  # 13.2: the coordinator
     BOOKING_REJECTED = "BOOKING_REJECTED"  # 13.2.1: the coordinator
     BOOKING_HOLD_EXPIRING = "BOOKING_HOLD_EXPIRING"  # 12.7: the coordinator, from the system

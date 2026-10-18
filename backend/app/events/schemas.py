@@ -199,9 +199,19 @@ class AssignedEventEntry(BaseModel):
     submitted_at: datetime | None  # set once on submission and never cleared afterwards
     status: str
     cover_image_url: str | None
+    # Story 12.6 AC11: whether a booking of the event is marked "Venue unavailable - alternative
+    # needed", and the venue of its pending replacement when one has been asked for.
+    is_venue_unavailable: bool
+    pending_replacement_venue_name: str | None
 
     @classmethod
-    def from_event(cls, event: Event) -> AssignedEventEntry:
+    def from_event(
+        cls,
+        event: Event,
+        *,
+        is_venue_unavailable: bool,
+        pending_replacement_venue_name: str | None,
+    ) -> AssignedEventEntry:
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status, and a
         # draft is never assigned to a coordinator.
         starts_at, ends_at = event.starts_at, event.ends_at
@@ -216,15 +226,20 @@ class AssignedEventEntry(BaseModel):
             submitted_at=event.submitted_at,
             status=event.status,
             cover_image_url=event.cover_image_url,
+            is_venue_unavailable=is_venue_unavailable,
+            pending_replacement_venue_name=pending_replacement_venue_name,
         )
 
 
 class AssignedEventList(BaseModel):
-    """AC3: one page of the coordinator's assigned events, and how many they have in all. No
-    defaults (response schema)."""
+    """AC3: one page of the coordinator's assigned events, and how many they have in all. Story
+    12.6 AC11: ``venue_unavailable_count`` is how many of the coordinator's events have a marked
+    booking, whatever page or filter this answer is - 0 when none. No defaults (response
+    schema)."""
 
     items: list[AssignedEventEntry]
     total: int
+    venue_unavailable_count: int
 
 
 # --- reference data (story 2.1) ------------------------------------------------------------
