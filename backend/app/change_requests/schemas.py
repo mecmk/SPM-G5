@@ -105,7 +105,7 @@ class ChangeRequestRejectionIn(_ChangeRequestIn):
     not count - the same rule, and the same ceiling, as the organiser's reason for asking."""
 
 
-def _change_request_fields(request: EventChangeRequest) -> dict[str, Any]:
+def _change_request_fields(request: EventChangeRequest, *, is_out_of_date: bool) -> dict[str, Any]:
     """Every ``ChangeRequestOut`` field of ``request``, so the queue entry repeats none of them."""
     return {
         "id": request.id,
@@ -123,6 +123,7 @@ def _change_request_fields(request: EventChangeRequest) -> dict[str, Any]:
         "decided_by_name": None if request.decided_by is None else request.decided_by.full_name,
         "decided_at": request.decided_at,
         "decision_reason": request.decision_reason,
+        "is_out_of_date": is_out_of_date,
         "created_at": request.created_at,
         "updated_at": request.updated_at,
     }
@@ -132,7 +133,8 @@ class ChangeRequestOut(BaseModel):
     """AC1: a change request as the organiser and the assigned coordinator see it. The values are
     returned as JSON, in the same canonical shape they are stored in (see the service). Story 19.2
     AC2/AC3: once decided, who decided, when, and the reason for a rejection; all None while it
-    waits or once withdrawn."""
+    waits or once withdrawn. AC7: ``is_out_of_date`` when it waits but the event no longer has the
+    value it recorded as current, so it can only be rejected (the service decides it)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -147,12 +149,15 @@ class ChangeRequestOut(BaseModel):
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
+    is_out_of_date: bool
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_change_request(cls, request: EventChangeRequest) -> ChangeRequestOut:
-        return cls(**_change_request_fields(request))
+    def from_change_request(
+        cls, request: EventChangeRequest, *, is_out_of_date: bool
+    ) -> ChangeRequestOut:
+        return cls(**_change_request_fields(request, is_out_of_date=is_out_of_date))
 
 
 class ChangeRequestQueueEntryOut(ChangeRequestOut):
@@ -165,10 +170,12 @@ class ChangeRequestQueueEntryOut(ChangeRequestOut):
     event_ends_at: datetime | None
 
     @classmethod
-    def from_queued_request(cls, request: EventChangeRequest) -> ChangeRequestQueueEntryOut:
+    def from_queued_request(
+        cls, request: EventChangeRequest, *, is_out_of_date: bool
+    ) -> ChangeRequestQueueEntryOut:
         event = request.event
         return cls(
-            **_change_request_fields(request),
+            **_change_request_fields(request, is_out_of_date=is_out_of_date),
             event_name=event.name,
             event_status=event.status,
             event_starts_at=event.starts_at,

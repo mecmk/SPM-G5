@@ -76,6 +76,7 @@ from app.events.models import (
     EventEquipmentRequest,
     EventStatus,
 )
+from app.events.schemas import EventEquipmentIn
 from app.notifications.service import NotificationType, active_members, notify
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
@@ -136,7 +137,7 @@ _MOVED_HOLD_NOTE = "Held again for the event's new dates."
 _ACCEPTED_HOLD_NOTE = "Reserved when Technical Support accepted the request."
 
 
-def _as_words(status: str) -> str:
+def as_words(status: str) -> str:
     """A status as it reads in a sentence: CLARIFICATION_REQUESTED -> "clarification requested"."""
     return status.lower().replace("_", " ")
 
@@ -172,14 +173,14 @@ class EquipmentClosed(EquipmentConflict):
     """AC9: the event is no longer Under Review, Clarification Requested or Planning."""
 
     def __init__(self, event: Event) -> None:
-        super().__init__(EQUIPMENT_CLOSED_MESSAGE.format(status=_as_words(event.status)))
+        super().__init__(EQUIPMENT_CLOSED_MESSAGE.format(status=as_words(event.status)))
 
 
 class ItemClosed(EquipmentConflict):
     """AC7: Technical Support has decided the item, or its event was cancelled."""
 
     def __init__(self, item: EventEquipmentRequest) -> None:
-        super().__init__(ITEM_CLOSED_MESSAGE.format(status=_as_words(item.status)))
+        super().__init__(ITEM_CLOSED_MESSAGE.format(status=as_words(item.status)))
 
 
 class TypeAlreadyRequested(EquipmentConflict):
@@ -212,7 +213,7 @@ class DecisionClosed(EquipmentConflict):
     """Story 16.1 AC7: the request's event was cancelled or rejected."""
 
     def __init__(self, event: Event) -> None:
-        super().__init__(DECISION_CLOSED_MESSAGE.format(status=_as_words(event.status)))
+        super().__init__(DECISION_CLOSED_MESSAGE.format(status=as_words(event.status)))
 
 
 class RequestNotPending(EquipmentConflict):
@@ -842,15 +843,6 @@ _EVER_SENT_STATUSES = _WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
 
 
-@dataclass(frozen=True)
-class ProposedEquipmentLine:
-    """Story 19.2: one line of an approved equipment change - a type, how many, and notes."""
-
-    equipment_type_code: str
-    quantity: int
-    technical_notes: str | None
-
-
 def _notify_technical_support_of_withdrawal(
     db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User
 ) -> None:
@@ -896,38 +888,40 @@ def _hold_or_flag(
 
 
 def apply_equipment_change(
-    db: Session, event: Event, lines: list[ProposedEquipmentLine], *, actor: User
+    db: Session, event: Event, lines: list[EventEquipmentIn], *, actor: User
 ) -> None:
     """Story 19.2 AC2/AC5: make ``event``'s equipment match an approved change, releasing only
-    what it affects. Items are matched by type, which an event lists once (2.1 AC6).
+    what it affects. A line with an ``id`` is that item, kept and edited; an item no line names is
+    removed; a line without one is new. Items are matched by id, not type: once an item is
+    Declined, 15.1 AC6 lets the type be asked for again, so an event can list a type twice.
 
-    * An item whose quantity and notes are unchanged keeps its status, decision and hold.
-    * A changed item releases its hold, takes the new quantity, loses the decision made for the
-      old one, and is held again if stock allows - Requested, for the coordinator to resubmit
-      (15.1) - or flagged Unavailable.
+    * An item whose type, quantity and notes are unchanged keeps its status, decision and hold.
+    * A changed item releases its hold, takes the new values, loses the decision made for the old
+      ones, and is held again if stock allows - Requested, for the coordinator to resubmit (15.1) -
+      or flagged Unavailable. A Cancelled item named again comes back the same way.
     * A removed item releases its hold; one ever sent to Technical Support is kept as Cancelled
       for their record, one never sent is deleted.
-    * A new type is added the same way a changed item is held.
+    * A new item is added and held the same way a changed one is.
 
     Technical Support are told of any item they had pending or accepted that was changed or
     removed. The types are locked first, as every other hold takes them (AC10). Written, not
     committed."""
     items = list(event.equipment_requests)
-    wanted = {line.equipment_type_code: line for line in lines}
+    wanted = {line.id: line for line in lines if line.id is not None}
     types = {
         equipment_type.code: equipment_type
         for equipment_type in db.scalars(
-            select(EquipmentType).where(EquipmentType.code.in_(set(wanted)))
+            select(EquipmentType).where(
+                EquipmentType.code.in_({line.equipment_type_code for line in lines})
+            )
         )
     }
     _lock_types(db, {item.equipment_type_id for item in items} | {t.id for t in types.values()})
 
     withdrawn: list[EventEquipmentRequest] = []
     to_hold: list[EventEquipmentRequest] = []
-    by_type: dict[str, EventEquipmentRequest] = {}
     for item in items:
-        code = item.equipment_type.code
-        line = wanted.get(code)
+        line = wanted.get(item.id)
         if line is None:
             _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
             if item.status in _WITH_TECHNICAL_SUPPORT:
@@ -937,12 +931,18 @@ def apply_equipment_change(
             elif item.status != EquipmentRequestStatus.CANCELLED:
                 event.equipment_requests.remove(item)
             continue
-        by_type[code] = item
-        if (line.quantity, line.technical_notes) == (item.quantity, item.technical_notes):
+        equipment_type = types[line.equipment_type_code]
+        is_unchanged = (equipment_type.id, line.quantity, line.technical_notes) == (
+            item.equipment_type_id,
+            item.quantity,
+            item.technical_notes,
+        )
+        if is_unchanged and item.status != EquipmentRequestStatus.CANCELLED:
             continue
         _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
         if item.status in _WITH_TECHNICAL_SUPPORT:
             withdrawn.append(item)
+        item.equipment_type = equipment_type
         item.quantity = line.quantity
         item.technical_notes = line.technical_notes
         item.decided_by_id = None
@@ -951,11 +951,9 @@ def apply_equipment_change(
         to_hold.append(item)
 
     added_at = datetime.now(UTC)
-    for position, (code, line) in enumerate(wanted.items()):
-        if code in by_type:
-            continue
+    for position, line in enumerate(line for line in lines if line.id is None):
         item = EventEquipmentRequest(
-            equipment_type=types[code],
+            equipment_type=types[line.equipment_type_code],
             quantity=line.quantity,
             technical_notes=line.technical_notes,
             created_by_id=actor.id,

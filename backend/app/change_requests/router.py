@@ -51,6 +51,13 @@ def _requirement_refusal(exc: service.InvalidVenueRequirement) -> HTTPException:
     )
 
 
+def _change_request_out(request: service.EventChangeRequest) -> ChangeRequestOut:
+    """Story 19.2 AC7: every change request is returned saying whether it is out of date."""
+    return ChangeRequestOut.from_change_request(
+        request, is_out_of_date=service.is_out_of_date(request)
+    )
+
+
 @router.post(
     "/{event_id}/change-requests",
     response_model=ChangeRequestOut,
@@ -75,7 +82,7 @@ def raise_change_request(
         raise _requirement_refusal(exc) from None
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
-    return ChangeRequestOut.from_change_request(request)
+    return _change_request_out(request)
 
 
 @router.get("/{event_id}/change-requests", response_model=list[ChangeRequestOut])
@@ -92,7 +99,7 @@ def list_change_requests(
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.NotRelatedParty as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    return [ChangeRequestOut.from_change_request(request) for request in requests]
+    return [_change_request_out(request) for request in requests]
 
 
 @router.post(
@@ -114,7 +121,7 @@ def withdraw_change_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND_MESSAGE) from None
     except service.EventStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    return ChangeRequestOut.from_change_request(request)
+    return _change_request_out(request)
 
 
 @queue_router.get("", response_model=list[ChangeRequestQueueEntryOut])
@@ -125,7 +132,12 @@ def list_coordinator_change_requests(
     """Story 19.2 AC1: the change requests on the coordinator's own events - pending ones first,
     oldest first, then those decided or withdrawn, latest first."""
     requests = service.list_coordinator_change_requests(db, viewer=viewer)
-    return [ChangeRequestQueueEntryOut.from_queued_request(request) for request in requests]
+    return [
+        ChangeRequestQueueEntryOut.from_queued_request(
+            request, is_out_of_date=service.is_out_of_date(request)
+        )
+        for request in requests
+    ]
 
 
 @router.post(
@@ -153,7 +165,7 @@ def approve_change_request(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
-    return ChangeRequestOut.from_change_request(request)
+    return _change_request_out(request)
 
 
 @router.post(
@@ -184,4 +196,4 @@ def reject_change_request(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
-    return ChangeRequestOut.from_change_request(request)
+    return _change_request_out(request)

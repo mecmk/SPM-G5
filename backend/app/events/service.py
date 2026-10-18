@@ -1404,7 +1404,7 @@ def record_transition(
     )
 
 
-# Story 9.4 AC3: the statuses a closed venue sends an event back to Planning from.
+# Story 9.4 AC3, story 19.2 AC8: the statuses an event is sent back to Planning from.
 _RETURNED_TO_PLANNING_FROM = (EventStatus.CONFIRMED, EventStatus.AWAITING_SAFETY_CHECK)
 
 
@@ -1417,16 +1417,18 @@ def return_event_to_planning(
     reason: str,
     details: dict[str, Any],
 ) -> bool:
-    """Story 9.4 AC3: a Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to
-    Planning because a venue it has booked was marked unavailable - recorded in the status history
-    with ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside
-    where it came from. Any other status is left as it is (Planning is already where it should
-    be), and False says nothing changed. The caller holds the event's row lock and commits, so
-    this leaves no notice of its own."""
+    """A Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to Planning: story
+    9.4 AC3, because a venue it has booked was marked unavailable, and story 19.2 AC8, because a
+    change to it was approved. Its confirmation is cleared, recorded in the status history with
+    ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside where it
+    came from. Any other status is left as it is (Planning is already where it should be), and
+    False says nothing changed. The caller holds the event's row lock, commits and tells whoever
+    should know, so this leaves no notice of its own."""
     if event.status not in _RETURNED_TO_PLANNING_FROM:
         return False
     from_status = event.status
     event.status = EventStatus.PLANNING
+    event.confirmed_at = None
     db.flush()
     record_transition(
         db,
@@ -2547,9 +2549,10 @@ def check_proposed_attendance(event: Event, attendance: int) -> None:
     """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
     room for more people than the event's expected attendance - judged with the proposed
     figure against the requirements as they stand. Also checked when the request is raised."""
-    for requirement in sorted(event.venue_requirements, key=lambda item: item.position):
+    ordered = sorted(event.venue_requirements, key=lambda item: item.position)
+    for index, requirement in enumerate(ordered):
         if requirement.capacity is not None and requirement.capacity > attendance:
-            raise AttendanceBelowRequirement(requirement.name or "A venue requirement")
+            raise AttendanceBelowRequirement(_describe_requirement(requirement.name, index))
 
 
 def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
@@ -2613,27 +2616,6 @@ def apply_proposed_venue_requirements(
     _replace_venue_requirements(db, event, items)
     _fill_requirement_times(event)
     _flush_request_edit(db, event)
-
-
-def return_to_planning(db: Session, event: Event, *, actor: User, reason: str) -> str:
-    """Story 19.2 AC8: an approved change sends a Confirmed or Awaiting safety check event back to
-    Planning, its confirmation cleared, so it must pass a new safety check (21.2) before it is
-    confirmed again; past safety reviews stay as its history (21.1 AC5). The move is recorded in
-    the status history with ``reason``. Returns the status it left. Written, not committed."""
-    from_status = event.status
-    event.status = EventStatus.PLANNING
-    event.confirmed_at = None
-    record_transition(
-        db,
-        event,
-        from_status=from_status,
-        to_status=EventStatus.PLANNING,
-        actor=actor,
-        at=datetime.now(UTC),
-        reason=reason,
-    )
-    db.flush()
-    return from_status
 
 
 def check_proposed_schedule(starts_at: datetime, ends_at: datetime) -> None:
