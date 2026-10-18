@@ -3455,7 +3455,7 @@
       "x": 2160,
       "y": 643,
       "width": 400,
-      "height": 234
+      "height": 250
     },
     {
       "angle": 0,
@@ -3484,9 +3484,9 @@
       "x": 2168,
       "y": 651,
       "width": 384,
-      "height": 218,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz",
+      "height": 234,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -3525,7 +3525,7 @@
       "id": "hdr-a30246939105",
       "type": "rectangle",
       "x": 2160,
-      "y": 937,
+      "y": 953,
       "width": 400,
       "height": 34
     },
@@ -3554,7 +3554,7 @@
       "id": "text-4023892eaf04",
       "type": "text",
       "x": 2168,
-      "y": 943,
+      "y": 959,
       "width": 384,
       "height": 22,
       "text": "event_status_history",
@@ -3605,7 +3605,7 @@
       "id": "body-66e549e0fddf",
       "type": "rectangle",
       "x": 2160,
-      "y": 971,
+      "y": 987,
       "width": 400,
       "height": 125
     },
@@ -3634,7 +3634,7 @@
       "id": "text-0a991d2cd7f0",
       "type": "text",
       "x": 2168,
-      "y": 979,
+      "y": 995,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\n    from_status?                   text\n    to_status                      text\nFK  changed_by_id?                 uuid\n    changed_at                     timestamptz\n    reason?                        text",
@@ -3677,7 +3677,7 @@
       "id": "hdr-2bf3f68f5286",
       "type": "rectangle",
       "x": 2160,
-      "y": 1156,
+      "y": 1172,
       "width": 400,
       "height": 34
     },
@@ -3706,7 +3706,7 @@
       "id": "text-6a275483d560",
       "type": "text",
       "x": 2168,
-      "y": 1162,
+      "y": 1178,
       "width": 384,
       "height": 22,
       "text": "event_coordinator_assignments",
@@ -3761,7 +3761,7 @@
       "id": "body-2d3f217cd0fc",
       "type": "rectangle",
       "x": 2160,
-      "y": 1190,
+      "y": 1206,
       "width": 400,
       "height": 125
     },
@@ -3790,7 +3790,7 @@
       "id": "text-87b02f963484",
       "type": "text",
       "x": 2168,
-      "y": 1198,
+      "y": 1214,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  coordinator_id                 uuid\nFK  assigned_by_id?                uuid\n    assigned_at                    timestamptz\n    unassigned_at?                 timestamptz\n    note?                          text",
@@ -3833,7 +3833,7 @@
       "id": "hdr-688fb10a7193",
       "type": "rectangle",
       "x": 2160,
-      "y": 1375,
+      "y": 1391,
       "width": 400,
       "height": 34
     },
@@ -3862,7 +3862,7 @@
       "id": "text-d578f3c142c8",
       "type": "text",
       "x": 2168,
-      "y": 1381,
+      "y": 1397,
       "width": 384,
       "height": 22,
       "text": "event_clarifications",
@@ -3913,7 +3913,7 @@
       "id": "body-6679df9a1566",
       "type": "rectangle",
       "x": 2160,
-      "y": 1409,
+      "y": 1425,
       "width": 400,
       "height": 109
     },
@@ -3942,7 +3942,7 @@
       "id": "text-c8fafe345762",
       "type": "text",
       "x": 2168,
-      "y": 1417,
+      "y": 1433,
       "width": 384,
       "height": 93,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  author_id                      uuid\n    kind                           text\n    message                        text\n    created_at                     timestamptz",
@@ -4471,7 +4471,7 @@
       "x": 2700,
       "y": 609,
       "width": 400,
-      "height": 468
+      "height": 484
     },
     {
       "angle": 0,
@@ -4500,9 +4500,9 @@
       "x": 2708,
       "y": 617,
       "width": 384,
-      "height": 452,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz",
+      "height": 468,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    cancelled_at?                  timestamptz",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    cancelled_at?                  timestamptz",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -7081,9 +7081,9 @@
       "id": "arrow-b84d4c903e95",
       "type": "arrow",
       "x": 2160,
-      "y": 1435,
+      "y": 1451,
       "width": 1760,
-      "height": 1203,
+      "height": 1219,
       "points": [
         [
           0,
@@ -7091,7 +7091,7 @@
         ],
         [
           -1760,
-          -1203
+          -1219
         ]
       ],
       "lastCommittedPoint": null,
@@ -7134,7 +7134,7 @@
       "id": "text-3d4570783c94",
       "type": "text",
       "x": 1220.0,
-      "y": 825.5,
+      "y": 833.5,
       "width": 120,
       "height": 16,
       "text": "author_id",
@@ -7177,9 +7177,9 @@
       "id": "arrow-9f185f27a77b",
       "type": "arrow",
       "x": 2160,
-      "y": 1435,
+      "y": 1451,
       "width": 140,
-      "height": 1375,
+      "height": 1391,
       "points": [
         [
           0,
@@ -7187,7 +7187,7 @@
         ],
         [
           -140,
-          -1375
+          -1391
         ]
       ],
       "lastCommittedPoint": null,
@@ -7230,7 +7230,7 @@
       "id": "text-698140ea8ec4",
       "type": "text",
       "x": 2030.0,
-      "y": 739.5,
+      "y": 747.5,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -7273,9 +7273,9 @@
       "id": "arrow-0b41b999ff7f",
       "type": "arrow",
       "x": 2160,
-      "y": 1216,
+      "y": 1232,
       "width": 1760,
-      "height": 984,
+      "height": 1000,
       "points": [
         [
           0,
@@ -7283,7 +7283,7 @@
         ],
         [
           -1760,
-          -984
+          -1000
         ]
       ],
       "lastCommittedPoint": null,
@@ -7326,7 +7326,7 @@
       "id": "text-a77ae624aec2",
       "type": "text",
       "x": 1220.0,
-      "y": 716.0,
+      "y": 724.0,
       "width": 120,
       "height": 16,
       "text": "assigned_by_id",
@@ -7369,9 +7369,9 @@
       "id": "arrow-4582f5a5a3a5",
       "type": "arrow",
       "x": 2160,
-      "y": 1234,
+      "y": 1250,
       "width": 1760,
-      "height": 984,
+      "height": 1000,
       "points": [
         [
           0,
@@ -7379,7 +7379,7 @@
         ],
         [
           -1760,
-          -984
+          -1000
         ]
       ],
       "lastCommittedPoint": null,
@@ -7422,7 +7422,7 @@
       "id": "text-976c9bec20e3",
       "type": "text",
       "x": 1220.0,
-      "y": 734.0,
+      "y": 742.0,
       "width": 120,
       "height": 16,
       "text": "coordinator_id",
@@ -7465,9 +7465,9 @@
       "id": "arrow-fa3c20e8bde2",
       "type": "arrow",
       "x": 2160,
-      "y": 1216,
+      "y": 1232,
       "width": 140,
-      "height": 1156,
+      "height": 1172,
       "points": [
         [
           0,
@@ -7475,7 +7475,7 @@
         ],
         [
           -140,
-          -1156
+          -1172
         ]
       ],
       "lastCommittedPoint": null,
@@ -7518,7 +7518,7 @@
       "id": "text-eaf8fdc2aa7e",
       "type": "text",
       "x": 2030.0,
-      "y": 630.0,
+      "y": 638.0,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -8617,9 +8617,9 @@
       "id": "arrow-8d2be95cca42",
       "type": "arrow",
       "x": 2160,
-      "y": 997,
+      "y": 1013,
       "width": 1760,
-      "height": 765,
+      "height": 781,
       "points": [
         [
           0,
@@ -8627,7 +8627,7 @@
         ],
         [
           -1760,
-          -765
+          -781
         ]
       ],
       "lastCommittedPoint": null,
@@ -8670,7 +8670,7 @@
       "id": "text-172b1d223a07",
       "type": "text",
       "x": 1220.0,
-      "y": 606.5,
+      "y": 614.5,
       "width": 120,
       "height": 16,
       "text": "changed_by_id",
@@ -8713,9 +8713,9 @@
       "id": "arrow-7af12a6cba55",
       "type": "arrow",
       "x": 2160,
-      "y": 997,
+      "y": 1013,
       "width": 140,
-      "height": 937,
+      "height": 953,
       "points": [
         [
           0,
@@ -8723,7 +8723,7 @@
         ],
         [
           -140,
-          -937
+          -953
         ]
       ],
       "lastCommittedPoint": null,
@@ -8766,7 +8766,7 @@
       "id": "text-83c2af08689e",
       "type": "text",
       "x": 2030.0,
-      "y": 520.5,
+      "y": 528.5,
       "width": 120,
       "height": 16,
       "text": "event_id",

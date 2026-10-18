@@ -500,6 +500,7 @@ One item per equipment type an event needs, with quantity and technical notes. T
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the item was last sent to Technical Support: on submission, or again when the event's dates changed (story 15.1 AC1, AC8). NULL until it is sent. |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who accepted or declined the item (story 16.1 AC3). NULL until it is decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | When the item was accepted or declined (story 16.1 AC3). NULL until it is decided. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the item was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change removed it (19.2). Only on a CANCELLED item; cleared when a change brings it back. |
 
 Allowed values:
 
@@ -507,6 +508,7 @@ Allowed values:
 
 Rules and indexes:
 
+- check `ck_event_equipment_requests_cancelled_at`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_event_equipment_requests_quantity`: `CHECK ((quantity > 0))`
 - index `ix_event_equipment_requests_event`: `btree (event_id)`
 
@@ -667,6 +669,7 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
 | `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 | `venue_unavailable_marked_at` | `timestamp with time zone` | yes | - | - | When the booking was marked "Venue unavailable - alternative needed" (story 9.4 AC3): set while a pending or approved booking's held period overlaps, from the later of now and the period's start to its end, one of its venue's unavailability periods; kept while any still does, and cleared when none does (AC6). Only the part of the held period still to come counts, so a period wholly in the past marks nothing. NULL when unmarked. A value left on a booking that is no longer pending or approved is history: readers ignore it and nothing clears it. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the booking was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change no longer fit it (19.2). Only on a CANCELLED booking; decided_by_id and decided_at keep its earlier decision. |
 
 Allowed values:
 
@@ -676,6 +679,7 @@ Rules and indexes:
 
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
+- check `ck_venue_bookings_cancelled_at`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_venue_bookings_hold_completed`: `CHECK (((hold_completed_at IS NULL) OR ((hold_expires_at IS NOT NULL) AND (status <> 'EXPIRED'::text))))`
 - check `ck_venue_bookings_hold_expiry`: `CHECK ((((status <> 'PENDING'::text) OR (hold_expires_at IS NULL)) AND ((status <> 'EXPIRED'::text) OR (hold_expires_at IS NOT NULL))))`
 - check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
