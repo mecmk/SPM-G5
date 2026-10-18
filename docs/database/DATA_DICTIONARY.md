@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-16 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-18 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -384,14 +384,17 @@ An event request and, once approved, the event itself - one row for the whole li
 | `contact_phone` | `text` | yes | - | - | Contact phone. |
 | `internal_notes` | `text` | yes | - | - | Coordinator-only notes; never shown to organisers or attendees. Routine field. |
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the organiser submitted the request (NULL while DRAFT). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) or cancellation was recorded (story 4.4 AC2, 4.5). |
+| `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) was recorded (story 4.4 AC2, 4.5). A cancellation is recorded in cancelled_at. |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Coordinator who made the decision. |
-| `decision_reason` | `text` | yes | - | - | Reason given on rejection (mandatory, story 4.5 AC1) or cancellation (story 6.5 AC2). |
+| `decision_reason` | `text` | yes | - | - | Reason given on rejection (mandatory, story 4.5 AC1). A cancellation's reason is cancellation_reason. |
 | `confirmed_at` | `timestamp with time zone` | yes | - | - | When the coordinator confirmed the event (status CONFIRMED). |
 | `completed_at` | `timestamp with time zone` | yes | - | - | When the event was marked COMPLETED. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). Also serves as the draft last-modified time (story 3.3 AC3). |
 | `is_public` | `boolean` | no | `false` | - | Whether the event is publicly listed (TRUE) or reachable only by a shared link (FALSE),     story 2.1 AC19. Defaults to private. No public listing page or link-sharing mechanism exists     yet - this only captures and displays the organiser's choice. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the organiser cancelled the event (story 6.2 AC5). Set with cancelled_by_id and cancellation_reason, and only on a CANCELLED event. |
+| `cancelled_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The organiser who cancelled the event (story 6.2 AC5, AC11). |
+| `cancellation_reason` | `text` | yes | - | - | Why the organiser cancelled the event; mandatory, never blank (story 6.2 AC7). |
 
 Allowed values:
 
@@ -400,6 +403,9 @@ Allowed values:
 Rules and indexes:
 
 - check `ck_events_attendance_positive`: `CHECK (((expected_attendance IS NULL) OR (expected_attendance > 0)))`
+- check `ck_events_cancellation_complete`: `CHECK ((num_nonnulls(cancelled_at, cancelled_by_id, cancellation_reason) = ANY (ARRAY[0, 3])))`
+- check `ck_events_cancellation_reason`: `CHECK ((btrim(cancellation_reason) <> ''::text))`
+- check `ck_events_cancellation_status`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_events_period`: `CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (ends_at > starts_at)))`
 - check `ck_events_registration_capacity`: `CHECK (((registration_capacity IS NULL) OR (registration_capacity > 0)))`
 - check `ck_events_registration_closes_before_start`: `CHECK (((registration_closes_at IS NULL) OR (starts_at IS NULL) OR (registration_closes_at <= starts_at)))`
@@ -582,7 +588,7 @@ A request by the organiser to change an important field (date and time, attendan
 | `current_value` | `text` | yes | - | - | The value when the request was raised, as canonical JSON text, for display (story 19.2 AC2). |
 | `proposed_value` | `text` | no | - | - | The requested new value, as canonical JSON text, validated by the creation rules (story 19.1 AC3/AC4). |
 | `reason` | `text` | no | - | - | Why the change is needed (mandatory). |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED or WITHDRAWN. The organiser may withdraw a PENDING request (story 19.1 AC9). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. The organiser may withdraw a PENDING request (story 19.1 AC9); cancelling the event closes it as CANCELLED (story 6.2 AC4). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Coordinator who decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | Decision time (story 19.4 AC2). |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 19.5 AC1). |
@@ -592,7 +598,7 @@ A request by the organiser to change an important field (date and time, attendan
 Allowed values:
 
 - `field_name`: `schedule`, `expected_attendance`, `venue_requirements`, `equipment`
-- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`
+- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`
 
 Rules and indexes:
 
