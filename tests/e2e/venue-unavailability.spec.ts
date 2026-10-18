@@ -11,7 +11,8 @@
  *      is blocked when it cannot be had; Save still goes through with bookings in the way.
  * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page, and
  *      on its request's page whatever its status.
- * AC6  A closure is edited, then ended, from the day it falls on; an ended one shows no actions;
+ * AC6  A closure is edited, then ended, from the day it falls on, each action saying what it does;
+ *      an ended one shows as "Ended", muted, with no actions;
  *      editing one that was removed meanwhile says so.
  * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
  *      Approve is held back.
@@ -50,6 +51,10 @@ import {
 test.use({ timezoneId: 'Asia/Singapore' })
 
 const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
+
+// Said beside the button each belongs to, so Venue Staff know what it will do before pressing it.
+const REMOVE_HINT = 'Not started yet: removes it completely'
+const END_NOW_HINT = 'Ends the whole closure now; the time already passed is kept'
 
 /** The "Availability" card, a region via its `aria-labelledby` (as venue-calendar.spec.ts). */
 function availability(page: Page) {
@@ -412,6 +417,8 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await expect(item.getByRole('button', { name: 'Edit' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+  await expect(item).toContainText(END_NOW_HINT)
+  await expect(item).not.toContainText(REMOVE_HINT)
 
   await item.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('form', { name: 'Edit blocked-off time' })).toBeVisible()
@@ -431,6 +438,11 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await page.getByRole('dialog').getByRole('button', { name: 'End now' }).click()
   await expect(item.getByRole('button')).toHaveCount(0)
   await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toHaveCount(0)
+  // An ended closure is history, not an unavailable venue: in the list, and on the grid.
+  await expect(item).toContainText('Ended – Renovation')
+  await expect(item).not.toContainText('Unavailable')
+  await expect(item).not.toContainText(END_NOW_HINT)
+  await expect(dayButton(page, today)).toHaveAccessibleName(/Ended – Renovation/)
 })
 
 test('9.4 AC6: a refused End now says why, and the calendar is loaded again', async ({ page }) => {
@@ -504,12 +516,15 @@ test('9.4 AC6: a row left open across the start of its closure switches from Rem
   const item = page.getByRole('listitem').filter({ hasText: description })
   await expect(item.getByRole('button', { name: 'Remove' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'End now' })).toHaveCount(0)
+  await expect(item).toContainText(REMOVE_HINT)
 
   // Three minutes on, with the page left open: it has started, so it is ended and not removed.
   await page.clock.runFor(3 * 60 * 1000)
 
   await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+  await expect(item).toContainText(END_NOW_HINT)
+  await expect(item).not.toContainText(REMOVE_HINT)
 })
 
 test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, browser }) => {
