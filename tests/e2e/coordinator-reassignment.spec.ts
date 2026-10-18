@@ -1,20 +1,26 @@
 /**
- * Story 5.2 - fe/be: reassign a coordinator-holding event to a different coordinator.
+ * Stories 5.2 and 5.6 - reassigning an event to another coordinator.
  *
- * AC3 the event page has a Reassign action with a list of eligible coordinators and a
- *     confirmation step; the assignment change takes effect immediately (the page shows the new
- *     coordinator without a reload).
+ * Story 5.6 (Q16) gave reassignment to the Event Coordinator Lead and took it from coordinators,
+ * replacing 5.2 AC1 and AC6; 5.2 AC3's Reassign action on the event page is now the Lead's.
  *
- * Boundary, permission and conflict detail (AC4, AC6, AC7) are backend cases, covered by
- * backend/tests/coordination/test_reassign_coordinator.py. This spec covers the flow a
- * coordinator actually clicks through.
+ * 5.6 AC1 the Lead reassigns from the event page and from the overview (5.5), choosing from the
+ *     other active coordinators, each with their active-event count; the page shows the new
+ *     coordinator at once.
+ * 5.6 AC5 a coordinator no longer sees Reassign.
+ * 5.6 AC6 a reassignment refused because the assignment changed says why.
+ * Responsive: the flow at a phone (375 x 667) and a desktop (1280 x 800), and the page and dialog
+ *     at a tablet (768 x 1024): no sideways scroll, the dialog and picker inside the screen, and
+ *     44px targets on the phone.
  *
- * The event used here is a fresh one created and submitted through the UI, not an existing seed
- * row: story 5.1's round robin means a submission can land on either seeded coordinator, and
- * reassigning a *shared* seed event (used by several other specs for its bookings, equipment and
- * accessibility data) would leave it permanently changed for the rest of this parallel run (see
- * tests/CLAUDE.md on why specs must not mutate shared seed state). Whichever coordinator the
- * round robin lands on is discovered from the page itself, the same way a person would look.
+ * The rules - who may reassign (401/403), which coordinators may be chosen (422), closed and
+ * unknown events (409/404), the stale and simultaneous reassignments (409), the notifications and
+ * what moves with the event - are backend cases:
+ * backend/tests/coordination/test_lead_reassign_coordinator.py.
+ *
+ * A reassignment is made on a fresh request, submitted through the UI and assigned to Chloe by the
+ * Lead, so no shared seed event changes (tests/CLAUDE.md). The cases that only look, or whose
+ * write is answered by a stub, use the seeded EVENTS.approved, Chloe's, in Planning.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
@@ -27,30 +33,6 @@ import {
   signIn,
   uniqueName,
 } from './support'
-
-test('5.2 AC3: a coordinator reassigns an event to another coordinator', async ({ page }) => {
-  // Two full sign-in cycles (organiser, then the auto-assigned coordinator) genuinely take
-  // longer than the default per-test budget - see bookings.spec.ts's AC3/AC4 test for the
-  // same reasoning.
-  test.setTimeout(60_000)
-
-  const name = uniqueName('Reassign')
-  await signIn(page, ACCOUNTS.organiser)
-  const eventId = await createAndSubmitRequest(page, name)
-
-  await page.goto(`/events/${eventId}`)
-  const { account, other } = await assignByLead(page)
-
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, account)
-  await page.goto(`/events/${eventId}`)
-
-  await page.getByRole('button', { name: 'Reassign' }).click()
-  await page.getByLabel('New coordinator').selectOption({ label: other.name })
-  await page.getByRole('button', { name: 'Confirm reassignment' }).click()
-
-  await expect(page.getByText(other.name)).toBeVisible()
-})
 
 /* ---------- Story 5.6: the Event Coordinator Lead reassigns ---------- */
 

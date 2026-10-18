@@ -7,7 +7,7 @@
  *     so.
  * AC2 the per-coordinator view lists each coordinator with their number of active events and the
  *     events themselves.
- * AC3 an event opens from the overview read-only: no Approve, Reject or Reassign.
+ * AC3 an event opens from the overview read-only: no Approve or Reject; since 5.6, Reassign.
  * AC4 a coordinator with no active events shows 0.
  * AC5 after the Lead assigns an event, a reload shows its coordinator; a deactivated coordinator
  *     is flagged.
@@ -424,9 +424,11 @@ test('5.5 AC3: an event opens read-only from the overview', async ({ page }) => 
 
   await expect(page).toHaveURL(new RegExp(`/events/${EVENTS.smartCitiesExpo}$`))
   await expect(page.getByRole('heading', { name: SMART_CITIES_EXPO, level: 1 })).toBeVisible()
-  for (const action of ['Approve', 'Reject', 'Reassign']) {
+  for (const action of ['Approve', 'Reject']) {
     await expect(page.getByRole('button', { name: action })).toHaveCount(0)
   }
+  // P7: Reassign is the one action the Lead has here, since story 5.6.
+  await expect(page.getByRole('button', { name: 'Reassign' })).toBeVisible()
 })
 
 test('5.5 AC3: the way back from an event keeps the view and filters', async ({ page }) => {
