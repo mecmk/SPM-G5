@@ -83,6 +83,7 @@ LISTED_EVENT_KEYS = {
     "id",
     "name",
     "description",
+    "cover_image_url",
     "starts_at",
     "ends_at",
     "venues",
@@ -195,7 +196,11 @@ def _api_item(client, event_id: uuid.UUID) -> dict:
 def test_an_open_event_is_listed_with_its_details_for_an_attendee(attendee_client, db: Session):
     starts_at = future_datetime(days=40)
     event = _open_event(
-        db, starts_at=starts_at, name="Harbour Jazz 18.1", description="Jazz on the waterfront."
+        db,
+        starts_at=starts_at,
+        name="Harbour Jazz 18.1",
+        description="Jazz on the waterfront.",
+        cover_image_url="/uploads/events/harbour-jazz-18-1.png",
     )
     hall = make_venue(db, name="Jazz Hall 18.1", location="Pier 1, Level 2")
     lawn = make_venue(db, name="Jazz Lawn 18.1", location="Pier 2")
@@ -220,6 +225,7 @@ def test_an_open_event_is_listed_with_its_details_for_an_attendee(attendee_clien
 
     assert item["name"] == "Harbour Jazz 18.1"
     assert item["description"] == "Jazz on the waterfront."
+    assert item["cover_image_url"] == "/uploads/events/harbour-jazz-18-1.png"  # 2.1 AC14
     assert datetime.fromisoformat(item["starts_at"]) == starts_at
     assert datetime.fromisoformat(item["ends_at"]) == starts_at + timedelta(hours=3)
     assert item["venues"] == [

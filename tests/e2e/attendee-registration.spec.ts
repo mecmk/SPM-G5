@@ -194,6 +194,18 @@ test.describe('registers for a seeded event once', () => {
   })
 })
 
+test('18.1 AC1: an event with a cover picture shows it on its card', async ({ page }) => {
+  // Story 18.2's sunset yoga has the seeded picture, and is only read here as there. A card's
+  // picture is decorative - no alt text, hidden from assistive technology - so it is found by
+  // its tag.
+  await openUpcomingEvents(page)
+
+  await expect(eventCard(page, 'Sunset Yoga by the Bay').locator('img')).toHaveAttribute(
+    'src',
+    '/images/events/cat.jpg',
+  )
+})
+
 test('18.1 AC1: with no events open for registration, the page says so', async ({ page }) => {
   await stubEventsCall(page, () => ({ status: 200, body: { items: [], total: 0 } }))
 

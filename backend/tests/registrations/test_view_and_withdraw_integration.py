@@ -74,6 +74,7 @@ MY_REGISTRATION_KEYS = {
     "id",
     "event_id",
     "event_name",
+    "cover_image_url",
     "starts_at",
     "ends_at",
     "status",
@@ -223,7 +224,12 @@ def test_an_attendee_sees_their_registration_with_its_event_and_status(
     attendee_client, db: Session
 ):
     starts_at = future_datetime(days=40)
-    event = _event(db, starts_at=starts_at, name="Poetry Night 18.2")
+    event = _event(
+        db,
+        starts_at=starts_at,
+        name="Poetry Night 18.2",
+        cover_image_url="/uploads/events/poetry-night-18-2.png",
+    )
     registered_at = datetime(2026, 10, 12, 2, 0, tzinfo=UTC)
     registration = _registration(db, event, Users.ATTENDEE.id, registered_at=registered_at)
 
@@ -232,6 +238,7 @@ def test_an_attendee_sees_their_registration_with_its_event_and_status(
     assert set(item) == MY_REGISTRATION_KEYS  # AC5: nothing about the event's planning
     assert item["event_id"] == str(event.id)
     assert item["event_name"] == "Poetry Night 18.2"
+    assert item["cover_image_url"] == "/uploads/events/poetry-night-18-2.png"  # 2.1 AC14
     assert _when(item["starts_at"]) == starts_at
     assert _when(item["ends_at"]) == starts_at + timedelta(hours=3)
     assert item["status"] == "REGISTERED"

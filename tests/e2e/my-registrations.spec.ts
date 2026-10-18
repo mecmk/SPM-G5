@@ -46,6 +46,11 @@ const PORTFOLIO_REVIEW = 'Portfolio Review Slot' // Bella's (story 18.1), never 
 
 const EVENT_STARTED_MESSAGE = 'This event has started, so you can no longer withdraw.'
 const NOT_FOUND_MESSAGE = 'This registration was not found.'
+const UNREACHABLE_MESSAGE = 'The server could not be reached. Check your connection and try again.'
+const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
+// The yoga's cover picture (2.1 AC14). A card's picture is decorative - no alt text, hidden
+// from assistive technology - so it has no role or name, and is found by its tag.
+const YOGA_PICTURE = '/images/events/cat.jpg'
 const LOADING_LABEL = 'Loading your registrations…'
 const EMPTY_MESSAGE = 'You have not registered for any events yet.'
 
@@ -150,6 +155,7 @@ test('18.2 AC1: an attendee opens My registrations from the sidebar and sees eac
   await expect(yoga.getByText('Registered', { exact: true })).toHaveClass(/\bbadge-registered\b/)
   await expect(yoga).toContainText('Sat, 27 Mar 2027 · 18:00–19:00')
   await expect(yoga).toContainText('You registered on Sun, 11 Oct 2026, 10:15')
+  await expect(yoga.locator('img')).toHaveAttribute('src', YOGA_PICTURE)
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
 
   const trail = eventCard(page, HERITAGE_TRAIL)
@@ -280,6 +286,14 @@ test('18.2 AC1: at phone width the registrations fit without sideways scrolling,
   const button = await withdraw.boundingBox()
   if (button === null) throw new Error('the card is not laid out')
   expect(button.height).toBeGreaterThanOrEqual(44)
+
+  // The picture stays beside the details, as on a card with no button; Withdraw goes below both.
+  const picture = await eventCard(page, SUNSET_YOGA).locator('img').boundingBox()
+  const title = await eventCard(page, SUNSET_YOGA).getByRole('heading', { level: 3 }).boundingBox()
+  if (picture === null || title === null) throw new Error('the card is not laid out')
+  expect(title.x).toBeGreaterThanOrEqual(picture.x + picture.width)
+  expect(title.y).toBeLessThan(picture.y + picture.height)
+  expect(button.y).toBeGreaterThanOrEqual(picture.y + picture.height)
 })
 
 // --- AC3: until the event starts -------------------------------------------------------------
@@ -291,6 +305,7 @@ test('18.2 AC3: a registration for an event that has started offers no Withdraw'
   const card = eventCard(page, BOOK_SWAP)
   await expect(card.getByText('Registered', { exact: true })).toBeVisible()
   await expect(card).toContainText('Sat, 3 Oct 2026 · 10:00–13:00')
+  await expect(card).toContainText(STARTED_NOTE)
   await expect(card.getByRole('button')).toHaveCount(0)
 })
 
@@ -336,9 +351,33 @@ test('18.2 AC3: a withdrawal refused because the event started meanwhile says wh
   await expect(page.getByRole('status').filter({ hasText: EVENT_STARTED_MESSAGE })).toContainText(
     'Cannot withdraw',
   )
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  // Refused for good, so Withdraw is no longer offered: only Close.
+  await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toHaveCount(0)
   await expect(eventCard(page, SUNSET_YOGA).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(eventCard(page, SUNSET_YOGA)).toContainText(STARTED_NOTE)
   await expect(withdrawButton(page, SUNSET_YOGA)).toHaveCount(0)
+})
+
+test('18.2 AC1: a withdrawal that cannot reach the server says so, and can be tried again', async ({
+  page,
+}) => {
+  await page.route(
+    (url) => WITHDRAW_API_PATH.test(url.pathname),
+    (route) =>
+      route.request().resourceType() === 'fetch'
+        ? route.abort('connectionrefused')
+        : route.fallback(),
+  )
+  await openMyRegistrations(page)
+
+  await confirmWithdrawal(page, SUNSET_YOGA)
+
+  const dialog = withdrawDialog(page, SUNSET_YOGA)
+  await expect(dialog.getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE)
+  await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
 })
 
 // --- AC4: registering again ------------------------------------------------------------------
@@ -391,7 +430,10 @@ test('18.2 AC6: a withdrawal of a registration that is no longer found says so',
 
   await confirmWithdrawal(page, SUNSET_YOGA)
 
-  await expect(withdrawDialog(page, SUNSET_YOGA).getByRole('alert')).toHaveText(NOT_FOUND_MESSAGE)
+  const dialog = withdrawDialog(page, SUNSET_YOGA)
+  await expect(dialog.getByRole('alert')).toHaveText(NOT_FOUND_MESSAGE)
+  await expect(dialog.getByRole('button', { name: 'Withdraw', exact: true })).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: NOT_FOUND_MESSAGE })).toContainText(
     'Cannot withdraw',
   )
