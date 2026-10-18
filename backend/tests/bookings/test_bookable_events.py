@@ -79,6 +79,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.ART_MARKET),
         str(Events.CODING_BOOTCAMP),
         str(Events.DATA_SUMMIT),
+        str(Events.DESIGN_SPRINT),
         str(Events.LANTERN_SHOWCASE),
         str(Events.MAKER_FAIRE),
         str(Events.SPRING_EXPO),

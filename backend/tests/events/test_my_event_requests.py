@@ -92,6 +92,7 @@ def test_organiser_sees_every_request_they_own(organiser_client):
         str(Events.CYBER_CLINIC),
         str(Events.DATA_SUMMIT),
         str(Events.AI_WORKSHOP),
+        str(Events.DESIGN_SPRINT),
     }
 
 
@@ -288,7 +289,7 @@ def test_limit_caps_the_page_and_total_counts_every_request_i_own(organiser_clie
     page = _page(organiser_client, "?limit=2")
 
     assert len(page["items"]) == 2
-    assert page["total"] == 15  # the fifteen seeded requests Olivia owns
+    assert page["total"] == 16  # the sixteen seeded requests Olivia owns
 
 
 @pytest.mark.story("2.6", ac=9)
@@ -315,7 +316,7 @@ def test_an_offset_past_the_end_is_an_empty_page_not_an_error(organiser_client):
     page = _page(organiser_client, "?offset=100")
 
     assert page["items"] == []
-    assert page["total"] == 15
+    assert page["total"] == 16
 
 
 @pytest.mark.story("2.6", ac=9)

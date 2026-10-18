@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
+from app.change_requests.models import ChangeRequestStatus, EventChangeRequest
 from app.common.audit import record_audit
 from app.events.models import (
     EquipmentRequestStatus,
@@ -333,6 +334,11 @@ NOT_SAFETY_APPROVED = "The event has not been approved by the Safety Officer."
 APPROVAL_OUT_OF_DATE = (
     "The event's {facts} changed after the safety approval; request a safety review again."
 )
+# Story 19.2 AC8: an approved change request can leave every compared fact as it was (fewer people
+# in a room every booking still fits, say), but the officer still has not seen it.
+CHANGE_APPROVED_SINCE_REVIEW = (
+    "A change to the event was approved after its safety approval; request a safety review again."
+)
 # AC14: each fact a stale approval names, in words.
 _FACT_NAMES = {
     "description": "description",
@@ -475,9 +481,25 @@ def request_blockers(db: Session, event: Event) -> list[str]:
     return [*missing_arrangements(db, event), *unavailable_venue_sentences(db, event)]
 
 
+def _change_approved_since(db: Session, event: Event, review: EventSafetyReview) -> bool:
+    """Story 19.2 AC8: a change request on ``event`` was approved after ``review``, so the event
+    must go through its safety check again before it is confirmed - whether the approval sent it
+    back to Planning or found it there."""
+    return db.scalar(
+        select(
+            exists().where(
+                EventChangeRequest.event_id == event.id,
+                EventChangeRequest.status == ChangeRequestStatus.APPROVED,
+                EventChangeRequest.decided_at > review.reviewed_at,
+            )
+        )
+    )
+
+
 def confirm_blockers(db: Session, event: Event) -> list[str]:
     """AC7/AC14/AC21: what stops the event being confirmed now; ``[]`` offers it. The latest
-    review must be an approval that saw the facts the event has now."""
+    review must be an approval that saw the facts the event has now, with no change request
+    approved since (story 19.2 AC8)."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_CONFIRM_MESSAGE]
     blockers = [*missing_arrangements(db, event), *unavailable_venue_sentences(db, event)]
@@ -490,6 +512,8 @@ def confirm_blockers(db: Session, event: Event) -> list[str]:
     changed = [_FACT_NAMES[key] for key in _FACT_NAMES if approved.get(key) != now.get(key)]
     if changed:
         blockers.append(APPROVAL_OUT_OF_DATE.format(facts=" and ".join(changed)))
+    if _change_approved_since(db, event, review):
+        blockers.append(CHANGE_APPROVED_SINCE_REVIEW)
     return blockers
 
 

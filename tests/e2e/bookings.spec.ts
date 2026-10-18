@@ -193,10 +193,10 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
 
   await page.getByRole('tab', { name: /^Rejected/ }).click()
   await expect(approvedGrandHallCard(page)).toHaveCount(0)
-  // Fewer than ten requests: one page, so no page controls. Checked on Rejected, not All or
-  // Approved: All gains a request from every spec that sends one, and Approved holds a booking
-  // for each of the many seeded events (story 12.6's alone are ten), so both reach ten; Rejected
-  // holds the seeded few and the ones 13.2.1's tests reject.
+  // Fewer than ten requests: one page, so no page controls. Checked on Rejected: All gains a
+  // request from every spec that sends one, and Approved holds the seeded approvals of several
+  // stories (story 12.6's alone are ten), so either can pass ten, while Rejected holds none seeded
+  // and at most the two 13.2.1's tests reject.
   await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
 
   // A pending card first: only All's own answer holds one, so the approved card checked after it

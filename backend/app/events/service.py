@@ -98,6 +98,10 @@ REQUIREMENT_ENDS_AFTER_EVENT_MESSAGE = "{requirement} cannot end after the event
 REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
     "{requirement} cannot need room for more people than the expected attendance."
 )
+# Story 19.2: the same rule, said of a change to the attendance rather than of the form's field.
+ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
+    "{requirement} needs room for more people than the new expected attendance."
+)
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.
 DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE = (
@@ -355,6 +359,14 @@ class MissingVenueRequirement(InvalidEventRequest):
 
     def __init__(self):
         super().__init__(NO_VENUE_REQUIREMENT_MESSAGE)
+
+
+class AttendanceBelowRequirement(InvalidEventRequest):
+    """Story 19.2 AC2: a proposed attendance smaller than a venue requirement needs room for
+    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance."""
+
+    def __init__(self, requirement: str) -> None:
+        super().__init__(ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement))
 
 
 class InvalidVenueRequirement(InvalidEventRequest):
@@ -1458,7 +1470,7 @@ def record_transition(
     )
 
 
-# Story 9.4 AC3: the statuses a closed venue sends an event back to Planning from.
+# Story 9.4 AC3, story 19.2 AC8: the statuses an event is sent back to Planning from.
 _RETURNED_TO_PLANNING_FROM = (EventStatus.CONFIRMED, EventStatus.AWAITING_SAFETY_CHECK)
 
 
@@ -1471,16 +1483,18 @@ def return_event_to_planning(
     reason: str,
     details: dict[str, Any],
 ) -> bool:
-    """Story 9.4 AC3: a Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to
-    Planning because a venue it has booked was marked unavailable - recorded in the status history
-    with ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside
-    where it came from. Any other status is left as it is (Planning is already where it should
-    be), and False says nothing changed. The caller holds the event's row lock and commits, so
-    this leaves no notice of its own."""
+    """A Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to Planning: story
+    9.4 AC3, because a venue it has booked was marked unavailable, and story 19.2 AC8, because a
+    change to it was approved. Its confirmation is cleared, recorded in the status history with
+    ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with ``details`` beside where it
+    came from. Any other status is left as it is (Planning is already where it should be), and
+    False says nothing changed. The caller holds the event's row lock, commits and tells whoever
+    should know, so this leaves no notice of its own."""
     if event.status not in _RETURNED_TO_PLANNING_FROM:
         return False
     from_status = event.status
     event.status = EventStatus.PLANNING
+    event.confirmed_at = None
     db.flush()
     record_transition(
         db,
@@ -2382,24 +2396,40 @@ def _fits_additional_venue(event: Event, booking: VenueBooking) -> bool:
     )
 
 
+def _unfitting_bookings(event: Event, booked: list[_LiveBooking]) -> list[_LiveBooking]:
+    """AC14, story 19.2 AC5: the bookings in ``booked`` that the event and its requirements, as
+    they now stand, no longer fit - a requirement removed, grown, retimed or relaid, or the event's
+    own period or attendance outgrowing an additional venue. ``booked`` is read before the change,
+    so a requirement removed meanwhile is still known by its name. A cleared date or attendance
+    judges nothing: it is refused elsewhere first."""
+    if event.starts_at is None or event.ends_at is None or event.expected_attendance is None:
+        return []
+    requirements = {requirement.id: requirement for requirement in event.venue_requirements}
+    unfitting = []
+    for item in booked:
+        if item.requirement_name is None:
+            if not _fits_additional_venue(event, item.booking):
+                unfitting.append(item)
+            continue
+        requirement = requirements.get(item.booking.venue_requirement_id)
+        if not _fits_booking(event, requirement, item.booking):
+            unfitting.append(item)
+    return unfitting
+
+
 def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
     """AC14: judged on the event and its requirements as the correction leaves them, before the
     event itself is written. Requirements the correction removed have already been flushed, so
     AC16 rests on ``correct_event_under_review`` rolling the whole correction back when the first
     booking that no longer fits refuses it. A cleared date or attendance is left to
     ``_missing_for_submission``, which refuses it as it would before approval."""
-    if event.starts_at is None or event.ends_at is None or event.expected_attendance is None:
-        return
     requirements = {requirement.id: requirement for requirement in event.venue_requirements}
-    for item in booked:
+    for item in _unfitting_bookings(event, booked):
         if item.requirement_name is None:
-            if not _fits_additional_venue(event, item.booking):
-                raise BookingNoLongerFits(item.venue_name, None)
-            continue
+            raise BookingNoLongerFits(item.venue_name, None)
         requirement = requirements.get(item.booking.venue_requirement_id)
-        if not _fits_booking(event, requirement, item.booking):
-            name = item.requirement_name if requirement is None else requirement.name
-            raise BookingNoLongerFits(item.venue_name, name or item.requirement_name)
+        name = item.requirement_name if requirement is None else requirement.name
+        raise BookingNoLongerFits(item.venue_name, name or item.requirement_name)
 
 
 def _apply_correction(
@@ -2529,7 +2559,7 @@ def remove_cover_image_under_review(
     _clear_cover_image(db, event, actor=actor, action="EVENT_DETAILS_CORRECTED")
 
 
-# --- story 19.1: what a change request may propose, and the point of contact ----------------
+# --- stories 19.1/19.2: what a change request may propose, and the point of contact ----------
 # Change requests themselves live in app/change_requests/. These are the event's own rules it
 # reuses, made public here so that package never reaches into this module's private helpers.
 
@@ -2568,6 +2598,90 @@ def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -
     """``actor``'s own event, its row held until the transaction ends, so a status change racing
     a story 19.1 write waits for it (AC8) - the lock story 2.7 AC12 already relies on."""
     return _get_own_event(db, event_id, actor, for_update=True)
+
+
+def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
+    """Story 19.2: the event as ``get_event`` shows it to ``viewer``, its row held until the
+    transaction ends, so a decision on one of its change requests waits for a withdrawal or a
+    reassignment already under way (and they for it), then reads what landed first. Only the
+    event's own row is held, as in ``_get_own_event``."""
+    event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
+    if event is None or not _can_view(viewer, event):
+        raise EventNotFound(event_id)
+    return event
+
+
+def check_proposed_attendance(event: Event, attendance: int) -> None:
+    """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
+    room for more people than the event's expected attendance - judged with the proposed
+    figure against the requirements as they stand. Also checked when the request is raised."""
+    ordered = sorted(event.venue_requirements, key=lambda item: item.position)
+    for index, requirement in enumerate(ordered):
+        if requirement.capacity is not None and requirement.capacity > attendance:
+            raise AttendanceBelowRequirement(_describe_requirement(requirement.name, index))
+
+
+def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
+    """Story 19.2 AC5: ``event``'s pending and approved bookings as they stand, read before an
+    approved change is applied, so ``bookings_no_longer_fitting`` can judge them after."""
+    return _live_bookings(db, event)
+
+
+def bookings_no_longer_fitting(event: Event, booked: list[_LiveBooking]) -> list[VenueBooking]:
+    """Story 19.2 AC5: the bookings in ``booked`` an approved change has left unfitting, by
+    f7.2.4's rule (``_fits_booking``, ``_fits_additional_venue``); every other one still fits and
+    is left as it is."""
+    return [item.booking for item in _unfitting_bookings(event, booked)]
+
+
+def apply_proposed_schedule(
+    db: Session, event: Event, starts_at: datetime, ends_at: datetime
+) -> None:
+    """Story 19.2 AC2: move ``event`` to an approved new start and end, checked by 2.1 AC2's date
+    rules and AC18's registration window as a request's own dates are. A venue requirement that
+    covered the whole old period covers the new one; any other keeps its length and shifts with
+    the start (PO decision, 16 Oct 2026), and one that then falls outside the event refuses the
+    change by 2.7's rule. Written, not committed."""
+    check_proposed_schedule(starts_at, ends_at)
+    _check_registration(
+        required=event.registration_required,
+        opens_at=event.registration_opens_at,
+        closes_at=event.registration_closes_at,
+        starts_at=starts_at,
+        supplied_opens_at=None,
+        supplied_closes_at=None,
+    )
+    old_starts_at, old_ends_at = event.starts_at, event.ends_at
+    shift = starts_at - old_starts_at
+    for requirement in event.venue_requirements:
+        if requirement.starts_at is None or requirement.ends_at is None:
+            continue
+        if (requirement.starts_at, requirement.ends_at) == (old_starts_at, old_ends_at):
+            requirement.starts_at, requirement.ends_at = starts_at, ends_at
+        else:
+            requirement.starts_at += shift
+            requirement.ends_at += shift
+    _check_venue_requirement_rules(
+        sorted(event.venue_requirements, key=lambda requirement: requirement.position),
+        event_starts_at=starts_at,
+        event_ends_at=ends_at,
+        attendance=event.expected_attendance,
+    )
+    event.starts_at, event.ends_at = starts_at, ends_at
+    _flush_request_edit(db, event)
+
+
+def apply_proposed_venue_requirements(
+    db: Session, event: Event, items: list[VenueRequirementIn]
+) -> None:
+    """Story 19.2 AC2: give ``event`` an approved list of venue requirements, re-checked by 2.7's
+    rules against the event as it stands. One with an ``id`` is kept and edited, so a booking
+    for it stays linked (2.7 AC3); one left out is removed; one without is new. Written, not
+    committed."""
+    check_proposed_venue_requirements(db, event, items)
+    _replace_venue_requirements(db, event, items)
+    _fill_requirement_times(event)
+    _flush_request_edit(db, event)
 
 
 def check_proposed_schedule(starts_at: datetime, ends_at: datetime) -> None:

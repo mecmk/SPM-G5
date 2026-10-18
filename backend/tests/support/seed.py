@@ -157,6 +157,8 @@ class Events:
     CYBER_CLINIC = _e(47)  # AWAITING_SAFETY_CHECK; the spec requests changes
     DATA_SUMMIT = _e(48)  # PLANNING; sent back with its venue flagged, venue unchanged
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
+    # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
+    DESIGN_SPRINT = _e(51)
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
     # that its day's closure (Unavailability.FOYER_*) has marked "Venue unavailable - alternative
     # needed". Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
@@ -200,6 +202,8 @@ class Bookings:
     APPROVED_CYBER_CLINIC_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000016")
     APPROVED_DATA_SUMMIT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000017")
     APPROVED_AI_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000018")
+    # Story 19.2: Events.DESIGN_SPRINT's Studio, at Seminar Room 2.1.
+    APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000022")

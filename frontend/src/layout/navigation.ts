@@ -2,6 +2,7 @@ import { PERMISSIONS, type Permission } from '../auth/permissions'
 import type { IconName } from '../components/Icon'
 import {
   BOOKING_REQUESTS_PATH,
+  CHANGE_REQUEST_QUEUE_PATH,
   EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
   EVENTS_UNASSIGNED_PATH,
@@ -110,13 +111,13 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: false,
       },
       {
-        to: '/change-requests/review',
+        to: CHANGE_REQUEST_QUEUE_PATH,
         label: 'Change requests',
-        description: 'Review requested changes against the event as it stands.',
+        description: 'Changes organisers have asked for on your events, waiting for your decision.',
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE,
         story: '19.2',
-        isAvailable: false,
+        isAvailable: true,
       },
       {
         to: '/registrations/report',

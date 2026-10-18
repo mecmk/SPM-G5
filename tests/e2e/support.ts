@@ -106,6 +106,9 @@ export const EVENTS = {
   cyberClinic: '33333333-0000-0000-0000-000000000047',
   dataSummit: '33333333-0000-0000-0000-000000000048',
   aiWorkshop: '33333333-0000-0000-0000-000000000049',
+  // Story 19.2 AC8: set up as the bootcamp is - secured, never reviewed, Seminar Room 2.1 booked
+  // in November 2028 - for change-request-decisions.spec.ts to send to its safety check.
+  designSprint: '33333333-0000-0000-0000-000000000051',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
@@ -229,6 +232,37 @@ export async function assignByLead(page: Page) {
   await page.goto(eventPath)
   await expect(page.getByText(chloe.account, { exact: true })).toBeVisible()
   return { ...chloe, other: carl }
+}
+
+/** A fresh event of the organiser's, approved by whichever coordinator it was assigned to, with
+ *  the organiser signed back in on its page. Returns its id, its name and that coordinator's
+ *  account. Stories 19.1 and 19.2 raise and decide change requests on it. */
+export async function approvedEvent(page: Page, label: string) {
+  await signIn(page, ACCOUNTS.organiser)
+  const name = uniqueName(label)
+  const eventId = await createAndSubmitRequest(page, name)
+  await page.goto(`/events/${eventId}`)
+  const { account } = await assignByLead(page)
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, account)
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await page
+    .getByRole('dialog', { name: 'Approve this request?' })
+    .getByRole('button', { name: 'Approve' })
+    .click()
+  await expect(page.getByText('Planning', { exact: true }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${eventId}`)
+  return { eventId, name, coordinator: account }
+}
+
+/** Story 19.1's change requests on an event's detail page, which story 19.2 decides there. */
+export function changeRequests(page: Page) {
+  return page.getByRole('region', { name: 'Change requests' })
 }
 
 /** The clarification thread on an event's detail page (stories 4.2, 4.6). */

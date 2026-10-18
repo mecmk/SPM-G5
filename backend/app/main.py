@@ -12,6 +12,7 @@ from app.auth.router import RETRY_AFTER_HEADER
 from app.auth.router import router as auth_router
 from app.bookings import service as bookings_service
 from app.bookings.router import router as bookings_router
+from app.change_requests.router import queue_router as change_request_queue_router
 from app.change_requests.router import router as change_requests_router
 from app.config import settings
 from app.coordination.router import router as coordination_router
@@ -87,6 +88,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(bookings_router)
 app.include_router(change_requests_router)
+app.include_router(change_request_queue_router)
 app.include_router(coordination_router)
 app.include_router(equipment_router)
 app.include_router(equipment_queue_router)

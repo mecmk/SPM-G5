@@ -579,6 +579,115 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     )
 
 
+def _notify_venue_staff_of_release(
+    db: Session, booking: VenueBooking, *, actor: User, change: str
+) -> None:
+    """Story 19.2 AC5: every active Venue Staff member is told a booking was released, as they are
+    of a withdrawal (12.2 AC2), since their schedule changes with it."""
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_RELEASED,
+            event_id=booking.event_id,
+            title="A venue booking was released",
+            message=(
+                f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
+                f"an approved change to the event's {change} no longer fits it."
+            ),
+            related_entity_type="venue_booking",
+            related_entity_id=booking.id,
+            commit=False,
+        )
+
+
+def _notify_venue_staff_of_replacement(
+    db: Session, original: VenueBooking, replacement: VenueBooking, *, actor: User
+) -> None:
+    """Story 12.6 AC3: every other active Venue Staff member is told the booking was released
+    because its replacement was approved - the person who approved it is not (20.1 AC3). The
+    organiser is not told."""
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_REPLACED,
+            event_id=original.event_id,
+            title=f"A booking of {original.venue.name} was released",
+            message=(
+                f'The booking of {original.venue.name} for "{original.event.name}" was released: '
+                f"{replacement.venue.name} was approved as its replacement."
+            ),
+            related_entity_type="venue_booking",
+            related_entity_id=original.id,
+            commit=False,
+        )
+
+
+def release_booking(
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor: User,
+    change: str | None = None,
+    replacement: VenueBooking | None = None,
+) -> bool:
+    """Releases ``booking``, cancelling it so its venue is free, and tells Venue Staff - the one
+    release both stories make. Who approved it and when stay on the record. The update is
+    conditional on the booking still holding its venue, so one Venue Staff rejected, or the sweep
+    expired, meanwhile is left alone; returns whether it was released. Written, not committed:
+    the caller's decision commits it.
+
+    Story 19.2 AC5: ``change`` names the field of the event an approved change to which no longer
+    fits ``booking`` - audited ``BOOKING_RELEASED``, Venue Staff told "an approved change ... no
+    longer fits it".
+
+    Story 12.6 AC3: ``replacement`` is the booking whose approval releases it - the original is
+    closed "Replaced by <venue>" and linked to it (``replaced_by_booking_id``, which is how an
+    original's ``released_at`` is read), audited ``BOOKING_REPLACED``, Venue Staff told which
+    venue replaced it. Exactly one of the two is given."""
+    if (change is None) == (replacement is None):
+        raise ValueError("release_booking takes a change or a replacement, not both or neither.")
+    values: dict[str, object] = {"status": BookingStatus.CANCELLED}
+    if replacement is not None:
+        values["decision_reason"] = REPLACED_BY_REASON.format(venue=replacement.venue.name)
+        values["replaced_by_booking_id"] = replacement.id
+    released = db.execute(
+        update(VenueBooking)
+        .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
+        .values(**values)
+    )
+    if released.rowcount == 0:
+        return False
+    db.refresh(booking)
+    details = {"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)}
+    if replacement is not None:
+        record_audit(
+            db,
+            actor=actor,
+            action="BOOKING_REPLACED",
+            entity_type="venue_booking",
+            entity_id=booking.id,
+            details={**details, "replaced_by_booking_id": str(replacement.id)},
+            commit=False,
+        )
+        _notify_venue_staff_of_replacement(db, booking, replacement, actor=actor)
+        return True
+    record_audit(
+        db,
+        actor=actor,
+        action="BOOKING_RELEASED",
+        entity_type="venue_booking",
+        entity_id=booking.id,
+        details={**details, "change": change},
+        commit=False,
+    )
+    _notify_venue_staff_of_release(db, booking, actor=actor, change=str(change))
+    return True
+
+
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """Row-locked read for an approve/reject action - see the module docstring's concurrency
     note. Two simultaneous decisions on the same booking serialize on this lock instead of
@@ -664,72 +773,20 @@ def get_booking_for_approval(db: Session, booking_id: uuid.UUID) -> VenueBooking
     return next(each for each in locked if each.id == booking_id)
 
 
-def _release_replaced_original(db: Session, replacement: VenueBooking) -> VenueBooking | None:
-    """Story 12.6 AC3: the replacement being approved releases the booking it replaces - CANCELLED
-    for "Replaced by <venue>", approval stamps kept, ``replaced_by_booking_id`` set - written, not
-    committed, so it is the approval's own transaction. The update is conditional on the booking
-    still holding its venue, so one that expired or was cancelled meanwhile is left alone (AC10);
-    returns the booking it released, or None when it released nothing.
-
-    To be reconciled with #116's ``release_booking`` (story 19.2) when that merges: the same
-    conditional write, with a reason and a link of its own."""
+def _release_replaced_booking(
+    db: Session, replacement: VenueBooking, *, actor: User
+) -> VenueBooking | None:
+    """Story 12.6 AC3: approving ``replacement`` releases the booking it replaces, through the one
+    ``release_booking``. The original was locked with the replacement by
+    ``get_booking_for_approval`` and is read afresh; it is released only while it still holds its
+    venue, so one that expired or was cancelled meanwhile is left alone (AC10). Returns the
+    booking it released, or None when it released nothing."""
     if replacement.replaces_booking_id is None:
         return None
-    original = db.scalar(
-        select(VenueBooking)
-        .where(VenueBooking.id == replacement.replaces_booking_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    released = db.execute(
-        update(VenueBooking)
-        .where(VenueBooking.id == original.id, VenueBooking.status.in_(_HOLDING_STATUSES))
-        .values(
-            status=BookingStatus.CANCELLED,
-            decision_reason=REPLACED_BY_REASON.format(venue=replacement.venue.name),
-            replaced_by_booking_id=replacement.id,
-        )
-    )
-    if released.rowcount == 0:
+    original = db.get(VenueBooking, replacement.replaces_booking_id)
+    if original is None or not release_booking(db, original, actor=actor, replacement=replacement):
         return None
-    db.refresh(original)
     return original
-
-
-def _record_replacement_release(
-    db: Session, original: VenueBooking, replacement: VenueBooking, *, actor: User
-) -> None:
-    """Story 12.6 AC3: the release is audited on the original, and every other active Venue Staff
-    member is told - the person who approved it is not (20.1 AC3). The organiser is not told."""
-    record_audit(
-        db,
-        actor=actor,
-        action="BOOKING_REPLACED",
-        entity_type="venue_booking",
-        entity_id=original.id,
-        details={
-            "venue_id": str(original.venue_id),
-            "event_id": str(original.event_id),
-            "replaced_by_booking_id": str(replacement.id),
-        },
-        commit=False,
-    )
-    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
-        notify(
-            db,
-            recipient=member,
-            actor=actor,
-            notification_type=NotificationType.BOOKING_REPLACED,
-            event_id=original.event_id,
-            title=f"A booking of {original.venue.name} was released",
-            message=(
-                f'The booking of {original.venue.name} for "{original.event.name}" was released: '
-                f"{replacement.venue.name} was approved as its replacement."
-            ),
-            related_entity_type="venue_booking",
-            related_entity_id=original.id,
-            commit=False,
-        )
 
 
 def approve_booking(
@@ -779,7 +836,8 @@ def approve_booking(
         raise HoldPeriodStarted()
     _check_hold_expiry(booking, hold_expires_at, now=moment)
 
-    released = _release_replaced_original(db, booking)
+    actor = db.get(User, actor_id)
+    released = _release_replaced_booking(db, booking, actor=actor)
     booking.status = BookingStatus.APPROVED
     booking.decided_by_id = actor_id
     booking.decided_at = moment
@@ -801,10 +859,7 @@ def approve_booking(
             raise
         raise BookingConflict(conflict) from exc
 
-    actor = db.get(User, actor_id)
     _notify_coordinator_of_decision(db, booking, actor=actor, released=released)
-    if released is not None:
-        _record_replacement_release(db, released, booking, actor=actor)
     record_audit(
         db,
         actor=actor,
