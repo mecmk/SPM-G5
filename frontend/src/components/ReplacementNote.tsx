@@ -23,7 +23,7 @@ export function ReplacementNote({
 }: ReplacementNoteProps) {
   if (replacesVenueName === null) return null
   return (
-    <div className="stack">
+    <div className="info stack">
       <p>
         <strong>{replacesLine(replacesVenueName)}</strong>
       </p>
