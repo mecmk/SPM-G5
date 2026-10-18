@@ -4,7 +4,8 @@ Level: unit. Each test calls one pure function in ``app/registrations/service.py
 no HTTP, no fixture - so the whole file runs in milliseconds without PostgreSQL. The integration
 tests beside it (``test_view_and_withdraw_integration.py``) prove the service applies these rules
 to real rows through the API, and ``tests/e2e/my-registrations.spec.ts`` proves the flows an
-attendee clicks through. No case is proven at more than one level.
+attendee clicks through. The integration tests check the AC3 boundary again, through the
+service, to catch it wiring this rule up wrongly; the e2e spec repeats none of these.
 
 AC1 The attendee sees their registrations with event name, date and status (Registered,
     Withdrawn or Event cancelled). An active registration can be withdrawn after confirmation,
@@ -90,7 +91,8 @@ def test_a_registration_cancelled_with_its_event_is_event_cancelled(event_status
 # --- AC8: a cancelled event, and one sent back to Planning ----------------------------------------
 @pytest.mark.story("18.2", ac=8)
 def test_an_active_registration_on_a_cancelled_event_is_event_cancelled():
-    """Story 21.2's rejection cancels the event and leaves its registrations as they were."""
+    """A Confirmed event sent back to Planning (9.4 AC3, 19.2 AC8) keeps its registrations (18.1
+    AC4), and may then be cancelled (6.2) with them still active."""
     assert (
         registration_standing(
             registration_status=RegistrationStatus.REGISTERED, event_status=EventStatus.CANCELLED

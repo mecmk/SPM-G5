@@ -125,6 +125,54 @@ def test_seed_is_idempotent_over_existing_data(db: Session):
     assert before == after
 
 
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("18.2", ac=4)
+@pytest.mark.parametrize(
+    ("registration_id", "event_id", "attendee_id"),
+    [
+        (Registrations.PORTFOLIO_REVIEW, Events.PORTFOLIO_REVIEW, Users.ATTENDEE_2.id),
+        (Registrations.SKETCHING_WALK, Events.SKETCHING_WALK, Users.ATTENDEE.id),
+    ],
+    ids=["18.1-bella-portfolio-review", "18.2-aiden-sketching-walk"],
+)
+def test_reseeding_leaves_a_newer_active_registration_alone(
+    db: Session, registration_id, event_id, attendee_id
+):
+    """`npm run db:ready` re-applies the seed to a database people have used. Once a seeded
+    registration was withdrawn and its attendee registered again (18.2 AC4), making the seeded one
+    REGISTERED again would give them two active registrations, which
+    uq_event_registrations_active refuses, and the seed would fail."""
+    conn = db.connection()
+    conn.execute(
+        text(
+            "UPDATE event_registrations SET status = 'WITHDRAWN', withdrawn_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": registration_id},
+    )
+    newer = conn.execute(
+        text(
+            "INSERT INTO event_registrations (event_id, attendee_id) VALUES (:event, :attendee)"
+            " RETURNING id"
+        ),
+        {"event": event_id, "attendee": attendee_id},
+    ).scalar_one()
+
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+    statuses = dict(
+        conn.execute(
+            text(
+                "SELECT id, status FROM event_registrations"
+                " WHERE event_id = :event AND attendee_id = :attendee"
+            ),
+            {"event": event_id, "attendee": attendee_id},
+        ).all()
+    )
+    assert statuses == {registration_id: "WITHDRAWN", newer: "REGISTERED"}
+
+
 @pytest.mark.story("1")
 def test_seed_constants_match_database(db: Session):
     """tests/support/seed.py must describe rows that really exist."""

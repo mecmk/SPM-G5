@@ -6,7 +6,9 @@ fixtures) or its service functions, against the real schema in the rolled-back t
 The race tests at the end commit real concurrent transactions and clean up after themselves. The
 pure rules (which status a registration shows, whether it can still be withdrawn, why a withdrawal
 was refused) are unit-tested in ``test_view_and_withdraw_unit.py``; the attendee's clicks are
-e2e-tested in ``tests/e2e/my-registrations.spec.ts``. No case is proven at more than one level.
+e2e-tested in ``tests/e2e/my-registrations.spec.ts``. The AC3 boundary - the event's start - is
+tested at both backend levels on purpose: the unit tests pin the rule, and these catch the
+service handing it the wrong moment or the wrong row. The e2e spec repeats none of them.
 
 Service-level tests pass ``now=NOW``, a moment after every seeded event has started, so a boundary
 can be hit to the microsecond. Their attendees are made by the test, so a list holds only the
@@ -34,6 +36,7 @@ AC8 A registration shows as Event cancelled when its event was cancelled or it w
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 import uuid
@@ -622,7 +625,9 @@ def test_a_place_taken_by_someone_else_meanwhile_cannot_be_registered_for_again(
 def test_a_registration_on_a_cancelled_event_shows_as_cancelled_and_cannot_be_withdrawn(
     attendee_client, db: Session
 ):
-    """As story 21.2's rejection leaves it: the event Cancelled, its registrations untouched."""
+    """The event Cancelled with its registrations untouched: a Confirmed event sent back to
+    Planning (9.4 AC3, 19.2 AC8) keeps its registrations (18.1 AC4), and may then be cancelled
+    (6.2) with them still active."""
     event = _event(db, starts_at=future_datetime(days=40), status=EventStatus.CANCELLED)
     registration = _registration(db, event, Users.ATTENDEE.id)
 
@@ -773,10 +778,18 @@ def _clean_up(engine: Engine, made: _Withdrawable) -> None:
         session.commit()
 
 
-def _attempt(engine: Engine, made: _Withdrawable, start: threading.Barrier | None = None) -> str:
-    """One withdrawal in a session of its own, as one request would make it."""
+def _attempt(
+    engine: Engine,
+    made: _Withdrawable,
+    start: threading.Barrier | None = None,
+    pids: queue.Queue[int] | None = None,
+) -> str:
+    """One withdrawal in a session of its own, as one request would make it. When ``pids`` is
+    given, the session's database process id goes into it first, so a test can watch it alone."""
     with Session(engine) as session:
         attendee = session.get(User, made.attendee_id)
+        if pids is not None:
+            pids.put(session.execute(text("SELECT pg_backend_pid()")).scalar_one())
         if start is not None:
             start.wait()
         try:
@@ -786,18 +799,18 @@ def _attempt(engine: Engine, made: _Withdrawable, start: threading.Barrier | Non
         return WITHDRAWN
 
 
-def _wait_until_blocked_or_done(engine: Engine, attempt: Future) -> None:
-    """Until ``attempt`` waits on a row lock (or, were nothing locked, has already finished)."""
+def _wait_until_blocked_or_done(engine: Engine, attempt: Future, pids: queue.Queue[int]) -> None:
+    """Until ``attempt``'s own session waits on a lock (or, were nothing locked, it has already
+    finished). Only that session is watched, so another one's wait cannot pass for it."""
+    pid = pids.get(timeout=10)
     deadline = time.monotonic() + 10
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         while time.monotonic() < deadline:
             if attempt.done():
                 return
             waiting = conn.execute(
-                text(
-                    "SELECT count(*) FROM pg_stat_activity"
-                    " WHERE datname = current_database() AND wait_event_type = 'Lock'"
-                )
+                text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                {"pid": pid},
             ).scalar()
             if waiting:
                 return
@@ -814,7 +827,7 @@ def _audit_count(engine: Engine, made: _Withdrawable) -> int:
 def test_two_withdrawals_arriving_at_once_withdraw_once(engine: Engine):
     """A double-click, or the same page open in two tabs."""
     made = _withdrawable(engine)
-    start = threading.Barrier(2)
+    start = threading.Barrier(2, timeout=10)
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             attempts = [pool.submit(_attempt, engine, made, start) for _ in range(2)]
@@ -836,6 +849,7 @@ def test_a_withdrawal_waits_for_one_in_progress_and_is_then_refused(engine: Engi
     a second time."""
     made = _withdrawable(engine)
     first = Session(engine)
+    pids: queue.Queue[int] = queue.Queue()
     try:
         first.execute(
             update(EventRegistration)
@@ -843,8 +857,8 @@ def test_a_withdrawal_waits_for_one_in_progress_and_is_then_refused(engine: Engi
             .values(status=RegistrationStatus.WITHDRAWN, withdrawn_at=EARLIER)
         )
         with ThreadPoolExecutor(max_workers=1) as pool:
-            attempt = pool.submit(_attempt, engine, made)
-            _wait_until_blocked_or_done(engine, attempt)
+            attempt = pool.submit(_attempt, engine, made, None, pids)
+            _wait_until_blocked_or_done(engine, attempt, pids)
             first.commit()
             outcome = attempt.result(timeout=30)
 

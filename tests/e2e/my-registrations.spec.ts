@@ -24,10 +24,10 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  *
  * Every test is independent: each case that withdraws has a seeded registration of its own
  * (backend/db/seed/020_sample_data.sql, 1818..02-08 for events 3333..70-76), so tests running in
- * parallel never share one, and every other case only reads. States the seed cannot reach - no
- * registrations at all, a slow or failed load, an event starting mid-visit, a registration gone
- * mid-visit - stub the one call with
- * `page.route`.
+ * parallel never share one, and every other case only reads. Those that withdraw never retry: a
+ * retry could only fail on what the first attempt changed, and would hide that attempt's trace.
+ * States the seed cannot reach - no registrations at all, a slow or failed load, an event starting
+ * mid-visit, a registration gone mid-visit - stub the one call with `page.route`.
  */
 
 const MY_REGISTRATIONS_PATH = '/registrations'
@@ -188,35 +188,39 @@ test('18.2 AC1: while the registrations load, the page says so', async ({ page }
   await expect(loading).toHaveCount(0)
 })
 
-test('18.2 AC1: withdrawing after confirming marks the registration Withdrawn, and Upcoming events has the place back', async ({
-  page,
-}) => {
-  await openMyRegistrations(page)
-  const card = eventCard(page, POETRY_NIGHT)
-  await expect(card.getByText('Registered', { exact: true })).toBeVisible()
+test.describe('withdraws its seeded registration once', () => {
+  test.describe.configure({ retries: 0 })
 
-  await withdrawButton(page, POETRY_NIGHT).click()
-  const dialog = withdrawDialog(page, POETRY_NIGHT)
-  await expect(dialog).toContainText('you may not be able to register again')
-  const before = todayInSingapore()
-  await dialog.getByRole('button', { name: 'Withdraw', exact: true }).click()
-  const after = todayInSingapore()
+  test('18.2 AC1: withdrawing after confirming marks the registration Withdrawn, and Upcoming events has the place back', async ({
+    page,
+  }) => {
+    await openMyRegistrations(page)
+    const card = eventCard(page, POETRY_NIGHT)
+    await expect(card.getByText('Registered', { exact: true })).toBeVisible()
 
-  await expect(dialog).toHaveCount(0)
-  await expect(
-    page.getByRole('status').filter({ hasText: `You have withdrawn from ${POETRY_NIGHT}.` }),
-  ).toContainText('Withdrawn')
-  await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
-  await expect(card).toContainText(withdrewToday(before, after))
-  await expect(card.getByRole('button')).toHaveCount(0)
+    await withdrawButton(page, POETRY_NIGHT).click()
+    const dialog = withdrawDialog(page, POETRY_NIGHT)
+    await expect(dialog).toContainText('you may not be able to register again')
+    const before = todayInSingapore()
+    await dialog.getByRole('button', { name: 'Withdraw', exact: true }).click()
+    const after = todayInSingapore()
 
-  await page.reload()
-  await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByRole('status').filter({ hasText: `You have withdrawn from ${POETRY_NIGHT}.` }),
+    ).toContainText('Withdrawn')
+    await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(card).toContainText(withdrewToday(before, after))
+    await expect(card.getByRole('button')).toHaveCount(0)
 
-  await page.goto(UPCOMING_EVENTS_PATH)
-  const upcoming = eventCard(page, POETRY_NIGHT)
-  await expect(upcoming).toContainText('1 place left')
-  await expect(upcoming.getByText('Open', { exact: true })).toBeVisible()
+    await page.reload()
+    await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
+
+    await page.goto(UPCOMING_EVENTS_PATH)
+    const upcoming = eventCard(page, POETRY_NIGHT)
+    await expect(upcoming).toContainText('1 place left')
+    await expect(upcoming.getByText('Open', { exact: true })).toBeVisible()
+  })
 })
 
 test('18.2 AC1: cancelling the confirmation keeps the registration and sends nothing', async ({
@@ -338,29 +342,33 @@ test('18.2 AC3: a withdrawal refused because the event started meanwhile says wh
 })
 
 // --- AC4: registering again ------------------------------------------------------------------
-test('18.2 AC4: after withdrawing, registering again from Upcoming events makes the registration active again', async ({
-  page,
-}) => {
-  await openMyRegistrations(page)
-  await confirmWithdrawal(page, SKETCHING_WALK)
-  await expect(
-    eventCard(page, SKETCHING_WALK).getByText('Withdrawn', { exact: true }),
-  ).toBeVisible()
+test.describe('withdraws its seeded registration once', () => {
+  test.describe.configure({ retries: 0 })
 
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, SKETCHING_WALK)
-    .getByRole('button', { name: `Register for ${SKETCHING_WALK}` })
-    .click()
-  await expect(
-    eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
-  ).toBeVisible()
+  test('18.2 AC4: after withdrawing, registering again from Upcoming events makes the registration active again', async ({
+    page,
+  }) => {
+    await openMyRegistrations(page)
+    await confirmWithdrawal(page, SKETCHING_WALK)
+    await expect(
+      eventCard(page, SKETCHING_WALK).getByText('Withdrawn', { exact: true }),
+    ).toBeVisible()
 
-  await page.goto(MY_REGISTRATIONS_PATH)
-  await expect(eventCard(page, SKETCHING_WALK)).toHaveCount(1)
-  await expect(
-    eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
-  ).toBeVisible()
-  await expect(withdrawButton(page, SKETCHING_WALK)).toBeEnabled()
+    await page.goto(UPCOMING_EVENTS_PATH)
+    await eventCard(page, SKETCHING_WALK)
+      .getByRole('button', { name: `Register for ${SKETCHING_WALK}` })
+      .click()
+    await expect(
+      eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
+    ).toBeVisible()
+
+    await page.goto(MY_REGISTRATIONS_PATH)
+    await expect(eventCard(page, SKETCHING_WALK)).toHaveCount(1)
+    await expect(
+      eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
+    ).toBeVisible()
+    await expect(withdrawButton(page, SKETCHING_WALK)).toBeEnabled()
+  })
 })
 
 // --- AC5: only the attendee's own ------------------------------------------------------------
@@ -401,20 +409,24 @@ test('18.2 AC5: an organiser who opens My registrations is told it is not permit
 })
 
 // --- AC7: a double-click withdraws once ------------------------------------------------------
-test('18.2 AC7: a double-click on Withdraw sends one withdrawal', async ({ page }) => {
-  await openMyRegistrations(page)
-  const sent = trackWithdrawals(page)
+test.describe('withdraws its seeded registration once', () => {
+  test.describe.configure({ retries: 0 })
 
-  await withdrawButton(page, BOARD_GAMES_SOCIAL).click()
-  await withdrawDialog(page, BOARD_GAMES_SOCIAL)
-    .getByRole('button', { name: 'Withdraw', exact: true })
-    .dblclick()
+  test('18.2 AC7: a double-click on Withdraw sends one withdrawal', async ({ page }) => {
+    await openMyRegistrations(page)
+    const sent = trackWithdrawals(page)
 
-  await expect(
-    eventCard(page, BOARD_GAMES_SOCIAL).getByText('Withdrawn', { exact: true }),
-  ).toBeVisible()
-  await expect(page.getByRole('alert')).toHaveCount(0)
-  expect(sent).toHaveLength(1)
+    await withdrawButton(page, BOARD_GAMES_SOCIAL).click()
+    await withdrawDialog(page, BOARD_GAMES_SOCIAL)
+      .getByRole('button', { name: 'Withdraw', exact: true })
+      .dblclick()
+
+    await expect(
+      eventCard(page, BOARD_GAMES_SOCIAL).getByText('Withdrawn', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(sent).toHaveLength(1)
+  })
 })
 
 // --- AC8: a cancelled event ------------------------------------------------------------------
