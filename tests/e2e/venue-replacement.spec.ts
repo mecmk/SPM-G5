@@ -484,10 +484,7 @@ test('12.6 AC6: when the closure is removed the button goes and the pending repl
   await staff.goto('/venues')
   // Story 12.6 AC12: the controls are on the Edit venue page.
   await venueCard(staff, FOYER).getByRole('link', { name: 'Edit' }).click()
-  const availability = staff.getByRole('region', {
-    name: 'Availability',
-    exact: true,
-  })
+  const availability = staff.getByRole('group', { name: 'Availability', exact: true })
   await expect(availability).toBeVisible()
   await availability.getByRole('button', { name: /^13 February 2029/ }).click()
   const closure = staff.getByRole('listitem').filter({ hasText: 'Floor resurfacing' })

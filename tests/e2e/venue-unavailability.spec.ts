@@ -53,7 +53,10 @@ const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
 
 /** The "Availability" card, a region via its `aria-labelledby` (as venue-calendar.spec.ts). */
 function availability(page: Page) {
-  return page.getByRole('region', { name: 'Availability', exact: true })
+  // A region on the details page, a group - a form section - on the Edit venue page.
+  return page
+    .getByRole('region', { name: 'Availability', exact: true })
+    .or(page.getByRole('group', { name: 'Availability', exact: true }))
 }
 
 /**
@@ -61,12 +64,15 @@ function availability(page: Page) {
  * closure is being edited the card is named "Edit blocked-off time".
  */
 function blockOff(page: Page) {
-  return page.getByRole('region', { name: /^(Block off time|Edit blocked-off time)$/ })
+  const name = /^(Block off time|Edit blocked-off time)$/
+  return page.getByRole('region', { name }).or(page.getByRole('group', { name }))
 }
 
 /** The card as it is when closed, holding the button that opens the add form. */
 function blockOffCard(page: Page) {
-  return page.getByRole('region', { name: 'Block off time', exact: true })
+  return page
+    .getByRole('region', { name: 'Block off time', exact: true })
+    .or(page.getByRole('group', { name: 'Block off time', exact: true }))
 }
 
 interface SaveOptions {

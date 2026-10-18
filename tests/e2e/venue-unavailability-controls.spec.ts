@@ -26,16 +26,21 @@ const PINNED_NOW = new Date('2029-02-01T10:00:00+08:00')
 const CLOSURE_DAY = /^5 February 2029/
 const CLOSURE_DESCRIPTION = 'Floor resurfacing'
 const CLOSURE_LABEL = 'Unavailable – Maintenance'
+const CLOSURES_NOTE = 'Closures are saved as soon as you add them; Save changes is not needed.'
 
 const DESKTOP = { width: 1280, height: 720 }
 const PHONE = { width: 390, height: 844 }
 
 function availability(page: Page) {
-  return page.getByRole('region', { name: 'Availability', exact: true })
+  // A region on the details page, a group - a form section - on the Edit venue page.
+  return page
+    .getByRole('region', { name: 'Availability', exact: true })
+    .or(page.getByRole('group', { name: 'Availability', exact: true }))
 }
 
 function blockOff(page: Page) {
-  return page.getByRole('region', { name: /^(Block off time|Edit blocked-off time)$/ })
+  const name = /^(Block off time|Edit blocked-off time)$/
+  return page.getByRole('region', { name }).or(page.getByRole('group', { name }))
 }
 
 /** The closure's row in the day's list, which holds its actions when there are any. */
@@ -92,6 +97,34 @@ test('12.6 AC12: the controls are on the Edit venue page', async ({ page }) => {
   await openClosureDay(page)
   await expect(closureRow(page).getByRole('button', { name: 'Edit' })).toBeVisible()
   await expect(closureRow(page).getByRole('button', { name: 'Remove' })).toBeVisible()
+})
+
+test('12.6 AC12: the Edit venue page closes its form with Save changes, then the closure sections', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openEditPage(page)
+
+  // Availability and Block off time are sections of the page like Accessibility is.
+  const accessibility = page.getByRole('group', { name: 'Accessibility', exact: true })
+  const save = page.getByRole('button', { name: 'Save changes' })
+  const note = page.getByText(CLOSURES_NOTE)
+  const calendar = page.getByRole('group', { name: 'Availability', exact: true })
+  const blockOffSection = page.getByRole('group', { name: 'Block off time', exact: true })
+  const parts = [accessibility, save, note, calendar, blockOffSection]
+  for (const part of parts) await expect(part).toBeVisible()
+
+  // In that order down the page: the form ends at Save changes, then the note, then the closures.
+  const boxes = await Promise.all(parts.map((part) => part.boundingBox()))
+  const ys = boxes.map((box) => box?.y ?? Number.NaN)
+  expect(ys).toEqual([...ys].sort((a, b) => a - b))
+  expect(new Set(ys).size).toBe(parts.length)
+  // and they are cards as wide and as far left as the form's own.
+  const [first, , , second, third] = boxes
+  for (const closure of [second, third]) {
+    expect(Math.abs((closure?.x ?? 0) - (first?.x ?? 1))).toBeLessThan(1)
+    expect(Math.abs((closure?.width ?? 0) - (first?.width ?? 1))).toBeLessThan(1)
+  }
 })
 
 test('12.6 AC12: the details page shows the period and its reason but no controls', async ({
