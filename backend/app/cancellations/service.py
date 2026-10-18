@@ -136,9 +136,12 @@ def cancel_event(db: Session, event_id: uuid.UUID, *, actor: User, reason: str) 
             actor=actor,
             because=_BOOKING_RELEASED_BECAUSE,
             details={"cause": "EVENT_CANCELLED"},
+            at=cancelled_at,
         )
     ]
-    closed_items = equipment_service.release_for_cancelled_event(db, event, actor=actor)
+    closed_items = equipment_service.release_for_cancelled_event(
+        db, event, actor=actor, at=cancelled_at
+    )
     attendee_ids = registrations_service.cancel_for_event(db, event.id)
     closed_request_ids = change_requests_service.cancel_pending_for_event(db, event.id)
 

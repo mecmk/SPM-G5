@@ -33,6 +33,9 @@ function backToRequest(itemId: string): EventCardBackState {
  * AC6: a refused accept leaves the page showing the shortfall it reported. AC7/AC9: any other
  * refusal loads the request again, so a decision made elsewhere meanwhile shows.
  * View event details opens the event (story 7.1), whose back link returns to this page.
+ *
+ * Story 6.2 AC15/AC16: a request cancelled with its event is read-only; it says when it was
+ * cancelled and leaves out what is available, since nothing is held for it any more.
  */
 export function EquipmentRequestDetailPage() {
   const { itemId = '' } = useParams()
@@ -116,6 +119,14 @@ export function EquipmentRequestDetailPage() {
               {entry.decided_by_name !== null && ` by ${entry.decided_by_name}`}
             </p>
           )}
+          {entry.status === 'CANCELLED' && (
+            <p className="small muted">
+              Cancelled{' '}
+              {entry.cancelled_at === null
+                ? 'at a time not recorded'
+                : formatDateTime(entry.cancelled_at)}
+            </p>
+          )}
 
           <div className="stack">
             <section className="stat-card-grid" aria-labelledby="equipment-summary-heading">
@@ -136,20 +147,24 @@ export function EquipmentRequestDetailPage() {
                   <p className="fact-label">Requested</p>
                   <p className="fact-value">{entry.quantity}</p>
                 </div>
-                <div className="subtle-block">
-                  <p className="fact-label">Available</p>
-                  <p className="fact-value">{entry.available}</p>
-                </div>
-                <div className="subtle-block">
-                  <p className="fact-label">Shortfall</p>
-                  <p className="fact-value">
-                    {entry.shortfall > 0 ? (
-                      <span className="badge badge-warning">Short by {entry.shortfall}</span>
-                    ) : (
-                      'None'
-                    )}
-                  </p>
-                </div>
+                {entry.status !== 'CANCELLED' && (
+                  <>
+                    <div className="subtle-block">
+                      <p className="fact-label">Available</p>
+                      <p className="fact-value">{entry.available}</p>
+                    </div>
+                    <div className="subtle-block">
+                      <p className="fact-label">Shortfall</p>
+                      <p className="fact-value">
+                        {entry.shortfall > 0 ? (
+                          <span className="badge badge-warning">Short by {entry.shortfall}</span>
+                        ) : (
+                          'None'
+                        )}
+                      </p>
+                    </div>
+                  </>
+                )}
                 <div className="subtle-block">
                   <p className="fact-label">Requested by</p>
                   <p className="fact-value">{entry.requested_by_name ?? NOT_RECORDED}</p>

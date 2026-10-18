@@ -766,6 +766,7 @@ def _apply_approved_change(
             actor=actor,
             because=_RELEASED_BECAUSE.format(label=label),
             details={"change": label},
+            at=datetime.now(UTC),
         )
     ]
     from_status = event.status

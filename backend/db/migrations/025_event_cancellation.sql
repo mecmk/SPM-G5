@@ -7,6 +7,9 @@
 --    An event cancelled before this migration has none of them, which the checks allow.
 -- 2. Cancelling closes the event's pending change requests (AC4), so their status gains
 --    CANCELLED.
+-- 3. A booking or equipment item cancelled records when (AC16), beside its old decision, so the
+--    queues can show it under Cancelled (AC14, AC15). Only on a CANCELLED row; one cancelled
+--    before this migration has none, which the checks allow.
 -- =====================================================================
 
 ALTER TABLE events
@@ -37,3 +40,19 @@ ALTER TABLE event_change_requests ADD CONSTRAINT ck_event_change_requests_status
 
 COMMENT ON COLUMN event_change_requests.status IS
     'PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. The organiser may withdraw a PENDING request (story 19.1 AC9); cancelling the event closes it as CANCELLED (story 6.2 AC4).';
+
+ALTER TABLE venue_bookings
+    ADD COLUMN cancelled_at TIMESTAMPTZ,
+    ADD CONSTRAINT ck_venue_bookings_cancelled_at
+        CHECK (cancelled_at IS NULL OR status = 'CANCELLED');
+
+COMMENT ON COLUMN venue_bookings.cancelled_at IS
+    'When the booking was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change no longer fit it (19.2). Only on a CANCELLED booking; decided_by_id and decided_at keep its earlier decision.';
+
+ALTER TABLE event_equipment_requests
+    ADD COLUMN cancelled_at TIMESTAMPTZ,
+    ADD CONSTRAINT ck_event_equipment_requests_cancelled_at
+        CHECK (cancelled_at IS NULL OR status = 'CANCELLED');
+
+COMMENT ON COLUMN event_equipment_requests.cancelled_at IS
+    'When the item was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change removed it (19.2). Only on a CANCELLED item; cleared when a change brings it back.';

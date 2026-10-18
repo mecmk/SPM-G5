@@ -42,6 +42,7 @@ import {
 } from '../routes'
 import {
   bookingOutcomeLabels,
+  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -143,6 +144,15 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     message:
       "This booking's hold expired before the event was confirmed, so the venue was released.",
   },
+}
+
+/** Story 6.2 AC16: the status sentence of a booking, saying a cancelled event's cancelled booking
+ * went with it. */
+function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
+  if (event.status === 'CANCELLED' && booking.status === 'CANCELLED') {
+    return 'This booking was cancelled with its event.'
+  }
+  return BOOKING_OUTCOME[booking.status].message
 }
 
 /** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
@@ -775,11 +785,20 @@ export function EventDetailPage() {
             <p className="eyebrow" id="event-cancellation-heading">
               Cancellation
             </p>
-            <p>
-              Cancelled by {event.cancelled_by_name ?? NOT_RECORDED} on{' '}
-              {formatDateTime(event.cancelled_at)}
-            </p>
-            <p>{event.cancellation_reason}</p>
+            <div className="fact-grid">
+              <div className="subtle-block">
+                <p className="fact-label">Cancelled by</p>
+                <p className="fact-value">{event.cancelled_by_name ?? NOT_RECORDED}</p>
+              </div>
+              <div className="subtle-block">
+                <p className="fact-label">Cancelled on</p>
+                <p className="fact-value">{formatDateTime(event.cancelled_at)}</p>
+              </div>
+            </div>
+            <div className="subtle-block">
+              <p className="fact-label">Reason</p>
+              <p>{event.cancellation_reason}</p>
+            </div>
           </section>
         )}
 
@@ -1019,7 +1038,7 @@ export function EventDetailPage() {
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
-              const outcomeLabels = bookingOutcomeLabels(booking.status)
+              const outcomeLabels = bookingOutcomeLabels(booking)
               const openHold = openHoldExpiry(booking)
               const forRequirement = bookedRequirementName(event, booking)
               return (
@@ -1068,7 +1087,7 @@ export function EventDetailPage() {
                   <div className="booking-outcome-message">
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
-                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(event, booking)}</p>
                       {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
                           the booking stays here for reference and the event needs another venue. */}
                       {booking.venue_unavailable_marked_at !== null && (
@@ -1109,6 +1128,14 @@ export function EventDetailPage() {
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
                           {formatDateTime(booking.decided_at)}
+                        </p>
+                      )}
+                      {/* Story 6.2 AC16: when the booking was cancelled. */}
+                      {booking.cancelled_at !== null && (
+                        <p>
+                          <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+                          <br />
+                          {formatDateTime(booking.cancelled_at)}
                         </p>
                       )}
                       {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}

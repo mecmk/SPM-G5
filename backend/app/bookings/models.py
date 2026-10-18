@@ -96,6 +96,9 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # (PO decision, AC6/AC8). Read it through ``venue_unavailable_mark``, which leaves out a
     # booking that no longer holds the venue.
     venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 6.2 AC16: when the booking was cancelled - with its event, or by an approved change
+    # (19.2); NULL otherwise, and for one cancelled before migration 025.
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)

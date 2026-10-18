@@ -85,12 +85,14 @@ class EventEquipmentAvailabilityOut(BaseModel):
 
 
 class EquipmentQueueStatus(StrEnum):
-    """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Any other item status
-    is not a tab, so asking for one is a 422 rather than an empty list."""
+    """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Story 6.2 AC15:
+    Cancelled, read-only, for the items once sent to them. Any other item status is not a tab, so
+    asking for one is a 422 rather than an empty list."""
 
     PENDING = EquipmentRequestStatus.PENDING
     ACCEPTED = EquipmentRequestStatus.ACCEPTED
     DECLINED = EquipmentRequestStatus.DECLINED
+    CANCELLED = EquipmentRequestStatus.CANCELLED
 
 
 class EquipmentDecisionOutcome(StrEnum):
@@ -150,6 +152,9 @@ class EquipmentQueueEntry(BaseModel):
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
+    # Story 6.2 AC16: when a cancelled item was cancelled; None otherwise, and for one cancelled
+    # before migration 025.
+    cancelled_at: datetime | None
 
     @classmethod
     def from_item(
@@ -173,6 +178,7 @@ class EquipmentQueueEntry(BaseModel):
             decided_by_name=None if item.decided_by is None else item.decided_by.full_name,
             decided_at=item.decided_at,
             decision_reason=item.status_notes,
+            cancelled_at=item.cancelled_at,
         )
 
 
@@ -185,6 +191,8 @@ class EquipmentQueueCounts(BaseModel):
     pending: int
     accepted: int
     declined: int
+    # Story 6.2 AC15.
+    cancelled: int
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> EquipmentQueueCounts:

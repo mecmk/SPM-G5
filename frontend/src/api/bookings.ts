@@ -48,6 +48,8 @@ export interface Booking {
   decided_at: string | null
   decision_reason: string | null
   alternative_suggestion: string | null
+  /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
+  cancelled_at: string | null
   created_at: string
   updated_at: string
 }
@@ -168,6 +170,9 @@ export interface BookingQueueEntry {
   decision_reason: string | null
   created_at: string
   decided_at: string | null
+  /** Story 6.2 AC16: when a cancelled booking was cancelled, shown beside its approval; null
+   * otherwise, and for one cancelled before that was recorded. */
+  cancelled_at: string | null
   /** Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
    * the event's confirmation completed it. R14: the booked start, which the Approve dialog's
    * expiry may not pass (AC5). */
@@ -339,6 +344,8 @@ export interface BookingOutcome {
   status: BookingStatus
   decided_at: string | null
   decision_reason: string | null
+  /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
+  cancelled_at: string | null
   /** Story 11.1 AC6: why a venue that did not suit was requested; null when it suited. */
   suitability_override_reason: string | null
   /** Story 12.7 AC1/AC8: when an approved booking's hold expires, and when it expired once

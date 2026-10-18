@@ -535,17 +535,19 @@ def release_booking(
     actor: User,
     because: str,
     details: dict[str, str],
+    at: datetime,
 ) -> bool:
     """Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2:
     its event was cancelled. Either way it is cancelled, freeing its venue, and Venue Staff are
     told ``because``, the clause that ends their notice; ``details`` join the venue and event in
-    the audit entry. Who approved it and when stay on the record. The update is conditional on the
+    the audit entry. Who approved it and when stay on the record, beside ``at``, when it was
+    cancelled (6.2 AC16). The update is conditional on the
     booking still holding its venue, so one Venue Staff rejected, or the sweep expired, meanwhile
     is left alone; returns whether it was released. Written, not committed: the caller commits."""
     released = db.execute(
         update(VenueBooking)
         .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
-        .values(status=BookingStatus.CANCELLED)
+        .values(status=BookingStatus.CANCELLED, cancelled_at=at)
     )
     if released.rowcount == 0:
         return False

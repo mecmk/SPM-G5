@@ -24,6 +24,7 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -109,6 +110,7 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
             status: decided.status,
             decision_reason: decided.decision_reason,
             decided_at: decided.decided_at,
+            cancelled_at: decided.cancelled_at,
             hold_expires_at: decided.hold_expires_at,
             hold_completed_at: decided.hold_completed_at,
           }
@@ -145,6 +147,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * f12.1.2 (story 12.1 AC17): a request can be approved from its card (13.2 AC1), so a card whose
  * setup or teardown runs outside the venue's opening hours says so under the venue, with the
  * booked period.
+ *
+ * Story 6.2 AC14: a Cancelled tab lists, read-only, the bookings released when their event was
+ * cancelled. AC16: such a card says when it was approved, if it was, and when it was cancelled.
  */
 export function BookingRequestsPage() {
   // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
@@ -354,8 +359,15 @@ export function BookingRequestsPage() {
 
                   {entry.decided_at !== null && (
                     <div className="subtle-block">
-                      <p className="fact-label">{bookingOutcomeLabels(entry.status).when}</p>
+                      <p className="fact-label">{bookingOutcomeLabels(entry).when}</p>
                       <p>{formatDateTime(entry.decided_at)}</p>
+                    </div>
+                  )}
+
+                  {entry.cancelled_at !== null && (
+                    <div className="subtle-block">
+                      <p className="fact-label">{CANCELLED_AT_LABEL}</p>
+                      <p>{formatDateTime(entry.cancelled_at)}</p>
                     </div>
                   )}
 
@@ -368,7 +380,7 @@ export function BookingRequestsPage() {
 
                   {entry.decision_reason !== null && (
                     <div className="subtle-block">
-                      <p className="fact-label">{bookingOutcomeLabels(entry.status).why}</p>
+                      <p className="fact-label">{bookingOutcomeLabels(entry).why}</p>
                       <p>{entry.decision_reason}</p>
                     </div>
                   )}

@@ -20,6 +20,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
 import {
   bookingOutcomeLabels,
+  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
@@ -380,9 +381,18 @@ export function BookingRequestDetailPage() {
         </section>
       )}
 
+      {/* Story 6.2 AC16: when the booking was cancelled. */}
+      {booking.cancelled_at !== null && (
+        <p className="subtle-block">
+          <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+          <br />
+          {formatDateTime(booking.cancelled_at)}
+        </p>
+      )}
+
       {booking.decision_reason !== null && (
         <p className="subtle-block">
-          <span className="fact-label">{bookingOutcomeLabels(booking.status).why}</span>
+          <span className="fact-label">{bookingOutcomeLabels(booking).why}</span>
           <br />
           {booking.decision_reason}
         </p>

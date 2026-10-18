@@ -1,6 +1,7 @@
 import type { Booking, BookingStatus, BookingStatusCounts } from '../api/bookings'
 
-export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'
+export type BookingStatusTabKey =
+  'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED'
 
 /** The one status Venue Staff can still decide: the queue card and detail page offer Approve /
  * Reject only for it. */
@@ -17,6 +18,10 @@ export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
  * page, the event page and the calendar's day row - and AC3/AC8: an expired one's. */
 export const HOLD_EXPIRES_LABEL = 'Hold expires'
 export const HOLD_EXPIRED_LABEL = 'Expired at'
+
+/** Story 6.2 AC16: how every page names when a booking was cancelled - with its event, or by an
+ * approved change (19.2). */
+export const CANCELLED_AT_LABEL = 'Cancelled at'
 
 /** Story 12.7 AC1/AC4: when an approved booking's hold expires, while it is open - not yet
  * completed by its event's confirmation, nor a booking approved before holds expired (no expiry).
@@ -42,24 +47,32 @@ export interface BookingOutcomeLabels {
 /** Story 13.1.2 AC3: "Decided at" / "Reason" for a staff decision; "Closed at" / "Note" for a
  * request that was withdrawn or cancelled, so it does not read as if staff decided it. Story 12.7
  * AC8: "Approved at" for an expired booking, whose `decided_at` is its approval - it expired at
- * `hold_expires_at`, shown beside it as `HOLD_EXPIRED_LABEL`. */
-export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabels {
-  if (status === EXPIRED_BOOKING_STATUS) return { when: 'Approved at', why: 'Reason' }
-  return CLOSED_WITHOUT_DECISION.includes(status)
+ * `hold_expires_at`, shown beside it as `HOLD_EXPIRED_LABEL`. Story 6.2 AC16: the same for a
+ * booking cancelled since `cancelled_at` was recorded - its `decided_at` is its approval, and
+ * `cancelled_at` is shown beside it as `CANCELLED_AT_LABEL`. */
+export function bookingOutcomeLabels(
+  booking: Pick<Booking, 'status' | 'cancelled_at'>,
+): BookingOutcomeLabels {
+  if (booking.status === EXPIRED_BOOKING_STATUS) return { when: 'Approved at', why: 'Reason' }
+  if (booking.status === 'CANCELLED' && booking.cancelled_at !== null) {
+    return { when: 'Approved at', why: 'Reason' }
+  }
+  return CLOSED_WITHOUT_DECISION.includes(booking.status)
     ? { when: 'Closed at', why: 'Note' }
     : { when: 'Decided at', why: 'Reason' }
 }
 
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
- * Events inbox tab pattern (story 6.1). WITHDRAWN and CANCELLED have no tab of their own and
- * only show up under "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a
- * tab of its own. */
+ * Events inbox tab pattern (story 6.1). WITHDRAWN has no tab of its own and only shows up under
+ * "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a tab of its own. Story
+ * 6.2 AC14: so does a cancelled one, read-only. */
 export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
   { key: 'EXPIRED', label: 'Expired' },
+  { key: 'CANCELLED', label: 'Cancelled' },
 ]
 
 /** The status a tab asks the backend for, or `null` for "All". */
@@ -87,6 +100,8 @@ export function bookingTabCount(tab: BookingStatusTabKey, counts: BookingStatusC
       return counts.rejected
     case 'EXPIRED':
       return counts.expired
+    case 'CANCELLED':
+      return counts.cancelled
   }
 }
 
