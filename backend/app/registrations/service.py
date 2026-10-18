@@ -380,8 +380,8 @@ def can_withdraw(*, standing: RegistrationStanding, now: datetime, starts_at: da
 
 def withdrawal_refusal(*, standing: RegistrationStanding) -> WithdrawalRefused:
     """18.2 AC3/AC7/AC8: why an attendee's own registration could not be withdrawn - already
-    withdrawn (a second click), cancelled with its event, or, being still active, because its
-    event has started."""
+    withdrawn (a second click); its event cancelled, whether the registration was cancelled with
+    it or is still active on it; or, being still active, because its event has started."""
     if standing is RegistrationStanding.WITHDRAWN:
         return AlreadyWithdrawn()
     if standing is RegistrationStanding.EVENT_CANCELLED:
@@ -428,8 +428,8 @@ def list_my_registrations(
     """18.2 AC1: ``attendee``'s registrations, one per event - the latest - with each event and
     where they stand. Events not yet started come first, soonest first; then those that have
     started (one starting at ``now`` has, AC3), latest first; then by name, then id. AC5/AC6:
-    only ``attendee``'s own. Chosen and ordered in SQL; no list that grows with the data, so not
-    paged (18.2 DoD)."""
+    only ``attendee``'s own. Chosen and ordered in SQL. Not paged: the list grows by one entry for
+    each event the attendee registers for, and one attendee's list stays short."""
     # Events not yet started by their start; those that have started have none here, so they come
     # after them all, and then go latest first.
     upcoming_start = case((Event.starts_at <= now, null()), else_=Event.starts_at)
