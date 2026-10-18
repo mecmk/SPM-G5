@@ -23,6 +23,8 @@
  * AC9  Only the event's assigned coordinator is offered Find a replacement venue; a marked
  *      pending booking offers Find another venue, which leads to Switch to this venue.
  * AC10 Switch to this venue is not offered on a pending replacement.
+ * AC13 While a booking is marked the event cannot go for a safety review or be confirmed, and its
+ *      page says why - naming the venue - in place of the button.
  * AC11 The coordinator's Events inbox has a "Venue unavailable" tab with the server's count, its
  *      empty state, and the pending replacement named on its cards.
  *
@@ -555,4 +557,22 @@ test('12.6 AC11: an event with a pending replacement shows Replacement requested
   await expect(page.getByRole('listitem').filter({ hasText: WELLNESS.name })).toContainText(
     `Replacement requested: ${GRAND_HALL}`,
   )
+})
+
+// --- AC13 ---------------------------------------------------------------------------------------
+test('12.6 AC13: the event page says a marked booking stops the safety review', async ({
+  page,
+}) => {
+  // The robotics open house is secured - its one requirement has an approved booking - but that
+  // booking is marked, so Request safety review is not offered: the page names the venue instead.
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(`/events/${ROBOTICS.id}`)
+  await expect(page.getByRole('heading', { name: ROBOTICS.name, level: 1 })).toBeVisible()
+
+  await expect(
+    page.getByText(
+      `${FOYER} is unavailable for part of its booked period: replace it, or wait for it to reopen.`,
+    ),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Request safety review' })).toHaveCount(0)
 })
