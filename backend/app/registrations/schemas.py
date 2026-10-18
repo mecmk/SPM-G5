@@ -2,13 +2,14 @@
 for, and a registration; and for story 18.2: the attendee's own registrations.
 
 AC5: what an attendee is sent is only what these models declare - an event's name, description,
-dates, booked venues, places left and registration state, and of their own registrations, each
-one's event name, cover picture and dates, where they stand, when they registered and withdrew,
-and whether they can withdraw now - never an event's organiser, coordinator, contact, purpose,
-equipment, accessibility needs or internal notes. No field carries
-its expected attendance, but that shows through the places left until someone registers, since
-capacity is the expected attendance (2.1 AC17) and the places left are shown (decision 1, 14 Oct
-2026).
+dates, booked venues, places left and registration state - never its organiser, coordinator,
+contact, purpose, equipment, accessibility needs or internal notes. No field carries its expected
+attendance, but that shows through the places left until someone registers, since capacity is
+the expected attendance (2.1 AC17) and the places left are shown (decision 1, 14 Oct 2026).
+
+Story 18.2 AC5: of their own registrations, an attendee is sent each one's event name, cover
+picture and dates, where they stand, when they registered and withdrew, and whether they can
+withdraw now - nothing more of the event.
 """
 
 from __future__ import annotations
