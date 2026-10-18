@@ -1017,17 +1017,17 @@ export function EventDetailPage() {
                       <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
                       {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
                           once its replacement was approved - or which venue is asked for. */}
-                      {booking.replaces_venue_name && (
+                      {booking.replaces_venue_name !== null && (
                         <p>
                           <strong>{replacesLine(booking.replaces_venue_name)}</strong>
                         </p>
                       )}
-                      {booking.replaced_by_venue_name && (
+                      {booking.replaced_by_venue_name !== null && (
                         <p>
                           <strong>{replacedByLine(booking.replaced_by_venue_name)}</strong>
                         </p>
                       )}
-                      {booking.pending_replacement_venue_name && (
+                      {booking.pending_replacement_venue_name !== null && (
                         <p>
                           <strong>
                             {replacementRequestedLine(booking.pending_replacement_venue_name)}
@@ -1086,13 +1086,14 @@ export function EventDetailPage() {
                       )}
                       {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
                           <venue>" above, which is also its reason, so it is not said twice. */}
-                      {booking.decision_reason !== null && !booking.replaced_by_venue_name && (
-                        <p>
-                          <span className="fact-label">{outcomeLabels.why}</span>
-                          <br />
-                          {booking.decision_reason}
-                        </p>
-                      )}
+                      {booking.decision_reason !== null &&
+                        booking.replaced_by_venue_name === null && (
+                          <p>
+                            <span className="fact-label">{outcomeLabels.why}</span>
+                            <br />
+                            {booking.decision_reason}
+                          </p>
+                        )}
                       {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
                       {booking.suitability_override_reason !== null && (
                         <p>

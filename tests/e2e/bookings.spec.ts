@@ -671,6 +671,12 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     ends_at: '2026-11-20T09:00:00Z',
     setup_minutes: 60,
     teardown_minutes: 60,
+    // Story 12.6: the fields every outcome now carries, none of them set for these three.
+    replaces_booking_id: null,
+    replaced_by_booking_id: null,
+    replaces_venue_name: null,
+    replaced_by_venue_name: null,
+    pending_replacement_venue_name: null,
   }
   const outcomes = [
     {
