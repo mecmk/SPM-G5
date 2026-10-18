@@ -307,6 +307,9 @@ class BookingQueueEntry(BaseModel):
     replaces_venue_name: str | None
     approval_releases_venue_name: str | None
     original_is_marked: bool | None
+    # Story 12.6 AC3: when a released original was released - its replacement's approval, shown as
+    # "Closed at" in place of its own earlier approval; None for any other request.
+    released_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -340,6 +343,7 @@ class BookingQueueEntry(BaseModel):
             replaces_venue_name=booking.replaces_venue_name,
             approval_releases_venue_name=booking.approval_releases_venue_name,
             original_is_marked=booking.original_is_marked,
+            released_at=booking.released_at,
         )
 
 
@@ -419,6 +423,9 @@ class BookingOutcome(BaseModel):
     replaces_venue_name: str | None
     replaced_by_venue_name: str | None
     pending_replacement_venue_name: str | None
+    # Story 12.6 AC3: when the original was released - its replacement's approval - which the card
+    # shows as "Closed at" rather than the original's own, earlier approval; None otherwise.
+    released_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -454,4 +461,5 @@ class BookingOutcome(BaseModel):
             replaces_venue_name=booking.replaces_venue_name,
             replaced_by_venue_name=booking.replaced_by_venue_name,
             pending_replacement_venue_name=booking.pending_replacement_venue_name,
+            released_at=booking.released_at,
         )

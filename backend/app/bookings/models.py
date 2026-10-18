@@ -177,6 +177,14 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         return None if self.replaced_by_booking is None else self.replaced_by_booking.venue.name
 
     @property
+    def released_at(self) -> datetime | None:
+        """Story 12.6 AC3: when this booking was released - the approval of the replacement that
+        released it - or None for a booking that was not. ``decided_at`` stays the booking's own
+        decision, so the time a released original closed is read from the replacement, which is
+        what released it, and nothing is stored twice."""
+        return None if self.replaced_by_booking is None else self.replaced_by_booking.decided_at
+
+    @property
     def pending_replacement_venue_name(self) -> str | None:
         """Story 12.6 AC4: the venue asked for as this booking's replacement, while pending."""
         return None if self.pending_replacement is None else self.pending_replacement.venue.name
