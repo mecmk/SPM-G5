@@ -505,10 +505,11 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
 
 
 def _notify_venue_staff_of_release(
-    db: Session, booking: VenueBooking, *, actor: User, change: str
+    db: Session, booking: VenueBooking, *, actor: User, because: str
 ) -> None:
-    """Story 19.2 AC5: every active Venue Staff member is told a booking was released, as they are
-    of a withdrawal (12.2 AC2), since their schedule changes with it."""
+    """Story 19.2 AC5, story 6.2 AC5: every active Venue Staff member is told a booking was
+    released, and ``because`` says why, as they are of a withdrawal (12.2 AC2), since their
+    schedule changes with it."""
     for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
@@ -519,7 +520,7 @@ def _notify_venue_staff_of_release(
             title="A venue booking was released",
             message=(
                 f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
-                f"an approved change to the event's {change} no longer fits it."
+                f"{because}."
             ),
             related_entity_type="venue_booking",
             related_entity_id=booking.id,
@@ -527,12 +528,20 @@ def _notify_venue_staff_of_release(
         )
 
 
-def release_booking(db: Session, booking: VenueBooking, *, actor: User, change: str) -> bool:
-    """Story 19.2 AC5: an approved change to its event (``change`` names the field) no longer fits
-    ``booking``, so it is cancelled, freeing its venue, and Venue Staff are told. Who approved it
-    and when stay on the record. The update is conditional on the booking still holding its venue,
-    so one Venue Staff rejected, or the sweep expired, meanwhile is left alone; returns whether it
-    was released. Written, not committed: the caller's decision commits it."""
+def release_booking(
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor: User,
+    because: str,
+    details: dict[str, str],
+) -> bool:
+    """Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2:
+    its event was cancelled. Either way it is cancelled, freeing its venue, and Venue Staff are
+    told ``because``, the clause that ends their notice; ``details`` join the venue and event in
+    the audit entry. Who approved it and when stay on the record. The update is conditional on the
+    booking still holding its venue, so one Venue Staff rejected, or the sweep expired, meanwhile
+    is left alone; returns whether it was released. Written, not committed: the caller commits."""
     released = db.execute(
         update(VenueBooking)
         .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
@@ -550,12 +559,42 @@ def release_booking(db: Session, booking: VenueBooking, *, actor: User, change: 
         details={
             "venue_id": str(booking.venue_id),
             "event_id": str(booking.event_id),
-            "change": change,
+            **details,
         },
         commit=False,
     )
-    _notify_venue_staff_of_release(db, booking, actor=actor, change=change)
+    _notify_venue_staff_of_release(db, booking, actor=actor, because=because)
     return True
+
+
+def lock_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
+    """Story 6.2 AC2/AC12: the event's pending and approved bookings, each row locked until the
+    transaction ends and read as it now stands, in id order, as story 9.4's re-check takes them.
+    A Venue Staff decision holding one is waited for, so the booking is released as it lands."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(
+                VenueBooking.event_id == event_id,
+                VenueBooking.status.in_(_HOLDING_STATUSES),
+            )
+            .order_by(VenueBooking.id)
+            .with_for_update(of=VenueBooking)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def get_booking_for_switch(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """Story 12.5's switch, row-locked as ``get_booking_for_decision`` locks it, with its event
+    locked first. The switch requests another venue for the event, so it must read the event under
+    lock (``_bookable_event``); taking the event before the booking, as story 6.2's cancellation
+    and story 9.4's re-check do, means the two can never each hold what the other waits for."""
+    event_id = db.scalar(select(VenueBooking.event_id).where(VenueBooking.id == booking_id))
+    if event_id is None:
+        raise BookingNotFound(booking_id)
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
+    return get_booking_for_decision(db, booking_id)
 
 
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
@@ -861,8 +900,17 @@ def _bookable_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     unconditionally: ``ck_events_submitted_fields_complete`` only lets a DRAFT row leave
     ``purpose`` / ``starts_at`` / ``ends_at`` / ``expected_attendance`` null, and DRAFT is
     not a bookable status.
+
+    Story 6.2 AC12: the event's row is held until the transaction ends and read as it now stands,
+    ``FOR NO KEY UPDATE`` as the cancellation takes it, so a request racing a cancellation waits
+    for it and is then refused, rather than leaving a new hold on a cancelled event.
     """
-    event = db.get(Event, event_id)
+    event = db.get(
+        Event,
+        event_id,
+        with_for_update={"of": Event, "key_share": True},
+        populate_existing=True,
+    )
     if event is None:
         raise EventNotFound(event_id)
     if event.status not in _BOOKABLE_EVENT_STATUSES:
@@ -1055,8 +1103,9 @@ def switch_booking_request(
 ) -> VenueBooking:
     """Story 12.5, decided 11 Oct 2026: switch the pending request ``replaced`` to another
     venue, for the same venue requirement (an additional venue stays one). Callers fetch
-    ``replaced`` with ``get_booking_for_decision``, as 12.2's withdrawal does, so two tabs
-    switching it at once wait on its row lock and the second finds it withdrawn.
+    ``replaced`` with ``get_booking_for_switch``, which locks it as 12.2's withdrawal does, so two
+    tabs switching it at once wait on its row lock and the second finds it withdrawn; its event is
+    locked first, so a cancellation (story 6.2) is waited for, not raced.
 
     Withdrawal's checks come first: only the event's assigned coordinator
     (``NotAssignedCoordinator``, before anything about the request is said), and only while it

@@ -1711,7 +1711,7 @@ class NoVenueRequirementToApprove(EventStateConflict):
 class MissingDecisionReason(InvalidEventRequest):
     """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
     with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
-    clarification flow, 6.5's cancellation, a seed script, a test factory)."""
+    clarification flow, a seed script, a test factory). Story 6.2's cancellation has its own."""
 
     def __init__(self) -> None:
         super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
@@ -2532,6 +2532,24 @@ def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -
     """``actor``'s own event, its row held until the transaction ends, so a status change racing
     a story 19.1 write waits for it (AC8) - the lock story 2.7 AC12 already relies on."""
     return _get_own_event(db, event_id, actor, for_update=True)
+
+
+def lock_own_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """Story 6.2: ``actor``'s own event, its row held until the transaction ends and read as it
+    now stands, so a cancellation waits for any other write to the event already under way, and
+    they for it. ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a Venue Staff approval holds its
+    booking and then writes a notice that names the event, which only ``FOR UPDATE`` would make
+    wait - while the cancellation waited on that booking: a deadlock (story 9.4's re-check takes
+    the event the same way, for the same reason)."""
+    event = db.get(
+        Event,
+        event_id,
+        with_for_update={"of": Event, "key_share": True},
+        populate_existing=True,
+    )
+    if event is None or event.organiser_id != actor.id:
+        raise EventNotFound(event_id)
+    return event
 
 
 def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:

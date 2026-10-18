@@ -349,6 +349,14 @@ ON CONFLICT (id) DO UPDATE SET
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason;
 
+-- Story 6.2: 3333..15 was cancelled by its organiser, Omar, who gave a reason. Kept apart from the
+-- review decision above, as cancel_event records it. tests/e2e/cancel-event.spec.ts opens it.
+UPDATE events
+SET cancelled_at = '2026-08-27 09:00+08',
+    cancelled_by_id = '11111111-0000-0000-0000-000000000002',
+    cancellation_reason = 'The rooftop terrace is closed for repairs that week.'
+WHERE id = '33333333-0000-0000-0000-000000000015';
+
 -- Story 18.1: Confirmed, Public events taking registrations - the attendee's Upcoming events, and
 -- tests/e2e/attendee-registration.spec.ts. Every case the spec clicks through has an event of its
 -- own, so tests running in parallel never share a place: the jazz evening (3333..39) is only read;
@@ -738,7 +746,7 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000012', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-14 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000019', '33333333-0000-0000-0000-000000000013', 'PLANNING', 'CONFIRMED', '11111111-0000-0000-0000-000000000003', '2026-09-15 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000020', '33333333-0000-0000-0000-000000000014', 'CONFIRMED', 'COMPLETED', '11111111-0000-0000-0000-000000000003', '2026-08-01 12:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000015', 'CONFIRMED', 'CANCELLED', '11111111-0000-0000-0000-000000000003', '2026-08-27 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000015', 'CONFIRMED', 'CANCELLED', '11111111-0000-0000-0000-000000000002', '2026-08-27 09:00+08', 'The rooftop terrace is closed for repairs that week.'),
     ('99999999-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000018', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-18 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000019', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-22 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000020', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-23 09:00+08', NULL),

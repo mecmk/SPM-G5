@@ -841,18 +841,18 @@ _WITH_TECHNICAL_SUPPORT = frozenset(
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
 _EVER_SENT_STATUSES = _WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
+# What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5).
+_CHANGE_WITHDREW = 'An approved change to "{event}"'
+_CANCELLATION_WITHDREW = 'Cancelling "{event}"'
 
 
 def _notify_technical_support_of_withdrawal(
-    db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User
+    db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User, cause: str
 ) -> None:
     """Story 19.2 AC5: items Technical Support had pending or accepted were changed or removed by
-    an approved change request, so every active member is told which, as they are told of a new
-    submission (story 20.1)."""
-    message = (
-        f'An approved change to "{event.name}" withdrew equipment sent to you: '
-        f"{_describe_items(items)}."
-    )
+    an approved change request; story 6.2 AC5: their event was cancelled. Every active member is
+    told which, as they are told of a new submission (story 20.1); ``cause`` opens the sentence."""
+    message = f"{cause} withdrew equipment sent to you: {_describe_items(items)}."
     for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
         notify(
             db,
@@ -967,5 +967,48 @@ def apply_equipment_change(
     for item in to_hold:
         _hold_or_flag(db, event, item, available, actor=actor)
     if withdrawn:
-        _notify_technical_support_of_withdrawal(db, event, withdrawn, actor=actor)
+        _notify_technical_support_of_withdrawal(
+            db,
+            event,
+            withdrawn,
+            actor=actor,
+            cause=_CHANGE_WITHDREW.format(event=event.name),
+        )
     db.flush()
+
+
+# --- story 6.2: the event was cancelled ------------------------------------------------------
+
+
+def release_for_cancelled_event(
+    db: Session, event: Event, *, actor: User
+) -> list[EventEquipmentRequest]:
+    """Story 6.2 AC3/AC4: ``event`` was cancelled, so every unit it still holds is released and
+    every open item is closed as Cancelled, kept for the record. Technical Support are told of the
+    items they had pending or accepted (AC5); one never sent changes nothing for them. The caller
+    holds the event's row lock; the types are locked after it, as every other hold takes them
+    (15.1 AC10). Returns the items closed. Written, not committed."""
+    held_type_ids = db.scalars(
+        select(EquipmentReservation.equipment_type_id).where(
+            EquipmentReservation.event_id == event.id,
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        )
+    ).all()
+    _lock_types(db, held_type_ids)
+    _release_holds(db, EquipmentReservation.event_id == event.id)
+
+    # A declined item stays Technical Support's decision; a cancelled one is already closed.
+    closed = [item for item in event.equipment_requests if item.status in _OPEN_ITEM_STATUSES]
+    withdrawn = [item for item in closed if item.status in _WITH_TECHNICAL_SUPPORT]
+    for item in closed:
+        item.status = EquipmentRequestStatus.CANCELLED
+    if withdrawn:
+        _notify_technical_support_of_withdrawal(
+            db,
+            event,
+            withdrawn,
+            actor=actor,
+            cause=_CANCELLATION_WITHDREW.format(event=event.name),
+        )
+    db.flush()
+    return closed

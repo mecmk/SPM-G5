@@ -58,7 +58,7 @@ class Permission(StrEnum):
     # The unassigned queue, and assigning an unassigned event to a coordinator (5.4).
     EVENTS_ASSIGN = "events:assign"
     EVENTS_EDIT_ROUTINE = "events:edit_routine"  # routine field edits (7.2)
-    EVENTS_CANCEL = "events:cancel"  # cancel event (6.5)
+    EVENTS_CANCEL = "events:cancel"  # the organiser cancels their own event (6.2)
     EVENT_CHANGE_REQUESTS_CREATE = "event_change_requests:create"  # organiser (19.1)
     EVENT_CHANGE_REQUESTS_DECIDE = "event_change_requests:decide"  # coordinator (19.x)
 
@@ -99,6 +99,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         {
             Permission.EVENTS_CREATE,
             Permission.EVENTS_READ_OWN,
+            Permission.EVENTS_CANCEL,
             Permission.EVENT_CHANGE_REQUESTS_CREATE,
             Permission.REGISTRATIONS_VIEW,
             Permission.NOTIFICATIONS_READ_OWN,
@@ -109,7 +110,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         | {
             Permission.EVENTS_REVIEW,
             Permission.EVENTS_EDIT_ROUTINE,
-            Permission.EVENTS_CANCEL,
             Permission.EVENT_CHANGE_REQUESTS_DECIDE,
             Permission.BOOKINGS_REQUEST,
             Permission.EQUIPMENT_REQUEST,

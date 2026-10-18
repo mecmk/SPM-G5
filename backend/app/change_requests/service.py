@@ -466,6 +466,24 @@ def withdraw_change_request(
     return request
 
 
+def cancel_pending_for_event(db: Session, event_id: uuid.UUID) -> list[uuid.UUID]:
+    """Story 6.2 AC4: the event was cancelled, so its pending change requests can never be
+    decided; each is closed as Cancelled and kept for the record. Decided and withdrawn requests
+    are left as they are. The caller holds the event's row lock, which raising, withdrawing and
+    deciding a request all take first. Returns the requests closed. Written, not committed."""
+    return list(
+        db.scalars(
+            update(EventChangeRequest)
+            .where(
+                EventChangeRequest.event_id == event_id,
+                EventChangeRequest.status == ChangeRequestStatus.PENDING,
+            )
+            .values(status=ChangeRequestStatus.CANCELLED)
+            .returning(EventChangeRequest.id)
+        )
+    )
+
+
 # --- decide (story 19.2) -----------------------------------------------------------------------
 
 # AC7: a decision is taken while the event is still going ahead - Planning, or past it but not
@@ -477,6 +495,8 @@ _DECIDABLE_STATUSES = (
 )
 # AC8: an approved change sends an event past Planning back to it, for a new safety check (21.2).
 _RETURNED_TO_PLANNING_REASON = "Change to the {label} approved."
+# AC5: why Venue Staff are told a booking was released.
+_RELEASED_BECAUSE = "an approved change to the event's {label} no longer fits it"
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can decide its change requests."
@@ -486,6 +506,8 @@ ALREADY_DECIDED_MESSAGES = {
     ChangeRequestStatus.APPROVED: "This change request has already been approved.",
     ChangeRequestStatus.REJECTED: "This change request has already been rejected.",
     ChangeRequestStatus.WITHDRAWN: "This change request was withdrawn by the organiser.",
+    # Story 6.2 AC4: refused first by the event's own status; kept so no status is missing here.
+    ChangeRequestStatus.CANCELLED: "This change request was cancelled with its event.",
 }
 DECISIONS_CLOSED_MESSAGE = (
     "This event is {status}, so its change requests can no longer be decided."
@@ -738,7 +760,13 @@ def _apply_approved_change(
     released = [
         str(booking.id)
         for booking in events_service.bookings_no_longer_fitting(event, booked)
-        if bookings_service.release_booking(db, booking, actor=actor, change=label)
+        if bookings_service.release_booking(
+            db,
+            booking,
+            actor=actor,
+            because=_RELEASED_BECAUSE.format(label=label),
+            details={"change": label},
+        )
     ]
     from_status = event.status
     is_returned = events_service.return_event_to_planning(

@@ -14,11 +14,15 @@ export interface ConfirmDialogProps {
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */
   errorId?: string
+  /** The button that closes the dialog without acting. Story 6.2 names it "Keep event", so it is
+   *  never read as the "Cancel event" it stands beside. */
+  dismissLabel?: string
 }
 
 /**
- * Story 8.3 - a modal that asks before a consequential action. Escape or Cancel closes it; focus
- * starts on Cancel, so a stray Enter never confirms.
+ * Story 8.3 - a modal that asks before a consequential action. Escape or the dismiss button
+ * (Cancel, unless `dismissLabel` names it) closes it; focus starts on that button, so a stray
+ * Enter never confirms.
  */
 export function ConfirmDialog({
   title,
@@ -30,6 +34,7 @@ export function ConfirmDialog({
   onCancel,
   tone = 'danger',
   errorId,
+  dismissLabel = 'Cancel',
 }: ConfirmDialogProps) {
   const titleId = useId()
   const cancelButton = useRef<HTMLButtonElement>(null)
@@ -71,7 +76,7 @@ export function ConfirmDialog({
             disabled={isBusy}
             onClick={onCancel}
           >
-            Cancel
+            {dismissLabel}
           </button>
           <button
             type="button"
