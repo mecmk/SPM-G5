@@ -653,7 +653,8 @@ export function VenueFormPage() {
       )}
 
       {/* Story 12.6 AC12: a saved venue's unavailable periods - the calendar with each one's Edit,
-          End now and Remove, and the Block off time card - for Venue Staff, here and nowhere else. */}
+          End now and Remove, and the Block off time card - for Venue Staff, here and nowhere else:
+          sections of the page like the form's own, after the form that Save changes closes. */}
       {isEditing && venueId !== undefined && savedName !== null && canManageUnavailability && (
         <VenueUnavailabilityManager venueId={venueId} venueName={savedName} />
       )}

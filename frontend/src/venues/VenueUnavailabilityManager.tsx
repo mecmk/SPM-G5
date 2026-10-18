@@ -3,7 +3,7 @@ import { getVenueCalendar } from '../api/venues'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
 import type { DayClosure } from '../components/venueCalendarDays'
 import { useVenueCalendar, VENUE_CALENDAR_DAY_PANEL_ID } from '../shared/useVenueCalendar'
-import { blockOffLabel } from './blockOffLabels'
+import { blockOffLabel, CLOSURES_SAVED_NOTE } from './blockOffLabels'
 import { ClosureActions } from './ClosureActions'
 import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
 
@@ -61,11 +61,10 @@ export function VenueUnavailabilityManager({
   }
 
   return (
-    <>
-      <section className="card stack" aria-labelledby="venue-availability-heading">
-        <p className="eyebrow" id="venue-availability-heading">
-          Availability
-        </p>
+    <div className="stack venue-form">
+      <p className="form-hint">{CLOSURES_SAVED_NOTE}</p>
+      <fieldset className="card stack">
+        <legend>Availability</legend>
         <VenueAvailabilityCalendar
           month={calendar.month}
           onMonthChange={calendar.setMonth}
@@ -75,12 +74,10 @@ export function VenueUnavailabilityManager({
           dayPanelId={VENUE_CALENDAR_DAY_PANEL_ID}
           renderClosureActions={renderClosureActions}
         />
-      </section>
+      </fieldset>
 
-      <section className="card stack" aria-labelledby="venue-block-off-heading">
-        <p className="eyebrow" id="venue-block-off-heading">
-          {blockOffLabel(editingClosure !== null)}
-        </p>
+      <fieldset className="card stack">
+        <legend>{blockOffLabel(editingClosure !== null)}</legend>
         <p className="muted">
           Close this venue for a period, for example for maintenance. Any bookings in that period
           will be flagged and their coordinators told.
@@ -93,7 +90,7 @@ export function VenueUnavailabilityManager({
           editing={editingClosure}
           onEditFinished={handleEditFinished}
         />
-      </section>
-    </>
+      </fieldset>
+    </div>
   )
 }
