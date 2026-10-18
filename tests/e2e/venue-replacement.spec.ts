@@ -205,6 +205,52 @@ test("12.6 AC1: an additional venue is replaced from the event's own period and 
   await expect(venueCard(page, FOYER)).toHaveCount(0)
 })
 
+test('12.6 AC1/AC10/AC7: replacement mode survives a filter change, Clear all and the requirement again', async ({
+  page,
+}) => {
+  const BOARDROOM = 'Boardroom 3.4'
+  await signIn(page, ACCOUNTS.coordinator)
+  await findReplacementFor(page, LANTERN)
+  const banner = catalogueBanner(page, LANTERN)
+
+  /** Still replacing the Foyer: the banner says so, the address keeps it, the closed venue stays
+   *  out, `venue` still offers Request this venue, and the booked panel offers no second search. */
+  async function expectStillReplacing(venue: string) {
+    await expect(banner).toContainText(`Replacing ${FOYER}`)
+    await expect(
+      venueCard(page, venue).getByRole('link', { name: REQUEST_THIS_VENUE }),
+    ).toBeVisible()
+    expect(new URL(page.url()).searchParams.has('replacing')).toBe(true)
+    await expect(venueCard(page, FOYER)).toHaveCount(0)
+    await expect(page.getByRole('link', { name: FIND_REPLACEMENT })).toHaveCount(0)
+  }
+
+  // A filter changed by hand.
+  await filters(page).getByLabel('Capacity from').fill('')
+  // The panel waits for a pause in typing before it changes the address.
+  await expect(page).not.toHaveURL(/capacity=/)
+  await expectStillReplacing(GRAND_HALL)
+
+  // Selecting the same requirement again restores its own filters, and keeps replacing.
+  await banner.getByRole('button', { name: MAIN_HALL, exact: true }).click()
+  await expect(filters(page).getByLabel('Capacity from')).toHaveValue('100')
+  await expectStillReplacing(GRAND_HALL)
+
+  // Clear all drops every filter, so the boardroom is listed; the Foyer is still out.
+  await page.getByRole('button', { name: 'Clear all filters' }).click()
+  await expect(filters(page).getByLabel('Capacity from')).toHaveValue('')
+  await expectStillReplacing(BOARDROOM)
+
+  // AC7 from there: the boardroom does not suit 100 people, so its request asks for a justification.
+  await venueCard(page, BOARDROOM).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(page.getByRole('heading', { name: `Request ${BOARDROOM}`, level: 1 })).toBeVisible()
+  await expect(page.getByText(`Replaces ${FOYER}`)).toBeVisible()
+  await expect(page.getByLabel('Justification')).toBeVisible()
+  await page.getByRole('button', { name: 'Send request' }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByRole('heading', { name: `Request ${BOARDROOM}`, level: 1 })).toBeVisible()
+})
+
 for (const [size, viewport] of [
   ['1280x720', DESKTOP],
   ['390x844', PHONE],
