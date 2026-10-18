@@ -121,8 +121,10 @@ def test_the_approval_notice_says_the_original_was_released(login_as, db):
     told = notifications_of(db, Users.COORDINATOR.id, event_id=scene.event.id)
     approval = [each for each in told if each.notification_type == "BOOKING_APPROVED"]
     assert len(approval) == 1
-    assert scene.original_venue.name in approval[0].message
-    assert "released" in approval[0].message
+    assert (
+        service.ORIGINAL_RELEASED_SENTENCE.format(venue=scene.original_venue.name)
+        in approval[0].message
+    )
 
 
 @pytest.mark.story("12.6", ac=3)
@@ -329,17 +331,23 @@ def test_approving_a_replacement_whose_original_is_already_closed_approves_alone
     scene = make_scenario(db)
     body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
     set_status(db, scene.original.id, closed_as)
+    reason_before = _outcome_of(db, scene.original.id).decision_reason
     before = len(notifications_of(db, colleague.id, event_id=scene.event.id))
 
     response = approve(login_as(Users.VENUE_STAFF), body["id"])
 
     assert response.status_code == 200, response.text
     assert response.json()["status"] == BookingStatus.APPROVED
-    assert _outcome_of(db, scene.original.id).status == closed_as
+    original = _outcome_of(db, scene.original.id)
+    assert original.status == closed_as
+    assert original.decision_reason == reason_before
     assert column(db, scene.original.id, "replaced_by_booking_id") is None
     told = notifications_of(db, Users.COORDINATOR.id, event_id=scene.event.id)
     approval = [each for each in told if each.notification_type == "BOOKING_APPROVED"]
-    assert len(approval) == 1 and "released" not in approval[0].message
+    # Not the word "released": 12.7's hold sentence in every approval notice has it. The sentence
+    # that says the original was released is the one that must be absent.
+    release_sentence = service.ORIGINAL_RELEASED_SENTENCE.format(venue=scene.original_venue.name)
+    assert len(approval) == 1 and release_sentence not in approval[0].message
     assert not [
         each
         for each in notifications_of(db, colleague.id, event_id=scene.event.id)[before:]
