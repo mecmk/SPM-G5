@@ -257,6 +257,12 @@ test.describe('12.6 AC3 on the awards evening', () => {
     await expect(card).toContainText(`Replaces ${FOYER}`)
     await expect(card).toContainText(`Approving this releases ${FOYER}`)
     await card.getByRole('link').first().click()
+    // react-router changes the address before the new page renders, and the queue's cards carry
+    // the same text, so wait until the queue itself has gone.
+    await expect(staff).toHaveURL(/\/venue-staff\/booking-requests\/[0-9a-f-]{36}$/)
+    await expect(staff.getByRole('heading', { name: 'Booking Requests', exact: true })).toHaveCount(
+      0,
+    )
     await expect(staff.getByText(`Replaces ${FOYER}`)).toBeVisible()
     await expect(staff.getByText(`Approving this releases ${FOYER}`)).toBeVisible()
     await staff.context().close()
@@ -545,7 +551,8 @@ test('12.6 AC11: an event with a pending replacement shows Replacement requested
   await page.goto(INBOX)
   await expect(page.getByRole('tab', { name: 'Venue unavailable (2)' })).toBeVisible()
   await page.getByRole('tab', { name: /^Venue unavailable/ }).click()
-  await expect(page.getByRole('link', { name: new RegExp(WELLNESS.name) })).toContainText(
+  // The card is a list item holding its title link and its details, so the chip is read from it.
+  await expect(page.getByRole('listitem').filter({ hasText: WELLNESS.name })).toContainText(
     `Replacement requested: ${GRAND_HALL}`,
   )
 })
