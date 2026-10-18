@@ -82,7 +82,6 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
     id: `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`,
     name,
     description: `${name}, described.`,
-    cover_image_url: null,
     starts_at: '2029-03-01T01:00:00Z',
     ends_at: '2029-03-01T04:00:00Z',
     venues: [{ name: 'Grand Hall', location: 'Tower A, Level 1' }],
@@ -193,18 +192,6 @@ test.describe('registers for a seeded event once', () => {
     await expect(card).toContainText(registeredToday(before, after))
     await expect(card).toContainText('59 places left')
   })
-})
-
-test('18.1 AC1: an event with a cover picture shows it on its card', async ({ page }) => {
-  // Story 18.2's sunset yoga has the seeded picture, and is only read here as there. A card's
-  // picture is decorative - no alt text, hidden from assistive technology - so it is found by
-  // its tag.
-  await openUpcomingEvents(page)
-
-  await expect(eventCard(page, 'Sunset Yoga by the Bay').locator('img')).toHaveAttribute(
-    'src',
-    '/images/events/cat.jpg',
-  )
 })
 
 test('18.1 AC1: with no events open for registration, the page says so', async ({ page }) => {

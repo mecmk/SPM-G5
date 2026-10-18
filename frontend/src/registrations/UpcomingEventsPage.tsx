@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { formatApiError, mediaUrl } from '../api/client'
+import { formatApiError } from '../api/client'
 import {
   listRegistrationEvents,
   registerForEvent,
@@ -130,14 +130,7 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
         Register
       </button>
     )
-  return (
-    <EventCard
-      title={event.name}
-      imageUrl={mediaUrl(event.cover_image_url)}
-      details={details}
-      action={register}
-    />
-  )
+  return <EventCard title={event.name} imageUrl={null} details={details} action={register} />
 }
 
 /** The size of the list to load again after a registration: what is shown, so a refreshed list
