@@ -11,6 +11,11 @@ export interface ConfirmDialogProps {
   /** Visual weight of the confirm button. Story 13.2 adds `primary` for a non-destructive
    * decision (approving a booking); `danger` (the default) is for actions that remove data. */
   tone?: 'danger' | 'primary'
+  /** Story 18.2: false once confirming can no longer succeed (a refusal that is final), so the
+   * confirm button is not offered at all and only the dialog's close button is left. */
+  canConfirm?: boolean
+  /** The label of the button that closes the dialog without confirming. */
+  cancelLabel?: string
 }
 
 /**
@@ -26,6 +31,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   tone = 'danger',
+  canConfirm = true,
+  cancelLabel = 'Cancel',
 }: ConfirmDialogProps) {
   const titleId = useId()
   const cancelButton = useRef<HTMLButtonElement>(null)
@@ -67,17 +74,19 @@ export function ConfirmDialog({
             disabled={isBusy}
             onClick={onCancel}
           >
-            Cancel
+            {cancelLabel}
           </button>
-          <button
-            type="button"
-            className={tone === 'primary' ? 'brand' : 'danger-solid'}
-            disabled={isBusy}
-            onClick={onConfirm}
-          >
-            {isBusy && <span className="spinner button-spinner" aria-hidden="true" />}
-            {confirmLabel}
-          </button>
+          {canConfirm && (
+            <button
+              type="button"
+              className={tone === 'primary' ? 'brand' : 'danger-solid'}
+              disabled={isBusy}
+              onClick={onConfirm}
+            >
+              {isBusy && <span className="spinner button-spinner" aria-hidden="true" />}
+              {confirmLabel}
+            </button>
+          )}
         </div>
       </div>
     </>

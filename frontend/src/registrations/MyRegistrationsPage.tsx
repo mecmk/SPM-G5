@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import {
   listMyRegistrations,
   withdrawRegistration,
@@ -24,12 +24,30 @@ const STANDING_BADGES: Record<RegistrationStanding, { status: string; label: str
   EVENT_CANCELLED: { status: 'cancelled', label: 'Event cancelled' },
 }
 
-/** Story 18.2 AC1: when the attendee registered, and when they withdrew if they did. */
+/** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
+const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
+
+/** Story 18.2 AC1/AC3: when the attendee registered, when they withdrew if they did, and why an
+ *  active registration can no longer be withdrawn. */
 function describeRegistration(registration: MyRegistration): string[] {
-  const registered = `You registered on ${formatDateTime(registration.registered_at)}`
-  return registration.withdrawn_at === null
-    ? [registered]
-    : [registered, `You withdrew on ${formatDateTime(registration.withdrawn_at)}`]
+  const lines = [`You registered on ${formatDateTime(registration.registered_at)}`]
+  if (registration.withdrawn_at !== null) {
+    lines.push(`You withdrew on ${formatDateTime(registration.withdrawn_at)}`)
+  }
+  if (registration.status === 'REGISTERED' && !registration.can_withdraw) {
+    lines.push(STARTED_NOTE)
+  }
+  return lines
+}
+
+/** Story 18.2 AC3/AC6-AC8: whether a refusal is the server's final word on this registration -
+ *  its event started or was cancelled, it was already withdrawn, or it is gone - so trying
+ *  again cannot succeed. A server that could not be reached may answer next time. */
+function isFinalRefusal(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.code === 'WITHDRAWAL_REFUSED' || err.code === 'REGISTRATION_NOT_FOUND')
+  )
 }
 
 /** Story 18.2 AC3: a loader that is not the one before it, so the list is loaded again. */
@@ -84,8 +102,9 @@ function MyRegistrationCard({ registration, onWithdraw }: MyRegistrationCardProp
  *      they registered or withdrew. Withdraw asks first; confirming marks it Withdrawn, with the
  *      notification centre's "Withdrawn" as the confirmation, and its place is free again.
  * AC3: a refused withdrawal (the event started meanwhile, or it was already withdrawn or
- *      cancelled) shows the backend's reason in the dialog, and the list is loaded again so every
- *      card shows where it now stands.
+ *      cancelled) shows the backend's reason in the dialog, which then offers only Close, and
+ *      the list is loaded again so every card shows where it now stands. A registration whose
+ *      event has started says why it offers no Withdraw.
  * AC5: attendees only - App.tsx guards the route, and the backend sends only their own.
  * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
  *      one.
@@ -97,10 +116,10 @@ export function MyRegistrationsPage() {
   const { data: registrations, error, isLoading, setData } = useLoaded(loadRegistrations)
   const [pending, setPending] = useState<MyRegistration | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
-  const [withdrawError, setWithdrawError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<{ message: string; isFinal: boolean } | null>(null)
 
   function askToWithdraw(registration: MyRegistration) {
-    setWithdrawError(null)
+    setRefusal(null)
     setPending(registration)
   }
 
@@ -111,7 +130,7 @@ export function MyRegistrationsPage() {
   async function confirmWithdraw() {
     if (pending === null) return
     setIsWithdrawing(true)
-    setWithdrawError(null)
+    setRefusal(null)
     try {
       const withdrawn = await withdrawRegistration(pending)
       setData((current) =>
@@ -119,7 +138,7 @@ export function MyRegistrationsPage() {
       )
       setPending(null)
     } catch (err) {
-      setWithdrawError(formatApiError(err))
+      setRefusal({ message: formatApiError(err), isFinal: isFinalRefusal(err) })
       setLoadRegistrations(freshListLoader)
     } finally {
       setIsWithdrawing(false)
@@ -165,7 +184,9 @@ export function MyRegistrationsPage() {
           title={`Withdraw from ${pending.event_name}?`}
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
-          error={withdrawError}
+          error={refusal?.message ?? null}
+          canConfirm={refusal === null || !refusal.isFinal}
+          cancelLabel={refusal?.isFinal ? 'Close' : 'Cancel'}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >
