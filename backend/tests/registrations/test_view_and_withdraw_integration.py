@@ -45,7 +45,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -120,7 +120,7 @@ def _event(db: Session, *, starts_at: datetime = NOW + timedelta(days=30), **ove
         registration_required=True,
         is_public=True,
         starts_at=starts_at,
-        ends_at=starts_at + timedelta(hours=3),
+        ends_at=overrides.pop("ends_at", starts_at + timedelta(hours=3)),
         registration_closes_at=overrides.pop(
             "registration_closes_at", starts_at - timedelta(days=1)
         ),
@@ -274,27 +274,41 @@ def test_events_not_yet_started_come_first_soonest_first_then_started_ones_lates
 ):
     """Ties go by name, then by id. An event starting exactly now has started (AC3). The rows are
     made in neither order, with ids against the expected order. (The two events of the same name
-    and dates have different organisers: one organiser cannot hold both, 2.1 AC20.)"""
+    and dates have different organisers: one organiser cannot hold both, 2.1 AC20.) One event in
+    each group runs for days, so ending later than the next one starts: ordered by their ends,
+    either group would come out differently."""
     attendee = _attendee(db)
+    hours, days = timedelta(hours=3), timedelta(days=8)
     expected = [
-        # (fixed id, name, starts_at, organiser), in the order the list must give them
-        (_fixed_id(9), "Soonest", NOW + timedelta(days=1), Users.ORGANISER_2),
-        (_fixed_id(8), "Alpha", NOW + timedelta(days=3), Users.ORGANISER_2),
-        (_fixed_id(7), "Beta", NOW + timedelta(days=3), Users.ORGANISER_2),
-        (_fixed_id(1), "Same name", NOW + timedelta(days=4), Users.ORGANISER_2),
-        (_fixed_id(2), "Same name", NOW + timedelta(days=4), Users.ORGANISER),
-        (_fixed_id(6), "Furthest", NOW + timedelta(days=5), Users.ORGANISER_2),
-        (_fixed_id(5), "Starting now", NOW, Users.ORGANISER_2),
-        (_fixed_id(4), "Yesterday", NOW - timedelta(days=1), Users.ORGANISER_2),
-        (_fixed_id(3), "Last week", NOW - timedelta(days=7), Users.ORGANISER_2),
+        # (fixed id, name, starts_at, how long it runs, organiser), in the order the list must
+        # give them
+        (_fixed_id(9), "Soonest", NOW + timedelta(days=1), days, Users.ORGANISER_2),
+        (_fixed_id(8), "Alpha", NOW + timedelta(days=3), hours, Users.ORGANISER_2),
+        (_fixed_id(7), "Beta", NOW + timedelta(days=3), hours, Users.ORGANISER_2),
+        (_fixed_id(1), "Same name", NOW + timedelta(days=4), hours, Users.ORGANISER_2),
+        (_fixed_id(2), "Same name", NOW + timedelta(days=4), hours, Users.ORGANISER),
+        (_fixed_id(6), "Furthest", NOW + timedelta(days=5), hours, Users.ORGANISER_2),
+        (_fixed_id(5), "Starting now", NOW, hours, Users.ORGANISER_2),
+        (_fixed_id(4), "Yesterday", NOW - timedelta(days=1), hours, Users.ORGANISER_2),
+        (_fixed_id(3), "Last week", NOW - timedelta(days=7), days, Users.ORGANISER_2),
     ]
-    for event_id, name, starts_at, organiser in [*reversed(expected[3:]), *expected[:3]]:
-        event = _event(db, id=event_id, name=name, starts_at=starts_at, organiser_id=organiser.id)
+    for event_id, name, starts_at, runs_for, organiser in [
+        *reversed(expected[3:]),
+        *expected[:3],
+    ]:
+        event = _event(
+            db,
+            id=event_id,
+            name=name,
+            starts_at=starts_at,
+            ends_at=starts_at + runs_for,
+            organiser_id=organiser.id,
+        )
         _registration(db, event, attendee.id)
 
     listed = [(item.event.id, item.event.name) for item in _mine(db, attendee)]
 
-    assert listed == [(event_id, name) for event_id, name, _, _ in expected]
+    assert listed == [(event_id, name) for event_id, name, *_ in expected]
 
 
 @pytest.mark.story("18.2", ac=1)
@@ -651,7 +665,8 @@ def test_a_registration_on_a_cancelled_event_shows_as_cancelled_and_cannot_be_wi
 def test_a_registration_cancelled_with_its_event_shows_as_cancelled_and_cannot_be_withdrawn(
     db: Session,
 ):
-    """As story 6.2 will leave it: the registration itself marked CANCELLED."""
+    """The registration itself marked CANCELLED: ConnectSphere cancelled it, as when its event is
+    cancelled (event_registrations.status)."""
     attendee = _attendee(db)
     registration = _registration(db, _event(db), attendee.id, status=RegistrationStatus.CANCELLED)
 
@@ -776,7 +791,15 @@ def _withdrawable(engine: Engine) -> _Withdrawable:
 
 def _clean_up(engine: Engine, made: _Withdrawable) -> None:
     with Session(engine) as session:
-        session.execute(delete(AuditLog).where(AuditLog.actor_id == made.attendee_id))
+        # By the registration as well as the actor, so a row written under the wrong actor goes too.
+        session.execute(
+            delete(AuditLog).where(
+                or_(
+                    AuditLog.actor_id == made.attendee_id,
+                    AuditLog.entity_id == made.registration_id,
+                )
+            )
+        )
         session.execute(
             delete(EventRegistration).where(EventRegistration.event_id == made.event_id)
         )
@@ -865,8 +888,12 @@ def test_a_withdrawal_waits_for_one_in_progress_and_is_then_refused(engine: Engi
         )
         with ThreadPoolExecutor(max_workers=1) as pool:
             attempt = pool.submit(_attempt, engine, made, None, pids)
-            _wait_until_blocked_or_done(engine, attempt, pids)
-            first.commit()
+            try:
+                _wait_until_blocked_or_done(engine, attempt, pids)
+            finally:
+                # Lets a withdrawal that is waiting go on even if the wait failed, so this fails
+                # rather than hangs: leaving the pool waits for the attempt.
+                first.commit()
             outcome = attempt.result(timeout=30)
 
         assert outcome == ALREADY_WITHDRAWN_MESSAGE

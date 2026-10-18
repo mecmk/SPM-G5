@@ -79,7 +79,8 @@ def test_a_withdrawn_registration_is_withdrawn_whatever_its_event(event_status):
 @pytest.mark.story("18.2", ac=8)
 @pytest.mark.parametrize("event_status", ALL_EVENT_STATUSES)
 def test_a_registration_cancelled_with_its_event_is_event_cancelled(event_status):
-    """Story 6.2 will mark an event's registrations CANCELLED as it cancels the event."""
+    """A CANCELLED registration is one ConnectSphere cancelled, as when its event is cancelled
+    (event_registrations.status), so the event's own status no longer decides it."""
     assert (
         registration_standing(
             registration_status=RegistrationStatus.CANCELLED, event_status=event_status
