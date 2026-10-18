@@ -208,7 +208,8 @@ def test_an_event_with_no_equipment_is_sent_an_empty_list(coordinator_client, db
 def test_a_released_item_on_a_cancelled_event_is_sent_as_cancelled_with_its_period(
     coordinator_client, db: Session
 ):
-    """As 6.2 will leave it: the event Cancelled, its item cancelled with it, holding nothing."""
+    """An item cancelled with its event (6.2): the event Cancelled, the item CANCELLED, holding
+    nothing."""
     event = _event(db, status=EventStatus.CANCELLED)
     make_equipment_item(
         db,

@@ -123,6 +123,8 @@ class Events:
     RECRUITMENT_FAIR = _e(25)  # coordinator 1
     PARTNER_GALA = _e(26)  # coordinator 2; accepted and declined items only
     EQUIPMENT_DECISIONS = _e(27)  # organiser 2, coordinator 1, dedicated to 16.1's e2e decisions
+    # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 19 January 2028.
+    WATERFRONT_DEMO = _e(80)  # one pending item (EquipmentItems.DEMO_LAPTOPS), accepted by the spec
     SMART_CITIES_EXPO = _e(28)  # organiser 2, coordinator 1, three requirements, for 8.4's e2e
     MOBILITY_FORUM = _e(29)  # organiser 2, coordinator 1, three requirements, for 12.5's e2e
     RESILIENCE_WORKSHOP = _e(30)  # organiser 2, coordinator 1, its one requirement booked
@@ -159,8 +161,6 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
-    # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 19 January 2028.
-    WATERFRONT_DEMO = _e(80)  # one pending item (EquipmentItems.DEMO_LAPTOPS), accepted by the spec
 
 
 class Bookings:
