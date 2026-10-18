@@ -409,8 +409,9 @@ ON CONFLICT (id) DO UPDATE SET
 -- Full) is withdrawn from once per run and its place comes back; the sketching walk (71) is
 -- withdrawn from and registered for again; Withdraw is double-clicked on the board games social
 -- (72); the yoga (73) is only read. Aiden withdrew from the heritage trail (74); the fun run (75)
--- was cancelled with his registration still active, as story 21.2's rejection leaves one; the book
--- swap (76) started on 3 Oct 2026. Organiser 2, coordinator 2, no venue booked, as 18.1's.
+-- was cancelled with his registration still active, as an event sent back to Planning after
+-- confirmation and then cancelled can be (18.1 AC4, 6.2); the book swap (76) started on
+-- 3 Oct 2026. Organiser 2, coordinator 2, no venue booked, as 18.1's.
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
@@ -1086,7 +1087,8 @@ WHERE NOT EXISTS (
       AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
 -- Story 18.2: Aiden's registrations for the events above (3333..70-76), one each. Only the heritage
--- trail's (74) is withdrawn; the fun run's (75) is still active on a cancelled event.
+-- trail's (74) is withdrawn; the fun run's (75) is still active on a cancelled event. As with
+-- Bella's above, a row whose attendee has since withdrawn and registered again is left as it is.
 INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at, withdrawn_at) VALUES
     ('18181818-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000070', '11111111-0000-0000-0000-000000000007',
      'REGISTERED', '2026-10-11 10:00+08', NULL),
@@ -1104,7 +1106,11 @@ INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_a
      'REGISTERED', '2026-09-25 08:00+08', NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
-    registered_at = EXCLUDED.registered_at, withdrawn_at = EXCLUDED.withdrawn_at;
+    registered_at = EXCLUDED.registered_at, withdrawn_at = EXCLUDED.withdrawn_at
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_registrations AS newer
+    WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
+      AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
 -- ---------------------------------------------------------------------
 -- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)

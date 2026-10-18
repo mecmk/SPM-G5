@@ -363,8 +363,9 @@ class MyRegistrationItem:
 
 def registration_standing(*, registration_status: str, event_status: str) -> RegistrationStanding:
     """18.2 AC1/AC8: Withdrawn when the attendee withdrew, whatever became of the event; Event
-    cancelled when the registration was cancelled with its event (6.2) or the event was cancelled
-    with it still active (21.2); Registered otherwise, including an event sent back to Planning."""
+    cancelled when the registration was cancelled with its event (6.2), or the event was
+    cancelled with it still active (an event sent back to Planning after confirmation keeps its
+    registrations, 18.1 AC4); Registered otherwise, including an event sent back to Planning."""
     if registration_status == RegistrationStatus.WITHDRAWN:
         return RegistrationStanding.WITHDRAWN
     if registration_status == RegistrationStatus.CANCELLED or event_status == EventStatus.CANCELLED:
