@@ -2,7 +2,8 @@
 
 A submitted event waits unassigned until the Event Coordinator Lead assigns it from the unassigned
 queue (story 5.4, which replaced 5.1's automatic round-robin assignment - 5.4 AC9). Once it has a
-coordinator, only that coordinator may hand it to another (story 5.2). Both writes share
+coordinator, the Lead may hand it to another (story 5.6, which took that over from 5.2's
+coordinator - Q16). Both writes share
 ``_create_assignment``, so "close the old row, open the new one, update the denormalised pointer,
 write the audit entry" is written once.
 
@@ -17,10 +18,12 @@ write the audit entry" is written once.
   re-checked on the way in;
 * 5.1 AC3 / 5.4 AC3 the assignment records who made it and when - ``assigned_by_id`` /
   ``assigned_at``, plus an ``EVENT_COORDINATOR_ASSIGNED`` audit entry;
-* 5.4 AC7/AC9 an unassigned event is assigned only by a holder of ``events:assign`` (the Lead);
-  5.2 AC6 an assigned one is reassigned only by its current coordinator;
+* 5.4 AC7/AC9 and 5.6 AC5 an event is assigned and reassigned only by a holder of
+  ``events:assign`` (the Lead);
 * 5.4 AC8 of two Leads assigning one event at once, the conditional update in
-  ``_create_assignment`` lets only the first through, and the second is told who got it.
+  ``_create_assignment`` lets only the first through, and the second is told who got it;
+* 5.6 AC6 a reassignment names the coordinator the Lead saw, and the same conditional update
+  refuses it once the event's coordinator has changed.
 
 Story 5.5 reads it all back for the Lead: every active event with its coordinator and the Lead
 who assigned it (``list_active_events``), and each coordinator's active events
@@ -60,10 +63,7 @@ ASSIGNABLE_STATUSES = frozenset(
 )
 
 
-# Story 5.4 AC7/AC9 and AC8: the refusals a Lead's or a coordinator's assignment can meet.
-NOT_PERMITTED_TO_ASSIGN_MESSAGE = (
-    "Only the Event Coordinator Lead can assign an event that has no coordinator yet."
-)
+# Story 5.4 AC8: a Lead's assignment of an event that already has a coordinator.
 ALREADY_ASSIGNED_MESSAGE = "This event has already been assigned to {coordinator}."
 NOT_AN_ACTIVE_STATUS_MESSAGE = "Filter by one of the active statuses: {statuses}."
 
@@ -111,22 +111,6 @@ class CoordinatorInactive(ValueError):
     def __init__(self, user: User):
         super().__init__(f"{user.full_name} is no longer an active user.")
         self.user = user
-
-
-class NotCurrentCoordinator(PermissionError):
-    """Story 5.2 AC6: once an event has a coordinator, only that coordinator may reassign it. An
-    unassigned event is the Lead's to assign (story 5.4 AC9: ``NotPermittedToAssign``)."""
-
-    def __init__(self) -> None:
-        super().__init__("Only the coordinator currently assigned to this event may reassign it.")
-
-
-class NotPermittedToAssign(PermissionError):
-    """Story 5.4 AC7/AC9: an unassigned event is assigned only by the Event Coordinator Lead -
-    Event Coordinators no longer claim one by hand."""
-
-    def __init__(self) -> None:
-        super().__init__(NOT_PERMITTED_TO_ASSIGN_MESSAGE)
 
 
 class AlreadyAssigned(RuntimeError):
@@ -368,12 +352,12 @@ def _notify_reassignment(
     new_coordinator: User,
     reassigned_by: User,
 ) -> None:
-    """Story 5.2 AC1: the previous coordinator, the new one, and the organiser are each told.
+    """Story 5.2 AC1 / 5.6 AC2: the previous coordinator, the new one, and the organiser are each
+    told.
     Only called for a genuine reassignment (there was a previous coordinator) - an event's first
     assignment, by the Lead, has nobody "previous" to tell and is told by ``_notify_assignment``
-    instead (story 5.4 AC4). Story 20.1 AC3 tells nobody of their own
-    action, and under 5.2 the previous coordinator is the one reassigning (AC6), so in practice
-    they are skipped; they are told when someone else reassigns, as the Lead will (story 5.6)."""
+    instead (story 5.4 AC4). Story 20.1 AC3 tells nobody of their own action: since 5.6 the Lead
+    reassigns, so all three are told."""
     previous_coordinator = db.get(User, previous_coordinator_id)
     organiser = db.get(User, event.organiser_id)
     notify(
@@ -450,13 +434,14 @@ def _create_assignment(
     coordinator: User,
     *,
     previous: EventCoordinatorAssignment | None,
+    expected_coordinator_id: uuid.UUID | None,
     assigned_by: User,
     note: str | None,
 ) -> EventCoordinatorAssignment:
-    """Shared machinery behind ``assign_coordinator`` - the Lead's first assignment (5.4) and a
-    coordinator's reassignment (5.2), ``assigned_by`` being who chose it: close any open
-    assignment, open the new one, keep ``events.assigned_coordinator_id`` in step, and write the
-    audit entry. Does not commit - the caller owns the transaction.
+    """Shared machinery behind ``assign_coordinator`` - the Lead's first assignment (5.4) and the
+    Lead's reassignment (5.6, which took it over from 5.2's coordinator), ``assigned_by`` being who
+    chose it: close any open assignment, open the new one, keep ``events.assigned_coordinator_id``
+    in step, and write the audit entry. Does not commit - the caller owns the transaction.
 
     ``previous`` is the caller's *own* read of ``current_assignment`` - the same one it already
     used to decide the caller is allowed to do this (5.2 AC6) - not re-read here. Re-reading it
@@ -468,17 +453,21 @@ def _create_assignment(
     assignment rather than closing and re-opening it, so the history in
     ``event_coordinator_assignments`` stays meaningful.
 
-    Story 5.2 AC7: the write is conditional on ``events.assigned_coordinator_id`` still holding
-    whatever ``previous`` said it did (``NULL`` when there was no previous coordinator) - the
-    same "attempt and catch the failure" shape as ``submit_event``'s conditional UPDATE. Two
-    reassignments that both read the same ``previous`` cannot both succeed: the second finds 0
-    rows match and raises ``AssignmentChanged`` before touching anything else, rather than
-    silently overwriting the first.
+    Story 5.2 AC7 / 5.6 AC6: the write is conditional on ``events.assigned_coordinator_id``
+    still holding ``expected_coordinator_id`` - the coordinator the Lead saw, or ``NULL`` for
+    5.4's assign - the same "attempt and catch the failure" shape as ``submit_event``'s
+    conditional UPDATE. A reassignment made from a view that has since changed, or the second of
+    two made at once, finds 0 rows match and raises ``AssignmentChanged`` before touching anything
+    else, rather than silently overwriting the first.
     """
     if previous is not None and previous.coordinator_id == coordinator.id:
         return previous
+    # The Lead's view is already stale by this request's own read: refused here, so the guarded
+    # UPDATE below only ever matches the pointer ``previous`` was read with.
+    read_coordinator_id = previous.coordinator_id if previous is not None else None
+    if read_coordinator_id != expected_coordinator_id:
+        raise AssignmentChanged(event.id)
 
-    expected_coordinator_id = previous.coordinator_id if previous is not None else None
     claimed = db.execute(
         update(Event)
         .where(
@@ -551,23 +540,25 @@ def assign_coordinator(
 ) -> EventCoordinatorAssignment:
     """Give ``event_id`` a coordinator (5.1 AC1).
 
-    Story 5.4 AC7/AC9: an unassigned event is assigned only by a holder of ``events:assign`` -
-    the Event Coordinator Lead; coordinators no longer claim one. AC8: a Lead who finds it already
-    assigned - before, or by another Lead a moment ago - is told so, and to whom (409).
-    Story 5.2 AC6: an assigned event is handed on only by its current coordinator.
+    Only a holder of ``events:assign`` - the Event Coordinator Lead - writes an assignment:
+    story 5.4 AC7/AC9 the first one, story 5.6 AC5 every reassignment (Q16, replacing 5.2 AC1 and
+    AC6: coordinators no longer hand their own events on). The router's ``require_permission``
+    refuses everyone else, so ``actor`` here is always a Lead.
+
+    ``data.expected_coordinator_id`` says which the request is (5.6 AC6). Left out, it is 5.4's
+    assign of an event with no coordinator, and one found already assigned - before, or by another
+    Lead a moment ago - is refused naming who has it (5.4 AC8). Set, it is a reassignment from that
+    coordinator, refused if the event's coordinator is no longer the one the Lead saw.
     """
     event = get_event(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
 
-    is_lead = role_has(actor.role_code, Permission.EVENTS_ASSIGN)
     previous = current_assignment(db, event.id)
-    if previous is None and not is_lead:
-        raise NotPermittedToAssign()
-    if previous is not None and is_lead:
+    expected_id = data.expected_coordinator_id
+    is_assign = expected_id is None
+    if is_assign and previous is not None:
         raise AlreadyAssigned(previous.coordinator)
-    if previous is not None and previous.coordinator_id != actor.id:
-        raise NotCurrentCoordinator()
 
     coordinator = db.get(User, data.coordinator_id)
     if coordinator is None:
@@ -579,12 +570,19 @@ def assign_coordinator(
 
     try:
         assignment = _create_assignment(
-            db, event, coordinator, previous=previous, assigned_by=actor, note=data.note
+            db,
+            event,
+            coordinator,
+            previous=previous,
+            expected_coordinator_id=expected_id,
+            assigned_by=actor,
+            note=data.note,
         )
     except AssignmentChanged:
-        # AC8: another Lead's assignment landed between this one's read and its write. The guarded
-        # update changed nothing, so read who got the event (it is committed) and name them.
-        winner = current_assignment(db, event.id) if is_lead else None
+        # 5.4 AC8: another Lead's assignment landed between this one's read and its write. The
+        # guarded update changed nothing, so read who got the event (it is committed) and name
+        # them. A reassignment that loses the race (5.6 AC6) is refused as changed.
+        winner = current_assignment(db, event.id) if is_assign else None
         if winner is None:
             raise
         raise AlreadyAssigned(winner.coordinator) from None

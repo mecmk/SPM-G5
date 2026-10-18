@@ -8,6 +8,7 @@ import {
   type UnassignedEventEntry,
 } from '../api/coordination'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { CoordinatorPicker } from '../components/CoordinatorPicker'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
@@ -31,11 +32,6 @@ async function loadQueue(): Promise<UnassignedQueue> {
 }
 
 /** Story 5.4 AC3: a coordinator as the picker offers them, with the load they already carry. */
-function describeCoordinator(coordinator: CoordinatorOption): string {
-  const count = coordinator.active_event_count
-  return `${coordinator.full_name} · ${count} active ${count === 1 ? 'event' : 'events'}`
-}
-
 /**
  * Story 5.4 - the Event Coordinator Lead's unassigned queue.
  * AC2: every submitted event with no coordinator, oldest submission first (the backend's order),
@@ -192,19 +188,12 @@ export function UnassignedQueuePage() {
           onCancel={cancelAssign}
         >
           <p>The coordinator and the organiser are both told.</p>
-          <label>
-            Coordinator
-            <select
-              value={selectedCoordinatorId}
-              onChange={(e) => setSelectedCoordinatorId(e.target.value)}
-            >
-              {queue.coordinators.map((coordinator) => (
-                <option key={coordinator.id} value={coordinator.id}>
-                  {describeCoordinator(coordinator)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CoordinatorPicker
+            label="Coordinator"
+            coordinators={queue.coordinators}
+            value={selectedCoordinatorId}
+            onChange={setSelectedCoordinatorId}
+          />
         </ConfirmDialog>
       )}
     </div>

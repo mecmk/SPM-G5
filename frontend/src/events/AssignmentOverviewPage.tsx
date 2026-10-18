@@ -28,6 +28,7 @@ import {
 } from '../shared/eventStatus'
 import { formatSchedule, NOT_RECORDED, NOT_YET_ASSIGNED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ReassignDialog } from './ReassignDialog'
 
 const PAGE_TITLE = 'Assignments'
 const DEACTIVATED = 'Deactivated'
@@ -108,6 +109,8 @@ function coordinatorDetail(entry: ActiveEventEntry) {
  * 0 included, and the events themselves.
  * AC3: each event opens its read-only details page (7.1).
  * AC5: a deactivated coordinator who still holds events is flagged in both views.
+ * Story 5.6 AC1: each event with a coordinator can be reassigned from its card; both views then
+ * read the change afresh.
  */
 export function AssignmentOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -126,6 +129,7 @@ export function AssignmentOverviewPage() {
   )
   const overview = useLoaded(loadOverview)
   const workloads = useLoaded(listWorkloads)
+  const [reassigning, setReassigning] = useState<ActiveEventEntry | null>(null)
   // While a changed filter loads, the previous filter's events are hidden rather than shown under
   // the new one (`useLoaded`'s isStale).
   const freshEvents = overview.isStale ? null : overview.data
@@ -174,6 +178,21 @@ export function AssignmentOverviewPage() {
       ASSIGNMENT_SEARCH_PARAMS.assignedByMe,
       change.target.checked ? ASSIGNED_BY_ME_FILTER : '',
     )
+  }
+
+  function askToReassign(entry: ActiveEventEntry) {
+    setReassigning(entry)
+  }
+
+  function cancelReassign() {
+    setReassigning(null)
+  }
+
+  /** Story 5.6 AC1: the card, and the coordinator's workload, show the new coordinator. */
+  function handleReassigned() {
+    setReassigning(null)
+    loadOverview().then(overview.setData, () => {})
+    listWorkloads().then(workloads.setData, () => {})
   }
 
   /** The address for the other view, keeping the filters. */
@@ -285,11 +304,33 @@ export function AssignmentOverviewPage() {
                       ? []
                       : [`Assigned by ${entry.assigned_by_name ?? NOT_RECORDED}`]),
                   ]}
+                  action={
+                    // Story 5.6: an event with no coordinator is assigned from 5.4's queue.
+                    entry.coordinator_id === null ? undefined : (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => askToReassign(entry)}
+                      >
+                        Reassign
+                      </button>
+                    )
+                  }
                 />
               ))}
             </EventCardGrid>
           )}
         </div>
+      )}
+
+      {reassigning !== null && reassigning.coordinator_id !== null && (
+        <ReassignDialog
+          eventId={reassigning.id}
+          eventName={reassigning.name}
+          currentCoordinatorId={reassigning.coordinator_id}
+          onReassigned={handleReassigned}
+          onCancel={cancelReassign}
+        />
       )}
     </div>
   )
