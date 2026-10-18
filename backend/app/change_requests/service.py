@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager
@@ -493,6 +494,11 @@ CHANGED_SINCE_REQUESTED_MESSAGE = (
     "The {label} changed since this request was raised, so it cannot be approved. Reject it so "
     "the organiser can ask again."
 )
+PROPOSAL_UNREADABLE_MESSAGE = (
+    "This change request can no longer be applied as it was stored. Reject it so the organiser "
+    "can ask again."
+)
+
 _APPROVED_TITLE = "Change approved for {event}"
 _APPROVED_MESSAGE = "{coordinator} approved your request to change the {label}."
 # AC8, and 21.2 AC8's "every status change notifies": said when the approval de-confirmed it.
@@ -506,6 +512,14 @@ _RETURNED_MESSAGE = (
 )
 _REJECTED_TITLE = "Change rejected for {event}"
 _REJECTED_MESSAGE = '{coordinator} rejected your request to change the {label}: "{reason}"'
+
+
+class ProposalUnreadable(EventStateConflict):
+    """AC2: the stored proposal no longer reads as the field's value - corrupted, or stored by a
+    schema since changed - so it cannot be applied; it can still be rejected."""
+
+    def __init__(self) -> None:
+        super().__init__(PROPOSAL_UNREADABLE_MESSAGE)
 
 
 class NotAssignedCoordinator(PermissionError):
@@ -542,13 +556,20 @@ def list_coordinator_change_requests(db: Session, *, viewer: User) -> list[Event
     what waits for their decision first, oldest first, the order to work through it in; then their
     record of what was decided or withdrawn, latest first (team request, 16 Oct 2026). A request
     still pending on an event no longer going ahead can never be decided, so it is left out; one
-    decided before the event closed stays in the record."""
+    decided before the event closed stays in the record. Each event's venue requirements and
+    equipment are loaded with it, since every row says whether it is out of date (AC7)."""
     is_pending = EventChangeRequest.status == ChangeRequestStatus.PENDING
+    with_event = contains_eager(EventChangeRequest.event)
     return list(
         db.scalars(
             select(EventChangeRequest)
             .join(EventChangeRequest.event)
-            .options(contains_eager(EventChangeRequest.event))
+            .options(
+                with_event.selectinload(Event.venue_requirements).selectinload(
+                    VenueRequirement.facilities
+                ),
+                with_event.selectinload(Event.equipment_requests),
+            )
             .where(
                 Event.assigned_coordinator_id == viewer.id,
                 or_(~is_pending, Event.status.in_(_DECIDABLE_STATUSES)),
@@ -655,7 +676,15 @@ def _proposed_equipment(event: Event, proposed: list[dict[str, Any]]) -> list[Ev
 
 def _apply_field(db: Session, event: Event, request: EventChangeRequest, *, actor: User) -> None:
     """AC2: write what ``request`` asks for to ``event``, re-checked against the event as it now
-    stands by the same creation rules 19.1 checked when it was raised."""
+    stands by the same creation rules 19.1 checked when it was raised. A stored proposal that no
+    longer reads as the field's value is refused (``ProposalUnreadable``)."""
+    try:
+        _write_field(db, event, request, actor=actor)
+    except ValidationError as exc:
+        raise ProposalUnreadable() from exc
+
+
+def _write_field(db: Session, event: Event, request: EventChangeRequest, *, actor: User) -> None:
     proposed = json.loads(request.proposed_value)
     field = request.field_name
     if field == ChangeRequestField.EXPECTED_ATTENDANCE:
