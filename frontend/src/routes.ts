@@ -208,6 +208,9 @@ export function safetyCheckPath(eventId: string): string {
   return SAFETY_CHECK_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
 
+// Story 19.2: the coordinator's queue of change requests waiting for a decision.
+export const CHANGE_REQUEST_QUEUE_PATH = '/change-requests/review'
+
 // Story 18.1: the events an attendee can browse and register for.
 export const UPCOMING_EVENTS_PATH = '/browse'
 

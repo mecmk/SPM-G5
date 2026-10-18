@@ -157,6 +157,8 @@ class Events:
     CYBER_CLINIC = _e(47)  # AWAITING_SAFETY_CHECK; the spec requests changes
     DATA_SUMMIT = _e(48)  # PLANNING; sent back with its venue flagged, venue unchanged
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
+    # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
+    DESIGN_SPRINT = _e(51)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below). Each is one case of tests/e2e/my-registrations.spec.ts.
     POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
@@ -196,6 +198,8 @@ class Bookings:
     APPROVED_CYBER_CLINIC_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000016")
     APPROVED_DATA_SUMMIT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000017")
     APPROVED_AI_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000018")
+    # Story 19.2: Events.DESIGN_SPRINT's Studio, at Seminar Room 2.1.
+    APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
 
 
 class Registrations:

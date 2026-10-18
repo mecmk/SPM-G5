@@ -8,6 +8,7 @@ import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
 import { EquipmentRequestDetailPage } from './equipment/EquipmentRequestDetailPage'
 import { EquipmentRequestsPage } from './equipment/EquipmentRequestsPage'
+import { ChangeRequestQueuePage } from './events/ChangeRequestQueuePage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
 import { MyEventsPage } from './events/MyEventsPage'
@@ -27,6 +28,7 @@ import { SafetyChecksPage } from './safety/SafetyChecksPage'
 import {
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
+  CHANGE_REQUEST_QUEUE_PATH,
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EQUIPMENT_REQUEST_PATH,
@@ -156,6 +158,15 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.SAFETY_REVIEW} />}>
                 <Route path={SAFETY_CHECKS_PATH} element={<SafetyChecksPage />} />
                 <Route path={SAFETY_CHECK_PATH} element={<SafetyCheckDetailPage />} />
+              </Route>
+
+              {/* Story 19.2: the coordinator's queue of change requests waiting for a decision. */}
+              <Route
+                element={
+                  <RequirePermission permission={PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE} />
+                }
+              >
+                <Route path={CHANGE_REQUEST_QUEUE_PATH} element={<ChangeRequestQueuePage />} />
               </Route>
 
               {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only).
