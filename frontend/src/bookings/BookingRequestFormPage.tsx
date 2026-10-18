@@ -44,6 +44,8 @@ import {
   isWithinOpeningHours,
   minutesToDuration,
   outsideHoursFact,
+  REPLACEMENT_TURNAROUND_HINT,
+  TURNAROUND_HINT,
   turnaroundProblem,
   VENUE_STAFF_DECIDE,
   ZERO_DURATION,
@@ -537,8 +539,7 @@ export function BookingRequestFormPage() {
         <section aria-labelledby="booking-turnaround-heading" className="stack">
           <h2 id="booking-turnaround-heading">Setup and teardown</h2>
           <p className="muted">
-            How long the venue is needed before the event starts and after it ends. Both stay 0
-            unless you enter more.
+            {original === null ? TURNAROUND_HINT : REPLACEMENT_TURNAROUND_HINT}
           </p>
           <div className="turnaround-fields">
             <DurationFields legend="Setup" draft={setupDraft} onChange={setSetupDraft} />

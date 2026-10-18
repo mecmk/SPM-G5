@@ -238,6 +238,9 @@ export interface BookingQueueEntry {
   replaces_venue_name: string | null
   approval_releases_venue_name: string | null
   original_is_marked: boolean | null
+  /** Story 12.6 AC3: when a released original was released - its replacement's approval; null for
+   * any other request. */
+  released_at: string | null
 }
 
 /** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was
@@ -416,6 +419,9 @@ export interface BookingOutcome {
   replaces_venue_name: string | null
   replaced_by_venue_name: string | null
   pending_replacement_venue_name: string | null
+  /** Story 12.6 AC3: when an original was released - its replacement's approval, which is when it
+   * closed; null for any other booking. */
+  released_at: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a

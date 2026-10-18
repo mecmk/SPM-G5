@@ -677,6 +677,7 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     replaces_venue_name: null,
     replaced_by_venue_name: null,
     pending_replacement_venue_name: null,
+    released_at: null,
   }
   const outcomes = [
     {

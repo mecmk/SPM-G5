@@ -33,6 +33,7 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   firstRequirementNeedingVenue,
   isBooked,
+  hasPendingReplacement,
   isReplaceable,
   replacementSearchFor,
   requirementName,
@@ -374,7 +375,8 @@ export function VenueCataloguePage() {
               replacementPath={
                 requestingEvent !== null &&
                 replacingBooking === null &&
-                isReplaceable(selectedCovering)
+                isReplaceable(selectedCovering) &&
+                !hasPendingReplacement(selectedCovering)
                   ? venueSearchPath(replacementSearchFor(event, selectedCovering))
                   : undefined
               }

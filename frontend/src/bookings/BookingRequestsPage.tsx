@@ -25,6 +25,7 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  closedAt,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -364,7 +365,7 @@ export function BookingRequestsPage() {
                   {entry.decided_at !== null && (
                     <div className="subtle-block">
                       <p className="fact-label">{bookingOutcomeLabels(entry.status).when}</p>
-                      <p>{formatDateTime(entry.decided_at)}</p>
+                      <p>{formatDateTime(closedAt(entry) ?? entry.decided_at)}</p>
                     </div>
                   )}
 

@@ -67,6 +67,12 @@ export function isReplaceable(booking: BookingOutcome): boolean {
   return booking.status === APPROVED && isMarked(booking)
 }
 
+/** Story 12.6 AC4/AC5: a replacement has been asked for `booking` and is still pending, so asking
+ * for another waits until it is rejected or withdrawn. */
+export function hasPendingReplacement(booking: BookingOutcome): boolean {
+  return booking.pending_replacement_venue_name !== null
+}
+
 /** Story 12.6 AC4: the replacement asked for `booking`, while it is pending. */
 export function pendingReplacementFor(
   booking: BookingOutcome,

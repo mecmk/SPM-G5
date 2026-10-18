@@ -78,6 +78,12 @@ export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabel
     : { when: 'Decided at', why: 'Reason' }
 }
 
+/** Story 12.6 AC3: when a withdrawn or cancelled request closed - the release, for an original a
+ * replacement's approval released, which is later than the approval `decided_at` still holds. */
+export function closedAt(request: { decided_at: string | null; released_at: string | null }) {
+  return request.released_at ?? request.decided_at
+}
+
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN and CANCELLED have no tab of their own and
  * only show up under "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a

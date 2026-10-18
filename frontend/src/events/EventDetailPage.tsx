@@ -42,6 +42,7 @@ import {
 import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
+  closedAt,
   FIND_ANOTHER_LABEL,
   FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
@@ -80,6 +81,7 @@ import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
   isMarked,
+  hasPendingReplacement,
   isReplaceable,
   replacementSearchFor,
   requirementName,
@@ -494,16 +496,21 @@ export function EventDetailPage() {
       setBookings(
         (current) =>
           current &&
-          current.map((booking) =>
-            booking.id === updated.id
-              ? {
-                  ...booking,
-                  status: updated.status,
-                  decided_at: updated.decided_at,
-                  decision_reason: updated.decision_reason,
-                }
-              : booking,
-          ),
+          current.map((booking) => {
+            if (booking.id === updated.id) {
+              return {
+                ...booking,
+                status: updated.status,
+                decided_at: updated.decided_at,
+                decision_reason: updated.decision_reason,
+              }
+            }
+            // Story 12.6 AC5: withdrawing a replacement ends the original's "Replacement
+            // requested", and with it the way to ask again.
+            return booking.id === pendingWithdraw.replaces_booking_id
+              ? { ...booking, pending_replacement_venue_name: null }
+              : booking
+          }),
       )
       setPendingWithdraw(null)
     } catch (err) {
@@ -1073,7 +1080,7 @@ export function EventDetailPage() {
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
-                          {formatDateTime(booking.decided_at)}
+                          {formatDateTime(closedAt(booking) ?? booking.decided_at)}
                         </p>
                       )}
                       {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
@@ -1129,16 +1136,19 @@ export function EventDetailPage() {
                   {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
                    *  event's assigned coordinator while it can take a booking (AC8): a replacement
                    *  for an approved one, the catalogue's Switch for a pending one. */}
-                  {isMarked(booking) && canFindVenue && isAssignedCoordinator && (
-                    <div className="cluster">
-                      <Link
-                        to={venueSearchPath(replacementSearchFor(event, booking))}
-                        className="button button-sm"
-                      >
-                        {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
-                      </Link>
-                    </div>
-                  )}
+                  {isMarked(booking) &&
+                    !hasPendingReplacement(booking) &&
+                    canFindVenue &&
+                    isAssignedCoordinator && (
+                      <div className="cluster">
+                        <Link
+                          to={venueSearchPath(replacementSearchFor(event, booking))}
+                          className="button button-sm"
+                        >
+                          {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
+                        </Link>
+                      </div>
+                    )}
                 </div>
               )
             })}
