@@ -14,6 +14,8 @@ import {
   type VenueReferenceData,
   type VenueStatus,
 } from '../api/venues'
+import { useAuth } from '../auth/authContext'
+import { PERMISSIONS } from '../auth/permissions'
 import { PageHeader } from '../components/PageHeader'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
@@ -34,6 +36,7 @@ import {
   type RefusedPicture,
   type VenueFormState,
 } from './venueForm'
+import { VenueUnavailabilityManager } from './VenueUnavailabilityManager'
 import { VenuePicturesField, type PictureTile } from './VenuePicturesField'
 
 /** Story 8.3 AC5: one of the venue's pictures as saved. Its key is its id. */
@@ -117,6 +120,9 @@ export function VenueFormPage() {
   const isEditing = venueId !== undefined
   const navigate = useNavigate()
   const location = useLocation()
+  /** Story 12.6 AC12: Venue Staff manage the venue's unavailable periods from this page. */
+  const { can } = useAuth()
+  const canManageUnavailability = can(PERMISSIONS.VENUE_UNAVAILABILITY_MANAGE)
   const [reference, setReference] = useState<VenueReferenceData | null>(null)
   const [form, setForm] = useState<VenueFormState | null>(isEditing ? null : EMPTY_VENUE_FORM)
   const [savedName, setSavedName] = useState<string | null>(null)
@@ -644,6 +650,12 @@ export function VenueFormPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Story 12.6 AC12: a saved venue's unavailable periods - the calendar with each one's Edit,
+          End now and Remove, and the Block off time card - for Venue Staff, here and nowhere else. */}
+      {isEditing && venueId !== undefined && savedName !== null && canManageUnavailability && (
+        <VenueUnavailabilityManager venueId={venueId} venueName={savedName} />
       )}
     </div>
   )
