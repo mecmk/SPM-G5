@@ -418,6 +418,14 @@ export function ChangeRequestsSection({
     setOpenDecision(null)
   }
 
+  /** Story 19.2 AC2/AC3: the click handler that opens the decision dialog on `request`, for
+   *  `outcome`. */
+  function openDecisionOn(request: ChangeRequest, outcome: OpenDecision['outcome']) {
+    return function openDecisionDialog() {
+      setOpenDecision({ request, outcome })
+    }
+  }
+
   /** Story 19.2 AC2/AC3: the decision is saved - list it as decided, and load the event again so
    *  an approved change shows on the page. */
   function finishDecision() {
@@ -517,7 +525,7 @@ export function ChangeRequestsSection({
                         <button
                           type="button"
                           className="brand button-with-icon"
-                          onClick={() => setOpenDecision({ request, outcome: 'APPROVED' })}
+                          onClick={openDecisionOn(request, 'APPROVED')}
                         >
                           <Icon name="check-circle" size={16} />
                           Approve
@@ -527,7 +535,7 @@ export function ChangeRequestsSection({
                         <button
                           type="button"
                           className="danger-solid button-with-icon"
-                          onClick={() => setOpenDecision({ request, outcome: 'REJECTED' })}
+                          onClick={openDecisionOn(request, 'REJECTED')}
                         >
                           <Icon name="x-circle" size={16} />
                           Reject

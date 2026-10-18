@@ -97,6 +97,13 @@ export function ChangeRequestQueuePage() {
     setOpenDecision(null)
   }
 
+  /** AC2/AC3: the click handler that opens the decision dialog on `entry`, for `outcome`. */
+  function openDecisionOn(entry: ChangeRequestQueueEntry, outcome: OpenDecision['outcome']) {
+    return function openDecisionDialog() {
+      setOpenDecision({ entry, outcome })
+    }
+  }
+
   /** AC2/AC3: the decided request takes its new status in place, so it leaves Pending for its
    *  own tab, with who decided, when and why. An approval may also have changed the event - its
    *  dates, or its status back to Planning (AC8) - which every card for it shows, so the queue
@@ -231,7 +238,7 @@ export function ChangeRequestQueuePage() {
                         <button
                           type="button"
                           className="brand button-sm"
-                          onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
+                          onClick={openDecisionOn(entry, 'APPROVED')}
                         >
                           Approve
                         </button>
@@ -239,7 +246,7 @@ export function ChangeRequestQueuePage() {
                       <button
                         type="button"
                         className="danger-solid button-sm"
-                        onClick={() => setOpenDecision({ entry, outcome: 'REJECTED' })}
+                        onClick={openDecisionOn(entry, 'REJECTED')}
                       >
                         Reject
                       </button>
