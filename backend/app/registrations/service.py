@@ -11,6 +11,10 @@ back to Planning meanwhile is read as it now stands. It inserts first and counts
 database's ``uq_event_registrations_active`` refuses a duplicate even from two tabs at once, and a
 place over capacity is rolled back - no check runs ahead of the write it guards
 (backend/STYLE.md).
+
+Story 18.3: an event's registration list, for its organiser and assigned coordinator only - anyone
+else is told the event was not found (AC5/AC6), as an unknown event is. Every registration is
+listed, withdrawn and cancelled ones marked by their status (AC4); only REGISTERED ones count.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, Select, and_, case, func, null, select, update
+from sqlalchemy import ColumnElement, Select, and_, case, func, null, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -47,6 +51,7 @@ REGISTRATION_NOT_YET_OPEN_MESSAGE = "Registration for this event has not opened 
 REGISTRATION_CLOSED_MESSAGE = "Registration for this event has closed."
 EVENT_FULL_MESSAGE = "This event is full."
 ALREADY_REGISTERED_MESSAGE = "You are already registered for this event."
+REGISTRATION_LIST_NOT_FOUND_MESSAGE = "This event was not found."
 
 
 class RegistrationState(StrEnum):
@@ -92,6 +97,14 @@ class AlreadyRegistered(RegistrationRefused):
         super().__init__(ALREADY_REGISTERED_MESSAGE)
 
 
+class RegistrationListNotFound(LookupError):
+    """18.3 AC5/AC6: no event with this id that the viewer organises or coordinates. One answer
+    for an unknown event and someone else's, so the list gives nothing away."""
+
+    def __init__(self) -> None:
+        super().__init__(REGISTRATION_LIST_NOT_FOUND_MESSAGE)
+
+
 @dataclass(frozen=True)
 class RegistrationEventItem:
     """AC1: one listed event, with what the attendee sees of it."""
@@ -112,10 +125,35 @@ class RegistrationEventListing:
     total: int
 
 
+@dataclass(frozen=True)
+class AttendeeRegistration:
+    """18.3 AC1: one row of an event's registration list - the registration and who made it."""
+
+    registration: EventRegistration
+    attendee: User
+
+
+@dataclass(frozen=True)
+class EventRegistrationList:
+    """18.3 AC1-AC3: an event's registrations, oldest first, its active count and capacity, and
+    whether that count has reached it."""
+
+    items: list[AttendeeRegistration]
+    active_count: int
+    capacity: int | None
+    is_full: bool
+
+
 def places_left(*, capacity: int, registered: int) -> int:
     """AC2: the places not yet taken. Never below 0: a change request (19.2) can lower the
     expected attendance below the registrations already made, which leaves the event full."""
     return max(capacity - registered, 0)
+
+
+def is_full(*, capacity: int | None, active: int) -> bool:
+    """18.3 AC3: full once the active registrations reach the capacity. Beyond it is still full,
+    as a change request (19.2) can lower the expected attendance; no capacity is never full."""
+    return capacity is not None and active >= capacity
 
 
 def closing_time(*, closes_at: datetime | None, starts_at: datetime) -> datetime:
@@ -508,3 +546,50 @@ def withdraw_registration(
     )
     db.commit()
     return item
+
+
+def list_event_registrations(
+    db: Session, event_id: uuid.UUID, *, viewer: User
+) -> EventRegistrationList:
+    """18.3 AC1/AC2/AC4: every registration for the event, oldest first, with its attendee.
+    AC5/AC6: ``RegistrationListNotFound`` unless ``viewer`` is its organiser or assigned
+    coordinator. AC7: the active count is taken from the rows returned, not a second query, so a
+    registration made between two queries can never leave the count and the list apart."""
+    event = db.get(Event, event_id)
+    if event is None or viewer.id not in (event.organiser_id, event.assigned_coordinator_id):
+        raise RegistrationListNotFound()
+    rows = db.execute(
+        select(EventRegistration, User)
+        .join(User, User.id == EventRegistration.attendee_id)
+        .where(EventRegistration.event_id == event.id)
+        .order_by(EventRegistration.registered_at, EventRegistration.id)
+    ).all()
+    items = [
+        AttendeeRegistration(registration=registration, attendee=attendee)
+        for registration, attendee in rows
+    ]
+    active = sum(item.registration.status == RegistrationStatus.REGISTERED for item in items)
+    return EventRegistrationList(
+        items=items,
+        active_count=active,
+        capacity=event.expected_attendance,
+        is_full=is_full(capacity=event.expected_attendance, active=active),
+    )
+
+
+def list_managed_registration_events(db: Session, *, viewer: User) -> list[Event]:
+    """18.3 AC5: the events whose registration list ``viewer`` may open - those taking
+    registrations that they organise or coordinate, past draft - soonest first, for the
+    registrations report to pick from."""
+    # ponytail: unpaginated, page it like list_registration_events if one user's events grow large
+    return list(
+        db.scalars(
+            select(Event)
+            .where(
+                Event.registration_required.is_(True),
+                Event.status != EventStatus.DRAFT,
+                or_(Event.organiser_id == viewer.id, Event.assigned_coordinator_id == viewer.id),
+            )
+            .order_by(Event.starts_at, Event.id)
+        )
+    )

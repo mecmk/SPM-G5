@@ -3,6 +3,9 @@ registering for one; and for story 18.2: the attendee's own registrations, and w
 
 18.2's withdrawal is ``POST .../withdraw``, an action URL like 12.2's booking and 19.1's change
 request withdrawals: a state transition with its own rules and audit record.
+
+Story 18.3: an event's registration list, under ``/events``, and the events whose list the viewer
+may open.
 """
 
 from __future__ import annotations
@@ -19,6 +22,9 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.registrations import service
 from app.registrations.schemas import (
+    EventRegistrationListOut,
+    EventRegistrationOut,
+    ManagedRegistrationEventOut,
     MyRegistrationOut,
     RegistrationCreate,
     RegistrationEventList,
@@ -27,8 +33,10 @@ from app.registrations.schemas import (
 )
 
 router = APIRouter(prefix="/registrations", tags=["registrations"])
+events_router = APIRouter(prefix="/events", tags=["registrations"])
 
 CanRegister = Depends(require_permission(Permission.REGISTRATIONS_SELF))
+CanViewRegistrations = Depends(require_permission(Permission.REGISTRATIONS_VIEW))
 DbSession = Annotated[Session, Depends(get_db)]
 
 
@@ -62,6 +70,19 @@ def list_registration_events(
         ],
         total=listing.total,
     )
+
+
+@router.get("/managed", response_model=list[ManagedRegistrationEventOut])
+def list_managed_registration_events(
+    db: DbSession, viewer: Annotated[CurrentUser, CanViewRegistrations]
+) -> list[ManagedRegistrationEventOut]:
+    """18.3 AC5: the events whose registration list the signed-in organiser or coordinator may
+    open, for the registrations report to pick from. registrations:view only - other roles get
+    403 and signed-out users 401 from the dependency."""
+    return [
+        ManagedRegistrationEventOut.from_event(event)
+        for event in service.list_managed_registration_events(db, viewer=viewer)
+    ]
 
 
 @router.post("", response_model=RegistrationOut, status_code=status.HTTP_201_CREATED)
@@ -119,3 +140,25 @@ def withdraw_registration(
     except service.WithdrawalRefused as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return _my_registration_out(item)
+
+
+@events_router.get("/{event_id}/registrations", response_model=EventRegistrationListOut)
+def list_event_registrations(
+    event_id: uuid.UUID, db: DbSession, viewer: CurrentUser
+) -> EventRegistrationListOut:
+    """18.3 AC1-AC4/AC7: the event's registrations and its active count against capacity.
+    AC5/AC6: any signed-in user may ask, but only the organiser and the assigned coordinator get
+    an answer - anyone else, like an unknown id, a 404. Signed out is a 401."""
+    try:
+        listing = service.list_event_registrations(db, event_id, viewer=viewer)
+    except service.RegistrationListNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    return EventRegistrationListOut(
+        items=[
+            EventRegistrationOut.from_registration(item.registration, attendee=item.attendee)
+            for item in listing.items
+        ],
+        active_count=listing.active_count,
+        capacity=listing.capacity,
+        is_full=listing.is_full,
+    )
