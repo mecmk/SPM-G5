@@ -20,6 +20,8 @@ export interface RegistrationEvent {
   id: string
   name: string
   description: string | null
+  /** Story 2.1 AC14: the event's cover picture, if it has one. */
+  cover_image_url: string | null
   starts_at: string
   ends_at: string
   venues: RegistrationVenue[]
@@ -81,6 +83,8 @@ export interface MyRegistration {
   id: string
   event_id: string
   event_name: string
+  /** Story 2.1 AC14: the event's cover picture, if it has one. */
+  cover_image_url: string | null
   starts_at: string
   ends_at: string
   status: RegistrationStanding

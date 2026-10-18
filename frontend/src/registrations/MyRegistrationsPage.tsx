@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ApiError, formatApiError } from '../api/client'
+import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   listMyRegistrations,
   withdrawRegistration,
@@ -89,7 +89,7 @@ function MyRegistrationCard({ registration, onWithdraw }: MyRegistrationCardProp
   return (
     <EventCard
       title={registration.event_name}
-      imageUrl={null}
+      imageUrl={mediaUrl(registration.cover_image_url)}
       details={details}
       action={withdraw}
     />

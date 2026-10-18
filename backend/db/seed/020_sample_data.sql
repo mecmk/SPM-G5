@@ -408,7 +408,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- tests running in parallel never share a registration: the poetry night (3333..70, one place, so
 -- Full) is withdrawn from once per run and its place comes back; the sketching walk (71) is
 -- withdrawn from and registered for again; Withdraw is double-clicked on the board games social
--- (72); the yoga (73) is only read. Aiden withdrew from the heritage trail (74); the fun run (75)
+-- (72); the yoga (73), with the seeded cover picture, is only read. Aiden withdrew from the heritage trail (74); the fun run (75)
 -- was cancelled with his registration still active, as an event sent back to Planning after
 -- confirmation and then cancelled can be (18.1 AC4, 6.2); the book swap (76) started on
 -- 3 Oct 2026. Organiser 2, coordinator 2, no venue booked, as 18.1's.
@@ -416,42 +416,42 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
                     contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at,
-                    decision_reason) VALUES
+                    decision_reason, cover_image_url) VALUES
     ('33333333-0000-0000-0000-000000000070', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Riverside Poetry Night', 'Community event', 'Open-mic poetry by the river.', '2027-03-06 19:00+08', '2027-03-06 21:00+08', 1, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-03-05 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL),
+     NULL, NULL),
     ('33333333-0000-0000-0000-000000000071', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Urban Sketching Walk', 'Community event', 'Sketch the shophouses of Joo Chiat with a local artist.', '2027-03-13 09:00+08', '2027-03-13 12:00+08', 30, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-03-12 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL),
+     NULL, NULL),
     ('33333333-0000-0000-0000-000000000072', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Board Games Social', 'Community event', 'An evening of strategy and party games.', '2027-03-20 19:00+08', '2027-03-20 22:00+08', 30, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-03-19 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL),
+     NULL, NULL),
     ('33333333-0000-0000-0000-000000000073', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Sunset Yoga by the Bay', 'Community event', 'An hour of gentle yoga as the sun goes down.', '2027-03-27 18:00+08', '2027-03-27 19:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-03-26 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL),
+     NULL, '/images/events/cat.jpg'),
     ('33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Heritage Trail Tour', 'Community event', 'A guided walk through Kampong Glam.', '2027-04-03 09:00+08', '2027-04-03 12:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-02 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL),
+     NULL, NULL),
     ('33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Charity Fun Run', 'Community event', 'A 5 km run along the park connector, for charity.', '2027-04-10 07:00+08', '2027-04-10 10:00+08', 200, 'CANCELLED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-09 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-10-12 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-05 09:00+08',
-     'The park connector is closed for works on the day.'),
+     'The park connector is closed for works on the day.', NULL),
     ('33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Autumn Book Swap', 'Community event', 'Bring a book, take a book.', '2026-10-03 10:00+08', '2026-10-03 13:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-02 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-01 09:00+08', '2026-09-03 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08',
-     NULL)
+     NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description,
@@ -464,7 +464,7 @@ ON CONFLICT (id) DO UPDATE SET
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
-    decision_reason = EXCLUDED.decision_reason;
+    decision_reason = EXCLUDED.decision_reason, cover_image_url = EXCLUDED.cover_image_url;
 
 -- Venue requirements (story 2.7). Each sample event that records venue requirements keeps them
 -- as one "Main venue" (story 2.7 AC7), with the event's own times and expected attendance - read

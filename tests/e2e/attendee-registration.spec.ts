@@ -82,6 +82,7 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
     id: `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`,
     name,
     description: `${name}, described.`,
+    cover_image_url: null,
     starts_at: '2029-03-01T01:00:00Z',
     ends_at: '2029-03-01T04:00:00Z',
     venues: [{ name: 'Grand Hall', location: 'Tower A, Level 1' }],

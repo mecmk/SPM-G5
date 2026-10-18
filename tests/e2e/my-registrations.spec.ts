@@ -271,29 +271,67 @@ test('18.2 AC1: a list that fails to load says why', async ({ page }) => {
   )
 })
 
-test('18.2 AC1: at phone width the registrations fit without sideways scrolling, and Withdraw is big enough for a thumb', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await openMyRegistrations(page)
+// The DoD's phone: an iPhone 12 Pro, emulated - its width alone lays text out narrower than the
+// phone does, and hides a card whose details no longer fit beside its picture.
+test.describe('on an iPhone 12 Pro', () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+  })
 
-  const withdraw = withdrawButton(page, SUNSET_YOGA)
-  await expect(withdraw).toBeVisible()
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )
-  expect(overflow).toBeLessThanOrEqual(0)
-  const button = await withdraw.boundingBox()
-  if (button === null) throw new Error('the card is not laid out')
-  expect(button.height).toBeGreaterThanOrEqual(44)
+  test('18.2 AC1: at phone width the registrations fit without sideways scrolling, and Withdraw is big enough for a thumb', async ({
+    page,
+  }) => {
+    await openMyRegistrations(page)
 
-  // The picture stays beside the details, as on a card with no button; Withdraw goes below both.
-  const picture = await eventCard(page, SUNSET_YOGA).locator('img').boundingBox()
-  const title = await eventCard(page, SUNSET_YOGA).getByRole('heading', { level: 3 }).boundingBox()
-  if (picture === null || title === null) throw new Error('the card is not laid out')
-  expect(title.x).toBeGreaterThanOrEqual(picture.x + picture.width)
-  expect(title.y).toBeLessThan(picture.y + picture.height)
-  expect(button.y).toBeGreaterThanOrEqual(picture.y + picture.height)
+    const withdraw = withdrawButton(page, SUNSET_YOGA)
+    await expect(withdraw).toBeVisible()
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBeLessThanOrEqual(0)
+    const button = await withdraw.boundingBox()
+    if (button === null) throw new Error('the card is not laid out')
+    expect(button.height).toBeGreaterThanOrEqual(44)
+  })
+
+  test('18.2 AC1: on a phone, a registration with wide details keeps its picture beside them, and Withdraw below', async ({
+    page,
+  }) => {
+    // Wider details than any seeded registration has: a card whose details no longer fit beside
+    // its picture is where the layout would break. Only the list call is stubbed.
+    await stubCall(page, 'GET', (pathname) => pathname === MINE_API_PATH, {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000183',
+          event_id: '00000000-0000-4000-8000-000000000184',
+          event_name: 'E2E Harbourfront Jazz and Food Festival Evening',
+          cover_image_url: YOGA_PICTURE,
+          starts_at: '2029-03-01T11:00:00Z',
+          ends_at: '2029-03-01T14:00:00Z',
+          status: 'REGISTERED',
+          registered_at: '2026-10-11T02:00:00Z',
+          withdrawn_at: null,
+          can_withdraw: true,
+        },
+      ],
+    })
+    await openMyRegistrations(page)
+
+    const card = eventCard(page, 'E2E Harbourfront Jazz and Food Festival Evening')
+    const picture = await card.locator('img').boundingBox()
+    const title = await card.getByRole('heading', { level: 3 }).boundingBox()
+    const withdraw = await card.getByRole('button', { name: /^Withdraw from / }).boundingBox()
+    if (picture === null || title === null || withdraw === null) {
+      throw new Error('the card is not laid out')
+    }
+    expect(title.x).toBeGreaterThanOrEqual(picture.x + picture.width)
+    expect(title.y).toBeLessThan(picture.y + picture.height)
+    expect(withdraw.y).toBeGreaterThanOrEqual(picture.y + picture.height)
+  })
 })
 
 // --- AC3: until the event starts -------------------------------------------------------------

@@ -44,6 +44,7 @@ class RegistrationEventOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    cover_image_url: str | None  # 2.1 AC14: the event's cover picture, if it has one
     starts_at: datetime
     ends_at: datetime
     venues: list[RegistrationVenueOut]
@@ -72,6 +73,7 @@ class RegistrationEventOut(BaseModel):
             id=event.id,
             name=event.name,
             description=event.description,
+            cover_image_url=event.cover_image_url,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             venues=[
@@ -121,6 +123,7 @@ class MyRegistrationOut(BaseModel):
     id: uuid.UUID
     event_id: uuid.UUID
     event_name: str
+    cover_image_url: str | None  # 2.1 AC14: the event's cover picture, if it has one
     starts_at: datetime
     ends_at: datetime
     status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
@@ -140,6 +143,7 @@ class MyRegistrationOut(BaseModel):
             id=registration.id,
             event_id=event.id,
             event_name=event.name,
+            cover_image_url=event.cover_image_url,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             status=status,
