@@ -131,14 +131,14 @@ _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
 # Story 15.2 AC3/AC5 with 6.2 AC15: what Technical Support's queue lists. An item in a tab of its
 # own, on an event still going ahead; or one cancelled after it was sent to them, whatever its
 # event - kept for their record, as a rejected event's items are not.
-_DECIDABLE_QUEUE_STATUSES = (
+_LIVE_TAB_STATUSES = (
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
     EquipmentRequestStatus.DECLINED,
 )
 _IN_QUEUE = or_(
     and_(
-        EventEquipmentRequest.status.in_(_DECIDABLE_QUEUE_STATUSES),
+        EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
         Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
     ),
     and_(

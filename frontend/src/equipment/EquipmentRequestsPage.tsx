@@ -16,6 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
+import { CANCELLED_AT_LABEL } from '../shared/bookingStatus'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
@@ -269,7 +270,7 @@ export function EquipmentRequestsPage() {
 
                   {entry.status === 'CANCELLED' && (
                     <div className="subtle-block">
-                      <p className="fact-label">Cancelled at</p>
+                      <p className="fact-label">{CANCELLED_AT_LABEL}</p>
                       <p>
                         {entry.cancelled_at === null
                           ? NOT_RECORDED

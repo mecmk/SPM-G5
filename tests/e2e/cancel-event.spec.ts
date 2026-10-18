@@ -3,6 +3,7 @@
  *
  * AC1  the organiser cancels their own event from its details page with a reason; the page then
  *      shows it Cancelled, with who cancelled it and why (AC5), and it stays in their events (AC9).
+ * AC4  a pending change request on the page reads Cancelled once the event is, with no Withdraw.
  * AC6  a cancelled event offers no Cancel event button.
  * AC7  the dialog will not send a blank reason (the client-side half), and closing it leaves the
  *      event as it was.
@@ -22,7 +23,15 @@
  * test cancels the seeded Lakeside Charity Run, which holds a booking and an equipment request.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, createAndSubmitRequest, EVENTS, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  approvedEvent,
+  changeRequests,
+  createAndSubmitRequest,
+  EVENTS,
+  signIn,
+  uniqueName,
+} from './support'
 
 const REASON = 'Our sponsor withdrew the budget.'
 // The seeded cancellation of the Summer Rooftop Mixer (backend/db/seed/020_sample_data.sql).
@@ -54,6 +63,31 @@ test('6.2 AC1: the organiser cancels their own event with a reason', async ({ pa
 
   await page.goto('/events/mine')
   await expect(page.getByText(name)).toBeVisible()
+})
+
+test('6.2 AC4: a pending change request reads Cancelled once its event is cancelled', async ({
+  page,
+}) => {
+  await approvedEvent(page, 'Cancelled with a change')
+  await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
+  await changeRequests(page)
+    .getByLabel('What to change')
+    .selectOption({ label: 'Expected attendance' })
+  await changeRequests(page).getByLabel('New expected attendance').fill('150')
+  await changeRequests(page).getByLabel('Reason for the change').fill('More guests confirmed.')
+  await changeRequests(page).getByRole('button', { name: 'Send change request' }).click()
+  const raised = changeRequests(page)
+    .getByRole('listitem')
+    .filter({ hasText: 'Expected attendance' })
+  await expect(raised).toContainText('Pending')
+
+  await page.getByRole('button', { name: 'Cancel event' }).click()
+  await cancelDialog(page).getByLabel('Reason for cancelling').fill(REASON)
+  await cancelDialog(page).getByRole('button', { name: 'Cancel event' }).click()
+  await expect(page.getByRole('region', { name: 'Cancellation' })).toBeVisible()
+
+  await expect(raised).toContainText('Cancelled')
+  await expect(raised.getByRole('button', { name: 'Withdraw request' })).toHaveCount(0)
 })
 
 test('6.2 AC7: a blank reason is not sent, and closing the dialog keeps the event', async ({

@@ -21,6 +21,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -95,10 +96,10 @@ def _notify_attendees(
     db: Session, event: Event, attendee_ids: list[uuid.UUID], *, actor: User, reason: str
 ) -> None:
     """AC5: every attendee whose registration was cancelled is told why."""
-    for attendee_id in attendee_ids:
+    for attendee in db.scalars(select(User).where(User.id.in_(attendee_ids))):
         notify(
             db,
-            recipient=db.get(User, attendee_id),
+            recipient=attendee,
             actor=actor,
             notification_type=NotificationType.REGISTRATION_CANCELLED,
             event_id=event.id,
