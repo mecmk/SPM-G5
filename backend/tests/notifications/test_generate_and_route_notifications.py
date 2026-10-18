@@ -2,7 +2,7 @@
 
 AC1 Notifications are generated for submission, clarification, approval or rejection,
     assignment, booking decisions, change decisions, registration changes and cancellation, and
-    for the triggers the Week 7 changes added (5.4, 5.6, 9.4, 14.4, 12.7, 21.2). Each records the
+    for the triggers the Week 7 changes added (5.4, 5.6, 9.4, 12.7, 21.2). Each records the
     action, the event and the time, and goes only to related users.
 AC2 New notifications appear in the recipient's notification list (20.2) without any extra
     action from them.
