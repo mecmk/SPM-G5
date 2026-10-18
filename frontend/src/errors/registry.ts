@@ -45,6 +45,7 @@ export type ErrorCode =
   | 'VENUE_PICTURES_NOT_ADDED'
   | 'VENUE_PICTURES_CHANGED'
   | 'EVENT_NOT_FOUND'
+  | 'NO_OTHER_COORDINATOR'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
   | 'EVENT_CORRECTION_CONFLICT'
@@ -280,6 +281,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_NOT_FOUND: {
     title: 'Request not found',
     message: 'This request does not exist, or it is not yours to open.',
+  },
+  /** Story 5.6 AC3: the Reassign picker found no active coordinator other than the current one;
+   * checked in the browser, before anything is sent. */
+  NO_OTHER_COORDINATOR: {
+    title: 'No one to reassign to',
+    message: 'There is no other active Event Coordinator to reassign this to.',
   },
   EVENT_ALREADY_SUBMITTED: {
     title: 'Request already submitted',

@@ -3,8 +3,7 @@ import { formatApiError } from '../api/client'
 import { listCoordinators, reassignCoordinator, type CoordinatorOption } from '../api/coordination'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { CoordinatorPicker } from '../components/CoordinatorPicker'
-
-const NO_OTHER_COORDINATOR = 'There is no other active Event Coordinator to reassign this to.'
+import { ERROR_REGISTRY } from '../errors/registry'
 
 interface ReassignDialogProps {
   eventId: string
@@ -51,8 +50,10 @@ export function ReassignDialog({
   }, [eventId])
 
   async function confirm() {
+    // Still loading, or the list failed to load (its error is already shown): nothing to send.
+    if (coordinators === null) return
     if (!selectedId) {
-      setError(NO_OTHER_COORDINATOR)
+      setError(ERROR_REGISTRY.NO_OTHER_COORDINATOR.message)
       return
     }
     setIsSaving(true)

@@ -428,7 +428,7 @@ test('5.5 AC3: an event opens read-only from the overview', async ({ page }) => 
     await expect(page.getByRole('button', { name: action })).toHaveCount(0)
   }
   // P7: Reassign is the one action the Lead has here, since story 5.6.
-  await expect(page.getByRole('button', { name: 'Reassign' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toBeVisible()
 })
 
 test('5.5 AC3: the way back from an event keeps the view and filters', async ({ page }) => {

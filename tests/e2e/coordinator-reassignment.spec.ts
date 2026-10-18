@@ -107,7 +107,7 @@ test('5.6 AC1: the Lead reassigns an event from its page', async ({ page }) => {
   await page.goto(`/events/${eventId}`)
   await expect(page.getByText(CHLOE.account, { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Reassign' }).click()
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
   await reassignToCarl(page, name)
 
   // The page shows the new coordinator straight away (AC1), and a reload agrees.
@@ -124,9 +124,11 @@ test('5.6 AC1: the Lead reassigns an event from the overview', async ({ page }) 
   const card = overviewCard(page, name)
   await expect(card).toContainText(`Coordinator: ${CHLOE.name}`)
 
-  await card.getByRole('button', { name: 'Reassign' }).click()
+  await card.getByRole('button', { name: 'Reassign', exact: true }).click()
   await reassignToCarl(page, name)
 
+  // The page reads the change afresh: the card leaves Chloe's list without a reload.
+  await expect(card).toHaveCount(0)
   await page.goto(`/events/assignments?coordinator=${CARL.id}`)
   await expect(overviewCard(page, name)).toContainText(`Coordinator: ${CARL.name}`)
   await expect(overviewCard(page, name)).toContainText('Assigned by Lena Lead')
@@ -136,19 +138,23 @@ test('5.6 AC5: a coordinator no longer sees Reassign', async ({ page }) => {
   // Read only: Chloe opens her own seeded event, which she could reassign under 5.2.
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.approved}`)
-  await expect(page.getByText('Assigned coordinator')).toBeVisible()
+  // Her own actions are drawn - Edit event is hers as its coordinator (7.2) - so Reassign being
+  // absent is a finding, not a page still loading.
+  await expect(page.getByRole('link', { name: 'Edit event' })).toBeVisible()
 
-  await expect(page.getByRole('button', { name: 'Reassign' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
 })
 
 test('5.6 AC6: a reassignment refused as stale says why', async ({ page }) => {
-  // The refusal itself is a backend case; here the page shows it. The PUT is answered with the
-  // server's 409, so the seeded event is never changed.
+  // The refusal itself is a backend case; here the page shows it, having sent the coordinator it
+  // showed. The PUT is answered with the server's 409, so the seeded event is never changed.
+  let sent: unknown = null
   await page.route(
     (url) => url.pathname === `/events/${EVENTS.approved}/coordinator`,
     (route) => {
       const request = route.request()
       if (request.method() !== 'PUT') return route.fallback()
+      sent = request.postDataJSON()
       return route.fulfill({
         status: 409,
         contentType: 'application/json',
@@ -161,12 +167,13 @@ test('5.6 AC6: a reassignment refused as stale says why', async ({ page }) => {
   await page.goto(`/events/${EVENTS.approved}`)
   const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
 
-  await page.getByRole('button', { name: 'Reassign' }).click()
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
   const dialog = reassignDialog(page, name)
   await dialog.getByLabel('New coordinator').selectOption(CARL.id)
   await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
 
   await expect(dialog.getByRole('alert')).toHaveText(STALE_MESSAGE)
+  expect(sent).toEqual({ coordinator_id: CARL.id, expected_coordinator_id: CHLOE.id })
 })
 
 for (const { device, viewport } of [
@@ -180,7 +187,10 @@ for (const { device, viewport } of [
 
     // The overview: each card's Reassign is in reach, and nothing scrolls sideways.
     await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
-    const cardButton = overviewCard(page, name).getByRole('button', { name: 'Reassign' })
+    const cardButton = overviewCard(page, name).getByRole('button', {
+      name: 'Reassign',
+      exact: true,
+    })
     await expect(cardButton).toBeVisible()
     await expectNoSidewaysScroll(page)
     if (viewport === PHONE) {
@@ -189,7 +199,7 @@ for (const { device, viewport } of [
 
     // The event page: Reassign, then the dialog and its picker inside the screen.
     await page.goto(`/events/${eventId}`)
-    const reassign = page.getByRole('button', { name: 'Reassign' })
+    const reassign = page.getByRole('button', { name: 'Reassign', exact: true })
     await expect(reassign).toBeVisible()
     await expectNoSidewaysScroll(page)
     if (viewport === PHONE) {
@@ -222,7 +232,7 @@ test('5.6 responsive: reassigning fits a tablet', async ({ page }) => {
   await expectNoSidewaysScroll(page)
   const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
 
-  await page.getByRole('button', { name: 'Reassign' }).click()
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
   const dialog = reassignDialog(page, name)
   await expectInsideScreen(page, dialog)
   await dialog.getByRole('button', { name: 'Cancel' }).click()

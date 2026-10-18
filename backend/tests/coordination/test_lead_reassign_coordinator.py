@@ -66,6 +66,8 @@ REASSIGNED_TYPES = (
     "EVENT_REASSIGNED_TO",
     "EVENT_REASSIGNED_ORGANISER",
 )
+# The server's sentence for a reassignment whose coordinator is no longer the one named (AC6).
+_CHANGED = "This event's coordinator changed just now. Reload the event and try again."
 # Every role but the Lead's, so a role added later is refused here without editing this list.
 REFUSED_ROLES = [user for user in Users.ONE_PER_ROLE if user != Users.LEAD]
 
@@ -189,12 +191,10 @@ def test_the_lead_reassigns_an_event_in_any_active_status(login_as, db: Session,
 
 @pytest.mark.story("5.6", ac=1)
 @pytest.mark.parametrize(
-    "status",
-    [EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED, EventStatus.DRAFT],
+    "status", [EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED]
 )
-def test_a_closed_or_draft_event_cannot_be_reassigned(login_as, db: Session, status):
-    """A closed event needs no owner, and a draft has never been handed over: both are refused
-    (409), and the event keeps its coordinator."""
+def test_a_closed_event_cannot_be_reassigned(login_as, db: Session, status):
+    """A closed event needs no owner: it is refused (409) naming its status, and keeps Chloe."""
     event = _assigned_event(db, Users.COORDINATOR.id, status=status)
 
     response = _reassign(
@@ -202,8 +202,22 @@ def test_a_closed_or_draft_event_cannot_be_reassigned(login_as, db: Session, sta
     )
 
     assert response.status_code == 409, response.text
+    assert status in response.json()["detail"]
     assert _pointer(db, event.id) == Users.COORDINATOR.id
     assert len(_history(db, event.id)) == 1
+
+
+@pytest.mark.story("5.6", ac=1)
+def test_a_draft_cannot_be_reassigned(login_as, db: Session):
+    """A draft has never been handed over, so it has no coordinator to reassign from: Olivia's
+    seeded draft is refused (409) naming its status, and stays unassigned."""
+    response = _reassign(
+        login_as(Users.LEAD), Events.DRAFT, Users.COORDINATOR_2.id, expected=Users.COORDINATOR.id
+    )
+
+    assert response.status_code == 409, response.text
+    assert EventStatus.DRAFT in response.json()["detail"]
+    assert _pointer(db, Events.DRAFT) is None
 
 
 @pytest.mark.story("5.6", ac=1)
@@ -285,17 +299,23 @@ def test_the_lead_is_offered_only_other_active_coordinators_with_their_counts(
     login_as, db: Session
 ):
     """The Lead's picker for Events.APPROVED: Carl, not Chloe (its coordinator), not an inactive
-    coordinator, and each with their number of active events (5.4 AC3)."""
+    coordinator, and Carl with his number of active events (5.4 AC3) - one more after he is given
+    another."""
     inactive = make_user(db, role=COORDINATOR_ROLE, is_active=False)
+    lead = login_as(Users.LEAD)
+    path = f"/coordinators?exclude_event_id={Events.APPROVED}"
+    carls_count = {o["id"]: o for o in lead.get(path).json()}[str(Users.COORDINATOR_2.id)][
+        "active_event_count"
+    ]
+    _assigned_event(db, Users.COORDINATOR_2.id, status=EventStatus.PLANNING)
 
-    response = login_as(Users.LEAD).get(f"/coordinators?exclude_event_id={Events.APPROVED}")
+    response = lead.get(path)
 
     assert response.status_code == 200, response.text
     offered = {option["id"]: option for option in response.json()}
-    assert str(Users.COORDINATOR_2.id) in offered
     assert str(Users.COORDINATOR.id) not in offered
     assert str(inactive.id) not in offered
-    assert all(isinstance(option["active_event_count"], int) for option in offered.values())
+    assert offered[str(Users.COORDINATOR_2.id)]["active_event_count"] == carls_count + 1
 
 
 @pytest.mark.story("5.6", ac=3)
@@ -477,6 +497,7 @@ def test_a_reassignment_from_a_stale_view_is_refused(login_as, db: Session):
     second = _reassign(lead, Events.APPROVED, dana.id, expected=Users.COORDINATOR.id)
 
     assert second.status_code == 409, second.text
+    assert second.json()["detail"] == _CHANGED
     assert _pointer(db, Events.APPROVED) == Users.COORDINATOR_2.id
     assert _history(db, Events.APPROVED) == history
     assert dana.id not in _reassignment_notices(db, Events.APPROVED).get(
@@ -501,6 +522,7 @@ def test_a_reassignment_of_an_unassigned_event_is_refused(login_as, db: Session)
     )
 
     assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CHANGED
     assert _pointer(db, event.id) is None
 
 
