@@ -249,7 +249,14 @@ export function VenueCataloguePage() {
   /** Story 8.4 AC3/AC7: the filters become the requirement's own, even when it is already the
    *  selected one and they were changed by hand. */
   function selectRequirement(requirement: VenueRequirement) {
-    if (event !== null) replaceSearch(venueSearchFor(event, requirement))
+    if (event === null) return
+    // Story 12.6 AC1: choosing the requirement being replaced again restores its filters and
+    // keeps replacing its booking; choosing another leaves replacement mode.
+    const isReplacingIt =
+      replacingBooking !== null && replacingBooking.venue_requirement_id === requirement.id
+    replaceSearch(
+      venueSearchFor(event, requirement, isReplacingIt ? replacingBooking.id : undefined),
+    )
   }
 
   /** Story 8.1 AC3's "Opening hours not recorded", and story 11.1 AC1's suitability, when the
