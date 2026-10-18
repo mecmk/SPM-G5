@@ -50,9 +50,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import event as sa_event
 from sqlalchemy import text
 from sqlalchemy.orm import Session, object_session
 
+from app.auth.models import User
+from app.change_requests import service as change_requests_service
 from app.change_requests.models import EventChangeRequest
 from app.events.models import Event, EventStatus
 from tests.support.factories import (
@@ -436,6 +439,32 @@ def test_queue_is_empty_when_nothing_waits(client, db: Session):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_the_queue_reads_each_events_values_in_a_fixed_number_of_queries(db: Session):
+    """AC1/AC7: every row says whether it is out of date, which reads its event's venue
+    requirements and equipment. They are loaded with the queue, not once per row."""
+    for _ in range(3):
+        event = _planning_event(db)
+        make_venue_requirement(db, event.id, facilities=(("PROJECTOR", 1, None),))
+        make_equipment_item(db, event=event, equipment_type=make_equipment_type(db), quantity=1)
+        make_change_request(db, event=event, field="venue_requirements", current=[], proposed=[])
+        make_change_request(db, event=event, field="equipment", current=[], proposed=[])
+    db.expire_all()
+    coordinator = db.get(User, Users.COORDINATOR.id)
+    statements: list[str] = []
+    listener = lambda _conn, _cursor, statement, *_rest: statements.append(statement)  # noqa: E731
+    sa_event.listen(db.get_bind(), "before_cursor_execute", listener)
+    try:
+        queue = change_requests_service.list_coordinator_change_requests(db, viewer=coordinator)
+        flags = [change_requests_service.is_out_of_date(request) for request in queue]
+    finally:
+        sa_event.remove(db.get_bind(), "before_cursor_execute", listener)
+
+    assert len(flags) == 6
+    # the queue with its events, then their requirements, facilities and equipment
+    assert len(statements) == 4, statements
 
 
 @pytest.mark.story("19.2", ac=1)
@@ -1590,6 +1619,40 @@ def test_a_cancelled_item_named_again_by_its_id_comes_back(login_as, db: Session
 
     assert _item(db, item.id).status == "REQUESTED"
     assert [hold.quantity for hold in _reserved(db, item.id)] == [2]
+
+
+@pytest.mark.story("19.2", ac=2)
+@pytest.mark.parametrize(
+    ("field", "current", "proposed"),
+    [
+        ("schedule", None, {"starts_at": "not a date"}),
+        ("venue_requirements", [], [{"name": "Hall", "capacity": "lots"}]),
+        ("equipment", [], [{"quantity": "two"}]),
+    ],
+    ids=["schedule", "venue_requirements", "equipment"],
+)
+def test_a_stored_proposal_that_cannot_be_read_is_refused(
+    coordinator_client, db: Session, field, current, proposed
+):
+    """A proposal stored in a shape the approval cannot read - corrupted, or from a schema since
+    changed - is refused plainly, changing nothing, rather than failing with a 500."""
+    event = _planning_event(db)
+    if current is None:  # the event's own dates, as 19.1 records them
+        current = {
+            "starts_at": event.starts_at.astimezone(UTC).isoformat(),
+            "ends_at": event.ends_at.astimezone(UTC).isoformat(),
+        }
+    request = make_change_request(db, event=event, field=field, current=current, proposed=proposed)
+
+    response = _approve(coordinator_client, request)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This change request can no longer be applied as it was stored. Reject it so the "
+        "organiser can ask again."
+    )
+    _assert_undecided(db, request)
+    _assert_nothing_sent_or_logged(db, request)
 
 
 @pytest.mark.story("19.2", ac=2)
