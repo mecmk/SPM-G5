@@ -17,6 +17,8 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.27",
     "ruff>=0.7",
+    "pytest-cov>=6.0",
+    "mutmut>=3.3,<4",
 ]
 
 [tool.pytest.ini_options]
@@ -29,11 +31,29 @@ filterwarnings = ["ignore::DeprecationWarning:starlette.testclient", "ignore::De
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# mutmut writes its mutated copy of the package to mutants/ when run outside Docker.
+extend-exclude = ["mutants"]
 
 [tool.ruff.lint]
 # RET: no `else` after an `if` that exits, no bare variable before a `return`.
 # Passes clean repo-wide as of adoption; see backend/STYLE.md "Automated enforcement".
 select = ["E", "F", "I", "RET"]
+
+# Coverage (npm run test:coverage, docs/testing/README.md): lines and branches.
+[tool.coverage.run]
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+
+# Mutation testing (npm run test:mutation, docs/testing/README.md). mutmut copies source_paths into
+# mutants/ and runs the tests there, so the whole app package goes, or nothing outside the mutated
+# modules imports (app.config); tests/ and db/ go with it for conftest.py and the migrations it
+# rebuilds the test database from. A run picks its own tests and mutants (scripts/mutation.mjs).
+[tool.mutmut]
+source_paths = ["app/"]
+also_copy = ["tests/", "db/"]
 
 [build-system]
 requires = ["hatchling"]
