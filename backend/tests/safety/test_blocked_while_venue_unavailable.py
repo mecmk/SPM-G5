@@ -38,7 +38,7 @@ def _confirm_path(event_id: uuid.UUID) -> str:
 
 
 def _summary_path(event_id: uuid.UUID) -> str:
-    return f"/safety-checks/{event_id}/safety-review"
+    return f"/events/{event_id}/safety-review"
 
 
 def _mark(db: Session, booking) -> None:
