@@ -1,4 +1,4 @@
-"""Story 19.2 - be: review and decide event change requests (Phase 1).
+"""Story 19.2 - be: review and decide event change requests.
 
 AC1 Assigned coordinators can view pending change requests for their events, including current
     and proposed values, reason, requester and date.
@@ -8,15 +8,14 @@ AC3 Rejecting requires a non-blank reason, leaves the event unchanged and notifi
 AC4 Whitespace-only rejection reasons must be rejected.
 AC5 Approving venue/equipment changes releases only affected bookings or reservations.
 AC6 Only the assigned coordinator can decide requests, enforced on the backend.
-AC7 Conflicting pending requests on the same field, withdrawn requests and duplicate decisions
-    are handled safely.
-AC8 Approving a change request on a Confirmed event returns it to Planning.
+AC7 Conflicting pending requests, withdrawn requests and duplicate decisions are handled safely:
+    deciding one marks the other as out of date.
+AC8 Approving a change request on a Confirmed event returns it to Planning, and it goes through
+    its safety check again before the coordinator confirms it again.
 
-Phase 1 (agreed 16 Oct 2026) built the queue, both decisions, who may make them, the reason, and
-the decision's record, notification and atomicity, approving only an attendance change on a
-Planning event. Phase 2 (agreed 16 Oct 2026) approves every field on any event still going ahead:
-* Venue requirements are matched by id, which 19.1 now keeps in the proposal; an older proposal
-  without ids is matched by name.
+Decisions agreed 16 Oct 2026, beyond the ACs' wording:
+* Venue requirements and equipment items are matched by id, which 19.1 keeps in the proposal; an
+  older proposal without ids is matched by name (a requirement) or type (an item).
 * A venue booking the approved change no longer fits (f7.2.4's fit rule) is cancelled, and every
   active Venue Staff member is told; a booking that still fits is left exactly as it is.
 * Changed or added equipment is held again if stock allows, else flagged Unavailable, and goes
@@ -26,7 +25,10 @@ Planning event. Phase 2 (agreed 16 Oct 2026) approves every field on any event s
 * New dates move every requirement that covered the whole old period to the new one, and shift
   the others by the same amount; one that no longer fits inside the event refuses the approval.
 * Approving on a Confirmed or Awaiting safety check event returns it to Planning, recording the
-  move, and clears its confirmation, so it must pass a new safety check (21.2) to be confirmed.
+  move, and clears its confirmation. A safety approval dated before any approved change no longer
+  lets the event be confirmed (21.2's Confirm), whatever status the change was approved in.
+* A pending request whose recorded current value no longer matches the event - another request's
+  approval moved it - is marked out of date, and can only be rejected.
 
 Excluded, with reason:
 * What the queue and dialogs show, and the reason box blocking a blank reason before sending
@@ -35,8 +37,10 @@ Excluded, with reason:
   connection, so the other decision is simulated by changing the request just before deciding,
   as 19.1 AC10 does. The event's row lock, which 19.1's withdrawal also takes, serialises the
   real race.
-* Nothing moves an event to Confirmed or Awaiting safety check yet (21.2), so those tests set the
-  status directly, after the request was raised in Planning, as it would be in practice.
+* Most AC8 tests set the status directly, after the request was raised in Planning, to reach
+  Confirmed or Awaiting safety check quickly;
+  ``test_a_de_confirmed_event_needs_a_new_safety_approval`` goes through 21.2's own request,
+  decision and confirm endpoints instead.
 """
 
 from __future__ import annotations
@@ -52,12 +56,14 @@ from sqlalchemy.orm import Session, object_session
 from app.change_requests.models import EventChangeRequest
 from app.events.models import Event, EventStatus
 from tests.support.factories import (
+    SecuredEvent,
     future_datetime,
     make_booking,
     make_change_request,
     make_equipment_item,
     make_equipment_type,
     make_event,
+    make_secured_event,
     make_user,
     make_venue,
     make_venue_requirement,
@@ -148,6 +154,18 @@ def _audit(db: Session, request_id: uuid.UUID, action: str) -> list:
                 " AND action = :a"
             ),
             {"id": request_id, "a": action},
+        )
+    )
+
+
+def _event_audit(db: Session, event_id: uuid.UUID, action: str) -> list:
+    return list(
+        db.execute(
+            text(
+                "SELECT actor_id, details FROM audit_log"
+                " WHERE entity_type = 'event' AND entity_id = :id AND action = :a"
+            ),
+            {"id": event_id, "a": action},
         )
     )
 
@@ -492,6 +510,23 @@ def test_approving_is_logged_with_the_old_and_new_value(coordinator_client, db: 
 
 
 @pytest.mark.story("19.2", ac=2)
+def test_the_applied_change_is_logged_against_the_event(coordinator_client, db: Session):
+    """The event's own history (7.4) shows the change, as 7.2's corrections and 19.1's contact
+    updates do: the field, from and to."""
+    event = _planning_event(db, expected_attendance=100)
+    request = make_change_request(db, event=event, current=100, proposed=150)
+
+    _approve(coordinator_client, request)
+
+    [entry] = _event_audit(db, event.id, "EVENT_CHANGE_APPLIED")
+    assert entry.actor_id == Users.COORDINATOR.id
+    assert entry.details == {
+        "change_request_id": str(request.id),
+        "expected_attendance": {"from": 100, "to": 150},
+    }
+
+
+@pytest.mark.story("19.2", ac=2)
 def test_approving_one_request_leaves_the_others_pending(coordinator_client, db: Session):
     event = _planning_event(db)
     attendance = make_change_request(db, event=event)
@@ -533,6 +568,57 @@ def test_approval_refused_by_a_creation_rule_changes_nothing(coordinator_client,
     assert _attendance(db, event.id) == 200
     _assert_undecided(db, request)
     _assert_nothing_sent_or_logged(db, request)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_an_unnamed_requirement_is_named_by_its_position(coordinator_client, db: Session):
+    """2.7's own rule names a requirement without a name by where it sits on the form."""
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, name="Main hall", capacity=50)
+    make_venue_requirement(db, event.id, position=1, name=None, capacity=151)
+    request = make_change_request(db, event=event, current=200, proposed=150)
+
+    response = _approve(coordinator_client, request)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Venue requirement 2 needs room for more people than the new expected attendance."
+    )
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_requirements_over_an_attendance_lowered_since_are_refused(login_as, db: Session):
+    """2.7 AC6 is judged against the event as it stands at the decision: the attendance was
+    lowered after the request was raised, so a requirement for more people is refused."""
+    event = _planning_event(db, expected_attendance=200)
+    hall = make_venue_requirement(
+        db, event.id, capacity=100, starts_at=event.starts_at, ends_at=event.ends_at
+    )
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                hall,
+                name="Main venue",
+                capacity=150,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+            )
+        ],
+    )
+    _set_event(db, event.id, expected_attendance=120)
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Main venue cannot need room for more people than the expected attendance."
+    )
+    assert _requirements(db, event.id)["Main venue"][1] == 100
+    _assert_undecided(db, request)
 
 
 # --- AC3: rejecting needs a reason and changes nothing ---------------------------------------
@@ -884,14 +970,14 @@ def test_requests_on_a_closed_event_cannot_be_decided(
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        f"This event is {status}, so its change requests can no longer be decided."
+        f"This event is {status.lower()}, so its change requests can no longer be decided."
     )
     _assert_undecided(db, request)
 
 
 @pytest.mark.story("19.2", ac=7)
 def test_one_pending_request_per_field_still_holds_after_a_decision(login_as, db: Session):
-    """The same-field conflict cannot arise: 19.1's index allows one pending request per field.
+    """19.1's index allows one pending request per field, so two never wait on the same field.
     Deciding one frees the field, so the organiser can ask again."""
     event = _planning_event(db, expected_attendance=100)
     request = make_change_request(db, event=event, current=100, proposed=150)
@@ -903,6 +989,81 @@ def test_one_pending_request_per_field_still_holds_after_a_decision(login_as, db
     )
 
     assert again.status_code == 201, again.text
+
+
+def _date_change_moves_the_requirements(login_as, db: Session) -> tuple[Event, EventChangeRequest]:
+    """A venue requirements request left pending while a date change - another field - is
+    approved: the new dates move the requirements' times, so what the first request recorded as
+    current is no longer the event's."""
+    event = _planning_event(db)
+    hall = make_venue_requirement(
+        db, event.id, capacity=50, starts_at=event.starts_at, ends_at=event.ends_at
+    )
+    requirements = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                hall,
+                name="Main venue",
+                capacity=40,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+            )
+        ],
+    )
+    dates = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {
+            "starts_at": (event.starts_at + timedelta(days=1)).isoformat(),
+            "ends_at": (event.ends_at + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert _approve(login_as(Users.COORDINATOR), dates).status_code == 200
+    return event, requirements
+
+
+@pytest.mark.story("19.2", ac=7)
+def test_deciding_one_request_marks_another_out_of_date(login_as, db: Session):
+    event, requirements = _date_change_moves_the_requirements(login_as, db)
+    coordinator = login_as(Users.COORDINATOR)
+
+    queue = {entry["id"]: entry for entry in coordinator.get("/change-requests").json()}
+    listed = {
+        entry["id"]: entry
+        for entry in coordinator.get(f"/events/{event.id}/change-requests").json()
+    }
+
+    assert queue[str(requirements.id)]["is_out_of_date"] is True
+    assert listed[str(requirements.id)]["is_out_of_date"] is True
+    assert [entry["is_out_of_date"] for entry in listed.values()].count(True) == 1
+
+
+@pytest.mark.story("19.2", ac=7)
+def test_an_out_of_date_request_can_only_be_rejected(login_as, db: Session):
+    _, requirements = _date_change_moves_the_requirements(login_as, db)
+
+    approved = _approve(login_as(Users.COORDINATOR), requirements)
+    rejected = _reject(login_as(Users.COORDINATOR), requirements)
+
+    assert approved.status_code == 409
+    assert rejected.status_code == 200
+    assert rejected.json()["is_out_of_date"] is False
+
+
+@pytest.mark.story("19.2", ac=7)
+def test_a_request_still_matching_the_event_is_not_out_of_date(coordinator_client, db: Session):
+    event = _planning_event(db, expected_attendance=100)
+    make_change_request(db, event=event, current=100, proposed=150)
+
+    [entry] = coordinator_client.get("/change-requests").json()
+
+    assert entry["is_out_of_date"] is False
 
 
 # --- AC8: approving past Planning returns the event to Planning ------------------------------
@@ -1194,6 +1355,48 @@ def test_attendance_rise_releases_only_the_bookings_too_small_for_it(login_as, d
 
 
 @pytest.mark.story("19.2", ac=5)
+def test_a_pending_booking_that_no_longer_fits_is_released(login_as, db: Session):
+    """A request Venue Staff have not decided yet holds the venue too (12.1), so it is released
+    the same way."""
+    event = _planning_event(db, expected_attendance=100)
+    pending = _book(db, event, people=100, status="PENDING", hold_expires_at=None)
+    request = _raise(login_as, db, event, "expected_attendance", 150)
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, pending.id).status == "CANCELLED"
+    [notice] = _notifications(db, event.id, "BOOKING_RELEASED")
+    assert notice.related_entity_id == pending.id
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_a_release_is_logged_with_the_approval(login_as, db: Session):
+    """Auditability: the approval names the bookings it released, and each release is logged
+    against its booking."""
+    event = _planning_event(db, expected_attendance=100)
+    released = _book(db, event, people=100)
+    request = _raise(login_as, db, event, "expected_attendance", 150)
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    [approval] = _audit(db, request.id, "EVENT_CHANGE_APPROVED")
+    assert approval.details["released_booking_ids"] == [str(released.id)]
+    [release] = db.execute(
+        text(
+            "SELECT actor_id, details FROM audit_log WHERE entity_type = 'venue_booking'"
+            " AND entity_id = :b AND action = 'BOOKING_RELEASED'"
+        ),
+        {"b": released.id},
+    )
+    assert release.actor_id == Users.COORDINATOR.id
+    assert release.details == {
+        "venue_id": str(released.venue_id),
+        "event_id": str(event.id),
+        "change": "expected attendance",
+    }
+
+
+@pytest.mark.story("19.2", ac=5)
 def test_venue_requirement_change_releases_only_the_bookings_it_affects(login_as, db: Session):
     event = _planning_event(db)
     start, end = event.starts_at, event.ends_at
@@ -1319,13 +1522,98 @@ def test_removed_equipment_releases_its_hold(login_as, db: Session):
     assert _item(db, sent.id).status == "CANCELLED"
     assert _reserved(db, sent.id) == []
     assert _item(db, unsent.id) is None
-    assert len(_notifications(db, event.id, "EQUIPMENT_WITHDRAWN")) == 1
+    [notice] = _notifications(db, event.id, "EQUIPMENT_WITHDRAWN")
+    assert sent_type.name in notice.message
+    assert unsent_type.name not in notice.message
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_a_removed_declined_item_is_kept_as_cancelled(login_as, db: Session):
+    """Technical Support declined it, so it stays on their record; they are not told again, as
+    they hold nothing for it."""
+    event = _planning_event(db)
+    kit = make_equipment_type(db, total_quantity=10)
+    declined = make_equipment_item(
+        db, event=event, equipment_type=kit, quantity=2, status="DECLINED"
+    )
+    request = _raise(login_as, db, event, "equipment", [])
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _item(db, declined.id).status == "CANCELLED"
+    assert _notifications(db, event.id, "EQUIPMENT_WITHDRAWN") == []
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_a_declined_item_and_an_open_one_of_its_type_are_told_apart(login_as, db: Session):
+    """15.1 AC6 lets a type be asked for again once its item is declined, so the event can list it
+    twice. Items are matched by id: the open one takes the new quantity and one hold, and the
+    declined one the organiser left out is kept as Cancelled."""
+    event = _planning_event(db)
+    kit = make_equipment_type(db, total_quantity=10)
+    declined = make_equipment_item(
+        db, event=event, equipment_type=kit, quantity=2, status="DECLINED"
+    )
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=3)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "equipment",
+        [{"id": str(item.id), "equipment_type_code": kit.code, "quantity": 4}],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert (_item(db, item.id).status, _item(db, item.id).quantity) == ("REQUESTED", 4)
+    assert [hold.quantity for hold in _reserved(db, item.id)] == [4]
+    assert _item(db, declined.id).status == "CANCELLED"
+    assert _reserved(db, declined.id) == []
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_a_cancelled_item_named_again_by_its_id_comes_back(login_as, db: Session):
+    """The id of an item kept as Cancelled is still the event's own (2.1 AC7), so a proposal may
+    name it: it comes back as it was, Requested and held, not left Cancelled."""
+    event = _planning_event(db)
+    kit = make_equipment_type(db, total_quantity=10)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=2, status="CANCELLED")
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "equipment",
+        [{"id": str(item.id), "equipment_type_code": kit.code, "quantity": 2}],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _item(db, item.id).status == "REQUESTED"
+    assert [hold.quantity for hold in _reserved(db, item.id)] == [2]
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_an_older_equipment_proposal_without_ids_is_matched_by_type(
+    coordinator_client, db: Session
+):
+    """Requests raised before item ids were kept still apply, the item found by its type."""
+    event = _planning_event(db)
+    kit = make_equipment_type(db, total_quantity=10)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=2)
+    line = {"equipment_type_code": kit.code, "quantity": 2, "technical_notes": None}
+    request = make_change_request(
+        db, event=event, field="equipment", current=[line], proposed=[{**line, "quantity": 5}]
+    )
+
+    assert _approve(coordinator_client, request).status_code == 200
+    assert _item(db, item.id).quantity == 5
 
 
 @pytest.mark.story("19.2", ac=5)
 def test_removed_equipment_kept_as_cancelled_is_not_current_equipment(login_as, db: Session):
     """A removed item kept, Cancelled, for Technical Support's record is no longer the event's:
-    the organiser may ask for it back as it was, and asking to remove it again changes nothing."""
+    asking to remove it again changes nothing, and asking for it back as it was brings it back,
+    held."""
     event = _planning_event(db)
     sent_type = make_equipment_type(db, total_quantity=10)
     make_equipment_item(db, event=event, equipment_type=sent_type, quantity=2, status="PENDING")
@@ -1349,6 +1637,17 @@ def test_removed_equipment_kept_as_cancelled_is_not_current_equipment(login_as, 
     assert removed_again.status_code == 422, removed_again.text
     assert added_back.status_code == 201, added_back.text
     assert added_back.json()["current_value"] == []
+    request = db.get(EventChangeRequest, uuid.UUID(added_back.json()["id"]))
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+    [back] = db.execute(
+        text(
+            "SELECT id, quantity FROM event_equipment_requests"
+            " WHERE event_id = :e AND status = 'REQUESTED'"
+        ),
+        {"e": event.id},
+    )
+    assert back.quantity == 2
+    assert [hold.quantity for hold in _reserved(db, back.id)] == [2]
 
 
 @pytest.mark.story("19.2", ac=5)
@@ -1438,6 +1737,10 @@ def test_approving_past_planning_returns_the_event_to_planning(login_as, db: Ses
     [moved] = [entry for entry in _history(db, event.id) if entry.to_status == "PLANNING"]
     assert (moved.from_status, moved.changed_by_id) == (status, Users.COORDINATOR.id)
     assert moved.reason == "Change to the expected attendance approved."
+    [returned] = _event_audit(db, event.id, "EVENT_RETURNED_TO_PLANNING")
+    assert returned.details == {"from_status": status, "change_request_id": str(request.id)}
+    [approval] = _audit(db, request.id, "EVENT_CHANGE_APPROVED")
+    assert approval.details["returned_from_status"] == status
     kept = _booking(db, booking.id)
     assert kept.status == "APPROVED"
     assert kept.hold_completed_at is not None
@@ -1450,9 +1753,126 @@ def test_approving_past_planning_returns_the_event_to_planning(login_as, db: Ses
 
 
 @pytest.mark.story("19.2", ac=8)
+@pytest.mark.parametrize("status", ["CONFIRMED", "AWAITING_SAFETY_CHECK"])
+def test_the_organiser_and_safety_officers_are_told_it_is_back_in_planning(
+    coordinator_client, db: Session, status
+):
+    """Every status change notifies (21.2 AC8): the organiser's notice of the approval says the
+    event is back in Planning, and the Safety Officers are told it left their check or lost its
+    confirmation."""
+    event = _planning_event(db, status=status)
+    request = make_change_request(db, event=event)
+
+    assert _approve(coordinator_client, request).status_code == 200
+
+    [approved] = _notifications(db, event.id, "EVENT_CHANGE_APPROVED")
+    assert approved.recipient_id == Users.ORGANISER.id
+    assert "back in Planning" in approved.message
+    told = _notifications(db, event.id, "EVENT_RETURNED_TO_PLANNING")
+    assert {notice.recipient_id for notice in told} == {Users.SAFETY_OFFICER.id}
+    assert all(event.name in notice.message for notice in told)
+
+
+@pytest.mark.story("19.2", ac=8)
 def test_approving_on_a_planning_event_records_no_status_change(coordinator_client, db: Session):
     event = _planning_event(db)
     request = make_change_request(db, event=event)
 
     assert _approve(coordinator_client, request).status_code == 200
     assert _history(db, event.id) == []
+    assert _event_audit(db, event.id, "EVENT_RETURNED_TO_PLANNING") == []
+    assert _notifications(db, event.id, "EVENT_RETURNED_TO_PLANNING") == []
+    [approved] = _notifications(db, event.id, "EVENT_CHANGE_APPROVED")
+    assert "Planning" not in approved.message
+
+
+def _approved_by_the_safety_officer(login_as, event: Event) -> None:
+    """21.2's own flow: the coordinator requests the check and the officer approves the facts
+    they read."""
+    coordinator = login_as(Users.COORDINATOR)
+    assert coordinator.post(f"/safety-checks/{event.id}/request", json={}).status_code == 200
+    officer = login_as(Users.SAFETY_OFFICER)
+    fingerprint = officer.get(f"/safety-checks/{event.id}").json()["facts_fingerprint"]
+    decided = officer.post(
+        f"/safety-checks/{event.id}/decision",
+        json={"outcome": "APPROVED", "findings": [], "facts_fingerprint": fingerprint},
+    )
+    assert decided.status_code == 200, decided.text
+
+
+def _fewer_people_in_the_venue(login_as, db: Session, secured: SecuredEvent):
+    """A change every booking still fits, so no fact 21.2 compares moves: the venue requirement
+    asks for room for fewer people."""
+    event = secured.event
+    return _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                secured.requirement_id,
+                name="Main venue",
+                capacity=event.expected_attendance // 2,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+            )
+        ],
+    )
+
+
+_NEEDS_NEW_APPROVAL = (
+    "A change to the event was approved after its safety approval; request a safety review again."
+)
+
+
+@pytest.mark.story("19.2", ac=8)
+def test_a_de_confirmed_event_needs_a_new_safety_approval(login_as, db: Session):
+    secured = make_secured_event(db)
+    event = secured.event
+    _approved_by_the_safety_officer(login_as, event)
+    request = _fewer_people_in_the_venue(login_as, db, secured)
+    coordinator = login_as(Users.COORDINATOR)
+    assert coordinator.post(f"/events/{event.id}/confirm").status_code == 200
+    assert _approve(coordinator, request).status_code == 200
+    assert _event_status(db, event.id) == "PLANNING"
+
+    response = coordinator.post(f"/events/{event.id}/confirm")
+
+    assert response.status_code == 409
+    assert _NEEDS_NEW_APPROVAL in response.json()["detail"]
+    assert _event_status(db, event.id) == "PLANNING"
+    safety = coordinator.get(f"/events/{event.id}/safety-review").json()
+    assert _NEEDS_NEW_APPROVAL in safety["confirm_blockers"]
+
+
+@pytest.mark.story("19.2", ac=8)
+def test_a_change_approved_in_planning_also_needs_a_new_safety_approval(login_as, db: Session):
+    """The approval is on record and the event not yet confirmed: no status moves, but the change
+    still postdates what the officer approved."""
+    secured = make_secured_event(db)
+    event = secured.event
+    _approved_by_the_safety_officer(login_as, event)
+    request = _fewer_people_in_the_venue(login_as, db, secured)
+    coordinator = login_as(Users.COORDINATOR)
+    assert _approve(coordinator, request).status_code == 200
+
+    response = coordinator.post(f"/events/{event.id}/confirm")
+
+    assert response.status_code == 409
+    assert _NEEDS_NEW_APPROVAL in response.json()["detail"]
+
+
+@pytest.mark.story("19.2", ac=8)
+def test_a_new_safety_approval_after_the_change_lets_it_be_confirmed(login_as, db: Session):
+    secured = make_secured_event(db)
+    event = secured.event
+    _approved_by_the_safety_officer(login_as, event)
+    request = _fewer_people_in_the_venue(login_as, db, secured)
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+    _approved_by_the_safety_officer(login_as, event)
+
+    response = login_as(Users.COORDINATOR).post(f"/events/{event.id}/confirm")
+
+    assert response.status_code == 200, response.text
+    assert _event_status(db, event.id) == "CONFIRMED"
