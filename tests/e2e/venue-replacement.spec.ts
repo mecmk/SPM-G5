@@ -400,12 +400,13 @@ test('12.6 AC6: when the closure is removed the button goes and the pending repl
   await requestGrandHall(page, SUMMIT)
   await expect(page.getByRole('link', { name: FIND_REPLACEMENT })).toBeVisible()
 
-  // Venue Staff remove the closure of the 13th from the foyer's calendar. The browser's clock is
+  // Venue Staff remove the closure of the 13th from the foyer's calendar, on its Edit venue page. The browser's clock is
   // pinned to the month before, as the 9.4 spec does for its venues, so the grid opens on February.
   const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
   await staff.clock.setFixedTime(new Date('2029-02-01T10:00:00+08:00'))
   await staff.goto('/venues')
-  await staff.getByRole('link', { name: FOYER }).click()
+  // Story 12.6 AC12: the controls are on the Edit venue page.
+  await venueCard(staff, FOYER).getByRole('link', { name: 'Edit' }).click()
   const availability = staff.getByRole('region', { name: 'Availability', exact: true })
   await expect(availability).toBeVisible()
   await availability.getByRole('button', { name: /^13 February 2029/ }).click()
