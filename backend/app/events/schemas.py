@@ -592,6 +592,10 @@ class EquipmentLineOut(BaseModel):
     decision_reason: str | None
     decided_at: datetime | None
     decided_by_name: str | None
+    # Story 17.1 AC1: the period the item is for - its event's own, which every item is held for
+    # (15.1 AC2). Both None while a draft has no dates.
+    period_starts_at: datetime | None
+    period_ends_at: datetime | None
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
@@ -609,6 +613,8 @@ class EquipmentLineOut(BaseModel):
             decision_reason=line.status_notes,
             decided_at=line.decided_at,
             decided_by_name=line.decided_by.full_name if line.decided_by is not None else None,
+            period_starts_at=line.event.starts_at,
+            period_ends_at=line.event.ends_at,
         )
 
 

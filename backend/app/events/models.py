@@ -156,6 +156,8 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Story 17.1 AC1: the event whose period the item is held for (15.1 AC2).
+    event: Mapped[Event] = relationship(back_populates="equipment_requests")
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
     submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
     decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])
@@ -343,6 +345,7 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan", order_by=EventAccessibilityNeed.feature_code
     )
     equipment_requests: Mapped[list[EventEquipmentRequest]] = relationship(
+        back_populates="event",
         cascade="all, delete-orphan",
         order_by=(EventEquipmentRequest.created_at, EventEquipmentRequest.id),
     )

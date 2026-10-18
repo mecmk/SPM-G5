@@ -14,17 +14,19 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { NOT_RECORDED, formatDateTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
-/** Story 15.1 AC1: how each item status reads on the event page. */
+/** Story 15.1 AC1: how each item status reads on the event page. Story 17.1 AC1/AC4: an accepted
+ *  item is reserved, and one cancelled with its event (6.2) or removed by an approved change (19.2)
+ *  is released. */
 const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   REQUESTED: 'Not yet sent',
   PENDING: 'Pending',
-  ACCEPTED: 'Accepted',
+  ACCEPTED: 'Accepted (reserved)',
   DECLINED: 'Declined',
   UNAVAILABLE: 'Unavailable',
-  CANCELLED: 'Cancelled',
+  CANCELLED: 'Released',
 }
 /** AC2/AC7: the items the coordinator may still edit or remove, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
@@ -35,6 +37,8 @@ const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'AC
 const WHOLE_NUMBER = /^\d+$/
 const UNAVAILABLE_SENTENCE =
   "The event's dates changed and not enough are free. Lower the quantity or remove it."
+/** Story 17.1 AC4: a released item holds no units. */
+const RELEASED_SENTENCE = 'Nothing is held for this item any more.'
 
 /** AC4: a typed quantity must be a whole number from 1 to the number available. */
 function isQuantityAllowed(value: string, available: number | undefined): boolean {
@@ -78,6 +82,8 @@ export interface EquipmentRequestsSectionProps {
  * plan for something else. AC3: a decided item says when, and by whom.
  * Story 21.2 AC4: while the latest safety review asks for the equipment to change, the section is
  * highlighted and says so.
+ * Story 17.1 AC1: each item names the period it is for, its event's; AC4: a released item says it
+ * holds nothing. AC6: the list is the event as loaded, so a reload shows a newer decision.
  */
 export function EquipmentRequestsSection({
   eventId,
@@ -324,6 +330,14 @@ export function EquipmentRequestsSection({
                       <span className="small muted">{item.technical_notes}</span>
                     </>
                   )}
+                  {item.period_starts_at !== null && item.period_ends_at !== null && (
+                    <>
+                      <br />
+                      <span className="item-timing">
+                        For {formatSchedule(item.period_starts_at, item.period_ends_at)}
+                      </span>
+                    </>
+                  )}
                   {item.status === 'PENDING' && item.submitted_at !== null && (
                     <>
                       <br />
@@ -346,6 +360,12 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="small">{UNAVAILABLE_SENTENCE}</span>
+                    </>
+                  )}
+                  {item.status === 'CANCELLED' && (
+                    <>
+                      <br />
+                      <span className="small">{RELEASED_SENTENCE}</span>
                     </>
                   )}
                 </span>

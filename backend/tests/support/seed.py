@@ -159,7 +159,7 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
-    # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 17 January 2029.
+    # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 19 January 2028.
     WATERFRONT_DEMO = _e(80)  # one pending item (EquipmentItems.DEMO_LAPTOPS), accepted by the spec
 
 

@@ -13,8 +13,8 @@
  *     event is not found (404) are backend cases.
  * AC6 a decision made while the coordinator has the page open shows once it is loaded again.
  * The list also fits a phone.
- * Every case is backend-tested as well, for the API's side:
- * backend/tests/equipment/test_display_equipment_integration.py.
+ * Here is what each viewer sees on the page. What the API sends - each item's fields and period,
+ * to whom, and the refusals - is backend/tests/equipment/test_display_equipment_integration.py's.
  *
  * The roadshow (EVENTS.equipmentRoadshow) and the Summer Rooftop Mixer (EVENTS.cancelled) are
  * only read here, and nothing can change a Confirmed event's equipment (EVENTS.confirmed, 15.1
@@ -139,6 +139,8 @@ test('17.1 AC6: a decision made while the page is open shows once it is loaded a
   page,
   browser,
 }) => {
+  // Two people sign in, and Technical Support's queue works out every request's figures.
+  test.setTimeout(60_000)
   await openEvent(page, ACCOUNTS.coordinator, EVENTS.waterfrontDemo, DEMO)
   const laptops = item(page, 'Presentation laptop')
   await expect(laptops.getByText('Pending', { exact: true })).toBeVisible()

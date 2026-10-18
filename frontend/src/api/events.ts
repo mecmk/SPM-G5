@@ -165,6 +165,10 @@ export interface EquipmentLine {
   /** Story 16.1 AC3: when Technical Support accepted or declined it, and who; `null` until then. */
   decided_at: string | null
   decided_by_name: string | null
+  /** Story 17.1 AC1: the period the item is for, its event's own; `null` while a draft has no
+   *  dates. */
+  period_starts_at: string | null
+  period_ends_at: string | null
 }
 
 /**

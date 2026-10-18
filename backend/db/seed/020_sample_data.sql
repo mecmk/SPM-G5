@@ -1061,7 +1061,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Story 17.1: tests/e2e/equipment-display.spec.ts. The Summer Rooftop Mixer (3333..15) was
 -- cancelled with two items on it, one accepted and one still pending: both were cancelled with
 -- it and hold nothing, so they show as Released (17.1 AC4). The waterfront demo (3333..80) is
--- the spec's own: in planning, organiser 2, coordinator 1, dated January 2029, clear of every
+-- the spec's own: in planning, organiser 2, coordinator 1, dated January 2028, clear of every
 -- other hold, with one pending item that the spec has Technical Support accept while the
 -- coordinator has the page open (17.1 AC6).
 -- ---------------------------------------------------------------------
@@ -1069,7 +1069,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
                     contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
     ('33333333-0000-0000-0000-000000000080', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Waterfront Product Demo', 'Product launch', 'Live demonstrations of the new product range for partners.', '2029-01-17 09:00+08', '2029-01-17 17:00+08', 50, 'PLANNING',
+     'Waterfront Product Demo', 'Product launch', 'Live demonstrations of the new product range for partners.', '2028-01-19 09:00+08', '2028-01-19 17:00+08', 50, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
      '2026-10-08 09:00+08', '2026-10-09 09:00+08', '11111111-0000-0000-0000-000000000003')
 ON CONFLICT (id) DO UPDATE SET
@@ -1083,7 +1083,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0080-000000000001', '33333333-0000-0000-0000-000000000080', 0, 'Demo hall', 50,
-     '2029-01-17 09:00+08', '2029-01-17 17:00+08', 'STANDING')
+     '2028-01-19 09:00+08', '2028-01-19 17:00+08', 'STANDING')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
@@ -1110,7 +1110,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000080', '66666666-0000-0000-0000-000000000036', '77777777-0000-0000-0000-000000000004', 2,
-     '2029-01-17 09:00+08', '2029-01-17 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-10 10:00+08', 'Held for the coordinator''s equipment request.')
+     '2028-01-19 09:00+08', '2028-01-19 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-10 10:00+08', 'Held for the coordinator''s equipment request.')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
     equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,

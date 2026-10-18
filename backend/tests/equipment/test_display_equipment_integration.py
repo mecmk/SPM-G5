@@ -124,16 +124,17 @@ def test_each_item_is_listed_with_its_type_quantity_period_and_status(
 
     items = _items(coordinator_client, event)
 
-    assert [
+    # Items made in one transaction share created_at, so the list's order is not asserted.
+    assert sorted(
         (item["equipment_type_name"], item["quantity"], item["status"], _period(item))
         for item in items
-    ] == [
-        ("Waiting kit", 1, "REQUESTED", (STARTS_AT, ENDS_AT)),
-        ("Pending kit", 2, "PENDING", (STARTS_AT, ENDS_AT)),
+    ) == [
         ("Accepted kit", 3, "ACCEPTED", (STARTS_AT, ENDS_AT)),
         ("Declined kit", 4, "DECLINED", (STARTS_AT, ENDS_AT)),
+        ("Pending kit", 2, "PENDING", (STARTS_AT, ENDS_AT)),
+        ("Waiting kit", 1, "REQUESTED", (STARTS_AT, ENDS_AT)),
     ]
-    declined_item = items[3]
+    (declined_item,) = [item for item in items if item["status"] == "DECLINED"]
     assert declined_item["decision_reason"] == "All four are booked for a conference that week."
     assert declined_item["decided_by_name"] == Users.TECH_SUPPORT.full_name
     assert datetime.fromisoformat(declined_item["decided_at"]) == DECIDED_AT
