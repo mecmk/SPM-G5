@@ -94,6 +94,7 @@ function fakeQueueEntry(index: number) {
     decision_reason: null,
     created_at: '2026-09-20T01:00:00Z',
     decided_at: null,
+    cancelled_at: null,
   }
 }
 
@@ -671,6 +672,7 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     ends_at: '2026-11-20T09:00:00Z',
     setup_minutes: 60,
     teardown_minutes: 60,
+    cancelled_at: null,
   }
   const outcomes = [
     {

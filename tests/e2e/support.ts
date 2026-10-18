@@ -35,6 +35,10 @@ export const EVENTS = {
   partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; no spec writes a request for it
   // Story 6.2, Cancelled by its organiser, organiser2, with a reason; only read.
   cancelled: '33333333-0000-0000-0000-000000000015',
+  // Story 6.2 AC14-AC16, Planning, organiser: organiser, coordinator, March 2029: a pending
+  // request for Sunrise Studio and four wireless microphones sent to Technical Support. The 6.2
+  // spec cancels it.
+  charityRun: '33333333-0000-0000-0000-000000000062',
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   // Story 15.1, both Planning, organiser: organiser, coordinator, dated May 2027. Only the
   // equipment flow changes the workshop's equipment; nothing changes the showcase's.

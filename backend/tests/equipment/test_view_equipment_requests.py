@@ -13,7 +13,9 @@ AC3 Tabs show Pending, Accepted and Declined requests. A decided request leaves 
 AC4 A request exactly equal to the available quantity shows no shortfall. Holds and reservations
     whose periods only touch the event's period at a boundary are not deducted.
 AC5 An item the coordinator removes, or any item on a cancelled or rejected event, disappears from
-    the queue.
+    the queue. Story 6.2 AC15 replaces this for an item cancelled once it was sent: it stays,
+    under a Cancelled tab (backend/tests/cancellations/test_cancel_event.py). An item still open
+    on a cancelled event - one cancelled before 6.2 closed its items - still disappears.
     An empty queue shows a message (tests/e2e/equipment-queue.spec.ts).
 AC6 Only Technical Support Staff can see the queue. Other roles are refused, including through
     the API.
@@ -25,8 +27,8 @@ figure is what the event's period leaves for this request. A shortfall therefore
 stock is lost after the hold was placed, such as units going out of service.
 
 Accepted and Declined are Technical Support's decisions (story 16.1), which nothing in this story
-writes, so the factory makes them. The other item statuses - REQUESTED (not yet sent), UNAVAILABLE
-(15.1 AC8) and CANCELLED - belong to no tab.
+writes, so the factory makes them. REQUESTED (not yet sent) and UNAVAILABLE (15.1 AC8) belong to
+no tab; CANCELLED has its own since story 6.2 AC15.
 
 Every case uses a fresh equipment type (``make_equipment_type``), so a test owns its whole stock,
 on factory events dated September 2027, clear of every seeded hold. The seeded queue is never
@@ -58,7 +60,7 @@ from tests.support.seed import EquipmentItems, Users
 QUEUE_PATH = "/equipment-requests"
 PENDING, ACCEPTED, DECLINED = "PENDING", "ACCEPTED", "DECLINED"
 TAB_STATUSES = (PENDING, ACCEPTED, DECLINED)
-NO_TAB_STATUSES = ("REQUESTED", "UNAVAILABLE", "CANCELLED")
+NO_TAB_STATUSES = ("REQUESTED", "UNAVAILABLE")
 
 SGT = timezone(timedelta(hours=8))
 START = datetime(2027, 9, 6, 9, 0, tzinfo=SGT)
@@ -282,7 +284,10 @@ def test_counts_cover_every_tab_whichever_is_asked_for(tech_client, db):
 
     after = _queue(tech_client, DECLINED)["counts"]
 
-    assert after == {key: before[key] + 1 for key in ("pending", "accepted", "declined")}
+    assert after == {
+        **{key: before[key] + 1 for key in ("pending", "accepted", "declined")},
+        "cancelled": before["cancelled"],
+    }
 
 
 @pytest.mark.story("15.2", ac=3)
@@ -314,12 +319,12 @@ def test_without_a_status_every_tab_is_listed(tech_client, db, status):
     items = _queue(tech_client, None)["items"]
 
     assert str(item.id) in [row["id"] for row in items]
-    assert {row["status"] for row in items} <= set(TAB_STATUSES)
+    assert {row["status"] for row in items} <= {*TAB_STATUSES, "CANCELLED"}
 
 
 @pytest.mark.story("15.2", ac=3)
 @pytest.mark.story("15.2", ac=5)
-def test_without_a_status_no_tab_and_cancelled_items_are_still_left_out(tech_client, db):
+def test_without_a_status_no_tab_items_and_cancelled_events_items_are_left_out(tech_client, db):
     hidden = [
         _sent(
             db,

@@ -159,6 +159,9 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
+    # Story 6.2 AC14/AC15's e2e event: organiser 1, coordinator 1, PLANNING, March 2029, a pending
+    # request for Sunrise Studio and four wireless microphones sent to Technical Support, held.
+    CHARITY_RUN = _e(62)
 
 
 class Bookings:
@@ -234,6 +237,9 @@ class VenueRequirements:
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
     # Story 12.7: Events.CRAFT_FAIR's one, whose request expired.
     CRAFT_FAIR_HALL = uuid.UUID("cccccccc-0000-0000-0034-000000000001")  # EXHIBITION, WIFI, 120
+    # Story 6.2: Events.CHARITY_RUN's one requirement, and its pending request for Sunrise Studio.
+    CHARITY_RUN_START_VILLAGE = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # CLASSROOM, 60
+    PENDING_CHARITY_RUN_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")
 
 
 class EquipmentItems:
@@ -273,6 +279,8 @@ class EquipmentHolds:
     OFFSITE_CAMERAS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000024")
     CONCERT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000025")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000026")
+    # Story 6.2: the hold of Events.CHARITY_RUN's four wireless microphones (item 6666..62).
+    CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
 
 
 class EquipmentOutOfService:

@@ -19,6 +19,11 @@ AC10 Everything happens in one transaction: a failure part-way leaves the event 
 AC11 Only the organiser who owns the event can cancel it.
 AC12 An approval racing the cancellation leaves no active venue hold or equipment reservation.
 AC13 Only the first of several cancellations succeeds, without repeating what it did.
+AC14 Venue Staff see the cancelled event's bookings under a read-only Cancelled tab and under All.
+AC15 Technical Support see the cancelled items that had been sent to them under a read-only
+     Cancelled tab and under All; an item never sent is not shown. This replaces 15.2 AC5 for a
+     cancelled event: a rejected event's items still disappear.
+AC16 A cancelled booking or equipment item shows when it was cancelled, not its old approval time.
 
 Most cases build a fresh event dated in 2030 on a fresh venue, owned by Olivia and coordinated
 by Chloe, so no seeded booking or hold is in the way. The races (AC12, AC13) run real concurrent
@@ -57,6 +62,7 @@ from app.events.models import (
     EventStatus,
     EventStatusHistory,
 )
+from app.events.schemas import EventEquipmentIn
 from app.notifications.models import Notification
 from app.registrations.models import EventRegistration, RegistrationStatus
 from tests.support.factories import (
@@ -914,3 +920,165 @@ def test_two_cancellations_at_once_cancel_once(engine):
             assert history == 1
     finally:
         _delete_committed(engine, event_id)
+
+
+# --- AC14 / AC15 / AC16: what Venue Staff and Technical Support see afterwards ----------------
+def _queue_ids(client, path: str, **params: Any) -> list[str]:
+    """Every id in one tab of a queue, page by page where the queue pages."""
+    ids: list[str] = []
+    while True:
+        body = client.get(path, params={**params, "offset": len(ids)}).json()
+        ids += [item["id"] for item in body["items"]]
+        if len(ids) >= body.get("total", len(ids)):
+            return ids
+
+
+def _sent_item(db: Session, event: Event, *, status: str) -> EventEquipmentRequest:
+    """An item the coordinator has sent to Technical Support."""
+    item = _item(db, event, status=status, is_held=status != EquipmentRequestStatus.DECLINED)
+    item.submitted_by_id = Users.COORDINATOR.id
+    item.submitted_at = datetime.now(UTC)
+    db.flush()
+    return item
+
+
+def _cancelled_by_organiser(login_as, event: Event) -> None:
+    assert _cancel(login_as(Users.ORGANISER), event.id).status_code == 200
+
+
+@pytest.mark.story("6.2", ac=14)
+def test_venue_staff_see_a_released_booking_under_cancelled_and_all(login_as, db: Session):
+    """The bookings queue already had a Cancelled tab (13.1.2), so this passed before AC14's
+    change, which is the page's tab."""
+    event = _event(db)
+    booking = _booking(db, event, status=BookingStatus.APPROVED)
+    before = login_as(Users.VENUE_STAFF).get("/bookings").json()["counts"]["cancelled"]
+
+    _cancelled_by_organiser(login_as, event)
+
+    staff = login_as(Users.VENUE_STAFF)
+    assert str(booking.id) in _queue_ids(staff, "/bookings", status="CANCELLED")
+    assert str(booking.id) in _queue_ids(staff, "/bookings")
+    assert staff.get("/bookings").json()["counts"]["cancelled"] == before + 1
+
+
+@pytest.mark.story("6.2", ac=15)
+@pytest.mark.parametrize(
+    "status", [EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED]
+)
+def test_technical_support_see_a_sent_item_under_cancelled_and_all(
+    login_as, db: Session, status: str
+):
+    event = _event(db)
+    item = _sent_item(db, event, status=status)
+    before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
+
+    _cancelled_by_organiser(login_as, event)
+
+    tech = login_as(Users.TECH_SUPPORT)
+    cancelled = tech.get("/equipment-requests", params={"status": "CANCELLED"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert str(item.id) in [row["id"] for row in cancelled.json()["items"]]
+    assert str(item.id) in _queue_ids(tech, "/equipment-requests")
+    after = tech.get("/equipment-requests").json()["counts"]
+    assert after["cancelled"] == before["cancelled"] + 1
+    assert after[status.lower()] == before[status.lower()] - 1
+    page = tech.get(f"/equipment-requests/{item.id}")
+    assert page.status_code == 200, page.text
+    assert page.json()["status"] == EquipmentRequestStatus.CANCELLED
+
+
+@pytest.mark.story("6.2", ac=15)
+def test_technical_support_never_see_an_item_never_sent_to_them(login_as, db: Session):
+    event = _event(db)
+    item = _item(db, event, status=EquipmentRequestStatus.REQUESTED)
+    before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
+
+    _cancelled_by_organiser(login_as, event)
+
+    tech = login_as(Users.TECH_SUPPORT)
+    assert str(item.id) not in _queue_ids(tech, "/equipment-requests")
+    assert tech.get("/equipment-requests").json()["counts"] == before
+    assert tech.get(f"/equipment-requests/{item.id}").status_code == 404
+
+
+@pytest.mark.story("6.2", ac=15)
+def test_a_cancelled_item_still_cannot_be_decided(login_as, db: Session):
+    """Listed for the record only: the Cancelled tab is read-only."""
+    event = _event(db)
+    item = _sent_item(db, event, status=EquipmentRequestStatus.PENDING)
+    _cancelled_by_organiser(login_as, event)
+
+    response = login_as(Users.TECH_SUPPORT).post(
+        f"/equipment-requests/{item.id}/decision", json={"outcome": "ACCEPTED"}
+    )
+
+    assert response.status_code == 409, response.text
+    assert _status(db, EventEquipmentRequest, item.id) == EquipmentRequestStatus.CANCELLED
+
+
+@pytest.mark.story("6.2", ac=16)
+def test_a_released_booking_records_when_it_was_cancelled(login_as, db: Session):
+    """Who approved it and when stay beside the new time, on every view of the booking."""
+    event = _event(db)
+    booking = _booking(db, event, status=BookingStatus.APPROVED)
+    kept = _booking(db, event, status=BookingStatus.WITHDRAWN)
+    approved_at = booking.decided_at
+    before = datetime.now(UTC)
+
+    _cancelled_by_organiser(login_as, event)
+
+    db.expire_all()
+    released = db.get(VenueBooking, booking.id)
+    assert released.cancelled_at >= before
+    assert released.decided_at == approved_at
+    assert db.get(VenueBooking, kept.id).cancelled_at is None
+    staff = login_as(Users.VENUE_STAFF)
+    full = staff.get(f"/bookings/{booking.id}").json()
+    assert full["cancelled_at"] is not None
+    assert full["decided_at"] is not None
+    tab = staff.get("/bookings", params={"status": "CANCELLED"}).json()["items"]
+    [entry] = [row for row in tab if row["id"] == str(booking.id)]
+    assert entry["cancelled_at"] == full["cancelled_at"]
+    outcomes = login_as(Users.COORDINATOR).get(f"/bookings/for-event/{event.id}").json()
+    by_id = {row["id"]: row for row in outcomes}
+    assert by_id[str(booking.id)]["cancelled_at"] == full["cancelled_at"]
+    assert by_id[str(kept.id)]["cancelled_at"] is None
+
+
+@pytest.mark.story("6.2", ac=16)
+def test_a_cancelled_item_records_when_it_was_cancelled(login_as, db: Session):
+    event = _event(db)
+    item = _sent_item(db, event, status=EquipmentRequestStatus.PENDING)
+    declined = _sent_item(db, event, status=EquipmentRequestStatus.DECLINED)
+    before = datetime.now(UTC)
+
+    _cancelled_by_organiser(login_as, event)
+
+    db.expire_all()
+    assert db.get(EventEquipmentRequest, item.id).cancelled_at >= before
+    assert db.get(EventEquipmentRequest, declined.id).cancelled_at is None
+    entry = login_as(Users.TECH_SUPPORT).get(f"/equipment-requests/{item.id}").json()
+    assert entry["cancelled_at"] is not None
+
+
+@pytest.mark.story("6.2", ac=16)
+def test_a_change_removing_an_item_records_when_and_reviving_it_clears_it(db: Session):
+    """19.2 closes a removed item as Cancelled too, and an approved change can bring it back."""
+    event = _event(db)
+    item = _sent_item(db, event, status=EquipmentRequestStatus.PENDING)
+    actor = db.get(User, Users.COORDINATOR.id)
+    db.refresh(event)
+
+    equipment_service.apply_equipment_change(db, event, [], actor=actor)
+    db.refresh(item)
+    assert item.status == EquipmentRequestStatus.CANCELLED
+    assert item.cancelled_at is not None
+
+    line = EventEquipmentIn(
+        id=item.id, equipment_type_code=item.equipment_type.code, quantity=item.quantity
+    )
+    equipment_service.apply_equipment_change(db, event, [line], actor=actor)
+    db.refresh(item)
+    assert item.status != EquipmentRequestStatus.CANCELLED
+    assert item.cancelled_at is None
