@@ -173,6 +173,44 @@ def test_reseeding_leaves_a_newer_active_registration_alone(
     assert statuses == {registration_id: "WITHDRAWN", newer: "REGISTERED"}
 
 
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("18.2", ac=4)
+def test_reseeding_leaves_a_registration_alone_once_a_newer_one_was_withdrawn_too(db: Session):
+    """Aiden withdrew from the seeded walk, registered again, and withdrew that too. Nothing is
+    active, but the newer registration is the one My registrations shows (18.2 AC1), as
+    Withdrawn: making the seeded one REGISTERED again would hold a place that page cannot
+    withdraw, while Upcoming events says he is registered."""
+    conn = db.connection()
+    conn.execute(
+        text(
+            "UPDATE event_registrations SET status = 'WITHDRAWN', withdrawn_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": Registrations.SKETCHING_WALK},
+    )
+    newer = conn.execute(
+        text(
+            "INSERT INTO event_registrations (event_id, attendee_id, status, withdrawn_at)"
+            " VALUES (:event, :attendee, 'WITHDRAWN', now()) RETURNING id"
+        ),
+        {"event": Events.SKETCHING_WALK, "attendee": Users.ATTENDEE.id},
+    ).scalar_one()
+
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+    statuses = dict(
+        conn.execute(
+            text(
+                "SELECT id, status FROM event_registrations"
+                " WHERE event_id = :event AND attendee_id = :attendee"
+            ),
+            {"event": Events.SKETCHING_WALK, "attendee": Users.ATTENDEE.id},
+        ).all()
+    )
+    assert statuses == {Registrations.SKETCHING_WALK: "WITHDRAWN", newer: "WITHDRAWN"}
+
+
 @pytest.mark.story("1")
 def test_seed_constants_match_database(db: Session):
     """tests/support/seed.py must describe rows that really exist."""
@@ -238,6 +276,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.HERITAGE_TRAIL, "CONFIRMED"),
         (Events.CHARITY_FUN_RUN, "CANCELLED"),
         (Events.BOOK_SWAP, "CONFIRMED"),
+        (Events.LANTERN_PAINTING, "CONFIRMED"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -262,6 +301,7 @@ def test_seed_constants_match_database(db: Session):
         (Registrations.HERITAGE_TRAIL, Events.HERITAGE_TRAIL, "WITHDRAWN"),
         (Registrations.CHARITY_FUN_RUN, Events.CHARITY_FUN_RUN, "REGISTERED"),
         (Registrations.BOOK_SWAP, Events.BOOK_SWAP, "REGISTERED"),
+        (Registrations.LANTERN_PAINTING, Events.LANTERN_PAINTING, "REGISTERED"),
     ):
         assert db.execute(
             text(

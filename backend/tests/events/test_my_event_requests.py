@@ -144,6 +144,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.HERITAGE_TRAIL),
         str(Events.CHARITY_FUN_RUN),
         str(Events.BOOK_SWAP),
+        str(Events.LANTERN_PAINTING),
     }
 
 

@@ -404,14 +404,16 @@ ON CONFLICT (id) DO UPDATE SET
     decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
 
 -- Story 18.2: the events Aiden has registered for (registrations below) - his My registrations, and
--- tests/e2e/my-registrations.spec.ts. Every case the spec clicks through has an event of its own, so
--- tests running in parallel never share a registration: the poetry night (3333..70, one place, so
--- Full) is withdrawn from once per run and its place comes back; the sketching walk (71) is
--- withdrawn from and registered for again; Withdraw is double-clicked on the board games social
--- (72); the yoga (73), with the seeded cover picture, is only read. Aiden withdrew from the heritage trail (74); the fun run (75)
--- was cancelled with his registration still active, as an event sent back to Planning after
--- confirmation and then cancelled can be (18.1 AC4, 6.2); the book swap (76) started on
--- 3 Oct 2026. Organiser 2, coordinator 2, no venue booked, as 18.1's.
+-- tests/e2e/my-registrations.spec.ts. Each case of the spec that withdraws has an event of its own,
+-- so tests running in parallel never withdraw the same registration: the poetry night (3333..70,
+-- one place, so Full) is withdrawn from once per run and its place comes back; the sketching walk
+-- (71) is withdrawn from and registered for again; Withdraw is double-clicked on the board games
+-- social (72); the lantern painting (77) is withdrawn from once the server can be reached again.
+-- The yoga (73), with the seeded cover picture, is only read, by every case that only reads.
+-- Aiden withdrew from the heritage trail (74); the fun run (75) was cancelled with his
+-- registration still active, as an event sent back to Planning after confirmation and then
+-- cancelled can be (18.1 AC4, 6.2); the book swap (76) started on 3 Oct 2026. Organiser 2,
+-- coordinator 2, no venue booked, as 18.1's.
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
@@ -440,7 +442,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Heritage Trail Tour', 'Community event', 'A guided walk through Kampong Glam.', '2027-04-03 09:00+08', '2027-04-03 12:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-02 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-01 09:00+08',
      NULL, NULL),
     ('33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Charity Fun Run', 'Community event', 'A 5 km run along the park connector, for charity.', '2027-04-10 07:00+08', '2027-04-10 10:00+08', 200, 'CANCELLED',
@@ -451,6 +453,11 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      'Autumn Book Swap', 'Community event', 'Bring a book, take a book.', '2026-10-03 10:00+08', '2026-10-03 13:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-02 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-01 09:00+08', '2026-09-03 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08',
+     NULL, NULL),
+    ('33333333-0000-0000-0000-000000000077', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Lantern Painting Workshop', 'Community event', 'Paint a paper lantern to take home.', '2027-04-17 14:00+08', '2027-04-17 16:00+08', 20, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-16 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
      NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
@@ -465,6 +472,20 @@ ON CONFLICT (id) DO UPDATE SET
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
     decision_reason = EXCLUDED.decision_reason, cover_image_url = EXCLUDED.cover_image_url;
+
+-- 3333..70-77's open assignment to coordinator 2, whom each event row names: self-assigned, on the
+-- day it was submitted, as 9.4's 60 and 61 are, so current_assignment() reads them as assigned
+-- (see story 5.2's note on event_coordinator_assignments below).
+INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000070', '33333333-0000-0000-0000-000000000070', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000071', '33333333-0000-0000-0000-000000000071', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000072', '33333333-0000-0000-0000-000000000072', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000073', '33333333-0000-0000-0000-000000000073', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000074', '33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000075', '33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000076', '33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-01 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000000077', '33333333-0000-0000-0000-000000000077', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08')
+ON CONFLICT (id) DO NOTHING;
 
 -- Venue requirements (story 2.7). Each sample event that records venue requirements keeps them
 -- as one "Main venue" (story 2.7 AC7), with the event's own times and expected attendance - read
@@ -1086,9 +1107,11 @@ WHERE NOT EXISTS (
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
--- Story 18.2: Aiden's registrations for the events above (3333..70-76), one each. Only the heritage
--- trail's (74) is withdrawn; the fun run's (75) is still active on a cancelled event. As with
--- Bella's above, a row whose attendee has since withdrawn and registered again is left as it is.
+-- Story 18.2: Aiden's registrations for the events above (3333..70-77), one each. Only the heritage
+-- trail's (74) is withdrawn; the fun run's (75) is still active on a cancelled event. A row whose
+-- attendee has registered for its event again since is left as it is, whether or not that later
+-- registration is still active: My registrations shows the latest one, so making this one
+-- Registered again would hold a place that the page offers no way to withdraw.
 INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at, withdrawn_at) VALUES
     ('18181818-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000070', '11111111-0000-0000-0000-000000000007',
      'REGISTERED', '2026-10-11 10:00+08', NULL),
@@ -1103,14 +1126,16 @@ INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_a
     ('18181818-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000007',
      'REGISTERED', '2026-10-06 12:00+08', NULL),
     ('18181818-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000007',
-     'REGISTERED', '2026-09-25 08:00+08', NULL)
+     'REGISTERED', '2026-09-25 08:00+08', NULL),
+    ('18181818-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000077', '11111111-0000-0000-0000-000000000007',
+     'REGISTERED', '2026-10-11 10:20+08', NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
     registered_at = EXCLUDED.registered_at, withdrawn_at = EXCLUDED.withdrawn_at
 WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
-      AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
+      AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
 
 -- ---------------------------------------------------------------------
 -- Story 21.1: the Safety Officer's reviews. The earlier review of the Riverside Book Fair (3333..36)

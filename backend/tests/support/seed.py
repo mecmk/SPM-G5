@@ -160,7 +160,8 @@ class Events:
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
-    # (Registrations below). Each is one case of tests/e2e/my-registrations.spec.ts.
+    # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
+    # one of its own; the cases that only read share them, the yoga's most of all.
     POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
     SKETCHING_WALK = _e(71)  # CONFIRMED; the spec withdraws and registers again
     BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
@@ -168,6 +169,7 @@ class Events:
     HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
     CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
     BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
+    LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
 
 
 class Bookings:
@@ -214,6 +216,7 @@ class Registrations:
     HERITAGE_TRAIL = uuid.UUID("18181818-0000-0000-0000-000000000006")  # WITHDRAWN
     CHARITY_FUN_RUN = uuid.UUID("18181818-0000-0000-0000-000000000007")
     BOOK_SWAP = uuid.UUID("18181818-0000-0000-0000-000000000008")
+    LANTERN_PAINTING = uuid.UUID("18181818-0000-0000-0000-000000000009")
 
 
 class Unavailability:
