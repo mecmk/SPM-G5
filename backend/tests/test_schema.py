@@ -166,6 +166,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.RECRUITMENT_FAIR, "PLANNING"),
         (Events.PARTNER_GALA, "PLANNING"),
         (Events.EQUIPMENT_DECISIONS, "PLANNING"),
+        (Events.WATERFRONT_DEMO, "PLANNING"),
         (Events.SMART_CITIES_EXPO, "PLANNING"),
         (Events.MOBILITY_FORUM, "PLANNING"),
         (Events.RESILIENCE_WORKSHOP, "PLANNING"),
@@ -205,7 +206,8 @@ def test_seed_constants_match_database(db: Session):
     # Story 15.1's e2e rows: an item not yet sent and a pending one, each with its hold, and the
     # out-of-service record that leaves no video camera free for the showcase. Story 15.2's: one
     # item per Technical Support tab, and the out-of-service record that leaves the pending one
-    # short.
+    # short. Story 17.1's: two items cancelled with their event, holding nothing, and a pending
+    # one with its hold.
     for item_id, status in (
         (EquipmentItems.WORKSHOP_PROJECTORS, "REQUESTED"),
         (EquipmentItems.SHOWCASE_SPEAKERS, "PENDING"),
@@ -219,6 +221,9 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentItems.OFFSITE_PROJECTORS, "PENDING"),
         (EquipmentItems.OFFSITE_WIRELESS_MICS, "PENDING"),
         (EquipmentItems.OFFSITE_CAMERAS, "PENDING"),
+        (EquipmentItems.MIXER_SPEAKERS, "CANCELLED"),
+        (EquipmentItems.MIXER_WIRELESS_MICS, "CANCELLED"),
+        (EquipmentItems.DEMO_LAPTOPS, "PENDING"),
     ):
         assert (
             db.execute(
@@ -238,6 +243,7 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentHolds.OFFSITE_PROJECTORS, EquipmentItems.OFFSITE_PROJECTORS),
         (EquipmentHolds.OFFSITE_WIRELESS_MICS, EquipmentItems.OFFSITE_WIRELESS_MICS),
         (EquipmentHolds.OFFSITE_CAMERAS, EquipmentItems.OFFSITE_CAMERAS),
+        (EquipmentHolds.DEMO_LAPTOPS, EquipmentItems.DEMO_LAPTOPS),
     ):
         assert (
             db.execute(

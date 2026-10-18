@@ -89,7 +89,8 @@ test("16.1 AC1: Technical Support accepts a request, and the coordinator sees it
 
   await openOffsiteAsCoordinator(page);
   const item = eventItem(page, "Portable speaker set");
-  await expect(item.getByText("Accepted", { exact: true })).toBeVisible();
+  // Story 17.1 AC1: the event page says an accepted item is reserved.
+  await expect(item.getByText("Accepted (reserved)", { exact: true })).toBeVisible();
   await expect(item).toContainText(/Decided .* by Theo Tech/);
 });
 

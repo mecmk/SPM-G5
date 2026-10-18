@@ -1058,6 +1058,67 @@ ON CONFLICT (id) DO UPDATE SET
     outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
 
 -- ---------------------------------------------------------------------
+-- Story 17.1: tests/e2e/equipment-display.spec.ts. The Summer Rooftop Mixer (3333..15) was
+-- cancelled with two items on it, one accepted and one still pending: both were cancelled with
+-- it and hold nothing, so they show as Released (17.1 AC4). The waterfront demo (3333..80) is
+-- the spec's own: in planning, organiser 2, coordinator 1, dated January 2029, clear of every
+-- other hold, with one pending item that the spec has Technical Support accept while the
+-- coordinator has the page open (17.1 AC6).
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000000080', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Waterfront Product Demo', 'Product launch', 'Live demonstrations of the new product range for partners.', '2029-01-17 09:00+08', '2029-01-17 17:00+08', 50, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-08 09:00+08', '2026-10-09 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0080-000000000001', '33333333-0000-0000-0000-000000000080', 0, 'Demo hall', 50,
+     '2029-01-17 09:00+08', '2029-01-17 17:00+08', 'STANDING')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0017-000000000001', '33333333-0000-0000-0000-000000000080', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-09 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- Self-assigned, as 3333..27 is, so it does not move story 5.1's round robin.
+INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000080', '33333333-0000-0000-0000-000000000080', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-08 09:00+08')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
+    ('66666666-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000015', '77777777-0000-0000-0000-000000000005', 2, 'Music on the terrace', 'CANCELLED', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-08-25 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-08-26 10:00+08'),
+    ('66666666-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000015', '77777777-0000-0000-0000-000000000002', 2, NULL, 'CANCELLED', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-08-25 10:00+08', NULL, NULL),
+    ('66666666-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000080', '77777777-0000-0000-0000-000000000004', 2, 'For the two demo stations', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-10 10:00+08', NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
+    created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
+    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at;
+
+INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
+    ('eeeeeeee-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000080', '66666666-0000-0000-0000-000000000036', '77777777-0000-0000-0000-000000000004', 2,
+     '2029-01-17 09:00+08', '2029-01-17 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-10 10:00+08', 'Held for the coordinator''s equipment request.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, status = EXCLUDED.status,
+    reserved_by_id = EXCLUDED.reserved_by_id, reserved_at = EXCLUDED.reserved_at,
+    released_at = NULL, released_quantity = 0, notes = EXCLUDED.notes;
+
+-- ---------------------------------------------------------------------
 -- Story 21.2: tests/e2e/safety-decision.spec.ts. Each flow the spec clicks through has an event
 -- of its own, so specs running in parallel never share one: the coding bootcamp (3333..50) is
 -- secured and never reviewed, for requesting a review; the cyber clinic (47) awaits the check,

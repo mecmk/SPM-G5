@@ -159,6 +159,8 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
+    # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 17 January 2029.
+    WATERFRONT_DEMO = _e(80)  # one pending item (EquipmentItems.DEMO_LAPTOPS), accepted by the spec
 
 
 class Bookings:
@@ -257,6 +259,11 @@ class EquipmentItems:
     # Story 21.1's, accepted, on Events.HARBOUR_CONCERT and Events.BOOK_FAIR in August 2028.
     CONCERT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000032")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000033")
+    # Story 17.1's: cancelled with Events.CANCELLED, holding nothing - one had been accepted, one
+    # was still pending - and the pending one on Events.WATERFRONT_DEMO.
+    MIXER_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000034")
+    MIXER_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000035")
+    DEMO_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000036")
 
 
 class EquipmentHolds:
@@ -273,6 +280,7 @@ class EquipmentHolds:
     OFFSITE_CAMERAS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000024")
     CONCERT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000025")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000026")
+    DEMO_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000027")
 
 
 class EquipmentOutOfService:
