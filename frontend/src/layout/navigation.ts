@@ -6,6 +6,7 @@ import {
   EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
   EVENTS_UNASSIGNED_PATH,
+  EVENTS_ASSIGNMENTS_PATH,
   VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
   SAFETY_CHECKS_PATH,
@@ -70,6 +71,15 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'inbox',
         permission: PERMISSIONS.EVENTS_ASSIGN,
         story: '5.4',
+        isAvailable: true,
+      },
+      {
+        to: EVENTS_ASSIGNMENTS_PATH,
+        label: 'Assignments',
+        description: 'Every active event and who coordinates it, to balance the team’s workload.',
+        icon: 'people',
+        permission: PERMISSIONS.EVENTS_ASSIGN,
+        story: '5.5',
         isAvailable: true,
       },
       {

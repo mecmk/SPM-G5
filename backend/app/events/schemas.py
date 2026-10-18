@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import Annotated
 
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     ConfigDict,
@@ -21,6 +22,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
@@ -30,6 +32,41 @@ from app.events.models import Event, EventClarification, EventEquipmentRequest, 
 # rejects 0 and below; the ceiling is the largest value the INTEGER columns can hold.
 _INT32_MAX = 2_147_483_647
 PositiveWholeNumber = Annotated[StrictInt, Field(gt=0, le=_INT32_MAX)]
+
+# Fix f2.1.5 (story 2.1 AC21-AC23): a request's expected attendance, facility quantities and
+# equipment quantities accept at most 100,000, since no venue holds more people. A larger one is
+# refused with a sentence giving the limit, never as a wrong number. Mirrored by the form in
+# frontend/src/events/eventRequestForm.ts and its error registry - keep the limit and the sentences
+# in step.
+MAX_ATTENDANCE_OR_QUANTITY = 100_000
+ATTENDANCE_TOO_LARGE_MESSAGE = "Expected attendance must be 100,000 or less."
+FACILITY_QUANTITY_TOO_LARGE_MESSAGE = "A facility quantity must be 100,000 or less."
+EQUIPMENT_QUANTITY_TOO_LARGE_MESSAGE = "Equipment quantity must be 100,000 or less."
+_NUMBER_TOO_LARGE_ERROR = "number_too_large"
+
+
+def _at_most_the_limit(message: str) -> AfterValidator:
+    """Fix f2.1.5 (story 2.1 AC22, AC23): refuse a number above ``MAX_ATTENDANCE_OR_QUANTITY`` with
+    ``message``. A custom error rather than a ``ValueError``, so the sentence is sent as it is,
+    without Pydantic's "Value error, " in front: story 19.1's change form shows it word for word."""
+
+    def check(value: int) -> int:
+        if value > MAX_ATTENDANCE_OR_QUANTITY:
+            raise PydanticCustomError(_NUMBER_TOO_LARGE_ERROR, message)
+        return value
+
+    return AfterValidator(check)
+
+
+ExpectedAttendance = Annotated[
+    StrictInt, Field(gt=0), _at_most_the_limit(ATTENDANCE_TOO_LARGE_MESSAGE)
+]
+FacilityQuantity = Annotated[
+    StrictInt, Field(gt=0), _at_most_the_limit(FACILITY_QUANTITY_TOO_LARGE_MESSAGE)
+]
+EquipmentQuantity = Annotated[
+    StrictInt, Field(gt=0), _at_most_the_limit(EQUIPMENT_QUANTITY_TOO_LARGE_MESSAGE)
+]
 
 ACCESSIBILITY_CONTRADICTION_MESSAGE = (
     "Accessibility cannot be marked none required while needs or notes are recorded."
@@ -238,7 +275,7 @@ class EventFacilityIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     code: str = Field(min_length=1)
-    quantity: PositiveWholeNumber | None = None
+    quantity: FacilityQuantity | None = None
     notes: str | None = None
 
     @field_validator("notes", mode="before")
@@ -297,7 +334,7 @@ class EventEquipmentIn(BaseModel):
 
     id: uuid.UUID | None = None
     equipment_type_code: str = Field(min_length=1)
-    quantity: PositiveWholeNumber
+    quantity: EquipmentQuantity
     technical_notes: str | None = None
 
     @field_validator("technical_notes", mode="before")
@@ -403,7 +440,7 @@ class EventCreate(_EventRequestRules):
     description: str | None = None
     starts_at: AwareDatetime | None = None
     ends_at: AwareDatetime | None = None
-    expected_attendance: PositiveWholeNumber | None = None
+    expected_attendance: ExpectedAttendance | None = None
     contact_name: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
@@ -443,7 +480,7 @@ class EventUpdate(_EventRequestRules):
     description: str | None = None
     starts_at: AwareDatetime | None = None
     ends_at: AwareDatetime | None = None
-    expected_attendance: PositiveWholeNumber | None = None
+    expected_attendance: ExpectedAttendance | None = None
     contact_name: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None

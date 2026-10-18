@@ -6,7 +6,7 @@ AC2 The proposed end must be after the start, and a date in the past is rejected
     explanatory message. An event may start at most 2 years ahead and may run for at most
     14 days (decided 20 Sep 2026).
 AC3 Expected attendance, equipment quantities and facility quantities accept positive whole
-    numbers only.
+    numbers only - at most 100,000 since fix f2.1.5 (AC21-AC23, test_event_request_number_limit.py).
 AC4 Venue requirements (room layout, facilities with a quantity, other requirements) can be
     recorded. Marking them "no venue requirements", stored apart from left empty, was withdrawn
     by fix f2.7.4: every request now has at least one venue requirement (story 2.7 AC14).
@@ -45,6 +45,8 @@ from tests.support.factories import (
 from tests.support.seed import Events, Users
 
 INT32_MAX = 2_147_483_647
+# Fix f2.1.5 (AC22): the most a request accepts, well under what an INTEGER column holds.
+LARGEST_ACCEPTED = 100_000
 # An organisation id that belongs to no one. Fixed rather than ``uuid.uuid4()``: a parametrize value
 # is evaluated when tests are collected and becomes part of the pytest node id, so a random one
 # writes a different line into the generated traceability matrix on every run.
@@ -511,7 +513,7 @@ def test_attendance_rejects_anything_but_a_positive_whole_number(organiser_clien
 
 
 @pytest.mark.story("2.1", ac=3)
-@pytest.mark.parametrize("attendance", [1, INT32_MAX], ids=["smallest", "largest"])
+@pytest.mark.parametrize("attendance", [1, LARGEST_ACCEPTED], ids=["smallest", "largest"])
 def test_attendance_accepts_the_boundary_values(organiser_client, attendance):
     response = organiser_client.post(
         "/events", json=event_request_payload(expected_attendance=attendance)
@@ -588,7 +590,7 @@ def test_facility_quantity_rejects_anything_but_a_positive_whole_number(organise
 
 
 @pytest.mark.story("2.1", ac=3)
-@pytest.mark.parametrize("quantity", [1, INT32_MAX], ids=["smallest", "largest"])
+@pytest.mark.parametrize("quantity", [1, LARGEST_ACCEPTED], ids=["smallest", "largest"])
 def test_facility_quantity_accepts_the_boundary_values(organiser_client, quantity):
     created = create_event_request(
         organiser_client,

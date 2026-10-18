@@ -66,7 +66,9 @@ export type ErrorCode =
   | 'EVENT_TOO_FAR_AHEAD'
   | 'EVENT_TOO_LONG'
   | 'EVENT_ATTENDANCE_INVALID'
+  | 'EVENT_ATTENDANCE_TOO_LARGE'
   | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'EVENT_FACILITY_QUANTITY_TOO_LARGE'
   | 'VENUE_REQUIREMENT_CAPACITY_INVALID'
   | 'VENUE_REQUIREMENT_OVER_ATTENDANCE'
   | 'VENUE_REQUIREMENT_TIMES_INCOMPLETE'
@@ -79,6 +81,7 @@ export type ErrorCode =
   | 'EVENT_EQUIPMENT_DUPLICATE'
   | 'EVENT_EQUIPMENT_UNAVAILABLE'
   | 'EVENT_QUANTITY_INVALID'
+  | 'EVENT_QUANTITY_TOO_LARGE'
   | 'EVENT_CONTACT_EMAIL_INVALID'
   | 'EVENT_CONTACT_PHONE_INVALID'
   | 'EVENT_PICTURE_TYPE_INVALID'
@@ -408,10 +411,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the attendance',
     message: 'Expected attendance must be a positive whole number.',
   },
+  /** Story 2.1 AC22 (fix f2.1.5): worded as the backend words it. */
+  EVENT_ATTENDANCE_TOO_LARGE: {
+    title: 'Check the attendance',
+    message: 'Expected attendance must be 100,000 or less.',
+  },
   /** Story 2.1 AC3. */
   EVENT_FACILITY_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  /** Story 2.1 AC22 (fix f2.1.5): worded as the backend words it. */
+  EVENT_FACILITY_QUANTITY_TOO_LARGE: {
+    title: 'Check the quantity',
+    message: 'A facility quantity must be 100,000 or less.',
   },
   /** Story 2.7 AC6, worded as the backend words it where it has its own sentence. */
   VENUE_REQUIREMENT_CAPACITY_INVALID: {
@@ -466,6 +479,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'Equipment quantity must be a positive whole number.',
+  },
+  /** Story 2.1 AC21 (fix f2.1.5): until the dates are chosen; then such a quantity is
+   * EVENT_EQUIPMENT_UNAVAILABLE. Worded as the backend words it. */
+  EVENT_QUANTITY_TOO_LARGE: {
+    title: 'Check the quantity',
+    message: 'Equipment quantity must be 100,000 or less.',
   },
   /** Story 2.1 AC13: worded as the backend words it. */
   EVENT_CONTACT_EMAIL_INVALID: {

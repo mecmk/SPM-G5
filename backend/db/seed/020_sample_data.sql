@@ -251,8 +251,9 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000027', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Leadership Offsite', 'Staff conference', 'Two days of strategy sessions for senior leaders.', NULL, '2027-12-08 09:00+08', '2027-12-09 17:00+08', 40, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-10-02 09:00+08', '2026-10-03 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..28: in planning and assigned to Chloe; dedicated to story 8.4's e2e spec
-    -- (tests/e2e/venue-requirement-search.spec.ts), which only reads it. Its three venue
+    -- 3333..28: in planning and assigned to Chloe; only read by e2e specs: story 8.4's
+    -- (tests/e2e/venue-requirement-search.spec.ts) and story 5.5's assignment overview
+    -- (tests/e2e/assignment-overview.spec.ts), which lists and opens it. Its three venue
     -- requirements (below) each find different venues, so choosing one visibly changes the results.
     -- Dated March 2028, clear of every other seeded event and of the periods backend tests build.
     ('33333333-0000-0000-0000-000000000028', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
@@ -297,7 +298,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000034', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Community Craft Fair', 'Community event', 'Stalls for local makers, with a workshop corner.', NULL, '2028-07-12 10:00+08', '2028-07-12 16:00+08', 120, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-24 09:00+08', '2026-09-26 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..35 and 3333..36: awaiting the Safety Officer's check, for story 21.1. The 35 expects
+    -- 3333..35 and 3333..36: awaiting the Safety Officer's check, for story 21.1. The 35 is also
+    -- read by 7.2's and 5.5's e2e specs (event-correction, assignment-overview). The 35 expects
     -- more people than its one approved venue holds, at a venue whose operating hours are not
     -- recorded. The 36 is within capacity and was sent back once by the officer
     -- (event_safety_reviews below), when it had fewer people and microphones than it has now.

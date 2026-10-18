@@ -59,7 +59,13 @@ import {
   EQUIPMENT_OPEN_STATUSES,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
-import { formatDate, formatDateTime, formatSchedule, formatTime } from '../shared/format'
+import {
+  formatDate,
+  formatDateTime,
+  formatSchedule,
+  formatTime,
+  NOT_YET_ASSIGNED,
+} from '../shared/format'
 import {
   FLAGGED_BY_SAFETY_REVIEW,
   SAFETY_REVIEW_STATUSES,
@@ -77,8 +83,14 @@ import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { SafetyReviewSection } from './SafetyReviewSection'
 
+/**
+ * Story 5.5 AC3 (PO decision P7): the Lead opens an event read-only, with Reassign "available
+ * (5.6)". Story 5.6 builds the Lead's reassignment; until then the backend refuses it (409), so
+ * this stays false and the Lead sees no Reassign button. 5.6 turns it on.
+ */
+const IS_LEAD_REASSIGNMENT_BUILT = false
+
 const NOT_RECORDED = 'Not recorded'
-const NOT_YET_ASSIGNED = 'Not yet assigned'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
@@ -564,13 +576,21 @@ export function EventDetailPage() {
    *  awaits a response - mirroring the backend's `respond_to_clarification`. */
   const canRespondToClarification =
     user !== null && event.organiser_id === user.id && event.status === 'CLARIFICATION_REQUESTED'
-  /** Story 5.2 AC1/AC6: only the currently assigned coordinator may reassign, and only on an
-   *  event that is not completed, cancelled or rejected - mirroring the backend's
-   *  `ASSIGNABLE_STATUSES` (a draft never reaches this: it has no coordinator to be one of). */
-  const canReassign =
-    can(PERMISSIONS.EVENTS_REVIEW) &&
-    isAssignedCoordinator &&
+  /** Story 5.5 AC3 (PO decision P7): where story 5.6's Lead reassignment switches on. */
+  const canReassignAsLead =
+    IS_LEAD_REASSIGNMENT_BUILT &&
+    can(PERMISSIONS.EVENTS_ASSIGN) &&
     !TERMINAL_STATUSES.includes(event.status)
+  /** Story 5.2 AC1/AC6: the currently assigned coordinator may reassign, and only on an event
+   *  that is not completed, cancelled or rejected - mirroring the backend's `ASSIGNABLE_STATUSES`
+   *  (a draft never reaches this: it has no coordinator to be one of). Story 5.6 adds the Lead,
+   *  through `canReassignAsLead`, which stays off until then (5.5 AC3). */
+  const canReassign =
+    (can(PERMISSIONS.EVENTS_REVIEW) &&
+      isAssignedCoordinator &&
+      !TERMINAL_STATUSES.includes(event.status)) ||
+    canReassignAsLead
+
   /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
    *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
    *  mirroring the backend's own checks. Everyone else sees the list alone. */
