@@ -21,6 +21,8 @@ export function venuePath(venueId: string): string {
 export const VENUE_SEARCH_PARAMS = {
   event: 'event',
   requirement: 'requirement',
+  // Story 12.6 AC1: the booking being replaced, which puts the catalogue in replacement mode.
+  replacing: 'replacing',
   search: 'search',
   capacity: 'capacity',
   capacityMax: 'capacity_max',
@@ -38,6 +40,8 @@ export interface VenueSearch {
   eventId?: string
   /** Story 8.4 AC4: the event's venue requirement selected in the catalogue's banner. */
   requirementId?: string
+  /** Story 12.6 AC1: the approved, marked booking a replacement is being found for. */
+  replacingBookingId?: string
   /** Name or location contains this text. */
   search?: string
   capacity?: number
@@ -56,6 +60,8 @@ export function venueSearchParams(search: VenueSearch): URLSearchParams {
   const params = new URLSearchParams()
   if (search.eventId) params.set(VENUE_SEARCH_PARAMS.event, search.eventId)
   if (search.requirementId) params.set(VENUE_SEARCH_PARAMS.requirement, search.requirementId)
+  if (search.replacingBookingId)
+    params.set(VENUE_SEARCH_PARAMS.replacing, search.replacingBookingId)
   if (search.search) params.set(VENUE_SEARCH_PARAMS.search, search.search)
   if (search.capacity !== undefined) {
     params.set(VENUE_SEARCH_PARAMS.capacity, String(search.capacity))
@@ -80,6 +86,7 @@ export function readVenueSearch(params: URLSearchParams): VenueSearch {
   return {
     eventId: params.get(VENUE_SEARCH_PARAMS.event) ?? undefined,
     requirementId: params.get(VENUE_SEARCH_PARAMS.requirement) ?? undefined,
+    replacingBookingId: params.get(VENUE_SEARCH_PARAMS.replacing) ?? undefined,
     search: searchText(params.get(VENUE_SEARCH_PARAMS.search)),
     capacity: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacity)),
     capacityMax: capacityLimit(params.get(VENUE_SEARCH_PARAMS.capacityMax)),

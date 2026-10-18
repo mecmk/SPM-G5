@@ -35,9 +35,55 @@ export function coveringBooking(
     bookings.find(
       (booking) =>
         booking.venue_requirement_id === requirement.id &&
-        COVERING_STATUSES.includes(booking.status),
+        COVERING_STATUSES.includes(booking.status) &&
+        !isPendingReplacementOfLiveOriginal(booking, bookings),
     ) ?? null
   )
+}
+
+/**
+ * Story 12.6 AC10: a pending replacement whose original still holds its venue covers nothing - the
+ * original does - as the backend's `find_covering_booking` and its one-per-requirement index leave
+ * it out. Once the original stops holding, the replacement is the requirement's request.
+ */
+function isPendingReplacementOfLiveOriginal(
+  booking: BookingOutcome,
+  bookings: readonly BookingOutcome[],
+): boolean {
+  if (booking.status !== 'PENDING' || booking.replaces_booking_id === null) return false
+  const original = bookings.find((each) => each.id === booking.replaces_booking_id)
+  return original !== undefined && COVERING_STATUSES.includes(original.status)
+}
+
+/** Story 9.4 AC3: Venue Staff's closure marked the booking "Venue unavailable - alternative
+ * needed"; the mark is null once the booking holds nothing. */
+export function isMarked(booking: BookingOutcome): boolean {
+  return booking.venue_unavailable_marked_at !== null
+}
+
+/** Story 12.6 AC1/AC9: only an approved booking still marked is replaced; a marked pending one is
+ * switched to another venue (12.5). */
+export function isReplaceable(booking: BookingOutcome): boolean {
+  return booking.status === APPROVED && isMarked(booking)
+}
+
+/** Story 12.6 AC4: the replacement asked for `booking`, while it is pending. */
+export function pendingReplacementFor(
+  booking: BookingOutcome,
+  bookings: readonly BookingOutcome[],
+): BookingOutcome | null {
+  return (
+    bookings.find((each) => each.replaces_booking_id === booking.id && each.status === 'PENDING') ??
+    null
+  )
+}
+
+/** Story 12.6 AC1: the venue requirement `booking` is for, null for an additional venue. */
+export function requirementOfBooking(
+  event: EventDetail,
+  booking: BookingOutcome,
+): VenueRequirement | null {
+  return event.venue_requirements.find((each) => each.id === booking.venue_requirement_id) ?? null
 }
 
 /**
@@ -113,11 +159,13 @@ export function venueRequirementTerms(
 export function venueSearchFor(
   event: EventDetail,
   requirement: VenueRequirement | null,
+  replacingBookingId?: string,
 ): VenueSearch {
   const terms = venueRequirementTerms(event, requirement)
   return {
     eventId: event.id,
     requirementId: requirement?.id,
+    replacingBookingId,
     capacity: terms.capacity ?? undefined,
     from: terms.startsAt ? instantToInput(terms.startsAt) : undefined,
     to: terms.endsAt ? instantToInput(terms.endsAt) : undefined,
@@ -125,6 +173,20 @@ export function venueSearchFor(
     facilities: terms.facilities.map((facility) => facility.code),
     accessibilityFeatures: event.accessibility_needs.map((need) => need.code),
   }
+}
+
+/**
+ * Story 12.6 AC1: the catalogue's address for replacing `booking`, an approved booking marked
+ * "Venue unavailable": its requirement's own search - or, for an additional venue, the event's
+ * own period and attendance - with the booking named, so the catalogue leaves its venue out. For
+ * a marked pending booking, the requirement's search alone: its venues offer Switch (12.5).
+ */
+export function replacementSearchFor(event: EventDetail, booking: BookingOutcome): VenueSearch {
+  return venueSearchFor(
+    event,
+    requirementOfBooking(event, booking),
+    isReplaceable(booking) ? booking.id : undefined,
+  )
 }
 
 /**

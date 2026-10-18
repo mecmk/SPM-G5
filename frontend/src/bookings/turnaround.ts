@@ -42,6 +42,16 @@ function wholeNumberOf(part: string): number | null {
   return WHOLE_NUMBER.test(trimmed) ? Number(trimmed) : null
 }
 
+/**
+ * Story 12.6 AC2: a setup or teardown of `minutes` as the fields of the step show it - whole days,
+ * then hours, then minutes - so the original's is there to read and change.
+ */
+export function minutesToDuration(minutes: number): DurationDraft {
+  const days = Math.floor(minutes / (24 * 60))
+  const hours = Math.floor((minutes % (24 * 60)) / 60)
+  return { days: String(days), hours: String(hours), minutes: String(minutes % 60) }
+}
+
 /** f12.1.2 (story 12.1 AC1/AC5): a setup or teardown draft in whole minutes, or null when any of
  * its parts is not a whole number of zero or more. */
 export function durationMinutes(draft: DurationDraft): number | null {

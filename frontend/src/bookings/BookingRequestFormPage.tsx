@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import {
   createBookingRequest,
   listBookingsForEvent,
+  requestReplacementBooking,
   SUITABILITY_OVERRIDE_REASON_MAX_LENGTH,
   switchBookingRequest,
   type BookingOutcome,
@@ -23,6 +24,7 @@ import {
   VENUE_SEARCH_PARAMS,
   venueSearchPath,
 } from '../routes'
+import { replacesLine } from '../shared/bookingStatus'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import {
@@ -30,6 +32,7 @@ import {
   coveringBooking,
   firstRequirementNeedingVenue,
   isBooked,
+  isReplaceable,
   requirementName,
   venueRequirementTerms,
   venueSearchFor,
@@ -39,6 +42,7 @@ import {
   bookedPeriod,
   durationMinutes,
   isWithinOpeningHours,
+  minutesToDuration,
   outsideHoursFact,
   turnaroundProblem,
   VENUE_STAFF_DECIDE,
@@ -193,6 +197,9 @@ export function BookingRequestFormPage() {
   const [searchParams] = useSearchParams()
   const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
   const replacesId = searchParams.get(VENUE_REQUEST_REPLACES_PARAM)
+  // Story 12.6 AC1/AC2: opened from the catalogue in replacement mode, the address also names the
+  // approved booking this request replaces.
+  const replacingId = searchParams.get(VENUE_SEARCH_PARAMS.replacing)
   const { user, can } = useAuth()
   const loadSubject = useCallback(
     () =>
@@ -223,23 +230,30 @@ export function BookingRequestFormPage() {
     setData: setSuitability,
   } = useLoaded(loadSuitability)
   // Story 12.5 (decided 11 Oct 2026): the event's bookings, read to find the request a switch
-  // replaces - only when the address names one.
+  // replaces - only when the address names one. Story 12.6: or the booking a replacement replaces.
+  const namesAnotherBooking = replacesId !== null || replacingId !== null
   const loadBookings = useCallback(
     () =>
-      isRequestable && replacesId !== null
+      isRequestable && namesAnotherBooking
         ? listBookingsForEvent(eventId)
         : Promise.resolve<BookingOutcome[] | null>(null),
-    [isRequestable, replacesId, eventId],
+    [isRequestable, namesAnotherBooking, eventId],
   )
   const { data: bookings, error: bookingsError } = useLoaded(loadBookings)
   const isFindingReplaced =
-    isRequestable && replacesId !== null && bookings === null && bookingsError === null
+    isRequestable && namesAnotherBooking && bookings === null && bookingsError === null
   const covering =
     requirement === null || bookings === null ? null : coveringBooking(requirement, bookings)
   /** The request this one replaces: the requirement's own, while it is pending. Anything else
    *  the address names - or bookings that could not be read - sends a plain request. */
   const replaced =
     covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
+  /** Story 12.6 AC2: the approved booking, still marked, this request replaces. Anything else the
+   *  address names sends a plain request, which the server refuses with its reason. */
+  const original =
+    bookings === null
+      ? null
+      : (bookings.find((each) => each.id === replacingId && isReplaceable(each)) ?? null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -254,6 +268,14 @@ export function BookingRequestFormPage() {
   // them.
   const [setupDraft, setSetupDraft] = useState(ZERO_DURATION)
   const [teardownDraft, setTeardownDraft] = useState(ZERO_DURATION)
+  // Story 12.6 AC2: a replacement starts from the original's setup and teardown, once they are
+  // known, and the coordinator may change them. Set once, so what they type is never overwritten.
+  const [hasPrefilledTurnaround, setHasPrefilledTurnaround] = useState(false)
+  if (original !== null && !hasPrefilledTurnaround) {
+    setHasPrefilledTurnaround(true)
+    setSetupDraft(minutesToDuration(original.setup_minutes))
+    setTeardownDraft(minutesToDuration(original.teardown_minutes))
+  }
 
   if (error) {
     return (
@@ -361,7 +383,19 @@ export function BookingRequestFormPage() {
     }
     setIsSending(true)
     try {
-      if (replaced !== null) {
+      if (original !== null) {
+        await requestReplacementBooking(
+          original.id,
+          {
+            venue_id: venue.id,
+            suitability_override_reason: reason ?? undefined,
+            setup_minutes: setupMinutes,
+            teardown_minutes: teardownMinutes,
+          },
+          venue.name,
+          original.venue_name,
+        )
+      } else if (replaced !== null) {
         await switchBookingRequest(
           replaced.id,
           {
@@ -464,6 +498,12 @@ export function BookingRequestFormPage() {
             <p>
               This replaces the request for {replaced.venue_name}, which is withdrawn when you
               switch.
+            </p>
+          )}
+          {original !== null && (
+            <p>
+              {replacesLine(original.venue_name)}, whose venue is unavailable. It stays booked until
+              Venue Staff approve this request, and is released then.
             </p>
           )}
           <ul className="check-list">

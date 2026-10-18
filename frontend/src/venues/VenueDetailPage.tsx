@@ -57,6 +57,7 @@ export function VenueDetailPage() {
     requestingEvent,
     selectedRequirement,
     selectedCovering,
+    replacingBooking,
     error: eventError,
   } = useRequestingEvent()
   const loadWindows = useCallback(
@@ -138,15 +139,19 @@ export function VenueDetailPage() {
           <div className="page-actions">
             {/* Story 12.5 AC11: the selected requirement already has a venue, which the page
              *  names; it is switched while only requested, never once booked. */}
-            {selectedRequirement !== null && selectedCovering !== null && (
-              <p className="muted">
-                {describeCoveredRequirement(
-                  requirementName(requestingEvent, selectedRequirement),
-                  selectedCovering,
-                )}
-              </p>
-            )}
-            {selectedCovering === null && (
+            {selectedRequirement !== null &&
+              selectedCovering !== null &&
+              replacingBooking === null && (
+                <p className="muted">
+                  {describeCoveredRequirement(
+                    requirementName(requestingEvent, selectedRequirement),
+                    selectedCovering,
+                  )}
+                </p>
+              )}
+            {/* Story 12.6 AC1/AC2: opened to replace a booking, the venue is requested as its
+             *  replacement, whatever the requirement already holds. */}
+            {(selectedCovering === null || replacingBooking !== null) && (
               <Link
                 to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
                 className="button brand"
@@ -154,19 +159,21 @@ export function VenueDetailPage() {
                 Request this venue
               </Link>
             )}
-            {selectedCovering !== null && !isBooked(selectedCovering) && (
-              <Link
-                to={venueSwitchPath(
-                  requestingEvent.id,
-                  venue.id,
-                  location.search,
-                  selectedCovering.id,
-                )}
-                className="button brand"
-              >
-                Switch to this venue
-              </Link>
-            )}
+            {selectedCovering !== null &&
+              !isBooked(selectedCovering) &&
+              replacingBooking === null && (
+                <Link
+                  to={venueSwitchPath(
+                    requestingEvent.id,
+                    venue.id,
+                    location.search,
+                    selectedCovering.id,
+                  )}
+                  className="button brand"
+                >
+                  Switch to this venue
+                </Link>
+              )}
           </div>
         </div>
       )}

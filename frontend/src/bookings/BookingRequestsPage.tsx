@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Pagination } from '../components/Pagination'
+import { ReplacementNote } from '../components/ReplacementNote'
 import { Chip } from '../components/Chip'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
@@ -326,6 +327,14 @@ export function BookingRequestsPage() {
                   </div>
 
                   <OutsideHoursNotice entry={entry} />
+
+                  {/* Story 12.6 AC3/AC6: a replacement says what it replaces and what approving
+                      it releases. */}
+                  <ReplacementNote
+                    replacesVenueName={entry.replaces_venue_name}
+                    approvalReleasesVenueName={entry.approval_releases_venue_name}
+                    originalIsMarked={entry.original_is_marked}
+                  />
 
                   <div className="fact-grid">
                     <div className="subtle-block">

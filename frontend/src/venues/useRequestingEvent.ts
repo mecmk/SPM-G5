@@ -6,7 +6,7 @@ import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { VENUE_SEARCH_PARAMS } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { canRequestVenueFor, coveringBooking } from '../shared/venueRequest'
+import { canRequestVenueFor, coveringBooking, isReplaceable } from '../shared/venueRequest'
 
 /** What a venue page knows about the event named in its address. */
 export interface RequestingEventState {
@@ -23,6 +23,10 @@ export interface RequestingEventState {
   selectedCovering: BookingOutcome | null
   /** The event a venue is being found for, when the signed-in user may request one for it. */
   requestingEvent: EventDetail | null
+  /** Story 12.6 AC1: the booking the address names to replace (`?replacing=`), while it is an
+   * approved booking still marked and the user may request a venue for its event - which puts the
+   * catalogue in replacement mode. Null otherwise. */
+  replacingBooking: BookingOutcome | null
   /** Why the event in the address, or its bookings, could not be loaded, otherwise null. */
   error: string | null
   /** Story 12.5 (decided 11 Oct 2026): a booking changed on the page - a request withdrawn from
@@ -56,6 +60,7 @@ export function useRequestingEvent(): RequestingEventState {
   const [searchParams] = useSearchParams()
   const eventId = searchParams.get(VENUE_SEARCH_PARAMS.event)
   const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
+  const replacingId = searchParams.get(VENUE_SEARCH_PARAMS.replacing)
   const { user, can } = useAuth()
   const canReadBookings = can(PERMISSIONS.BOOKINGS_READ)
   const loadEvent = useCallback(
@@ -109,9 +114,14 @@ export function useRequestingEvent(): RequestingEventState {
   const selectedRequirement =
     resolvedEvent?.venue_requirements.find((requirement) => requirement.id === requirementId) ??
     null
+  const replacingBooking =
+    isRequestable && bookings !== null
+      ? (bookings.find((booking) => booking.id === replacingId && isReplaceable(booking)) ?? null)
+      : null
   return {
     event: resolvedEvent,
     bookings,
+    replacingBooking,
     selectedRequirement,
     selectedCovering:
       selectedRequirement === null || bookings === null

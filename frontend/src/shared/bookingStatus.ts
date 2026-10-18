@@ -10,6 +10,34 @@ export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
  * its held period - the event's page, Venue Staff's queue card and the request's own page. */
 export const VENUE_UNAVAILABLE_LABEL = 'Venue unavailable – alternative needed'
 
+/** Story 12.6 AC1/AC9: the event page's way to a replacement for an approved marked booking, and
+ * for a marked pending one (which is switched to another venue, 12.5) the way to the catalogue. */
+export const FIND_REPLACEMENT_LABEL = 'Find a replacement venue'
+export const FIND_ANOTHER_LABEL = 'Find another venue'
+
+/** Story 12.6 AC2-AC4: how every page words a replacement - on the replacement ("Replaces"), on
+ * the original once an approved replacement released it ("Replaced by"), on the original while one
+ * is pending, and in the banner for a marked requirement. AC3: what Venue Staff are told approving
+ * will release; AC1: the banner of the catalogue opened to replace a booking. */
+export function replacesLine(venueName: string): string {
+  return `Replaces ${venueName}`
+}
+export function replacedByLine(venueName: string): string {
+  return `Replaced by ${venueName}`
+}
+export function replacementRequestedLine(venueName: string): string {
+  return `Replacement requested: ${venueName}`
+}
+export function venueUnavailableLine(venueName: string): string {
+  return `Venue unavailable: ${venueName}`
+}
+export function approvalReleasesLine(venueName: string): string {
+  return `Approving this releases ${venueName}`
+}
+export function replacingLine(venueName: string): string {
+  return `Replacing ${venueName}`
+}
+
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */
 export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
 

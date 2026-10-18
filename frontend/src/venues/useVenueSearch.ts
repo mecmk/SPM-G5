@@ -55,6 +55,8 @@ function filtersKey(search: VenueSearch): string {
     facilities: [...(search.facilities ?? [])].sort(),
     accessibilityFeatures: [...(search.accessibilityFeatures ?? [])].sort(),
     includeWithdrawn: false,
+    // Story 12.6: the booking being replaced is not a filter.
+    replacingBookingId: undefined,
   }).toString()
 }
 
