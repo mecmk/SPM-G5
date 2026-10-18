@@ -85,6 +85,19 @@ export const EVENTS = {
   // closure over them.
   choirShowcase: '33333333-0000-0000-0000-000000000060',
   artMarket: '33333333-0000-0000-0000-000000000061',
+  // Story 12.6, organiser: organiser2, February 2029. Each has a booking at Exhibition Foyer that
+  // its day's closure has marked "Venue unavailable - alternative needed" (the closure and the mark
+  // are seeded); Grand Hall is free for every one. Coordinator's unless said otherwise.
+  lanternShowcase: '33333333-0000-0000-0000-000000000062', // approved; read only
+  makerFaire: '33333333-0000-0000-0000-000000000063', // an approved additional venue, marked
+  springExpo: '33333333-0000-0000-0000-000000000064', // the spec raises a replacement
+  awardsEvening: '33333333-0000-0000-0000-000000000065', // ... and Venue Staff approve it
+  pitchNight: '33333333-0000-0000-0000-000000000066', // ... withdrawn, then asked for again
+  neighbourhoodSummit: '33333333-0000-0000-0000-000000000067', // ... the closure removed first
+  heritageWalk: '33333333-0000-0000-0000-000000000068', // CANCELLED, its booking still marked
+  productShowcase: '33333333-0000-0000-0000-000000000069', // a marked PENDING booking
+  roboticsOpenHouse: '33333333-0000-0000-0000-000000000070', // coordinator2's; read only
+  wellnessExpo: '33333333-0000-0000-0000-000000000071', // coordinator2's; the spec asks for one
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged
