@@ -10,8 +10,9 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  *
  * AC1 Confirmed, Public events with registration enabled that have not started are listed
  *     soonest first, a page at a time, with name, description, date, time, each booked venue's
- *     name and location, the places left and the registration state. Registering shows a
- *     confirmation with its time; the event then shows as Registered.
+ *     name and location, the places left and the registration state, and its cover picture if
+ *     it has one (fix f18.1.1). Registering shows a confirmation with its time; the event then
+ *     shows as Registered.
  * AC3 Full, closed and not-yet-open events stay listed, with Register disabled.
  * AC4 An event no longer open to attendees refuses registration, and the page says so, naming
  *     the event, once the reloaded list no longer shows it.
@@ -30,9 +31,18 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 const UPCOMING_EVENTS_PATH = '/browse'
 const EVENTS_API_PATH = '/registrations/events'
+// A card's picture (2.1 AC14) is decorative - no alt text, hidden from assistive technology - so
+// it has no role or name, and is found by its tag. The jazz evening has the seeded one; an
+// uploaded one is served by the API (mediaUrl).
+const JAZZ_PICTURE = '/images/events/cat.jpg'
+const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-pictured-gala.png'
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 const REGISTER_API_PATH = '/registrations'
 
-const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked; only read
+const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked, a picture; only read
 const DESIGN_MASTERCLASS = 'Design Thinking Masterclass' // open; registered for once
 const FOUNDERS_FIRESIDE = 'Startup Founders Fireside' // open; double-clicked once
 const MENTORING_SLOT = 'Career Mentoring Slot' // one place; raced for once
@@ -90,6 +100,7 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
     places_left: 10,
     state: 'OPEN',
     registered_at: null,
+    cover_image_url: null,
     ...overrides,
   }
 }
@@ -192,6 +203,35 @@ test.describe('registers for a seeded event once', () => {
     await expect(card).toContainText(registeredToday(before, after))
     await expect(card).toContainText('59 places left')
   })
+})
+
+test('18.1 AC1: an event with a cover picture shows it on its card', async ({ page }) => {
+  await openUpcomingEvents(page)
+
+  await expect(eventCard(page, JAZZ_EVENING).locator('img')).toHaveAttribute('src', JAZZ_PICTURE)
+})
+
+test('18.1 AC1: an uploaded cover picture is loaded from the API', async ({ page }) => {
+  // No seeded event has an uploaded picture, so the list call is stubbed, and so is the picture
+  // the API would serve.
+  await page.route(
+    (url) => url.pathname === UPLOADED_PICTURE_PATH,
+    (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG_BYTES }),
+  )
+  const listRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === 'fetch' && new URL(request.url()).pathname === EVENTS_API_PATH,
+  )
+  const pictured = listedEvent('E2E Pictured Gala', { cover_image_url: UPLOADED_PICTURE_PATH })
+  await stubEventsCall(page, () => ({ status: 200, body: { items: [pictured], total: 1 } }))
+
+  await openUpcomingEvents(page)
+
+  const apiOrigin = new URL((await listRequest).url()).origin
+  await expect(eventCard(page, pictured.name).locator('img')).toHaveAttribute(
+    'src',
+    `${apiOrigin}${UPLOADED_PICTURE_PATH}`,
+  )
 })
 
 test('18.1 AC1: with no events open for registration, the page says so', async ({ page }) => {

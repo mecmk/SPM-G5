@@ -984,6 +984,11 @@ FROM (VALUES
 ) AS link (booking_id, requirement_id)
 WHERE b.id = link.booking_id;
 
+-- Fix f18.1.1: the jazz evening (3333..39) has the seeded cover picture, which
+-- tests/e2e/attendee-registration.spec.ts looks for on its Upcoming events card.
+UPDATE events SET cover_image_url = '/images/events/cat.jpg'
+WHERE id = '33333333-0000-0000-0000-000000000039';
+
 -- Story 18.1: the jazz evening's (3333..39) two venues, approved by Vera, each hold completed when
 -- the event was confirmed (story 12.7 AC4): its Main venue, Grand Hall, and the Exhibition Foyer
 -- for food stalls as an additional venue.
