@@ -32,10 +32,11 @@ export type ChangeRequestInput =
  * Mirrors `ChangeRequestOut`: story 19.1 AC1, a change request as the organiser and the assigned
  * coordinator see it. `current_value` and `proposed_value` are in the canonical shape the backend
  * stores (app/change_requests/service.py): a schedule as `{ starts_at, ends_at }` in UTC, the
- * attendance as a number, each venue requirement with its `id` (null for a new one; absent on a
- * request raised before ids were kept), and equipment by type, without ids. Story 19.2 AC2/AC3:
- * once decided, who decided, when, and a rejection's reason; all null while it waits or once
- * withdrawn.
+ * attendance as a number, and each venue requirement and equipment item with its `id` (null for a
+ * new one; absent on a request raised before ids were kept). Story 19.2 AC2/AC3: once decided,
+ * who decided, when, and a rejection's reason; all null while it waits or once withdrawn. AC7:
+ * `is_out_of_date` when it waits but the event no longer has the value it recorded as current -
+ * another request's approval moved it - so it can only be rejected.
  */
 export interface ChangeRequest {
   id: string
@@ -51,6 +52,7 @@ export interface ChangeRequest {
   decided_by_name: string | null
   decided_at: string | null
   decision_reason: string | null
+  is_out_of_date: boolean
   created_at: string
   updated_at: string
 }
@@ -73,7 +75,7 @@ const CHANGE_REQUEST_ERRORS = {
 } as const
 
 /** Story 19.2: the registry codes a decision's refusals take; each arrives with the backend's own
- *  sentence (already decided or withdrawn, not approvable yet, changed since, or a creation rule). */
+ *  sentence (already decided or withdrawn, the event closed, changed since, or a creation rule). */
 const CHANGE_REQUEST_DECISION_ERRORS = {
   403: 'NOT_PERMITTED',
   404: 'NOT_FOUND',

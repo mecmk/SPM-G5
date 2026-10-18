@@ -25,7 +25,7 @@ import { formatDateTime, inputToInstant, instantToInput } from '../shared/format
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
-import { changeTitle, FIELD_LABELS, STATUS_LABELS } from './changeRequestValues'
+import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
@@ -513,7 +513,7 @@ export function ChangeRequestsSection({
                           Withdraw request
                         </button>
                       )}
-                      {canDecideThis && (
+                      {canDecideThis && !request.is_out_of_date && (
                         <button
                           type="button"
                           className="brand button-with-icon"
@@ -526,7 +526,7 @@ export function ChangeRequestsSection({
                       {canDecideThis && (
                         <button
                           type="button"
-                          className="secondary button-with-icon"
+                          className="danger-solid button-with-icon"
                           onClick={() => setOpenDecision({ request, outcome: 'REJECTED' })}
                         >
                           <Icon name="x-circle" size={16} />
@@ -538,6 +538,10 @@ export function ChangeRequestsSection({
                 </div>
 
                 <ChangeRequestDecision request={request} />
+
+                {canDecideThis && request.is_out_of_date && (
+                  <p className="warning">{OUT_OF_DATE_NOTE}</p>
+                )}
               </li>
             )
           })}

@@ -11,6 +11,9 @@ const TIME_ZONE = 'Asia/Singapore'
  * a reason for declining given before reasons were required. */
 export const NOT_RECORDED = 'Not recorded'
 
+/** What a page shows for a venue requirement or booking that asks for no particular layout. */
+export const ANY_LAYOUT = 'Any'
+
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {
     weekday: 'short',

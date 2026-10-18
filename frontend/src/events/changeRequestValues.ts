@@ -1,7 +1,7 @@
 import type { ChangeRequestField, ChangeRequestStatus } from '../api/changeRequests'
 import type { EventReferenceData } from '../api/events'
 import type { IconName } from '../components/Icon'
-import { formatDate, formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
+import { ANY_LAYOUT, formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
 
 /**
  * Story 19.1 AC1: how each requestable field is named, in the order the form offers them.
@@ -22,6 +22,11 @@ export const STATUS_LABELS: Record<ChangeRequestStatus, string> = {
   REJECTED: 'Rejected',
   WITHDRAWN: 'Withdrawn',
 }
+
+/** Story 19.2 AC7: why a pending request can only be rejected - the event no longer has the value
+ *  it recorded as current, because another request's approval moved it. */
+export const OUT_OF_DATE_NOTE =
+  'The event has changed since this request was raised, so it can no longer be approved. Reject it so the organiser can ask again.'
 
 /** Story 19.2 AC1: what a request is about, in words - "Changes to date and time". */
 export function changeTitle(field: ChangeRequestField): string {
@@ -72,6 +77,8 @@ interface RequirementValue extends ScheduleValue {
   facilities: FacilityValue[]
 }
 interface EquipmentValue {
+  /** Story 19.2: kept since then; absent from a request raised before it. */
+  id?: string | null
   equipment_type_code: string
   quantity: number
   technical_notes: string | null
@@ -99,10 +106,7 @@ function namesFrom(references: EventReferenceData | null): Names {
 /** "Wed, 18 Nov 2026 · 09:00–17:00", or both dates when it runs over more than one day. */
 function describePeriod(value: ScheduleValue): string {
   if (value.starts_at === null || value.ends_at === null) return NOT_RECORDED
-  if (formatDate(value.starts_at) === formatDate(value.ends_at)) {
-    return formatSchedule(value.starts_at, value.ends_at)
-  }
-  return `${formatDateTime(value.starts_at)} – ${formatDateTime(value.ends_at)}`
+  return formatSchedule(value.starts_at, value.ends_at)
 }
 
 function describeMoment(stamp: string | null): string {
@@ -110,7 +114,7 @@ function describeMoment(stamp: string | null): string {
 }
 
 function describeLayout(code: string | null, names: Names): string {
-  return code === null ? 'Any' : (names.layouts.get(code) ?? code)
+  return code === null ? ANY_LAYOUT : (names.layouts.get(code) ?? code)
 }
 
 function describeFacilities(facilities: FacilityValue[], names: Names): string {
@@ -217,52 +221,69 @@ function venueRequirementChanges(
   return lines
 }
 
-/** Equipment is matched by type, which an event lists once (2.1 AC6). */
+/** The item in `now` that `requested` edits: the one with its id, or - for a request raised
+ *  before ids were kept - the one of the same type; undefined for a new item. */
+function equipmentEdited(
+  requested: EquipmentValue,
+  now: EquipmentValue[],
+): EquipmentValue | undefined {
+  if (requested.id !== undefined) {
+    return requested.id === null ? undefined : now.find((item) => item.id === requested.id)
+  }
+  return now.find((item) => item.equipment_type_code === requested.equipment_type_code)
+}
+
+/** Items are matched as the backend applies them (story 19.2): by id, or by type for a request
+ *  raised before ids were kept. Once an item is declined its type can be asked for again (15.1
+ *  AC6), so the same type may appear twice. */
 function equipmentChanges(
   now: EquipmentValue[],
   requested: EquipmentValue[],
   names: Names,
 ): ChangeLine[] {
   const typeName = (code: string) => names.equipment.get(code) ?? code
-  const requestedByType = new Map(requested.map((line) => [line.equipment_type_code, line]))
-  const nowTypes = new Set(now.map((line) => line.equipment_type_code))
   const lines: ChangeLine[] = []
-  for (const line of now) {
-    const name = typeName(line.equipment_type_code)
-    const kept = requestedByType.get(line.equipment_type_code)
-    if (kept === undefined) {
-      lines.push({
-        icon: 'box',
-        what: name,
-        now: `×${line.quantity}`,
-        requested: NOT_THERE_REQUESTED,
-      })
+  const edited = new Set<EquipmentValue>()
+  for (const item of requested) {
+    const before = equipmentEdited(item, now)
+    const name = typeName(item.equipment_type_code)
+    if (before === undefined) {
+      lines.push({ icon: 'box', what: name, now: NOT_THERE_NOW, requested: `×${item.quantity}` })
       continue
     }
-    if (kept.quantity !== line.quantity) {
+    edited.add(before)
+    if (before.equipment_type_code !== item.equipment_type_code) {
+      lines.push({
+        icon: 'box',
+        what: `${name} · type`,
+        now: typeName(before.equipment_type_code),
+        requested: name,
+      })
+    }
+    if (before.quantity !== item.quantity) {
       lines.push({
         icon: 'box',
         what: `${name} · quantity`,
-        now: `×${line.quantity}`,
-        requested: `×${kept.quantity}`,
+        now: `×${before.quantity}`,
+        requested: `×${item.quantity}`,
       })
     }
-    if (kept.technical_notes !== line.technical_notes) {
+    if (before.technical_notes !== item.technical_notes) {
       lines.push({
         icon: 'pencil',
         what: `${name} · notes`,
-        now: line.technical_notes ?? NONE,
-        requested: kept.technical_notes ?? NONE,
+        now: before.technical_notes ?? NONE,
+        requested: item.technical_notes ?? NONE,
       })
     }
   }
-  for (const line of requested) {
-    if (!nowTypes.has(line.equipment_type_code)) {
+  for (const item of now) {
+    if (!edited.has(item)) {
       lines.push({
         icon: 'box',
-        what: typeName(line.equipment_type_code),
-        now: NOT_THERE_NOW,
-        requested: `×${line.quantity}`,
+        what: typeName(item.equipment_type_code),
+        now: `×${item.quantity}`,
+        requested: NOT_THERE_REQUESTED,
       })
     }
   }

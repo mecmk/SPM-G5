@@ -695,9 +695,9 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'Give every venue requirement a number of people, as a whole number from 1.',
   },
   // Story 19.2: the coordinator deciding change requests.
-  /** AC5/AC7/AC8: a decision refused for the state it found - already decided or withdrawn, the
-   *  event closed or changed since the request, or a change not approvable until Phase 2. The
-   *  backend's own sentence (always sent) says which. */
+  /** AC7: a decision refused for the state it found - already decided or withdrawn, the event
+   *  closed, or the field changed since the request. The backend's own sentence (always sent)
+   *  says which. */
   CHANGE_REQUEST_DECISION_REFUSED: {
     title: 'Decision not made',
     message: 'This change request can no longer be decided this way.',

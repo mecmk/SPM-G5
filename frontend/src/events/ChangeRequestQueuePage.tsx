@@ -6,6 +6,7 @@ import {
   type ChangeRequestQueueEntry,
   type ChangeRequestStatus,
 } from '../api/changeRequests'
+import { formatApiError } from '../api/client'
 import { fetchEventReferenceData } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
@@ -16,12 +17,12 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { CHANGE_REQUEST_QUEUE_PATH, eventPath } from '../routes'
-import { formatDate, formatDateTime, formatTime } from '../shared/format'
+import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
-import { changeTitle, STATUS_LABELS } from './changeRequestValues'
+import { changeTitle, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 
 type QueueTabKey = 'ALL' | ChangeRequestStatus
 
@@ -30,10 +31,10 @@ type QueueTabKey = 'ALL' | ChangeRequestStatus
  *  so it reads as a queue. */
 const QUEUE_TABS: { key: QueueTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'APPROVED', label: 'Approved' },
-  { key: 'REJECTED', label: 'Rejected' },
-  { key: 'WITHDRAWN', label: 'Withdrawn' },
+  ...(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN'] as const).map((key) => ({
+    key,
+    label: STATUS_LABELS[key],
+  })),
 ]
 
 /** An event opened from a card here leads back to the queue, not to Home (story 7.1's back link). */
@@ -71,7 +72,8 @@ interface OpenDecision {
  * then decided or withdrawn ones, latest first (the backend's order), a tab per status.
  * AC2/AC3: Approve and Reject open the shared decision dialog; a decided request moves to its
  * tab, showing who decided, when and why, and one refused because it moved on meanwhile has the
- * queue load again (AC7).
+ * queue load again (AC7). AC7: a request another approval has left out of date says so, and
+ * offers only Reject.
  */
 export function ChangeRequestQueuePage() {
   const {
@@ -83,6 +85,7 @@ export function ChangeRequestQueuePage() {
   const { data: references, error: referencesError } = useLoaded(fetchEventReferenceData)
   const [tab, setTab] = useState<QueueTabKey>('PENDING')
   const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
+  const [reloadError, setReloadError] = useState<string | null>(null)
   const entries = queue?.filter((entry) => inTab(entry, tab)) ?? null
   const tabs = QUEUE_TABS.map((item) => ({
     ...item,
@@ -105,12 +108,24 @@ export function ChangeRequestQueuePage() {
         current.map((entry) => (entry.id === decided.id ? { ...entry, ...decided } : entry)),
     )
     setOpenDecision(null)
-    if (decided.status === 'APPROVED') void reloadQueue()
+    if (decided.status === 'APPROVED') void reloadAfterApproval()
+  }
+
+  /** AC2/AC7/AC8: the approval may have moved the event, or left another request out of date, so
+   *  the queue loads again. The dialog has closed, so a failed reload is shown here: nothing else
+   *  would say the cards may be out of step. */
+  async function reloadAfterApproval() {
+    setReloadError(null)
+    try {
+      setQueue(await listCoordinatorChangeRequests())
+    } catch (err) {
+      setReloadError(formatApiError(err))
+    }
   }
 
   /** AC7: a decision refused for the request's state - load the queue again, so it shows what
    *  happened meanwhile. */
-  async function reloadQueue() {
+  async function reloadAfterRefusal() {
     try {
       setQueue(await listCoordinatorChangeRequests())
     } catch {
@@ -135,6 +150,11 @@ export function ChangeRequestQueuePage() {
           {referencesError}
         </p>
       )}
+      {reloadError && (
+        <p role="alert" className="error">
+          {reloadError}
+        </p>
+      )}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
@@ -152,11 +172,8 @@ export function ChangeRequestQueuePage() {
                 <div className="item-card-header">
                   <StatusBadge status={entry.status} label={STATUS_LABELS[entry.status]} />
                   {entry.event_starts_at !== null && entry.event_ends_at !== null && (
-                    <div className="item-card-capacity">
-                      <div>{formatDate(entry.event_starts_at)}</div>
-                      <div className="small muted">
-                        {formatTime(entry.event_starts_at)}–{formatTime(entry.event_ends_at)}
-                      </div>
+                    <div className="item-card-capacity item-card-period">
+                      <div>{formatSchedule(entry.event_starts_at, entry.event_ends_at)}</div>
                     </div>
                   )}
                 </div>
@@ -199,6 +216,8 @@ export function ChangeRequestQueuePage() {
 
                 <ChangeRequestDecision request={entry} />
 
+                {entry.is_out_of_date && <p className="warning">{OUT_OF_DATE_NOTE}</p>}
+
                 <div
                   className={
                     entry.status === 'PENDING'
@@ -208,13 +227,15 @@ export function ChangeRequestQueuePage() {
                 >
                   {entry.status === 'PENDING' && (
                     <div className="cluster">
-                      <button
-                        type="button"
-                        className="brand button-sm"
-                        onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
-                      >
-                        Approve
-                      </button>
+                      {!entry.is_out_of_date && (
+                        <button
+                          type="button"
+                          className="brand button-sm"
+                          onClick={() => setOpenDecision({ entry, outcome: 'APPROVED' })}
+                        >
+                          Approve
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="danger-solid button-sm"
@@ -242,7 +263,7 @@ export function ChangeRequestQueuePage() {
           eventStatus={openDecision.entry.event_status}
           onCancel={closeDecision}
           onDecided={recordDecision}
-          onRefused={reloadQueue}
+          onRefused={reloadAfterRefusal}
         />
       )}
     </div>

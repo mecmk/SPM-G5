@@ -94,8 +94,8 @@ export const CHANGE_REQUESTABLE_STATUS: EventStatus = 'PLANNING'
 
 /**
  * Story 19.2 AC8: the statuses an approved change request returns an event from, to Planning, for
- * a new safety check - mirroring the backend's `_RETURNS_TO_PLANNING`
- * (backend/app/change_requests/service.py).
+ * a new safety check - mirroring the backend's `_RETURNED_TO_PLANNING_FROM`
+ * (backend/app/events/service.py), shared with story 9.4.
  */
 export const CHANGE_RETURNS_TO_PLANNING_STATUSES: readonly EventStatus[] = [
   'AWAITING_SAFETY_CHECK',
