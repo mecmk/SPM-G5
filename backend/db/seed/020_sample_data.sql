@@ -355,41 +355,43 @@ ON CONFLICT (id) DO UPDATE SET
 -- the masterclass (40), the fireside chat (41) and the mentoring slot (42, one place) are each
 -- registered for once per run; the portfolio review (43, one place) is full with Bella's place
 -- below; the wine appreciation (44) closed on 1 Oct 2026; the Lunar New Year market (45) opens on
--- 10 Jan 2028. Organiser 2, coordinator 2. Only the jazz evening has its venues booked (below): the
+-- 10 Jan 2028. Organiser 2, coordinator 2. The jazz evening has the seeded cover picture (18.1 AC8,
+-- fix f18.1.1), which the spec looks for on its card. Only the jazz evening has its venues booked (below): the
 -- others show "Venue to be confirmed", as a Confirmed event with no approved booking does, and Venue Staff's
 -- Approved tab stays on one page (tests/e2e/bookings.spec.ts, 13.1.2 AC1).
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
-                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at) VALUES
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at,
+                    cover_image_url) VALUES
     ('33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbourfront Jazz Evening', 'Community event', 'Live jazz on the waterfront, with food stalls in the foyer.', '2028-10-07 19:00+08', '2028-10-07 22:00+08', 120, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-05 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', '/images/events/cat.jpg'),
     ('33333333-0000-0000-0000-000000000040', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Design Thinking Masterclass', 'Professional development', 'A hands-on day of design thinking exercises.', '2028-10-14 09:00+08', '2028-10-14 17:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-12 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL),
     ('33333333-0000-0000-0000-000000000041', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Startup Founders Fireside', 'Community event', 'Three founders on their first five years.', '2028-10-21 18:30+08', '2028-10-21 20:30+08', 80, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-20 12:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL),
     ('33333333-0000-0000-0000-000000000042', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Career Mentoring Slot', 'Professional development', 'One hour with a senior mentor.', '2028-10-28 10:00+08', '2028-10-28 11:00+08', 1, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-27 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL),
     ('33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Portfolio Review Slot', 'Professional development', 'One portfolio, reviewed by a design lead.', '2028-11-04 10:00+08', '2028-11-04 11:00+08', 1, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-11-03 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL),
     ('33333333-0000-0000-0000-000000000044', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Autumn Wine Appreciation', 'Community event', 'Six wines from three regions, with a sommelier.', '2028-11-11 18:00+08', '2028-11-11 21:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-01 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-09-25 09:00+08', NULL),
     ('33333333-0000-0000-0000-000000000045', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Lunar New Year Market', 'Community event', 'Festive stalls, lion dance and calligraphy.', '2028-01-26 10:00+08', '2028-01-26 18:00+08', 250, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, '2028-01-10 10:00+08', '2028-01-24 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08')
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL)
 ON CONFLICT (id) DO UPDATE SET
     organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
     purpose = EXCLUDED.purpose, description = EXCLUDED.description,
@@ -401,7 +403,8 @@ ON CONFLICT (id) DO UPDATE SET
     registration_opens_at = EXCLUDED.registration_opens_at, registration_closes_at = EXCLUDED.registration_closes_at,
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
-    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
+    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
+    cover_image_url = EXCLUDED.cover_image_url;
 
 -- Story 18.2: the events Aiden has registered for (registrations below) - his My registrations, and
 -- tests/e2e/my-registrations.spec.ts. Each case of the spec that withdraws has an event of its own,
@@ -1067,11 +1070,6 @@ FROM (VALUES
     ('44444444-0000-0000-0000-000000000008'::uuid, 'cccccccc-0000-0000-0000-000000000017'::uuid)
 ) AS link (booking_id, requirement_id)
 WHERE b.id = link.booking_id;
-
--- Fix f18.1.1: the jazz evening (3333..39) has the seeded cover picture, which
--- tests/e2e/attendee-registration.spec.ts looks for on its Upcoming events card.
-UPDATE events SET cover_image_url = '/images/events/cat.jpg'
-WHERE id = '33333333-0000-0000-0000-000000000039';
 
 -- Story 18.1: the jazz evening's (3333..39) two venues, approved by Vera, each hold completed when
 -- the event was confirmed (story 12.7 AC4): its Main venue, Grand Hall, and the Exhibition Foyer

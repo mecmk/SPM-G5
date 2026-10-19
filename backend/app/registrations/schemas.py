@@ -48,7 +48,7 @@ class RegistrationEventOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
-    cover_image_url: str | None  # f18.1.1 (2.1 AC14): the event's cover picture, if it has one
+    cover_image_url: str | None  # 18.1 AC8 (fix f18.1.1): the event's cover picture, if any
     starts_at: datetime
     ends_at: datetime
     venues: list[RegistrationVenueOut]
