@@ -201,9 +201,10 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
   await openVenue(page, VENUES.gardenAtrium)
   const description = uniqueName('Atrium floor polishing')
 
+  // After the pinned 10 October: a closure the page's clock has already passed shows as Ended.
   await fillClosure(page, {
-    starts: '2028-10-02T09:00',
-    ends: '2028-10-04T18:00',
+    starts: '2028-10-17T09:00',
+    ends: '2028-10-19T18:00',
     reason: 'Maintenance',
     description,
   })
@@ -212,8 +213,8 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
   await expect(blockOff(page).getByLabel('Description')).toHaveAttribute('aria-required', 'true')
   await saveClosure(page)
 
-  await dayButton(page, /^3 October 2028/).click()
-  const list = dayList(page, /3 Oct 2028/)
+  await dayButton(page, /^18 October 2028/).click()
+  const list = dayList(page, /18 Oct 2028/)
   await expect(list).toContainText(description)
   await expect(list).toContainText('Unavailable – Maintenance')
 })

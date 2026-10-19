@@ -72,6 +72,7 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
         month={calendar.month}
         onMonthChange={calendar.setMonth}
         windows={calendar.windows}
+        loadedAt={calendar.loadedAt}
         error={calendar.error}
         isLoading={calendar.isLoading}
         dayPanelId={DAY_PANEL_ID}

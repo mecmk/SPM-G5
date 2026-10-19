@@ -3,6 +3,7 @@ import { ApiError, formatApiError } from '../api/client'
 import { endUnavailabilityNow, removeUnavailability } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { DayClosure } from '../components/venueCalendarDays'
+import { END_CLOSURE_HINT, REMOVE_CLOSURE_HINT } from './blockOffLabels'
 
 export interface ClosureActionsProps {
   venueId: string
@@ -87,15 +88,12 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
       <button type="button" className="secondary button-sm" onClick={handleEdit}>
         Edit
       </button>
-      {hasStarted ? (
+      <span className="closure-action">
         <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
-          End now
+          {hasStarted ? 'End now' : 'Remove'}
         </button>
-      ) : (
-        <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
-          Remove
-        </button>
-      )}
+        <span className="small muted">{hasStarted ? END_CLOSURE_HINT : REMOVE_CLOSURE_HINT}</span>
+      </span>
       {pending === 'end' && (
         <ConfirmDialog
           title="End this closure now?"
