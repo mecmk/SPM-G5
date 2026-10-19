@@ -76,6 +76,7 @@ export function ReassignDialog({
       error={error}
       onConfirm={confirm}
       onCancel={onCancel}
+      className="reassign-dialog"
     >
       <p>
         Hand this event to a different active Event Coordinator. Both coordinators and the organiser

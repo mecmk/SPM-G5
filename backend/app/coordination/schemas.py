@@ -1,4 +1,4 @@
-"""Request / response shapes for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5)."""
+"""Request / response shapes for coordinator assignment (stories 5.1, 5.2, 5.4, 5.5 and 5.6)."""
 
 from __future__ import annotations
 

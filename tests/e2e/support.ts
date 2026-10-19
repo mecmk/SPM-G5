@@ -262,6 +262,21 @@ export function venueCard(page: Page, name: string) {
   return page.getByRole('article').filter({ has: page.getByRole('heading', { name }) })
 }
 
+/** The screens the responsive checks use: a phone, a tablet and a desktop. */
+export const PHONE = { width: 375, height: 667 }
+export const TABLET = { width: 768, height: 1024 }
+export const DESKTOP = { width: 1280, height: 800 }
+/** The smallest height a control pressed with a thumb may have on a phone. */
+export const MIN_TOUCH_TARGET = 44
+
+/** The page fits its viewport: nothing scrolls sideways. */
+export async function expectNoSidewaysScroll(page: Page) {
+  const fits = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  )
+  expect(fits).toBe(true)
+}
+
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */
 export function corsHeaders(request: Request) {
   return {

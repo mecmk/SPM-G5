@@ -1,4 +1,5 @@
 import { useCallback, useState, type ChangeEvent } from 'react'
+import { formatApiError } from '../api/client'
 import { Link, useSearchParams } from 'react-router'
 import type { EventStatus } from '../api/events'
 import {
@@ -130,6 +131,7 @@ export function AssignmentOverviewPage() {
   const overview = useLoaded(loadOverview)
   const workloads = useLoaded(listWorkloads)
   const [reassigning, setReassigning] = useState<ActiveEventEntry | null>(null)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   // While a changed filter loads, the previous filter's events are hidden rather than shown under
   // the new one (`useLoaded`'s isStale).
   const freshEvents = overview.isStale ? null : overview.data
@@ -188,11 +190,15 @@ export function AssignmentOverviewPage() {
     setReassigning(null)
   }
 
-  /** Story 5.6 AC1: the card, and the coordinator's workload, show the new coordinator. */
+  /** Story 5.6 AC1: the card, and the coordinator's workload, show the new coordinator. The
+   *  reassignment has already been made, so a list that fails to load again says so rather than
+   *  quietly showing the old coordinator. */
   function handleReassigned() {
     setReassigning(null)
-    loadOverview().then(overview.setData, () => {})
-    listWorkloads().then(workloads.setData, () => {})
+    setRefreshError(null)
+    const showRefreshError = (err: unknown) => setRefreshError(formatApiError(err))
+    loadOverview().then(overview.setData, showRefreshError)
+    listWorkloads().then(workloads.setData, showRefreshError)
   }
 
   /** The address for the other view, keeping the filters. */
@@ -210,6 +216,11 @@ export function AssignmentOverviewPage() {
         title={PAGE_TITLE}
         subtitle="Every active event, and each coordinator's share of them."
       />
+      {refreshError && (
+        <p role="alert" className="error">
+          {refreshError}
+        </p>
+      )}
 
       <nav className="view-switch" aria-label="View">
         <Link
@@ -309,7 +320,7 @@ export function AssignmentOverviewPage() {
                     entry.coordinator_id === null ? undefined : (
                       <button
                         type="button"
-                        className="secondary"
+                        className="secondary reassign-action"
                         onClick={() => askToReassign(entry)}
                       >
                         Reassign

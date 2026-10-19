@@ -1,19 +1,20 @@
 """Story 5.6 - be: the Event Coordinator Lead reassigns an event to a different coordinator.
 
 Happy path
-AC1  On an event that is not completed, cancelled or rejected, the Lead can choose another active
-     Event Coordinator. The change records who made it and when, and the event moves to the new
-     coordinator's list (6.1).
+AC1  On an event that is not completed, cancelled or rejected, the Event Coordinator Lead can
+     choose another active Event Coordinator from the event page or the Lead's overview (5.5). The
+     change records who made it and when, and the event moves to the new coordinator's list (6.1).
 AC2  Both coordinators and the organiser are notified (20.1). The previous assignment is kept in
      the event's history.
 Boundary
 AC3  Only active Event Coordinators are offered, and the current coordinator is not in the list.
 Edge
-AC4  Pending booking requests, change requests and clarification threads move with the event.
+AC4  Pending booking requests, change requests and clarification threads move with the event, as
+     in 5.2.
 Permission
-AC5  Only the Lead can reassign. Event Coordinators can no longer reassign their own events: the
-     API refuses it (403) (replaces 5.2 AC1 and AC6; Q16). The previous coordinator loses access
-     immediately.
+AC5  Only the Event Coordinator Lead can reassign. Event Coordinators can no longer reassign their
+     own events: the Reassign action is removed for them and the API refuses it (403) (replaces
+     5.2 AC1 and AC6; Q16). The previous coordinator loses access immediately.
 Conflict
 AC6  If two reassignments are made at the same time, the second is refused because the assignment
      has changed.
@@ -67,7 +68,9 @@ REASSIGNED_TYPES = (
     "EVENT_REASSIGNED_ORGANISER",
 )
 # The server's sentence for a reassignment whose coordinator is no longer the one named (AC6).
-_CHANGED = "This event's coordinator changed just now. Reload the event and try again."
+_CHANGED = (
+    "This event's coordinator has changed since you opened it. Reload the event and try again."
+)
 # Every role but the Lead's, so a role added later is refused here without editing this list.
 REFUSED_ROLES = [user for user in Users.ONE_PER_ROLE if user != Users.LEAD]
 
@@ -623,3 +626,126 @@ def test_two_leads_reassigning_at_once_write_one(engine):
             session.execute(delete(Event).where(Event.id == event_id))
             session.execute(delete(User).where(User.id.in_([second_lead_id, dana_id])))
             session.commit()
+
+
+@pytest.mark.story("5.6", ac=1)
+@pytest.mark.story("5.6", ac=6)
+def test_a_reassignment_waits_for_a_cancellation_landing_at_the_same_time(engine):
+    """Real concurrent transactions, cleaned up after, as the race test above. The event is being
+    cancelled - that transaction holds its row - while the Lead hands it from Chloe to Carl. The
+    reassignment waits for the row, then sees the event Cancelled and is refused (409), rather
+    than leaving a cancelled event assigned to Carl with "reassigned" notices sent after it was
+    cancelled (review of #124, probe P1)."""
+    with Session(engine) as session:
+        event = _assigned_event(session, Users.COORDINATOR.id, name="Cancel Race")
+        session.commit()
+        event_id = event.id
+    outcome: dict[str, str] = {}
+
+    def reassign() -> None:
+        with Session(engine) as session:
+            lead = session.get(User, Users.LEAD.id)
+            try:
+                coordination_service.assign_coordinator(
+                    session,
+                    event_id,
+                    AssignCoordinatorIn(
+                        coordinator_id=Users.COORDINATOR_2.id,
+                        expected_coordinator_id=Users.COORDINATOR.id,
+                    ),
+                    actor=lead,
+                )
+                outcome["result"] = "reassigned"
+            except coordination_service.EventNotAssignable:
+                session.rollback()
+                outcome["result"] = "refused"
+
+    try:
+        with Session(engine) as cancelling:
+            cancelling.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+            lead_acting = threading.Thread(target=reassign)
+            lead_acting.start()
+            # Long enough for the reassignment to have read the event, or to be waiting for it.
+            lead_acting.join(timeout=0.5)
+            cancelling.execute(
+                text("UPDATE events SET status = 'CANCELLED' WHERE id = :e"), {"e": event_id}
+            )
+            cancelling.commit()
+        lead_acting.join(timeout=30)
+
+        assert outcome == {"result": "refused"}
+        with Session(engine) as session:
+            stored = session.get(Event, event_id)
+            assert stored.status == EventStatus.CANCELLED
+            assert stored.assigned_coordinator_id == Users.COORDINATOR.id
+            rows = session.scalars(
+                select(EventCoordinatorAssignment).where(
+                    EventCoordinatorAssignment.event_id == event_id
+                )
+            ).all()
+            assert [row.coordinator_id for row in rows] == [Users.COORDINATOR.id]
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(Notification).where(Notification.event_id == event_id))
+            session.execute(delete(AuditLog).where(AuditLog.entity_id == event_id))
+            session.execute(
+                delete(EventCoordinatorAssignment).where(
+                    EventCoordinatorAssignment.event_id == event_id
+                )
+            )
+            session.execute(delete(Event).where(Event.id == event_id))
+            session.commit()
+
+
+@pytest.mark.story("5.6", ac=6)
+def test_a_reassignment_whose_own_read_is_already_stale_is_refused(db: Session, monkeypatch):
+    """The Lead's page still shows Chloe, but the event went to Carl. While this request reads the
+    event (Carl), another Lead hands it back to Chloe. Its write would now match "Chloe" and close
+    an assignment already closed, leaving two open ones - a 500 from the database's one-open-row
+    index. It is refused (409) because its own read already disagreed with what the Lead saw
+    (review of #124, probe P4)."""
+    lead = db.get(User, Users.LEAD.id)
+    other_lead = make_user(db, role=LEAD_ROLE, full_name="Other Lead")
+    dana = make_user(db, role=COORDINATOR_ROLE, full_name="Dana Coordinator")
+    coordination_service.assign_coordinator(
+        db,
+        Events.APPROVED,
+        AssignCoordinatorIn(
+            coordinator_id=Users.COORDINATOR_2.id, expected_coordinator_id=Users.COORDINATOR.id
+        ),
+        actor=lead,
+    )
+    real_current_assignment = coordination_service.current_assignment
+    interloper_has_run = False
+
+    def _handed_back_after_the_read(db_, event_id_):
+        nonlocal interloper_has_run
+        result = real_current_assignment(db_, event_id_)
+        if not interloper_has_run:
+            interloper_has_run = True
+            coordination_service.assign_coordinator(
+                db_,
+                event_id_,
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR.id,
+                    expected_coordinator_id=Users.COORDINATOR_2.id,
+                ),
+                actor=other_lead,
+            )
+        return result
+
+    monkeypatch.setattr(coordination_service, "current_assignment", _handed_back_after_the_read)
+
+    with pytest.raises(coordination_service.AssignmentChanged):
+        coordination_service.assign_coordinator(
+            db,
+            Events.APPROVED,
+            AssignCoordinatorIn(
+                coordinator_id=dana.id, expected_coordinator_id=Users.COORDINATOR.id
+            ),
+            actor=lead,
+        )
+
+    monkeypatch.undo()
+    assert _pointer(db, Events.APPROVED) == Users.COORDINATOR.id
+    assert _open_assignment(db, Events.APPROVED).coordinator_id == Users.COORDINATOR.id

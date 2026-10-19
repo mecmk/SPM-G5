@@ -31,7 +31,6 @@ async function loadQueue(): Promise<UnassignedQueue> {
   return { events, coordinators }
 }
 
-/** Story 5.4 AC3: a coordinator as the picker offers them, with the load they already carry. */
 /**
  * Story 5.4 - the Event Coordinator Lead's unassigned queue.
  * AC2: every submitted event with no coordinator, oldest submission first (the backend's order),

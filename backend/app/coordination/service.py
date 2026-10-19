@@ -1,4 +1,4 @@
-"""Business logic for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5).
+"""Business logic for coordinator assignment (stories 5.1, 5.2, 5.4, 5.5 and 5.6).
 
 A submitted event waits unassigned until the Event Coordinator Lead assigns it from the unassigned
 queue (story 5.4, which replaced 5.1's automatic round-robin assignment - 5.4 AC9). Once it has a
@@ -65,6 +65,10 @@ ASSIGNABLE_STATUSES = frozenset(
 
 # Story 5.4 AC8: a Lead's assignment of an event that already has a coordinator.
 ALREADY_ASSIGNED_MESSAGE = "This event has already been assigned to {coordinator}."
+# Story 5.6 AC6: a reassignment naming a coordinator the event no longer has.
+ASSIGNMENT_CHANGED_MESSAGE = (
+    "This event's coordinator has changed since you opened it. Reload the event and try again."
+)
 NOT_AN_ACTIVE_STATUS_MESSAGE = "Filter by one of the active statuses: {statuses}."
 
 # Story 5.5 AC1 (PO decision P5): the coordinator filter's value for events with no coordinator.
@@ -133,14 +137,13 @@ class NotAnActiveStatus(ValueError):
 
 
 class AssignmentChanged(RuntimeError):
-    """Story 5.2 AC7: the event's coordinator changed between when this request read it and when
-    it tried to write - another (re)assignment won the race. Never partially applied: nothing
-    about the event or its history is touched when this is raised."""
+    """Story 5.6 AC6 (5.2 AC7): the event's coordinator is no longer the one the request names -
+    the Lead's page was opened before another reassignment, or another one won a race with this
+    one. Never partially applied: nothing about the event or its history is touched when this is
+    raised. The message does not guess which happened (backend/STYLE.md)."""
 
     def __init__(self, event_id: uuid.UUID) -> None:
-        super().__init__(
-            "This event's coordinator changed just now. Reload the event and try again."
-        )
+        super().__init__(ASSIGNMENT_CHANGED_MESSAGE)
         self.event_id = event_id
 
 
@@ -313,6 +316,17 @@ def get_event(db: Session, event_id: uuid.UUID) -> Event:
     return event
 
 
+def _get_event_for_update(db: Session, event_id: uuid.UUID) -> Event:
+    """Story 5.6 AC1/AC6: the event, its row held until the transaction ends, so a cancellation,
+    rejection or other assignment already under way finishes first and is what this one reads -
+    and none can land between this read and the write (review of #124, probe P1). Only the
+    event's own row is held, as in events/service.py's ``get_event_for_update``."""
+    event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
+    if event is None:
+        raise EventNotFound(event_id)
+    return event
+
+
 def current_assignment(db: Session, event_id: uuid.UUID) -> EventCoordinatorAssignment | None:
     """The open assignment for an event (``unassigned_at IS NULL``), or None."""
     return db.scalars(
@@ -443,11 +457,13 @@ def _create_assignment(
     chose it: close any open assignment, open the new one, keep ``events.assigned_coordinator_id``
     in step, and write the audit entry. Does not commit - the caller owns the transaction.
 
-    ``previous`` is the caller's *own* read of ``current_assignment`` - the same one it already
-    used to decide the caller is allowed to do this (5.2 AC6) - not re-read here. Re-reading it
-    fresh at this point would defeat AC7's guard below: it would let this call "self-heal" past
-    exactly the staleness the guard exists to catch, silently adopting whatever changed instead
-    of noticing it changed.
+    ``previous`` is the caller's own read of ``current_assignment``, made under the event's row
+    lock, and is compared with ``expected_coordinator_id`` - the coordinator the Lead saw - before
+    anything is written. It is not re-read here: re-reading would let this call adopt whatever
+    changed instead of noticing it changed. That comparison is a licensed exception to "attempt
+    and catch" (backend/STYLE.md, Standing divergences): without it, a request whose own read
+    already disagrees with the Lead's could match the guarded UPDATE after a hand-back and close
+    an assignment that is already closed - a 500 from the one-open-row index, not a 409.
 
     Re-assigning the coordinator who already holds the event is a no-op - when the caller saw
     them as its coordinator too: it returns the existing assignment rather than closing and
@@ -460,10 +476,11 @@ def _create_assignment(
     two made at once, finds 0 rows match and raises ``AssignmentChanged`` before touching anything
     else, rather than silently overwriting the first.
     """
-    # The Lead's view is already stale by this request's own read: refused here - before the
-    # no-op below, so a second Lead who chose the coordinator the first one just gave the event
-    # is refused too, not told it worked (5.6 AC6) - and the guarded UPDATE below only ever
-    # matches the pointer ``previous`` was read with.
+    # The Lead's view is already stale by this request's own read: refused here (5.6 AC6) -
+    # before the no-op below, so a second Lead who chose the coordinator the first one just gave
+    # the event is refused too, not told it worked - and the guarded UPDATE below only ever
+    # matches the pointer ``previous`` was read with. Also how 5.4's assign of an assigned event
+    # is refused (5.4 AC8): its expected coordinator is None.
     read_coordinator_id = previous.coordinator_id if previous is not None else None
     if read_coordinator_id != expected_coordinator_id:
         raise AssignmentChanged(event.id)
@@ -551,16 +568,17 @@ def assign_coordinator(
     assign of an event with no coordinator, and one found already assigned - before, or by another
     Lead a moment ago - is refused naming who has it (5.4 AC8). Set, it is a reassignment from that
     coordinator, refused if the event's coordinator is no longer the one the Lead saw.
+
+    The event's row is locked first (``_get_event_for_update``), so its status and coordinator are
+    read after any change already under way, and cannot change before the write.
     """
-    event = get_event(db, event_id)
+    event = _get_event_for_update(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
 
     previous = current_assignment(db, event.id)
     expected_id = data.expected_coordinator_id
     is_assign = expected_id is None
-    if is_assign and previous is not None:
-        raise AlreadyAssigned(previous.coordinator)
 
     coordinator = db.get(User, data.coordinator_id)
     if coordinator is None:
@@ -581,9 +599,9 @@ def assign_coordinator(
             note=data.note,
         )
     except AssignmentChanged:
-        # 5.4 AC8: another Lead's assignment landed between this one's read and its write. The
-        # guarded update changed nothing, so read who got the event (it is committed) and name
-        # them. A reassignment that loses the race (5.6 AC6) is refused as changed.
+        # 5.4 AC8: an assign found the event already has a coordinator - given before, or by
+        # another Lead whose write this one waited for - so it names them. A reassignment naming a
+        # coordinator the event no longer has (5.6 AC6) is refused as changed.
         winner = current_assignment(db, event.id) if is_assign else None
         if winner is None:
             raise

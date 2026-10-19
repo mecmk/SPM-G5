@@ -365,10 +365,13 @@ def test_unrelated_organiser_cannot_see_another_organisers_event(login_as):
 @pytest.mark.story("5.1", ac=2)
 @pytest.mark.parametrize(
     "user",
-    [Users.ORGANISER, Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ATTENDEE],
+    # Every role but the Lead's, so a role added later is refused here without editing this list.
+    [user for user in Users.ONE_PER_ROLE if user != Users.LEAD],
     ids=lambda u: u.role,
 )
 def test_only_the_lead_may_assign(login_as, db: Session, user):
+    """Every role but the Lead's is refused (403), Chloe included - the coordinator Events.SUBMITTED
+    is assigned to - since story 5.6 (Q16) took reassignment from coordinators too."""
     before = _open_assignments(db, Events.SUBMITTED)
     actor = login_as(user)
 

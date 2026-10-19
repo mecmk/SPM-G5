@@ -485,10 +485,11 @@ export function EventDetailPage() {
     setIsConfirmingReassign(false)
   }
 
-  /** Story 5.6 AC1: the page shows the new coordinator straight away. */
+  /** Story 5.6 AC1: the page shows the new coordinator straight away, read again as the page's
+   *  other changes are (`reloadEvent`). */
   function handleReassigned() {
     setIsConfirmingReassign(false)
-    getEvent(eventId).then(setEvent, () => {})
+    void reloadEvent()
   }
 
   const backState = location.state as EventCardBackState | null
@@ -638,7 +639,7 @@ export function EventDetailPage() {
               </button>
             )}
             {canReassign && (
-              <button type="button" className="secondary" onClick={askToReassign}>
+              <button type="button" className="secondary reassign-action" onClick={askToReassign}>
                 Reassign
               </button>
             )}

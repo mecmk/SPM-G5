@@ -26,10 +26,15 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
   COORDINATORS,
+  DESKTOP,
   EVENTS,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  TABLET,
   assignByLead,
   corsHeaders,
   createAndSubmitRequest,
+  expectNoSidewaysScroll,
   signIn,
   uniqueName,
 } from './support'
@@ -37,11 +42,8 @@ import {
 /* ---------- Story 5.6: the Event Coordinator Lead reassigns ---------- */
 
 const [CHLOE, CARL] = COORDINATORS
-const PHONE = { width: 375, height: 667 }
-const TABLET = { width: 768, height: 1024 }
-const DESKTOP = { width: 1280, height: 800 }
-const MIN_TOUCH_TARGET = 44
-const STALE_MESSAGE = "This event's coordinator changed just now. Reload the event and try again."
+const STALE_MESSAGE =
+  "This event's coordinator has changed since you opened it. Reload the event and try again."
 /** How the picker names a coordinator: their name and their number of active events (5.4 AC3). */
 const WITH_COUNT = /· \d+ active events?$/
 
@@ -85,13 +87,6 @@ function overviewCard(page: Page, name: string) {
     .filter({ has: page.getByRole('link', { name, exact: true }) })
 }
 
-async function expectNoSidewaysScroll(page: Page) {
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-  expect(fits).toBe(true)
-}
-
 /** The element sits wholly inside the viewport. */
 async function expectInsideScreen(page: Page, element: Locator) {
   const box = (await element.boundingBox())!
@@ -127,8 +122,15 @@ test('5.6 AC1: the Lead reassigns an event from the overview', async ({ page }) 
   await card.getByRole('button', { name: 'Reassign', exact: true }).click()
   await reassignToCarl(page, name)
 
-  // The page reads the change afresh: the card leaves Chloe's list without a reload.
+  // The page reads the change afresh: the card leaves Chloe's list without a reload, and the By
+  // coordinator view - read once when the page opened - lists it under Carl.
   await expect(card).toHaveCount(0)
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  const carls = page
+    .getByRole('list', { name: 'Coordinators' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: CARL.name, exact: true }) })
+  await expect(carls.getByRole('link', { name, exact: true })).toBeVisible()
   await page.goto(`/events/assignments?coordinator=${CARL.id}`)
   await expect(overviewCard(page, name)).toContainText(`Coordinator: ${CARL.name}`)
   await expect(overviewCard(page, name)).toContainText('Assigned by Lena Lead')
@@ -240,4 +242,101 @@ test('5.6 responsive: reassigning fits a tablet', async ({ page }) => {
   await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
   await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
   await expectNoSidewaysScroll(page)
+})
+
+test('5.6 AC1: Reassign is offered only on an active event that has a coordinator', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  // An event nobody is assigned to yet is the Lead's to assign from 5.4's queue (CL-147).
+  const name = uniqueName('Not yet assigned')
+  await signIn(page, ACCOUNTS.organiser)
+  const eventId = await createAndSubmitRequest(page, name)
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByText('Not yet assigned', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
+
+  // Nor on its overview card, while an assigned card beside it offers it.
+  await page.goto('/events/assignments?coordinator=unassigned')
+  await expect(overviewCard(page, name)).toContainText('Not yet assigned')
+  await expect(
+    overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }),
+  ).toHaveCount(0)
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await expect(
+    page
+      .getByRole('list', { name: 'Active events' })
+      .getByRole('button', { name: 'Reassign', exact: true })
+      .first(),
+  ).toBeVisible()
+
+  // A closed event needs no owner: Omar's rejected Rooftop Networking Night. Only looked at here.
+  await page.goto(`/events/${EVENTS.rejected}`)
+  await expect(page.getByRole('heading', { name: 'Rooftop Networking Night' })).toBeVisible()
+  await expect(page.getByText('Assigned coordinator')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
+})
+
+test('5.6 AC6: Confirm does nothing while the coordinators are still loading', async ({ page }) => {
+  // Read only: the PUT is never sent, and the dialog is cancelled. The coordinators are held back
+  // so Confirm is pressed before the picker has anything to choose.
+  let releaseCoordinators = () => {}
+  const isHeld = new Promise<void>((resolve) => {
+    releaseCoordinators = resolve
+  })
+  const sent: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PUT') sent.push(request.url())
+  })
+  await page.route(
+    (url) => url.pathname === '/coordinators',
+    async (route) => {
+      if (route.request().resourceType() === 'fetch') await isHeld
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await expect(dialog.getByLabel('New coordinator')).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  releaseCoordinators()
+  await expect(dialog.getByLabel('New coordinator')).toBeEnabled()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(sent).toEqual([])
+})
+
+test('5.6 AC1: a refresh of the overview that fails after a reassignment says so', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Refresh fails')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }).click()
+  // The reassignment itself goes through; the list read afterwards fails.
+  await page.route(
+    (url) => url.pathname === '/coordination/active-events',
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Internal Server Error' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  await reassignToCarl(page, name)
+
+  await expect(page.getByRole('alert')).toBeVisible()
 })

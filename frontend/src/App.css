@@ -3959,15 +3959,13 @@ button.requirement-choice.requirement-covered:hover,
 
 /* ---------- the Lead's reassignment (story 5.6) ---------- */
 
-/* On a phone, Reassign - on the event page and on each overview card - and the dialog's picker
-   and buttons are at least 44px tall. The dialog already fills the screen less a 1rem gutter. */
+/* On a phone, Reassign - on the event page and on each overview card - and the Reassign dialog's
+   picker and buttons are at least 44px tall. Scoped to those, so other stories' buttons and
+   dialogs keep their size. The dialog already fills the screen less a 1rem gutter. */
 @media (max-width: 640px) {
-  .event-detail-page .page-actions button,
-  .event-detail-page .dialog select,
-  .event-detail-page .dialog-actions button,
-  .assignment-overview .event-card-action button,
-  .assignment-overview .dialog select,
-  .assignment-overview .dialog-actions button {
+  .reassign-action,
+  .reassign-dialog select,
+  .reassign-dialog .dialog-actions button {
     min-height: 44px;
   }
 }
