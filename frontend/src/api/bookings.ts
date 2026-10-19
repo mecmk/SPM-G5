@@ -180,7 +180,7 @@ export function requestReplacementBooking(
   bookingId: string,
   input: BookingReplacementInput,
   venueName: string,
-  replacedVenueName: string,
+  replacedVenueName: string | null,
 ): Promise<Booking> {
   return api<Booking>(`/bookings/${bookingId}/replacements`, {
     method: 'POST',
@@ -192,7 +192,7 @@ export function requestReplacementBooking(
     },
     notify: {
       title: 'Replacement requested',
-      message: `${venueName} was requested to replace ${replacedVenueName}; it is with Venue Staff for review.`,
+      message: `${venueName} was requested to replace ${replacedVenueName ?? 'a booking'}; it is with Venue Staff for review.`,
     },
   })
 }

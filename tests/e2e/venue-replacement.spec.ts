@@ -345,10 +345,13 @@ test.describe('12.6 AC3 on the awards evening', () => {
     await dialog.getByLabel('Hold expires').fill(HOLD_EXPIRES('08'))
     await dialog.getByRole('button', { name: 'Approve' }).click()
     await expect(dialog).not.toBeVisible()
-    // The All tab is not reloaded: the approved card stops saying what approving it will
-    // release, since that booking is released.
-    await expect(card.getByText('Approved', { exact: true })).toBeVisible()
-    await expect(card).not.toContainText(`Approving this releases ${FOYER}`)
+    // The All tab is read again, since the approval released the original: its card moves to
+    // Cancelled, and the replacement's no longer says what approving it will release.
+    const queue = staff.getByRole('listitem').filter({ hasText: AWARDS.name })
+    await expect(queue.filter({ hasText: `Replaced by ${GRAND_HALL}` })).toContainText('Cancelled')
+    await expect(queue.filter({ hasText: `Replaces ${FOYER}` })).not.toContainText(
+      `Approving this releases ${FOYER}`,
+    )
     await staff.context().close()
 
     await signIn(page, ACCOUNTS.coordinator)

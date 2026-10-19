@@ -5,6 +5,7 @@ export type BookingStatusTabKey = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 
 /** The one status Venue Staff can still decide: the queue card and detail page offer Approve /
  * Reject only for it. */
 export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
+export const APPROVED_BOOKING_STATUS: BookingStatus = 'APPROVED'
 
 /** Story 9.4 AC3: how every page names a booking whose venue was marked unavailable for part of
  * its held period - the event's page, Venue Staff's queue card and the request's own page. */

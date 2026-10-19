@@ -67,6 +67,23 @@ export function isReplaceable(booking: BookingOutcome): boolean {
   return booking.status === APPROVED && isMarked(booking)
 }
 
+/**
+ * Story 12.6 AC1/AC9: whether a marked booking offers the way to another venue. An approved one
+ * offers a replacement, until one is asked for. A pending one is switched to another venue for its
+ * requirement (12.5), so a pending replacement has none - its way out is Withdraw - and neither has
+ * a pending additional venue, which has no requirement to switch for. A closed booking offers
+ * nothing, whatever mark it was left with.
+ */
+export function offersWayToAnotherVenue(booking: BookingOutcome): boolean {
+  if (!isMarked(booking)) return false
+  if (booking.status === APPROVED) return !hasPendingReplacement(booking)
+  return (
+    booking.status === 'PENDING' &&
+    booking.replaces_booking_id === null &&
+    booking.venue_requirement_id !== null
+  )
+}
+
 /** Story 12.6 AC4/AC5: a replacement has been asked for `booking` and is still pending, so asking
  * for another waits until it is rejected or withdrawn. */
 export function hasPendingReplacement(booking: BookingOutcome): boolean {

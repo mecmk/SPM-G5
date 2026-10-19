@@ -250,8 +250,10 @@ export function BookingRequestFormPage() {
    *  the address names - or bookings that could not be read - sends a plain request. */
   const replaced =
     covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
-  /** Story 12.6 AC2: the approved booking, still marked, this request replaces. Anything else the
-   *  address names sends a plain request, which the server refuses with its reason. */
+  /** Story 12.6 AC2: the approved booking, still marked, this request replaces, once it is read.
+   *  Whatever the address names as `replacing` is sent as a replacement all the same, and the
+   *  server refuses it with its reason if the booking is no longer one - never as a plain
+   *  request, which for an additional venue it would accept. */
   const original =
     bookings === null
       ? null
@@ -385,9 +387,9 @@ export function BookingRequestFormPage() {
     }
     setIsSending(true)
     try {
-      if (original !== null) {
+      if (replacingId !== null) {
         await requestReplacementBooking(
-          original.id,
+          replacingId,
           {
             venue_id: venue.id,
             suitability_override_reason: reason ?? undefined,
@@ -395,7 +397,7 @@ export function BookingRequestFormPage() {
             teardown_minutes: teardownMinutes,
           },
           venue.name,
-          original.venue_name,
+          original?.venue_name ?? null,
         )
       } else if (replaced !== null) {
         await switchBookingRequest(
@@ -600,6 +602,11 @@ export function BookingRequestFormPage() {
         </section>
 
         <div className="form-actions">
+          {bookingsError !== null && (
+            <p role="alert" className="error">
+              {bookingsError}
+            </p>
+          )}
           {sendError && (
             <p role="alert" className="error">
               {sendError}
@@ -610,7 +617,10 @@ export function BookingRequestFormPage() {
               Back to the results
             </Link>
           )}
-          <button type="submit" disabled={isSending || isChecking}>
+          <button
+            type="submit"
+            disabled={isSending || isChecking || (namesAnotherBooking && bookingsError !== null)}
+          >
             {replaced === null
               ? isSending
                 ? 'Sending…'

@@ -84,7 +84,10 @@ export function ReviewQueuePage() {
     let cancelled = false
     listAssignedEvents(0, true)
       .then((first) => {
-        if (!cancelled) setUnavailable(first)
+        if (cancelled) return
+        setUnavailable(first)
+        // An earlier failed load's alert is not this list's.
+        setUnavailableError(null)
       })
       .catch((err: unknown) => {
         if (!cancelled) setUnavailableError(formatApiError(err))

@@ -25,6 +25,7 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  APPROVED_BOOKING_STATUS,
   closedAt,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
@@ -191,9 +192,13 @@ export function BookingRequestsPage() {
 
   /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
    * belongs, so the page is fetched again and the next request moves up - `loadQueuePage` steps
-   * back a page if that one is now empty. */
+   * back a page if that one is now empty. Story 12.6 AC3: approving a replacement released the
+   * booking it replaces, which moves too and which the card says no more of, so under All the page
+   * is fetched again as well. */
   function recordDecision(decided: Booking) {
-    if (tab === 'ALL') {
+    const hasReleased =
+      decided.status === APPROVED_BOOKING_STATUS && decided.replaces_booking_id !== null
+    if (tab === 'ALL' && !hasReleased) {
       setQueue((current) => current && withDecisionInPlace(current, decided))
       return
     }

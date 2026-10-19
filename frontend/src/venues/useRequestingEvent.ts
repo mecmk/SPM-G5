@@ -6,7 +6,12 @@ import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { VENUE_SEARCH_PARAMS } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { canRequestVenueFor, coveringBooking, isReplaceable } from '../shared/venueRequest'
+import {
+  canRequestVenueFor,
+  coveringBooking,
+  hasPendingReplacement,
+  isReplaceable,
+} from '../shared/venueRequest'
 
 /** What a venue page knows about the event named in its address. */
 export interface RequestingEventState {
@@ -116,7 +121,10 @@ export function useRequestingEvent(): RequestingEventState {
     null
   const replacingBooking =
     isRequestable && bookings !== null
-      ? (bookings.find((booking) => booking.id === replacingId && isReplaceable(booking)) ?? null)
+      ? (bookings.find(
+          (booking) =>
+            booking.id === replacingId && isReplaceable(booking) && !hasPendingReplacement(booking),
+        ) ?? null)
       : null
   return {
     event: resolvedEvent,

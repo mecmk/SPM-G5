@@ -82,7 +82,7 @@ import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
   isMarked,
-  hasPendingReplacement,
+  offersWayToAnotherVenue,
   isReplaceable,
   replacementSearchFor,
   requirementName,
@@ -504,10 +504,12 @@ export function EventDetailPage() {
                 status: updated.status,
                 decided_at: updated.decided_at,
                 decision_reason: updated.decision_reason,
+                // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
+                venue_unavailable_marked_at: null,
               }
             }
             // Story 12.6 AC5: withdrawing a replacement ends the original's "Replacement
-            // requested", and with it the way to ask again.
+            // requested", which brings its Find a replacement venue back.
             return booking.id === pendingWithdraw.replaces_booking_id
               ? { ...booking, pending_replacement_venue_name: null }
               : booking
@@ -1143,19 +1145,16 @@ export function EventDetailPage() {
                   {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
                    *  event's assigned coordinator while it can take a booking (AC8): a replacement
                    *  for an approved one, the catalogue's Switch for a pending one. */}
-                  {isMarked(booking) &&
-                    !hasPendingReplacement(booking) &&
-                    canFindVenue &&
-                    isAssignedCoordinator && (
-                      <div className="cluster">
-                        <Link
-                          to={venueSearchPath(replacementSearchFor(event, booking))}
-                          className="button button-sm"
-                        >
-                          {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
-                        </Link>
-                      </div>
-                    )}
+                  {offersWayToAnotherVenue(booking) && canFindVenue && isAssignedCoordinator && (
+                    <div className="cluster">
+                      <Link
+                        to={venueSearchPath(replacementSearchFor(event, booking))}
+                        className="button button-sm"
+                      >
+                        {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )
             })}

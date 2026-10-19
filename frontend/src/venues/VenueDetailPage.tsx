@@ -150,8 +150,10 @@ export function VenueDetailPage() {
                 </p>
               )}
             {/* Story 12.6 AC1/AC2: opened to replace a booking, the venue is requested as its
-             *  replacement, whatever the requirement already holds. */}
-            {(selectedCovering === null || replacingBooking !== null) && (
+             *  replacement, whatever the requirement already holds - unless it is the venue being
+             *  replaced, which cannot replace itself (AC10). */}
+            {(selectedCovering === null ||
+              (replacingBooking !== null && replacingBooking.venue_id !== venue.id)) && (
               <Link
                 to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
                 className="button brand"
