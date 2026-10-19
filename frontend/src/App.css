@@ -1505,6 +1505,16 @@ button.link {
   text-decoration: none;
 }
 
+/* A link inside an empty state's sentence, in the brand colour like the app's other links. */
+.empty a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.empty a:hover {
+  text-decoration: underline;
+}
+
 .link:hover,
 button.link:hover {
   background: none;
@@ -2664,6 +2674,12 @@ td.num {
 @media (max-width: 640px) {
   .event-card:has(.event-card-action) {
     flex-wrap: wrap;
+  }
+
+  /* The details share the first row with the picture, as on a card with no control, and
+     only the control drops below them. */
+  .event-card:has(.event-card-action) .event-card-body {
+    flex: 1 1 0;
   }
 
   .event-card-action {
@@ -3952,6 +3968,14 @@ button.requirement-choice.requirement-covered:hover,
   .assignment-overview .event-card-action button,
   .assignment-overview .dialog select,
   .assignment-overview .dialog-actions button {
+    min-height: 44px;
+  }
+}
+
+/* Story 18.2: on a phone each registration's Withdraw button on My registrations is at least
+   44px tall, to be pressed with a thumb, as 18.1's Register is. */
+@media (max-width: 640px) {
+  .my-registrations .event-card-action button {
     min-height: 44px;
   }
 }
