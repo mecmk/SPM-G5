@@ -3967,6 +3967,15 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
+/* Fix f19.1.1: on a phone, the organiser's Request a change - now also on a Confirmed event - is at
+   least 44px tall, to be pressed with a thumb. Only that button: the form's own buttons keep their
+   size. */
+@media (max-width: 640px) {
+  .change-requests-section > .page-actions button {
+    min-height: 44px;
+  }
+}
+
 /* ---------- the Lead's reassignment (story 5.6) ---------- */
 
 /* On a phone, Reassign - on the event page and on each overview card - and the Reassign dialog's

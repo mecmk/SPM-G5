@@ -7,6 +7,7 @@ import {
   type BookingStatus,
 } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
+import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/changeRequests'
 import {
   approveEvent,
   CLARIFICATION_MESSAGE_MAX_LENGTH,
@@ -60,7 +61,7 @@ import {
   ACTIVE_EVENT_STATUSES,
   AWAITING_DECISION_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
-  CHANGE_REQUESTABLE_STATUS,
+  CHANGE_REQUESTABLE_STATUSES,
   CHANGE_REQUESTS_VISIBLE_STATUSES,
   CONTACT_EDITABLE_STATUSES,
   DETAILS_LOCKED_HINT,
@@ -267,6 +268,13 @@ export function EventDetailPage() {
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<BookingOutcome[] | null>(null)
+  /** Story 19.1 AC12: when change requests close - or why that couldn't be read - with the event
+   *  it was read for, so another event's answer is never shown on this one. */
+  const [requestWindow, setRequestWindow] = useState<{
+    eventId: string
+    window: ChangeRequestWindow | null
+    error: string | null
+  } | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
@@ -332,6 +340,29 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, event, user])
+
+  /** Story 19.1 AC12: when change requests close, read for the organiser of a Planning or
+   *  Confirmed event, and again whenever the event is - its bookings, and so its set-up time, may
+   *  have changed. */
+  useEffect(() => {
+    if (event === null || user === null) return undefined
+    const mayRequestChanges =
+      can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
+      event.organiser_id === user.id &&
+      CHANGE_REQUESTABLE_STATUSES.includes(event.status)
+    if (!mayRequestChanges) return undefined
+    let cancelled = false
+    fetchChangeRequestWindow(eventId)
+      .then((window) => {
+        if (!cancelled) setRequestWindow({ eventId, window, error: null })
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRequestWindow({ eventId, window: null, error: formatApiError(err) })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, event, user, can])
 
   useEffect(() => {
     if (!canReadBooking) return undefined
@@ -638,12 +669,19 @@ export function EventDetailPage() {
   const canViewClarifications =
     user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
   const isOrganiser = user !== null && event.organiser_id === user.id
-  /** Story 19.1 AC1/AC5/AC7: only the owning organiser, holding event_change_requests:create, asks
-   *  for a change, and only while the event is in Planning - mirroring the backend's checks. */
-  const canRequestChanges =
+  /** Story 19.1 AC1/AC5/AC7/AC11/AC12: only the owning organiser, holding
+   *  event_change_requests:create, asks for a change, and only while the event is in Planning or
+   *  Confirmed - never before approval, while awaiting the safety check, or once completed,
+   *  cancelled or rejected - mirroring the backend's checks. */
+  const mayRequestChanges =
     can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
     isOrganiser &&
-    event.status === CHANGE_REQUESTABLE_STATUS
+    CHANGE_REQUESTABLE_STATUSES.includes(event.status)
+  /** AC12: and only until 24 hours before its set-up time, as the server says. */
+  const readRequestWindow =
+    mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
+  const shownRequestWindow = readRequestWindow?.window ?? null
+  const canRequestChanges = shownRequestWindow?.is_open === true
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
   const canViewChangeRequests =
@@ -1201,6 +1239,8 @@ export function EventDetailPage() {
           <ChangeRequestsSection
             event={event}
             canRaise={canRequestChanges}
+            requestWindow={shownRequestWindow}
+            requestWindowError={readRequestWindow?.error ?? null}
             canWithdraw={isOrganiser}
             canDecide={canDecideChangeRequests}
             onDecided={reloadEvent}
