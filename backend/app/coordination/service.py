@@ -20,10 +20,15 @@ write the audit entry" is written once.
   ``assigned_at``, plus an ``EVENT_COORDINATOR_ASSIGNED`` audit entry;
 * 5.4 AC7/AC9 and 5.6 AC5 an event is assigned and reassigned only by a holder of
   ``events:assign`` (the Lead);
-* 5.4 AC8 of two Leads assigning one event at once, the conditional update in
-  ``_create_assignment`` lets only the first through, and the second is told who got it;
-* 5.6 AC6 a reassignment names the coordinator the Lead saw, and the same conditional update
-  refuses it once the event's coordinator has changed.
+* 5.4 AC8 of two Leads assigning one event at once, the second waits on the event's row lock,
+  then finds it assigned and is told who got it;
+* 5.6 AC6 a reassignment names the coordinator the Lead saw, and is refused once the event's
+  coordinator has changed - by a reassignment made since the Lead's page opened, or one this
+  request waited for on the row lock.
+
+Both refusals are made under the row lock, before anything about the chosen coordinator is
+checked, by comparing the coordinator read with the one the Lead saw (``_refuse_if_changed``).
+The conditional update in ``_create_assignment`` stays as the backstop.
 
 Story 5.5 reads it all back for the Lead: every active event with its coordinator and the Lead
 who assigned it (``list_active_events``), and each coordinator's active events
@@ -138,9 +143,10 @@ class NotAnActiveStatus(ValueError):
 
 class AssignmentChanged(RuntimeError):
     """Story 5.6 AC6 (5.2 AC7): the event's coordinator is no longer the one the request names -
-    the Lead's page was opened before another reassignment, or another one won a race with this
-    one. Never partially applied: nothing about the event or its history is touched when this is
-    raised. The message does not guess which happened (backend/STYLE.md)."""
+    the Lead's page was opened before another reassignment, or another was made while this one
+    waited for the event's row lock. Never partially applied: nothing about the event or its
+    history is touched when this is raised. The message does not guess which happened
+    (backend/STYLE.md)."""
 
     def __init__(self, event_id: uuid.UUID) -> None:
         super().__init__(ASSIGNMENT_CHANGED_MESSAGE)
@@ -442,6 +448,31 @@ def _notify_assignment(db: Session, event: Event, *, coordinator: User, assigned
     )
 
 
+def _refuse_if_changed(
+    previous: EventCoordinatorAssignment | None,
+    *,
+    expected_coordinator_id: uuid.UUID | None,
+    event_id: uuid.UUID,
+) -> None:
+    """Story 5.4 AC8 / 5.6 AC6: refuse when the coordinator read under the row lock is not the
+    one the Lead saw - ``None`` for 5.4's assign, which is then told who has the event.
+
+    A licensed exception to "attempt and catch" (backend/STYLE.md, Standing divergences). The read
+    is made under the event's row lock, so nothing changes between it and the write. Checking first
+    keeps the refusals in the order 5.4 set, before anything about the chosen user, and lets a
+    no-op write nothing: re-choosing the coordinator who has the event returns before the guarded
+    UPDATE, which would otherwise stamp ``events.updated_at`` through its trigger - the version
+    7.2's correction checks (``events/service.py::_claim_for_correction``) - so an open correction
+    would be refused after a reassignment that changed nothing. A stale Lead is refused even when
+    they chose the coordinator who now has it."""
+    read_coordinator_id = previous.coordinator_id if previous is not None else None
+    if read_coordinator_id == expected_coordinator_id:
+        return
+    if expected_coordinator_id is None and previous is not None:
+        raise AlreadyAssigned(previous.coordinator)
+    raise AssignmentChanged(event_id)
+
+
 def _create_assignment(
     db: Session,
     event: Event,
@@ -458,32 +489,21 @@ def _create_assignment(
     in step, and write the audit entry. Does not commit - the caller owns the transaction.
 
     ``previous`` is the caller's own read of ``current_assignment``, made under the event's row
-    lock, and is compared with ``expected_coordinator_id`` - the coordinator the Lead saw - before
-    anything is written. It is not re-read here: re-reading would let this call adopt whatever
-    changed instead of noticing it changed. That comparison is a licensed exception to "attempt
-    and catch" (backend/STYLE.md, Standing divergences): without it, a request whose own read
-    already disagrees with the Lead's could match the guarded UPDATE after a hand-back and close
-    an assignment that is already closed - a 500 from the one-open-row index, not a 409.
+    lock and already found to hold the coordinator the Lead saw (``_refuse_if_changed``). It is
+    not re-read here: re-reading would let this call adopt whatever changed instead of noticing it
+    changed.
 
-    Re-assigning the coordinator who already holds the event is a no-op - when the caller saw
-    them as its coordinator too: it returns the existing assignment rather than closing and
-    re-opening it, so the history in ``event_coordinator_assignments`` stays meaningful.
+    Re-assigning the coordinator who already holds the event is a no-op: it returns the existing
+    assignment and writes nothing, so the history in ``event_coordinator_assignments`` stays
+    meaningful and the event's version (``updated_at``) is left alone.
 
-    Story 5.2 AC7 / 5.6 AC6: the write is conditional on ``events.assigned_coordinator_id``
-    still holding ``expected_coordinator_id`` - the coordinator the Lead saw, or ``NULL`` for
-    5.4's assign - the same "attempt and catch the failure" shape as ``submit_event``'s
-    conditional UPDATE. A reassignment made from a view that has since changed, or the second of
-    two made at once, finds 0 rows match and raises ``AssignmentChanged`` before touching anything
-    else, rather than silently overwriting the first.
+    Story 5.2 AC7 / 5.6 AC6: the write is still conditional on ``events.assigned_coordinator_id``
+    holding ``expected_coordinator_id`` - the coordinator the Lead saw, or ``NULL`` for 5.4's
+    assign. Under the row lock it always matches in real use; it is the backstop behind the read
+    check, and raises ``AssignmentChanged`` before touching anything else rather than silently
+    overwriting another assignment. Only the tests that commit a race inside this transaction
+    (5.2 AC7, 5.4 AC8) reach it.
     """
-    # The Lead's view is already stale by this request's own read: refused here (5.6 AC6) -
-    # before the no-op below, so a second Lead who chose the coordinator the first one just gave
-    # the event is refused too, not told it worked - and the guarded UPDATE below only ever
-    # matches the pointer ``previous`` was read with. Also how 5.4's assign of an assigned event
-    # is refused (5.4 AC8): its expected coordinator is None.
-    read_coordinator_id = previous.coordinator_id if previous is not None else None
-    if read_coordinator_id != expected_coordinator_id:
-        raise AssignmentChanged(event.id)
     if previous is not None and previous.coordinator_id == coordinator.id:
         return previous
 
@@ -503,8 +523,9 @@ def _create_assignment(
     if previous is not None:
         # Close the old row *and flush it* before inserting the new one, otherwise the partial
         # unique index would briefly see two open assignments for this event. Safe unconditionally
-        # here: the guarded UPDATE above already proved nobody else changed the pointer since we
-        # read ``previous``, so this is still the one open row for this event.
+        # here: ``previous`` was read under the event's row lock, held since
+        # ``_get_event_for_update``, so no other assignment can have closed it or opened another
+        # since.
         previous.unassigned_at = func.now()
         db.flush()
 
@@ -570,7 +591,8 @@ def assign_coordinator(
     coordinator, refused if the event's coordinator is no longer the one the Lead saw.
 
     The event's row is locked first (``_get_event_for_update``), so its status and coordinator are
-    read after any change already under way, and cannot change before the write.
+    read after any change already under way, and cannot change before the write. The refusals come
+    in 5.4's order: the event's status, then its coordinator, then the chosen user.
     """
     event = _get_event_for_update(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
@@ -579,6 +601,7 @@ def assign_coordinator(
     previous = current_assignment(db, event.id)
     expected_id = data.expected_coordinator_id
     is_assign = expected_id is None
+    _refuse_if_changed(previous, expected_coordinator_id=expected_id, event_id=event.id)
 
     coordinator = db.get(User, data.coordinator_id)
     if coordinator is None:
@@ -599,9 +622,9 @@ def assign_coordinator(
             note=data.note,
         )
     except AssignmentChanged:
-        # 5.4 AC8: an assign found the event already has a coordinator - given before, or by
-        # another Lead whose write this one waited for - so it names them. A reassignment naming a
-        # coordinator the event no longer has (5.6 AC6) is refused as changed.
+        # The guarded UPDATE's backstop (see _create_assignment), which the row lock keeps out of
+        # real use. An assign is then told who got the event (5.4 AC8); a reassignment is refused
+        # as changed (5.6 AC6).
         winner = current_assignment(db, event.id) if is_assign else None
         if winner is None:
             raise

@@ -628,8 +628,34 @@ def test_two_leads_reassigning_at_once_write_one(engine):
             session.commit()
 
 
-@pytest.mark.story("5.6", ac=1)
 @pytest.mark.story("5.6", ac=6)
+@pytest.mark.parametrize(
+    "chosen", ["an unknown user", "not a coordinator", "an inactive coordinator"]
+)
+def test_a_stale_reassignment_is_refused_as_changed_whoever_it_names(login_as, db: Session, chosen):
+    """The Lead's page still shows Chloe, but the event went to Carl. Their reassignment is refused
+    because the assignment changed - said before anything about the user they chose, as 5.4 AC8's
+    refusal is (review of #124). Only a direct API call names such a user."""
+    event = _assigned_event(db, Users.COORDINATOR.id)
+    lead = login_as(Users.LEAD)
+    moved = _reassign(lead, event.id, Users.COORDINATOR_2.id, expected=Users.COORDINATOR.id)
+    assert moved.status_code == 200, moved.text
+    chosen_id = {
+        "an unknown user": uuid.uuid4,
+        "not a coordinator": lambda: Users.ORGANISER.id,
+        "an inactive coordinator": lambda: make_user(db, role=COORDINATOR_ROLE, is_active=False).id,
+    }[chosen]()
+
+    response = _reassign(lead, event.id, chosen_id, expected=Users.COORDINATOR.id)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == (
+        "This event's coordinator has changed since you opened it. Reload the event and try again."
+    )
+    assert _pointer(db, event.id) == Users.COORDINATOR_2.id
+
+
+@pytest.mark.story("5.6", ac=1)
 def test_a_reassignment_waits_for_a_cancellation_landing_at_the_same_time(engine):
     """Real concurrent transactions, cleaned up after, as the race test above. The event is being
     cancelled - that transaction holds its row - while the Lead hands it from Chloe to Carl. The
@@ -699,11 +725,16 @@ def test_a_reassignment_waits_for_a_cancellation_landing_at_the_same_time(engine
 
 @pytest.mark.story("5.6", ac=6)
 def test_a_reassignment_whose_own_read_is_already_stale_is_refused(db: Session, monkeypatch):
-    """The Lead's page still shows Chloe, but the event went to Carl. While this request reads the
-    event (Carl), another Lead hands it back to Chloe. Its write would now match "Chloe" and close
-    an assignment already closed, leaving two open ones - a 500 from the database's one-open-row
-    index. It is refused (409) because its own read already disagreed with what the Lead saw
-    (review of #124, probe P4)."""
+    """The Lead's page still shows Chloe, but the event went to Carl. Just after this request reads
+    the event (Carl), another Lead hands it back to Chloe. It is refused (409) on its own read,
+    which already disagreed with what the Lead saw, and nothing is written (review of #124, probe
+    P4).
+
+    The hand-back is injected inside this request's own transaction, as 5.2 AC7's test injects its
+    race, and committing it releases the row lock. A real hand-back can't land there: it waits on
+    the lock, and the request is refused the same way. What this pins is that the refusal comes
+    from the request's own read (``_refuse_if_changed``), not from the guarded UPDATE, which would
+    match "Chloe" after the hand-back and close an assignment already closed."""
     lead = db.get(User, Users.LEAD.id)
     other_lead = make_user(db, role=LEAD_ROLE, full_name="Other Lead")
     dana = make_user(db, role=COORDINATOR_ROLE, full_name="Dana Coordinator")

@@ -14,7 +14,7 @@ AC3  The assignment change and its history entry are saved together, and access 
 AC4  Only active Event Coordinators are offered, and the current coordinator is excluded.
 AC5  Pending booking requests and clarification threads move with the event. (Change requests
      are 5.6 AC4's, in test_lead_reassign_coordinator.py.)
-AC6  (its second sentence) The previous coordinator loses access immediately.
+AC6  (its second sentence) The previous coordinator loses assignment access immediately.
 AC7  Two simultaneous reassignments: the second is refused because the assignment has changed.
 """
 
@@ -239,7 +239,7 @@ def test_clarification_thread_stays_visible_after_reassignment(login_as, db: Ses
     assert len(response.json()) >= 1
 
 
-# --- AC6, its second sentence: the previous coordinator loses access immediately -------------
+# --- AC6, its second sentence: the previous coordinator loses assignment access immediately --
 @pytest.mark.story("5.2", ac=6)
 def test_previous_coordinator_immediately_loses_all_assignment_rights(login_as):
     """Once the Lead hands Events.APPROVED to Carl, Chloe can no longer edit it - she is no longer
@@ -270,8 +270,7 @@ def test_previous_coordinator_immediately_loses_all_assignment_rights(login_as):
 def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, monkeypatch):
     """Two reassignments 'at the same time' (e.g. a double submit) both read Chloe as current
     before either writes: Chloe -> Carl, and, from a second tab, Chloe -> Dana. Since 5.6 both are
-    the Lead's. The second write
-    must be refused rather than silently overwrite the first.
+    the Lead's. The second write must be refused rather than silently overwrite the first.
 
     A single test session can't host two genuinely overlapping transactions (5.4's
     test_two_leads_assigning_at_once_write_one needs real sessions, its own commits and a clean-up
@@ -279,7 +278,10 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     deterministically: the moment
     the reassignment-in-progress reads "who is current" via ``current_assignment``, a second,
     already-authorised reassignment (Chloe -> Carl) is made and committed first, simulating the
-    other request winning the race.
+    other request winning the race. Committed inside this request's own transaction, it gets past
+    the row lock 5.6 added, which a real second request would wait on, and is refused by the read
+    check (``_refuse_if_changed``). So what this reaches is the guarded UPDATE, the backstop
+    behind that check.
 
     Uses the seeded Events.APPROVED rather than a hand-built event: ``make_event`` sets
     ``assigned_coordinator_id`` on the event row directly but does not create a matching open

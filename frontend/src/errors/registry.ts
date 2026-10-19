@@ -46,6 +46,7 @@ export type ErrorCode =
   | 'VENUE_PICTURES_CHANGED'
   | 'EVENT_NOT_FOUND'
   | 'NO_OTHER_COORDINATOR'
+  | 'REASSIGNED_LIST_NOT_REFRESHED'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
   | 'EVENT_CORRECTION_CONFLICT'
@@ -291,6 +292,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   NO_OTHER_COORDINATOR: {
     title: 'No one to reassign to',
     message: 'There is no other active Event Coordinator to reassign this to.',
+  },
+  /** Story 5.6 AC1 (5.5 AC5): the overview's lists could not be read again after a reassignment
+   * that went through, so they still show the old coordinator. Says it went through, so the Lead
+   * does not try again from the old card. */
+  REASSIGNED_LIST_NOT_REFRESHED: {
+    title: 'List not refreshed',
+    message:
+      'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.',
   },
   EVENT_ALREADY_SUBMITTED: {
     title: 'Request already submitted',

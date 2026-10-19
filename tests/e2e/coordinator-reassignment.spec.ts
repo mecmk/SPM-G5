@@ -7,6 +7,7 @@
  * 5.6 AC1 the Lead reassigns from the event page and from the overview (5.5), choosing from the
  *     other active coordinators, each with their active-event count; the page shows the new
  *     coordinator at once.
+ * 5.6 AC3 the picker can't be confirmed until the active coordinators it offers have loaded.
  * 5.6 AC5 a coordinator no longer sees Reassign.
  * 5.6 AC6 a reassignment refused because the assignment changed says why.
  * Responsive: the flow at a phone (375 x 667) and a desktop (1280 x 800), and the page and dialog
@@ -44,6 +45,8 @@ import {
 const [CHLOE, CARL] = COORDINATORS
 const STALE_MESSAGE =
   "This event's coordinator has changed since you opened it. Reload the event and try again."
+const NOT_REFRESHED_MESSAGE =
+  'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.'
 /** How the picker names a coordinator: their name and their number of active events (5.4 AC3). */
 const WITH_COUNT = /· \d+ active events?$/
 
@@ -279,7 +282,7 @@ test('5.6 AC1: Reassign is offered only on an active event that has a coordinato
   await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
 })
 
-test('5.6 AC6: Confirm does nothing while the coordinators are still loading', async ({ page }) => {
+test('5.6 AC3: Confirm does nothing while the coordinators are still loading', async ({ page }) => {
   // Read only: the PUT is never sent, and the dialog is cancelled. The coordinators are held back
   // so Confirm is pressed before the picker has anything to choose.
   let releaseCoordinators = () => {}
@@ -314,7 +317,7 @@ test('5.6 AC6: Confirm does nothing while the coordinators are still loading', a
   expect(sent).toEqual([])
 })
 
-test('5.6 AC1: a refresh of the overview that fails after a reassignment says so', async ({
+test('5.6 AC1: a refresh of the overview that fails after a reassignment says so, until the next good load', async ({
   page,
 }) => {
   test.setTimeout(90_000)
@@ -322,21 +325,33 @@ test('5.6 AC1: a refresh of the overview that fails after a reassignment says so
   await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
   await overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }).click()
   // The reassignment itself goes through; the list read afterwards fails.
-  await page.route(
-    (url) => url.pathname === '/coordination/active-events',
-    (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch') return route.fallback()
-      return route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ detail: 'Internal Server Error' }),
-        headers: corsHeaders(request),
-      })
-    },
-  )
+  const isActiveEvents = (url: URL) => url.pathname === '/coordination/active-events'
+  await page.route(isActiveEvents, (route) => {
+    const request = route.request()
+    if (request.resourceType() !== 'fetch') return route.fallback()
+    return route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Internal Server Error' }),
+      headers: corsHeaders(request),
+    })
+  })
 
   await reassignToCarl(page, name)
 
-  await expect(page.getByRole('alert')).toBeVisible()
+  // It says the reassignment was made, so the Lead does not try again from the old card.
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  // The other view loads nothing afresh, so the lists are still out of date and it stays.
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  await expect(page.getByRole('list', { name: 'Coordinators' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  await page.getByRole('link', { name: 'All active events' }).click()
+  await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+
+  // The next good load of the events - here, choosing Carl's - shows the change, and the notice
+  // goes.
+  await page.unroute(isActiveEvents)
+  await page.getByRole('combobox', { name: 'Coordinator' }).selectOption(CARL.id)
+  await expect(overviewCard(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
 })

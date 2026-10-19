@@ -119,6 +119,26 @@ def test_reassigning_the_same_coordinator_does_not_duplicate_history(login_as, d
 
 
 @pytest.mark.story("5.1", ac=1)
+def test_reassigning_the_same_coordinator_leaves_the_event_version_alone(login_as, db: Session):
+    """Re-choosing the coordinator who has the event writes nothing to it, so its ``updated_at`` -
+    the version story 7.2's correction checks (AC9) - is unchanged, and a correction Chloe has open
+    is not refused because of it (review of #124)."""
+    version = text("SELECT updated_at FROM events WHERE id = :e")
+    before = db.execute(version, {"e": Events.APPROVED}).scalar()
+
+    response = login_as(Users.LEAD).put(
+        f"/events/{Events.APPROVED}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert db.execute(version, {"e": Events.APPROVED}).scalar() == before
+
+
+@pytest.mark.story("5.1", ac=1)
 def test_draft_event_cannot_be_assigned_a_coordinator(login_as, db: Session):
     """AC1 is about a *submitted* event - a draft has not been handed over yet."""
     lead = login_as(Users.LEAD)
@@ -362,7 +382,7 @@ def test_unrelated_organiser_cannot_see_another_organisers_event(login_as):
 
 
 # --- Access control (story 1.2 AC4 applied to this endpoint) -------------------------------
-@pytest.mark.story("5.1", ac=2)
+@pytest.mark.story("5.4", ac=7)
 @pytest.mark.parametrize(
     "user",
     # Every role but the Lead's, so a role added later is refused here without editing this list.
@@ -370,8 +390,9 @@ def test_unrelated_organiser_cannot_see_another_organisers_event(login_as):
     ids=lambda u: u.role,
 )
 def test_only_the_lead_may_assign(login_as, db: Session, user):
-    """Every role but the Lead's is refused (403), Chloe included - the coordinator Events.SUBMITTED
-    is assigned to - since story 5.6 (Q16) took reassignment from coordinators too."""
+    """5.4 AC7: Event Coordinators and all other roles are refused (403). Chloe is included - the
+    coordinator Events.SUBMITTED is assigned to - since story 5.6 (Q16) took reassignment from
+    coordinators too."""
     before = _open_assignments(db, Events.SUBMITTED)
     actor = login_as(user)
 
