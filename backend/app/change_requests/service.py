@@ -1263,17 +1263,25 @@ def _capacity_shortfall(
     """AC1/AC4 (decided 19 Oct 2026): an attendance change is judged against what the venues
     the approval keeps hold between them, each by 11.1's capacity in its booked layout - a
     requirement's own booking can still fit its requirement while the event outgrows it. Equal
-    fits. Nothing is judged without a kept booking, nor for any other field."""
+    fits. A venue booked for several requirements (12.5 AC9) holds its people once, so it is
+    counted once, by the first booking of it. Nothing is judged without a kept booking, nor for
+    any other field."""
     if request.field_name != ChangeRequestField.EXPECTED_ATTENDANCE or not kept:
         return None
-    venues = [
-        CountedVenueOut(
-            venue_name=booking.venue.name,
-            capacity=venue_service.venue_capacity(booking.venue, layout=booking.required_layout),
-            layout_name=_counted_layout_name(booking),
+    by_venue: dict[uuid.UUID, CountedVenueOut] = {}
+    for booking in kept:
+        by_venue.setdefault(
+            booking.venue_id,
+            CountedVenueOut(
+                venue_id=booking.venue_id,
+                venue_name=booking.venue.name,
+                capacity=venue_service.venue_capacity(
+                    booking.venue, layout=booking.required_layout
+                ),
+                layout_name=_counted_layout_name(booking),
+            ),
         )
-        for booking in kept
-    ]
+    venues = list(by_venue.values())
     booked = sum(venue.capacity for venue in venues)
     if proposed.attendance <= booked:
         return None

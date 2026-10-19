@@ -472,7 +472,14 @@ def test_an_attendance_beyond_what_the_booked_venues_hold_is_flagged(login_as, d
         "proposed_attendance": 500,
         "booked_capacity": 250,
         "shortfall": 250,
-        "venues": [{"venue_name": hall.venue.name, "capacity": 250, "layout_name": None}],
+        "venues": [
+            {
+                "venue_id": str(hall.venue_id),
+                "venue_name": hall.venue.name,
+                "capacity": 250,
+                "layout_name": None,
+            }
+        ],
     }
     assert impact["venue_bookings"] == []
     assert impact["has_impact"] is True
@@ -502,6 +509,27 @@ def test_every_booked_venue_counts_towards_the_capacity(login_as, db: Session):
     request = _raise(login_as, db, event, "expected_attendance", 500)
 
     assert _impact(login_as, request)["capacity_shortfall"] is None
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_venue_booked_for_two_requirements_counts_once(login_as, db: Session):
+    """12.5 AC9: one 250-seat hall serves a morning and an afternoon requirement. Its seats are
+    counted once, so 450 people are still flagged, and the hall is listed once."""
+    event = _planning_event(db, expected_attendance=200)
+    midpoint = event.starts_at + (event.ends_at - event.starts_at) / 2
+    hall = make_venue(db, capacity=250, name=f"Hall {uuid.uuid4().hex[:6]}")
+    morning = _requirement(db, event, capacity=200, name="Morning", ends_at=midpoint)
+    afternoon = _requirement(
+        db, event, capacity=200, name="Afternoon", position=1, starts_at=midpoint
+    )
+    _book(db, event, people=200, requirement_id=morning, venue=hall, ends_at=midpoint)
+    _book(db, event, people=200, requirement_id=afternoon, venue=hall, starts_at=midpoint)
+    request = _raise(login_as, db, event, "expected_attendance", 450)
+
+    shortfall = _impact(login_as, request)["capacity_shortfall"]
+
+    assert (shortfall["booked_capacity"], shortfall["shortfall"]) == (250, 200)
+    assert [venue["venue_id"] for venue in shortfall["venues"]] == [str(hall.id)]
 
 
 @pytest.mark.story("19.3", ac=1)

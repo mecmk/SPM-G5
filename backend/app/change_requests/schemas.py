@@ -228,8 +228,10 @@ class ClosureOut(BaseModel):
 
 class CountedVenueOut(BaseModel):
     """One booked venue counted towards ``CapacityShortfallOut``: how many it holds, in the booked
-    layout (``layout_name``) where the venue records that layout's capacity (story 11.1 AC4)."""
+    layout (``layout_name``) where the venue records that layout's capacity (story 11.1 AC4).
+    Each venue is counted once, however many of the event's requirements it is booked for."""
 
+    venue_id: uuid.UUID
     venue_name: str
     capacity: int
     layout_name: str | None
@@ -304,11 +306,11 @@ class RegistrationImpactOut(BaseModel):
 
 class ChangeRequestImpactOut(BaseModel):
     """Story 19.3: what approving a pending change request would affect, worked out from the
-        records as they stand (AC3). ``capacity_shortfall`` when an attendance change outgrows the
-    venues booked (AC1). ``refused_because`` when 19.2 would refuse the approval - nothing
-        else is predicted then; ``is_out_of_date`` when it can only be rejected (19.2 AC7).
-        ``fingerprint`` identifies everything else here, so an approval can tell whether it still
-        holds (AC7)."""
+    records as they stand (AC3). ``capacity_shortfall`` when an attendance change outgrows the
+    venues booked (AC1). ``refused_because`` when 19.2 would refuse the approval - nothing else
+    is predicted then; ``is_out_of_date`` when it can only be rejected (19.2 AC7).
+    ``fingerprint`` identifies everything else here, so an approval can tell whether it still
+    holds (AC7)."""
 
     change_request_id: uuid.UUID
     assessed_at: datetime

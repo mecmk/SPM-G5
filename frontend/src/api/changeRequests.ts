@@ -194,6 +194,7 @@ export interface Closure {
 
 /** Mirrors `CountedVenueOut`: one booked venue counted towards a `CapacityShortfall`. */
 export interface CountedVenue {
+  venue_id: string
   venue_name: string
   capacity: number
   layout_name: string | null
