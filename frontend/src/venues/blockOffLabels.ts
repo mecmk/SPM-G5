@@ -6,6 +6,11 @@
 export const BLOCK_OFF_LABEL = 'Block off time'
 export const EDIT_BLOCK_OFF_LABEL = 'Edit blocked-off time'
 
+/** Story 12.6 AC12: said under the form's Save changes, above the closure sections, which are not
+ * part of the form: a closure is saved by its own Save closure, not by the venue's Save changes. */
+export const CLOSURES_SAVED_NOTE =
+  'Closures are saved as soon as you add them; Save changes is not needed.'
+
 /** The card's heading, the form's own button and the confirmation's button. */
 export function blockOffLabel(isEditing: boolean): string {
   return isEditing ? EDIT_BLOCK_OFF_LABEL : BLOCK_OFF_LABEL

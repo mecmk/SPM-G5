@@ -4,6 +4,10 @@ import type { VenueUnavailableWindow } from '../api/venues'
 import { instantToInput, inputToInstant } from './format'
 
 /** One venue's `getVenueCalendar`, bound to it: the windows overlapping `startsAt`-`endsAt`. */
+/** The id of the calendar's day panel, which the month grid's day buttons control (story 9.1): the
+ *  same on the venue's details page and, story 12.6 AC12, on the Edit venue page. */
+export const VENUE_CALENDAR_DAY_PANEL_ID = 'venue-calendar-day-panel'
+
 export type VenueCalendarLoader = (
   startsAt: string,
   endsAt: string,
