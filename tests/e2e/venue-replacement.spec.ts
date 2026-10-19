@@ -1,49 +1,84 @@
 /**
- * Story 12.6 - request a replacement venue for an affected booking: what a coordinator clicks
- * through when Venue Staff have closed a venue over a booking of theirs.
+ * Story 12.6 - Request a replacement venue for an affected booking
  *
- * AC1  On an approved booking marked "Venue unavailable – alternative needed" the event's page
- *      offers Find a replacement venue, which opens the catalogue pre-filled from the booking's
- *      requirement - or, for an additional venue, from the event's own period and attendance -
- *      with the banner naming the booking being replaced. Usable at 1280x720 and 390x844.
- * AC2  Request this venue raises a pending replacement; the request step says what it replaces
- *      and carries the original's setup and teardown, editable; the event page lists both.
- * AC3  Venue Staff's queue card and request page say what the replacement replaces and what
- *      approving it releases; once approved the event's list reads "Replaced by <venue>" on the
- *      original and "Replaces <venue>" on the replacement, at both sizes.
- * AC4  Until it is approved the requirement reads "Venue unavailable: <venue>" in the banner, then
- *      "Replacement requested: <venue>"; the event page does not read "All required venues
- *      booked" while its only live booking is marked; Find a venue skips a marked requirement;
- *      selecting one in the banner shows its booking with Find a replacement venue, never
- *      Request this venue.
- * AC5  A withdrawn replacement leaves the original marked, and another can be requested.
- * AC6  Once the closure is removed Find a replacement venue goes, and the pending replacement can
- *      still be withdrawn with the original kept.
- * AC8  A cancelled event's marked booking offers no replacement.
- * AC9  Only the event's assigned coordinator is offered Find a replacement venue; a marked
- *      pending booking offers Find another venue, which leads to Switch to this venue.
- * AC10 Switch to this venue is not offered on a pending replacement.
- * AC12 While a booking is marked, or a replacement for one is pending, the event cannot go for a
- *      safety review or be confirmed, and its page says why - naming the venue - in place of the
- *      button.
- * AC11 The coordinator's Events inbox has a "Venue unavailable" tab with the server's count, its
- *      empty state, and the pending replacement named on its cards.
+ * Happy path
+ * 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
+ *     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
+ *     pre-filled from that booking's venue requirement (8.4), or, for an additional venue, from
+ *     the event's own period and attendance, with the unavailable venue excluded. The banner
+ *     names the booking being replaced, and stays while the coordinator changes or clears the
+ *     filters.
+ * 2. "Request this venue" raises a new booking request linked to the original booking as its
+ *     replacement, carrying the original's setup and teardown (still editable on the request
+ *     step). The event's details, status and other venue bookings are not changed.
+ * 3. When Venue Staff approve the replacement (13.2), the original booking is released
+ *     (Cancelled) in the same step. The event's booking list shows the original as "Replaced by
+ *     <venue>", closed at the time of the release, and the replacement as "Replaces <venue>".
+ *     Before approving, Venue Staff see "Replaces <venue>" and "Approving this releases
+ *     <venue>". The coordinator's approval notice says the original was released and Venue Staff
+ *     are told of the release; the organiser is not notified.
  *
- * The rules - the refusals, the one pending replacement, the release, the race, the notices, the
- * list's count and paging, the safety review's and Confirm's refusals - are backend cases:
- * backend/tests/bookings/test_request_replacement.py, test_replacement_approval.py,
- * test_replacement_schema.py, test_replacement_for_venue_staff.py,
- * test_replacement_with_change_request.py (19.2), backend/tests/safety/
- * test_blocked_while_venue_unavailable.py, backend/tests/events/
+ * Boundary
+ * 4. Until a replacement is approved, the original booking stays approved and on record. The
+ *     banner (12.5) shows its requirement as "Venue unavailable: <venue>", or "Replacement
+ *     requested: <venue>" while one is pending. The event page does not show "All required
+ *     venues booked" while a requirement's only booking is marked, and Find a venue skips marked
+ *     requirements.
+ *
+ * Edge
+ * 5. If the replacement is rejected or withdrawn, the original booking stays marked and another
+ *     replacement can be requested.
+ * 6. If the unavailability ends before a replacement is approved (9.4 AC6), the mark clears and
+ *     "Find a replacement venue" disappears; the coordinator can withdraw the pending
+ *     replacement and keep the original booking. If Venue Staff approve it anyway, it still
+ *     replaces the original.
+ * 7. A replacement caused by venue unavailability does not need an organiser change request
+ *     (19.1), including when its suitability is overridden with a justification (11.1).
+ * 8. No replacement can be requested on a cancelled event (6.2). A replacement that was never
+ *     approved is never shown as having replaced the original.
+ *
+ * Permission
+ * 9. Only the event's assigned coordinator can request a replacement venue. Only an approved
+ *     marked booking can be replaced. A marked pending booking for a requirement offers "Find
+ *     another venue", which leads to "Switch to this venue" (12.5); a marked pending additional
+ *     venue is withdrawn and requested again.
+ *
+ * Conflict
+ * 10. Only one pending replacement request is allowed per original booking: while one is
+ *     pending, "Find a replacement venue" is not offered, a second request is refused naming the
+ *     venue already requested, and the pending replacement cannot be switched (withdraw it
+ *     first). A replacement at the original booking's own venue is refused. If two replacements
+ *     are sent at once, only the first succeeds.
+ *
+ * Coordinator event list
+ * 11. The assigned coordinator's Events inbox has a "Venue unavailable" tab listing only their
+ *     events with a booking marked "Venue unavailable – alternative needed", with the number of
+ *     such events on the tab (0 when none). An event with a pending replacement stays listed and
+ *     shows "Replacement requested: <venue>". Opening an event shows the marked booking. An
+ *     event leaves the tab once no booking on it is marked.
+ *
+ * Safety review and confirmation
+ * 12. While any booking on an event is marked "Venue unavailable – alternative needed" (9.4), or
+ *     has a pending replacement, the coordinator cannot send the event for safety review (21.2)
+ *     or confirm it. The refusal names each such venue together with any other missing
+ *     arrangement. Once the replacement is approved or withdrawn, or the unavailability ends
+ *     with no replacement pending, the event can be sent and confirmed as usual. *
+ * This file is what a person clicks, through the pages of AC1-AC12. The rules - the refusals, the
+ * one pending replacement, the release, the race, the notices, the list's count and paging, the
+ * safety review's and Confirm's refusals - are backend cases: backend/tests/bookings/
+ * test_request_replacement.py, test_replacement_approval.py, test_replacement_schema.py,
+ * test_replacement_for_venue_staff.py, test_replacement_with_change_request.py (19.2),
+ * backend/tests/safety/test_blocked_while_venue_unavailable.py, backend/tests/events/
  * test_assigned_events_venue_unavailable.py and backend/tests/venues/
- * test_venue_search_exclude_venue.py. This file is the flow a person clicks.
+ * test_venue_search_exclude_venue.py.
  *
  * Seed (backend/db/seed/020_sample_data.sql, "Story 12.6"): events of February 2029, each with a
  * booking at Exhibition Foyer marked by the closure of its day, and Grand Hall free for every
  * one. Each flow that changes something has an event of its own (see the seed's note), so specs
  * running in parallel never share one; the ones that read are never changed. The pages that need
  * a state the seed cannot reach answer one call of their own (a marked pending replacement, a
- * failed read).
+ * failed read, Venue Staff's queue cut down to one event's requests, which under All is
+ * otherwise anywhere in every spec's requests: the queue has no search or filter to find it by).
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, corsHeaders, signIn, venueCard } from './support'
@@ -166,9 +201,11 @@ async function queueCard(page: Page, event: SeededEvent, tab?: string) {
 
 /**
  * Show Venue Staff's queue as `event`'s own requests only. The queue is every request every spec
- * raised, in the order of their dates, and under All the card can be anywhere in it; the real
- * answer is read in full, page by page, and cut down to the event's, so the page under test is
- * the page that really renders them.
+ * raised, in the order of their dates, and under All the card can be anywhere in it. It has no
+ * search or filter to find the card by, and walking its pages for it did not hold up in a full
+ * run (tests/STYLE.md allows a stub for a state the seed cannot reach, and a crowd it cannot
+ * promise is one): the real answer is read in full, page by page, and cut down to the event's, so
+ * the page under test is the page that really renders them.
  */
 async function showOnlyRequestsOf(page: Page, event: SeededEvent) {
   const QUEUE_PAGE = 100
@@ -253,7 +290,7 @@ test("12.6 AC1: an additional venue is replaced from the event's own period and 
   await expect(venueCard(page, FOYER)).toHaveCount(0)
 })
 
-test('12.6 AC1/AC10/AC7: replacement mode survives a filter change, Clear all and the requirement again', async ({
+test('12.6 AC1/AC7: replacement mode survives a filter change, Clear all and the requirement again', async ({
   page,
 }) => {
   const BOARDROOM = 'Boardroom 3.4'
@@ -755,7 +792,7 @@ async function patchFirstBooking(page: Page, event: SeededEvent, patch: Record<s
   )
 }
 
-test('12.6 AC2: a replacement asked for after the closure was removed is refused, not sent as a plain request', async ({
+test('12.6 AC2/AC6: a replacement asked for after the closure was removed is refused, not sent as a plain request', async ({
   page,
   browser,
 }) => {
@@ -806,7 +843,7 @@ test('12.6 AC2: when the event bookings cannot be read the step says so and cann
   await expect(page.getByRole('button', { name: 'Send request' })).toBeDisabled()
 })
 
-test("12.6 AC1: the closed venue's own page offers no Request this venue while replacing it", async ({
+test("12.6 AC1/AC10: the closed venue's own page offers no Request this venue while replacing it", async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
