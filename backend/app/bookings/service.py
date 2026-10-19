@@ -1332,9 +1332,10 @@ def request_replacement_booking(
     before anything about the booking is said, AC9); an event that takes no booking, a cancelled
     one included (``EventNotBookable``, AC8); a booking that is not an approved, still marked one
     (``BookingNotReplaceable``, AC9); an unknown or withdrawn venue; the original's own venue
-    (``ReplacementAtOriginalVenue``) or a second pending replacement
-    (``ReplacementAlreadyPending``, naming the venue already requested, AC10); then every check a
-    new request meets (12.1, 11.1; 12.5's one-per-requirement leaves the original out)."""
+    (``ReplacementAtOriginalVenue``); then every check a new request meets (12.1, 11.1; 12.5's
+    one-per-requirement leaves the original out), and the insert itself, where the database's
+    one-pending-replacement index refuses a second one (``ReplacementAlreadyPending``, naming the
+    venue already requested, AC10) - attempted, not looked for first."""
     if original.event.assigned_coordinator_id != actor.id:
         raise NotAssignedCoordinator(message=REPLACEMENT_NOT_ASSIGNED_COORDINATOR_MESSAGE)
     event = _bookable_event(db, original.event_id, actor=actor)
@@ -1342,9 +1343,6 @@ def request_replacement_booking(
     venue = _bookable_venue(db, data.venue_id)
     if venue.id == original.venue_id:
         raise ReplacementAtOriginalVenue(venue)
-    pending = find_pending_replacement(db, original.id)
-    if pending is not None:
-        raise ReplacementAlreadyPending(pending)
     return _request_venue(
         db,
         event,
