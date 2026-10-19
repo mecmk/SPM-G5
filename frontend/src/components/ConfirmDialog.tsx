@@ -11,9 +11,10 @@ export interface ConfirmDialogProps {
   /** Visual weight of the confirm button. Story 13.2 adds `primary` for a non-destructive
    * decision (approving a booking); `danger` (the default) is for actions that remove data. */
   tone?: 'danger' | 'primary'
-  /** Story 18.2: false once confirming can no longer succeed (a refusal that is final), so the
-   * confirm button is not offered at all and the cancel button, labelled `cancelLabel`, is the
-   * only one left. */
+  /** False while confirming is not on offer, so the confirm button is not shown at all and the
+   * cancel button, labelled `cancelLabel`, is the only one left. Story 18.2: once confirming can no
+   * longer succeed (a refusal that is final). Story 19.3: while the change request's impact
+   * loads, and for good if it can't be read, since approving needs that assessment. */
   canConfirm?: boolean
   /** The label of the button that closes the dialog without confirming. */
   cancelLabel?: string

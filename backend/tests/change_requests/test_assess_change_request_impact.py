@@ -283,6 +283,21 @@ def test_attendance_change_lists_the_booking_it_cancels_and_why(login_as, db: Se
 
 
 @pytest.mark.story("19.3", ac=1)
+def test_the_events_own_cancelled_booking_never_holds_the_venue(login_as, db: Session):
+    """The foyer was booked for 80, so 90 cancels it; a replacement needs the very period the
+    foyer's own booking holds, which the approval frees, so it is not shown as held."""
+    event = _planning_event(db, expected_attendance=80)
+    foyer = _book(db, event, people=80)
+    request = _raise(login_as, db, event, "expected_attendance", 90)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+
+    assert row["will_be_cancelled"] is True
+    assert row["needed_starts_at"] is not None
+    assert row["held_by"] is None
+
+
+@pytest.mark.story("19.3", ac=1)
 def test_each_of_several_bookings_is_judged_on_its_own(login_as, db: Session):
     event = _planning_event(db)
     hall_requirement = _requirement(db, event, capacity=60, name="Main hall")
@@ -386,6 +401,21 @@ def test_registrations_are_counted_not_named(login_as, db: Session):
         "over_by": 1,
         "dates_change": False,
     }
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_registrations_alone_are_an_impact(login_as, db: Session):
+    """No booking or equipment is touched, but three registered for an attendance lowered to 2,
+    so the page must not also say nothing is affected."""
+    event = _planning_event(db, expected_attendance=100)
+    _register(db, event, 3)
+    request = _raise(login_as, db, event, "expected_attendance", 2)
+
+    impact = _impact(login_as, request)
+
+    assert impact["venue_bookings"] == []
+    assert impact["equipment"] == []
+    assert impact["has_impact"] is True
 
 
 @pytest.mark.story("19.3", ac=1)
@@ -660,13 +690,18 @@ def test_only_an_attendance_change_is_judged_against_the_booked_capacity(login_a
     """The event already expects more than its hall seats; moving its dates does not ask about
     capacity at all."""
     event = _planning_event(db, expected_attendance=300)
-    _book(db, event, people=300, requirement_id=_requirement(db, event, capacity=300), capacity=250)
+    hall = _book(
+        db, event, people=300, requirement_id=_requirement(db, event, capacity=300), capacity=250
+    )
     starts_at = event.starts_at + timedelta(days=7)
     request = _raise(
         login_as, db, event, "schedule", _schedule(starts_at, starts_at + timedelta(hours=8))
     )
 
-    assert _impact(login_as, request)["capacity_shortfall"] is None
+    impact = _impact(login_as, request)
+
+    assert impact["capacity_shortfall"] is None
+    assert _bookings_by_id(impact)[str(hall.id)]["capacity_warning"] is None
 
 
 @pytest.mark.story("19.3", ac=1)
@@ -712,8 +747,8 @@ def test_a_cancelled_booking_says_what_happens_next(login_as, db: Session):
     row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
 
     assert row["after_approval"] == (
-        "Cancelled when the change is approved, freeing the venue. Venue Staff need do nothing; "
-        "request a replacement from the event page."
+        "Cancelled when the change is approved, freeing the venue. Venue Staff are told, and need "
+        "do nothing; request a replacement from the event page."
     )
 
 
@@ -799,6 +834,52 @@ def test_new_dates_send_equipment_back_as_the_approval_does(login_as, db: Sessio
 
 
 @pytest.mark.story("19.3", ac=2)
+def test_an_accepted_item_that_still_fits_goes_back_to_technical_support(login_as, db: Session):
+    """Technical Support accepted 2 of 4 projectors for the old dates; the new dates have them
+    all, but that decision was for the old dates, so the approval sends it back as Pending."""
+    event = _planning_event(db)
+    projectors = make_equipment_type(db, total_quantity=4)
+    item = make_equipment_item(
+        db, event=event, equipment_type=projectors, quantity=2, status="ACCEPTED"
+    )
+    starts_at = event.starts_at + timedelta(days=7)
+    request = _raise(
+        login_as, db, event, "schedule", _schedule(starts_at, starts_at + timedelta(hours=8))
+    )
+
+    impact = _impact(login_as, request)
+    row = {row["item_id"]: row for row in impact["equipment"]}[str(item.id)]
+    response = _approve(login_as, request, impact["fingerprint"])
+
+    assert response.status_code == 200, response.text
+    assert row["status_after"] == _item_status(db, item.id) == "PENDING"
+
+
+@pytest.mark.story("19.3", ac=2)
+def test_an_items_own_hold_does_not_count_against_dates_it_overlaps(login_as, db: Session):
+    """Moved an hour later, the new dates overlap the old: the item's own hold of 3 of 4
+    projectors is released before it is held again, so all 4 are available to it."""
+    event = _planning_event(db)
+    projectors = make_equipment_type(db, total_quantity=4)
+    item = make_equipment_item(db, event=event, equipment_type=projectors, quantity=3)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        _schedule(event.starts_at + timedelta(hours=1), event.ends_at + timedelta(hours=1)),
+    )
+
+    impact = _impact(login_as, request)
+    row = {row["item_id"]: row for row in impact["equipment"]}[str(item.id)]
+    response = _approve(login_as, request, impact["fingerprint"])
+
+    assert response.status_code == 200, response.text
+    assert (row["available"], row["shortfall"]) == (4, 0)
+    assert row["status_after"] == _item_status(db, item.id) == "REQUESTED"
+
+
+@pytest.mark.story("19.3", ac=2)
 def test_approval_sends_no_notice_beyond_19_2s(login_as, db: Session):
     event = _planning_event(db, expected_attendance=80)
     _book(db, event, people=80)
@@ -854,7 +935,7 @@ def test_a_booking_made_after_the_request_is_assessed(login_as, db: Session):
 # --- AC4: boundaries --------------------------------------------------------------------------
 
 
-def _moved_by_a_week(login_as, db: Session, *, setup: int = 0, hours=None):
+def _moved_by_a_week(login_as, db: Session, *, setup: int = 0, teardown: int = 0, hours=None):
     """An event with its hall booked, and a request to move it a week later; returns the event,
     the hall's booking, the venue and the new period."""
     event = _planning_event(db)
@@ -866,6 +947,7 @@ def _moved_by_a_week(login_as, db: Session, *, setup: int = 0, hours=None):
         requirement_id=_requirement(db, event, capacity=100),
         venue=venue,
         setup_minutes=setup,
+        teardown_minutes=teardown,
     )
     starts_at = event.starts_at + timedelta(days=7)
     ends_at = starts_at + timedelta(hours=8)
@@ -917,6 +999,18 @@ def test_setup_time_counts_towards_the_period_needed(login_as, db: Session):
     before it, as it was booked with (12.1)."""
     request, hall, venue, starts_at, _ = _moved_by_a_week(login_as, db, setup=30)
     _other_booking(db, venue, starts_at=starts_at - timedelta(hours=2), ends_at=starts_at)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["held_by"] is not None
+
+
+@pytest.mark.story("19.3", ac=4)
+def test_teardown_time_counts_towards_the_period_needed(login_as, db: Session):
+    """The other booking starts as the new event ends, but the hall needs 30 minutes' teardown
+    after it, as it was booked with (12.1)."""
+    request, hall, venue, _, ends_at = _moved_by_a_week(login_as, db, teardown=30)
+    _other_booking(db, venue, starts_at=ends_at, ends_at=ends_at + timedelta(hours=2))
 
     row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
@@ -991,6 +1085,20 @@ def test_an_unavailability_period_touching_the_new_times_is_not(login_as, db: Se
 
 
 @pytest.mark.story("19.3", ac=5)
+def test_an_unavailability_period_over_the_setup_is_flagged(login_as, db: Session):
+    """The closure ends as the new event starts, but the hall is held from 30 minutes before for
+    setup, and 12.1 judges a closure on the held period."""
+    request, hall, venue, starts_at, _ = _moved_by_a_week(login_as, db, setup=30)
+    make_unavailability(
+        db, venue_id=venue.id, starts_at=starts_at - timedelta(hours=2), ends_at=starts_at
+    )
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["closure"] is not None
+
+
+@pytest.mark.story("19.3", ac=5)
 def test_new_times_outside_the_opening_hours_are_flagged(login_as, db: Session):
     """The hall opens 07:00-09:00 Singapore time, which no eight-hour event fits."""
     request, hall, *_ = _moved_by_a_week(login_as, db, hours=(time(7, 0), time(9, 0)))
@@ -998,6 +1106,30 @@ def test_new_times_outside_the_opening_hours_are_flagged(login_as, db: Session):
     row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
     assert row["is_outside_opening_hours"] is True
+
+
+@pytest.mark.story("19.3", ac=5)
+def test_opening_hours_are_judged_on_the_booked_times_not_the_setup(login_as, db: Session):
+    """10:00-16:00 Singapore time at a hall open 09:00-17:00: inside the hours, though its 90
+    minutes' setup starts at 08:30. 12.1 judges the hours on the booking's own times (f12.1.2)."""
+    day = future_datetime(days=60).date()
+    starts_at = datetime.combine(day, time(2, 0), tzinfo=UTC)  # 10:00 in Singapore
+    event = _planning_event(db, starts_at=starts_at, ends_at=starts_at + timedelta(hours=6))
+    hall = _book(
+        db,
+        event,
+        people=100,
+        requirement_id=_requirement(db, event, capacity=100),
+        venue=make_venue(db, capacity=500, hours=(time(9, 0), time(17, 0))),
+        setup_minutes=90,
+    )
+    moved = starts_at + timedelta(days=7)
+    request = _raise(login_as, db, event, "schedule", _schedule(moved, moved + timedelta(hours=6)))
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["will_be_cancelled"] is True
+    assert row["is_outside_opening_hours"] is False
 
 
 @pytest.mark.story("19.3", ac=5)
@@ -1108,6 +1240,16 @@ def test_a_decided_request_has_no_impact_to_assess(login_as, db: Session, status
     assert login_as(Users.COORDINATOR).get(_impact_url(request)).status_code == 409
 
 
+@pytest.mark.story("19.3", ac=6)
+def test_a_cancelled_event_has_no_impact_to_assess(login_as, db: Session):
+    event = _planning_event(db)
+    request = _raise(login_as, db, event, "expected_attendance", 120)
+    db.execute(text("UPDATE events SET status = 'CANCELLED' WHERE id = :e"), {"e": event.id})
+    db.expire_all()
+
+    assert login_as(Users.COORDINATOR).get(_impact_url(request)).status_code == 409
+
+
 # --- AC7: re-assessed when approving ------------------------------------------------------------
 
 
@@ -1162,6 +1304,39 @@ def test_equipment_taken_meanwhile_changes_the_assessment(login_as, db: Session)
 
     assert response.status_code == 412
     assert _item_status(db, item.id) == "REQUESTED"
+
+
+@pytest.mark.story("19.3", ac=7)
+def test_a_registration_made_meanwhile_changes_the_assessment(login_as, db: Session):
+    event = _planning_event(db, expected_attendance=100)
+    _register(db, event, 3)
+    request = _raise(login_as, db, event, "expected_attendance", 2)
+    seen = _impact(login_as, request)
+    _register(db, event, 1)
+
+    response = _approve(login_as, request, seen["fingerprint"])
+
+    assert response.status_code == 412
+    assert _request_status(db, request.id) == "PENDING"
+
+
+@pytest.mark.story("19.3", ac=7)
+def test_a_capacity_shortfall_changed_meanwhile_changes_the_assessment(login_as, db: Session):
+    """The hall seated 250 of the 500 asked for when Chloe looked; Venue Staff then recorded it
+    as seating 200."""
+    event = _planning_event(db, expected_attendance=180)
+    hall = _book(
+        db, event, people=180, requirement_id=_requirement(db, event, capacity=180), capacity=250
+    )
+    request = _raise(login_as, db, event, "expected_attendance", 500)
+    seen = _impact(login_as, request)
+    db.execute(text("UPDATE venues SET capacity = 200 WHERE id = :v"), {"v": hall.venue_id})
+    db.expire_all()
+
+    response = _approve(login_as, request, seen["fingerprint"])
+
+    assert response.status_code == 412
+    assert _request_status(db, request.id) == "PENDING"
 
 
 @pytest.mark.story("19.3", ac=7)

@@ -437,7 +437,7 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     )
 
 
-def people_needed(capacity: int | None, attendance: int | None) -> int | None:
+def people_needed(*, capacity: int | None, attendance: int | None) -> int | None:
     """Story 12.1 AC2 / 11.1 AC1: how many people a venue must hold for a requirement asking for
     ``capacity`` at an event expecting ``attendance`` - the requirement's number, else the
     attendance. Story 19.3 asks it of the values a change request proposes."""
@@ -450,7 +450,8 @@ def people_to_hold(event: Event, requirement: VenueRequirement | None) -> int | 
     (``ck_events_submitted_fields_complete``). The booking request and the suitability indicator
     both ask this, so they cannot disagree. None only for a draft that has neither."""
     return people_needed(
-        None if requirement is None else requirement.capacity, event.expected_attendance
+        capacity=None if requirement is None else requirement.capacity,
+        attendance=event.expected_attendance,
     )
 
 

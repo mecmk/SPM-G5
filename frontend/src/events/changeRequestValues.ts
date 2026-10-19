@@ -54,7 +54,7 @@ const REQUIREMENT_PART_ICONS: Record<string, IconName> = {
 
 // How a side reads when the thing is not there on it.
 const NOT_THERE_NOW = 'Not requested'
-const NOT_THERE_REQUESTED = 'Removed'
+export const NOT_THERE_REQUESTED = 'Removed'
 const NONE = 'None'
 
 /** The canonical value shapes the backend stores (app/change_requests/service.py). */

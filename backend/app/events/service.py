@@ -2361,7 +2361,8 @@ def _requirement_misfits(
     misfits = []
     if terms.starts_at < booking.starts_at or terms.ends_at > booking.ends_at:
         misfits.append(BookingMisfit.TIMES)
-    if venue_service.people_needed(terms.capacity, attendance) > booking.expected_attendance:
+    people = venue_service.people_needed(capacity=terms.capacity, attendance=attendance)
+    if people > booking.expected_attendance:
         misfits.append(BookingMisfit.PEOPLE)
     if terms.layout_code != booking.required_layout_code:
         misfits.append(BookingMisfit.LAYOUT)

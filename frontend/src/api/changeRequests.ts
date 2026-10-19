@@ -1,5 +1,11 @@
+import type { BookingStatus } from './bookings'
 import { api } from './client'
-import type { EquipmentInput, EventStatus, VenueRequirementInput } from './events'
+import type {
+  EquipmentInput,
+  EquipmentItemStatus,
+  EventStatus,
+  VenueRequirementInput,
+} from './events'
 import type { UnavailabilityReason } from './venues'
 
 /** Story 19.1 AC4: the longest reason. Keep in step with the backend's `CHANGE_REASON_MAX_LENGTH`
@@ -224,7 +230,7 @@ export interface BookingImpact {
   venue_name: string
   /** Null for an additional venue (12.5). */
   requirement_name: string | null
-  status: string
+  status: BookingStatus
   starts_at: string
   ends_at: string
   will_be_cancelled: boolean
@@ -249,11 +255,11 @@ export interface EquipmentImpact {
   equipment_type_code: string
   equipment_type_name: string
   change: EquipmentImpactChange
-  current_status: string | null
+  current_status: EquipmentItemStatus | null
   required: number | null
   available: number | null
   shortfall: number
-  status_after: string | null
+  status_after: EquipmentItemStatus | null
   technical_support_told: boolean
   after_approval: string
 }

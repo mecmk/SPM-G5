@@ -1,10 +1,13 @@
-"""Request and response shapes for event change requests (story 19.1), and their decisions (story
-19.2).
+"""Request and response shapes for event change requests (story 19.1), their decisions (story
+19.2), and the impact approving one would have (story 19.3).
 
 A change request names one field and the value proposed for it. The body is a union tagged by
 ``field``, so each field's value is checked by the very types story 2.1/2.7 use when a request is
 created - ``ExpectedAttendance``, ``VenueRequirementIn``, ``EventEquipmentIn`` - rather than by
 rules of its own (19.1 AC4). An unknown ``field`` matches no member and is refused with a 422.
+
+The impact (story 19.3) lists each booking, equipment item and the registrations the approval
+would touch, with what it does to each, and a fingerprint the approval sends back (AC7).
 """
 
 from __future__ import annotations

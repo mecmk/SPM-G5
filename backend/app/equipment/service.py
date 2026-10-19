@@ -821,6 +821,20 @@ def open_items(db: Session, event: Event) -> list[EventEquipmentRequest]:
     )
 
 
+def status_after_new_dates(status: str, *, is_held: bool) -> str:
+    """AC8: the status an open item ends in once new dates are rechecked - Unavailable if they
+    leave too few units; otherwise Pending again if it was sent, since the decision was for the
+    old dates, Requested if it was flagged, and as it was if never sent. Story 19.3's assessment
+    reads it to say what approving a date change does."""
+    if not is_held:
+        return EquipmentRequestStatus.UNAVAILABLE
+    if status in SENT_ITEM_STATUSES:
+        return EquipmentRequestStatus.PENDING
+    if status == EquipmentRequestStatus.UNAVAILABLE:
+        return EquipmentRequestStatus.REQUESTED
+    return status
+
+
 def recheck_equipment_for_new_dates(
     db: Session, event: Event, *, actor: User
 ) -> list[EventEquipmentRequest]:
@@ -847,16 +861,15 @@ def recheck_equipment_for_new_dates(
         # to Technical Support or is flagged.
         item.decided_by_id = None
         item.decided_at = None
-        if not take_units(available, item.equipment_type_id, item.quantity):
-            item.status = EquipmentRequestStatus.UNAVAILABLE
+        is_held = take_units(available, item.equipment_type_id, item.quantity)
+        status = status_after_new_dates(item.status, is_held=is_held)
+        if not is_held:
             flagged.append(item)
-            continue
-        db.add(_new_hold(event, item, actor=actor, notes=_MOVED_HOLD_NOTE))
-        if item.status in SENT_ITEM_STATUSES:
-            item.status = EquipmentRequestStatus.PENDING
-            item.submitted_at = resent_at
-        elif item.status == EquipmentRequestStatus.UNAVAILABLE:
-            item.status = EquipmentRequestStatus.REQUESTED
+        else:
+            db.add(_new_hold(event, item, actor=actor, notes=_MOVED_HOLD_NOTE))
+            if status == EquipmentRequestStatus.PENDING:
+                item.submitted_at = resent_at
+        item.status = status
     record_audit(
         db,
         actor=actor,
@@ -905,6 +918,21 @@ def _notify_technical_support_of_withdrawal(
         )
 
 
+def status_after_change(*, is_held: bool) -> str:
+    """Story 19.2 AC5: the status a changed or added item ends in - Requested, for the coordinator
+    to send (15.1), if the units are there; otherwise Unavailable, holding nothing."""
+    return EquipmentRequestStatus.REQUESTED if is_held else EquipmentRequestStatus.UNAVAILABLE
+
+
+def status_after_removal(status: str) -> str | None:
+    """Story 19.2 AC5: the status a removed item ends in - Cancelled, kept for Technical Support's
+    record, if it was ever sent to them; None if it is deleted. An item already Cancelled stays
+    so, and is not removed again."""
+    if status in EVER_SENT_STATUSES or status == EquipmentRequestStatus.CANCELLED:
+        return EquipmentRequestStatus.CANCELLED
+    return None
+
+
 def _hold_or_flag(
     db: Session,
     event: Event,
@@ -916,11 +944,10 @@ def _hold_or_flag(
     """Story 19.2 AC5: hold ``item`` for the event's period if ``available`` still has the units,
     taking them from it, and leave it Requested for the coordinator to send (15.1); otherwise flag
     it Unavailable, holding nothing, as 15.1 AC8 flags an item new dates no longer fit."""
-    if not take_units(available, item.equipment_type_id, item.quantity):
-        item.status = EquipmentRequestStatus.UNAVAILABLE
-        return
-    db.add(_new_hold(event, item, actor=actor, notes=_CHANGED_HOLD_NOTE))
-    item.status = EquipmentRequestStatus.REQUESTED
+    is_held = take_units(available, item.equipment_type_id, item.quantity)
+    if is_held:
+        db.add(_new_hold(event, item, actor=actor, notes=_CHANGED_HOLD_NOTE))
+    item.status = status_after_change(is_held=is_held)
 
 
 class EquipmentChange(StrEnum):
@@ -1023,10 +1050,11 @@ def apply_equipment_change(
         if item.status in WITH_TECHNICAL_SUPPORT:
             withdrawn.append(item)
         if planned.change == EquipmentChange.REMOVED:
-            if item.status in EVER_SENT_STATUSES:
-                item.status = EquipmentRequestStatus.CANCELLED
-            elif item.status != EquipmentRequestStatus.CANCELLED:
+            status = status_after_removal(item.status)
+            if status is None:
                 event.equipment_requests.remove(item)
+            else:
+                item.status = status
             continue
         item.equipment_type = types[line.equipment_type_code]
         item.quantity = line.quantity

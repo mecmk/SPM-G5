@@ -10,12 +10,15 @@ import {
   type RegistrationImpact,
   type ShortPeriod,
 } from '../api/changeRequests'
+import type { BookingStatus } from '../api/bookings'
+import type { EquipmentItemStatus } from '../api/events'
 import { formatApiError } from '../api/client'
 import { UNAVAILABILITY_REASON_NAMES } from '../api/venues'
 import { Icon, type IconName } from '../components/Icon'
 import { LoadingState } from '../layout/LoadingState'
-import { formatSchedule } from '../shared/format'
-import { OUT_OF_DATE_NOTE } from './changeRequestValues'
+import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
+import { ADDITIONAL_VENUE, formatSchedule } from '../shared/format'
+import { NOT_THERE_REQUESTED, OUT_OF_DATE_NOTE } from './changeRequestValues'
 
 /** Story 19.3 AC1: what the assessment says when the change touches nothing already arranged. */
 const NO_IMPACT_MESSAGE = 'No existing arrangements are affected.'
@@ -27,11 +30,20 @@ export const IMPACT_LOADING_LABEL = 'Assessing the impact…'
 type ImpactTone = 'danger' | 'warning' | 'success'
 
 /** AC2/AC5: an equipment item's outcome once approved, by the status 19.2 leaves it in. */
-const EQUIPMENT_STATUS_AFTER: Record<string, { label: string; tone: ImpactTone }> = {
+const EQUIPMENT_STATUS_AFTER: Partial<
+  Record<EquipmentItemStatus, { label: string; tone: ImpactTone }>
+> = {
   PENDING: { label: 'Back to Technical Support', tone: 'warning' },
   REQUESTED: { label: 'Held again', tone: 'success' },
   UNAVAILABLE: { label: 'Not enough available', tone: 'danger' },
-  CANCELLED: { label: 'Removed', tone: 'warning' },
+  CANCELLED: { label: NOT_THERE_REQUESTED, tone: 'warning' },
+}
+
+/** AC7: where a booking stands now, so a decision Venue Staff make while the coordinator looks
+ *  shows on its card. Only a pending or approved booking is ever affected. */
+const BOOKING_STATUS_NOW: Partial<Record<BookingStatus, string>> = {
+  PENDING: 'Pending request',
+  APPROVED: 'Approved',
 }
 
 /** What each kind of equipment change is, under the item's name. */
@@ -42,8 +54,9 @@ const EQUIPMENT_CHANGE_NOTES: Record<EquipmentImpactChange, string> = {
   rechecked: 'Rechecked for the new dates',
 }
 
+/** A story c3 badge in the tone of what it says. */
 function Pill({ tone, children }: { tone: ImpactTone; children: ReactNode }) {
-  return <span className={`impact-pill impact-tone-${tone}`}>{children}</span>
+  return <span className={`badge badge-sm badge-${tone}`}>{children}</span>
 }
 
 /** A labelled line of an arrangement's card: the label in a column of its own on a wide screen,
@@ -122,7 +135,8 @@ function BookingRow({ booking }: { booking: BookingImpact }) {
         <div>
           <p className="impact-item-name">{booking.venue_name}</p>
           <p className="small muted">
-            {booking.requirement_name ?? 'Additional venue'} · Booked for{' '}
+            {booking.requirement_name ?? ADDITIONAL_VENUE} ·{' '}
+            {BOOKING_STATUS_NOW[booking.status] ?? booking.status} for{' '}
             {formatSchedule(booking.starts_at, booking.ends_at)}
           </p>
         </div>
@@ -237,14 +251,19 @@ function CapacityShortfallCard({ shortfall }: { shortfall: CapacityShortfall }) 
 function EquipmentRow({ item }: { item: EquipmentImpact }) {
   const outcome =
     item.status_after === null
-      ? { label: 'Removed', tone: 'warning' as const }
+      ? { label: NOT_THERE_REQUESTED, tone: 'warning' as const }
       : EQUIPMENT_STATUS_AFTER[item.status_after]
   return (
     <li className="impact-item">
       <div className="impact-item-header">
         <div>
           <p className="impact-item-name">{item.equipment_type_name}</p>
-          <p className="small muted">{EQUIPMENT_CHANGE_NOTES[item.change]}</p>
+          <p className="small muted">
+            {EQUIPMENT_CHANGE_NOTES[item.change]}
+            {item.current_status === null
+              ? ''
+              : ` · Now ${EQUIPMENT_STATUS_LABELS[item.current_status]}`}
+          </p>
         </div>
         <div className="impact-item-pills">
           {outcome !== undefined && <Pill tone={outcome.tone}>{outcome.label}</Pill>}
@@ -406,7 +425,7 @@ function ImpactCategory({ title, icon, summary, children }: ImpactCategoryProps)
       <span className="impact-category-text">
         <span className="impact-category-title">
           {title}
-          <span className={`impact-pill impact-tone-${summary.tone}`}>{summary.pill}</span>
+          <Pill tone={summary.tone}>{summary.pill}</Pill>
         </span>
         <span className="impact-category-summary">{summary.summary}</span>
       </span>

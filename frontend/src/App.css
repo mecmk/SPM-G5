@@ -1523,7 +1523,7 @@ label.checkbox input {
 }
 
 /* AC1: the assessment - a heading, one row per category (venue bookings, equipment,
-   registrations) that opens onto each arrangement, and a note on who is told. */
+   registrations) that opens onto each arrangement. */
 .impact-panel {
   display: grid;
   gap: 0.875rem;
@@ -1623,13 +1623,6 @@ button.impact-category-header:hover {
   display: flex;
   flex: none;
   color: var(--text-muted);
-}
-
-.impact-pill {
-  padding: 0.0625rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 
 .impact-tone-danger {

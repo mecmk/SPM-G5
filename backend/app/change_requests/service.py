@@ -1,5 +1,6 @@
-"""Business rules for story 19.1: raise an event change request, list them, withdraw one; and for
-story 19.2: the coordinator's queue and record of them, and approving or rejecting one.
+"""Business rules for story 19.1: raise an event change request, list them, withdraw one; for
+story 19.2: the coordinator's queue and record of them, and approving or rejecting one; and for
+story 19.3: the impact approving one would have.
 
 A change request records one field of an event in Planning, its value now, the value proposed
 and why. Raising one changes nothing on the event, its bookings or its equipment holds (AC1/AC3):
@@ -18,6 +19,12 @@ the change by the creation rules, releases only the bookings and equipment it af
 returns an event past Planning to Planning (AC8). Rejecting changes nothing on the event (AC3). A
 pending request whose recorded value the event no longer has - another request's approval moved
 it - is marked out of date, and can only be rejected (AC7).
+
+Assessing (story 19.3). The impact of a pending request is worked out from the records as they
+stand, by 19.2's own rules - ``booking_misfits``, ``check_proposed_schedule_change`` and the
+equipment plan and statuses in ``app.equipment`` - so it says what the approval will do, and
+writes nothing (AC3). Approving re-assesses under the event's lock and refuses, applying nothing,
+when the result no longer matches the fingerprint the coordinator approved on (AC7).
 """
 
 from __future__ import annotations
@@ -983,8 +990,8 @@ _LAYOUT_REASON = "It was booked for a different layout from the one the change a
 
 # AC2: what the approval does to each booking, as 19.2 does it.
 _BOOKING_CANCELLED = (
-    "Cancelled when the change is approved, freeing the venue. Venue Staff need do nothing; "
-    "request a replacement from the event page."
+    "Cancelled when the change is approved, freeing the venue. Venue Staff are told, and need do "
+    "nothing; request a replacement from the event page."
 )
 _BOOKING_KEPT = "Stays as it is."
 
@@ -993,8 +1000,8 @@ _ITEM_CANCELLED = "Removed: its hold is released, and it is kept as Cancelled fo
 _ITEM_DELETED = "Removed: its hold is released and the item deleted."
 _ITEM_REQUESTED = "Held again, and back to Requested for you to send to Technical Support."
 _ITEM_RESENT = (
-    "Held again for the new dates, and back with Technical Support as Pending, since their "
-    "decision was for the old dates."
+    "Held again for the new dates, and back with Technical Support as Pending, to decide for the "
+    "new dates."
 )
 _ITEM_MOVED = "Held again for the new dates."
 _ITEM_UNAVAILABLE = (
@@ -1126,7 +1133,7 @@ def _needed_terms(
     return _NeededTerms(
         starts_at=terms.starts_at,
         ends_at=terms.ends_at,
-        people=venue_service.people_needed(terms.capacity, attendance),
+        people=venue_service.people_needed(capacity=terms.capacity, attendance=attendance),
     )
 
 
@@ -1348,7 +1355,7 @@ def _equipment_row(
         current_status=current_status,
         required=required,
         available=available,
-        shortfall=0 if required is None else max(0, required - (available or 0)),
+        shortfall=0 if required is None or available is None else max(0, required - available),
         status_after=status_after,
         technical_support_told=technical_support_told,
         after_approval=after_approval + told,
@@ -1369,14 +1376,15 @@ def _rechecked_equipment(
     for item in equipment_service.open_items(db, event):
         before = available.get(item.equipment_type_id, 0)
         is_held = equipment_service.take_units(available, item.equipment_type_id, item.quantity)
+        status_after = equipment_service.status_after_new_dates(item.status, is_held=is_held)
         if not is_held:
-            status_after, after_approval = EquipmentRequestStatus.UNAVAILABLE, _ITEM_UNAVAILABLE
-        elif item.status in equipment_service.SENT_ITEM_STATUSES:
-            status_after, after_approval = EquipmentRequestStatus.PENDING, _ITEM_RESENT
-        elif item.status == EquipmentRequestStatus.UNAVAILABLE:
-            status_after, after_approval = EquipmentRequestStatus.REQUESTED, _ITEM_REQUESTED
+            after_approval = _ITEM_UNAVAILABLE
+        elif status_after == EquipmentRequestStatus.PENDING:
+            after_approval = _ITEM_RESENT
+        elif status_after != item.status:
+            after_approval = _ITEM_REQUESTED
         else:
-            status_after, after_approval = item.status, _ITEM_MOVED
+            after_approval = _ITEM_MOVED
         rows.append(
             _equipment_row(
                 item_id=item.id,
@@ -1430,9 +1438,7 @@ def _changed_equipment(
             current_status=current_status,
             required=quantity,
             available=before,
-            status_after=(
-                EquipmentRequestStatus.REQUESTED if is_held else EquipmentRequestStatus.UNAVAILABLE
-            ),
+            status_after=equipment_service.status_after_change(is_held=is_held),
             technical_support_told=is_told,
             after_approval=_ITEM_REQUESTED if is_held else _ITEM_UNAVAILABLE,
         )
@@ -1457,7 +1463,7 @@ def _changed_equipment(
             planned.change == equipment_service.EquipmentChange.REMOVED
             and item.status != EquipmentRequestStatus.CANCELLED
         ):
-            is_kept = item.status in equipment_service.EVER_SENT_STATUSES
+            status_after = equipment_service.status_after_removal(item.status)
             rows.append(
                 _equipment_row(
                     item_id=item.id,
@@ -1466,9 +1472,9 @@ def _changed_equipment(
                     current_status=item.status,
                     required=None,
                     available=None,
-                    status_after=EquipmentRequestStatus.CANCELLED if is_kept else None,
+                    status_after=status_after,
                     technical_support_told=is_told,
-                    after_approval=_ITEM_CANCELLED if is_kept else _ITEM_DELETED,
+                    after_approval=_ITEM_DELETED if status_after is None else _ITEM_CANCELLED,
                 )
             )
     for line in plan.added:
