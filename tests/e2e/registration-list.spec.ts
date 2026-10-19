@@ -1,10 +1,10 @@
 /**
  * Story 18.3 - fe/be: the registration list for my event.
- * AC1 The list shows each attendee's name, email, registration time and status, and the active
- *     count against the event's capacity: the organiser reads the count on the event's page and
- *     who registered on the registrations report it links to; the assigned coordinator reads the
- *     count on the event page too, and reaches the report from the navigation. An event that does
- *     not take registrations offers neither.
+ * AC1 Shows attendee name, email, registration time and status, plus the active count against
+ *     capacity: the organiser reads the count on the event's page and who registered on the
+ *     registrations report it links to; the assigned coordinator reads the count on the event page
+ *     too, and reaches the report from the navigation. An event that does not take registrations
+ *     offers neither.
  * AC3 No registrations shows an empty message. When the count reaches capacity, the list shows
  *     "Full".
  * AC4 Withdrawn registrations are marked as such and not counted: a withdrawn row shows when.
