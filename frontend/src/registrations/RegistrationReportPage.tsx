@@ -52,7 +52,7 @@ export function RegistrationReportPage() {
           </select>
         </label>
       )}
-      {eventId && <RegistrationListSection eventId={eventId} />}
+      {eventId && <RegistrationListSection key={eventId} eventId={eventId} />}
     </div>
   )
 }

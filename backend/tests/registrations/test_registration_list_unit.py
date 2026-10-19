@@ -3,8 +3,8 @@
 Level: unit. ``is_full`` in ``app/registrations/service.py`` alone - no database, no HTTP. The
 integration tests beside it (``test_registration_list_integration.py``) prove the API applies it.
 
-AC3 An event with no registrations shows an empty list; an event whose count reaches capacity
-    shows it is full.
+AC3 No registrations shows an empty message. When the count reaches capacity, the list shows
+    "Full".
 """
 
 from __future__ import annotations

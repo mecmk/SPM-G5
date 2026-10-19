@@ -9,9 +9,9 @@ list is e2e-tested in ``tests/e2e/registration-list.spec.ts``.
 AC1 The list shows each attendee's name, email, registration time and status, and the active count
     against the event's capacity.
 AC2 The list and the count are worked out on the server from the active registrations.
-AC3 An event with no registrations shows an empty list; an event whose count reaches capacity
-    shows it is full.
-AC4 Withdrawn registrations are listed as such and not counted.
+AC3 No registrations shows an empty message. When the count reaches capacity, the list shows
+    "Full".
+AC4 Withdrawn registrations are marked as such and not counted.
 AC5 Only the organiser and the assigned coordinator can view the list; anyone else is told it was
     not found.
 AC6 The API answers "not found" to users with no relationship to the event.
