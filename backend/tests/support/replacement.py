@@ -7,9 +7,9 @@ test can place a replacement in any state the way ``make_venue_requirement`` wri
 
 * ``replaces_booking_id`` - on a replacement, the booking it replaces (composite FK with
   ``event_id``, so the two share an event);
-* ``replaces_live_original`` - on a replacement, TRUE while its original still holds its venue; the
-  one-per-requirement index leaves a PENDING row with it set out, and a trigger clears it when the
-  original stops holding;
+* ``replaces_live_original`` - on a replacement, set when it is requested; the one-per-requirement
+  index leaves a PENDING row with it set out, and a trigger clears it on a PENDING replacement when
+  the original stops holding (a decided replacement keeps what it had);
 * ``replaced_by_booking_id`` - on an original, the replacement that released it (CANCELLED only).
 
 Nothing here is a fixture: each helper takes the session.
@@ -201,7 +201,8 @@ def add_pending_replacement(
 
 
 def column(db: Session, booking_id: uuid.UUID, name: str):
-    """One column of a booking, read in SQL: the ORM has no attribute for 12.6's yet."""
+    """One column of a booking, read in SQL after the trigger has written it, so the value is the
+    database's and not a session's stale one."""
     db.expire_all()
     return db.execute(
         text(f"SELECT {name} FROM venue_bookings WHERE id = :id"), {"id": booking_id}

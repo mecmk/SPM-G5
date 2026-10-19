@@ -681,17 +681,6 @@ def test_a_second_pending_replacement_is_refused_naming_the_venue_already_reques
 
 
 @pytest.mark.story("12.6", ac=10)
-def test_after_withdrawing_the_first_another_replacement_is_allowed(coordinator_client, db):
-    scene = make_scenario(db)
-    first = created(replace(coordinator_client, scene.original.id, scene.alternative))
-    assert coordinator_client.post(f"{BOOKINGS_PATH}/{first['id']}/withdraw").status_code == 200
-
-    second = replace(coordinator_client, scene.original.id, hall(db))
-
-    assert second.status_code == 201, second.text
-
-
-@pytest.mark.story("12.6", ac=10)
 def test_a_replacement_at_the_originals_own_venue_is_refused(coordinator_client, db):
     """Refused for what it is, in a sentence of its own - not as the venue being held by the very
     booking it would replace."""

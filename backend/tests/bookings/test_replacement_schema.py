@@ -64,7 +64,7 @@ Safety review and confirmation
 This file tries the database's own guards for a replacement in SQL, below the service: the
 composite foreign key with ``event_id`` and the self-link check (AC2), ``replaced_by_booking_id``
 only on a CANCELLED booking and one replacement per original (AC3), and the one-pending index, the
-narrowed one-per-requirement index and the trigger that puts the carve-out back the moment the
+narrowed one-per-requirement index and the trigger that ends the carve-out the moment the
 original stops holding by any path (AC10). The service-level rules are test_request_replacement.py
 and test_replacement_approval.py.
 """

@@ -61,9 +61,10 @@ Safety review and confirmation
     Once the replacement is approved or withdrawn, or the unavailability ends with no replacement
     pending, the event can be sent and confirmed as usual.
 
-This file approves the replacement: AC3, and AC6, AC8 and AC10 where approval is the case (approved
-after the unavailability ended; never approved, so never "Replaced by"; the original already closed,
-so the approval releases nothing). Raising the replacement is test_request_replacement.py.
+This file approves the replacement: AC3 (including the original already closed, so the approval
+releases nothing), and AC6 and AC8 where approval is the case (approved after the unavailability
+ended; never approved, so never "Replaced by"). Raising the replacement is
+test_request_replacement.py.
 """
 
 from __future__ import annotations
@@ -82,6 +83,7 @@ from app.bookings import schemas as booking_schemas
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
 from app.common.audit import AuditLog
+from app.notifications.service import NotificationType
 from tests.support.factories import make_unavailability, make_user
 from tests.support.replacement import (
     BOOKINGS_PATH,
@@ -192,8 +194,11 @@ def test_other_venue_staff_are_told_the_original_was_released_and_the_organiser_
 
     told = notifications_of(db, colleague.id, event_id=scene.event.id)[before:]
     assert len(told) == 1
-    assert scene.original_venue.name in told[0].message
-    assert "released" in told[0].message
+    assert told[0].notification_type == NotificationType.BOOKING_REPLACED
+    assert told[0].message == (
+        f'The booking of {scene.original_venue.name} for "{scene.event.name}" was released: '
+        f"{scene.alternative.name} was approved as its replacement."
+    )
     # The approver acted, so is not told (20.1 AC3); the inactive account and the organiser never.
     assert not [
         each
@@ -387,9 +392,10 @@ def test_an_additional_venues_replacement_releases_its_original_when_approved(lo
 
 @pytest.mark.story("12.6", ac=3)
 def test_an_approval_locks_the_original_before_the_replacement(login_as, db):
-    """Everything that closes the original (the sweep, 19.2's release) locks it first and the
-    trigger then updates the replacement, so an approval taking the two in the other order could
-    deadlock with them. ``get_booking_for_approval`` locks the original, then the replacement."""
+    """The paths that close the original (the sweep, 19.2's release) lock it before the
+    replacement, which the trigger then updates, so an approval taking the two in the other order
+    could deadlock with them. ``get_booking_for_approval`` locks the original, then the
+    replacement. (19.2 takes the event's row before either; approval takes no event row.)"""
     scene = make_scenario(db)
     body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
     replacement_id = uuid.UUID(body["id"])
@@ -407,6 +413,36 @@ def test_an_approval_locks_the_original_before_the_replacement(login_as, db):
     finally:
         event.remove(connection, "before_cursor_execute", record)
 
+    assert locked == [[scene.original.id], [replacement_id]]
+
+
+@pytest.mark.story("12.6", ac=3)
+def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as, db):
+    """The same order through the endpoint itself, which a later change to its handler could
+    break without touching ``get_booking_for_approval``: its locks of a booking by id - the sweep
+    that opens every booking endpoint locks by time - are the original's, then the replacement's."""
+    scene = make_scenario(db)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    replacement_id = uuid.UUID(body["id"])
+    staff = login_as(Users.VENUE_STAFF)
+    locked: list[list[uuid.UUID]] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if "FOR UPDATE" in statement and "venue_bookings" in statement:
+            values = parameters.values() if isinstance(parameters, dict) else parameters
+            ids = [value for value in values if isinstance(value, uuid.UUID)]
+            # The hold sweep every booking endpoint opens with locks by time, not by id.
+            if ids:
+                locked.append(ids)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record)
+    try:
+        response = approve(staff, body["id"])
+    finally:
+        event.remove(connection, "before_cursor_execute", record)
+
+    assert response.status_code == 200, response.text
     assert locked == [[scene.original.id], [replacement_id]]
 
 
@@ -443,8 +479,8 @@ def test_a_never_approved_replacement_is_not_shown_as_replacing_when_both_are_ca
     assert listed[str(replacement.id)]["replaces_venue_name"] == scene.original_venue.name
 
 
-# --- AC10: the original closed first ------------------------------------------------------------
-@pytest.mark.story("12.6", ac=10)
+# --- AC3: the original closed first ------------------------------------------------------------
+@pytest.mark.story("12.6", ac=3)
 @pytest.mark.parametrize("closed_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED])
 def test_approving_a_replacement_whose_original_is_already_closed_approves_alone(
     login_as, db, closed_as

@@ -504,6 +504,42 @@ def _with_a_second_requirement_unbooked(db: Session, secured: SecuredEvent) -> N
 
 
 @pytest.mark.story("12.6", ac=12)
+def test_a_marked_booking_and_a_pending_replacement_are_both_named_in_one_refusal(
+    login_as, db: Session
+):
+    """Each kind of blocker has its own sentence, and a refusal carries all of them: the marked
+    original, the replacement pending for it, and another venue marked on the same event."""
+    secured = make_secured_event(db)
+    _mark(db, secured.booking)
+    replacement = created(
+        replace(login_as(Users.COORDINATOR), secured.booking.id, make_venue(db, capacity=100))
+    )
+    extra_venue = make_venue(db, name=f"Unavailable Annex {uuid.uuid4().hex[:8]}")
+    make_booking(
+        db,
+        event_id=secured.event.id,
+        venue_id=extra_venue.id,
+        starts_at=secured.event.starts_at,
+        ends_at=secured.event.ends_at,
+        status=BookingStatus.APPROVED,
+        venue_unavailable_marked_at=datetime.now(UTC),
+        hold_expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    name = _replacement_venue_name(db, replacement)
+
+    response = login_as(Users.COORDINATOR).post(_request_path(secured.event.id), json={})
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    for sentence in (
+        _sentence(_venue_name(db, secured)),
+        _sentence(extra_venue.name),
+        _pending_sentence(name),
+    ):
+        assert sentence in detail
+
+
+@pytest.mark.story("12.6", ac=12)
 def test_the_review_refusal_names_the_venue_and_every_other_thing_missing(
     coordinator_client, db: Session
 ):
