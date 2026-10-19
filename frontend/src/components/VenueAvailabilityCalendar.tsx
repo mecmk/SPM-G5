@@ -22,8 +22,9 @@ export interface VenueAvailabilityCalendarProps {
   month: Date
   onMonthChange: (nextMonth: Date) => void
   windows: VenueUnavailableWindow[]
-  /** When `windows` were loaded: a closure whose end is before it is shown as ended. */
-  loadedAt: number
+  /** The calendar's clock (`useVenueCalendar`'s `now`): a closure that ends at or before it is
+   *  shown as ended. */
+  now: number
   /** The message to show when the month failed to load, otherwise null. */
   error: string | null
   isLoading: boolean
@@ -37,14 +38,15 @@ export interface VenueAvailabilityCalendarProps {
 
 /**
  * Story 9.1: one venue's month of bookings, holds and closures, with a pressed day's list below
- * it. Shown on the venue's own page and, story 13.1.3, beside a booking request Venue Staff are
+ * it. Shown on the venue's details page, on its Edit venue page (fix f9.4.1, where Venue Staff
+ * also get each closure's actions) and, story 13.1.3, beside a booking request Venue Staff are
  * deciding. The page loads the month (`useVenueCalendar`) and wraps this in its own titled card.
  */
 export function VenueAvailabilityCalendar({
   month,
   onMonthChange,
   windows,
-  loadedAt,
+  now,
   error,
   isLoading,
   dayPanelId,
@@ -67,7 +69,7 @@ export function VenueAvailabilityCalendar({
       : 'ready'
 
   /** Story 9.1 AC5/AC9: each window split into the part on every day it covers. */
-  const dayItems = useMemo(() => buildDayItems(windows, loadedAt), [windows, loadedAt])
+  const dayItems = useMemo(() => buildDayItems(windows, now), [windows, now])
   const itemsByDate = useMemo(() => groupDayItemsByDate(dayItems), [dayItems])
   const calendarEntries = useMemo(() => dayItems.map(toCalendarEntry), [dayItems])
   // A day stays open only while it has items, so one whose booking is gone closes.

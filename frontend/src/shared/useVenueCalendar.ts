@@ -23,10 +23,14 @@ export interface VenueCalendarState {
   /** The message to show when the latest month failed to load, otherwise null. */
   error: string | null
   isLoading: boolean
-  /** When `windows` arrived (ms since the epoch): the moment a closure counts as ended from
-   *  (story 9.4 AC6), read once per load so a render never reads the clock. */
-  loadedAt: number
+  /** The moment a closure counts as ended from (ms since the epoch; story 9.4 AC6): the one clock
+   *  for the day list's labels and tones and for each closure's buttons. It is set when the month
+   *  loads and moved on every minute after, so a page left open sees a closure end. */
+  now: number
 }
+
+/** How often `now` moves on. */
+const CLOCK_TICK_MS = 60_000
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -74,7 +78,12 @@ export function useVenueCalendar(
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [loadedAt, setLoadedAt] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -88,7 +97,7 @@ export function useVenueCalendar(
       .then((data) => {
         if (cancelled) return
         setWindows(data)
-        setLoadedAt(Date.now())
+        setNow(Date.now())
         setError(null)
         setIsLoading(false)
       })
@@ -106,5 +115,5 @@ export function useVenueCalendar(
     // reloadKey is not read above: it is listed only so that its change loads the month again.
   }, [loadWindows, month, reloadKey])
 
-  return { month, setMonth, windows, error, isLoading, loadedAt }
+  return { month, setMonth, windows, error, isLoading, now }
 }

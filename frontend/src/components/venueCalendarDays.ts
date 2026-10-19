@@ -14,10 +14,11 @@ import { eachDate } from './calendarGrid'
  *  called - in words as well as colour. */
 export const BOOKED_LABEL = 'Booked'
 export const HELD_LABEL = 'Held – pending'
-/** Story 9.4 AC1: what a closed period is called, as the legend names it and as a closure's row
- *  starts ("Unavailable – Maintenance"). */
+/** Story 9.4 AC1: what a closed period is called while it lasts, as the legend names it and as a
+ *  closure's row starts ("Unavailable – Maintenance"). */
 export const UNAVAILABLE_LABEL = 'Unavailable'
-/** What a closure that has already ended is called: history, not an unavailable venue. */
+/** Story 9.4 AC1/AC6 (fix f9.4.1): what a closure that has already ended is called, and how its row
+ *  starts ("Ended – Maintenance"): history, not an unavailable venue. */
 export const ENDED_LABEL = 'Ended'
 
 const HELD_ENTRY_PREFIX = 'Held'
@@ -67,8 +68,9 @@ export interface DayItem {
   date: string
   /** The event's name, or a closure's notes. */
   label: string
-  /** "Booked", "Held – pending" or "Unavailable – Maintenance"; on a day only a booking's setup or
-   *  teardown reaches, "Setup and teardown only" or "Held – pending, setup and teardown only". */
+  /** "Booked", "Held – pending", "Unavailable – Maintenance" or, once it has ended, "Ended –
+   *  Maintenance"; on a day only a booking's setup or teardown reaches, "Setup and teardown only"
+   *  or "Held – pending, setup and teardown only". */
   kindLabel: string
   tone: CalendarEntryTone
   /** The booking's part of the day, "09:00–18:00"; a closure's, or a day the booking does not
@@ -120,7 +122,7 @@ function isSameSlice(first: DaySlice, second: DaySlice): boolean {
 
 /** Story 9.4 AC1: what a closure's chip says in the month grid, where there is room for a few
  *  words: its reason's name, or - for Other, which says nothing by itself - its description. The
- *  day list keeps "Unavailable – <reason>" and the description both. */
+ *  day list keeps "Unavailable – <reason>" (or "Ended – <reason>") and the description both. */
 function closureEntryLabel(window: VenueUnavailableWindow): string {
   if (window.reason === OTHER_UNAVAILABILITY_REASON) return window.label
   return CLOSURE_REASON_NAMES[window.reason] ?? window.label
@@ -168,7 +170,9 @@ function entryLabelOf(
   return hasEnded ? `${ENDED_LABEL} – ${closureEntryLabel(window)}` : closureEntryLabel(window)
 }
 
-/** The tone an item is drawn in: a hold warns, a closure that has ended is muted, the rest block. */
+/** Story 9.4 AC1/AC6 (fix f9.4.1): the tone an item is drawn in. A hold warns, a closure that has
+ *  ended is muted, the rest block - a booking is never muted, since its day passing does not
+ *  undo it. */
 function toneOf(isHeld: boolean, hasEnded: boolean): CalendarEntryTone {
   if (isHeld) return 'warning'
   return hasEnded ? 'muted' : 'danger'
@@ -187,7 +191,8 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number, now: numb
     const isBooking = window.reason === BOOKING_REASON || window.reason === HELD_REASON
     const isHeld = window.reason === HELD_REASON
     const isTurnaroundOnly = isBooking && bookingSlice === null
-    // Story 9.4 AC6: a closure that has ended - run its course, or ended now - is history.
+    // Story 9.4 AC6: a closure that has ended - run its course, or ended now - is history; `now` is
+    // the calendar's one clock, which also decides what its row offers.
     const hasEnded = !isBooking && Date.parse(window.ends_at) <= now
     let turnaround: string | null = null
     if (isBooking && bookingSlice !== null && !isSameSlice(bookingSlice, blocked)) {

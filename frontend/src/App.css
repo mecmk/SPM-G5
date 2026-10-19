@@ -1711,8 +1711,8 @@ td.num {
 }
 
 .chip-muted {
-  color: var(--text-faint);
-  background: var(--surface-alt);
+  color: var(--text-muted);
+  background: var(--surface);
   border-color: var(--border);
 }
 
@@ -1976,8 +1976,9 @@ td.num {
 }
 
 .calendar-entry-muted {
-  background: var(--surface-alt);
-  color: var(--text-faint);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .calendar-more,
@@ -2074,6 +2075,12 @@ td.num {
 
 .calendar-cell-openable.calendar-cell-success:hover {
   background: var(--success-bg);
+}
+
+/* A day whose only entries are ended closures has no tone background of its own: its resting
+   background, so the hover does not paint it in the accent colour and hide the date. */
+.calendar-cell-openable.calendar-cell-muted:hover {
+  background: var(--surface);
 }
 
 .calendar-cell-openable:focus-visible {

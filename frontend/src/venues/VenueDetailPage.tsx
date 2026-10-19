@@ -291,7 +291,7 @@ export function VenueDetailPage() {
               month={calendar.month}
               onMonthChange={calendar.setMonth}
               windows={calendar.windows}
-              loadedAt={calendar.loadedAt}
+              now={calendar.now}
               error={calendar.error}
               isLoading={calendar.isLoading}
               dayPanelId={VENUE_CALENDAR_DAY_PANEL_ID}

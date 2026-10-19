@@ -18,9 +18,9 @@ export interface VenueUnavailabilityManagerProps {
  * and the Block off time card that adds one. They live on the Edit venue page only; the venue's
  * details page keeps a calendar that shows each period and its reason and nothing to change.
  * Rendered only for whoever holds the permission to manage unavailability, and the backend
- * refuses the writes to anyone else. 9.4's rules are the same as when the controls were on the
- * details page; what is new with the move is each day row's hint beside Remove and End now, and
- * an ended closure showing as Ended.
+ * refuses the writes to anyone else. Each day row's Remove and End now say what they do; how an
+ * ended closure shows, as Ended, is the calendar's (`buildDayItems`), the same on every page it
+ * is shown on.
  */
 export function VenueUnavailabilityManager({
   venueId,
@@ -56,6 +56,7 @@ export function VenueUnavailabilityManager({
         key={`${closure.id}:${closure.startsAt}:${closure.endsAt}`}
         venueId={venueId}
         closure={closure}
+        now={calendar.now}
         onEdit={setEditingClosure}
         onChanged={handleClosureChanged}
       />
@@ -71,7 +72,7 @@ export function VenueUnavailabilityManager({
           month={calendar.month}
           onMonthChange={calendar.setMonth}
           windows={calendar.windows}
-          loadedAt={calendar.loadedAt}
+          now={calendar.now}
           error={calendar.error}
           isLoading={calendar.isLoading}
           dayPanelId={VENUE_CALENDAR_DAY_PANEL_ID}
