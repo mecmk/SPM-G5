@@ -10,9 +10,8 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  *
  * AC1 Confirmed, Public events with registration enabled that have not started are listed
  *     soonest first, a page at a time, with name, description, date, time, each booked venue's
- *     name and location, the places left and the registration state, and its cover picture if
- *     it has one (fix f18.1.1). Registering shows a confirmation with its time; the event then
- *     shows as Registered.
+ *     name and location, the places left and the registration state. Registering shows a
+ *     confirmation with its time; the event then shows as Registered.
  * AC3 Full, closed and not-yet-open events stay listed, with Register disabled.
  * AC4 An event no longer open to attendees refuses registration, and the page says so, naming
  *     the event, once the reloaded list no longer shows it.
@@ -20,6 +19,9 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  * AC6 A second registration is refused, also when both arrive at once; of two attendees competing
  *     for the last place, one succeeds and the other is told the event is full. No Register can be
  *     pressed while a registration is being sent.
+ * AC8 (fix f18.1.1, proposed, waiting on the backlog's Change Log) Each event shows its cover
+ *     picture (2.1 AC14), or the placeholder when it has none or its picture can't be loaded. An
+ *     uploaded picture is loaded from the API. What the list sends is a backend case.
  *
  * Every test is independent: each case that registers has a seeded event of its own
  * (backend/db/seed/020_sample_data.sql, 3333..39-45), so tests running in parallel never share a
@@ -31,15 +33,11 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 const UPCOMING_EVENTS_PATH = '/browse'
 const EVENTS_API_PATH = '/registrations/events'
-// A card's picture (2.1 AC14) is decorative - no alt text, hidden from assistive technology - so
-// it has no role or name, and is found by its tag. The jazz evening has the seeded one; an
-// uploaded one is served by the API (mediaUrl).
+// AC8: a card's picture is decorative - no alt text, hidden from assistive technology - so it has
+// no role or name, and is found by its tag. The jazz evening has the seeded one; an uploaded one
+// is served by the API (mediaUrl).
 const JAZZ_PICTURE = '/images/events/cat.jpg'
 const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-pictured-gala.png'
-const PNG_BYTES = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-  'base64',
-)
 const REGISTER_API_PATH = '/registrations'
 
 const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked, a picture; only read
@@ -205,33 +203,42 @@ test.describe('registers for a seeded event once', () => {
   })
 })
 
-test('18.1 AC1: an event with a cover picture shows it on its card', async ({ page }) => {
+test('18.1 AC8: an event with a cover picture shows it on its card', async ({ page }) => {
   await openUpcomingEvents(page)
 
-  await expect(eventCard(page, JAZZ_EVENING).locator('img')).toHaveAttribute('src', JAZZ_PICTURE)
+  const picture = eventCard(page, JAZZ_EVENING).locator('img')
+  await expect(picture).toHaveAttribute('src', JAZZ_PICTURE)
+  // Loaded, not only asked for: a picture that fails to load gives way to the placeholder.
+  await expect
+    .poll(() => picture.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0)
 })
 
-test('18.1 AC1: an uploaded cover picture is loaded from the API', async ({ page }) => {
-  // No seeded event has an uploaded picture, so the list call is stubbed, and so is the picture
-  // the API would serve.
-  await page.route(
-    (url) => url.pathname === UPLOADED_PICTURE_PATH,
-    (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG_BYTES }),
-  )
+test('18.1 AC8: an uploaded picture is asked of the API, and an event without one keeps the placeholder', async ({
+  page,
+}) => {
+  // No seeded event has an uploaded picture, so the list call alone is stubbed. The picture itself
+  // is not: what matters is where the browser asks for it. The API has no such file, so that card
+  // then falls back to the placeholder.
   const listRequest = page.waitForRequest(
     (request) =>
       request.resourceType() === 'fetch' && new URL(request.url()).pathname === EVENTS_API_PATH,
   )
+  const pictureRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === 'image' &&
+      new URL(request.url()).pathname === UPLOADED_PICTURE_PATH,
+  )
   const pictured = listedEvent('E2E Pictured Gala', { cover_image_url: UPLOADED_PICTURE_PATH })
-  await stubEventsCall(page, () => ({ status: 200, body: { items: [pictured], total: 1 } }))
+  const plain = listedEvent('E2E Plain Gala')
+  await stubEventsCall(page, () => ({ status: 200, body: { items: [pictured, plain], total: 2 } }))
 
   await openUpcomingEvents(page)
 
   const apiOrigin = new URL((await listRequest).url()).origin
-  await expect(eventCard(page, pictured.name).locator('img')).toHaveAttribute(
-    'src',
-    `${apiOrigin}${UPLOADED_PICTURE_PATH}`,
-  )
+  expect(new URL((await pictureRequest).url()).origin).toBe(apiOrigin)
+  await expect(eventCard(page, plain.name)).toBeVisible()
+  await expect(eventCard(page, plain.name).locator('img')).toHaveCount(0)
 })
 
 test('18.1 AC1: with no events open for registration, the page says so', async ({ page }) => {
