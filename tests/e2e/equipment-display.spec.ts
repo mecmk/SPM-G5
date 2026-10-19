@@ -2,15 +2,17 @@
  * Story 17.1 - fe/be: display equipment reserved for my event.
  * AC1 the event page's Equipment requirements section lists each item with its type, quantity,
  *     period and status: here the coordinator reads the roadshow's pending, accepted (reserved)
- *     and declined items, each with the event's period, and the declined one with Technical
- *     Support's reason. That the period is the event's own, and follows it when the dates change,
- *     is a backend case; so is a draft's item, which has no period until the event has dates.
+ *     and declined items, each with its period, and the declined one with Technical Support's
+ *     reason. A decided item names the decision - Accepted or Declined - and who made it and when,
+ *     and no item that is still open says it holds nothing. That an item's period is what its hold
+ *     covers - kept when a correction moves the event inside it - or its event's while it holds
+ *     nothing, and that a draft's item has none until the event has dates, are backend cases.
  * AC2 the owning organiser sees the same list, read-only: no way to add, edit, remove or send.
  * AC3 an event with no equipment says so.
- * AC4 an item released with its cancelled event shows as Released. One that was held says it
- *     holds nothing; one declined before still shows who declined it and why, and was never held.
- * AC1 a decided item names the decision - Accepted or Declined - and who made it and when, and only
- *     a released item says it holds nothing.
+ * AC4 an item released with its cancelled event shows as Released. The two still open when it
+ *     was cancelled say they hold nothing. The third was declined and then removed by an approved
+ *     change (19.2): it still shows who declined it and why, and says nothing about a hold, which
+ *     its decline had released.
  * AC5 Technical Support, opening the event from its queue, sees the list read-only. That every
  *     internal role is sent it, an attendee is refused (403) and another organiser is told the
  *     event is not found (404) are backend cases.
@@ -142,7 +144,8 @@ test('17.1 AC4: items released with their cancelled event show as Released, hold
   const microphones = item(page, 'Wireless microphone')
   await expect(microphones).not.toContainText(/(Accepted|Declined) .* by/)
   await expect(microphones).toContainText(HOLDS_NOTHING)
-  // The projector was declined before: who declined it and why still show, and it held nothing.
+  // The projector was declined, then removed by an approved change: who declined it and why still
+  // show, and its hold went when it was declined, so it says nothing about one.
   const projector = item(page, 'Portable projector')
   await expect(projector).toContainText(DECLINED_BY_THEO)
   await expect(projector).toContainText(MIXER_DECLINE_REASON)

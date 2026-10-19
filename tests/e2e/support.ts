@@ -45,7 +45,7 @@ export const EVENTS = {
   // equipment items; the 16.1 spec accepts and declines them.
   equipmentDecisions: '33333333-0000-0000-0000-000000000027',
   // Story 17.1, organiser: organiser2, coordinator. The Summer Rooftop Mixer was cancelled with
-  // two items on it, released with it; nothing changes them. The waterfront demo is Planning,
+  // three items on it, all released; nothing changes them. The waterfront demo is Planning,
   // dated January 2028, with one pending item the 17.1 spec has Technical Support accept.
   cancelled: '33333333-0000-0000-0000-000000000015',
   waterfrontDemo: '33333333-0000-0000-0000-000000000080',

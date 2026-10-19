@@ -1175,10 +1175,12 @@ ON CONFLICT (id) DO UPDATE SET
     outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
 
 -- ---------------------------------------------------------------------
--- Story 17.1: tests/e2e/equipment-display.spec.ts. The Summer Rooftop Mixer (3333..15) was
--- cancelled with three items on it, one accepted, one still pending and one declined before: all
--- were cancelled with it and hold nothing, so they show as Released (17.1 AC4), the declined one
--- with Technical Support's reason. The waterfront demo (3333..80) is
+-- Story 17.1: tests/e2e/equipment-display.spec.ts. The Summer Rooftop Mixer (3333..15) has
+-- three released items (17.1 AC4), all CANCELLED and holding nothing. Two were still open when the
+-- event was cancelled, one accepted and one pending, and cancelling closed them (6.2). The third,
+-- a projector, had been declined, and an approved change (19.2) removed it before then, which
+-- leaves it CANCELLED with Technical Support's reason; cancelling the event would have left a
+-- declined item Declined. The waterfront demo (3333..80) is
 -- the spec's own: in planning, organiser 2, coordinator 1, dated January 2028, clear of every
 -- other hold, with one pending item that the spec has Technical Support accept while the
 -- coordinator has the page open (17.1 AC6).

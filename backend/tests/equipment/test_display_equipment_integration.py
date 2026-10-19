@@ -276,9 +276,6 @@ def test_the_organiser_is_sent_the_same_items_as_the_coordinator(login_as, db: S
     assert _period(organisers[0]) == (STARTS_AT, ENDS_AT)
 
 
-# =============================================================================================
-# AC3 - an event with no equipment
-# =============================================================================================
 @pytest.mark.story("17.1", ac=2)
 def test_each_items_hold_is_read_with_the_items_not_one_statement_per_item(
     coordinator_client, db: Session
@@ -291,6 +288,9 @@ def test_each_items_hold_is_read_with_the_items_not_one_statement_per_item(
     assert six == one
 
 
+# =============================================================================================
+# AC3 - an event with no equipment
+# =============================================================================================
 @pytest.mark.story("17.1", ac=3)
 def test_an_event_with_no_equipment_is_sent_an_empty_list(coordinator_client, db: Session):
     assert _items(coordinator_client, _event(db)) == []
@@ -303,8 +303,8 @@ def test_an_event_with_no_equipment_is_sent_an_empty_list(coordinator_client, db
 def test_a_released_item_on_a_cancelled_event_is_sent_as_cancelled_with_its_period(
     coordinator_client, db: Session
 ):
-    """A Cancelled event with its item CANCELLED and holding nothing, the state a cancelled
-    event's items are in."""
+    """A Cancelled event with its sent item CANCELLED and holding nothing: cancelling an event
+    closes its open items so (6.2), while a declined one stays Declined."""
     event = _event(db, status=EventStatus.CANCELLED)
     make_equipment_item(
         db,
