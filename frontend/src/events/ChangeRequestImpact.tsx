@@ -194,7 +194,7 @@ function CapacityShortfallCard({ shortfall }: { shortfall: CapacityShortfall }) 
       <dl className="impact-facts">
         <Fact label="Counted">
           {shortfall.venues.map((venue) => (
-            <p key={venue.venue_name}>
+            <p key={venue.venue_id}>
               {venue.venue_name}: holds {venue.capacity}
               {venue.layout_name === null ? '' : ` in the ${venue.layout_name} layout`}
             </p>
@@ -268,9 +268,7 @@ function RegistrationsSummary({ registrations }: { registrations: RegistrationIm
         )}
         {isOver && <Stat label="Over by" value={registrations.over_by} tone="warning" />}
       </div>
-      <AfterApproval>
-        Kept as they are: approving cancels no registration, and no attendee is told.
-      </AfterApproval>
+      <AfterApproval>Kept as they are.</AfterApproval>
     </div>
   )
 }
