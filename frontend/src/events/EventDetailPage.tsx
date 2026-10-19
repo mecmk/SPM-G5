@@ -32,6 +32,7 @@ import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
+import { RegistrationCount } from '../components/RegistrationCount'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
@@ -245,8 +246,9 @@ function formatHeroMeta(event: EventDetail): string {
  * Story 15.1: the Equipment requirements section is where the assigned coordinator records the
  * event's equipment and submits it to Technical Support (`EquipmentRequestsSection`).
  *
- * Story 18.3: for the organiser and assigned coordinator of an event that takes registrations, the
- * Registration card shows only the count, with a link to the registrations report for who registered.
+ * Story 18.3: for the organiser and assigned coordinator of an event past draft that takes or holds
+ * registrations, the Registration card shows only the count, with a link to the registrations
+ * report for who registered.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -286,12 +288,18 @@ export function EventDetailPage() {
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
   const [registrations, setRegistrations] = useState<EventRegistrationList | null>(null)
   const [registrationsError, setRegistrationsError] = useState<string | null>(null)
-  /** Story 18.3 AC5: only the organiser and the assigned coordinator see who registered. */
+  /** Story 18.3 AC5: only the organiser and the assigned coordinator of an event past draft see
+   *  who registered - the backend's `_registration_list_viewable_by`. */
   const canSeeRegistrations =
     event !== null &&
-    event.registration_required &&
+    event.status !== 'DRAFT' &&
     user !== null &&
     (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+  /** Story 18.3 AC1: the count is shown for an event taking registrations, or still holding some
+   *  after Registration required was turned off (9.4 then 7.2). */
+  const showsRegistrations =
+    canSeeRegistrations &&
+    (event.registration_required || (registrations !== null && registrations.total > 0))
 
   useEffect(() => {
     let cancelled = false
@@ -344,7 +352,8 @@ export function EventDetailPage() {
   useEffect(() => {
     if (!canSeeRegistrations) return undefined
     let cancelled = false
-    listEventRegistrations(eventId)
+    // One row is enough: the counts come with every page.
+    listEventRegistrations(eventId, 0, 1)
       .then((data) => {
         if (!cancelled) setRegistrations(data)
       })
@@ -876,22 +885,20 @@ export function EventDetailPage() {
               </>
             )}
             {/* Story 18.3 AC1: the count here; who registered is on the registrations report. */}
-            {canSeeRegistrations && registrations !== null && (
-              <div>
-                <p className="eyebrow">Registered</p>
-                <p className="cluster">
-                  {registrations.active_count} / {registrations.capacity ?? '–'}
-                  {registrations.is_full && <Chip label="Full" tone="warning" />}
-                </p>
-              </div>
+            {showsRegistrations && registrations !== null && (
+              <RegistrationCount
+                activeCount={registrations.active_count}
+                capacity={registrations.capacity}
+                isFull={registrations.is_full}
+              />
             )}
           </div>
-          {canSeeRegistrations && registrationsError && (
+          {canSeeRegistrations && event.registration_required && registrationsError && (
             <p role="alert" className="error">
               {registrationsError}
             </p>
           )}
-          {canSeeRegistrations && (
+          {showsRegistrations && (
             <div className="cluster">
               <Link to={registrationsReportPath(event.id)} className="button secondary button-sm">
                 View registrations

@@ -764,7 +764,8 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'This registration could not be withdrawn.',
   },
 
-  /** Story 18.3 AC5/AC6: not the viewer's event, or no such event. Worded as the backend's
+  // Story 18.3: an organiser or coordinator reading an event's registration list.
+  /** AC5/AC6: not the viewer's event, still a draft, or no such event. Worded as the backend's
    *  REGISTRATION_LIST_NOT_FOUND_MESSAGE. */
   REGISTRATION_LIST_NOT_FOUND: {
     title: 'Registrations unavailable',

@@ -1,14 +1,16 @@
 """Story 18.3 - the registration list for my event. INTEGRATION tests: the API on PostgreSQL.
 
-Level: integration. Each test calls ``GET /events/{event_id}/registrations`` through a signed-in
-``*_client`` fixture against the real schema in the rolled-back test transaction. Whether an event
-is full is unit-tested in ``test_registration_list_unit.py``; the organiser's and coordinator's
-view of the list is e2e-tested in ``tests/e2e/registration-list.spec.ts``.
+Level: integration. Each test calls ``GET /events/{event_id}/registrations`` - or, in the picker
+section at the end, ``GET /registrations/managed`` - through a signed-in ``*_client`` fixture
+against the real schema in the rolled-back test transaction. Whether an event is full is
+unit-tested in ``test_registration_list_unit.py``; the organiser's and coordinator's view of the
+list is e2e-tested in ``tests/e2e/registration-list.spec.ts``.
 
 AC1 The list shows each attendee's name, email, registration time and status, and the active count
     against the event's capacity.
 AC2 The list and the count are worked out on the server from the active registrations.
-AC3 An event with no registrations gives an empty list; at capacity the list says it is full.
+AC3 An event with no registrations shows an empty list; an event whose count reaches capacity
+    shows it is full.
 AC4 Withdrawn registrations are listed as such and not counted.
 AC5 Only the organiser and the assigned coordinator can view the list; anyone else is told it was
     not found.
@@ -26,12 +28,13 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.events.models import Event, EventStatus
+from app.registrations import service
 from app.registrations.models import EventRegistration, RegistrationStatus
 from tests.support.factories import make_event, make_user
 from tests.support.seed import Users
 
 REGISTERED_AT = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
-NOT_FOUND = "This event was not found."
+NOT_FOUND = service.REGISTRATION_LIST_NOT_FOUND_MESSAGE
 ROW_KEYS = {"id", "attendee_name", "attendee_email", "registered_at", "status", "withdrawn_at"}
 
 
@@ -92,6 +95,7 @@ def test_the_organiser_sees_each_attendee_with_the_count_against_capacity(
     assert body["active_count"] == 1
     assert body["capacity"] == 5
     assert body["is_full"] is False
+    assert body["total"] == 1
     [row] = body["items"]
     assert set(row) == ROW_KEYS
     assert row["id"] == str(registration.id)
@@ -179,17 +183,50 @@ def test_more_registrations_than_a_lowered_capacity_is_still_full(organiser_clie
 
 # --- AC4: withdrawn registrations -------------------------------------------------------------
 @pytest.mark.story("18.3", ac=4)
-@pytest.mark.parametrize("status", [RegistrationStatus.WITHDRAWN, RegistrationStatus.CANCELLED])
-def test_inactive_registrations_are_listed_with_their_status_and_not_counted(
-    organiser_client, db: Session, status: str
+def test_a_withdrawn_registration_is_listed_with_when_it_was_withdrawn_and_not_counted(
+    organiser_client, db: Session
 ):
     event = _my_event(db, capacity=1)
-    _register(db, event, status=status)
+    registration = _register(db, event, status=RegistrationStatus.WITHDRAWN)
 
     body = organiser_client.get(_path(event.id)).json()
 
     [row] = body["items"]
-    assert row["status"] == status
+    assert row["status"] == "WITHDRAWN"
+    assert datetime.fromisoformat(row["withdrawn_at"]) == registration.withdrawn_at
+    assert body["active_count"] == 0
+    assert body["is_full"] is False
+
+
+@pytest.mark.story("18.3", ac=4)
+def test_a_registration_cancelled_with_its_event_reads_event_cancelled_and_is_not_counted(
+    organiser_client, db: Session
+):
+    event = _my_event(db, capacity=1)
+    _register(db, event, status=RegistrationStatus.CANCELLED)
+
+    body = organiser_client.get(_path(event.id)).json()
+
+    [row] = body["items"]
+    assert row["status"] == "EVENT_CANCELLED"
+    assert body["active_count"] == 0
+    assert body["is_full"] is False
+
+
+@pytest.mark.story("18.3", ac=4)
+def test_a_cancelled_events_still_active_registration_reads_event_cancelled_and_is_not_counted(
+    organiser_client, db: Session
+):
+    # As 18.2's registration_standing tells the attendee, so the two pages agree.
+    event = _my_event(db, capacity=1)
+    _register(db, event)
+    event.status = EventStatus.CANCELLED
+    db.flush()
+
+    body = organiser_client.get(_path(event.id)).json()
+
+    [row] = body["items"]
+    assert row["status"] == "EVENT_CANCELLED"
     assert body["active_count"] == 0
     assert body["is_full"] is False
 
@@ -245,6 +282,23 @@ def test_an_unknown_event_gets_the_same_not_found(organiser_client):
 
 
 @pytest.mark.story("18.3", ac=6)
+def test_the_organisers_own_draft_gets_the_same_not_found(organiser_client, db: Session):
+    # A draft takes no registrations yet, and may not have the expected attendance to count against.
+    draft = make_event(
+        db,
+        status=EventStatus.DRAFT,
+        registration_required=True,
+        expected_attendance=None,
+        submitted_at=None,
+    )
+
+    response = organiser_client.get(_path(draft.id))
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == NOT_FOUND
+
+
+@pytest.mark.story("18.3", ac=6)
 def test_signed_out_users_get_401(client, db: Session):
     event = _my_event(db)
 
@@ -269,6 +323,61 @@ def test_the_count_is_the_number_of_registered_rows_in_the_list(organiser_client
 
     assert len(body["items"]) == len(statuses)
     assert body["active_count"] == sum(row["status"] == "REGISTERED" for row in body["items"]) == 3
+
+
+@pytest.mark.story("18.3", ac=7)
+def test_a_page_of_the_list_carries_the_count_and_total_of_the_whole_list(
+    organiser_client, db: Session
+):
+    event = _my_event(db, capacity=10)
+    statuses = [
+        RegistrationStatus.REGISTERED,
+        RegistrationStatus.WITHDRAWN,
+        RegistrationStatus.REGISTERED,
+    ]
+    rows = [
+        _register(db, event, status=status, minutes=minutes)
+        for minutes, status in enumerate(statuses)
+    ]
+
+    first = organiser_client.get(_path(event.id), params={"limit": 2}).json()
+    rest = organiser_client.get(_path(event.id), params={"limit": 2, "offset": 2}).json()
+
+    assert [row["id"] for row in first["items"]] == [str(rows[0].id), str(rows[1].id)]
+    assert [row["id"] for row in rest["items"]] == [str(rows[2].id)]
+    for page in (first, rest):
+        assert page["total"] == 3
+        assert page["active_count"] == 2
+
+
+@pytest.mark.story("18.3", ac=7)
+def test_a_page_past_the_end_still_carries_the_count(organiser_client, db: Session):
+    event = _my_event(db, capacity=1)
+    _register(db, event)
+
+    body = organiser_client.get(_path(event.id), params={"offset": 5}).json()
+
+    assert body["items"] == []
+    assert body["total"] == 1
+    assert body["active_count"] == 1
+    assert body["is_full"] is True
+
+
+@pytest.mark.story("18.3", ac=2)
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"limit": 0},
+        {"limit": service.REGISTRATION_LIST_MAX_LIMIT + 1},
+        {"offset": -1},
+        {"offset": service.REGISTRATION_LIST_MAX_OFFSET + 1},
+    ],
+    ids=str,
+)
+def test_a_page_outside_the_bounds_is_refused(organiser_client, db: Session, params):
+    event = _my_event(db)
+
+    assert organiser_client.get(_path(event.id), params=params).status_code == 422
 
 
 # --- AC5: the report page's picker - the events whose list this user may view ------------------
@@ -299,6 +408,22 @@ def test_the_organiser_picks_from_their_own_events_that_take_registrations(
 
     assert str(mine.id) in ids
     assert {str(no_registration.id), str(draft.id), str(someone_elses.id)}.isdisjoint(ids)
+
+
+@pytest.mark.story("18.3", ac=5)
+def test_an_event_that_stopped_taking_registrations_is_still_picked_while_it_holds_some(
+    organiser_client, db: Session
+):
+    # 9.4 sends a Confirmed event back to Planning with its registrations, and a 7.2 correction
+    # can then turn Registration required off: who registered must stay readable.
+    event = _my_event(db)
+    _register(db, event)
+    event.status = EventStatus.PLANNING
+    event.registration_required = False
+    db.flush()
+
+    assert str(event.id) in _managed_ids(organiser_client)
+    assert organiser_client.get(_path(event.id)).json()["active_count"] == 1
 
 
 @pytest.mark.story("18.3", ac=5)

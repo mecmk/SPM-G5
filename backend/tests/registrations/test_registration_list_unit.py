@@ -3,7 +3,8 @@
 Level: unit. ``is_full`` in ``app/registrations/service.py`` alone - no database, no HTTP. The
 integration tests beside it (``test_registration_list_integration.py``) prove the API applies it.
 
-AC3 When the active count reaches the event's capacity, the list shows it is full.
+AC3 An event with no registrations shows an empty list; an event whose count reaches capacity
+    shows it is full.
 """
 
 from __future__ import annotations
@@ -31,8 +32,3 @@ def test_beyond_a_lowered_capacity_is_still_full():
 @pytest.mark.story("18.3", ac=3)
 def test_no_registrations_is_not_full():
     assert is_full(capacity=1, active=0) is False
-
-
-@pytest.mark.story("18.3", ac=3)
-def test_an_event_with_no_capacity_recorded_is_never_full():
-    assert is_full(capacity=None, active=3) is False

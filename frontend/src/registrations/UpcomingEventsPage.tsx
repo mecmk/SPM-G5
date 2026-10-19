@@ -11,6 +11,7 @@ import {
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
+import { FULL_LABEL } from '../components/RegistrationCount'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
@@ -25,7 +26,7 @@ import {
 const STATE_BADGES: Record<RegistrationState, RegistrationBadge> = {
   OPEN: { status: 'success', label: 'Open' },
   NOT_YET_OPEN: { status: 'info', label: 'Not yet open' },
-  FULL: { status: 'warning', label: 'Full' },
+  FULL: { status: 'warning', label: FULL_LABEL },
   CLOSED: { status: 'neutral', label: 'Closed' },
   REGISTERED: REGISTERED_BADGE,
 }

@@ -220,9 +220,15 @@ export const MY_REGISTRATIONS_PATH = '/registrations'
 // Story 18.3: who registered for the events an organiser or coordinator manages, one at a time.
 export const REGISTRATIONS_REPORT_PATH = '/registrations/report'
 
+/** Story 18.3: the registrations report's search parameters - the event picked on it. */
+export const REGISTRATIONS_REPORT_PARAMS = {
+  event: 'event',
+} as const
+
 /** Story 18.3: the registrations report with one event already picked. */
 export function registrationsReportPath(eventId: string): string {
-  return `${REGISTRATIONS_REPORT_PATH}?event=${encodeURIComponent(eventId)}`
+  const params = new URLSearchParams({ [REGISTRATIONS_REPORT_PARAMS.event]: eventId })
+  return `${REGISTRATIONS_REPORT_PATH}?${params}`
 }
 
 // Story 2.6: the organiser's own list of event requests.

@@ -159,37 +159,39 @@ class MyRegistrationOut(BaseModel):
 
 
 class EventRegistrationOut(BaseModel):
-    """18.3 AC1/AC4: one registration in an event's list - who, when, and its status, WITHDRAWN
-    and CANCELLED ones included. No defaults (response schema)."""
+    """18.3 AC1/AC4: one registration in an event's list - who, when, and where they stand, as
+    18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. No defaults
+    (response schema)."""
 
     id: uuid.UUID
     attendee_name: str
     attendee_email: str
     registered_at: datetime
-    status: str
+    status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
     withdrawn_at: datetime | None
 
     @classmethod
     def from_registration(
-        cls, registration: EventRegistration, *, attendee: User
+        cls, registration: EventRegistration, *, attendee: User, status: str
     ) -> EventRegistrationOut:
         return cls(
             id=registration.id,
             attendee_name=attendee.full_name,
             attendee_email=attendee.email,
             registered_at=registration.registered_at,
-            status=registration.status,
+            status=status,
             withdrawn_at=registration.withdrawn_at,
         )
 
 
 class EventRegistrationListOut(BaseModel):
-    """18.3 AC1-AC3/AC7: the list, and the count of its REGISTERED rows against the capacity.
-    No defaults (response schema)."""
+    """18.3 AC1-AC3/AC7: one page of the list, how many registrations there are in all, and how
+    many are active against the capacity. No defaults (response schema)."""
 
     items: list[EventRegistrationOut]
+    total: int
     active_count: int
-    capacity: int | None
+    capacity: int
     is_full: bool
 
 
