@@ -58,6 +58,7 @@ export function VenueDetailPage() {
     selectedRequirement,
     selectedCovering,
     replacingBooking,
+    replacementRefusal,
     error: eventError,
   } = useRequestingEvent()
   const loadWindows = useCallback(
@@ -152,17 +153,19 @@ export function VenueDetailPage() {
             {/* Story 12.6 AC1/AC2: opened to replace a booking, the venue is requested as its
              *  replacement, whatever the requirement already holds - unless it is the venue being
              *  replaced, which cannot replace itself (AC10). */}
-            {(selectedCovering === null ||
-              (replacingBooking !== null && replacingBooking.venue_id !== venue.id)) && (
-              <Link
-                to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
-                className="button brand"
-              >
-                Request this venue
-              </Link>
-            )}
+            {replacementRefusal === null &&
+              (selectedCovering === null ||
+                (replacingBooking !== null && replacingBooking.venue_id !== venue.id)) && (
+                <Link
+                  to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
+                  className="button brand"
+                >
+                  Request this venue
+                </Link>
+              )}
             {selectedCovering !== null &&
               !isBooked(selectedCovering) &&
+              replacementRefusal === null &&
               replacingBooking === null && (
                 <Link
                   to={venueSwitchPath(

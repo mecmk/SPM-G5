@@ -90,6 +90,15 @@ export function hasPendingReplacement(booking: BookingOutcome): boolean {
   return booking.pending_replacement_venue_name !== null
 }
 
+/**
+ * Story 12.6 AC1/AC10: whether a replacement can be asked for `booking` now - the one rule the
+ * catalogue and the request step share: an approved booking still marked, with no replacement
+ * pending on it.
+ */
+export function isReplaceableNow(booking: BookingOutcome): boolean {
+  return isReplaceable(booking) && !hasPendingReplacement(booking)
+}
+
 /** Story 12.6 AC4: the replacement asked for `booking`, while it is pending. */
 export function pendingReplacementFor(
   booking: BookingOutcome,

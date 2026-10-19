@@ -178,6 +178,8 @@ interface RequestingEventBannerProps {
   isAdditionalVenue: boolean
   /** Story 12.6 AC1: the booking this catalogue is finding a replacement for, named in the banner. */
   replacingBooking: BookingOutcome | null
+  /** Story 12.6 AC10: why the booking the address names cannot be replaced, when it cannot. */
+  replacementRefusal: string | null
   onSelectRequirement: (requirement: VenueRequirement) => void
 }
 
@@ -203,6 +205,7 @@ export function RequestingEventBanner({
   hasChangedFilters,
   isAdditionalVenue,
   replacingBooking,
+  replacementRefusal,
   onSelectRequirement,
 }: RequestingEventBannerProps) {
   const requirementsId = useId()
@@ -228,6 +231,7 @@ export function RequestingEventBanner({
           for the booked period. Choose another venue to request in its place.
         </p>
       )}
+      {replacementRefusal !== null && <p>{replacementRefusal}</p>}
       {listed.length > 0 && (
         <div>
           <p id={requirementsId} className="eyebrow">

@@ -38,6 +38,14 @@ export function approvalReleasesLine(venueName: string): string {
 export function replacingLine(venueName: string): string {
   return `Replacing ${venueName}`
 }
+/** Story 12.6 AC10: what the catalogue says for an address that names a booking which already has
+ *  a replacement pending, so no second one is offered. */
+export function replacementAlreadyRequestedLine(venueName: string): string {
+  return `${replacementRequestedLine(venueName)}. Withdraw it from the event page before asking for another.`
+}
+/** Story 12.6 AC1/AC9: what the catalogue says for an address that names a booking which is not
+ *  an approved, marked booking any more, so it replaces nothing. */
+export const NO_LONGER_REPLACEABLE_LINE = 'That booking is no longer waiting for a replacement.'
 
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */
 export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'

@@ -875,7 +875,7 @@ test('12.6 AC2: when the event bookings cannot be read the step says so and cann
 
   await expect(page.getByRole('heading', { name: `Request ${GRAND_HALL}`, level: 1 })).toBeVisible()
   await expect(page.getByRole('alert')).toContainText(
-    "This venue's booking could not be checked against the event's other bookings",
+    "the event's other bookings could not be read",
   )
   await expect(page.getByRole('button', { name: 'Send request' })).toBeDisabled()
 })

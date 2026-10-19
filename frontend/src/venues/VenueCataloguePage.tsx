@@ -33,8 +33,7 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   firstRequirementNeedingVenue,
   isBooked,
-  hasPendingReplacement,
-  isReplaceable,
+  isReplaceableNow,
   replacementSearchFor,
   requirementName,
   venueSearchFor,
@@ -145,6 +144,7 @@ export function VenueCataloguePage() {
     selectedCovering,
     requestingEvent,
     replacingBooking,
+    replacementRefusal,
     error: eventError,
     applyBookingChange,
     isResolving,
@@ -299,7 +299,11 @@ export function VenueCataloguePage() {
     }
     // Story 12.6 AC1/AC2: opened to replace a booking, every venue offers Request this venue, which
     // asks for it as that booking's replacement.
-    if (requestingEvent && (selectedCovering === null || replacingBooking !== null)) {
+    if (
+      requestingEvent &&
+      replacementRefusal === null &&
+      (selectedCovering === null || replacingBooking !== null)
+    ) {
       return (
         <Link
           to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
@@ -311,7 +315,12 @@ export function VenueCataloguePage() {
     }
     // Story 12.5 AC11: a selected requirement takes one request at a time. While its request is
     // pending, a venue is offered in its place (decided 11 Oct 2026); once booked, none is.
-    if (requestingEvent && selectedCovering !== null && !isBooked(selectedCovering)) {
+    if (
+      requestingEvent &&
+      replacementRefusal === null &&
+      selectedCovering !== null &&
+      !isBooked(selectedCovering)
+    ) {
       return (
         <Link
           to={venueSwitchPath(requestingEvent.id, venue.id, location.search, selectedCovering.id)}
@@ -354,8 +363,10 @@ export function VenueCataloguePage() {
           selectedRequirement={selectedRequirement}
           hasChangedFilters={hasChangedFilters}
           replacingBooking={replacingBooking}
+          replacementRefusal={replacementRefusal}
           isAdditionalVenue={
             requestingEvent !== null &&
+            replacementRefusal === null &&
             event.venue_requirements.length > 0 &&
             search.requirementId === undefined
           }
@@ -382,8 +393,7 @@ export function VenueCataloguePage() {
               replacementPath={
                 requestingEvent !== null &&
                 replacingBooking === null &&
-                isReplaceable(selectedCovering) &&
-                !hasPendingReplacement(selectedCovering)
+                isReplaceableNow(selectedCovering)
                   ? venueSearchPath(replacementSearchFor(event, selectedCovering))
                   : undefined
               }

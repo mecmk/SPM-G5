@@ -95,6 +95,7 @@ export type ErrorCode =
   | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
+  | 'BOOKING_EVENT_BOOKINGS_UNREAD'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
   | 'BOOKING_TURNAROUND_INVALID'
   | 'BOOKING_TURNAROUND_TOO_LONG'
@@ -563,6 +564,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message:
       "Only the event's assigned coordinator can request a venue for it, while the event is in " +
       'Planning or Confirmed.',
+  },
+  /**
+   * Story 12.5 / 12.6: the request step names another booking of the event - the request a switch
+   * replaces, or the booking a replacement replaces - and the event's bookings could not be read to
+   * find it. Send is off until they are, since without it the request would be sent as something
+   * else; the read's own reason follows this sentence.
+   */
+  BOOKING_EVENT_BOOKINGS_UNREAD: {
+    title: 'Bookings could not be read',
+    message:
+      "This request cannot be sent yet: the event's other bookings could not be read, and it " +
+      'depends on one of them.',
   },
   /**
    * Story 12.5 AC11: the request step's address names a venue requirement that is not the

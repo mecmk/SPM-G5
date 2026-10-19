@@ -114,6 +114,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
             decided_at: decided.decided_at,
             hold_expires_at: decided.hold_expires_at,
             hold_completed_at: decided.hold_completed_at,
+            // Story 12.6 AC3: a decided request releases nothing, so its card stops saying that
+            // approving it will.
+            approval_releases_venue_name: null,
           }
         : entry,
     ),

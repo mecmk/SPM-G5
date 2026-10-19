@@ -516,6 +516,9 @@ export function EventDetailPage() {
           }),
       )
       setPendingWithdraw(null)
+      // Story 12.6 AC12: a withdrawn replacement, or a withdrawn marked booking, may have been what
+      // stopped the safety review, so its blockers are read again.
+      getEventSafety(eventId).then(setSafety, () => {})
     } catch (err) {
       setWithdrawError(formatApiError(err))
     } finally {

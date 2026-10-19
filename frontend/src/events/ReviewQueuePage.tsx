@@ -70,7 +70,9 @@ function withoutRepeats(
 export function ReviewQueuePage() {
   const { data: list, error, isLoading, setData: setList } = useLoaded(loadFirstPage)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  // Each list has its own Load more, so each keeps its own failure: one list's is not the other's.
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [unavailableLoadMoreError, setUnavailableLoadMoreError] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('submitted_at')
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<InboxTabKey>('ALL')
@@ -84,10 +86,7 @@ export function ReviewQueuePage() {
     let cancelled = false
     listAssignedEvents(0, true)
       .then((first) => {
-        if (cancelled) return
-        setUnavailable(first)
-        // An earlier failed load's alert is not this list's.
-        setUnavailableError(null)
+        if (!cancelled) setUnavailable(first)
       })
       .catch((err: unknown) => {
         if (!cancelled) setUnavailableError(formatApiError(err))
@@ -96,6 +95,16 @@ export function ReviewQueuePage() {
       cancelled = true
     }
   }, [isUnavailableTab])
+
+  /** Story 12.6 AC11: opening the Venue unavailable tab starts its list afresh - an earlier failed
+   *  load's alert is not this load's, and the tab shows its loading state until the list answers. */
+  function openTab(next: InboxTabKey) {
+    if (next === VENUE_UNAVAILABLE_TAB) {
+      setUnavailableError(null)
+      setUnavailable(null)
+    }
+    setTab(next)
+  }
 
   const shownList = isUnavailableTab ? unavailable : list
   const items = useMemo(() => list?.items ?? [], [list])
@@ -122,8 +131,9 @@ export function ReviewQueuePage() {
 
   const handleLoadMore = useCallback(async () => {
     if (shownList === null) return
+    const setError = isUnavailableTab ? setUnavailableLoadMoreError : setLoadMoreError
     setIsLoadingMore(true)
-    setLoadMoreError(null)
+    setError(null)
     try {
       const next = await listAssignedEvents(shownList.items.length, isUnavailableTab)
       const more = (current: AssignedEventList | null) =>
@@ -138,7 +148,7 @@ export function ReviewQueuePage() {
       if (isUnavailableTab) setUnavailable(more)
       else setList(more)
     } catch (err) {
-      setLoadMoreError(formatApiError(err))
+      setError(formatApiError(err))
     } finally {
       setIsLoadingMore(false)
     }
@@ -165,7 +175,7 @@ export function ReviewQueuePage() {
 
       {list !== null && (
         <div className="stack">
-          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+          <Tabs tabs={tabs} activeKey={tab} onChange={openTab} />
 
           <div className="filter-bar">
             <label className="filter-grow">
@@ -241,9 +251,9 @@ export function ReviewQueuePage() {
             </EventCardGrid>
           )}
 
-          {loadMoreError && (
+          {(isUnavailableTab ? unavailableLoadMoreError : loadMoreError) && (
             <p role="alert" className="error">
-              {loadMoreError}
+              {isUnavailableTab ? unavailableLoadMoreError : loadMoreError}
             </p>
           )}
           {shownList !== null && shownList.items.length < shownList.total && (
