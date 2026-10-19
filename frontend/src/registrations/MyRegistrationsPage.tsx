@@ -5,7 +5,6 @@ import {
   listMyRegistrations,
   withdrawRegistration,
   type MyRegistration,
-  type RegistrationStanding,
 } from '../api/registrations'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
@@ -14,23 +13,9 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { UPCOMING_EVENTS_PATH } from '../routes'
-import { eventBadgeStatus } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import {
-  REGISTERED_BADGE,
-  describeRegisteredAt,
-  type RegistrationBadge,
-} from './registrationLabels'
-
-/** Story 18.2 AC1/AC8: each status's label, and the badge colour it takes (App.css). Registered is
- *  18.1's badge; Event cancelled is a cancelled event's colour, as every event status page shows
- *  it, not a cancelled booking's (shared/eventStatus.ts keeps the two apart). */
-const STANDING_BADGES: Record<RegistrationStanding, RegistrationBadge> = {
-  REGISTERED: REGISTERED_BADGE,
-  WITHDRAWN: { status: 'withdrawn', label: 'Withdrawn' },
-  EVENT_CANCELLED: { status: eventBadgeStatus('CANCELLED'), label: 'Event cancelled' },
-}
+import { STANDING_BADGES, describeRegisteredAt } from './registrationLabels'
 
 /** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
 const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'

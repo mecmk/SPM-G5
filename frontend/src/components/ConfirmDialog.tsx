@@ -20,6 +20,9 @@ export interface ConfirmDialogProps {
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */
   errorId?: string
+  /** A class added to the dialog, so one dialog can be styled apart from the others (story 5.6:
+   *  the Reassign dialog's 44px phone targets). */
+  className?: string
 }
 
 /**
@@ -40,6 +43,7 @@ export function ConfirmDialog({
   canConfirm = true,
   cancelLabel = 'Cancel',
   errorId,
+  className,
 }: ConfirmDialogProps) {
   const titleId = useId()
   const dialog = useRef<HTMLDivElement>(null)
@@ -61,7 +65,7 @@ export function ConfirmDialog({
       <div className="dialog-backdrop" />
       <div
         ref={dialog}
-        className="dialog"
+        className={className ? `dialog ${className}` : 'dialog'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

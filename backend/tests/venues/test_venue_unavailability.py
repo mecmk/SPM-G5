@@ -2379,7 +2379,7 @@ def test_an_approval_that_wins_the_lock_is_approved_and_the_save_then_marks_it(e
     def approve() -> None:
         with Session(engine) as session:
             pids["approve"] = _backend_pid(session)
-            booking = booking_service.get_booking_for_decision(session, booking_id)
+            booking = booking_service.get_booking_for_approval(session, booking_id)
             holding.set()
             _wait_until(engine, pids, "save")
             booking_service.approve_booking(
@@ -2437,7 +2437,7 @@ def test_a_save_that_wins_the_lock_refuses_the_approval_that_waited(engine):
         with Session(engine) as session:
             pids["approve"] = _backend_pid(session)
             assert holding.wait(LOCK_WAIT_SECONDS)
-            booking = booking_service.get_booking_for_decision(session, booking_id)
+            booking = booking_service.get_booking_for_approval(session, booking_id)
             try:
                 booking_service.approve_booking(
                     session,

@@ -7,7 +7,7 @@
  *     so.
  * AC2 the per-coordinator view lists each coordinator with their number of active events and the
  *     events themselves.
- * AC3 an event opens from the overview read-only: no Approve, Reject or Reassign.
+ * AC3 an event opens from the overview read-only: no Approve or Reject; since 5.6, Reassign.
  * AC4 a coordinator with no active events shows 0.
  * AC5 after the Lead assigns an event, a reload shows its coordinator; a deactivated coordinator
  *     is flagged.
@@ -29,9 +29,14 @@ import { expect, test, type Locator, type Page, type Request } from '@playwright
 import {
   ACCOUNTS,
   COORDINATORS,
+  DESKTOP,
   EVENTS,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  TABLET,
   corsHeaders,
   createAndSubmitRequest,
+  expectNoSidewaysScroll,
   signIn,
   uniqueName,
 } from './support'
@@ -58,10 +63,6 @@ const SMART_CITIES_EXPO = 'Smart Cities Expo'
 // by the 21.1 and 7.2 specs.
 const HARBOUR_LIGHTS = 'Harbour Lights Concert'
 const [CHLOE, CARL] = COORDINATORS
-const PHONE = { width: 375, height: 667 }
-const TABLET = { width: 768, height: 1024 }
-const DESKTOP = { width: 1280, height: 800 }
-const MIN_TOUCH_TARGET = 44
 
 function overviewItem(page: Page, eventName: string) {
   return page
@@ -216,13 +217,6 @@ async function expectOnOneLine(flag: Locator) {
     return new Set([...text.getClientRects()].map((rect) => Math.round(rect.top))).size
   })
   expect(lineCount).toBe(1)
-}
-
-async function expectNoSidewaysScroll(page: Page) {
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-  expect(fits).toBe(true)
 }
 
 test('5.5 AC1/AC5: the overview shows a new event’s coordinator and who assigned it', async ({
@@ -424,9 +418,11 @@ test('5.5 AC3: an event opens read-only from the overview', async ({ page }) => 
 
   await expect(page).toHaveURL(new RegExp(`/events/${EVENTS.smartCitiesExpo}$`))
   await expect(page.getByRole('heading', { name: SMART_CITIES_EXPO, level: 1 })).toBeVisible()
-  for (const action of ['Approve', 'Reject', 'Reassign']) {
+  for (const action of ['Approve', 'Reject']) {
     await expect(page.getByRole('button', { name: action })).toHaveCount(0)
   }
+  // P7: Reassign is the one action the Lead has here, since story 5.6.
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toBeVisible()
 })
 
 test('5.5 AC3: the way back from an event keeps the view and filters', async ({ page }) => {

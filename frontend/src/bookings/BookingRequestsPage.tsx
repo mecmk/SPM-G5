@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Pagination } from '../components/Pagination'
+import { ReplacementNote } from '../components/ReplacementNote'
 import { Chip } from '../components/Chip'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
@@ -24,6 +25,8 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
+  APPROVED_BOOKING_STATUS,
+  closedAt,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -111,6 +114,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
             decided_at: decided.decided_at,
             hold_expires_at: decided.hold_expires_at,
             hold_completed_at: decided.hold_completed_at,
+            // Story 12.6 AC3: a decided request releases nothing, so its card stops saying that
+            // approving it will.
+            approval_releases_venue_name: null,
           }
         : entry,
     ),
@@ -189,9 +195,13 @@ export function BookingRequestsPage() {
 
   /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
    * belongs, so the page is fetched again and the next request moves up - `loadQueuePage` steps
-   * back a page if that one is now empty. */
+   * back a page if that one is now empty. Story 12.6 AC3: approving a replacement released the
+   * booking it replaces, which moves too and which the card says no more of, so under All the page
+   * is fetched again as well. */
   function recordDecision(decided: Booking) {
-    if (tab === 'ALL') {
+    const hasReleased =
+      decided.status === APPROVED_BOOKING_STATUS && decided.replaces_booking_id !== null
+    if (tab === 'ALL' && !hasReleased) {
       setQueue((current) => current && withDecisionInPlace(current, decided))
       return
     }
@@ -327,6 +337,14 @@ export function BookingRequestsPage() {
 
                   <OutsideHoursNotice entry={entry} />
 
+                  {/* Story 12.6 AC3/AC6: a replacement says what it replaces and what approving
+                      it releases. */}
+                  <ReplacementNote
+                    replacesVenueName={entry.replaces_venue_name}
+                    approvalReleasesVenueName={entry.approval_releases_venue_name}
+                    originalIsMarked={entry.original_is_marked}
+                  />
+
                   <div className="fact-grid">
                     <div className="subtle-block">
                       <p className="fact-label">Layout</p>
@@ -355,7 +373,7 @@ export function BookingRequestsPage() {
                   {entry.decided_at !== null && (
                     <div className="subtle-block">
                       <p className="fact-label">{bookingOutcomeLabels(entry.status).when}</p>
-                      <p>{formatDateTime(entry.decided_at)}</p>
+                      <p>{formatDateTime(closedAt(entry) ?? entry.decided_at)}</p>
                     </div>
                   )}
 

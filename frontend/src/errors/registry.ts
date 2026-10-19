@@ -45,6 +45,8 @@ export type ErrorCode =
   | 'VENUE_PICTURES_NOT_ADDED'
   | 'VENUE_PICTURES_CHANGED'
   | 'EVENT_NOT_FOUND'
+  | 'NO_OTHER_COORDINATOR'
+  | 'REASSIGNED_LIST_NOT_REFRESHED'
   | 'EVENT_ALREADY_SUBMITTED'
   | 'EVENT_ROUTINE_EDIT_CLOSED'
   | 'EVENT_CORRECTION_CONFLICT'
@@ -95,6 +97,7 @@ export type ErrorCode =
   | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
+  | 'BOOKING_EVENT_BOOKINGS_UNREAD'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
   | 'BOOKING_TURNAROUND_INVALID'
   | 'BOOKING_TURNAROUND_TOO_LONG'
@@ -126,6 +129,7 @@ export type ErrorCode =
   | 'REGISTRATION_REFUSED'
   | 'REGISTRATION_NOT_FOUND'
   | 'WITHDRAWAL_REFUSED'
+  | 'REGISTRATION_LIST_NOT_FOUND'
 
 export interface ErrorEntry {
   title: string
@@ -284,6 +288,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_NOT_FOUND: {
     title: 'Request not found',
     message: 'This request does not exist, or it is not yours to open.',
+  },
+  /** Story 5.6 AC3: the Reassign picker found no active coordinator other than the current one;
+   * checked in the browser, before anything is sent. */
+  NO_OTHER_COORDINATOR: {
+    title: 'No one to reassign to',
+    message: 'There is no other active Event Coordinator to reassign this to.',
+  },
+  /** Story 5.6 AC1 (5.5 AC5): the overview's lists could not be read again after a reassignment
+   * that went through, so they still show the old coordinator. Says it went through, so the Lead
+   * does not try again from the old card. */
+  REASSIGNED_LIST_NOT_REFRESHED: {
+    title: 'List not refreshed',
+    message:
+      'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.',
   },
   EVENT_ALREADY_SUBMITTED: {
     title: 'Request already submitted',
@@ -565,6 +583,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
       'Planning or Confirmed.',
   },
   /**
+   * Story 12.5 / 12.6: the request step names another booking of the event - the request a switch
+   * replaces, or the booking a replacement replaces - and the event's bookings could not be read to
+   * find it. Send is off until they are, since without it the request would be sent as something
+   * else; the read's own reason follows this sentence.
+   */
+  BOOKING_EVENT_BOOKINGS_UNREAD: {
+    title: 'Bookings could not be read',
+    message:
+      "This request cannot be sent yet: the event's other bookings could not be read, and it " +
+      'depends on one of them.',
+  },
+  /**
    * Story 12.5 AC11: the request step's address names a venue requirement that is not the
    * event's, so the page offers no request - the backend would refuse it with the same first
    * sentence.
@@ -686,9 +716,10 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.
-  /** AC5/AC6/AC8/AC10: a change request refused for the state it found - the event is no longer
-   *  in Planning, the field already has a pending request, or the request was decided before it
-   *  could be withdrawn. The backend's own sentence (always sent) says which. */
+  /** AC5/AC6/AC8/AC10/AC12/AC13: a change request refused for the state it found - the event is
+   *  not yet approved, awaiting its safety check, completed, cancelled, rejected, or within 24
+   *  hours of its set-up time; the field already has a pending request; or the request was
+   *  decided before it could be withdrawn. The backend's own sentence (always sent) says which. */
   CHANGE_REQUEST_REFUSED: {
     title: 'Change request not sent',
     message: "This change request could not be made in the event's current state.",
@@ -761,6 +792,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   WITHDRAWAL_REFUSED: {
     title: 'Cannot withdraw',
     message: 'This registration could not be withdrawn.',
+  },
+
+  // Story 18.3: an organiser or coordinator reading an event's registration list.
+  /** AC5/AC6: not the viewer's event, still a draft, or no such event. Worded as the backend's
+   *  REGISTRATION_LIST_NOT_FOUND_MESSAGE. */
+  REGISTRATION_LIST_NOT_FOUND: {
+    title: 'Registrations unavailable',
+    message: 'This event was not found.',
   },
 }
 

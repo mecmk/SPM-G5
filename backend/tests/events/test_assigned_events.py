@@ -26,6 +26,10 @@ ENTRY_FIELDS = {
     "submitted_at",
     "status",
     "cover_image_url",
+    # Story 12.6 AC11: the entry says whether its event has a marked booking, and the venue of a
+    # pending replacement.
+    "is_venue_unavailable",
+    "pending_replacement_venue_name",
 }
 # Derived, so a status added later is covered without anyone remembering to add it here.
 ALL_STATUSES = [value for name, value in vars(EventStatus).items() if name.isupper()]

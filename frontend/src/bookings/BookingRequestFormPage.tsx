@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import {
   createBookingRequest,
   listBookingsForEvent,
+  requestReplacementBooking,
   SUITABILITY_OVERRIDE_REASON_MAX_LENGTH,
   switchBookingRequest,
   type BookingOutcome,
@@ -23,6 +24,7 @@ import {
   VENUE_SEARCH_PARAMS,
   venueSearchPath,
 } from '../routes'
+import { replacesLine } from '../shared/bookingStatus'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import {
@@ -30,6 +32,7 @@ import {
   coveringBooking,
   firstRequirementNeedingVenue,
   isBooked,
+  isReplaceableNow,
   requirementName,
   venueRequirementTerms,
   venueSearchFor,
@@ -39,7 +42,10 @@ import {
   bookedPeriod,
   durationMinutes,
   isWithinOpeningHours,
+  minutesToDuration,
   outsideHoursFact,
+  REPLACEMENT_TURNAROUND_HINT,
+  TURNAROUND_HINT,
   turnaroundProblem,
   VENUE_STAFF_DECIDE,
   ZERO_DURATION,
@@ -193,6 +199,9 @@ export function BookingRequestFormPage() {
   const [searchParams] = useSearchParams()
   const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
   const replacesId = searchParams.get(VENUE_REQUEST_REPLACES_PARAM)
+  // Story 12.6 AC1/AC2: opened from the catalogue in replacement mode, the address also names the
+  // approved booking this request replaces.
+  const replacingId = searchParams.get(VENUE_SEARCH_PARAMS.replacing)
   const { user, can } = useAuth()
   const loadSubject = useCallback(
     () =>
@@ -223,23 +232,33 @@ export function BookingRequestFormPage() {
     setData: setSuitability,
   } = useLoaded(loadSuitability)
   // Story 12.5 (decided 11 Oct 2026): the event's bookings, read to find the request a switch
-  // replaces - only when the address names one.
+  // replaces - only when the address names one. Story 12.6: or the booking a replacement replaces.
+  const namesAnotherBooking = replacesId !== null || replacingId !== null
   const loadBookings = useCallback(
     () =>
-      isRequestable && replacesId !== null
+      isRequestable && namesAnotherBooking
         ? listBookingsForEvent(eventId)
         : Promise.resolve<BookingOutcome[] | null>(null),
-    [isRequestable, replacesId, eventId],
+    [isRequestable, namesAnotherBooking, eventId],
   )
   const { data: bookings, error: bookingsError } = useLoaded(loadBookings)
   const isFindingReplaced =
-    isRequestable && replacesId !== null && bookings === null && bookingsError === null
+    isRequestable && namesAnotherBooking && bookings === null && bookingsError === null
   const covering =
     requirement === null || bookings === null ? null : coveringBooking(requirement, bookings)
   /** The request this one replaces: the requirement's own, while it is pending. Anything else
    *  the address names - or bookings that could not be read - sends a plain request. */
   const replaced =
     covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
+  /** Story 12.6 AC2: the approved booking, still marked and with no replacement pending, this
+   *  request replaces, once it is read - the catalogue's own rule (`isReplaceableNow`). It only
+   *  fills the step's setup and teardown. A request that names a booking by `replacing` is still
+   *  sent as a replacement when no such booking is found, and the server refuses it with its
+   *  reason - never as a plain request, which for an additional venue it would accept. */
+  const original =
+    bookings === null
+      ? null
+      : (bookings.find((each) => each.id === replacingId && isReplaceableNow(each)) ?? null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -254,6 +273,14 @@ export function BookingRequestFormPage() {
   // them.
   const [setupDraft, setSetupDraft] = useState(ZERO_DURATION)
   const [teardownDraft, setTeardownDraft] = useState(ZERO_DURATION)
+  // Story 12.6 AC2: a replacement starts from the original's setup and teardown, once they are
+  // known, and the coordinator may change them. Set once, so what they type is never overwritten.
+  const [hasPrefilledTurnaround, setHasPrefilledTurnaround] = useState(false)
+  if (original !== null && !hasPrefilledTurnaround) {
+    setHasPrefilledTurnaround(true)
+    setSetupDraft(minutesToDuration(original.setup_minutes))
+    setTeardownDraft(minutesToDuration(original.teardown_minutes))
+  }
 
   if (error) {
     return (
@@ -361,6 +388,8 @@ export function BookingRequestFormPage() {
     }
     setIsSending(true)
     try {
+      // A switch is taken first: its pending request is the one the address names with `replaces`,
+      // so a stale `replacing` left in the address cannot turn it into a replacement.
       if (replaced !== null) {
         await switchBookingRequest(
           replaced.id,
@@ -373,6 +402,18 @@ export function BookingRequestFormPage() {
           venue.name,
           forRequirement,
           replaced.venue_name,
+        )
+      } else if (replacingId !== null) {
+        await requestReplacementBooking(
+          replacingId,
+          {
+            venue_id: venue.id,
+            suitability_override_reason: reason ?? undefined,
+            setup_minutes: setupMinutes,
+            teardown_minutes: teardownMinutes,
+          },
+          venue.name,
+          original?.venue_name ?? null,
         )
       } else {
         await createBookingRequest(
@@ -466,6 +507,12 @@ export function BookingRequestFormPage() {
               switch.
             </p>
           )}
+          {original !== null && (
+            <p>
+              {replacesLine(original.venue_name)}, whose venue is unavailable. It stays booked until
+              Venue Staff approve this request, and is released then.
+            </p>
+          )}
           <ul className="check-list">
             <li>
               <span className="grow-text">Venue requirement</span>
@@ -497,8 +544,7 @@ export function BookingRequestFormPage() {
         <section aria-labelledby="booking-turnaround-heading" className="stack">
           <h2 id="booking-turnaround-heading">Setup and teardown</h2>
           <p className="muted">
-            How long the venue is needed before the event starts and after it ends. Both stay 0
-            unless you enter more.
+            {original === null ? TURNAROUND_HINT : REPLACEMENT_TURNAROUND_HINT}
           </p>
           <div className="turnaround-fields">
             <DurationFields legend="Setup" draft={setupDraft} onChange={setSetupDraft} />
@@ -559,6 +605,11 @@ export function BookingRequestFormPage() {
         </section>
 
         <div className="form-actions">
+          {bookingsError !== null && (
+            <p role="alert" className="error">
+              {ERROR_REGISTRY.BOOKING_EVENT_BOOKINGS_UNREAD.message} {bookingsError}
+            </p>
+          )}
           {sendError && (
             <p role="alert" className="error">
               {sendError}
@@ -569,7 +620,10 @@ export function BookingRequestFormPage() {
               Back to the results
             </Link>
           )}
-          <button type="submit" disabled={isSending || isChecking}>
+          <button
+            type="submit"
+            disabled={isSending || isChecking || (namesAnotherBooking && bookingsError !== null)}
+          >
             {replaced === null
               ? isSending
                 ? 'Sending…'
