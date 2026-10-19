@@ -1,17 +1,31 @@
 /**
  * Story 6.2 - cancel an event and release held resources.
  *
- * AC1  the organiser cancels their own event from its details page with a reason; the page then
- *      shows it Cancelled, with who cancelled it and why (AC5), and it stays in their events (AC9).
- * AC4  a pending change request on the page reads Cancelled once the event is, with no Withdraw.
- * AC6  a cancelled event offers no Cancel event button.
- * AC7  the dialog will not send a blank reason (the client-side half), and closing it leaves the
- *      event as it was.
- * AC11 a coordinator is not offered Cancel event.
- * AC14 Venue Staff find the cancelled event's booking under Cancelled, with no Approve or Reject.
- * AC15 Technical Support find its equipment request under Cancelled, with no Accept or Decline.
- * AC16 each card says when it was cancelled, and the coordinator's event page says the booking
- *      went with the event.
+ * AC1  The Event Organiser can cancel their own event from the Event Details page by selecting
+ *      Cancel Event, entering a cancellation reason and confirming the action. The event's status
+ *      changes to Cancelled.
+ * AC4  All pending venue booking requests, open equipment requests, pending event change requests
+ *      and attendee registrations are closed. Their records remain available for reference.
+ * AC6  Cancellation is permitted while an event is Under Review, Clarification Requested,
+ *      Planning, Awaiting Safety Check or Confirmed. Draft, Completed, Cancelled and Rejected
+ *      events cannot be cancelled.
+ * AC7  A cancellation reason is mandatory. An empty or whitespace-only reason is refused. Closing
+ *      the confirmation dialog leaves the event unchanged.
+ * AC11 Only the Event Organiser who owns the event can cancel it. Other users, including Event
+ *      Coordinators, cannot cancel the event. Unauthorised API requests are refused.
+ * AC14 Venue Staff see the cancelled event's venue bookings under a read-only Cancelled tab in
+ *      their booking queue, and under All. No Approve or Reject is offered.
+ * AC15 Technical Support see the cancelled event's equipment requests that had been sent to them
+ *      under a read-only Cancelled tab in their equipment queue, and under All. Requests never
+ *      sent to them are not shown. No Accept or Decline is offered. This replaces 15.2 AC5 for
+ *      cancelled events; equipment on rejected events still leaves the queue.
+ * AC16 A cancelled venue booking or equipment request shows when it was cancelled, alongside (not
+ *      instead of) when it was approved. On the event page, the coordinator sees "This booking
+ *      was cancelled with its event."
+ *
+ * This spec covers the parts of those a user clicks through: the dialog and the cancelled page
+ * (AC1, AC4's change request, AC5's display, AC6, AC7, AC11's button), and what each role then
+ * sees (AC14-AC16).
  *
  * What is released or closed (AC2-AC4), who is told (AC5), every status rule (AC6), the server's
  * refusals (AC7, AC11), the transaction and race cases (AC10, AC12, AC13), what each queue lists
@@ -38,6 +52,11 @@ const REASON = 'Our sponsor withdrew the budget.'
 const SEEDED_REASON = 'The rooftop terrace is closed for repairs that week.'
 
 const CHARITY_RUN = 'Lakeside Charity Run'
+// The charity run's approved Sunrise Studio booking and its wireless microphones
+// (backend/db/seed/020_sample_data.sql), cancelled with it; and its Harbour Pavilion booking, which
+// an earlier change cancelled.
+const CHARITY_RUN_STUDIO_BOOKING = '44444444-0000-0000-0000-000000000062'
+const CHARITY_RUN_MICROPHONES = '66666666-0000-0000-0000-000000000062'
 
 function cancelDialog(page: Page) {
   return page.getByRole('dialog', { name: 'Cancel this event?' })
@@ -148,10 +167,18 @@ test('6.2 AC14/AC15/AC16: Venue Staff and Technical Support find what was releas
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
-  const booking = page.getByRole('listitem').filter({ hasText: CHARITY_RUN })
+  const booking = page
+    .getByRole('listitem')
+    .filter({ hasText: CHARITY_RUN })
+    .filter({ hasText: 'Sunrise Studio' })
   await expect(booking.getByRole('heading', { name: CHARITY_RUN })).toBeVisible()
+  await expect(booking.getByText('Approved at', { exact: true })).toBeVisible()
   await expect(booking.getByText('Cancelled at', { exact: true })).toBeVisible()
   await expect(booking.getByRole('button')).toHaveCount(0)
+  await page.goto(`/venue-staff/booking-requests/${CHARITY_RUN_STUDIO_BOOKING}`)
+  await expect(page.getByText('Approved at', { exact: true })).toBeVisible()
+  await expect(page.getByText('Cancelled at', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, ACCOUNTS.techSupport)
@@ -163,11 +190,21 @@ test('6.2 AC14/AC15/AC16: Venue Staff and Technical Support find what was releas
   await expect(item.getByText('Cancelled at', { exact: true })).toBeVisible()
   await expect(item.getByText('Available', { exact: true })).toHaveCount(0)
   await expect(item.getByRole('button')).toHaveCount(0)
+  await page.goto(`/equipment/requests/${CHARITY_RUN_MICROPHONES}`)
+  await expect(page.getByText('Cancelled at', { exact: true })).toBeVisible()
+  await expect(page.getByText('Available', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.charityRun}`)
   const bookingSection = page.getByRole('region', { name: 'Venue booking' })
-  await expect(bookingSection).toContainText('This booking was cancelled with its event.')
-  await expect(bookingSection.getByText('Cancelled at', { exact: true })).toBeVisible()
+  // Only the Sunrise Studio booking went with the event; an earlier change cancelled the other.
+  await expect(bookingSection.getByText('This booking was cancelled with its event.')).toHaveCount(
+    1,
+  )
+  await expect(bookingSection.getByText('Cancelled at', { exact: true })).toHaveCount(2)
+  // 4.6's decision reads as the approval it was, not the Cancelled the page states above it.
+  const clarifications = page.getByRole('region', { name: 'Clarifications' })
+  await expect(clarifications.getByText('Approved', { exact: true })).toBeVisible()
 })

@@ -1,29 +1,60 @@
-"""Story 6.2 - cancel an event and release the resources it holds.
+"""Story 6.2 - cancel an event and release held resources.
 
-AC1  The Event Organiser cancels their own event from its details page with a reason; its status
-     becomes Cancelled.
-AC2  Its pending and approved venue bookings are released, so the venues are free again.
-AC3  Its equipment holds and reservations are released, so the equipment is free again.
-AC4  Its open equipment requests, pending change requests and attendee registrations are closed;
-     their records stay.
-AC5  The assigned coordinator (or the Event Coordinator Lead when none is assigned) and every
-     registered attendee are told; Venue Staff and Technical Support are told of what was released.
-     The reason, the organiser and the time are recorded.
-AC6  Cancelling is allowed from Under Review, Clarification Requested, Planning, Awaiting Safety
-     Check and Confirmed; Draft, Completed, Cancelled and Rejected events cannot be cancelled.
-AC7  A reason is mandatory; an empty or whitespace-only one is refused.
-AC8  An event holding nothing can still be cancelled.
-AC9  The cancelled event stays visible, and planning, booking approvals, equipment decisions and
-     registrations on it are refused.
-AC10 Everything happens in one transaction: a failure part-way leaves the event unchanged.
-AC11 Only the organiser who owns the event can cancel it.
-AC12 An approval racing the cancellation leaves no active venue hold or equipment reservation.
-AC13 Only the first of several cancellations succeeds, without repeating what it did.
-AC14 Venue Staff see the cancelled event's bookings under a read-only Cancelled tab and under All.
-AC15 Technical Support see the cancelled items that had been sent to them under a read-only
-     Cancelled tab and under All; an item never sent is not shown. This replaces 15.2 AC5 for a
-     cancelled event: a rejected event's items still disappear.
-AC16 A cancelled booking or equipment item shows when it was cancelled, not its old approval time.
+Happy path
+AC1  The Event Organiser can cancel their own event from the Event Details page by selecting
+     Cancel Event, entering a cancellation reason and confirming the action. The event's status
+     changes to Cancelled.
+AC2  Cancelling an event releases all associated venue holds and bookings, including pending and
+     approved bookings, so that the venues become available for other events.
+AC3  All equipment holds and reservations associated with the event are released, making the
+     equipment available for other events.
+AC4  All pending venue booking requests, open equipment requests, pending event change requests
+     and attendee registrations are closed. Their records remain available for reference.
+AC5  The assigned Event Coordinator (or the Event Coordinator Lead if none is assigned) and all
+     registered attendees are notified of the cancellation (20.1). Venue Staff and Technical
+     Support are notified of the bookings and equipment released. The cancellation reason,
+     organiser and timestamp are recorded, and the event details page displays its Cancelled
+     status.
+
+Boundary
+AC6  Cancellation is permitted while an event is Under Review, Clarification Requested, Planning,
+     Awaiting Safety Check or Confirmed. Draft, Completed, Cancelled and Rejected events cannot be
+     cancelled.
+AC7  A cancellation reason is mandatory. An empty or whitespace-only reason is refused. Closing the
+     confirmation dialog leaves the event unchanged.
+
+Edge
+AC8  An event with no venue bookings, equipment reservations or registered attendees can still be
+     cancelled successfully.
+AC9  After cancellation, the event and its associated requests remain visible as historical
+     records, but further planning actions, booking approvals, equipment decisions and
+     registrations are blocked.
+AC10 The event status change, resource releases, closure of pending requests and notification
+     records happen in one transaction. If any part fails, the cancellation is rolled back, and the
+     event remains unchanged.
+
+Permission
+AC11 Only the Event Organiser who owns the event can cancel it. Other users, including Event
+     Coordinators, cannot cancel the event. Unauthorised API requests are refused.
+
+Conflict
+AC12 If Venue Staff or Technical Support approve a request concurrently with cancellation, no
+     active venue holds or equipment reservations remain for the cancelled event.
+AC13 If the organiser attempts to cancel the same event multiple times, only the first
+     cancellation succeeds and later attempts are refused, without duplicate resource releases or
+     notifications.
+AC14 Venue Staff see the cancelled event's venue bookings under a read-only Cancelled tab in their
+     booking queue, and under All. No Approve or Reject is offered.
+AC15 Technical Support see the cancelled event's equipment requests that had been sent to them
+     under a read-only Cancelled tab in their equipment queue, and under All. Requests never sent
+     to them are not shown. No Accept or Decline is offered. This replaces 15.2 AC5 for cancelled
+     events; equipment on rejected events still leaves the queue.
+AC16 A cancelled venue booking or equipment request shows when it was cancelled, alongside (not
+     instead of) when it was approved. On the event page, the coordinator sees "This booking was
+     cancelled with its event."
+
+A declined equipment request is Technical Support's decision, not an open request, so AC4 leaves
+it Declined; under AC9 and AC15 it stays in their queue, under Declined and All, read-only.
 
 Most cases build a fresh event dated in 2030 on a fresh venue, owned by Olivia and coordinated
 by Chloe, so no seeded booking or hold is in the way. The races (AC12, AC13) run real concurrent
@@ -46,10 +77,12 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.bookings import service as bookings_service
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingRequestIn
+from app.bookings.schemas import BookingRequestIn, BookingSwitchIn
 from app.cancellations import service as cancellations_service
 from app.change_requests.models import EventChangeRequest
 from app.common.audit import AuditLog
+from app.coordination import service as coordination_service
+from app.coordination.schemas import AssignCoordinatorIn
 from app.equipment import service as equipment_service
 from app.equipment.schemas import EquipmentDecisionIn
 from app.events import service as events_service
@@ -65,6 +98,7 @@ from app.events.models import (
 from app.events.schemas import EventEquipmentIn
 from app.notifications.models import Notification
 from app.registrations.models import EventRegistration, RegistrationStatus
+from app.safety import service as safety_service
 from tests.support.factories import (
     approval_payload,
     make_booking,
@@ -323,10 +357,36 @@ def test_nothing_is_deleted(organiser_client, db: Session):
     assert counts() == before
 
 
+@pytest.mark.story("6.2", ac=2)
+def test_a_hold_that_already_ended_is_recorded_as_expired_not_released(
+    organiser_client, db: Session
+):
+    """Story 12.7: lapsed holds are expired before the cancellation runs, so the record says the
+    hold ran out, not that the cancellation released it."""
+    event = _event(db)
+    booking = _booking(
+        db,
+        event,
+        status=BookingStatus.APPROVED,
+        hold_expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    db.commit()
+
+    assert _cancel(organiser_client, event.id).status_code == 200
+
+    db.expire_all()
+    assert _status(db, VenueBooking, booking.id) == BookingStatus.EXPIRED
+    assert db.get(VenueBooking, booking.id).cancelled_at is None
+
+
 # --- AC5: recorded, and who is told ------------------------------------------------------------
 @pytest.mark.story("6.2", ac=5)
 def test_the_cancellation_is_recorded(organiser_client, db: Session):
-    event = _event(db)
+    event = _event(db, status=EventStatus.CONFIRMED, is_public=True, registration_required=True)
+    booking = _booking(db, event)
+    item = _item(db, event, status=EquipmentRequestStatus.PENDING)
+    request = make_change_request(db, event=event)
+    _register(db, event, Users.ATTENDEE)
 
     assert _cancel(organiser_client, event.id).status_code == 200
 
@@ -342,7 +402,7 @@ def test_the_cancellation_is_recorded(organiser_client, db: Session):
         )
     ).all()
     assert (history.from_status, history.changed_by_id, history.reason) == (
-        EventStatus.PLANNING,
+        EventStatus.CONFIRMED,
         Users.ORGANISER.id,
         REASON,
     )
@@ -351,7 +411,11 @@ def test_the_cancellation_is_recorded(organiser_client, db: Session):
     ).all()
     assert audit.actor_id == Users.ORGANISER.id
     assert audit.details["reason"] == REASON
-    assert audit.details["from_status"] == EventStatus.PLANNING
+    assert audit.details["from_status"] == EventStatus.CONFIRMED
+    assert audit.details["released_booking_ids"] == [str(booking.id)]
+    assert audit.details["cancelled_equipment_ids"] == [str(item.id)]
+    assert audit.details["cancelled_change_request_ids"] == [str(request.id)]
+    assert audit.details["cancelled_registrations"] == 1
 
 
 @pytest.mark.story("6.2", ac=5)
@@ -465,9 +529,12 @@ def test_a_closed_or_draft_event_cannot_be_cancelled(organiser_client, db: Sessi
 
     assert response.status_code == 409, response.text
     words = status.lower().replace("_", " ")
-    assert response.json()["detail"] == (
-        f"This event is {words}, so it can no longer be cancelled."
+    expected = (
+        "This event is still a draft, so there is nothing to cancel."
+        if status == EventStatus.DRAFT
+        else f"This event is {words}, so it can no longer be cancelled."
     )
+    assert response.json()["detail"] == expected
     db.expire_all()
     assert _status(db, Event, event.id) == status
 
@@ -587,6 +654,9 @@ def test_a_failure_part_way_leaves_everything_as_it_was(
     item = _item(db, event, status=EquipmentRequestStatus.PENDING)
     request = make_change_request(db, event=event)
     registration = _register(db, event, Users.ATTENDEE)
+    # Committed, so the rollback below drops only what the cancellation wrote; the fixture still
+    # discards it all at the end.
+    db.commit()
     real_record_audit = cancellations_service.record_audit
 
     def record_audit(db: Session, *, action: str, **kwargs: Any) -> Any:
@@ -868,6 +938,183 @@ def test_a_booking_request_racing_the_cancellation_is_refused(engine):
         _delete_committed(engine, event_id, venue_id=venue_id)
 
 
+@pytest.mark.story("6.2", ac=12)
+def test_a_confirmation_racing_the_cancellation_ends_cancelled(
+    engine, monkeypatch: pytest.MonkeyPatch
+):
+    """Story 21.2's Confirm locks the event before its approved bookings, as the cancellation
+    does, so the two take turns. Taken the other way round, each would hold what the other waits
+    for (a deadlock), and PostgreSQL would roll one back. Confirm is held part-way, once it has
+    its locks; the cancellation waits, then cancels the event as Confirm left it."""
+    event_id = _committed_event(engine)
+    with Session(engine) as session:
+        venue = make_venue(session)
+        booking = _booking(
+            session, session.get(Event, event_id), status=BookingStatus.APPROVED, venue_id=venue.id
+        )
+        session.commit()
+        booking_id, venue_id = booking.id, venue.id
+    pids: dict[str, int] = {}
+    holding, go = threading.Event(), threading.Event()
+
+    def held_blockers(db: Session, event: Event) -> list[str]:
+        holding.set()
+        go.wait(LOCK_WAIT_SECONDS)
+        return []
+
+    monkeypatch.setattr(safety_service, "confirm_blockers", held_blockers)
+
+    def confirm() -> None:
+        with Session(engine) as session:
+            safety_service.confirm_event(
+                session,
+                session.get(Event, event_id),
+                actor=session.get(User, Users.COORDINATOR.id),
+            )
+
+    def cancel() -> None:
+        holding.wait(LOCK_WAIT_SECONDS)
+        with Session(engine) as session:
+            pids["cancel"] = _backend_pid(session)
+            _cancel_in(session, event_id)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            confirming = pool.submit(confirm)
+            cancelling = pool.submit(cancel)
+            _wait_until_waiting(engine, pids, "cancel")
+            go.set()
+            confirming.result(timeout=LOCK_WAIT_SECONDS)
+            cancelling.result(timeout=LOCK_WAIT_SECONDS)
+
+        with Session(engine) as session:
+            assert session.get(Event, event_id).status == EventStatus.CANCELLED
+            assert session.get(VenueBooking, booking_id).status == BookingStatus.CANCELLED
+            history = session.scalars(
+                select(EventStatusHistory.to_status)
+                .where(EventStatusHistory.event_id == event_id)
+                .order_by(EventStatusHistory.changed_at)
+            ).all()
+            assert history[-2:] == [EventStatus.CONFIRMED, EventStatus.CANCELLED]
+    finally:
+        go.set()
+        _delete_committed(engine, event_id, booking_id, venue_id=venue_id)
+
+
+@pytest.mark.story("6.2", ac=12)
+def test_a_switch_racing_the_cancellation_is_refused(engine):
+    """Story 12.5's switch locks the event before the request it replaces, as the cancellation
+    does, so it waits for the cancellation and then finds the request released. Locking the
+    request first would leave each holding what the other waits for."""
+    event_id = _committed_event(engine)
+    with Session(engine) as session:
+        venue, other = make_venue(session), make_venue(session)
+        booking = _booking(session, session.get(Event, event_id), venue_id=venue.id)
+        session.commit()
+        booking_id, venue_id, other_id = booking.id, venue.id, other.id
+    pids: dict[str, int] = {}
+    holding, go = threading.Event(), threading.Event()
+
+    def cancel() -> None:
+        with Session(engine) as session:
+            session.execute(
+                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
+            )
+            holding.set()
+            go.wait(LOCK_WAIT_SECONDS)
+            _cancel_in(session, event_id)
+
+    def switch() -> str:
+        holding.wait(LOCK_WAIT_SECONDS)
+        with engine.connect() as connection, Session(bind=connection) as session:
+            pids["switch"] = _backend_pid(session)
+            try:
+                replaced = bookings_service.get_booking_for_switch(session, booking_id)
+                bookings_service.switch_booking_request(
+                    session,
+                    replaced,
+                    BookingSwitchIn(venue_id=other_id),
+                    actor=session.get(User, Users.COORDINATOR.id),
+                )
+            except (bookings_service.BookingNotPending, bookings_service.EventNotBookable):
+                return "refused"
+            return "switched"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cancelling = pool.submit(cancel)
+            switching = pool.submit(switch)
+            _wait_until_waiting(engine, pids, "switch")
+            go.set()
+            cancelling.result(timeout=LOCK_WAIT_SECONDS)
+            assert switching.result(timeout=LOCK_WAIT_SECONDS) == "refused"
+
+        with Session(engine) as session:
+            assert session.get(VenueBooking, booking_id).status == BookingStatus.CANCELLED
+            assert (
+                session.scalar(select(func.count()).where(VenueBooking.event_id == event_id)) == 1
+            )
+    finally:
+        go.set()
+        with Session(engine) as session:
+            session.execute(text("DELETE FROM venues WHERE id = :id"), {"id": other_id})
+            session.commit()
+        _delete_committed(engine, event_id, booking_id, venue_id=venue_id)
+
+
+@pytest.mark.story("6.2", ac=9)
+def test_an_assignment_racing_the_cancellation_is_refused(engine):
+    """Story 5.4's assignment reads the event under its lock, so one racing the cancellation
+    waits for it, then finds the event Cancelled and is refused, rather than giving a cancelled
+    event a coordinator."""
+    with Session(engine) as session:
+        event_id = _event(session, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=None).id
+        session.commit()
+    pids: dict[str, int] = {}
+    holding, go = threading.Event(), threading.Event()
+
+    def cancel() -> None:
+        with Session(engine) as session:
+            session.execute(
+                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
+            )
+            holding.set()
+            go.wait(LOCK_WAIT_SECONDS)
+            _cancel_in(session, event_id)
+
+    def assign() -> str:
+        holding.wait(LOCK_WAIT_SECONDS)
+        with Session(engine) as session:
+            pids["assign"] = _backend_pid(session)
+            try:
+                coordination_service.assign_coordinator(
+                    session,
+                    event_id,
+                    AssignCoordinatorIn(coordinator_id=Users.COORDINATOR.id),
+                    actor=session.get(User, Users.LEAD.id),
+                )
+            except coordination_service.EventNotAssignable:
+                return "refused"
+            return "assigned"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cancelling = pool.submit(cancel)
+            assigning = pool.submit(assign)
+            _wait_until_waiting(engine, pids, "assign")
+            go.set()
+            cancelling.result(timeout=LOCK_WAIT_SECONDS)
+            assert assigning.result(timeout=LOCK_WAIT_SECONDS) == "refused"
+
+        with Session(engine) as session:
+            event = session.get(Event, event_id)
+            assert event.status == EventStatus.CANCELLED
+            assert event.assigned_coordinator_id is None
+    finally:
+        go.set()
+        _delete_committed(engine, event_id)
+
+
 @pytest.mark.story("6.2", ac=13)
 def test_a_second_cancellation_is_refused_and_repeats_nothing(organiser_client, db: Session):
     event = _event(db)
@@ -986,6 +1233,57 @@ def test_technical_support_see_a_sent_item_under_cancelled_and_all(
     page = tech.get(f"/equipment-requests/{item.id}")
     assert page.status_code == 200, page.text
     assert page.json()["status"] == EquipmentRequestStatus.CANCELLED
+
+
+@pytest.mark.story("6.2", ac=9)
+@pytest.mark.story("6.2", ac=15)
+def test_technical_support_keep_a_declined_item_under_declined_and_all(login_as, db: Session):
+    """A declined item stays Declined (AC4 closes only open requests), and stays in their queue
+    as the record of their decision, where 15.2 AC5 used to drop it."""
+    event = _event(db)
+    item = _sent_item(db, event, status=EquipmentRequestStatus.DECLINED)
+    before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
+
+    _cancelled_by_organiser(login_as, event)
+
+    tech = login_as(Users.TECH_SUPPORT)
+    assert str(item.id) in _queue_ids(tech, "/equipment-requests", status="DECLINED")
+    assert str(item.id) in _queue_ids(tech, "/equipment-requests")
+    assert str(item.id) not in _queue_ids(tech, "/equipment-requests", status="CANCELLED")
+    assert tech.get("/equipment-requests").json()["counts"] == before
+    page = tech.get(f"/equipment-requests/{item.id}")
+    assert page.status_code == 200, page.text
+    assert page.json()["status"] == EquipmentRequestStatus.DECLINED
+
+
+@pytest.mark.story("6.2", ac=15)
+def test_no_availability_is_worked_out_for_a_cancelled_item(
+    login_as, db: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """A cancelled item holds nothing, and its card shows no Available or Shortfall, so its
+    event's stock is not worked out: every cancelled event's items stay in the queue for good."""
+    event = _event(db)
+    item = _sent_item(db, event, status=EquipmentRequestStatus.PENDING)
+    _cancelled_by_organiser(login_as, event)
+    worked_out: list[uuid.UUID | None] = []
+    real_available_by_type = events_service.available_by_type
+
+    def available_by_type(db: Session, starts_at, ends_at, **kwargs: Any):
+        worked_out.append(kwargs.get("exclude_event_id"))
+        return real_available_by_type(db, starts_at, ends_at, **kwargs)
+
+    monkeypatch.setattr(events_service, "available_by_type", available_by_type)
+    tech = login_as(Users.TECH_SUPPORT)
+
+    cancelled = tech.get("/equipment-requests", params={"status": "CANCELLED"})
+    everything = tech.get("/equipment-requests")
+    page = tech.get(f"/equipment-requests/{item.id}")
+
+    assert event.id not in worked_out
+    [row] = [row for row in cancelled.json()["items"] if row["id"] == str(item.id)]
+    assert (row["available"], row["shortfall"]) == (None, None)
+    assert str(item.id) in [row["id"] for row in everything.json()["items"]]
+    assert (page.json()["available"], page.json()["shortfall"]) == (None, None)
 
 
 @pytest.mark.story("6.2", ac=15)

@@ -198,10 +198,6 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000014', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'New Year Town Hall', 'All-hands briefing', 'Company-wide briefing on the year ahead.', NULL, '2026-08-01 09:00+08', '2026-08-01 11:00+08', 300, 'COMPLETED',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-06-20 09:00+08', '2026-06-22 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..15: cancelled after being arranged
-    ('33333333-0000-0000-0000-000000000015', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
-     'Summer Rooftop Mixer', 'Team social', 'An evening social mixer on the rooftop terrace.', NULL, '2026-10-05 18:00+08', '2026-10-05 21:00+08', 60, 'CANCELLED',
-     '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-08-25 09:00+08', '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     -- 3333..18: in planning and assigned to Chloe; dedicated to story 11.1's e2e spec
     -- (tests/e2e/venue-suitability.spec.ts), which judges venues for its one venue requirement
     -- and is refused for want of a justification. Since story 12.5 a requirement takes one
@@ -349,13 +345,32 @@ ON CONFLICT (id) DO UPDATE SET
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason;
 
--- Story 6.2: 3333..15 was cancelled by its organiser, Omar, who gave a reason. Kept apart from the
--- review decision above, as cancel_event records it. tests/e2e/cancel-event.spec.ts opens it.
-UPDATE events
-SET cancelled_at = '2026-08-27 09:00+08',
-    cancelled_by_id = '11111111-0000-0000-0000-000000000002',
-    cancellation_reason = 'The rooftop terrace is closed for repairs that week.'
-WHERE id = '33333333-0000-0000-0000-000000000015';
+-- 3333..15 (story 6.1's cancelled event): approved by Chloe on 26 Aug, then cancelled by its
+-- organiser, Omar, on 27 Aug with a reason (story 6.2), recorded apart from that approval as
+-- cancel_event records it. tests/e2e/cancel-event.spec.ts opens it.
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, cover_image_url, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    registration_required, registration_capacity, registration_closes_at,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, decision_reason,
+                    cancelled_at, cancelled_by_id, cancellation_reason) VALUES
+    ('33333333-0000-0000-0000-000000000015', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Summer Rooftop Mixer', 'Team social', 'An evening social mixer on the rooftop terrace.', NULL, '2026-10-05 18:00+08', '2026-10-05 21:00+08', 60, 'CANCELLED',
+     '11111111-0000-0000-0000-000000000003', 'Rooftop', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-08-25 09:00+08', '2026-08-26 09:00+08', '11111111-0000-0000-0000-000000000003', NULL,
+     '2026-08-27 09:00+08', '11111111-0000-0000-0000-000000000002', 'The rooftop terrace is closed for repairs that week.')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, cover_image_url = EXCLUDED.cover_image_url,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required,
+    registration_required = EXCLUDED.registration_required, registration_capacity = EXCLUDED.registration_capacity,
+    registration_closes_at = EXCLUDED.registration_closes_at, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
+    decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason,
+    cancelled_at = EXCLUDED.cancelled_at, cancelled_by_id = EXCLUDED.cancelled_by_id,
+    cancellation_reason = EXCLUDED.cancellation_reason;
 
 -- Story 18.1: Confirmed, Public events taking registrations - the attendee's Upcoming events, and
 -- tests/e2e/attendee-registration.spec.ts. Every case the spec clicks through has an event of its
@@ -830,7 +845,6 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000012', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-14 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000019', '33333333-0000-0000-0000-000000000013', 'PLANNING', 'CONFIRMED', '11111111-0000-0000-0000-000000000003', '2026-09-15 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000020', '33333333-0000-0000-0000-000000000014', 'CONFIRMED', 'COMPLETED', '11111111-0000-0000-0000-000000000003', '2026-08-01 12:00+08', NULL),
-    ('99999999-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000015', 'CONFIRMED', 'CANCELLED', '11111111-0000-0000-0000-000000000002', '2026-08-27 09:00+08', 'The rooftop terrace is closed for repairs that week.'),
     ('99999999-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000018', 'APPROVED', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-18 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000019', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-22 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000020', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-09-23 09:00+08', NULL),
@@ -869,6 +883,14 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000000060', '33333333-0000-0000-0000-000000000060', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000000061', '33333333-0000-0000-0000-000000000061', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 10:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- Story 6.2: 3333..15 was cancelled by its organiser, Omar, with his reason. An upsert of its own,
+-- so a database seeded before 6.2 is brought up to date.
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0000-000000000021', '33333333-0000-0000-0000-000000000015', 'CONFIRMED', 'CANCELLED', '11111111-0000-0000-0000-000000000002', '2026-08-27 09:00+08', 'The rooftop terrace is closed for repairs that week.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, from_status = EXCLUDED.from_status, to_status = EXCLUDED.to_status,
+    changed_by_id = EXCLUDED.changed_by_id, changed_at = EXCLUDED.changed_at, reason = EXCLUDED.reason;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
     ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-09-02 09:30+08'),
@@ -1352,8 +1374,10 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- Story 6.2 AC14/AC15: tests/e2e/cancel-event.spec.ts. The charity run (3333..62) is cancelled by
 -- its organiser, then found under Venue Staff's and Technical Support's Cancelled tabs. Organiser
--- 1, coordinator 1, March 2029 so nothing else shares its period: one requirement with a pending
--- request for Sunrise Studio, and four wireless microphones sent to Technical Support, held.
+-- 1, coordinator 1, March 2029 so nothing else shares its period: one requirement with an
+-- approved, held booking of Sunrise Studio, and four wireless microphones sent to Technical
+-- Support, held. Its Harbour Pavilion booking was approved, then cancelled on 7 Oct by an earlier
+-- change, so it was not cancelled with the event (AC16).
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
@@ -1385,8 +1409,8 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
                             venue_requirement_id, hold_expires_at) VALUES
     ('44444444-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '22222222-0000-0000-0000-000000000008',
      '11111111-0000-0000-0000-000000000003', '2029-03-14 08:00+08', '2029-03-14 12:00+08', 0, 0,
-     60, 'CLASSROOM', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-06 12:00+08',
-     'cccccccc-0000-0000-0062-000000000001', NULL)
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-06 15:00+08', NULL, '2026-10-06 12:00+08',
+     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -1396,6 +1420,23 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, cancelled_at) VALUES
+    ('44444444-0000-0000-0000-000000000063', '33333333-0000-0000-0000-000000000062', '22222222-0000-0000-0000-000000000007',
+     '11111111-0000-0000-0000-000000000003', '2029-03-14 08:00+08', '2029-03-14 12:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-06 11:00+08', NULL, '2026-10-06 10:00+08',
+     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08', '2026-10-07 10:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at;
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
     ('66666666-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '77777777-0000-0000-0000-000000000002', 4, 'Start line and finish line', 'PENDING', NULL,

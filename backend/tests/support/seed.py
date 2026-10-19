@@ -207,6 +207,14 @@ class Bookings:
     APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
 
 
+class CharityRunBookings:
+    """Story 6.2: Events.CHARITY_RUN's bookings, for tests/e2e/cancel-event.spec.ts."""
+
+    APPROVED_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")  # held until 1 Mar 2029
+    # Approved, then cancelled on 7 Oct 2026 by an earlier change, not with the event.
+    CHANGE_CANCELLED_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
+
+
 class Registrations:
     """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
     Users.ATTENDEE's, one for each of 18.2's events, named after it."""
@@ -257,9 +265,8 @@ class VenueRequirements:
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
     # Story 12.7: Events.CRAFT_FAIR's one, whose request expired.
     CRAFT_FAIR_HALL = uuid.UUID("cccccccc-0000-0000-0034-000000000001")  # EXHIBITION, WIFI, 120
-    # Story 6.2: Events.CHARITY_RUN's one requirement, and its pending request for Sunrise Studio.
+    # Story 6.2: Events.CHARITY_RUN's one requirement.
     CHARITY_RUN_START_VILLAGE = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # CLASSROOM, 60
-    PENDING_CHARITY_RUN_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")
 
 
 class EquipmentItems:
@@ -283,6 +290,9 @@ class EquipmentItems:
     # Story 21.1's, accepted, on Events.HARBOUR_CONCERT and Events.BOOK_FAIR in August 2028.
     CONCERT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000032")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000033")
+
+    # Story 6.2: Events.CHARITY_RUN's four wireless microphones, sent to Technical Support, held.
+    CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
 
 
 class EquipmentHolds:

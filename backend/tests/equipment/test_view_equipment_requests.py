@@ -14,8 +14,9 @@ AC4 A request exactly equal to the available quantity shows no shortfall. Holds 
     whose periods only touch the event's period at a boundary are not deducted.
 AC5 An item the coordinator removes, or any item on a cancelled or rejected event, disappears from
     the queue. Story 6.2 AC15 replaces this for an item cancelled once it was sent: it stays,
-    under a Cancelled tab (backend/tests/cancellations/test_cancel_event.py). An item still open
-    on a cancelled event - one cancelled before 6.2 closed its items - still disappears.
+    under a Cancelled tab, and so does a declined one, under Declined
+    (backend/tests/cancellations/test_cancel_event.py). An item still open on a cancelled event -
+    one cancelled before 6.2 closed its items - still disappears.
     An empty queue shows a message (tests/e2e/equipment-queue.spec.ts).
 AC6 Only Technical Support Staff can see the queue. Other roles are refused, including through
     the API.
@@ -451,8 +452,16 @@ def test_an_item_the_coordinator_removes_disappears(login_as, db):
 
 
 @pytest.mark.story("15.2", ac=5)
-@pytest.mark.parametrize("event_status", [EventStatus.CANCELLED, EventStatus.REJECTED])
-@pytest.mark.parametrize("status", TAB_STATUSES)
+@pytest.mark.parametrize(
+    ("status", "event_status"),
+    [
+        *((status, EventStatus.REJECTED) for status in TAB_STATUSES),
+        # Story 6.2 AC15 keeps a declined item on a cancelled event, under Declined
+        # (test_cancel_event.py); an item still open on one is from before 6.2 closed them.
+        (PENDING, EventStatus.CANCELLED),
+        (ACCEPTED, EventStatus.CANCELLED),
+    ],
+)
 def test_any_item_on_a_cancelled_or_rejected_event_disappears(
     tech_client, db, status, event_status
 ):
