@@ -1222,6 +1222,15 @@ label.checkbox input {
   color: var(--text-muted);
 }
 
+/* Story 17.1: on a phone, an equipment item's name, notes and period take the row's whole width,
+   and its quantity, badge and buttons go on the line below, rather than squeezing the text into a
+   narrow column beside them. */
+@media (max-width: 640px) {
+  .equipment-items > li > .grow-text {
+    flex-basis: 100%;
+  }
+}
+
 /* Story 16.1 AC2: Technical Support's reason for declining an equipment item, on a line of its own
    under the item's row on the event page (flex-basis: 100% wraps it in .check-list li), so the
    coordinator does not miss it and the quantity and badge stay level with the item's name. The
@@ -1638,6 +1647,7 @@ td.num {
 }
 
 .badge-draft,
+.badge-released,
 .badge-withdrawn,
 .badge-expired,
 .badge-neutral {

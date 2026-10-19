@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, and_, text
 from sqlalchemy.dialects.postgresql import CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -156,8 +156,20 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # Story 17.1 AC1: the event whose period the item is held for (15.1 AC2).
+    # Story 17.1 AC1: the event, whose period an item holding nothing is for.
     event: Mapped[Event] = relationship(back_populates="equipment_requests")
+    # Story 17.1 AC1: the hold the item still has, if any - what it is reserved for, which a 7.2
+    # correction inside the held period leaves as it was. Joined to the item's own query, so a
+    # list of items costs no statement each.
+    reserved_hold: Mapped[EquipmentReservation | None] = relationship(
+        primaryjoin=lambda: and_(
+            EquipmentReservation.equipment_request_id == EventEquipmentRequest.id,
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        ),
+        lazy="joined",
+        uselist=False,
+        viewonly=True,
+    )
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
     submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
     decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])

@@ -50,10 +50,14 @@ function item(page: Page, typeName: string) {
   return equipmentSection(page).getByRole('listitem').filter({ hasText: typeName })
 }
 
-/** Laid out on a single line: one line box, however wide the text is. */
+/** Laid out on a single line: every box of its text at the same height. (An inline element has a
+ *  box per text node and per line, so the boxes are counted by where they sit, not one by one.) */
 async function expectOnOneLine(text: Locator) {
   await expect(text).toBeVisible()
-  expect(await text.evaluate((element) => element.getClientRects().length)).toBe(1)
+  const lineTops = await text.evaluate(
+    (element) => new Set(Array.from(element.getClientRects(), (box) => Math.round(box.top))).size,
+  )
+  expect(lineTops).toBe(1)
 }
 
 async function openEvent(page: Page, account: string, eventId: string, name: string) {
