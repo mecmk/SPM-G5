@@ -420,6 +420,9 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     judged = _requirement_judged_by_search(db, query.event, query.requirement, actor=actor)
 
     scope = [] if query.include_withdrawn else [Venue.status == VenueStatus.ACTIVE]
+    if query.exclude_venue is not None:
+        # Story 12.6 AC1: in the scope, so it is outside the count and the removal hints too.
+        scope.append(Venue.id != query.exclude_venue)
     groups = _search_groups(query, period)
     venues = db.scalars(
         select(Venue).where(*scope, *chain.from_iterable(groups.values())).order_by(Venue.name)
