@@ -27,6 +27,7 @@ import json
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import Any
 
 from pydantic import ValidationError
@@ -56,6 +57,7 @@ from app.change_requests.schemas import (
     ProposedSchedule,
     RegistrationImpactOut,
     ScheduleChangeIn,
+    ShortPeriodOut,
     VenueRequirementsChangeIn,
 )
 from app.common.audit import record_audit
@@ -1257,40 +1259,62 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
     return _VenueImpact(affected=impacts, kept=kept)
 
 
+def _counted_venue(booking: VenueBooking) -> CountedVenueOut:
+    """Story 11.1 AC4: how many people ``booking``'s venue holds, in its booked layout."""
+    return CountedVenueOut(
+        venue_id=booking.venue_id,
+        venue_name=booking.venue.name,
+        capacity=venue_service.venue_capacity(booking.venue, layout=booking.required_layout),
+        layout_name=_counted_layout_name(booking),
+    )
+
+
 def _capacity_shortfall(
     request: EventChangeRequest, proposed: _ProposedEvent, kept: list[VenueBooking]
 ) -> CapacityShortfallOut | None:
-    """AC1/AC4 (decided 19 Oct 2026): an attendance change is judged against what the venues
-    the approval keeps hold between them, each by 11.1's capacity in its booked layout - a
-    requirement's own booking can still fit its requirement while the event outgrows it. Equal
-    fits. A venue booked for several requirements (12.5 AC9) holds its people once, so it is
-    counted once, by the first booking of it. Nothing is judged without a kept booking, nor for
-    any other field."""
+    """AC1/AC4 (decided 19 Oct 2026): an attendance change is judged, moment by moment, against
+    what the venues the approval keeps hold between them while they are in use - each by 11.1's
+    capacity in its booked layout, a venue booked for several requirements (12.5 AC9) counted
+    once. A requirement's own booking can still fit its requirement while the event outgrows it,
+    and venues booked at different times never hold the same people. The event is split wherever
+    a booking starts or ends, on the bookings' own times (setup and teardown hold nobody); a span
+    no venue is booked for is a break and needs no room. Equal fits. Neighbouring short spans
+    with the same venues are one period. Nothing is judged without a kept booking, nor for any
+    other field."""
     if request.field_name != ChangeRequestField.EXPECTED_ATTENDANCE or not kept:
         return None
-    by_venue: dict[uuid.UUID, CountedVenueOut] = {}
-    for booking in kept:
-        by_venue.setdefault(
-            booking.venue_id,
-            CountedVenueOut(
-                venue_id=booking.venue_id,
-                venue_name=booking.venue.name,
-                capacity=venue_service.venue_capacity(
-                    booking.venue, layout=booking.required_layout
-                ),
-                layout_name=_counted_layout_name(booking),
-            ),
-        )
-    venues = list(by_venue.values())
-    booked = sum(venue.capacity for venue in venues)
-    if proposed.attendance <= booked:
-        return None
-    return CapacityShortfallOut(
-        proposed_attendance=proposed.attendance,
-        booked_capacity=booked,
-        shortfall=proposed.attendance - booked,
-        venues=venues,
+    moments = sorted(
+        {booking.starts_at for booking in kept} | {booking.ends_at for booking in kept}
     )
+    periods: list[ShortPeriodOut] = []
+    for starts_at, ends_at in pairwise(moments):
+        in_use = {
+            booking.venue_id: booking
+            for booking in kept
+            if booking.starts_at <= starts_at and ends_at <= booking.ends_at
+        }
+        if not in_use:
+            continue
+        venues = [_counted_venue(booking) for booking in in_use.values()]
+        capacity = sum(venue.capacity for venue in venues)
+        if proposed.attendance <= capacity:
+            continue
+        previous = periods[-1] if periods else None
+        if previous is not None and previous.ends_at == starts_at and previous.venues == venues:
+            periods[-1] = previous.model_copy(update={"ends_at": ends_at})
+            continue
+        periods.append(
+            ShortPeriodOut(
+                starts_at=starts_at,
+                ends_at=ends_at,
+                capacity=capacity,
+                shortfall=proposed.attendance - capacity,
+                venues=venues,
+            )
+        )
+    if not periods:
+        return None
+    return CapacityShortfallOut(proposed_attendance=proposed.attendance, periods=periods)
 
 
 def _counted_layout_name(booking: VenueBooking) -> str | None:

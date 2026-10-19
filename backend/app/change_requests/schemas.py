@@ -227,7 +227,7 @@ class ClosureOut(BaseModel):
 
 
 class CountedVenueOut(BaseModel):
-    """One booked venue counted towards ``CapacityShortfallOut``: how many it holds, in the booked
+    """One booked venue counted towards a ``ShortPeriodOut``: how many it holds, in the booked
     layout (``layout_name``) where the venue records that layout's capacity (story 11.1 AC4).
     Each venue is counted once, however many of the event's requirements it is booked for."""
 
@@ -237,15 +237,25 @@ class CountedVenueOut(BaseModel):
     layout_name: str | None
 
 
-class CapacityShortfallOut(BaseModel):
-    """AC1/AC4 (decided 19 Oct 2026): an attendance change asks for more people than the venues
-    still booked after approval hold between them - the bookings it cancels hold nobody then. Equal
-    fits. A warning only: no booking is cancelled for it."""
+class ShortPeriodOut(BaseModel):
+    """AC1/AC4: a stretch of the event when the venues in use (``venues``) hold ``capacity``
+    people between them, ``shortfall`` fewer than the proposed attendance."""
 
-    proposed_attendance: int
-    booked_capacity: int
+    starts_at: datetime
+    ends_at: datetime
+    capacity: int
     shortfall: int
     venues: list[CountedVenueOut]
+
+
+class CapacityShortfallOut(BaseModel):
+    """AC1/AC4 (decided 19 Oct 2026): an attendance change asks for more people than the venues
+    still booked after approval hold, at some moments, between the ones in use then - the bookings
+    it cancels hold nobody. ``periods`` are those moments, in order. A warning only: no booking is
+    cancelled for it."""
+
+    proposed_attendance: int
+    periods: list[ShortPeriodOut]
 
 
 class BookingImpactOut(BaseModel):
