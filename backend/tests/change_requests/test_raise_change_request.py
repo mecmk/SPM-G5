@@ -15,15 +15,16 @@ AC4 A reason is mandatory. New values follow the same rules as creation (date li
 
 Edge
 AC5 Only one pending request per field per event. Before final approval, change requests are not
-    offered; once the event is Confirmed, they are not offered and the API refuses them.
+    offered. (Its last sentence, "once Confirmed, they are not offered and the API refuses them",
+    was replaced by AC11.)
 AC6 The server refuses a duplicate pending request for the same field.
 
 Permission
 AC7 Only the owning organiser can raise change requests. Coordinators cannot raise them.
 
 Conflict
-AC8 If the event is cancelled or becomes Confirmed while the request is being written,
-    submitting it is refused.
+AC8 If the event is cancelled while the request is being written, submitting it is refused.
+    (Its "or becomes Confirmed" was replaced by AC11; AC13 now says it.)
 
 Withdrawal (added by the PO at Checkpoint 1)
 AC9 The organiser can withdraw their own pending change request. It is kept as Withdrawn, the
@@ -822,17 +823,13 @@ def test_change_request_refused_before_approval(organiser_client, db: Session, s
     assert _change_requests(db, event.id) == []
 
 
-@pytest.mark.story("19.1", ac=5)
+@pytest.mark.story("19.1", ac=12)
 @pytest.mark.parametrize(
-    "status",
-    [
-        EventStatus.CONFIRMED,
-        EventStatus.COMPLETED,
-        EventStatus.CANCELLED,
-        EventStatus.REJECTED,
-    ],
+    "status", [EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED]
 )
-def test_change_request_refused_once_confirmed_or_closed(organiser_client, db: Session, status):
+def test_change_request_refused_once_closed(organiser_client, db: Session, status):
+    """AC12: a completed, cancelled or rejected event takes no change requests. (A Confirmed one
+    does since fix f19.1.1, AC11.)"""
     event = _planning_event(db, status=status)
 
     response = _raise(organiser_client, event.id, "expected_attendance", 150)
@@ -877,11 +874,13 @@ def test_organiser_cannot_raise_a_change_on_another_organisers_event(login_as, d
 
 
 # --- AC8: conflict -----------------------------------------------------------------------------
-@pytest.mark.story("19.1", ac=8)
-@pytest.mark.parametrize("new_status", [EventStatus.CONFIRMED, EventStatus.CANCELLED])
-def test_raise_refused_when_event_confirmed_or_cancelled_meanwhile(
+@pytest.mark.story("19.1", ac=13)
+@pytest.mark.parametrize("new_status", [EventStatus.CANCELLED, EventStatus.COMPLETED])
+def test_raise_refused_when_event_cancelled_or_completed_meanwhile(
     organiser_client, db: Session, new_status
 ):
+    """AC13: the event was cancelled or completed while Olivia wrote the request, so it is refused.
+    (Becoming Confirmed meanwhile no longer refuses it: AC11.)"""
     event = _planning_event(db)
     opened = organiser_client.get(f"/events/{event.id}")
     assert opened.json()["status"] == EventStatus.PLANNING

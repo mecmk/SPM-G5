@@ -6,8 +6,9 @@
  * AC2 the point of contact is updated directly from the same page.
  * AC4 the form will not submit without a reason (the client-side half; the server's refusal and
  *     every value rule are backend cases).
- * AC5 change requests are offered only on a Planning event: not before approval, not once
- *     Confirmed.
+ * AC11 (fix f19.1.1) change requests are offered on a Confirmed event too, saying that approving
+ *     one sends the event back to Planning for a new safety check.
+ * AC12 they are not offered before approval, nor while the event awaits its safety check (Q20).
  * AC9 the organiser withdraws a pending request after confirming, and it reads as Withdrawn.
  *
  * Validation rules, refusals (401/403/404/409/422), the one-pending-per-field rule, the conflict
@@ -99,7 +100,9 @@ test('19.1 AC4: the change form will not submit without a reason', async ({ page
   expect(raiseCalls).toBe(0)
 })
 
-test('19.1 AC5: change requests are offered only on a planning event', async ({ page }) => {
+test('19.1 AC12: change requests are not offered before approval or while awaiting the safety check', async ({
+  page,
+}) => {
   // Planning: offered. Olivia's Regional Sales Summit is only looked at here, never changed.
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.planning}`)
@@ -110,11 +113,11 @@ test('19.1 AC5: change requests are offered only on a planning event', async ({ 
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 
-  // Confirmed: Omar's dinner takes no more change requests.
+  // Awaiting its safety check: Omar's concert, until Q20 decides. Only looked at here.
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, ACCOUNTS.organiser2)
-  await page.goto(`/events/${CONFIRMED_DINNER}`)
-  await expect(page.getByRole('heading', { name: 'Partner Appreciation Dinner' })).toBeVisible()
+  await page.goto(`/events/${EVENTS.harbourConcert}`)
+  await expect(page.getByRole('heading', { name: 'Harbour Lights Concert' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 })
 
