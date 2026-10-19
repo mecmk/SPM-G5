@@ -63,7 +63,8 @@ Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
 
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
-  offered before approval or while awaiting the safety check) and the reason field blocking
+  offered before approval, while awaiting the safety check, once completed or cancelled, or
+  within 24 hours of set-up, with the page saying when they close) and the reason field blocking
   submit (AC4's client-side half) are UI behaviour, proven in tests/e2e/change-requests.spec.ts.
 * Most AC8 and AC13 cases share the test's one connection, so the other transaction is simulated
   by changing the status just before submitting.
@@ -1393,6 +1394,85 @@ def test_change_request_refused_once_the_event_has_ended(organiser_client, db: S
     assert response.json()["detail"] == _CLOSED_BEFORE_SETUP_REFUSAL
     assert _change_requests(db, event.id) == []
     assert _event_status(db, event.id) == status
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_the_event_start_counts_when_set_up_begins_after_it(organiser_client, db: Session):
+    """Set-up time is the earlier of the first set-up and the event's start: a booking for the
+    event's last hours, held from 30 hours ahead, doesn't keep requests open for an event that
+    starts in 23."""
+    event = _confirmed_event_starting_in(db, 23)
+    make_booking(
+        db,
+        venue_id=make_venue(db).id,
+        event_id=event.id,
+        starts_at=event.starts_at + timedelta(hours=8),
+        ends_at=event.starts_at + timedelta(hours=10),
+        setup_minutes=60,
+        status="APPROVED",
+    )
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CLOSED_BEFORE_SETUP_REFUSAL
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_the_earliest_set_up_of_several_bookings_counts(organiser_client, db: Session):
+    """Two venues for an event starting in 30 hours: one held from 26 hours ahead, the other from
+    23. It is the first set-up that counts, so requests are closed."""
+    event = _confirmed_event_starting_in(db, 30)
+    _book_with_setup(db, event, setup_minutes=4 * 60)
+    _book_with_setup(db, event, setup_minutes=7 * 60)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+
+
+class _ClockAt:
+    """Stands in for the service's ``datetime`` with ``now`` fixed at ``moment``, so the cut-off
+    itself can be tested, not only the hours either side of it."""
+
+    def __init__(self, moment: datetime) -> None:
+        self._moment = moment
+
+    def now(self, tz=None) -> datetime:
+        return self._moment
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_change_requests_are_closed_at_exactly_24_hours_before_set_up(
+    organiser_client, db: Session, monkeypatch
+):
+    """The boundary itself: at the very moment 24 hours before set-up, requests are already closed
+    - "until 24 hours before", not "until and including"."""
+    event = _confirmed_event_starting_in(db, 48)
+    monkeypatch.setattr(
+        change_requests_service, "datetime", _ClockAt(event.starts_at - timedelta(hours=24))
+    )
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CLOSED_BEFORE_SETUP_REFUSAL
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_change_requests_are_open_a_second_before_the_cut_off(
+    organiser_client, db: Session, monkeypatch
+):
+    event = _confirmed_event_starting_in(db, 48)
+    monkeypatch.setattr(
+        change_requests_service,
+        "datetime",
+        _ClockAt(event.starts_at - timedelta(hours=24, seconds=1)),
+    )
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 201, response.text
 
 
 def _window(client, event_id: uuid.UUID):

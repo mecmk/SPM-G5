@@ -26,6 +26,7 @@ import {
   ACCOUNTS,
   approvedEvent,
   changeRequests,
+  corsHeaders,
   EVENTS,
   expectNoSidewaysScroll,
   inFuture,
@@ -35,10 +36,12 @@ import {
 } from './support'
 
 const REASON = 'The keynote speaker can only attend a day later.'
-// f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change a Confirmed event.
-// Team decision on the review of #125 (19.1 AC12): change requests close 24 hours before set-up.
+// Team decision on the review of #125 (19.1 AC12): change requests close 24 hours before set-up,
+// and the page says when - or, when that can't be read (a stubbed failure), says so instead.
 const CLOSE_NOTE = /^Change requests close 24 hours before set-up, on .+\.$/
 const CLOSED_NOTE = 'Change requests for this event closed 24 hours before its set-up time.'
+const WINDOW_FAILED = 'The cut-off could not be read.'
+// f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change a Confirmed event.
 const BACK_TO_PLANNING_NOTE =
   'If this change is approved, the event goes back to Planning and needs a new safety check before it is confirmed again.'
 
@@ -158,6 +161,30 @@ test('19.1 AC12: change requests are offered until 24 hours before set-up, sayin
   // none are offered, and it says why.
   await page.goto(`/events/${EVENTS.bookSwap}`)
   await expect(changeRequests(page).getByText(CLOSED_NOTE)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
+})
+
+test('19.1 AC12: when reading the cut-off fails, change requests are not offered and the page says so', async ({
+  page,
+}) => {
+  // Read only. Omar's dinner offers them (the test above); here the cut-off can't be read.
+  await page.route(
+    (url) => url.pathname === `/events/${EVENTS.confirmed}/change-request-window`,
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: WINDOW_FAILED }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(`/events/${EVENTS.confirmed}`)
+
+  await expect(changeRequests(page).getByRole('alert')).toHaveText(WINDOW_FAILED)
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 })
 

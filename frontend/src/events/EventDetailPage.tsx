@@ -257,13 +257,13 @@ export function EventDetailPage() {
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<BookingOutcome[] | null>(null)
-  /** Story 19.1 AC12: when change requests close, with the event it was read for, so another
-   *  event's answer is never shown while this one's loads. */
+  /** Story 19.1 AC12: when change requests close - or why that couldn't be read - with the event
+   *  it was read for, so another event's answer is never shown on this one. */
   const [requestWindow, setRequestWindow] = useState<{
     eventId: string
-    window: ChangeRequestWindow
+    window: ChangeRequestWindow | null
+    error: string | null
   } | null>(null)
-  const [requestWindowError, setRequestWindowError] = useState<string | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
@@ -333,12 +333,10 @@ export function EventDetailPage() {
     let cancelled = false
     fetchChangeRequestWindow(eventId)
       .then((window) => {
-        if (cancelled) return
-        setRequestWindow({ eventId, window })
-        setRequestWindowError(null)
+        if (!cancelled) setRequestWindow({ eventId, window, error: null })
       })
       .catch((err: unknown) => {
-        if (!cancelled) setRequestWindowError(formatApiError(err))
+        if (!cancelled) setRequestWindow({ eventId, window: null, error: formatApiError(err) })
       })
     return () => {
       cancelled = true
@@ -668,8 +666,9 @@ export function EventDetailPage() {
     isOrganiser &&
     CHANGE_REQUESTABLE_STATUSES.includes(event.status)
   /** AC12: and only until 24 hours before its set-up time, as the server says. */
-  const shownRequestWindow =
-    mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow.window : null
+  const readRequestWindow =
+    mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
+  const shownRequestWindow = readRequestWindow?.window ?? null
   const canRequestChanges = shownRequestWindow?.is_open === true
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
@@ -1174,7 +1173,7 @@ export function EventDetailPage() {
             event={event}
             canRaise={canRequestChanges}
             requestWindow={shownRequestWindow}
-            requestWindowError={mayRequestChanges ? requestWindowError : null}
+            requestWindowError={readRequestWindow?.error ?? null}
             canWithdraw={isOrganiser}
             canDecide={canDecideChangeRequests}
             onDecided={reloadEvent}

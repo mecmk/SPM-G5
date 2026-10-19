@@ -1,8 +1,11 @@
-"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests; and for
-story 19.2: the coordinator's queue of pending ones, and approving or rejecting one.
+"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests, and say when
+they close (fix f19.1.1); and for story 19.2: the coordinator's queue of pending ones, and
+approving or rejecting one.
 
-They sit under the event they belong to (``/events/{event_id}/change-requests``), except the
-queue, which spans the coordinator's events (``/change-requests``). Withdrawing, approving and
+They sit under the event they belong to (``/events/{event_id}/change-requests``, and
+``/events/{event_id}/change-request-window`` for when they close - outside ``/change-requests/``
+so it can never be read as a request's id), except the queue, which spans the coordinator's events
+(``/change-requests``). Withdrawing, approving and
 rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs like story
 12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with its own
 rules, notification and audit record (see backend/STYLE.md, Standing divergences).
