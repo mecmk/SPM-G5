@@ -1,8 +1,7 @@
 /**
  * Story 9.4: mark a venue temporarily unavailable, even with events booked there.
  *
- * AC1  Venue Staff add a closure from the venue's Edit venue page (story 12.6 AC12 moved the
- *      controls there from its details page) - a start, an end, a reason and a
+ * AC1  Venue Staff add a closure from the venue's page - a start, an end, a reason and a
  *      description, which every reason needs - and the calendar shows it as "Unavailable" with
  *      its reason; a block off with no description is refused in the backend's own words, and
  *      the month grid's chip names the reason, or the description for Other.
@@ -11,13 +10,12 @@
  *      is blocked when it cannot be had; Save still goes through with bookings in the way.
  * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page, and
  *      on its request's page whatever its status.
- * AC6  A closure is edited, then ended, from the day it falls on, each action saying what it does;
- *      an ended one shows as "Ended", muted, with no actions;
+ * AC6  A closure is edited, then ended, from the day it falls on; an ended one shows no actions;
  *      editing one that was removed meanwhile says so.
  * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
  *      Approve is held back.
  * AC9  Only Venue Staff see the Block off time card; the coordinator and the Safety Officer see
- *      the calendar, on the venue's details page, and no way to change it.
+ *      the calendar and no way to change it.
  *
  * The rules - the reasons and the Other description, what overlaps, the event's return to
  * Planning, who is told, the refusal to approve, the races - are backend cases:
@@ -36,32 +34,16 @@
  * one and works on today.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
-import {
-  ACCOUNTS,
-  EVENTS,
-  VENUES,
-  corsHeaders,
-  inFuture,
-  signIn,
-  uniqueName,
-  venueCard,
-} from './support'
+import { ACCOUNTS, EVENTS, VENUES, corsHeaders, inFuture, signIn, uniqueName } from './support'
 
 // The spec pins and reads wall-clock dates in Singapore time, whatever the machine's zone.
 test.use({ timezoneId: 'Asia/Singapore' })
 
 const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
 
-// Said beside the button each belongs to, so Venue Staff know what it will do before pressing it.
-const REMOVE_HINT = 'Not started yet: removes it completely'
-const END_NOW_HINT = 'Ends the whole closure now; the time already passed is kept'
-
 /** The "Availability" card, a region via its `aria-labelledby` (as venue-calendar.spec.ts). */
 function availability(page: Page) {
-  // A region on the details page, a group - a form section - on the Edit venue page.
-  return page
-    .getByRole('region', { name: 'Availability', exact: true })
-    .or(page.getByRole('group', { name: 'Availability', exact: true }))
+  return page.getByRole('region', { name: 'Availability', exact: true })
 }
 
 /**
@@ -69,15 +51,12 @@ function availability(page: Page) {
  * closure is being edited the card is named "Edit blocked-off time".
  */
 function blockOff(page: Page) {
-  const name = /^(Block off time|Edit blocked-off time)$/
-  return page.getByRole('region', { name }).or(page.getByRole('group', { name }))
+  return page.getByRole('region', { name: /^(Block off time|Edit blocked-off time)$/ })
 }
 
 /** The card as it is when closed, holding the button that opens the add form. */
 function blockOffCard(page: Page) {
-  return page
-    .getByRole('region', { name: 'Block off time', exact: true })
-    .or(page.getByRole('group', { name: 'Block off time', exact: true }))
+  return page.getByRole('region', { name: 'Block off time', exact: true })
 }
 
 interface SaveOptions {
@@ -115,19 +94,7 @@ async function saveClosure(page: Page, options: SaveOptions = {}) {
   expect((await landed).ok()).toBe(true)
 }
 
-/**
- * Venue Staff's way to the controls: the venue's Edit venue page, from its card in the catalogue
- * (story 12.6 AC12). Waits for the calendar the controls act on.
- */
 async function openVenue(page: Page, name: string) {
-  await page.goto('/venues')
-  await venueCard(page, name).getByRole('link', { name: 'Edit' }).click()
-  await expect(availability(page)).toBeVisible()
-  await expect(page.getByText('Loading availability…')).toHaveCount(0)
-}
-
-/** The venue's details page, which every internal role may open and which has the calendar alone. */
-async function openVenueRecord(page: Page, name: string) {
   await page.goto('/venues')
   await page.getByRole('link', { name }).click()
   await expect(availability(page)).toBeVisible()
@@ -201,10 +168,9 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
   await openVenue(page, VENUES.gardenAtrium)
   const description = uniqueName('Atrium floor polishing')
 
-  // After the pinned 10 October: a closure the page's clock has already passed shows as Ended.
   await fillClosure(page, {
-    starts: '2028-10-17T09:00',
-    ends: '2028-10-19T18:00',
+    starts: '2028-10-02T09:00',
+    ends: '2028-10-04T18:00',
     reason: 'Maintenance',
     description,
   })
@@ -213,8 +179,8 @@ test('9.4 AC1: Venue Staff add a closure, which the calendar shows as Unavailabl
   await expect(blockOff(page).getByLabel('Description')).toHaveAttribute('aria-required', 'true')
   await saveClosure(page)
 
-  await dayButton(page, /^18 October 2028/).click()
-  const list = dayList(page, /18 Oct 2028/)
+  await dayButton(page, /^3 October 2028/).click()
+  const list = dayList(page, /3 Oct 2028/)
   await expect(list).toContainText(description)
   await expect(list).toContainText('Unavailable – Maintenance')
 })
@@ -418,8 +384,6 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await expect(item.getByRole('button', { name: 'Edit' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
-  await expect(item).toContainText(END_NOW_HINT)
-  await expect(item).not.toContainText(REMOVE_HINT)
 
   await item.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('form', { name: 'Edit blocked-off time' })).toBeVisible()
@@ -439,11 +403,6 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   await page.getByRole('dialog').getByRole('button', { name: 'End now' }).click()
   await expect(item.getByRole('button')).toHaveCount(0)
   await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toHaveCount(0)
-  // An ended closure is history, not an unavailable venue: in the list, and on the grid.
-  await expect(item).toContainText('Ended – Renovation')
-  await expect(item).not.toContainText('Unavailable')
-  await expect(item).not.toContainText(END_NOW_HINT)
-  await expect(dayButton(page, today)).toHaveAccessibleName(/Ended – Renovation/)
 })
 
 test('9.4 AC6: a refused End now says why, and the calendar is loaded again', async ({ page }) => {
@@ -517,15 +476,12 @@ test('9.4 AC6: a row left open across the start of its closure switches from Rem
   const item = page.getByRole('listitem').filter({ hasText: description })
   await expect(item.getByRole('button', { name: 'Remove' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'End now' })).toHaveCount(0)
-  await expect(item).toContainText(REMOVE_HINT)
 
   // Three minutes on, with the page left open: it has started, so it is ended and not removed.
   await page.clock.runFor(3 * 60 * 1000)
 
   await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'Remove' })).toHaveCount(0)
-  await expect(item).toContainText(END_NOW_HINT)
-  await expect(item).not.toContainText(REMOVE_HINT)
 })
 
 test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, browser }) => {
@@ -537,7 +493,7 @@ test('9.4 AC9: only Venue Staff see the Block off time card', async ({ page, bro
 
   for (const email of [ACCOUNTS.coordinator, ACCOUNTS.safetyOfficer]) {
     const other = await signedInPage(browser, email)
-    await openVenueRecord(other, VENUES.gardenAtrium)
+    await openVenue(other, VENUES.gardenAtrium)
     await expect(availability(other)).toBeVisible()
     await expect(blockOff(other)).toHaveCount(0)
     await expect(other.getByRole('button', { name: 'Block off time' })).toHaveCount(0)

@@ -4,10 +4,6 @@ import type { VenueUnavailableWindow } from '../api/venues'
 import { instantToInput, inputToInstant } from './format'
 
 /** One venue's `getVenueCalendar`, bound to it: the windows overlapping `startsAt`-`endsAt`. */
-/** The id of the calendar's day panel, which the month grid's day buttons control (story 9.1): the
- *  same on the venue's details page and, story 12.6 AC12, on the Edit venue page. */
-export const VENUE_CALENDAR_DAY_PANEL_ID = 'venue-calendar-day-panel'
-
 export type VenueCalendarLoader = (
   startsAt: string,
   endsAt: string,
@@ -23,9 +19,6 @@ export interface VenueCalendarState {
   /** The message to show when the latest month failed to load, otherwise null. */
   error: string | null
   isLoading: boolean
-  /** When `windows` arrived (ms since the epoch): the moment a closure counts as ended from
-   *  (story 9.4 AC6), read once per load so a render never reads the clock. */
-  loadedAt: number
 }
 
 function startOfMonth(date: Date): Date {
@@ -74,7 +67,6 @@ export function useVenueCalendar(
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [loadedAt, setLoadedAt] = useState(() => Date.now())
 
   useEffect(() => {
     let cancelled = false
@@ -88,7 +80,6 @@ export function useVenueCalendar(
       .then((data) => {
         if (cancelled) return
         setWindows(data)
-        setLoadedAt(Date.now())
         setError(null)
         setIsLoading(false)
       })
@@ -106,5 +97,5 @@ export function useVenueCalendar(
     // reloadKey is not read above: it is listed only so that its change loads the month again.
   }, [loadWindows, month, reloadKey])
 
-  return { month, setMonth, windows, error, isLoading, loadedAt }
+  return { month, setMonth, windows, error, isLoading }
 }

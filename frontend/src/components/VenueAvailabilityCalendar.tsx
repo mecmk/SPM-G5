@@ -22,8 +22,6 @@ export interface VenueAvailabilityCalendarProps {
   month: Date
   onMonthChange: (nextMonth: Date) => void
   windows: VenueUnavailableWindow[]
-  /** When `windows` were loaded: a closure whose end is before it is shown as ended. */
-  loadedAt: number
   /** The message to show when the month failed to load, otherwise null. */
   error: string | null
   isLoading: boolean
@@ -44,7 +42,6 @@ export function VenueAvailabilityCalendar({
   month,
   onMonthChange,
   windows,
-  loadedAt,
   error,
   isLoading,
   dayPanelId,
@@ -67,7 +64,7 @@ export function VenueAvailabilityCalendar({
       : 'ready'
 
   /** Story 9.1 AC5/AC9: each window split into the part on every day it covers. */
-  const dayItems = useMemo(() => buildDayItems(windows, loadedAt), [windows, loadedAt])
+  const dayItems = useMemo(() => buildDayItems(windows), [windows])
   const itemsByDate = useMemo(() => groupDayItemsByDate(dayItems), [dayItems])
   const calendarEntries = useMemo(() => dayItems.map(toCalendarEntry), [dayItems])
   // A day stays open only while it has items, so one whose booking is gone closes.

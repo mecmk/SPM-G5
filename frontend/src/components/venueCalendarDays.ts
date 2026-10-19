@@ -17,8 +17,6 @@ export const HELD_LABEL = 'Held – pending'
 /** Story 9.4 AC1: what a closed period is called, as the legend names it and as a closure's row
  *  starts ("Unavailable – Maintenance"). */
 export const UNAVAILABLE_LABEL = 'Unavailable'
-/** What a closure that has already ended is called: history, not an unavailable venue. */
-export const ENDED_LABEL = 'Ended'
 
 const HELD_ENTRY_PREFIX = 'Held'
 // Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
@@ -126,8 +124,8 @@ function closureEntryLabel(window: VenueUnavailableWindow): string {
   return CLOSURE_REASON_NAMES[window.reason] ?? window.label
 }
 
-function closureKindLabel(reason: string, hasEnded: boolean): string {
-  return `${hasEnded ? ENDED_LABEL : UNAVAILABLE_LABEL} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
+function closureKindLabel(reason: string): string {
+  return `${UNAVAILABLE_LABEL} – ${CLOSURE_REASON_NAMES[reason] ?? reason}`
 }
 
 function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
@@ -157,24 +155,12 @@ function closureOf(window: VenueUnavailableWindow): DayClosure | null {
   }
 }
 
-function entryLabelOf(
-  window: VenueUnavailableWindow,
-  isBooking: boolean,
-  isHeld: boolean,
-  hasEnded: boolean,
-): string {
+function entryLabelOf(window: VenueUnavailableWindow, isBooking: boolean, isHeld: boolean): string {
   if (isHeld) return `${HELD_ENTRY_PREFIX} – ${window.label}`
-  if (isBooking) return window.label
-  return hasEnded ? `${ENDED_LABEL} – ${closureEntryLabel(window)}` : closureEntryLabel(window)
+  return isBooking ? window.label : closureEntryLabel(window)
 }
 
-/** The tone an item is drawn in: a hold warns, a closure that has ended is muted, the rest block. */
-function toneOf(isHeld: boolean, hasEnded: boolean): CalendarEntryTone {
-  if (isHeld) return 'warning'
-  return hasEnded ? 'muted' : 'danger'
-}
-
-function itemsForWindow(window: VenueUnavailableWindow, index: number, now: number): DayItem[] {
+function itemsForWindow(window: VenueUnavailableWindow, index: number): DayItem[] {
   return eachDate(window.starts_at, window.ends_at).flatMap((date) => {
     const dayStart = startOfDay(date)
     const blocked = sliceOfDay(window.starts_at, window.ends_at, dayStart)
@@ -187,8 +173,6 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number, now: numb
     const isBooking = window.reason === BOOKING_REASON || window.reason === HELD_REASON
     const isHeld = window.reason === HELD_REASON
     const isTurnaroundOnly = isBooking && bookingSlice === null
-    // Story 9.4 AC6: a closure that has ended - run its course, or ended now - is history.
-    const hasEnded = !isBooking && Date.parse(window.ends_at) <= now
     let turnaround: string | null = null
     if (isBooking && bookingSlice !== null && !isSameSlice(bookingSlice, blocked)) {
       turnaround = `${turnaroundSideLabel(bookingSlice, blocked)}: ${formatSlice(blocked, dayStart)}`
@@ -201,15 +185,15 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number, now: numb
         label: window.label,
         kindLabel: isBooking
           ? bookingKindLabel(isHeld, isTurnaroundOnly)
-          : closureKindLabel(window.reason, hasEnded),
-        tone: toneOf(isHeld, hasEnded),
+          : closureKindLabel(window.reason),
+        tone: isHeld ? 'warning' : 'danger',
         timeRange: formatSlice(bookingSlice ?? blocked, dayStart),
         turnaround,
         holdExpiry: window.hold_expires_at
           ? `${HOLD_EXPIRES_LABEL} ${formatDateTime(window.hold_expires_at)}`
           : null,
         sortStart: (bookingSlice ?? blocked).start,
-        entryLabel: entryLabelOf(window, isBooking, isHeld, hasEnded),
+        entryLabel: entryLabelOf(window, isBooking, isHeld),
         closure: closureOf(window),
       },
     ]
@@ -217,11 +201,10 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number, now: numb
 }
 
 /** Story 9.1 AC5/AC9: every window split into the part on each day it covers, in date then time
- *  order - so a day's items, and the entries a cell shows, are already in the order to list.
- *  `now` is the moment a closure counts as ended from (story 9.4 AC6). */
-export function buildDayItems(windows: VenueUnavailableWindow[], now: number): DayItem[] {
+ *  order - so a day's items, and the entries a cell shows, are already in the order to list. */
+export function buildDayItems(windows: VenueUnavailableWindow[]): DayItem[] {
   return windows
-    .flatMap((window, index) => itemsForWindow(window, index, now))
+    .flatMap(itemsForWindow)
     .sort(
       (first, second) =>
         first.date.localeCompare(second.date) ||
