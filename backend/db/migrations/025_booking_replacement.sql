@@ -63,7 +63,8 @@ BEGIN
     UPDATE venue_bookings
     SET replaces_live_original = FALSE
     WHERE replaces_booking_id = NEW.id
-      AND replaces_live_original;
+      AND replaces_live_original
+      AND status = 'PENDING';
     RETURN NEW;
 END;
 $$;
@@ -102,6 +103,8 @@ COMMENT ON FUNCTION clear_replacement_carve_out() IS
 COMMENT ON TRIGGER trg_venue_bookings_clear_replacement_carve_out ON venue_bookings IS
     'Story 12.6 AC10: when a booking stops holding its venue, by whatever route, its pending replacements start counting as the requirement''s request (clear_replacement_carve_out).';
 COMMENT ON COLUMN venue_bookings.status IS
-    'PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3).';
+    'PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3), and one an approved change to its event no longer fits becomes CANCELLED with no replacement (story 19.2 AC5).';
 COMMENT ON COLUMN venue_bookings.decision_reason IS
     'Mandatory when rejected (story 13.2.1 AC1/AC2). On an approved booking released by its replacement (story 12.6 AC3): "Replaced by <venue>".';
+COMMENT ON COLUMN venue_bookings.decided_at IS
+    'Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), for a WITHDRAWN or CANCELLED request, when it was closed - except an approved booking a replacement released (story 12.6 AC3) or an approved change released (story 19.2 AC5), whose decided_at stays its approval: when a released original closed is its replacement''s decided_at, or is not recorded for a change.';

@@ -1246,6 +1246,9 @@ ON CONFLICT (id) DO NOTHING;
 --            70, and raises a replacement for 71. Nothing else may be marked on coordinator 2.
 -- Nothing else may book Exhibition Foyer or Grand Hall on these days. Grand Hall (400, standing)
 -- takes every one of these requirements, so a replacement is always found there.
+-- Once one of these bookings has been replaced (a replacement raised and approved) the seed cannot be
+-- applied again over it: its upsert puts status back to APPROVED but leaves replaced_by_booking_id,
+-- which ck_venue_bookings_replaced_by_cancelled refuses. Run npm run db:reset instead of db:ready.
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,

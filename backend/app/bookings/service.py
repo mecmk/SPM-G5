@@ -754,23 +754,27 @@ def _notify_coordinator_of_decision(
 
 def get_booking_for_approval(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """Story 12.6 AC3: the row-locked read of ``get_booking_for_decision`` for an approval, which
-    may release another booking. The booking is read unlocked to find the one it replaces; both
-    are then locked in id order - the order 9.4's re-check takes its bookings in - and read
-    afresh, so the status and the link are the committed ones whichever lock was waited for."""
+    may release another booking. The booking is read unlocked to find the one it replaces; the
+    original is locked first and the replacement second, and both are read afresh, so the status
+    and the link are the committed ones whichever lock was waited for. That is the order every
+    path that closes the original takes (the hold sweep, 19.2's release), where the trigger then
+    updates the replacement; taking the two in id order instead could deadlock with them."""
     booking = db.get(VenueBooking, booking_id)
     if booking is None:
         raise BookingNotFound(booking_id)
-    ids = sorted(
-        {booking_id, *([booking.replaces_booking_id] if booking.replaces_booking_id else [])}
-    )
-    locked = db.scalars(
+    if booking.replaces_booking_id is not None:
+        db.scalar(
+            select(VenueBooking.id)
+            .where(VenueBooking.id == booking.replaces_booking_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    return db.scalars(
         select(VenueBooking)
-        .where(VenueBooking.id.in_(ids))
-        .order_by(VenueBooking.id)
+        .where(VenueBooking.id == booking_id)
         .with_for_update()
         .execution_options(populate_existing=True)
-    ).all()
-    return next(each for each in locked if each.id == booking_id)
+    ).one()
 
 
 def _release_replaced_booking(

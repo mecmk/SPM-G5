@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-18 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-19 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -646,9 +646,9 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3), and one an approved change to its event no longer fits becomes CANCELLED with no replacement (story 19.2 AC5). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1) - for an EXPIRED booking, who approved it - or the coordinator who withdrew the request (story 12.2). NULL when the system cancelled it (migration 010). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), and for a WITHDRAWN or CANCELLED request, when it was closed. |
+| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), for a WITHDRAWN or CANCELLED request, when it was closed - except an approved booking a replacement released (story 12.6 AC3) or an approved change released (story 19.2 AC5), whose decided_at stays its approval: when a released original closed is its replacement's decided_at, or is not recorded for a change. |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). On an approved booking released by its replacement (story 12.6 AC3): "Replaced by <venue>". |
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
