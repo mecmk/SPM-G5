@@ -47,6 +47,16 @@ def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
     )
 
 
+def pending_replacement_conditions() -> tuple[ColumnElement[bool], ...]:
+    """Story 12.6: the booking is a replacement still waiting for Venue Staff's decision. Its
+    approval releases the booking it replaces, so the event's safety review and confirmation wait
+    for it, as they wait for a mark: the review saw the original venue, not this one."""
+    return (
+        VenueBooking.status == BookingStatus.PENDING,
+        VenueBooking.replaces_booking_id.is_not(None),
+    )
+
+
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "venue_bookings"
 

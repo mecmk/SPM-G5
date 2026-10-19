@@ -25,7 +25,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
-from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
+from app.bookings.models import (
+    BookingStatus,
+    VenueBooking,
+    marked_booking_conditions,
+    pending_replacement_conditions,
+)
 from app.change_requests.models import ChangeRequestStatus, EventChangeRequest
 from app.common.audit import record_audit
 from app.events.models import (
@@ -315,17 +320,24 @@ NOT_AWAITING_SAFETY_CHECK_MESSAGE = "Only an event awaiting the safety check can
 STATUS_CHANGED_MESSAGE = "This event changed while you were acting on it. Reload and try again."
 ARRANGEMENTS_NOT_SECURED_MESSAGE = "Secure every arrangement before requesting a safety review."
 NOT_CONFIRMABLE_MESSAGE = "This event cannot be confirmed yet."
-# Story 12.6 AC13 (PO decision): while a booking of the event is marked "Venue unavailable -
-# alternative needed" the event is neither sent for a review nor confirmed. Each refusal says what
-# it refuses, then names every unavailable venue.
+# Story 12.6 AC12 (PO decision; the customer's Q12 and Q37): while a booking of the event is marked
+# "Venue unavailable - alternative needed", or a replacement for one is waiting for Venue Staff's
+# decision, the event is neither sent for a review nor confirmed. Each refusal says what it
+# refuses, then every blocker - these venues and whatever else 21.2 names - in one 409.
 VENUE_UNAVAILABLE_FOR_REVIEW_MESSAGE = (
-    "This event cannot be sent for a safety review while a booked venue is unavailable."
+    "This event cannot be sent for a safety review while a booked venue is unavailable or a "
+    "replacement for it is waiting for a decision."
 )
 VENUE_UNAVAILABLE_FOR_CONFIRM_MESSAGE = (
-    "This event cannot be confirmed while a booked venue is unavailable."
+    "This event cannot be confirmed while a booked venue is unavailable or a replacement for it "
+    "is waiting for a decision."
 )
 VENUE_UNAVAILABLE_SENTENCE = (
     "{venue} is unavailable for part of its booked period: replace it, or wait for it to reopen."
+)
+REPLACEMENT_PENDING_SENTENCE = (
+    "{venue} is requested as a replacement and not approved yet: wait for the decision, or "
+    "withdraw it."
 )
 NO_VENUE_BOOKED = "No venue is booked."
 REQUIREMENT_NOT_BOOKED = "{name} has no approved venue booking."
@@ -395,8 +407,9 @@ class ArrangementsNotSecured(SafetyStateConflict):
 
 
 class BookedVenueUnavailable(SafetyStateConflict):
-    """Story 12.6 AC13: a live booking of the event is marked unavailable, so it is neither sent
-    for a review nor confirmed; ``refusal`` says which, and each venue is named."""
+    """Story 12.6 AC12: a live booking of the event is marked unavailable, or a replacement for one
+    is still pending, so it is neither sent for a review nor confirmed; ``refusal`` says which,
+    then every blocker is named - the venues and whatever else 21.2 names - in this one refusal."""
 
     def __init__(self, refusal: str, sentences: list[str]) -> None:
         super().__init__(" ".join([refusal, *sentences]))
@@ -458,27 +471,40 @@ def latest_review(db: Session, event_id: uuid.UUID) -> EventSafetyReview | None:
     )
 
 
-def unavailable_venue_sentences(db: Session, event: Event) -> list[str]:
-    """Story 12.6 AC13: one sentence for each venue whose booking of ``event`` is marked "Venue
-    unavailable", naming it and saying to replace it or wait for it to reopen; ``[]`` when no live
-    booking is marked. Read with the one definition of a live mark (``marked_booking_conditions``),
-    so a mark left on a closed booking, or on another event's booking, is not here."""
+def booked_venue_blockers(db: Session, event: Event) -> list[str]:
+    """Story 12.6 AC12: one sentence for each venue of ``event`` that holds the review back - a
+    live booking marked "Venue unavailable" (replace it, or wait for it to reopen), then each
+    replacement still pending (wait for the decision, or withdraw it) - naming the venue; ``[]``
+    when there is none. Read with the one definition of each (``marked_booking_conditions``,
+    ``pending_replacement_conditions``), so a mark left on a closed booking, or on another event's
+    booking, is not here. A replacement counts after the mark clears too: its approval would
+    change the venue the review saw."""
     marked = db.scalars(
         select(VenueBooking)
         .options(joinedload(VenueBooking.venue))
         .where(VenueBooking.event_id == event.id, *marked_booking_conditions())
         .order_by(VenueBooking.starts_at, VenueBooking.id)
     ).all()
-    names = list(dict.fromkeys(booking.venue.name for booking in marked))
-    return [VENUE_UNAVAILABLE_SENTENCE.format(venue=name) for name in names]
+    replacements = db.scalars(
+        select(VenueBooking)
+        .options(joinedload(VenueBooking.venue))
+        .where(VenueBooking.event_id == event.id, *pending_replacement_conditions())
+        .order_by(VenueBooking.starts_at, VenueBooking.id)
+    ).all()
+    unavailable = dict.fromkeys(booking.venue.name for booking in marked)
+    requested = dict.fromkeys(booking.venue.name for booking in replacements)
+    return [
+        *(VENUE_UNAVAILABLE_SENTENCE.format(venue=name) for name in unavailable),
+        *(REPLACEMENT_PENDING_SENTENCE.format(venue=name) for name in requested),
+    ]
 
 
 def request_blockers(db: Session, event: Event) -> list[str]:
-    """AC1/AC19: what stops a review being requested now; ``[]`` offers it. Story 12.6 AC13: each
+    """AC1/AC19: what stops a review being requested now; ``[]`` offers it. Story 12.6 AC12: each
     unavailable booked venue is named too, so the event page says why before anything is sent."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_REVIEW_MESSAGE]
-    return [*missing_arrangements(db, event), *unavailable_venue_sentences(db, event)]
+    return [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
 
 
 def _change_approved_since(db: Session, event: Event, review: EventSafetyReview) -> bool:
@@ -502,7 +528,7 @@ def confirm_blockers(db: Session, event: Event) -> list[str]:
     approved since (story 19.2 AC8)."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_CONFIRM_MESSAGE]
-    blockers = [*missing_arrangements(db, event), *unavailable_venue_sentences(db, event)]
+    blockers = [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
     review = latest_review(db, event.id)
     if review is None or review.outcome != SafetyReviewOutcome.APPROVED:
         blockers.append(NOT_SAFETY_APPROVED)
@@ -633,16 +659,16 @@ def request_safety_review(
     """AC1: the assigned coordinator sends a secured Planning event for the safety check; the
     Safety Officers and the organiser are told (AC8). AC19: refused unless it is in Planning and
     secured, naming what is missing. AC12: refused with a warning when a flagged arrangement is
-    unchanged, unless ``acknowledge_unchanged``. Story 12.6 AC13: refused
-    (``BookedVenueUnavailable``) while a booking of the event is marked unavailable, naming each
-    venue."""
+    unchanged, unless ``acknowledge_unchanged``. Story 12.6 AC12: refused
+    (``BookedVenueUnavailable``) while a booking of the event is marked unavailable or a
+    replacement for one is pending, in one refusal naming those venues and what is missing."""
     _assert_assigned_coordinator(event, actor, verb="request a safety review of")
     if event.status != EventStatus.PLANNING:
         raise SafetyStateConflict(NOT_IN_PLANNING_FOR_REVIEW_MESSAGE)
-    unavailable = unavailable_venue_sentences(db, event)
-    if unavailable:
-        raise BookedVenueUnavailable(VENUE_UNAVAILABLE_FOR_REVIEW_MESSAGE, unavailable)
     missing = missing_arrangements(db, event)
+    venues = booked_venue_blockers(db, event)
+    if venues:
+        raise BookedVenueUnavailable(VENUE_UNAVAILABLE_FOR_REVIEW_MESSAGE, [*missing, *venues])
     if missing:
         raise ArrangementsNotSecured(missing)
     unchanged = _unchanged_flags(db, event)
@@ -775,8 +801,9 @@ def confirm_event(db: Session, event: Event, *, actor: User) -> None:
     """AC7: the assigned coordinator confirms an event the latest review approved, with the facts
     it still has; it moves to Confirmed and ``trg_events_complete_venue_holds`` completes its
     venue holds. AC14/AC21: refused, naming each blocker. AC8: the organiser and Safety Officers
-    are told. Story 12.6 AC13: refused (``BookedVenueUnavailable``) while a booking of the event
-    is marked unavailable, naming each venue - read after the bookings are locked."""
+    are told. Story 12.6 AC12: refused (``BookedVenueUnavailable``) while a booking of the event
+    is marked unavailable or a replacement for one is pending, in one refusal naming those venues
+    and every other blocker - read after the bookings are locked."""
     _assert_assigned_coordinator(event, actor, verb="confirm")
     # 12.7 AC10: lock the approved bookings first, so a sweep at the same moment either waits for
     # this confirmation (and the trigger completes their holds) or has already expired them (and
@@ -786,10 +813,9 @@ def confirm_event(db: Session, event: Event, *, actor: User) -> None:
         .where(VenueBooking.event_id == event.id, VenueBooking.status == BookingStatus.APPROVED)
         .with_for_update()
     ).all()
-    unavailable = unavailable_venue_sentences(db, event)
-    if unavailable:
-        raise BookedVenueUnavailable(VENUE_UNAVAILABLE_FOR_CONFIRM_MESSAGE, unavailable)
     blockers = confirm_blockers(db, event)
+    if blockers and booked_venue_blockers(db, event):
+        raise BookedVenueUnavailable(VENUE_UNAVAILABLE_FOR_CONFIRM_MESSAGE, blockers)
     if blockers:
         raise EventNotConfirmable(blockers)
 
