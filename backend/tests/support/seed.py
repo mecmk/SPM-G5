@@ -141,7 +141,7 @@ class Events:
     # Story 18.1's, all CONFIRMED, Public and taking registrations: organiser 2, coordinator 2.
     # Each is one case of tests/e2e/attendee-registration.spec.ts. Only the jazz evening has venues
     # booked.
-    JAZZ_EVENING = _e(39)  # open, 120 places, two venues; only read
+    JAZZ_EVENING = _e(39)  # open, 120 places, two venues, the cover picture; only read
     DESIGN_MASTERCLASS = _e(40)  # open, 60 places; the spec registers for it
     FOUNDERS_FIRESIDE = _e(41)  # open, 80 places; the spec double-clicks Register
     MENTORING_SLOT = _e(42)  # open, 1 place; the spec's two attendees race for it

@@ -20,6 +20,8 @@ export interface RegistrationEvent {
   id: string
   name: string
   description: string | null
+  /** Story 18.1 AC8 (fix f18.1.1): the event's cover picture, if it has one. */
+  cover_image_url: string | null
   starts_at: string
   ends_at: string
   venues: RegistrationVenue[]
