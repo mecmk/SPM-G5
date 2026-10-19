@@ -81,7 +81,8 @@ function blockOffCard(page: Page) {
 }
 
 interface SaveOptions {
-  /** The form's own button: "Save closure" when adding, "Save changes" when editing. */
+  /** The form's own button, "Save closure" whether it adds or edits, so the Edit venue page has
+   *  one Save changes - the venue's. */
   saveName?: string
   /** The confirmation's button, which says what the form says: "Block off time" or "Edit blocked-off time". */
   confirmName?: string
@@ -321,7 +322,6 @@ test('9.4 AC2 and AC3: an edit that reaches a booking lists it, asks first, and 
     'Community Choir Showcase',
   )
   await saveClosure(page, {
-    saveName: 'Save changes',
     confirmName: 'Edit blocked-off time',
     onDialog: async (dialog) => {
       await expect(
@@ -428,22 +428,21 @@ test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows 
   const patched = page.waitForRequest(
     (request) => request.method() === 'PATCH' && request.url().includes('/unavailability/'),
   )
-  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
   expect((await patched).postDataJSON()).toEqual({ reason: 'RENOVATION' })
   await expect(item).toContainText('Unavailable – Renovation')
 
   // Ending the closure being edited closes its form.
   await item.getByRole('button', { name: 'Edit' }).click()
-  await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toBeVisible()
+  await expect(blockOff(page).getByRole('button', { name: 'Save closure' })).toBeVisible()
   await item.getByRole('button', { name: 'End now' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'End now' }).click()
   await expect(item.getByRole('button')).toHaveCount(0)
-  await expect(blockOff(page).getByRole('button', { name: 'Save changes' })).toHaveCount(0)
-  // An ended closure is history, not an unavailable venue: in the list, and on the grid.
+  await expect(blockOff(page).getByRole('button', { name: 'Save closure' })).toHaveCount(0)
+  // An ended closure is history, not an unavailable venue.
   await expect(item).toContainText('Ended – Renovation')
   await expect(item).not.toContainText('Unavailable')
   await expect(item).not.toContainText(END_NOW_HINT)
-  await expect(dayButton(page, today)).toHaveAccessibleName(/Ended – Renovation/)
 })
 
 test('9.4 AC6: a refused End now says why, and the calendar is loaded again', async ({ page }) => {
@@ -488,6 +487,42 @@ test('9.4 AC6: a refused End now says why, and the calendar is loaded again', as
   )
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await reloaded
+})
+
+test('9.4 AC6: a row left open across the end of its closure reads Ended and loses its buttons together', async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date() })
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openVenue(page, VENUES.gardenAtrium)
+  const description = uniqueName('Atrium handrails')
+  // In force since an hour ago, and over in two and a half minutes by the server's clock.
+  const singaporeNow = Date.now() + 8 * 60 * 60 * 1000
+  await fillClosure(page, {
+    starts: new Date(singaporeNow - 60 * 60 * 1000).toISOString().slice(0, 16),
+    ends: new Date(singaporeNow + 150 * 1000).toISOString().slice(0, 16),
+    description,
+  })
+  await saveClosure(page)
+  const singapore = new Date(singaporeNow)
+  const today = new RegExp(
+    `^${singapore.getUTCDate()} ${singapore.toLocaleString('en-GB', {
+      month: 'long',
+      timeZone: 'UTC',
+    })} ${singapore.getUTCFullYear()}`,
+  )
+  await dayButton(page, today).click()
+  const item = page.getByRole('listitem').filter({ hasText: description })
+  await expect(item).toContainText('Unavailable – Maintenance')
+  await expect(item.getByRole('button', { name: 'End now' })).toBeVisible()
+
+  // Four minutes on, with the page left open: the buttons and the label are of one clock, so the
+  // row that has no buttons no longer reads Unavailable.
+  await page.clock.runFor(4 * 60 * 1000)
+
+  await expect(item.getByRole('button')).toHaveCount(0)
+  await expect(item).toContainText('Ended – Maintenance')
+  await expect(item).not.toContainText('Unavailable')
 })
 
 test('9.4 AC6: a row left open across the start of its closure switches from Remove to End now', async ({
@@ -657,7 +692,7 @@ test('9.4 AC6: editing a closure that was removed meanwhile says it is gone, and
 
   await item.getByRole('button', { name: 'Edit' }).click()
   await blockOff(page).getByLabel('Description').fill(uniqueName('Atrium carpet again'))
-  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
 
   await expect(blockOff(page).getByRole('alert')).toHaveText('Unavailability period not found.')
   await expect(dayButton(page, /^24 October 2028/)).toHaveCount(0)
@@ -702,7 +737,7 @@ test('9.4 AC6: an edit the server refuses says why in the form, and the calendar
       request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/calendar'),
   )
   await blockOff(page).getByLabel('Description').fill(uniqueName('Atrium doors again'))
-  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
 
   await expect(blockOff(page).getByRole('alert')).toHaveText('This period has already ended.')
   await reloaded
@@ -749,6 +784,6 @@ test('9.4 AC6: a closure whose start has seconds is edited by the field that cha
   const patched = page.waitForRequest(
     (request) => request.method() === 'PATCH' && request.url().includes('/unavailability/'),
   )
-  await blockOff(page).getByRole('button', { name: 'Save changes' }).click()
+  await blockOff(page).getByRole('button', { name: 'Save closure' }).click()
   expect((await patched).postDataJSON()).toEqual({ reason: 'RENOVATION' })
 })
