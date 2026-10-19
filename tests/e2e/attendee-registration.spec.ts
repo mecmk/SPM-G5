@@ -19,6 +19,9 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  * AC6 A second registration is refused, also when both arrive at once; of two attendees competing
  *     for the last place, one succeeds and the other is told the event is full. No Register can be
  *     pressed while a registration is being sent.
+ * AC8 (fix f18.1.1, proposed, waiting on the backlog's Change Log) Each event shows its cover
+ *     picture (2.1 AC14), or the placeholder when it has none or its picture can't be loaded. An
+ *     uploaded picture is loaded from the API. What the list sends is a backend case.
  *
  * Every test is independent: each case that registers has a seeded event of its own
  * (backend/db/seed/020_sample_data.sql, 3333..39-45), so tests running in parallel never share a
@@ -30,9 +33,14 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
 
 const UPCOMING_EVENTS_PATH = '/browse'
 const EVENTS_API_PATH = '/registrations/events'
+// AC8: a card's picture is decorative - no alt text, hidden from assistive technology - so it has
+// no role or name, and is found by its tag. The jazz evening has the seeded one; an uploaded one
+// is served by the API (mediaUrl).
+const JAZZ_PICTURE = '/images/events/cat.jpg'
+const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-pictured-gala.png'
 const REGISTER_API_PATH = '/registrations'
 
-const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked; only read
+const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked, a picture; only read
 const DESIGN_MASTERCLASS = 'Design Thinking Masterclass' // open; registered for once
 const FOUNDERS_FIRESIDE = 'Startup Founders Fireside' // open; double-clicked once
 const MENTORING_SLOT = 'Career Mentoring Slot' // one place; raced for once
@@ -90,6 +98,7 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
     places_left: 10,
     state: 'OPEN',
     registered_at: null,
+    cover_image_url: null,
     ...overrides,
   }
 }
@@ -192,6 +201,46 @@ test.describe('registers for a seeded event once', () => {
     await expect(card).toContainText(registeredToday(before, after))
     await expect(card).toContainText('59 places left')
   })
+})
+
+test('18.1 AC8: an event with a cover picture shows it on its card', async ({ page }) => {
+  await openUpcomingEvents(page)
+
+  const picture = eventCard(page, JAZZ_EVENING).locator('img')
+  await expect(picture).toHaveAttribute('src', JAZZ_PICTURE)
+  // Loaded, not only asked for: a picture that fails to load gives way to the placeholder.
+  await expect
+    .poll(() => picture.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0)
+})
+
+test('18.1 AC8: an uploaded picture is asked of the API, one that cannot be loaded gives way to the placeholder, and so does none', async ({
+  page,
+}) => {
+  // No seeded event has an uploaded picture, so the list call alone is stubbed. The picture itself
+  // is not: the browser asks the API for it, which has no such file, so the card then shows the
+  // placeholder - AC8's picture that can't be loaded.
+  const listRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === 'fetch' && new URL(request.url()).pathname === EVENTS_API_PATH,
+  )
+  const pictureRequest = page.waitForRequest(
+    (request) =>
+      request.resourceType() === 'image' &&
+      new URL(request.url()).pathname === UPLOADED_PICTURE_PATH,
+  )
+  const pictured = listedEvent('E2E Pictured Gala', { cover_image_url: UPLOADED_PICTURE_PATH })
+  const plain = listedEvent('E2E Plain Gala')
+  await stubEventsCall(page, () => ({ status: 200, body: { items: [pictured, plain], total: 2 } }))
+
+  await openUpcomingEvents(page)
+
+  const apiOrigin = new URL((await listRequest).url()).origin
+  expect(new URL((await pictureRequest).url()).origin).toBe(apiOrigin)
+  await expect(eventCard(page, pictured.name)).toBeVisible()
+  await expect(eventCard(page, pictured.name).locator('img')).toHaveCount(0)
+  await expect(eventCard(page, plain.name)).toBeVisible()
+  await expect(eventCard(page, plain.name).locator('img')).toHaveCount(0)
 })
 
 test('18.1 AC1: with no events open for registration, the page says so', async ({ page }) => {

@@ -41,6 +41,10 @@ AC7 The server checks the event's status, the opening and closing times and capa
     moment it records the registration, holding the event's row, and the database keeps one
     active registration per attendee per event, so simultaneous requests cannot exceed capacity or
     create duplicates.
+
+Cover pictures (fix f18.1.1), proposed as AC8, waiting on the backlog's Change Log:
+AC8 Each event shows its cover picture (2.1 AC14), or the placeholder when it has none or its
+    picture can't be loaded.
 """
 
 from __future__ import annotations
@@ -83,6 +87,7 @@ LISTED_EVENT_KEYS = {
     "id",
     "name",
     "description",
+    "cover_image_url",
     "starts_at",
     "ends_at",
     "venues",
@@ -195,7 +200,10 @@ def _api_item(client, event_id: uuid.UUID) -> dict:
 def test_an_open_event_is_listed_with_its_details_for_an_attendee(attendee_client, db: Session):
     starts_at = future_datetime(days=40)
     event = _open_event(
-        db, starts_at=starts_at, name="Harbour Jazz 18.1", description="Jazz on the waterfront."
+        db,
+        starts_at=starts_at,
+        name="Harbour Jazz 18.1",
+        description="Jazz on the waterfront.",
     )
     hall = make_venue(db, name="Jazz Hall 18.1", location="Pier 1, Level 2")
     lawn = make_venue(db, name="Jazz Lawn 18.1", location="Pier 2")
@@ -434,6 +442,24 @@ def test_a_withdrawn_registration_does_not_show_the_event_as_registered(db: Sess
     item = _item(db, attendee, event)
 
     assert (item.state, item.registered_at) == (RegistrationState.OPEN, None)
+
+
+# =============================================================================================
+# AC8 - cover pictures (fix f18.1.1)
+# =============================================================================================
+@pytest.mark.story("18.1", ac=8)
+def test_an_event_is_listed_with_its_cover_picture_or_none(attendee_client, db: Session):
+    """The picture the organiser uploaded (2.1 AC14), and none for an event without one, which the
+    page shows as the placeholder."""
+    pictured = _open_event(
+        db, starts_at=future_datetime(days=40), cover_image_url="/uploads/events/harbour-jazz.png"
+    )
+    plain = _open_event(db, starts_at=future_datetime(days=40))
+
+    assert _api_item(attendee_client, pictured.id)["cover_image_url"] == (
+        "/uploads/events/harbour-jazz.png"
+    )
+    assert _api_item(attendee_client, plain.id)["cover_image_url"] is None
 
 
 # =============================================================================================
