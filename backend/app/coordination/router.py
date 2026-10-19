@@ -1,4 +1,4 @@
-"""HTTP endpoints for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5).
+"""HTTP endpoints for coordinator assignment (stories 5.1, 5.2, 5.4, 5.5 and 5.6).
 
 ``GET /coordination/unassigned-events`` - the Lead's unassigned queue (5.4 AC2)
 ``GET /coordination/active-events``     - the Lead's overview of every active event (5.5 AC1)
@@ -6,11 +6,12 @@
 ``GET /coordinators``                   - the selectable coordinators, with their active events
                                           (5.1 AC2, 5.4 AC3)
 ``GET /events/{event_id}/coordinator``  - who currently owns the event (5.1 AC4)
-``PUT /events/{event_id}/coordinator``  - the Lead assigns an unassigned event (5.4 AC3), or its
-                                          coordinator hands it to another (5.2)
+``PUT /events/{event_id}/coordinator``  - the Lead assigns an unassigned event (5.4 AC3), or
+                                          hands an assigned one to another coordinator (5.6)
 
-Assigning an unassigned event needs ``events:assign`` (the Lead, 5.4 AC7); reassigning needs
-``events:review`` (a coordinator, 5.2). The service decides which one a request is.
+Both writes need ``events:assign``, the Lead's (5.4 AC7, 5.6 AC5): since 5.6 coordinators no
+longer reassign their own events (Q16, replacing 5.2 AC1 and AC6). The service decides which of the
+two a request is, from the coordinator it names as expected.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth.deps import CurrentUser, require_any_permission, require_permission
+from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.coordination import service
 from app.coordination.schemas import (
@@ -38,11 +39,6 @@ router = APIRouter(tags=["coordination"])
 
 CanReadInternalUsers = Depends(require_permission(Permission.USERS_READ_INTERNAL))
 CanAssign = Depends(require_permission(Permission.EVENTS_ASSIGN))
-# 5.4 AC7 / 5.2: the Lead assigns and a coordinator reassigns; the service decides which a
-# request is, so the door lets either permission in.
-CanAssignOrReassign = Depends(
-    require_any_permission(Permission.EVENTS_ASSIGN, Permission.EVENTS_REVIEW)
-)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
@@ -141,21 +137,18 @@ def assign_coordinator(
     event_id: uuid.UUID,
     payload: AssignCoordinatorIn,
     db: DbSession,
-    actor: Annotated[CurrentUser, CanAssignOrReassign],
+    actor: Annotated[CurrentUser, CanAssign],
 ) -> EventCoordinatorOut:
     """5.1 AC1/AC3: record the event's single current coordinator, with who assigned it and when.
-    5.4 AC3/AC7/AC9: an unassigned event is assigned by the Lead; anyone else gets 403.
-    5.4 AC8: a Lead who finds it already assigned gets 409, naming the coordinator.
-    5.2 AC6: an assigned event is refused with 403 for anyone but its current coordinator.
-    5.2 AC7: refused with 409 if the coordinator changed since the caller last read it."""
+    5.4 AC3/AC7/AC9 and 5.6 AC1/AC5: the Lead assigns an unassigned event and reassigns an assigned
+    one; everyone else, coordinators included, gets 403 from the dependency.
+    5.4 AC8: a Lead assigning an event found already assigned gets 409, naming the coordinator.
+    5.6 AC6 (and 5.2 AC7): a reassignment is refused with 409 if the event's coordinator is no
+    longer the one the Lead saw."""
     try:
         assignment = service.assign_coordinator(db, event_id, payload, actor=actor)
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found.") from None
-    except service.NotPermittedToAssign as exc:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    except service.NotCurrentCoordinator as exc:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.AlreadyAssigned as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.AssignmentChanged as exc:

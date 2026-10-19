@@ -7,7 +7,6 @@ import {
   type BookingStatus,
 } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
-import { assignCoordinator, listCoordinators, type CoordinatorOption } from '../api/coordination'
 import {
   approveEvent,
   CLARIFICATION_MESSAGE_MAX_LENGTH,
@@ -52,6 +51,7 @@ import {
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
+  ACTIVE_EVENT_STATUSES,
   AWAITING_DECISION_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
   CHANGE_REQUESTABLE_STATUS,
@@ -84,14 +84,8 @@ import {
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
+import { ReassignDialog } from './ReassignDialog'
 import { SafetyReviewSection } from './SafetyReviewSection'
-
-/**
- * Story 5.5 AC3 (PO decision P7): the Lead opens an event read-only, with Reassign "available
- * (5.6)". Story 5.6 builds the Lead's reassignment; until then the backend refuses it (409), so
- * this stays false and the Lead sees no Reassign button. 5.6 turns it on.
- */
-const IS_LEAD_REASSIGNMENT_BUILT = false
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
@@ -282,10 +276,6 @@ export function EventDetailPage() {
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [isConfirmingReassign, setIsConfirmingReassign] = useState(false)
-  const [isReassigning, setIsReassigning] = useState(false)
-  const [reassignError, setReassignError] = useState<string | null>(null)
-  const [eligibleCoordinators, setEligibleCoordinators] = useState<CoordinatorOption[] | null>(null)
-  const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
   const [registrations, setRegistrations] = useState<EventRegistrationList | null>(null)
   const [registrationsError, setRegistrationsError] = useState<string | null>(null)
   /** Story 18.3 AC5: only the organiser and the assigned coordinator of an event past draft see
@@ -364,25 +354,6 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, canSeeRegistrations])
-
-  /** Story 5.2 AC4: loaded only once the Reassign dialog opens, leaving the event's current
-   *  coordinator out - they are not a valid target for their own event. */
-  useEffect(() => {
-    if (!isConfirmingReassign) return undefined
-    let cancelled = false
-    listCoordinators(eventId)
-      .then((options) => {
-        if (cancelled) return
-        setEligibleCoordinators(options)
-        setSelectedCoordinatorId(options.length > 0 ? options[0].id : '')
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setReassignError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isConfirmingReassign, eventId])
 
   if (error) {
     return (
@@ -545,9 +516,6 @@ export function EventDetailPage() {
   }
 
   function askToReassign() {
-    setReassignError(null)
-    setEligibleCoordinators(null)
-    setSelectedCoordinatorId('')
     setIsConfirmingReassign(true)
   }
 
@@ -555,24 +523,11 @@ export function EventDetailPage() {
     setIsConfirmingReassign(false)
   }
 
-  async function confirmReassign() {
-    if (!event) return
-    if (!selectedCoordinatorId) {
-      setReassignError('There is no other active Event Coordinator to reassign this to.')
-      return
-    }
-    setIsReassigning(true)
-    setReassignError(null)
-    try {
-      await assignCoordinator(event.id, selectedCoordinatorId)
-      const updated = await getEvent(event.id)
-      setEvent(updated)
-      setIsConfirmingReassign(false)
-    } catch (err) {
-      setReassignError(formatApiError(err))
-    } finally {
-      setIsReassigning(false)
-    }
+  /** Story 5.6 AC1: the page shows the new coordinator straight away, read again as the page's
+   *  other changes are (`reloadEvent`). */
+  function handleReassigned() {
+    setIsConfirmingReassign(false)
+    void reloadEvent()
   }
 
   const backState = location.state as EventCardBackState | null
@@ -614,20 +569,14 @@ export function EventDetailPage() {
    *  awaits a response - mirroring the backend's `respond_to_clarification`. */
   const canRespondToClarification =
     user !== null && event.organiser_id === user.id && event.status === 'CLARIFICATION_REQUESTED'
-  /** Story 5.5 AC3 (PO decision P7): where story 5.6's Lead reassignment switches on. */
-  const canReassignAsLead =
-    IS_LEAD_REASSIGNMENT_BUILT &&
-    can(PERMISSIONS.EVENTS_ASSIGN) &&
-    !TERMINAL_STATUSES.includes(event.status)
-  /** Story 5.2 AC1/AC6: the currently assigned coordinator may reassign, and only on an event
-   *  that is not completed, cancelled or rejected - mirroring the backend's `ASSIGNABLE_STATUSES`
-   *  (a draft never reaches this: it has no coordinator to be one of). Story 5.6 adds the Lead,
-   *  through `canReassignAsLead`, which stays off until then (5.5 AC3). */
+  /** Story 5.6 AC1/AC5: the Lead reassigns an event that has a coordinator and is still active
+   *  (not a draft, nor completed, cancelled or rejected) - mirroring the backend's
+   *  `ASSIGNABLE_STATUSES`. Coordinators no longer reassign their own events (Q16, replacing 5.2
+   *  AC1/AC6); an event with none is assigned from 5.4's queue instead. */
   const canReassign =
-    (can(PERMISSIONS.EVENTS_REVIEW) &&
-      isAssignedCoordinator &&
-      !TERMINAL_STATUSES.includes(event.status)) ||
-    canReassignAsLead
+    can(PERMISSIONS.EVENTS_ASSIGN) &&
+    event.assigned_coordinator_id !== null &&
+    ACTIVE_EVENT_STATUSES.includes(event.status)
 
   /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
    *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
@@ -728,7 +677,7 @@ export function EventDetailPage() {
               </button>
             )}
             {canReassign && (
-              <button type="button" className="secondary" onClick={askToReassign}>
+              <button type="button" className="secondary reassign-action" onClick={askToReassign}>
                 Reassign
               </button>
             )}
@@ -1326,36 +1275,14 @@ export function EventDetailPage() {
           </p>
         </ConfirmDialog>
       )}
-      {isConfirmingReassign && (
-        <ConfirmDialog
-          title={`Reassign "${event.name}"?`}
-          confirmLabel="Confirm reassignment"
-          tone="primary"
-          isBusy={isReassigning}
-          error={reassignError}
-          onConfirm={confirmReassign}
+      {isConfirmingReassign && event.assigned_coordinator_id !== null && (
+        <ReassignDialog
+          eventId={event.id}
+          eventName={event.name}
+          currentCoordinatorId={event.assigned_coordinator_id}
+          onReassigned={handleReassigned}
           onCancel={cancelReassign}
-        >
-          <p>Hand this event to a different active Event Coordinator.</p>
-          <label>
-            New coordinator
-            <select
-              value={selectedCoordinatorId}
-              onChange={(e) => setSelectedCoordinatorId(e.target.value)}
-              disabled={eligibleCoordinators === null || eligibleCoordinators.length === 0}
-            >
-              {eligibleCoordinators === null && <option value="">Loading…</option>}
-              {eligibleCoordinators?.length === 0 && (
-                <option value="">No other coordinators available</option>
-              )}
-              {eligibleCoordinators?.map((coordinator) => (
-                <option key={coordinator.id} value={coordinator.id}>
-                  {coordinator.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ConfirmDialog>
+        />
       )}
     </div>
   )

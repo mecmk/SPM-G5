@@ -56,7 +56,7 @@ export function listUnassignedEvents(): Promise<UnassignedEventEntry[]> {
 
 /**
  * Story 5.4 AC3: the Lead gives an unassigned event its first coordinator. Same endpoint as
- * `assignCoordinator`, with its own notice. 409 (`CONFLICT`) when another Lead assigned it first
+ * `reassignCoordinator`, with its own notice. 409 (`CONFLICT`) when another Lead assigned it first
  * (AC8), with the backend's sentence naming who got it.
  */
 export function assignUnassignedEvent(
@@ -75,18 +75,19 @@ export function assignUnassignedEvent(
 }
 
 /**
- * Story 5.2 AC1: hand an event to a different coordinator.
- * 403 (`NOT_PERMITTED`) once the event already has a coordinator and the caller is not them
- * (5.2 AC6); 409 (`CONFLICT`) if the coordinator changed since the caller last read it (5.2 AC7) -
- * both arrive with the backend's own sentence, so the default registry codes need no override.
+ * Story 5.6 AC1: the Lead hands an event from `expectedCoordinatorId` - the coordinator the Lead
+ * saw - to a different one. 403 (`NOT_PERMITTED`) for anyone but the Lead (AC5); 409 (`CONFLICT`)
+ * once the event's coordinator is no longer the one the Lead saw (AC6) - both arrive with the
+ * backend's own sentence, so the default registry codes need no override.
  */
-export function assignCoordinator(
+export function reassignCoordinator(
   eventId: string,
   coordinatorId: string,
+  expectedCoordinatorId: string,
 ): Promise<EventCoordinatorOut> {
   return api<EventCoordinatorOut>(`/events/${eventId}/coordinator`, {
     method: 'PUT',
-    body: { coordinator_id: coordinatorId },
+    body: { coordinator_id: coordinatorId, expected_coordinator_id: expectedCoordinatorId },
     errorCodes: COORDINATOR_ERROR_CODES,
     notify: {
       title: 'Coordinator reassigned',
