@@ -14,17 +14,19 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { NOT_RECORDED, formatDateTime } from '../shared/format'
+import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
-/** Story 15.1 AC1: how each item status reads on the event page. */
+/** Story 15.1 AC1: how each item status reads on the event page. Story 17.1 AC1/AC4: an accepted
+ *  item is reserved, and one cancelled with its event (6.2) or removed by an approved change (19.2)
+ *  is released. */
 const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   REQUESTED: 'Not yet sent',
   PENDING: 'Pending',
-  ACCEPTED: 'Accepted',
+  ACCEPTED: 'Accepted (reserved)',
   DECLINED: 'Declined',
   UNAVAILABLE: 'Unavailable',
-  CANCELLED: 'Cancelled',
+  CANCELLED: 'Released',
 }
 /** AC2/AC7: the items the coordinator may still edit or remove, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
@@ -35,6 +37,33 @@ const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'AC
 const WHOLE_NUMBER = /^\d+$/
 const UNAVAILABLE_SENTENCE =
   "The event's dates changed and not enough are free. Lower the quantity or remove it."
+/** Story 17.1 AC4: a released item holds no units. */
+const RELEASED_SENTENCE = 'Nothing is held for this item any more.'
+/** Story 17.1 AC4: a released hold is neither a decision nor a problem, so its badge takes the
+ *  neutral colour (App.css), not a cancellation's red. */
+const BADGE_STATUSES: Partial<Record<EquipmentItemStatus, string>> = { CANCELLED: 'released' }
+
+/**
+ * Story 16.1 AC2 / 17.1 AC1: whether Technical Support declined the item. Its status says so while
+ * it is Declined; once it is released or unavailable, a recorded reason marks the decline, since
+ * 16.1 AC4 refuses one without a reason and accepting takes none.
+ */
+function isDeclined(item: EquipmentLine): boolean {
+  return item.status === 'DECLINED' || item.decision_reason !== null
+}
+
+/** Story 16.1 AC3 / 17.1 AC1: which way Technical Support decided a decided item. */
+function decisionOf(item: EquipmentLine): 'Accepted' | 'Declined' {
+  return isDeclined(item) ? 'Declined' : 'Accepted'
+}
+
+/** Story 17.1 AC4: a released item was holding units until it was released, unless it had been
+ *  declined, which released them then. */
+function wasHeldUntilReleased(item: EquipmentLine): boolean {
+  return (
+    item.status === 'CANCELLED' && (item.decided_at === null || decisionOf(item) === 'Accepted')
+  )
+}
 
 /** AC4: a typed quantity must be a whole number from 1 to the number available. */
 function isQuantityAllowed(value: string, available: number | undefined): boolean {
@@ -73,11 +102,15 @@ export interface EquipmentRequestsSectionProps {
  * AC7), and sends what is waiting to Technical Support (AC1). The quantity is checked here before
  * anything is sent (AC4), and the server re-checks every change; after a refusal the figures are
  * reloaded, so the form shows what is free now (AC4, AC10).
- * Story 16.1 AC1/AC2: an item Technical Support accepted reads Accepted, and one it declined shows
- * the reason in a callout on its own line under the item, so the coordinator knows whether to
- * plan for something else. AC3: a decided item says when, and by whom.
+ * Story 16.1 AC1/AC2: an item Technical Support accepted reads Accepted (reserved, 17.1), and one
+ * it declined shows the reason in a callout on its own line under the item, so the coordinator
+ * knows whether to plan for something else. AC3: a decided item says which way, when, and by whom.
  * Story 21.2 AC4: while the latest safety review asks for the equipment to change, the section is
  * highlighted and says so.
+ * Story 17.1 AC1: each item names the period it is for - what its hold covers, or its event's
+ * while it holds nothing (the server decides). AC4: a released item says it holds nothing if it
+ * was held until then, and keeps a decline's reason. AC6: the list is the event as loaded, so a
+ * reload shows a newer decision. On a phone an item's text takes the row's width (App.css).
  */
 export function EquipmentRequestsSection({
   eventId,
@@ -255,7 +288,7 @@ export function EquipmentRequestsSection({
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (
-        <ul className="check-list">
+        <ul className="check-list equipment-items">
           {equipment.map((item) =>
             editing?.id === item.id ? (
               <li key={item.id}>
@@ -324,6 +357,14 @@ export function EquipmentRequestsSection({
                       <span className="small muted">{item.technical_notes}</span>
                     </>
                   )}
+                  {item.period_starts_at !== null && item.period_ends_at !== null && (
+                    <>
+                      <br />
+                      <span className="item-timing">
+                        For {formatSchedule(item.period_starts_at, item.period_ends_at)}
+                      </span>
+                    </>
+                  )}
                   {item.status === 'PENDING' && item.submitted_at !== null && (
                     <>
                       <br />
@@ -337,7 +378,7 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="item-timing">
-                        Decided {formatDateTime(item.decided_at)}
+                        {decisionOf(item)} {formatDateTime(item.decided_at)}
                         {item.decided_by_name !== null && ` by ${item.decided_by_name}`}
                       </span>
                     </>
@@ -348,9 +389,18 @@ export function EquipmentRequestsSection({
                       <span className="small">{UNAVAILABLE_SENTENCE}</span>
                     </>
                   )}
+                  {wasHeldUntilReleased(item) && (
+                    <>
+                      <br />
+                      <span className="small">{RELEASED_SENTENCE}</span>
+                    </>
+                  )}
                 </span>
                 <span className="mono">×{item.quantity}</span>
-                <StatusBadge status={item.status} label={STATUS_LABELS[item.status]} />
+                <StatusBadge
+                  status={BADGE_STATUSES[item.status] ?? item.status}
+                  label={STATUS_LABELS[item.status]}
+                />
                 {canChange && EDITABLE_STATUSES.includes(item.status) && (
                   <span className="row-actions">
                     <button
@@ -371,7 +421,7 @@ export function EquipmentRequestsSection({
                     </button>
                   </span>
                 )}
-                {item.status === 'DECLINED' && (
+                {isDeclined(item) && (
                   <span className="decline-reason">
                     <span className="fact-label">Reason for declining</span>
                     {item.decision_reason ?? NOT_RECORDED}
