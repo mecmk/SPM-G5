@@ -93,17 +93,17 @@ export const EVENTS = {
   // Story 12.6, organiser: organiser2, February 2029. Each has a booking at Exhibition Foyer that
   // its day's closure has marked "Venue unavailable - alternative needed" (the closure and the mark
   // are seeded); Grand Hall is free for every one. Coordinator's unless said otherwise.
-  lanternShowcase: '33333333-0000-0000-0000-000000000062', // approved; read only
-  makerFaire: '33333333-0000-0000-0000-000000000063', // an approved additional venue, marked
-  springExpo: '33333333-0000-0000-0000-000000000064', // the spec raises a replacement
-  awardsEvening: '33333333-0000-0000-0000-000000000065', // ... and Venue Staff approve it
-  pitchNight: '33333333-0000-0000-0000-000000000066', // ... withdrawn, then asked for again
-  neighbourhoodSummit: '33333333-0000-0000-0000-000000000067', // ... the closure removed first
-  heritageWalk: '33333333-0000-0000-0000-000000000068', // CANCELLED, its booking still marked
-  productShowcase: '33333333-0000-0000-0000-000000000069', // a marked PENDING booking
-  roboticsOpenHouse: '33333333-0000-0000-0000-000000000078', // coordinator2's; read only
-  wellnessExpo: '33333333-0000-0000-0000-000000000079', // coordinator2's; the spec asks for one
-  craftMarket: '33333333-0000-0000-0000-000000000080', // an additional venue, marked; its closure is removed, then a request
+  lanternShowcase: '33333333-0000-0000-0000-000000012662', // approved; read only
+  makerFaire: '33333333-0000-0000-0000-000000012663', // an approved additional venue, marked
+  springExpo: '33333333-0000-0000-0000-000000012664', // the spec raises a replacement
+  awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
+  pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
+  neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
+  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its booking still marked
+  productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
+  roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
+  wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
+  craftMarket: '33333333-0000-0000-0000-000000012680', // an additional venue, marked; its closure is removed, then a request
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged

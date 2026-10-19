@@ -87,7 +87,7 @@ const FOYER = 'Exhibition Foyer'
 const GRAND_HALL = 'Grand Hall'
 const MAIN_HALL = 'Main hall'
 const BREAKOUT_ROOM = 'Breakout room'
-const MAIN_HALL_OF_LANTERN = 'cccccccc-0000-0000-0062-000000000001'
+const MAIN_HALL_OF_LANTERN = 'cccccccc-0000-0000-0126-000000006201'
 
 const FIND_REPLACEMENT = 'Find a replacement venue'
 // How the seed stamps the awards evening's original, as the event page writes it.
@@ -493,7 +493,7 @@ test('12.6 AC4/AC5/AC10: the banner follows the replacement, and a withdrawn one
   // AC4: while it is pending the requirement says so in the banner, and neither Switch nor a
   // second request is offered for it (AC10: a pending replacement is withdrawn, not switched).
   await page.goto(
-    `/venues?event=${PITCH_NIGHT.id}&requirement=cccccccc-0000-0000-0066-000000000001`,
+    `/venues?event=${PITCH_NIGHT.id}&requirement=cccccccc-0000-0000-0126-000000006601`,
   )
   const banner = catalogueBanner(page, PITCH_NIGHT)
   await expect(banner).toContainText(`Replacement requested: ${GRAND_HALL}`)
@@ -864,7 +864,7 @@ test('12.6 AC9: a pending replacement whose own venue is closed offers no way to
   await signIn(page, ACCOUNTS.coordinator)
   // The showcase's marked pending booking, as if it were a replacement: its way out is Withdraw.
   await patchFirstBooking(page, SHOWCASE, {
-    replaces_booking_id: '44444444-0000-0000-0000-000000000022',
+    replaces_booking_id: '44444444-0000-0000-0000-000000012622',
     replaces_venue_name: 'Grand Hall',
   })
   await openEvent(page, SHOWCASE)

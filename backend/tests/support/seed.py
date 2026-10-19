@@ -175,17 +175,17 @@ class Events:
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
     # that its day's closure (Unavailability.FOYER_*) has marked "Venue unavailable - alternative
     # needed". Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
-    LANTERN_SHOWCASE = _e(62)  # read only; APPROVED marked booking
-    MAKER_FAIRE = _e(63)  # an APPROVED marked additional venue beside a requirement booked
-    SPRING_EXPO = _e(64)  # the spec raises a replacement
-    AWARDS_EVENING = _e(65)  # ... and Venue Staff approve it
-    PITCH_NIGHT = _e(66)  # ... and the coordinator withdraws it, then asks again
-    NEIGHBOURHOOD_SUMMIT = _e(67)  # ... and Venue Staff remove the closure first
-    HERITAGE_WALK = _e(68)  # CANCELLED, its booking still marked
-    PRODUCT_SHOWCASE = _e(69)  # a marked PENDING booking
-    ROBOTICS_OPEN_HOUSE = _e(78)  # coordinator 2's; read only
-    WELLNESS_EXPO = _e(79)  # coordinator 2's; the spec raises a replacement
-    CRAFT_MARKET = _e(80)  # an additional venue, marked: its closure is removed, then a request
+    LANTERN_SHOWCASE = _e(12662)  # read only; APPROVED marked booking
+    MAKER_FAIRE = _e(12663)  # an APPROVED marked additional venue beside a requirement booked
+    SPRING_EXPO = _e(12664)  # the spec raises a replacement
+    AWARDS_EVENING = _e(12665)  # ... and Venue Staff approve it
+    PITCH_NIGHT = _e(12666)  # ... and the coordinator withdraws it, then asks again
+    NEIGHBOURHOOD_SUMMIT = _e(12667)  # ... and Venue Staff remove the closure first
+    HERITAGE_WALK = _e(12668)  # CANCELLED, its booking still marked
+    PRODUCT_SHOWCASE = _e(12669)  # a marked PENDING booking
+    ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; read only
+    WELLNESS_EXPO = _e(12679)  # coordinator 2's; the spec raises a replacement
+    CRAFT_MARKET = _e(12680)  # an additional venue, marked: its closure is removed, then a request
 
 
 class Bookings:
@@ -220,20 +220,20 @@ class Bookings:
     APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
-    LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000022")
-    MAKER_FAIRE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000023")  # unmarked
+    LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
+    MAKER_FAIRE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012623")  # unmarked
     # Marked, and for no requirement: an additional venue.
-    MAKER_FAIRE_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000024")
-    SPRING_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000025")
-    AWARDS_EVENING_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000026")
-    PITCH_NIGHT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000027")
-    NEIGHBOURHOOD_SUMMIT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000028")
-    HERITAGE_WALK_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000029")
-    PRODUCT_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000030")  # pending
-    ROBOTICS_OPEN_HOUSE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000031")
-    WELLNESS_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000032")
-    CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000033")  # unmarked
-    CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000034")  # marked
+    MAKER_FAIRE_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012624")
+    SPRING_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012625")
+    AWARDS_EVENING_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012626")
+    PITCH_NIGHT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012627")
+    NEIGHBOURHOOD_SUMMIT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012628")
+    HERITAGE_WALK_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012629")
+    PRODUCT_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012630")  # pending
+    ROBOTICS_OPEN_HOUSE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012631")
+    WELLNESS_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012632")
+    CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012633")  # unmarked
+    CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012634")  # marked
 
 
 class Registrations:
@@ -255,8 +255,8 @@ class Unavailability:
     MAINTENANCE_SEMINAR_ROOM = uuid.UUID("88888888-0000-0000-0000-000000000001")
     # Story 12.6: Exhibition Foyer closed on each of its events' days, numbered like the event less
     # sixty (3333..62 -> 8888..02); the marks on its bookings are this closure's doing.
-    FOYER_LANTERN_SHOWCASE = uuid.UUID("88888888-0000-0000-0000-000000000002")
-    FOYER_NEIGHBOURHOOD_SUMMIT = uuid.UUID("88888888-0000-0000-0000-000000000007")
+    FOYER_LANTERN_SHOWCASE = uuid.UUID("88888888-0000-0000-0000-000000012602")
+    FOYER_NEIGHBOURHOOD_SUMMIT = uuid.UUID("88888888-0000-0000-0000-000000012607")
 
 
 class Clarifications:
@@ -288,8 +288,8 @@ class VenueRequirements:
     FORUM_NETWORKING_LOUNGE = uuid.UUID("cccccccc-0000-0000-0029-000000000003")  # STANDING, 100
     # Story 12.6: Events.LANTERN_SHOWCASE's two - Main hall, whose booking is marked, and Breakout
     # room, which has none.
-    LANTERN_MAIN_HALL = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # STANDING, 100
-    LANTERN_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0062-000000000002")  # CLASSROOM, 40
+    LANTERN_MAIN_HALL = uuid.UUID("cccccccc-0000-0000-0126-000000006201")  # STANDING, 100
+    LANTERN_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0126-000000006202")  # CLASSROOM, 40
     WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # CLASSROOM, 12
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
     # Story 12.7: Events.CRAFT_FAIR's one, whose request expired.
