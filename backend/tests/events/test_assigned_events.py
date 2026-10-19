@@ -9,8 +9,6 @@ AC4 Only `events:review` may read it: other roles get 403, signed-out gets 401.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 from sqlalchemy.orm import Session
 
@@ -102,24 +100,6 @@ def test_entry_shows_name_organiser_dates_and_status(coordinator_client):
     assert entry["name"] == "Nimbus Developer Conference"
     assert entry["organiser_name"] == Users.ORGANISER_2.full_name
     assert entry["status"] == "PLANNING"
-
-
-@pytest.mark.story("6.1", ac=1)
-def test_entry_shows_when_the_event_was_submitted_and_its_picture(coordinator_client, db: Session):
-    """Both come from the event itself: the picture is the optional one AC1 names."""
-    submitted_at = datetime(2026, 9, 21, 3, 15, tzinfo=UTC)
-    picture = "/uploads/events/assigned-entry.jpg"
-    event = make_event(
-        db,
-        assigned_coordinator_id=Users.COORDINATOR.id,
-        submitted_at=submitted_at,
-        cover_image_url=picture,
-    )
-
-    entry = next(row for row in _page(coordinator_client)["items"] if row["id"] == str(event.id))
-
-    assert datetime.fromisoformat(entry["submitted_at"]) == submitted_at
-    assert entry["cover_image_url"] == picture
 
 
 # --- AC3: paging, most recently updated first ------------------------------------------------

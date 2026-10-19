@@ -101,37 +101,6 @@ briefing cares about (double booking, over-committed equipment, ...).
 real foreign key, the seed loads into an empty schema and is idempotent, ORM models match the
 tables, and the DB-level guards (double-booking exclusion, mandatory fields once submitted) fire.
 
-### Coverage and mutation testing
-
-Both are scoped to the modules a story adds or changes, from the repo root.
-
-**Coverage** (pytest-cov, lines and branches; `[tool.coverage]` in `backend/pyproject.toml`):
-
-```bash
-npm run test:coverage -- --cov=app.events.schemas --cov-fail-under=100
-npm run test:function-coverage -- app/events/schemas.py
-```
-
-The first runs the whole suite, measuring only the modules named with `--cov`, and fails below
-100% of their lines and branches. It also writes `backend/coverage.json`. coverage.py has no
-function figure of its own, so the second reads that report and counts a function or method as
-covered when any of its statements ran, failing while one never did.
-
-**Mutation testing** (mutmut; `[tool.mutmut]` in `backend/pyproject.toml`):
-
-```bash
-npm run test:mutation -- --tests tests/equipment tests/events "app.events.schemas.*"
-```
-
-mutmut forks a process per mutant, which Windows cannot do, so `scripts/mutation.mjs` runs it in a
-`python:3.12-slim` Docker container on every OS, with the backend mounted read-only. It needs
-PostgreSQL up (`npm run db:up`), and its tests use their own throwaway databases,
-`connectsphere_mut` and `connectsphere_mut_test`. `--tests` names the tests that may kill a mutant,
-and the globs the mutants to run. Each mutant then runs only those of the tests that reached its
-function. The report lands in `backend/mutation-report/` (git-ignored): every mutant's status in
-`results.txt`, and the diff of each survivor in `survivors.txt`. A survivor is killed with a test
-seen failing against it, or explained as equivalent - one no test could tell apart.
-
 ## End-to-end tests
 
 One spec per story area lives in `tests/e2e/`; `npx playwright test --list` in `tests/` lists

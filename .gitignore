@@ -6,13 +6,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
-# Coverage and mutation testing (npm run test:coverage, npm run test:mutation)
-.coverage.*
-coverage.json
-coverage.xml
-htmlcov/
-mutants/
-backend/mutation-report/
 
 # --- Node (frontend, tests) ---
 node_modules/

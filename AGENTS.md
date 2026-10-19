@@ -96,11 +96,6 @@ npm run build
 # From the repo root instead: npm run lint (backend + frontend lint/format-check),
 # npm run format (auto-fixes backend + frontend formatting)
 
-# Coverage and mutation testing, scoped to a story's modules (docs/testing/README.md):
-# npm run test:coverage -- --cov=app.<module> --cov-fail-under=100
-# npm run test:function-coverage -- app/<module>.py
-# npm run test:mutation -- --tests tests/<feature> "app.<module>.*"   (Docker)
-
 # E2E — from the repo root. Needs PostgreSQL up (npm run db:up) but not your dev servers: it
 # rebuilds a throwaway connectsphere_e2e database and starts its own API and app on it.
 # Never run specs against the development database.
