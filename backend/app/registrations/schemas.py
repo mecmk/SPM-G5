@@ -1,7 +1,7 @@
 """Request and response models for story 18.1: the events an attendee can browse and register
 for, and a registration; and for story 18.2: the attendee's own registrations.
 
-AC5: what an attendee is sent is only what these models declare - an event's name, description,
+AC5: an attendee gets only what these models declare - an event's name, description, cover picture,
 dates, booked venues, places left and registration state - never its organiser, coordinator,
 contact, purpose, equipment, accessibility needs or internal notes. No field carries its expected
 attendance, but that shows through the places left until someone registers, since capacity is
@@ -51,6 +51,7 @@ class RegistrationEventOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    cover_image_url: str | None  # 18.1 AC8 (fix f18.1.1): the event's cover picture, if any
     starts_at: datetime
     ends_at: datetime
     venues: list[RegistrationVenueOut]
@@ -79,6 +80,7 @@ class RegistrationEventOut(BaseModel):
             id=event.id,
             name=event.name,
             description=event.description,
+            cover_image_url=event.cover_image_url,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             venues=[
