@@ -407,6 +407,35 @@ def test_a_pending_change_request_moves_with_the_event(login_as):
 
 
 @pytest.mark.story("5.6", ac=4)
+def test_a_pending_change_request_is_decided_by_the_new_coordinator(login_as):
+    """19.2: the pending request moves to Carl's decision queue and leaves Chloe's, and only Carl
+    can decide it - Chloe's rejection is refused (403), Carl's is taken."""
+    raised = login_as(Users.ORGANISER_2).post(
+        f"/events/{Events.APPROVED}/change-requests",
+        json={"field": "expected_attendance", "proposed": 360, "reason": "More guests confirmed."},
+    )
+    assert raised.status_code == 201, raised.text
+    request_id = raised.json()["id"]
+    reject_path = f"/events/{Events.APPROVED}/change-requests/{request_id}/reject"
+    reason = {"reason": "The Grand Hall cannot hold that many."}
+
+    reassigned = _reassign(
+        login_as(Users.LEAD), Events.APPROVED, Users.COORDINATOR_2.id, expected=Users.COORDINATOR.id
+    )
+    assert reassigned.status_code == 200, reassigned.text
+
+    chloe = login_as(Users.COORDINATOR)
+    assert request_id not in {entry["id"] for entry in chloe.get("/change-requests").json()}
+    by_chloe = chloe.post(reject_path, json=reason)
+    carl = login_as(Users.COORDINATOR_2)
+    assert request_id in {entry["id"] for entry in carl.get("/change-requests").json()}
+    by_carl = carl.post(reject_path, json=reason)
+
+    assert by_chloe.status_code == 403, by_chloe.text
+    assert by_carl.status_code == 200, by_carl.text
+
+
+@pytest.mark.story("5.6", ac=4)
 def test_the_clarification_thread_moves_with_the_event(login_as, db: Session):
     """The conversation Chloe started is Carl's to read once the event is his, not Chloe's."""
     make_clarification(db, event_id=Events.APPROVED, author_id=Users.COORDINATOR.id)
