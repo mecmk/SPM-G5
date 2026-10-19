@@ -22,6 +22,7 @@ import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import { MyRegistrationsPage } from './registrations/MyRegistrationsPage'
+import { RegistrationReportPage } from './registrations/RegistrationReportPage'
 import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
 import { SafetyChecksPage } from './safety/SafetyChecksPage'
@@ -46,6 +47,7 @@ import {
   MY_REGISTRATIONS_PATH,
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
+  REGISTRATIONS_REPORT_PATH,
   UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
@@ -174,6 +176,11 @@ function App() {
               <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
                 <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
                 <Route path={MY_REGISTRATIONS_PATH} element={<MyRegistrationsPage />} />
+              </Route>
+
+              {/* Story 18.3: the organiser's and coordinator's registrations report. */}
+              <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_VIEW} />}>
+                <Route path={REGISTRATIONS_REPORT_PATH} element={<RegistrationReportPage />} />
               </Route>
 
               {/*
