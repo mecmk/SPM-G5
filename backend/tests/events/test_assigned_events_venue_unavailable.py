@@ -71,6 +71,8 @@ def test_the_count_ignores_paging_and_the_filter(coordinator_client, db):
     baseline = _listed(coordinator_client)["venue_unavailable_count"]
     make_scenario(db)
     make_scenario(db)
+    # Another coordinator's marked event is not this coordinator's to count.
+    make_scenario(db, coordinator_id=Users.COORDINATOR_2.id)
 
     plain = _listed(coordinator_client)
     paged = _listed(coordinator_client, limit=1, offset=1)

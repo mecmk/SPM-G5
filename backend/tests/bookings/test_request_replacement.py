@@ -534,7 +534,7 @@ def test_an_unassigned_coordinator_is_refused_before_the_bookings_state_is_read(
     response = replace(login_as(Users.COORDINATOR_2), scene.original.id, scene.alternative)
 
     assert response.status_code == 403, response.text
-    assert "coordinator assigned to this event" in response.json()["detail"]
+    assert response.json()["detail"] == service.REPLACEMENT_NOT_ASSIGNED_COORDINATOR_MESSAGE
 
 
 @pytest.mark.story("12.6", ac=9)
@@ -670,6 +670,7 @@ def test_two_replacements_sent_at_once_make_one(engine):
         session.commit()
         original_id, event_id = scene.original.id, scene.event.id
         venue_ids = [scene.alternative.id, extra.id]
+        venue_names = [scene.alternative.name, extra.name]
         all_venue_ids = [scene.original_venue.id, *venue_ids]
     start = threading.Barrier(2)
 
@@ -696,7 +697,11 @@ def test_two_replacements_sent_at_once_make_one(engine):
             outcomes = sorted(future.result(timeout=30) for future in futures)
 
         assert outcomes[0] == "created"
-        assert outcomes[1].startswith("refused: ") and "already" in outcomes[1]
+        # Refused as the database's index refuses it, naming the venue the other tab asked for.
+        assert outcomes[1] in {
+            "refused: " + service.REPLACEMENT_ALREADY_PENDING_MESSAGE.format(venue=name)
+            for name in venue_names
+        }
         with Session(engine) as session:
             count = session.scalars(
                 select(func.count())

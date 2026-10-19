@@ -29,6 +29,7 @@ from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.change_requests.models import EventChangeRequest
+from tests.support.factories import make_venue
 from tests.support.replacement import (
     BOOKINGS_PATH,
     approve,
@@ -108,18 +109,50 @@ def test_a_change_that_unfits_a_flagged_original_releases_its_pending_replacemen
     assert not [notice for notice in notices if notice.notification_type == "BOOKING_REPLACED"]
 
 
+def _raise_requirement_layout(login_as, db: Session, scene, layout_code: str) -> EventChangeRequest:
+    """Olivia asks, through 19.1's own endpoint, for the event's one venue requirement to be laid
+    out as ``layout_code``: a change the original's booking, and the replacement beside it, no
+    longer fit (f7.2.4: the requirement asks for another layout than they were requested for)."""
+    proposed = [
+        {
+            "id": str(scene.requirement_id),
+            "name": "Main hall",
+            "capacity": 40,
+            "starts_at": scene.starts_at.isoformat(),
+            "ends_at": scene.ends_at.isoformat(),
+            "layout_code": layout_code,
+            "facilities": [],
+            "notes": None,
+        }
+    ]
+    response = login_as(Users.ORGANISER).post(
+        f"/events/{scene.event.id}/change-requests",
+        json={"field": "venue_requirements", "proposed": proposed, "reason": "More are coming."},
+    )
+    assert response.status_code == 201, response.text
+    return db.get(EventChangeRequest, uuid.UUID(response.json()["id"]))
+
+
 @pytest.mark.story("12.6", ac=10)
 def test_a_requirement_needs_a_venue_again_once_the_change_released_both(login_as, db):
-    """With both bookings released the requirement is uncovered, so a normal request for a venue
-    is taken as 12.5 takes it for any requirement that needs one."""
-    scene = make_scenario(db, additional=True)
-    created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
-    request = _raise_attendance(login_as, db, scene.event, 80)
+    """The requirement is laid out another way, so 19.2 releases the original and the replacement
+    asked for it. With neither left the requirement is uncovered, and a normal request for a venue
+    is taken as 12.5 takes it for any requirement that needs one - the one-per-requirement index
+    sees no live booking, and the replacement's carve-out is gone with it."""
+    scene = make_scenario(db)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    request = _raise_requirement_layout(login_as, db, scene, "THEATRE")
     assert _approve_change(login_as(Users.COORDINATOR), request).status_code == 200
+    assert _booking(db, scene.original.id).status == BookingStatus.CANCELLED
+    assert _booking(db, uuid.UUID(body["id"])).status == BookingStatus.CANCELLED
 
     again = login_as(Users.COORDINATOR).post(
         BOOKINGS_PATH,
-        json={"event_id": str(scene.event.id), "venue_id": str(hall(db).id)},
+        json={
+            "event_id": str(scene.event.id),
+            "venue_id": str(make_venue(db, capacity=100, layouts={"THEATRE": None}).id),
+            "venue_requirement_id": str(scene.requirement_id),
+        },
     )
 
     assert again.status_code == 201, again.text

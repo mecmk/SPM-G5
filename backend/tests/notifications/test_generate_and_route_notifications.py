@@ -825,7 +825,7 @@ def test_simultaneous_booking_decisions_notify_once(engine: Engine):
     def approve() -> str:
         with Session(engine) as session:
             start.wait()
-            booking = bookings_service.get_booking_for_decision(session, booking_id)
+            booking = bookings_service.get_booking_for_approval(session, booking_id)
             try:
                 bookings_service.approve_booking(
                     session,

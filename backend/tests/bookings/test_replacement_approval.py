@@ -22,13 +22,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.bookings import schemas as booking_schemas
 from app.bookings import service
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
 from app.common.audit import AuditLog
 from tests.support.factories import make_unavailability, make_user
 from tests.support.replacement import (
@@ -184,7 +184,8 @@ def test_a_reassigned_coordinator_is_told_of_the_approval(login_as, db):
         for each in notifications_of(db, Users.COORDINATOR_2.id, event_id=scene.event.id)
         if each.notification_type == "BOOKING_APPROVED"
     ]
-    assert len(carl) == 1 and "released" in carl[0].message
+    released_sentence = service.ORIGINAL_RELEASED_SENTENCE.format(venue=scene.original_venue.name)
+    assert len(carl) == 1 and released_sentence in carl[0].message
     assert not [
         each
         for each in notifications_of(db, Users.COORDINATOR.id, event_id=scene.event.id)
@@ -245,7 +246,7 @@ def test_two_approvals_at_once_release_the_original_once(engine):
     def approve_it(replacement_id) -> str:
         with Session(engine) as session:
             start.wait()
-            booking = service.get_booking_for_decision(session, replacement_id)
+            booking = service.get_booking_for_approval(session, replacement_id)
             try:
                 service.approve_booking(
                     session,
@@ -302,6 +303,59 @@ def test_a_released_original_carries_the_time_it_was_released(login_as, db):
     assert original["released_at"] == replacement["decided_at"]
     assert original["released_at"] != original["decided_at"]
     assert replacement["released_at"] is None
+
+
+@pytest.mark.story("12.6", ac=3)
+def test_an_additional_venues_replacement_releases_its_original_when_approved(login_as, db):
+    """A replacement for a booking that is for no requirement is released the same way: the
+    original is CANCELLED and linked, so it leaves the Venue unavailable tab and stops blocking the
+    safety review - the one-per-requirement index never comes into it."""
+    scene = make_scenario(db, additional=True)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+
+    assert approve(login_as(Users.VENUE_STAFF), body["id"]).status_code == 200
+
+    original = _outcome_of(db, scene.original.id)
+    assert original.status == BookingStatus.CANCELLED
+    assert original.decision_reason == service.REPLACED_BY_REASON.format(
+        venue=scene.alternative.name
+    )
+    assert str(column(db, original.id, "replaced_by_booking_id")) == body["id"]
+    assert _outcome_of(db, uuid.UUID(body["id"])).status == BookingStatus.APPROVED
+    db.expire_all()
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(VenueBooking)
+            .where(VenueBooking.event_id == scene.event.id, *marked_booking_conditions())
+        )
+        == 0
+    )
+
+
+@pytest.mark.story("12.6", ac=3)
+def test_an_approval_locks_the_original_before_the_replacement(login_as, db):
+    """Everything that closes the original (the sweep, 19.2's release) locks it first and the
+    trigger then updates the replacement, so an approval taking the two in the other order could
+    deadlock with them. ``get_booking_for_approval`` locks the original, then the replacement."""
+    scene = make_scenario(db)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    replacement_id = uuid.UUID(body["id"])
+    locked: list[list[uuid.UUID]] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if "FOR UPDATE" in statement and "venue_bookings" in statement:
+            values = parameters.values() if isinstance(parameters, dict) else parameters
+            locked.append([value for value in values if isinstance(value, uuid.UUID)])
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record)
+    try:
+        service.get_booking_for_approval(db, replacement_id)
+    finally:
+        event.remove(connection, "before_cursor_execute", record)
+
+    assert locked == [[scene.original.id], [replacement_id]]
 
 
 # --- AC6: approved after the unavailability ended ------------------------------------------------
