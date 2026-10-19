@@ -156,7 +156,7 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 6.2 AC16: when the item was cancelled - with its event, or by an approved change
-    # (19.2); NULL otherwise, for one cancelled before migration 025, and once a change revives it.
+    # (19.2); NULL otherwise, for one cancelled before migration 026, and once a change revives it.
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 17.1 AC1: the event, whose period an item holding nothing is for.

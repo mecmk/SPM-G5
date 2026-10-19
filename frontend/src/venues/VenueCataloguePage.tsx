@@ -24,6 +24,7 @@ import {
   venueEditPath,
   venuePath,
   venueRequestPath,
+  venueSearchPath,
   venueSwitchPath,
   type VenueSearch,
 } from '../routes'
@@ -32,6 +33,8 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   firstRequirementNeedingVenue,
   isBooked,
+  isReplaceableNow,
+  replacementSearchFor,
   requirementName,
   venueSearchFor,
 } from '../shared/venueRequest'
@@ -52,7 +55,11 @@ import { hasFilters, hasSameFilters, RELAX_CHANGES, useVenueSearch } from './use
  * is judged against that requirement; the page searches only once the address names one of the
  * event's, or none.
  */
-function searchQueryFor(search: VenueSearch, judgedEventId: string | undefined): VenueSearchQuery {
+function searchQueryFor(
+  search: VenueSearch,
+  judgedEventId: string | undefined,
+  excludedVenueId: string | undefined,
+): VenueSearchQuery {
   const hasPeriod = Boolean(search.from && search.to)
   return {
     search: search.search,
@@ -66,6 +73,8 @@ function searchQueryFor(search: VenueSearch, judgedEventId: string | undefined):
     include_withdrawn: search.includeWithdrawn,
     event: judgedEventId,
     requirement: judgedEventId === undefined ? undefined : search.requirementId,
+    // Story 12.6 AC1: the venue being replaced is never offered as its own replacement.
+    exclude_venue: excludedVenueId,
   }
 }
 
@@ -134,6 +143,8 @@ export function VenueCataloguePage() {
     selectedRequirement,
     selectedCovering,
     requestingEvent,
+    replacingBooking,
+    replacementRefusal,
     error: eventError,
     applyBookingChange,
     isResolving,
@@ -148,7 +159,11 @@ export function VenueCataloguePage() {
     !hasSameFilters(search, venueSearchFor(event, selectedRequirement))
   const isWaiting = isResolving || isStrayRequirement
   const judgedEventId = requestingEvent?.id
-  const query = useMemo(() => searchQueryFor(search, judgedEventId), [search, judgedEventId])
+  const excludedVenueId = replacingBooking?.venue_id
+  const query = useMemo(
+    () => searchQueryFor(search, judgedEventId, excludedVenueId),
+    [search, judgedEventId, excludedVenueId],
+  )
   const [listRequest, setListRequest] = useState<VenueListRequest | null>(
     isWaiting ? null : { query },
   )
@@ -234,7 +249,14 @@ export function VenueCataloguePage() {
   /** Story 8.4 AC3/AC7: the filters become the requirement's own, even when it is already the
    *  selected one and they were changed by hand. */
   function selectRequirement(requirement: VenueRequirement) {
-    if (event !== null) replaceSearch(venueSearchFor(event, requirement))
+    if (event === null) return
+    // Story 12.6 AC1: choosing the requirement being replaced again restores its filters and
+    // keeps replacing its booking; choosing another leaves replacement mode.
+    const isReplacingIt =
+      replacingBooking !== null && replacingBooking.venue_requirement_id === requirement.id
+    replaceSearch(
+      venueSearchFor(event, requirement, isReplacingIt ? replacingBooking.id : undefined),
+    )
   }
 
   /** Story 8.1 AC3's "Opening hours not recorded", and story 11.1 AC1's suitability, when the
@@ -275,7 +297,13 @@ export function VenueCataloguePage() {
         </div>
       )
     }
-    if (requestingEvent && selectedCovering === null) {
+    // Story 12.6 AC1/AC2: opened to replace a booking, every venue offers Request this venue, which
+    // asks for it as that booking's replacement.
+    if (
+      requestingEvent &&
+      replacementRefusal === null &&
+      (selectedCovering === null || replacingBooking !== null)
+    ) {
       return (
         <Link
           to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
@@ -287,7 +315,12 @@ export function VenueCataloguePage() {
     }
     // Story 12.5 AC11: a selected requirement takes one request at a time. While its request is
     // pending, a venue is offered in its place (decided 11 Oct 2026); once booked, none is.
-    if (requestingEvent && selectedCovering !== null && !isBooked(selectedCovering)) {
+    if (
+      requestingEvent &&
+      replacementRefusal === null &&
+      selectedCovering !== null &&
+      !isBooked(selectedCovering)
+    ) {
       return (
         <Link
           to={venueSwitchPath(requestingEvent.id, venue.id, location.search, selectedCovering.id)}
@@ -329,8 +362,11 @@ export function VenueCataloguePage() {
           bookings={bookings}
           selectedRequirement={selectedRequirement}
           hasChangedFilters={hasChangedFilters}
+          replacingBooking={replacingBooking}
+          replacementRefusal={replacementRefusal}
           isAdditionalVenue={
             requestingEvent !== null &&
+            replacementRefusal === null &&
             event.venue_requirements.length > 0 &&
             search.requirementId === undefined
           }
@@ -354,6 +390,13 @@ export function VenueCataloguePage() {
               requirementName={requirementName(event, selectedRequirement)}
               search={location.search}
               onWithdraw={requestingEvent === null ? undefined : askToWithdraw}
+              replacementPath={
+                requestingEvent !== null &&
+                replacingBooking === null &&
+                isReplaceableNow(selectedCovering)
+                  ? venueSearchPath(replacementSearchFor(event, selectedCovering))
+                  : undefined
+              }
             />
           )}
           {result === null && !error && <LoadingState label="Loading venues…" />}

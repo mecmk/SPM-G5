@@ -5,8 +5,17 @@ import { getEvent, type EventDetail, type VenueRequirement } from '../api/events
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { VENUE_SEARCH_PARAMS } from '../routes'
+import {
+  NO_LONGER_REPLACEABLE_LINE,
+  replacementAlreadyRequestedLine,
+} from '../shared/bookingStatus'
 import { useLoaded } from '../shared/useLoaded'
-import { canRequestVenueFor, coveringBooking } from '../shared/venueRequest'
+import {
+  canRequestVenueFor,
+  coveringBooking,
+  isReplaceableNow,
+  pendingReplacementFor,
+} from '../shared/venueRequest'
 
 /** What a venue page knows about the event named in its address. */
 export interface RequestingEventState {
@@ -23,6 +32,16 @@ export interface RequestingEventState {
   selectedCovering: BookingOutcome | null
   /** The event a venue is being found for, when the signed-in user may request one for it. */
   requestingEvent: EventDetail | null
+  /** Story 12.6 AC1: the booking the address names to replace (`?replacing=`), while it is an
+   * approved booking still marked and the user may request a venue for its event - which puts the
+   * catalogue in replacement mode. Null otherwise. */
+  replacingBooking: BookingOutcome | null
+  /** Story 12.6 AC1/AC10: why the booking the address names (`?replacing=`) cannot be replaced -
+   * a replacement is already pending on it, or it is no longer a marked approved booking - when
+   * the user may request a venue for its event and the bookings are known. Then the catalogue
+   * offers no request at all, since a request from here would be an additional venue, not a
+   * replacement. Null when the address names none, or names one that can be replaced. */
+  replacementRefusal: string | null
   /** Why the event in the address, or its bookings, could not be loaded, otherwise null. */
   error: string | null
   /** Story 12.5 (decided 11 Oct 2026): a booking changed on the page - a request withdrawn from
@@ -56,6 +75,7 @@ export function useRequestingEvent(): RequestingEventState {
   const [searchParams] = useSearchParams()
   const eventId = searchParams.get(VENUE_SEARCH_PARAMS.event)
   const requirementId = searchParams.get(VENUE_SEARCH_PARAMS.requirement)
+  const replacingId = searchParams.get(VENUE_SEARCH_PARAMS.replacing)
   const { user, can } = useAuth()
   const canReadBookings = can(PERMISSIONS.BOOKINGS_READ)
   const loadEvent = useCallback(
@@ -109,9 +129,25 @@ export function useRequestingEvent(): RequestingEventState {
   const selectedRequirement =
     resolvedEvent?.venue_requirements.find((requirement) => requirement.id === requirementId) ??
     null
+  const namedBooking =
+    isRequestable && bookings !== null && replacingId !== null
+      ? (bookings.find((booking) => booking.id === replacingId) ?? null)
+      : null
+  const replacingBooking =
+    namedBooking !== null && isReplaceableNow(namedBooking) ? namedBooking : null
+  const pendingReplacement =
+    namedBooking === null ? null : pendingReplacementFor(namedBooking, bookings ?? [])
+  const replacementRefusal =
+    isRequestable && bookings !== null && replacingId !== null && replacingBooking === null
+      ? pendingReplacement !== null
+        ? replacementAlreadyRequestedLine(pendingReplacement.venue_name)
+        : NO_LONGER_REPLACEABLE_LINE
+      : null
   return {
     event: resolvedEvent,
     bookings,
+    replacingBooking,
+    replacementRefusal,
     selectedRequirement,
     selectedCovering:
       selectedRequirement === null || bookings === null

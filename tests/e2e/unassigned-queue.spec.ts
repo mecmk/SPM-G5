@@ -23,7 +23,17 @@
  * stubbing the one fetch, as tests/CLAUDE.md allows.
  */
 import { expect, test, type Page, type Request } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, createAndSubmitRequest, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  DESKTOP,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  corsHeaders,
+  createAndSubmitRequest,
+  expectNoSidewaysScroll,
+  signIn,
+  uniqueName,
+} from './support'
 
 const QUEUE_PATH = '/events/unassigned'
 const QUEUE_API = '/coordination/unassigned-events'
@@ -32,9 +42,6 @@ const QUEUE_LABEL = 'Unassigned events'
 const CARL = { id: '11111111-0000-0000-0000-000000000004', name: 'Carl Coordinator' }
 const EMPTY_MESSAGE = 'No events are waiting for a coordinator.'
 const NO_COORDINATOR_MESSAGE = 'No Event Coordinator is active, so events cannot be assigned yet.'
-const PHONE = { width: 375, height: 667 }
-const DESKTOP = { width: 1280, height: 800 }
-const MIN_TOUCH_TARGET = 44
 
 function mainNav(page: Page) {
   return page.getByRole('navigation', { name: 'Main' })
@@ -81,13 +88,6 @@ async function stubFetch(page: Page, path: string, body: unknown) {
       })
     },
   )
-}
-
-async function expectNoSidewaysScroll(page: Page) {
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-  expect(fits).toBe(true)
 }
 
 test("5.4 AC1: the Lead's sidebar offers the unassigned queue", async ({ page }) => {

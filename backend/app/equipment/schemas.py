@@ -154,7 +154,7 @@ class EquipmentQueueEntry(BaseModel):
     decided_at: datetime | None
     decision_reason: str | None
     # Story 6.2 AC16: when a cancelled item was cancelled; None otherwise, and for one cancelled
-    # before migration 025.
+    # before migration 026.
     cancelled_at: datetime | None
 
     @classmethod

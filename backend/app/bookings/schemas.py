@@ -118,6 +118,33 @@ class BookingSwitchIn(BaseModel):
         return None if stripped == "" else stripped
 
 
+class BookingReplacementIn(BaseModel):
+    """Story 12.6 AC2: the venue asked for as the replacement of the booking in the address, whose
+    venue Venue Staff made unavailable. The event, the venue requirement (or none, for an
+    additional venue), the period and the attendance are the original's own, so none is sent; the
+    venue is, with story 11.1's justification when it does not suit, read as ``BookingRequestIn``
+    reads it.
+
+    The setup and teardown default to the original's: a replacement carries what the original
+    carried unless the request sends its own, and a ``0`` sent is a choice, not an omission. Each
+    is whole minutes up to ``TURNAROUND_MAX_MINUTES``, as for any request (12.1 AC5).
+    """
+
+    venue_id: uuid.UUID
+    suitability_override_reason: str | None = Field(
+        default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
+    )
+    setup_minutes: StrictInt | None = Field(default=None, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes: StrictInt | None = Field(default=None, ge=0, le=TURNAROUND_MAX_MINUTES)
+
+    @field_validator("suitability_override_reason", mode="before")
+    @classmethod
+    def _blank_reason_is_none(cls, value: object) -> object:
+        """Story 11.1 AC7: an empty or whitespace-only justification is no justification."""
+        stripped = _strip(value)
+        return None if stripped == "" else stripped
+
+
 class BookingRejection(BaseModel):
     """13.2.1 AC2: a reason is mandatory - blank or whitespace-only does not count. Mirrors
     events.schemas.EventRejection (story 4.5)."""
@@ -207,6 +234,15 @@ class BookingOut(BaseModel):
     # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; None
     # when unmarked, and always None once the booking is no longer pending or approved.
     venue_unavailable_marked_at: datetime | None = Field(validation_alias="venue_unavailable_mark")
+    # Story 12.6 AC2/AC3: the booking this one replaces and the one that replaced it, and what
+    # Venue Staff read before approving a replacement (AC3, AC6): the venue replaced, the venue
+    # approval will release - only while it still holds its venue - and whether the original is
+    # still marked. All None for a booking that replaces and is replaced by nothing.
+    replaces_booking_id: uuid.UUID | None
+    replaced_by_booking_id: uuid.UUID | None
+    replaces_venue_name: str | None
+    approval_releases_venue_name: str | None
+    original_is_marked: bool | None
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -252,7 +288,7 @@ class BookingQueueEntry(BaseModel):
     created_at: datetime
     decided_at: datetime | None
     # Story 6.2 AC16: when a cancelled booking was cancelled, shown beside its approval; None
-    # otherwise, and for one cancelled before migration 025.
+    # otherwise, and for one cancelled before migration 026.
     cancelled_at: datetime | None
     # Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
     # the event's confirmation completed it; R14: the booked start, which the Approve dialog's
@@ -270,6 +306,15 @@ class BookingQueueEntry(BaseModel):
     venue_operating_hours_end: time | None
     # Story 9.4 AC3: the mark, for Venue Staff deciding the request (AC7); None when unmarked.
     venue_unavailable_marked_at: datetime | None
+    # Story 12.6 AC3, AC6: for a replacement, the venue it replaces, the venue approving it will
+    # release (only while that booking still holds its venue) and whether the original is still
+    # marked; None for any other request.
+    replaces_venue_name: str | None
+    approval_releases_venue_name: str | None
+    original_is_marked: bool | None
+    # Story 12.6 AC3: when a released original was released - its replacement's approval, shown as
+    # "Closed at" in place of its own earlier approval; None for any other request.
+    released_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -301,6 +346,10 @@ class BookingQueueEntry(BaseModel):
             venue_operating_hours_start=booking.venue.operating_hours_start,
             venue_operating_hours_end=booking.venue.operating_hours_end,
             venue_unavailable_marked_at=booking.venue_unavailable_mark,
+            replaces_venue_name=booking.replaces_venue_name,
+            approval_releases_venue_name=booking.approval_releases_venue_name,
+            original_is_marked=booking.original_is_marked,
+            released_at=booking.released_at,
         )
 
 
@@ -373,6 +422,18 @@ class BookingOutcome(BaseModel):
     # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed", for
     # the event page; None when unmarked, and always None once the booking is closed.
     venue_unavailable_marked_at: datetime | None
+    # Story 12.6 AC2-AC4: the booking this one replaces and the one that replaced it, and their
+    # venues, for the event page: "Replaces <venue>" on a replacement, "Replaced by <venue>" on an
+    # original released by an approved one (never for a replacement that was not approved, AC8),
+    # and "Replacement requested: <venue>" on an original while one is pending.
+    replaces_booking_id: uuid.UUID | None
+    replaced_by_booking_id: uuid.UUID | None
+    replaces_venue_name: str | None
+    replaced_by_venue_name: str | None
+    pending_replacement_venue_name: str | None
+    # Story 12.6 AC3: when the original was released - its replacement's approval - which the card
+    # shows as "Closed at" rather than the original's own, earlier approval; None otherwise.
+    released_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -404,4 +465,10 @@ class BookingOutcome(BaseModel):
             ),
             hold_expiry_changed_at=booking.hold_expiry_changed_at,
             venue_unavailable_marked_at=booking.venue_unavailable_mark,
+            replaces_booking_id=booking.replaces_booking_id,
+            replaced_by_booking_id=booking.replaced_by_booking_id,
+            replaces_venue_name=booking.replaces_venue_name,
+            replaced_by_venue_name=booking.replaced_by_venue_name,
+            pending_replacement_venue_name=booking.pending_replacement_venue_name,
+            released_at=booking.released_at,
         )

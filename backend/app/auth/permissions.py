@@ -54,8 +54,9 @@ class Permission(StrEnum):
     EVENTS_CREATE = "events:create"  # raise / submit requests, answer clarification (2.1, 3.x, 4.3)
     EVENTS_READ_OWN = "events:read_own"  # organiser sees own events (2.6, 7.1)
     EVENTS_READ_ALL = "events:read_all"  # internal staff see every event (7.1)
-    EVENTS_REVIEW = "events:review"  # queue, clarify, approve, reject, reassign (4.x, 5.2)
-    # The unassigned queue, and assigning an unassigned event to a coordinator (5.4).
+    EVENTS_REVIEW = "events:review"  # queue, clarify, approve, reject (4.x)
+    # The unassigned queue, assigning an unassigned event (5.4) and reassigning an assigned one
+    # to another coordinator (5.6, taken from 5.2's coordinator - Q16).
     EVENTS_ASSIGN = "events:assign"
     EVENTS_EDIT_ROUTINE = "events:edit_routine"  # routine field edits (7.2)
     EVENTS_CANCEL = "events:cancel"  # the organiser cancels their own event (6.2)

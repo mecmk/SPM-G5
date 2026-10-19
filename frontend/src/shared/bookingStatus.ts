@@ -6,10 +6,47 @@ export type BookingStatusTabKey =
 /** The one status Venue Staff can still decide: the queue card and detail page offer Approve /
  * Reject only for it. */
 export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
+export const APPROVED_BOOKING_STATUS: BookingStatus = 'APPROVED'
 
 /** Story 9.4 AC3: how every page names a booking whose venue was marked unavailable for part of
  * its held period - the event's page, Venue Staff's queue card and the request's own page. */
 export const VENUE_UNAVAILABLE_LABEL = 'Venue unavailable – alternative needed'
+
+/** Story 12.6 AC1/AC9: the event page's way to a replacement for an approved marked booking, and
+ * for a marked pending one (which is switched to another venue, 12.5) the way to the catalogue. */
+export const FIND_REPLACEMENT_LABEL = 'Find a replacement venue'
+export const FIND_ANOTHER_LABEL = 'Find another venue'
+
+/** Story 12.6 AC2-AC4: how every page words a replacement - on the replacement ("Replaces"), on
+ * the original once an approved replacement released it ("Replaced by"), on the original while one
+ * is pending, and in the banner for a marked requirement. AC3: what Venue Staff are told approving
+ * will release; AC1: the banner of the catalogue opened to replace a booking. */
+export function replacesLine(venueName: string): string {
+  return `Replaces ${venueName}`
+}
+export function replacedByLine(venueName: string): string {
+  return `Replaced by ${venueName}`
+}
+export function replacementRequestedLine(venueName: string): string {
+  return `Replacement requested: ${venueName}`
+}
+export function venueUnavailableLine(venueName: string): string {
+  return `Venue unavailable: ${venueName}`
+}
+export function approvalReleasesLine(venueName: string): string {
+  return `Approving this releases ${venueName}`
+}
+export function replacingLine(venueName: string): string {
+  return `Replacing ${venueName}`
+}
+/** Story 12.6 AC10: what the catalogue says for an address that names a booking which already has
+ *  a replacement pending, so no second one is offered. */
+export function replacementAlreadyRequestedLine(venueName: string): string {
+  return `${replacementRequestedLine(venueName)}. Withdraw it from the event page before asking for another.`
+}
+/** Story 12.6 AC1/AC9: what the catalogue says for an address that names a booking which is not
+ *  an approved, marked booking any more, so it replaces nothing. */
+export const NO_LONGER_REPLACEABLE_LINE = 'That booking is no longer waiting for a replacement.'
 
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */
 export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
@@ -56,6 +93,14 @@ export function bookingOutcomeLabels(
   return CLOSED_WITHOUT_DECISION.includes(booking.status)
     ? { when: 'Closed at', why: 'Note' }
     : { when: 'Decided at', why: 'Reason' }
+}
+
+/** Story 12.6 AC3: when a withdrawn or cancelled request closed - the release, for an original a
+ * replacement's approval released, which is later than the approval `decided_at` still holds. For
+ * a booking story 19.2 released there is no release time, so this is its `decided_at`, which is
+ * its approval. */
+export function closedAt(request: { decided_at: string | null; released_at: string | null }) {
+  return request.released_at ?? request.decided_at
 }
 
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's

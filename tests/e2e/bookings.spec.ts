@@ -95,6 +95,11 @@ function fakeQueueEntry(index: number) {
     created_at: '2026-09-20T01:00:00Z',
     decided_at: null,
     cancelled_at: null,
+    // Story 12.6: the queue entry's fields for a replacement and a released original, none set here.
+    replaces_venue_name: null,
+    approval_releases_venue_name: null,
+    original_is_marked: null,
+    released_at: null,
   }
 }
 
@@ -196,8 +201,8 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await expect(approvedGrandHallCard(page)).toHaveCount(0)
   // Fewer than ten requests: one page, so no page controls. Checked on Rejected: All gains a
   // request from every spec that sends one, and Approved holds the seeded approvals of several
-  // stories, so either can pass ten, while Rejected holds none seeded and at most the two
-  // 13.2.1's tests reject.
+  // stories (story 12.6's seed alone approves a dozen and more), so either can pass ten, while
+  // Rejected holds none seeded and at most the two 13.2.1's tests reject.
   await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
 
   // A pending card first: only All's own answer holds one, so the approved card checked after it
@@ -673,6 +678,13 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     setup_minutes: 60,
     teardown_minutes: 60,
     cancelled_at: null,
+    // Story 12.6: the fields every outcome now carries, none of them set for these three.
+    replaces_booking_id: null,
+    replaced_by_booking_id: null,
+    replaces_venue_name: null,
+    replaced_by_venue_name: null,
+    pending_replacement_venue_name: null,
+    released_at: null,
   }
   const outcomes = [
     {

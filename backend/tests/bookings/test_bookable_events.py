@@ -47,9 +47,10 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
     reject e2e test, a PLANNING one for 11.1's e2e spec (s8.1), two PLANNING ones
     dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 17.1's, one to
     8.4's, three to 12.5's, one to 12.1's real send, one to 11.1's, one to 12.7's, one to
-    f12.1.2's, two to 9.4's, two to 21.2's, one to 19.2's and one to 6.2's - "approved or later"
-    includes them all, but not 21.2's two awaiting the safety check. The pick-list offers all
-    twenty-eight, soonest first."""
+    f12.1.2's, two to 9.4's, two to 21.2's, one to 19.2's, one to 6.2's and twelve to 12.6's (its
+    other events are the cancelled heritage walk, which is not bookable, and coordinator 2's two) -
+    "approved or later" includes them all, but not 21.2's two awaiting the safety check. The
+    pick-list offers all forty, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -81,6 +82,19 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.CODING_BOOTCAMP),
         str(Events.DATA_SUMMIT),
         str(Events.DESIGN_SPRINT),
+        str(Events.LANTERN_SHOWCASE),
+        str(Events.MAKER_FAIRE),
+        str(Events.SPRING_EXPO),
+        str(Events.AWARDS_EVENING),
+        str(Events.PITCH_NIGHT),
+        str(Events.NEIGHBOURHOOD_SUMMIT),
+        str(Events.PRODUCT_SHOWCASE),
+        str(Events.CRAFT_MARKET),
+        str(Events.HARVEST_FAIR),
+        str(Events.OPEN_STUDIOS),
+        str(Events.NIGHT_BAZAAR),
+        str(Events.SPRING_FAIR),
+        str(Events.GARDEN_FAIR),
         str(Events.CHARITY_RUN),
     ]
 

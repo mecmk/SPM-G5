@@ -147,6 +147,23 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.CHARITY_FUN_RUN),
         str(Events.BOOK_SWAP),
         str(Events.LANTERN_PAINTING),
+        # Story 12.6's e2e events, all organiser 2's.
+        str(Events.LANTERN_SHOWCASE),
+        str(Events.MAKER_FAIRE),
+        str(Events.SPRING_EXPO),
+        str(Events.AWARDS_EVENING),
+        str(Events.PITCH_NIGHT),
+        str(Events.NEIGHBOURHOOD_SUMMIT),
+        str(Events.HERITAGE_WALK),
+        str(Events.PRODUCT_SHOWCASE),
+        str(Events.ROBOTICS_OPEN_HOUSE),
+        str(Events.WELLNESS_EXPO),
+        str(Events.CRAFT_MARKET),
+        str(Events.HARVEST_FAIR),
+        str(Events.OPEN_STUDIOS),
+        str(Events.NIGHT_BAZAAR),
+        str(Events.SPRING_FAIR),
+        str(Events.GARDEN_FAIR),
     }
 
 

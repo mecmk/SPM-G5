@@ -11,9 +11,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -32,6 +33,28 @@ class BookingStatus:
     WITHDRAWN = "WITHDRAWN"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
+
+
+def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
+    """Story 9.4 AC3 / story 12.6 AC11, AC12: the booking still holds its venue - pending or
+    approved - and is marked "Venue unavailable - alternative needed". One definition for every
+    reader of the mark: the coordinator's list (``Venue unavailable`` tab) and the safety review
+    and confirmation, which refuse while an event has such a booking. A mark left on a closed
+    booking is history and is not one."""
+    return (
+        VenueBooking.status.in_((BookingStatus.PENDING, BookingStatus.APPROVED)),
+        VenueBooking.venue_unavailable_marked_at.is_not(None),
+    )
+
+
+def pending_replacement_conditions() -> tuple[ColumnElement[bool], ...]:
+    """Story 12.6: the booking is a replacement still waiting for Venue Staff's decision. Its
+    approval releases the booking it replaces, so the event's safety review and confirmation wait
+    for it, as they wait for a mark: the review saw the original venue, not this one."""
+    return (
+        VenueBooking.status == BookingStatus.PENDING,
+        VenueBooking.replaces_booking_id.is_not(None),
+    )
 
 
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -97,8 +120,22 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # booking that no longer holds the venue.
     venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 6.2 AC16: when the booking was cancelled - with its event, or by an approved change
-    # (19.2); NULL otherwise, and for one cancelled before migration 025.
+    # (19.2); NULL otherwise, and for one cancelled before migration 026.
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 12.6 AC2: the booking this one replaces, which Venue Staff's closure made unavailable -
+    # a booking of the same event (composite FK fk_venue_bookings_replaces); None for any other.
+    # AC3: on an original released by its replacement, the replacement whose approval released it,
+    # set in that release and only on a CANCELLED booking. AC10: replaces_live_original is set on
+    # a replacement when it is requested, which the one-per-requirement index reads only while the
+    # replacement is pending, leaving it out; the database clears it on a pending replacement when
+    # the original stops holding its venue, and a decided replacement keeps what it had.
+    replaces_booking_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    replaced_by_booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("venue_bookings.id")
+    )
+    replaces_live_original: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)
@@ -113,6 +150,26 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     required_layout: Mapped[RoomLayout | None] = relationship(foreign_keys=[required_layout_code])
     venue_requirement: Mapped[VenueRequirement | None] = relationship()
+    # Story 12.6: the three bookings a replacement links - the one this replaces, the one that
+    # replaced this, and the pending replacement asked for this one. Read only, loaded when asked.
+    replaced_booking: Mapped[VenueBooking | None] = relationship(
+        primaryjoin="foreign(VenueBooking.replaces_booking_id) == remote(VenueBooking.id)",
+        uselist=False,
+        viewonly=True,
+    )
+    replaced_by_booking: Mapped[VenueBooking | None] = relationship(
+        primaryjoin="foreign(VenueBooking.replaced_by_booking_id) == remote(VenueBooking.id)",
+        uselist=False,
+        viewonly=True,
+    )
+    pending_replacement: Mapped[VenueBooking | None] = relationship(
+        primaryjoin=(
+            "and_(VenueBooking.id == foreign(remote(VenueBooking.replaces_booking_id)),"
+            " remote(VenueBooking.status) == 'PENDING')"
+        ),
+        uselist=False,
+        viewonly=True,
+    )
 
     @property
     def venue_unavailable_mark(self) -> datetime | None:
@@ -121,3 +178,49 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         and is not reported."""
         holds_venue = self.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
         return self.venue_unavailable_marked_at if holds_venue else None
+
+    @property
+    def replaces_venue_name(self) -> str | None:
+        """Story 12.6 AC3: the venue of the booking this one replaces, whatever its state."""
+        return None if self.replaced_booking is None else self.replaced_booking.venue.name
+
+    @property
+    def replaced_by_venue_name(self) -> str | None:
+        """Story 12.6 AC3, AC8: the venue of the replacement whose approval released this booking
+        - set only then, so a replacement never approved is never shown as having replaced it."""
+        return None if self.replaced_by_booking is None else self.replaced_by_booking.venue.name
+
+    @property
+    def released_at(self) -> datetime | None:
+        """Story 12.6 AC3: when this booking was released - the approval of the replacement that
+        released it - or None for any other booking. ``decided_at`` stays the booking's own
+        decision, so the time a released original closed is read from the replacement, which is
+        what released it, and nothing is stored twice. A booking story 19.2 released has no
+        replacement to read it from, so None: its close time is not recorded, and its
+        ``decided_at`` is its approval, not when it closed."""
+        return None if self.replaced_by_booking is None else self.replaced_by_booking.decided_at
+
+    @property
+    def pending_replacement_venue_name(self) -> str | None:
+        """Story 12.6 AC4: the venue asked for as this booking's replacement, while pending."""
+        return None if self.pending_replacement is None else self.pending_replacement.venue.name
+
+    @property
+    def approval_releases_venue_name(self) -> str | None:
+        """Story 12.6 AC3: while this is a pending replacement, the venue its approval will
+        release - only while that booking still holds its venue (nothing is released otherwise)."""
+        original = self.replaced_booking
+        holds_venue = original is not None and original.status in (
+            BookingStatus.PENDING,
+            BookingStatus.APPROVED,
+        )
+        if self.status != BookingStatus.PENDING or original is None or not holds_venue:
+            return None
+        return original.venue.name
+
+    @property
+    def original_is_marked(self) -> bool | None:
+        """Story 12.6 AC6: for a replacement, whether the booking it replaces is still marked
+        "Venue unavailable"; None for any other booking."""
+        original = self.replaced_booking
+        return None if original is None else original.venue_unavailable_mark is not None

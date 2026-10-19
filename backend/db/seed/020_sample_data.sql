@@ -1441,6 +1441,289 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
+-- Story 12.6: tests/e2e/venue-replacement.spec.ts. Eleven events of organiser 2, February 2029, each
+-- with a booking at Exhibition Foyer (2222..04) that Venue Staff's closure of its day has marked
+-- "Venue unavailable - alternative needed" (the closure and the mark are both seeded: a spec may
+-- not reach the API, and the mark is otherwise only written by saving a closure). The
+-- replacements are found among the other venues, Grand Hall above all.
+--
+-- Every id of this story is in a block of its own that no other story counts up into, ending
+-- 0126NN: events 3333..0126NN, bookings 4444..0126NN, closures 8888..0126NN, and requirements
+-- cccccccc-0000-0000-0126-000000EEII (EE the event's NN, II the requirement's own number). NN is
+-- the number below, so a story that numbers on from 3333..80 or 4444..34 cannot land on these.
+--
+-- Each flow that changes something has an event of its own, so specs running in parallel never
+-- share one (events are named by their NN):
+--   62 read only: the entry point, the pre-filled catalogue, who is offered it, both sizes;
+--      a second requirement, Breakout room, has no booking, so Find a venue opens on it
+--   63 an additional venue (booking 24, marked) beside a requirement booked at Seminar Room 2.1
+--   64 the spec raises a replacement       65 ... and Venue Staff approve it
+--   66 ... and the coordinator withdraws it, then asks again
+--   67 ... and Venue Staff remove the closure before it is approved
+--   68 a CANCELLED event whose booking is still marked: no replacement is offered
+--   69 a marked PENDING booking: Switch is offered, not a replacement
+--   80 a second additional venue (booking 34, marked) beside a requirement booked at Seminar Room
+--      2.1: its closure is removed and a replacement requested after it, so the step must refuse
+--   81 an additional venue (booking 36, marked) beside a requirement booked at Seminar Room 2.1: the
+--      spec asks for a replacement, then presses Back
+--   82 a marked pending replacement (booking 38, marked by its own venue's closure) of an approved
+--      booking at Harbour Pavilion (37): its way out is Withdraw, and no way to another venue
+--   83 a marked pending additional venue (booking 40) beside a requirement booked at Seminar Room
+--      2.1: the page offers Withdraw, not a catalogue that would add a second venue
+--   84 the spec raises a replacement and Venue Staff reject it
+--   85 a requirement's plain pending request (booking 42) beside an older withdrawn one (43), nothing
+--      marked: the request step is opened with the withdrawn one named as `replacing`
+--   78 and 79 coordinator 2's, for the "Venue unavailable" tab; the spec only reads 78, and raises
+--      a replacement for 79. Nothing else may be marked on coordinator 2.
+-- Nothing else may book Exhibition Foyer or Grand Hall on these days. Grand Hall (400, standing)
+-- takes every one of these requirements, so a replacement is always found there.
+-- Once one of these bookings has been replaced (a replacement raised and approved) the seed cannot be
+-- applied again over it: its upsert puts status back to APPROVED but leaves replaced_by_booking_id,
+-- which ck_venue_bookings_replaced_by_cancelled refuses. Run npm run db:reset instead of db:ready.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000012662', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Lantern Festival Showcase', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-05 10:00+08', '2029-02-05 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012663', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Maker Faire Weekend', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-07 10:00+08', '2029-02-07 20:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012664', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Spring Expo Preview', 'Trade event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-08 10:00+08', '2029-02-08 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012665', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Regional Awards Evening', 'Awards', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-09 10:00+08', '2029-02-09 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012666', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Startup Pitch Night', 'Networking', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-12 10:00+08', '2029-02-12 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012667', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Neighbourhood Summit', 'Conference', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-13 10:00+08', '2029-02-13 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012668', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Heritage Walk Launch', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-14 10:00+08', '2029-02-14 16:00+08', 100, 'CANCELLED',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012669', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Product Showcase Day', 'Trade event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-15 10:00+08', '2029-02-15 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012678', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Robotics Open House', 'Open day', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-16 10:00+08', '2029-02-16 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000004'),
+    ('33333333-0000-0000-0000-000000012679', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Wellness Expo Weekend', 'Trade event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-19 10:00+08', '2029-02-19 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000004'),
+    ('33333333-0000-0000-0000-000000012680', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Craft Market Weekend', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-20 10:00+08', '2029-02-20 20:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012681', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Harvest Fair Weekend', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-21 10:00+08', '2029-02-21 20:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012682', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Open Studios Day', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-22 10:00+08', '2029-02-22 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012683', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Night Bazaar Weekend', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-23 10:00+08', '2029-02-23 20:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012684', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Spring Fair Preview', 'Community event', 'February 2029: its venue is closed for the day, so it needs another.', '2029-02-26 10:00+08', '2029-02-26 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003'),
+    ('33333333-0000-0000-0000-000000012685', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Garden Fair Day', 'Community event', 'February 2029: its first request was withdrawn and a second is pending; nothing is marked.', '2029-02-27 10:00+08', '2029-02-27 16:00+08', 100, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0126-000000006201', '33333333-0000-0000-0000-000000012662', 0, 'Main hall', 100, '2029-02-05 10:00+08', '2029-02-05 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006202', '33333333-0000-0000-0000-000000012662', 1, 'Breakout room', 40, '2029-02-05 10:00+08', '2029-02-05 12:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0126-000000006301', '33333333-0000-0000-0000-000000012663', 0, 'Workshop room', 40, '2029-02-07 10:00+08', '2029-02-07 12:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0126-000000006401', '33333333-0000-0000-0000-000000012664', 0, 'Main hall', 100, '2029-02-08 10:00+08', '2029-02-08 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006501', '33333333-0000-0000-0000-000000012665', 0, 'Main hall', 100, '2029-02-09 10:00+08', '2029-02-09 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006601', '33333333-0000-0000-0000-000000012666', 0, 'Main hall', 100, '2029-02-12 10:00+08', '2029-02-12 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006701', '33333333-0000-0000-0000-000000012667', 0, 'Main hall', 100, '2029-02-13 10:00+08', '2029-02-13 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006801', '33333333-0000-0000-0000-000000012668', 0, 'Main hall', 100, '2029-02-14 10:00+08', '2029-02-14 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000006901', '33333333-0000-0000-0000-000000012669', 0, 'Main hall', 100, '2029-02-15 10:00+08', '2029-02-15 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000007801', '33333333-0000-0000-0000-000000012678', 0, 'Main hall', 100, '2029-02-16 10:00+08', '2029-02-16 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000007901', '33333333-0000-0000-0000-000000012679', 0, 'Main hall', 100, '2029-02-19 10:00+08', '2029-02-19 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000008001', '33333333-0000-0000-0000-000000012680', 0, 'Workshop room', 40, '2029-02-20 10:00+08', '2029-02-20 12:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0126-000000008101', '33333333-0000-0000-0000-000000012681', 0, 'Workshop room', 40, '2029-02-21 10:00+08', '2029-02-21 12:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0126-000000008201', '33333333-0000-0000-0000-000000012682', 0, 'Main hall', 100, '2029-02-22 10:00+08', '2029-02-22 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000008301', '33333333-0000-0000-0000-000000012683', 0, 'Workshop room', 40, '2029-02-23 10:00+08', '2029-02-23 12:00+08', 'CLASSROOM'),
+    ('cccccccc-0000-0000-0126-000000008401', '33333333-0000-0000-0000-000000012684', 0, 'Main hall', 100, '2029-02-26 10:00+08', '2029-02-26 16:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0126-000000008501', '33333333-0000-0000-0000-000000012685', 0, 'Main hall', 100, '2029-02-27 10:00+08', '2029-02-27 16:00+08', 'STANDING')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+-- Exhibition Foyer is closed for each of these days; the marks below are the closure's doing.
+INSERT INTO venue_unavailability_periods (id, venue_id, starts_at, ends_at, reason, notes, created_by_id) VALUES
+    ('88888888-0000-0000-0000-000000012602', '22222222-0000-0000-0000-000000000004', '2029-02-05 00:00+08', '2029-02-06 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012603', '22222222-0000-0000-0000-000000000004', '2029-02-07 00:00+08', '2029-02-08 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012604', '22222222-0000-0000-0000-000000000004', '2029-02-08 00:00+08', '2029-02-09 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012605', '22222222-0000-0000-0000-000000000004', '2029-02-09 00:00+08', '2029-02-10 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012606', '22222222-0000-0000-0000-000000000004', '2029-02-12 00:00+08', '2029-02-13 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012607', '22222222-0000-0000-0000-000000000004', '2029-02-13 00:00+08', '2029-02-14 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012608', '22222222-0000-0000-0000-000000000004', '2029-02-14 00:00+08', '2029-02-15 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012609', '22222222-0000-0000-0000-000000000004', '2029-02-15 00:00+08', '2029-02-16 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012610', '22222222-0000-0000-0000-000000000004', '2029-02-16 00:00+08', '2029-02-17 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012611', '22222222-0000-0000-0000-000000000004', '2029-02-19 00:00+08', '2029-02-20 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012612', '22222222-0000-0000-0000-000000000004', '2029-02-20 00:00+08', '2029-02-21 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012613', '22222222-0000-0000-0000-000000000004', '2029-02-21 00:00+08', '2029-02-22 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012614', '22222222-0000-0000-0000-000000000004', '2029-02-22 00:00+08', '2029-02-23 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012615', '22222222-0000-0000-0000-000000000004', '2029-02-23 00:00+08', '2029-02-24 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
+    ('88888888-0000-0000-0000-000000012616', '22222222-0000-0000-0000-000000000004', '2029-02-26 00:00+08', '2029-02-27 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005')
+ON CONFLICT (id) DO UPDATE SET
+    venue_id = EXCLUDED.venue_id, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    reason = EXCLUDED.reason, notes = EXCLUDED.notes;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, venue_unavailable_marked_at) VALUES
+    ('44444444-0000-0000-0000-000000012622', '33333333-0000-0000-0000-000000012662', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-05 10:00+08', '2029-02-05 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006201', '2029-02-05 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012623', '33333333-0000-0000-0000-000000012663', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-02-07 10:00+08', '2029-02-07 12:00+08', 30, 30,
+     40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006301', '2029-02-07 09:00+08', NULL),
+    ('44444444-0000-0000-0000-000000012624', '33333333-0000-0000-0000-000000012663', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-07 10:00+08', '2029-02-07 20:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     NULL, '2029-02-07 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012625', '33333333-0000-0000-0000-000000012664', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-08 10:00+08', '2029-02-08 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006401', '2029-02-08 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012626', '33333333-0000-0000-0000-000000012665', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-09 10:00+08', '2029-02-09 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006501', '2029-02-09 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012627', '33333333-0000-0000-0000-000000012666', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-12 10:00+08', '2029-02-12 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006601', '2029-02-12 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012628', '33333333-0000-0000-0000-000000012667', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-13 10:00+08', '2029-02-13 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006701', '2029-02-13 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012629', '33333333-0000-0000-0000-000000012668', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-14 10:00+08', '2029-02-14 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006801', '2029-02-14 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012630', '33333333-0000-0000-0000-000000012669', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-15 10:00+08', '2029-02-15 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000006901', NULL, '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012631', '33333333-0000-0000-0000-000000012678', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-16 10:00+08', '2029-02-16 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000007801', '2029-02-16 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012632', '33333333-0000-0000-0000-000000012679', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-19 10:00+08', '2029-02-19 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000007901', '2029-02-19 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012633', '33333333-0000-0000-0000-000000012680', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-02-20 10:00+08', '2029-02-20 12:00+08', 30, 30,
+     40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008001', '2029-02-20 09:00+08', NULL),
+    ('44444444-0000-0000-0000-000000012634', '33333333-0000-0000-0000-000000012680', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-20 10:00+08', '2029-02-20 20:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     NULL, '2029-02-20 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012635', '33333333-0000-0000-0000-000000012681', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-02-21 10:00+08', '2029-02-21 12:00+08', 30, 30,
+     40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008101', '2029-02-21 09:00+08', NULL),
+    ('44444444-0000-0000-0000-000000012636', '33333333-0000-0000-0000-000000012681', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-21 10:00+08', '2029-02-21 20:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     NULL, '2029-02-21 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012637', '33333333-0000-0000-0000-000000012682', '22222222-0000-0000-0000-000000000007',
+     '11111111-0000-0000-0000-000000000003', '2029-02-22 10:00+08', '2029-02-22 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008201', '2029-02-22 09:00+08', NULL),
+    ('44444444-0000-0000-0000-000000012639', '33333333-0000-0000-0000-000000012683', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-02-23 10:00+08', '2029-02-23 12:00+08', 30, 30,
+     40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008301', '2029-02-23 09:00+08', NULL),
+    ('44444444-0000-0000-0000-000000012640', '33333333-0000-0000-0000-000000012683', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-23 10:00+08', '2029-02-23 20:00+08', 30, 30,
+     100, 'STANDING', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-09 12:00+08',
+     NULL, NULL, '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012641', '33333333-0000-0000-0000-000000012684', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-26 10:00+08', '2029-02-26 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008401', '2029-02-26 09:00+08', '2026-10-17 10:00+08'),
+    ('44444444-0000-0000-0000-000000012642', '33333333-0000-0000-0000-000000012685', '22222222-0000-0000-0000-000000000007',
+     '11111111-0000-0000-0000-000000000003', '2029-02-27 10:00+08', '2029-02-27 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-12 12:00+08',
+     'cccccccc-0000-0000-0126-000000008501', NULL, NULL),
+    ('44444444-0000-0000-0000-000000012643', '33333333-0000-0000-0000-000000012685', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-27 10:00+08', '2029-02-27 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'WITHDRAWN', NULL, '2026-10-11 12:00+08', NULL, '2026-10-09 12:00+08',
+     'cccccccc-0000-0000-0126-000000008501', NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    venue_unavailable_marked_at = EXCLUDED.venue_unavailable_marked_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL;
+
+-- 3333..0126-82's pending replacement (booking 38), marked by its own venue's closure: a replacement
+-- links to its original (booking 37, the same event) and starts with the one-per-requirement
+-- carve-out on, as the API leaves it.
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, venue_unavailable_marked_at,
+                            replaces_booking_id, replaces_live_original) VALUES
+    ('44444444-0000-0000-0000-000000012638', '33333333-0000-0000-0000-000000012682', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-02-22 10:00+08', '2029-02-22 16:00+08', 30, 30,
+     100, 'STANDING', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-12 12:00+08',
+     'cccccccc-0000-0000-0126-000000008201', NULL, '2026-10-17 10:00+08',
+     '44444444-0000-0000-0000-000000012637', TRUE)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    venue_unavailable_marked_at = EXCLUDED.venue_unavailable_marked_at,
+    replaces_booking_id = EXCLUDED.replaces_booking_id, replaces_live_original = EXCLUDED.replaces_live_original,
+    hold_reminded_at = NULL, hold_completed_at = NULL;
+
+-- ---------------------------------------------------------------------
 -- Story 6.2 AC14/AC15: tests/e2e/cancel-event.spec.ts. The charity run (3333..62) is cancelled by
 -- its organiser, then found under Venue Staff's and Technical Support's Cancelled tabs. Organiser
 -- 1, coordinator 1, March 2029 so nothing else shares its period: one requirement with an

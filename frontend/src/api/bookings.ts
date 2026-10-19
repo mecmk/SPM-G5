@@ -44,6 +44,15 @@ export interface Booking {
   /** Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; null
    * when unmarked, and always null once the booking is no longer pending or approved. */
   venue_unavailable_marked_at: string | null
+  /** Story 12.6 AC2/AC3: the booking this one replaces and the one that replaced it. For Venue
+   * Staff deciding a replacement (AC3, AC6): the venue replaced, the venue approving will release -
+   * only while that booking still holds its venue - and whether the original is still marked. All
+   * null for a booking that replaces and is replaced by nothing. */
+  replaces_booking_id: string | null
+  replaced_by_booking_id: string | null
+  replaces_venue_name: string | null
+  approval_releases_venue_name: string | null
+  original_is_marked: boolean | null
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
@@ -151,6 +160,45 @@ export function switchBookingRequest(
   })
 }
 
+/** Mirrors `BookingReplacementIn`: the venue asked for as the replacement of an approved booking
+ * whose venue became unavailable (story 12.6 AC2). Story 11.1: `suitability_override_reason` is why
+ * a venue that does not suit is requested. `setup_minutes` and `teardown_minutes` default, when
+ * left out, to the original's; a 0 sent is a choice. */
+export interface BookingReplacementInput {
+  venue_id: string
+  suitability_override_reason?: string
+  setup_minutes?: number
+  teardown_minutes?: number
+}
+
+/**
+ * Story 12.6 AC2: ask for `venueName` as the replacement of the approved booking `bookingId`, which
+ * Venue Staff's closure marked "Venue unavailable". The original stays approved until Venue Staff
+ * approve the replacement (AC4). A refusal - 409, or 422 for a venue that does not suit with no
+ * justification, as for `createBookingRequest` - writes nothing. The notice names the new venue and
+ * the one it replaces.
+ */
+export function requestReplacementBooking(
+  bookingId: string,
+  input: BookingReplacementInput,
+  venueName: string,
+  replacedVenueName: string | null,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/replacements`, {
+    method: 'POST',
+    body: input,
+    errorCodes: {
+      404: 'BOOKING_NOT_FOUND',
+      409: 'BOOKING_NOT_ALLOWED',
+      422: 'BOOKING_JUSTIFICATION_REQUIRED',
+    },
+    notify: {
+      title: 'Replacement requested',
+      message: `${venueName} was requested to replace ${replacedVenueName ?? 'a booking'}; it is with Venue Staff for review.`,
+    },
+  })
+}
+
 /** Mirrors `BookingQueueEntry` in backend/app/bookings/schemas.py. */
 export interface BookingQueueEntry {
   id: string
@@ -189,6 +237,15 @@ export interface BookingQueueEntry {
   venue_operating_hours_end: string | null
   /** Story 9.4 AC3: the mark, for Venue Staff deciding the request; null when unmarked. */
   venue_unavailable_marked_at: string | null
+  /** Story 12.6 AC3, AC6: for a replacement, the venue it replaces, the venue approving it will
+   * release (only while that booking still holds its venue) and whether the original is still
+   * marked; null for any other request. */
+  replaces_venue_name: string | null
+  approval_releases_venue_name: string | null
+  original_is_marked: boolean | null
+  /** Story 12.6 AC3: when a released original was released - its replacement's approval; null for
+   * any other request, one story 19.2 released included. */
+  released_at: string | null
 }
 
 /** Mirrors `BookingStatusCounts`: how many requests hold each status, whatever tab or page was
@@ -360,6 +417,18 @@ export interface BookingOutcome {
   /** Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; null
    * when unmarked, and always null once the booking is no longer pending or approved. */
   venue_unavailable_marked_at: string | null
+  /** Story 12.6 AC2-AC4: the booking this one replaces and the one that replaced it, and their
+   * venues: "Replaces <venue>" on a replacement, "Replaced by <venue>" on an original released by
+   * an approved one (never for a replacement that was not approved, AC8), and "Replacement
+   * requested: <venue>" on an original while one is pending. */
+  replaces_booking_id: string | null
+  replaced_by_booking_id: string | null
+  replaces_venue_name: string | null
+  replaced_by_venue_name: string | null
+  pending_replacement_venue_name: string | null
+  /** Story 12.6 AC3: when an original was released - its replacement's approval, which is when it
+   * closed; null for any other booking, one story 19.2 released included. */
+  released_at: string | null
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a

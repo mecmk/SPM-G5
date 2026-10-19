@@ -495,6 +495,37 @@ def test_a_second_lead_is_told_it_is_already_assigned_and_to_whom(login_as, db: 
 
 
 @pytest.mark.story("5.4", ac=8)
+@pytest.mark.parametrize(
+    "chosen", ["an unknown user", "not a coordinator", "an inactive coordinator"]
+)
+def test_already_assigned_is_said_before_anything_about_the_chosen_user(
+    login_as, db: Session, chosen
+):
+    """AC8's refusal comes first, as it did before story 5.6: a Lead assigning an event that
+    already has a coordinator is told who has it, whoever they chose, rather than a 422 about the
+    user (review of #124). Only a direct API call names such a user - the picker offers only
+    active coordinators."""
+    event = _unassigned_event(db)
+    lead = login_as(Users.LEAD)
+    assert _assign(lead, event.id, Users.COORDINATOR.id).status_code == 200
+    chosen_id = {
+        "an unknown user": uuid.uuid4,
+        "not a coordinator": lambda: Users.ORGANISER.id,
+        "an inactive coordinator": lambda: (
+            make_user(db, role="EVENT_COORDINATOR", is_active=False).id
+        ),
+    }[chosen]()
+
+    response = _assign(lead, event.id, chosen_id)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == (
+        f"This event has already been assigned to {Users.COORDINATOR.full_name}."
+    )
+    assert _pointer(db, event.id) == Users.COORDINATOR.id
+
+
+@pytest.mark.story("5.4", ac=8)
 def test_two_leads_assigning_at_once_write_one(engine):
     """Real concurrent transactions, so this test commits and cleans up after itself. Two Leads
     assign one unassigned event at the same moment, to two different coordinators: exactly one

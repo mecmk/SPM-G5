@@ -69,20 +69,33 @@ export interface AssignedEventEntry {
   submitted_at: string | null
   status: EventStatus
   cover_image_url: string | null
+  /** Story 12.6 AC11: whether a booking of the event is marked "Venue unavailable - alternative
+   * needed", and the venue of its pending replacement when one has been asked for. */
+  is_venue_unavailable: boolean
+  pending_replacement_venue_name: string | null
 }
 
-/** Mirrors `AssignedEventList`: one page of the coordinator's assigned events, and the total. */
+/** Mirrors `AssignedEventList`: one page of the coordinator's assigned events, and the total.
+ * Story 12.6 AC11: `venue_unavailable_count` is how many of the coordinator's events have a marked
+ * booking, whatever page or filter the answer is - 0 when none. */
 export interface AssignedEventList {
   items: AssignedEventEntry[]
   total: number
+  venue_unavailable_count: number
 }
 
 /**
  * Story 6.1 AC1-AC3: every event assigned to the signed-in coordinator, in any status - unlike
- * `listReviewQueue`, which only ever returns the three awaiting-decision statuses.
+ * `listReviewQueue`, which only ever returns the three awaiting-decision statuses. Story 12.6
+ * AC11: `venueUnavailable` narrows the list to the events with a marked booking, and the paging
+ * follows it.
  */
-export function listAssignedEvents(offset: number): Promise<AssignedEventList> {
-  return api<AssignedEventList>(`/events/assigned-to-me?offset=${offset}`)
+export function listAssignedEvents(
+  offset: number,
+  venueUnavailable = false,
+): Promise<AssignedEventList> {
+  const filter = venueUnavailable ? '&venue_unavailable=true' : ''
+  return api<AssignedEventList>(`/events/assigned-to-me?offset=${offset}${filter}`)
 }
 
 /**

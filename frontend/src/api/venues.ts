@@ -208,6 +208,9 @@ export interface VenueSearchQuery {
    * catalogue's banner (story 8.4). Without it, the event's attendance alone, as for an additional
    * venue (story 12.5 AC5). Sent only with `event`. */
   requirement?: string
+  /** Story 12.6 AC1: a venue the results never hold - the unavailable one a replacement is being
+   * found for. */
+  exclude_venue?: string
 }
 
 /** Mirrors `Criterion` in backend/app/venues/suitability.py: what a failed criterion is about. */
@@ -297,6 +300,7 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
   if (query.include_withdrawn) params.set('include_withdrawn', 'true')
   if (query.event) params.set('event', query.event)
   if (query.requirement) params.set('requirement', query.requirement)
+  if (query.exclude_venue) params.set('exclude_venue', query.exclude_venue)
   return api<VenueSearchResult>(`/venues/search?${params}`)
 }
 

@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 025 - story 6.2: the organiser cancels their own event.
+-- Migration 026 - story 6.2: the organiser cancels their own event.
 --
 -- 1. Who cancelled the event, when and why are recorded in columns of their own, so the review
 --    decision (4.4/4.5) in decided_at / decided_by_id / decision_reason is kept beside them. The
