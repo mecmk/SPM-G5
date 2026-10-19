@@ -128,6 +128,7 @@ export type ErrorCode =
   | 'REGISTRATION_REFUSED'
   | 'REGISTRATION_NOT_FOUND'
   | 'WITHDRAWAL_REFUSED'
+  | 'REGISTRATION_LIST_NOT_FOUND'
 
 export interface ErrorEntry {
   title: string
@@ -777,6 +778,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   WITHDRAWAL_REFUSED: {
     title: 'Cannot withdraw',
     message: 'This registration could not be withdrawn.',
+  },
+
+  // Story 18.3: an organiser or coordinator reading an event's registration list.
+  /** AC5/AC6: not the viewer's event, still a draft, or no such event. Worded as the backend's
+   *  REGISTRATION_LIST_NOT_FOUND_MESSAGE. */
+  REGISTRATION_LIST_NOT_FOUND: {
+    title: 'Registrations unavailable',
+    message: 'This event was not found.',
   },
 }
 

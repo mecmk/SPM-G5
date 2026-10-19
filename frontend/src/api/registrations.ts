@@ -111,3 +111,58 @@ export function withdrawRegistration(registration: MyRegistration): Promise<MyRe
     },
   })
 }
+
+/** Mirrors `EventRegistrationOut`: story 18.3 AC1/AC4, one registration in an event's list, with
+ *  where the attendee stands as 18.2 tells them. `withdrawn_at` is set only when `status` is
+ *  WITHDRAWN. */
+export interface EventRegistration {
+  id: string
+  attendee_name: string
+  attendee_email: string
+  registered_at: string
+  status: RegistrationStanding
+  withdrawn_at: string | null
+}
+
+/** Mirrors `EventRegistrationListOut`: story 18.3 AC1-AC3/AC7, one page of the list, how many
+ *  registrations there are in all, and how many are active against capacity, all worked out on
+ *  the server. */
+export interface EventRegistrationList {
+  items: EventRegistration[]
+  total: number
+  active_count: number
+  capacity: number
+  is_full: boolean
+}
+
+/** Story 18.3 AC1: how many registrations a page of the list asks for - the backend's
+ *  REGISTRATION_LIST_PAGE_SIZE. */
+export const REGISTRATION_LIST_PAGE_SIZE = 50
+
+/** Mirrors `ManagedRegistrationEventOut`: story 18.3 AC5, one event on the registrations
+ *  report's picker. */
+export interface ManagedRegistrationEvent {
+  id: string
+  name: string
+  starts_at: string
+  ends_at: string
+}
+
+/** Story 18.3 AC5: the events past draft that the signed-in user organises or coordinates and
+ *  that take or hold registrations, soonest first. */
+export function listManagedRegistrationEvents(): Promise<ManagedRegistrationEvent[]> {
+  return api<ManagedRegistrationEvent[]>('/registrations/managed')
+}
+
+/** Story 18.3: a page of the registrations for an event the signed-in user organises or
+ *  coordinates, from `offset`. */
+export function listEventRegistrations(
+  eventId: string,
+  offset: number = 0,
+  limit: number = REGISTRATION_LIST_PAGE_SIZE,
+): Promise<EventRegistrationList> {
+  return api<EventRegistrationList>(
+    `/events/${encodeURIComponent(eventId)}/registrations?offset=${offset}&limit=${limit}`,
+    { errorCodes: { 404: 'REGISTRATION_LIST_NOT_FOUND' } },
+  )
+}
