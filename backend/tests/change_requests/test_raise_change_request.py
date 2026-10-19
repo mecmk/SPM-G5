@@ -1039,9 +1039,10 @@ def _wait_until_waiting(engine: Engine, pids: dict[str, int], name: str) -> None
 
 @pytest.mark.story("19.1", ac=1)
 def test_a_request_waiting_on_a_handover_tells_the_new_coordinator(engine, monkeypatch):
-    """Chloe hands the event to Carl and is held part-way, the event's row locked; Olivia's request
-    waits for it. Once the handover commits, the request must tell Carl, who is assigned now
-    (story 5.2), and not be left reading the coordinator as it stood before it waited."""
+    """The Lead hands the event from Chloe to Carl and is held part-way, the event's row locked;
+    Olivia's request waits for it. Once the handover commits, the request must tell Carl, who is
+    assigned now (story 5.6), and not be left reading the coordinator as it stood before it
+    waited."""
     with Session(engine) as session:
         event = _planning_event(session)
         session.add(
@@ -1069,8 +1070,11 @@ def test_a_request_waiting_on_a_handover_tells_the_new_coordinator(engine, monke
             coordination_service.assign_coordinator(
                 session,
                 event_id,
-                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
-                actor=session.get(User, Users.COORDINATOR.id),
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR_2.id,
+                    expected_coordinator_id=Users.COORDINATOR.id,
+                ),
+                actor=session.get(User, Users.LEAD.id),
             )
 
     def raise_request() -> None:
