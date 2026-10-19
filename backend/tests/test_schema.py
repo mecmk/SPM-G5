@@ -127,6 +127,92 @@ def test_seed_is_idempotent_over_existing_data(db: Session):
     assert before == after
 
 
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("18.2", ac=4)
+@pytest.mark.parametrize(
+    ("registration_id", "event_id", "attendee_id"),
+    [
+        (Registrations.PORTFOLIO_REVIEW, Events.PORTFOLIO_REVIEW, Users.ATTENDEE_2.id),
+        (Registrations.SKETCHING_WALK, Events.SKETCHING_WALK, Users.ATTENDEE.id),
+    ],
+    ids=["18.1-bella-portfolio-review", "18.2-aiden-sketching-walk"],
+)
+def test_reseeding_leaves_a_newer_active_registration_alone(
+    db: Session, registration_id, event_id, attendee_id
+):
+    """`npm run db:ready` re-applies the seed to a database people have used. Once a seeded
+    registration was withdrawn and its attendee registered again (18.2 AC4), making the seeded one
+    REGISTERED again would give them two active registrations, which
+    uq_event_registrations_active refuses, and the seed would fail."""
+    conn = db.connection()
+    conn.execute(
+        text(
+            "UPDATE event_registrations SET status = 'WITHDRAWN', withdrawn_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": registration_id},
+    )
+    newer = conn.execute(
+        text(
+            "INSERT INTO event_registrations (event_id, attendee_id) VALUES (:event, :attendee)"
+            " RETURNING id"
+        ),
+        {"event": event_id, "attendee": attendee_id},
+    ).scalar_one()
+
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+    statuses = dict(
+        conn.execute(
+            text(
+                "SELECT id, status FROM event_registrations"
+                " WHERE event_id = :event AND attendee_id = :attendee"
+            ),
+            {"event": event_id, "attendee": attendee_id},
+        ).all()
+    )
+    assert statuses == {registration_id: "WITHDRAWN", newer: "REGISTERED"}
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("18.2", ac=4)
+def test_reseeding_leaves_a_registration_alone_once_a_newer_one_was_withdrawn_too(db: Session):
+    """Aiden withdrew from the seeded walk, registered again, and withdrew that too. Nothing is
+    active, but the newer registration is the one My registrations shows (18.2 AC1), as
+    Withdrawn: making the seeded one REGISTERED again would hold a place that page cannot
+    withdraw, while Upcoming events says he is registered."""
+    conn = db.connection()
+    conn.execute(
+        text(
+            "UPDATE event_registrations SET status = 'WITHDRAWN', withdrawn_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": Registrations.SKETCHING_WALK},
+    )
+    newer = conn.execute(
+        text(
+            "INSERT INTO event_registrations (event_id, attendee_id, status, withdrawn_at)"
+            " VALUES (:event, :attendee, 'WITHDRAWN', now()) RETURNING id"
+        ),
+        {"event": Events.SKETCHING_WALK, "attendee": Users.ATTENDEE.id},
+    ).scalar_one()
+
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+    statuses = dict(
+        conn.execute(
+            text(
+                "SELECT id, status FROM event_registrations"
+                " WHERE event_id = :event AND attendee_id = :attendee"
+            ),
+            {"event": Events.SKETCHING_WALK, "attendee": Users.ATTENDEE.id},
+        ).all()
+    )
+    assert statuses == {Registrations.SKETCHING_WALK: "WITHDRAWN", newer: "WITHDRAWN"}
+
+
 @pytest.mark.story("1")
 def test_seed_constants_match_database(db: Session):
     """tests/support/seed.py must describe rows that really exist."""
@@ -185,6 +271,14 @@ def test_seed_constants_match_database(db: Session):
         (Events.WINE_APPRECIATION, "CONFIRMED"),
         (Events.LUNAR_NEW_YEAR_MARKET, "CONFIRMED"),
         (Events.SUPPLIER_INDUCTION, "PLANNING"),
+        (Events.POETRY_NIGHT, "CONFIRMED"),
+        (Events.SKETCHING_WALK, "CONFIRMED"),
+        (Events.BOARD_GAMES_SOCIAL, "CONFIRMED"),
+        (Events.SUNSET_YOGA, "CONFIRMED"),
+        (Events.HERITAGE_TRAIL, "CONFIRMED"),
+        (Events.CHARITY_FUN_RUN, "CANCELLED"),
+        (Events.BOOK_SWAP, "CONFIRMED"),
+        (Events.LANTERN_PAINTING, "CONFIRMED"),
         # Story 12.6's e2e events: all Planning but the heritage walk, which was cancelled.
         (Events.LANTERN_SHOWCASE, "PLANNING"),
         (Events.MAKER_FAIRE, "PLANNING"),
@@ -244,6 +338,24 @@ def test_seed_constants_match_database(db: Session):
         ).scalar()
         == Users.ATTENDEE_2.id
     )
+    # Story 18.2: Aiden's registrations, one for each of 18.2's events.
+    for registration_id, event_id, status in (
+        (Registrations.POETRY_NIGHT, Events.POETRY_NIGHT, "REGISTERED"),
+        (Registrations.SKETCHING_WALK, Events.SKETCHING_WALK, "REGISTERED"),
+        (Registrations.BOARD_GAMES_SOCIAL, Events.BOARD_GAMES_SOCIAL, "REGISTERED"),
+        (Registrations.SUNSET_YOGA, Events.SUNSET_YOGA, "REGISTERED"),
+        (Registrations.HERITAGE_TRAIL, Events.HERITAGE_TRAIL, "WITHDRAWN"),
+        (Registrations.CHARITY_FUN_RUN, Events.CHARITY_FUN_RUN, "REGISTERED"),
+        (Registrations.BOOK_SWAP, Events.BOOK_SWAP, "REGISTERED"),
+        (Registrations.LANTERN_PAINTING, Events.LANTERN_PAINTING, "REGISTERED"),
+    ):
+        assert db.execute(
+            text(
+                "SELECT attendee_id, status FROM event_registrations"
+                " WHERE id = :id AND event_id = :event"
+            ),
+            {"id": registration_id, "event": event_id},
+        ).one() == (Users.ATTENDEE.id, status)
     for clarification_id in (Clarifications.REQUEST, Clarifications.RESPONSE):
         assert db.execute(
             text("SELECT 1 FROM event_clarifications WHERE id = :id"), {"id": clarification_id}

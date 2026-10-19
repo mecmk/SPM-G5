@@ -96,9 +96,9 @@ export const EVENTS = {
   neighbourhoodSummit: '33333333-0000-0000-0000-000000000067', // ... the closure removed first
   heritageWalk: '33333333-0000-0000-0000-000000000068', // CANCELLED, its booking still marked
   productShowcase: '33333333-0000-0000-0000-000000000069', // a marked PENDING booking
-  roboticsOpenHouse: '33333333-0000-0000-0000-000000000070', // coordinator2's; read only
-  wellnessExpo: '33333333-0000-0000-0000-000000000071', // coordinator2's; the spec asks for one
-  craftMarket: '33333333-0000-0000-0000-000000000072', // an additional venue, marked; its closure is removed, then a request
+  roboticsOpenHouse: '33333333-0000-0000-0000-000000000078', // coordinator2's; read only
+  wellnessExpo: '33333333-0000-0000-0000-000000000079', // coordinator2's; the spec asks for one
+  craftMarket: '33333333-0000-0000-0000-000000000080', // an additional venue, marked; its closure is removed, then a request
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged

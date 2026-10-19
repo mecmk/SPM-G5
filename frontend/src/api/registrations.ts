@@ -20,6 +20,8 @@ export interface RegistrationEvent {
   id: string
   name: string
   description: string | null
+  /** Story 18.1 AC8 (fix f18.1.1): the event's cover picture, if it has one. */
+  cover_image_url: string | null
   starts_at: string
   ends_at: string
   venues: RegistrationVenue[]
@@ -65,5 +67,47 @@ export function registerForEvent(event: RegistrationEvent): Promise<Registration
     body: { event_id: event.id },
     errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN', 409: 'REGISTRATION_REFUSED' },
     notify: { title: 'Registered', message: `You are registered for ${event.name}.` },
+  })
+}
+
+/** Values of `RegistrationStanding` (backend/app/registrations/service.py): story 18.2 AC1/AC8,
+ *  where the attendee stands with an event they registered for. */
+export type RegistrationStanding = 'REGISTERED' | 'WITHDRAWN' | 'EVENT_CANCELLED'
+
+/**
+ * Mirrors `MyRegistrationOut`: story 18.2 AC1, one of the attendee's own registrations.
+ * `withdrawn_at` is set only when `status` is WITHDRAWN. `can_withdraw` is decided by the server,
+ * on its clock (AC3). AC5: nothing internal to the event's planning is sent.
+ */
+export interface MyRegistration {
+  id: string
+  event_id: string
+  event_name: string
+  /** Story 2.1 AC14: the event's cover picture, if it has one. */
+  cover_image_url: string | null
+  starts_at: string
+  ends_at: string
+  status: RegistrationStanding
+  registered_at: string
+  withdrawn_at: string | null
+  can_withdraw: boolean
+}
+
+/** Story 18.2 AC1: the signed-in attendee's registrations, one per event, events not yet started
+ *  first. */
+export function listMyRegistrations(): Promise<MyRegistration[]> {
+  return api<MyRegistration[]>('/registrations')
+}
+
+/** Story 18.2 AC1/AC2: withdraw one of the signed-in attendee's registrations. The notice is the
+ *  confirmation; a refusal (AC3, AC6-AC8) carries the backend's sentence saying why. */
+export function withdrawRegistration(registration: MyRegistration): Promise<MyRegistration> {
+  return api<MyRegistration>(`/registrations/${encodeURIComponent(registration.id)}/withdraw`, {
+    method: 'POST',
+    errorCodes: { 404: 'REGISTRATION_NOT_FOUND', 409: 'WITHDRAWAL_REFUSED' },
+    notify: {
+      title: 'Withdrawn',
+      message: `You have withdrawn from ${registration.event_name}.`,
+    },
   })
 }

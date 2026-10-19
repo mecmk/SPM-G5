@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { formatApiError } from '../api/client'
+import { formatApiError, mediaUrl } from '../api/client'
 import {
   listRegistrationEvents,
   registerForEvent,
@@ -15,14 +15,19 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import {
+  REGISTERED_BADGE,
+  describeRegisteredAt,
+  type RegistrationBadge,
+} from './registrationLabels'
 
 /** Story 18.1 AC1/AC3: each state's label, and the badge colour it takes (App.css). */
-const STATE_BADGES: Record<RegistrationState, { status: string; label: string }> = {
+const STATE_BADGES: Record<RegistrationState, RegistrationBadge> = {
   OPEN: { status: 'success', label: 'Open' },
   NOT_YET_OPEN: { status: 'info', label: 'Not yet open' },
   FULL: { status: 'warning', label: 'Full' },
   CLOSED: { status: 'neutral', label: 'Closed' },
-  REGISTERED: { status: 'registered', label: 'Registered' },
+  REGISTERED: REGISTERED_BADGE,
 }
 
 /** Story 18.1 AC1: what a Confirmed event with no approved venue booking shows. */
@@ -39,7 +44,7 @@ function describePlacesLeft(placesLeft: number): string {
  */
 function describeRegistration(event: RegistrationEvent): string {
   if (event.registered_at !== null) {
-    return `You registered on ${formatDateTime(event.registered_at)}`
+    return describeRegisteredAt(event.registered_at)
   }
   if (event.registration_opens_at !== null && event.state === 'NOT_YET_OPEN') {
     return `Registration opens ${formatDateTime(event.registration_opens_at)}`
@@ -95,7 +100,8 @@ interface UpcomingEventCardProps {
  * action: beside the details, below them on a phone), enabled only while the event is open (AC3:
  * disabled when full, closed or not yet open; not offered once registered). AC6: disabled while
  * any registration is being sent, so a double-click sends one, and a second card's answer cannot
- * enable the first card's Register while its own is still on the way.
+ * enable the first card's Register while its own is still on the way. AC8 (fix f18.1.1): the
+ * event's cover picture, from the API when it was uploaded (mediaUrl), or the placeholder.
  */
 function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: UpcomingEventCardProps) {
   function handleRegister() {
@@ -130,7 +136,14 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
         Register
       </button>
     )
-  return <EventCard title={event.name} imageUrl={null} details={details} action={register} />
+  return (
+    <EventCard
+      title={event.name}
+      imageUrl={mediaUrl(event.cover_image_url)}
+      details={details}
+      action={register}
+    />
+  )
 }
 
 /** The size of the list to load again after a registration: what is shown, so a refreshed list
@@ -155,6 +168,7 @@ function refreshLimit(shownCount: number): number {
  *      the card, and the list is loaded again so every card shows where it now stands.
  * AC4: an event that stopped taking registrations is gone from the reloaded list, so its refusal
  *      is shown above the list instead, naming the event.
+ * AC8 (fix f18.1.1): each card shows its event's cover picture, or the placeholder.
  */
 export function UpcomingEventsPage() {
   // What to load: the first page, then everything shown again after each registration. A new

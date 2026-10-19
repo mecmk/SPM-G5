@@ -139,7 +139,7 @@ class Events:
     # Story 18.1's, all CONFIRMED, Public and taking registrations: organiser 2, coordinator 2.
     # Each is one case of tests/e2e/attendee-registration.spec.ts. Only the jazz evening has venues
     # booked.
-    JAZZ_EVENING = _e(39)  # open, 120 places, two venues; only read
+    JAZZ_EVENING = _e(39)  # open, 120 places, two venues, the cover picture; only read
     DESIGN_MASTERCLASS = _e(40)  # open, 60 places; the spec registers for it
     FOUNDERS_FIRESIDE = _e(41)  # open, 80 places; the spec double-clicks Register
     MENTORING_SLOT = _e(42)  # open, 1 place; the spec's two attendees race for it
@@ -159,6 +159,17 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
+    # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
+    # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
+    # one of its own; the cases that only read share them, the yoga's most of all.
+    POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
+    SKETCHING_WALK = _e(71)  # CONFIRMED; the spec withdraws and registers again
+    BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
+    SUNSET_YOGA = _e(73)  # CONFIRMED; only read
+    HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
+    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
+    BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
+    LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
     # that its day's closure (Unavailability.FOYER_*) has marked "Venue unavailable - alternative
     # needed". Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
@@ -170,9 +181,9 @@ class Events:
     NEIGHBOURHOOD_SUMMIT = _e(67)  # ... and Venue Staff remove the closure first
     HERITAGE_WALK = _e(68)  # CANCELLED, its booking still marked
     PRODUCT_SHOWCASE = _e(69)  # a marked PENDING booking
-    ROBOTICS_OPEN_HOUSE = _e(70)  # coordinator 2's; read only
-    WELLNESS_EXPO = _e(71)  # coordinator 2's; the spec raises a replacement
-    CRAFT_MARKET = _e(72)  # an additional venue, marked: its closure is removed, then a request
+    ROBOTICS_OPEN_HOUSE = _e(78)  # coordinator 2's; read only
+    WELLNESS_EXPO = _e(79)  # coordinator 2's; the spec raises a replacement
+    CRAFT_MARKET = _e(80)  # an additional venue, marked: its closure is removed, then a request
 
 
 class Bookings:
@@ -224,9 +235,18 @@ class Bookings:
 
 
 class Registrations:
-    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one."""
+    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
+    Users.ATTENDEE's, one for each of 18.2's events, named after it."""
 
     PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
+    POETRY_NIGHT = uuid.UUID("18181818-0000-0000-0000-000000000002")
+    SKETCHING_WALK = uuid.UUID("18181818-0000-0000-0000-000000000003")
+    BOARD_GAMES_SOCIAL = uuid.UUID("18181818-0000-0000-0000-000000000004")
+    SUNSET_YOGA = uuid.UUID("18181818-0000-0000-0000-000000000005")
+    HERITAGE_TRAIL = uuid.UUID("18181818-0000-0000-0000-000000000006")  # WITHDRAWN
+    CHARITY_FUN_RUN = uuid.UUID("18181818-0000-0000-0000-000000000007")
+    BOOK_SWAP = uuid.UUID("18181818-0000-0000-0000-000000000008")
+    LANTERN_PAINTING = uuid.UUID("18181818-0000-0000-0000-000000000009")
 
 
 class Unavailability:
