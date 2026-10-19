@@ -80,7 +80,9 @@ export function bookingOutcomeLabels(status: BookingStatus): BookingOutcomeLabel
 }
 
 /** Story 12.6 AC3: when a withdrawn or cancelled request closed - the release, for an original a
- * replacement's approval released, which is later than the approval `decided_at` still holds. */
+ * replacement's approval released, which is later than the approval `decided_at` still holds. For
+ * a booking story 19.2 released there is no release time, so this is its `decided_at`, which is
+ * its approval. */
 export function closedAt(request: { decided_at: string | null; released_at: string | null }) {
   return request.released_at ?? request.decided_at
 }

@@ -239,7 +239,7 @@ export interface BookingQueueEntry {
   approval_releases_venue_name: string | null
   original_is_marked: boolean | null
   /** Story 12.6 AC3: when a released original was released - its replacement's approval; null for
-   * any other request. */
+   * any other request, one story 19.2 released included. */
   released_at: string | null
 }
 
@@ -420,7 +420,7 @@ export interface BookingOutcome {
   replaced_by_venue_name: string | null
   pending_replacement_venue_name: string | null
   /** Story 12.6 AC3: when an original was released - its replacement's approval, which is when it
-   * closed; null for any other booking. */
+   * closed; null for any other booking, one story 19.2 released included. */
   released_at: string | null
 }
 

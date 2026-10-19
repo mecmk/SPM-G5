@@ -29,16 +29,20 @@
  *      empty state, and the pending replacement named on its cards.
  *
  * The rules - the refusals, the one pending replacement, the release, the race, the notices, the
- * list's count and paging - are backend cases: backend/tests/bookings/test_request_replacement.py,
- * test_replacement_approval.py, test_replacement_schema.py, test_replacement_for_venue_staff.py,
- * backend/tests/events/test_assigned_events_venue_unavailable.py and
- * backend/tests/venues/test_venue_search_exclude_venue.py. This file is the flow a person clicks.
+ * list's count and paging, the safety review's and Confirm's refusals - are backend cases:
+ * backend/tests/bookings/test_request_replacement.py, test_replacement_approval.py,
+ * test_replacement_schema.py, test_replacement_for_venue_staff.py,
+ * test_replacement_with_change_request.py (19.2), backend/tests/safety/
+ * test_blocked_while_venue_unavailable.py, backend/tests/events/
+ * test_assigned_events_venue_unavailable.py and backend/tests/venues/
+ * test_venue_search_exclude_venue.py. This file is the flow a person clicks.
  *
- * Seed (backend/db/seed/020_sample_data.sql, "Story 12.6"): ten events of February 2029, each with
- * a booking at Exhibition Foyer marked by the closure of its day, and Grand Hall free for every
+ * Seed (backend/db/seed/020_sample_data.sql, "Story 12.6"): events of February 2029, each with a
+ * booking at Exhibition Foyer marked by the closure of its day, and Grand Hall free for every
  * one. Each flow that changes something has an event of its own (see the seed's note), so specs
- * running in parallel never share one; the ones that read are never changed. The 2 s the DoD asks
- * of the pre-filled catalogue is checked by hand, not here.
+ * running in parallel never share one; the ones that read are never changed. The pages that need
+ * a state the seed cannot reach answer one call of their own (a marked pending replacement, a
+ * failed read).
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, corsHeaders, signIn, venueCard } from './support'
