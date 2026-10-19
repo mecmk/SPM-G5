@@ -214,12 +214,12 @@ test('18.1 AC8: an event with a cover picture shows it on its card', async ({ pa
     .toBeGreaterThan(0)
 })
 
-test('18.1 AC8: an uploaded picture is asked of the API, and an event without one keeps the placeholder', async ({
+test('18.1 AC8: an uploaded picture is asked of the API, one that cannot be loaded gives way to the placeholder, and so does none', async ({
   page,
 }) => {
   // No seeded event has an uploaded picture, so the list call alone is stubbed. The picture itself
-  // is not: what matters is where the browser asks for it. The API has no such file, so that card
-  // then falls back to the placeholder.
+  // is not: the browser asks the API for it, which has no such file, so the card then shows the
+  // placeholder - AC8's picture that can't be loaded.
   const listRequest = page.waitForRequest(
     (request) =>
       request.resourceType() === 'fetch' && new URL(request.url()).pathname === EVENTS_API_PATH,
@@ -237,6 +237,8 @@ test('18.1 AC8: an uploaded picture is asked of the API, and an event without on
 
   const apiOrigin = new URL((await listRequest).url()).origin
   expect(new URL((await pictureRequest).url()).origin).toBe(apiOrigin)
+  await expect(eventCard(page, pictured.name)).toBeVisible()
+  await expect(eventCard(page, pictured.name).locator('img')).toHaveCount(0)
   await expect(eventCard(page, plain.name)).toBeVisible()
   await expect(eventCard(page, plain.name).locator('img')).toHaveCount(0)
 })
