@@ -3976,6 +3976,19 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
+/* ---------- the Lead's reassignment (story 5.6) ---------- */
+
+/* On a phone, Reassign - on the event page and on each overview card - and the Reassign dialog's
+   picker and buttons are at least 44px tall. Scoped to those, so other stories' buttons and
+   dialogs keep their size. The dialog already fills the screen less a 1rem gutter. */
+@media (max-width: 640px) {
+  .reassign-action,
+  .reassign-dialog select,
+  .reassign-dialog .dialog-actions button {
+    min-height: 44px;
+  }
+}
+
 /* Story 18.2: on a phone each registration's Withdraw button on My registrations is at least
    44px tall, to be pressed with a thumb, as 18.1's Register is. */
 @media (max-width: 640px) {

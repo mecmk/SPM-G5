@@ -21,13 +21,14 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, lazyload
+from sqlalchemy.orm import Session, joinedload, lazyload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import Permission, RoleCode, role_has
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
 from app.common.audit import record_audit
 from app.config import settings
 from app.events.models import (
@@ -499,31 +500,96 @@ def list_my_events(
     return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
 
 
+# Story 12.6 AC11: the events a marked booking counts for - the ones still being arranged or going
+# ahead, as story 9.4 flags them (``app.venues.service._FLAGGABLE_EVENT_STATUSES``). A cancelled
+# event leaves the tab even though a mark may still sit on one of its bookings.
+_VENUE_UNAVAILABLE_EVENT_STATUSES = (
+    EventStatus.PLANNING,
+    EventStatus.AWAITING_SAFETY_CHECK,
+    EventStatus.CONFIRMED,
+)
+
+
+def _has_marked_booking() -> ColumnElement[bool]:
+    """Story 12.6 AC11: the event has a booking that still holds its venue and is marked "Venue
+    unavailable - alternative needed" (9.4). A mark left on a closed booking is history."""
+    return exists().where(VenueBooking.event_id == Event.id, *marked_booking_conditions())
+
+
+@dataclass(frozen=True)
+class AssignedEventsListing:
+    """One page of a coordinator's assigned events, how many the list holds in all, how many the
+    coordinator has with a marked booking whatever the page or the filter (story 12.6 AC11), and,
+    for the page's events, which have one and which venue a pending replacement asks for."""
+
+    events: list[Event]
+    total: int
+    venue_unavailable_count: int
+    venue_unavailable_event_ids: frozenset[uuid.UUID]
+    pending_replacement_venues: dict[uuid.UUID, str]
+
+
 def list_assigned_events(
     db: Session,
     *,
     coordinator: User,
     limit: int = MY_EVENTS_MAX_LIMIT,
     offset: int = 0,
-) -> MyEventsListing:
+    venue_unavailable: bool = False,
+) -> AssignedEventsListing:
     """Story 6.1 AC1/AC2: every event assigned to ``coordinator``, in any status - unlike the
     review queue (story 4.1), which only ever returns the three awaiting-decision statuses. A
     draft is never assigned to a coordinator, so it can never appear here. AC3: most recently
     updated first, ties broken by id, paged the same way as the organiser's own list
     (``list_my_events``) - both lists grow across a person's whole history rather than staying
     small like the review queue, so the same shape fits. ``assigned_coordinator`` is the caller
-    themselves and needs no name, so only ``organiser`` is left to load eagerly."""
+    themselves and needs no name, so only ``organiser`` is left to load eagerly.
+
+    Story 12.6 AC11: ``venue_unavailable`` narrows the list to the events with a marked booking,
+    and ``total`` and the paging then follow the narrowed list. ``venue_unavailable_count`` is how
+    many such events the coordinator has, counted apart from the page and the filter, so the tab's
+    label is right whichever is showing (0 when none). An event with a pending replacement stays
+    listed and names the venue asked for."""
     is_assigned = Event.assigned_coordinator_id == coordinator.id
+    is_unavailable = (
+        is_assigned & Event.status.in_(_VENUE_UNAVAILABLE_EVENT_STATUSES) & _has_marked_booking()
+    )
+    shown = is_unavailable if venue_unavailable else is_assigned
     page = (
         select(Event)
         .options(lazyload(Event.assigned_coordinator))
-        .where(is_assigned)
+        .where(shown)
         .order_by(Event.updated_at.desc(), Event.id)
         .limit(limit)
         .offset(offset)
     )
-    total = db.scalar(select(func.count()).select_from(Event).where(is_assigned))
-    return MyEventsListing(events=list(db.scalars(page).all()), total=total or 0)
+    events = list(db.scalars(page).all())
+    total = db.scalar(select(func.count()).select_from(Event).where(shown))
+    count = db.scalar(select(func.count()).select_from(Event).where(is_unavailable))
+    event_ids = [event.id for event in events]
+    marked_ids = frozenset(
+        db.scalars(select(Event.id).where(Event.id.in_(event_ids), is_unavailable)).all()
+    )
+    replacements = db.scalars(
+        select(VenueBooking)
+        .options(joinedload(VenueBooking.venue))
+        .where(
+            VenueBooking.event_id.in_(event_ids),
+            VenueBooking.status == BookingStatus.PENDING,
+            VenueBooking.replaces_booking_id.is_not(None),
+        )
+        .order_by(VenueBooking.created_at, VenueBooking.id)
+    ).all()
+    pending_venues: dict[uuid.UUID, str] = {}
+    for replacement in replacements:
+        pending_venues.setdefault(replacement.event_id, replacement.venue.name)
+    return AssignedEventsListing(
+        events=events,
+        total=total or 0,
+        venue_unavailable_count=count or 0,
+        venue_unavailable_event_ids=marked_ids,
+        pending_replacement_venues=pending_venues,
+    )
 
 
 def list_reference_data(db: Session) -> EventReferenceData:

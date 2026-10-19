@@ -271,12 +271,15 @@ def test_raising_a_change_notifies_the_assigned_coordinator(organiser_client, db
 
 @pytest.mark.story("19.1", ac=1)
 def test_notification_goes_to_the_coordinator_assigned_now(client, db: Session):
-    """Regression for story 5.2: Events.APPROVED is Omar's Planning event, assigned to Chloe.
-    Once Chloe hands it to Carl, a change request must reach Carl."""
-    client.login(Users.COORDINATOR)
+    """Regression for stories 5.2 and 5.6: Events.APPROVED is Omar's Planning event, assigned to
+    Chloe. Once the Lead hands it to Carl, a change request must reach Carl."""
+    client.login(Users.LEAD)
     handed_over = client.put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
     assert handed_over.status_code == 200, handed_over.text
     client.logout()

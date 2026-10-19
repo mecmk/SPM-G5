@@ -10,6 +10,8 @@ the expected attendance (2.1 AC17) and the places left are shown (decision 1, 14
 Story 18.2 AC5: of their own registrations, an attendee is sent each one's event name, cover
 picture and dates, where they stand, when they registered and withdrew, and whether they can
 withdraw now - nothing more of the event.
+
+Story 18.3: an event's registration list, as its organiser and assigned coordinator see it.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.auth.models import User
 from app.events.models import Event
 from app.registrations.models import EventRegistration
 from app.venues.models import Venue
@@ -155,3 +158,53 @@ class MyRegistrationOut(BaseModel):
             withdrawn_at=registration.withdrawn_at,
             can_withdraw=can_withdraw,
         )
+
+
+class EventRegistrationOut(BaseModel):
+    """18.3 AC1/AC4: one registration in an event's list - who, when, and where they stand, as
+    18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. No defaults
+    (response schema)."""
+
+    id: uuid.UUID
+    attendee_name: str
+    attendee_email: str
+    registered_at: datetime
+    status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
+    withdrawn_at: datetime | None
+
+    @classmethod
+    def from_registration(
+        cls, registration: EventRegistration, *, attendee: User, status: str
+    ) -> EventRegistrationOut:
+        return cls(
+            id=registration.id,
+            attendee_name=attendee.full_name,
+            attendee_email=attendee.email,
+            registered_at=registration.registered_at,
+            status=status,
+            withdrawn_at=registration.withdrawn_at,
+        )
+
+
+class EventRegistrationListOut(BaseModel):
+    """18.3 AC1-AC3/AC7: one page of the list, how many registrations there are in all, and how
+    many are active against the capacity. No defaults (response schema)."""
+
+    items: list[EventRegistrationOut]
+    total: int
+    active_count: int
+    capacity: int
+    is_full: bool
+
+
+class ManagedRegistrationEventOut(BaseModel):
+    """18.3 AC5: one event on the registrations report's picker. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+
+    @classmethod
+    def from_event(cls, event: Event) -> ManagedRegistrationEventOut:
+        return cls(id=event.id, name=event.name, starts_at=event.starts_at, ends_at=event.ends_at)

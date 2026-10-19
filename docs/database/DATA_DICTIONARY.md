@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-16 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-19 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -646,10 +646,10 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3), and one an approved change to its event no longer fits becomes CANCELLED with no replacement (story 19.2 AC5). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1) - for an EXPIRED booking, who approved it - or the coordinator who withdrew the request (story 12.2). NULL when the system cancelled it (migration 010). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), and for a WITHDRAWN or CANCELLED request, when it was closed. |
-| `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). |
+| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), for a WITHDRAWN or CANCELLED request, when it was closed - except an approved booking a replacement released (story 12.6 AC3) or an approved change released (story 19.2 AC5), whose decided_at stays its approval: when a released original closed is its replacement's decided_at, or is not recorded for a change. |
+| `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). On an approved booking released by its replacement (story 12.6 AC3): "Replaced by <venue>". |
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
@@ -661,6 +661,9 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
 | `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 | `venue_unavailable_marked_at` | `timestamp with time zone` | yes | - | - | When the booking was marked "Venue unavailable - alternative needed" (story 9.4 AC3): set while a pending or approved booking's held period overlaps, from the later of now and the period's start to its end, one of its venue's unavailability periods; kept while any still does, and cleared when none does (AC6). Only the part of the held period still to come counts, so a period wholly in the past marks nothing. NULL when unmarked. A value left on a booking that is no longer pending or approved is history: readers ignore it and nothing clears it. |
+| `replaces_booking_id` | `uuid` | yes | - | - | FK -> venue_bookings.id, with event_id (fk_venue_bookings_replaces), so always a booking of the same event. The booking this one was requested to replace, because Venue Staff made its venue unavailable (story 12.6 AC2); NULL for every other booking. Set when the replacement is requested and never cleared, so a rejected or withdrawn replacement still says what it was for. The original stays approved until the replacement is approved (AC3, AC4). |
+| `replaced_by_booking_id` | `uuid` | yes | - | FK → `venue_bookings.id` | FK -> venue_bookings.id. On an original released by its replacement: the replacement whose approval released it (story 12.6 AC3), set in that same transaction and only on a CANCELLED booking (ck_venue_bookings_replaced_by_cancelled). The event page shows "Replaced by <venue>" only when this is set, so a replacement that was never approved is never shown as having replaced it (AC8). NULL otherwise; a booking replaces at most one original (uq_venue_bookings_replaced_by). |
+| `replaces_live_original` | `boolean` | no | `false` | - | TRUE on a replacement (replaces_booking_id) from the moment it is requested, while its original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE on a PENDING replacement when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement's request. The index reads it only for a PENDING booking: on a decided replacement it keeps what it had and means nothing. FALSE for every other booking. |
 
 Allowed values:
 
@@ -668,14 +671,20 @@ Allowed values:
 
 Rules and indexes:
 
+- unique `uq_venue_bookings_id_event`: `UNIQUE (id, event_id)`
+- unique `uq_venue_bookings_replaced_by`: `UNIQUE (replaced_by_booking_id)`
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
 - check `ck_venue_bookings_hold_completed`: `CHECK (((hold_completed_at IS NULL) OR ((hold_expires_at IS NOT NULL) AND (status <> 'EXPIRED'::text))))`
 - check `ck_venue_bookings_hold_expiry`: `CHECK ((((status <> 'PENDING'::text) OR (hold_expires_at IS NULL)) AND ((status <> 'EXPIRED'::text) OR (hold_expires_at IS NOT NULL))))`
 - check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
+- check `ck_venue_bookings_live_original_is_a_replacement`: `CHECK (((NOT replaces_live_original) OR (replaces_booking_id IS NOT NULL)))`
+- check `ck_venue_bookings_not_self_replacement`: `CHECK ((replaces_booking_id IS DISTINCT FROM id))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
+- check `ck_venue_bookings_replaced_by_cancelled`: `CHECK (((replaced_by_booking_id IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
-- unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
+- unique index `uq_venue_bookings_one_pending_replacement`: `btree (replaces_booking_id) WHERE ((status = 'PENDING'::text) AND (replaces_booking_id IS NOT NULL))`
+- unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])) AND (NOT ((status = 'PENDING'::text) AND replaces_live_original)))`
 - index `ix_venue_bookings_event`: `btree (event_id)`
 - index `ix_venue_bookings_open_holds`: `btree (hold_expires_at) WHERE ((status = 'APPROVED'::text) AND (hold_completed_at IS NULL))`
 - index `ix_venue_bookings_status`: `btree (status)`

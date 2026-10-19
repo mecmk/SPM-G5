@@ -3,8 +3,10 @@ import { Link } from 'react-router'
 import type { BookingOutcome } from '../api/bookings'
 import { StatusBadge } from '../components/StatusBadge'
 import { venuePath } from '../routes'
+import { Chip } from '../components/Chip'
+import { FIND_REPLACEMENT_LABEL, VENUE_UNAVAILABLE_LABEL } from '../shared/bookingStatus'
 import { formatSchedule } from '../shared/format'
-import { isBooked } from '../shared/venueRequest'
+import { isBooked, isMarked } from '../shared/venueRequest'
 
 export interface CoveringBookingCardProps {
   /** The pending or approved request of the selected venue requirement. */
@@ -16,6 +18,9 @@ export interface CoveringBookingCardProps {
   /** Story 12.5 (decided 11 Oct 2026): withdraw the request, for whoever may - the event's
    *  assigned coordinator. Offered while it is pending only (12.2). */
   onWithdraw?: (booking: BookingOutcome) => void
+  /** Story 12.6 AC1/AC4: the catalogue's address for replacing the booking, when it is an approved
+   *  one still marked "Venue unavailable" and the user may request a venue for its event. */
+  replacementPath?: string
 }
 
 /**
@@ -32,6 +37,7 @@ export function CoveringBookingCard({
   requirementName,
   search,
   onWithdraw,
+  replacementPath,
 }: CoveringBookingCardProps) {
   const headingId = useId()
   const canChange = onWithdraw !== undefined && !isBooked(booking)
@@ -54,6 +60,18 @@ export function CoveringBookingCard({
       <p className="small muted">
         {booking.venue_location} · {formatSchedule(booking.starts_at, booking.ends_at)}
       </p>
+      {isMarked(booking) && (
+        <p>
+          <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
+        </p>
+      )}
+      {replacementPath !== undefined && (
+        <div className="cluster">
+          <Link to={replacementPath} className="button button-sm">
+            {FIND_REPLACEMENT_LABEL}
+          </Link>
+        </div>
+      )}
       {canChange && (
         <>
           <p className="small muted">

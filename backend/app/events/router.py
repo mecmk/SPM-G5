@@ -108,13 +108,29 @@ def list_assigned_events(
         int, Query(ge=1, le=service.MY_EVENTS_MAX_LIMIT)
     ] = service.MY_EVENTS_MAX_LIMIT,
     offset: Annotated[int, Query(ge=0, le=service.MY_EVENTS_MAX_OFFSET)] = 0,
+    venue_unavailable: bool = False,
 ) -> AssignedEventList:
     """Story 6.1 AC1-AC3: every event assigned to the signed-in coordinator, in any status,
     newest activity first, paged like `/mine`. AC4: events:review only - other roles get 403
-    from the dependency (1.2 AC4)."""
-    listing = service.list_assigned_events(db, coordinator=actor, limit=limit, offset=offset)
+    from the dependency (1.2 AC4).
+
+    Story 12.6 AC11: `?venue_unavailable=true` lists only the events with a booking marked "Venue
+    unavailable - alternative needed", and every answer carries `venue_unavailable_count`, the
+    coordinator's own figure for the tab, whatever the page or the filter."""
+    listing = service.list_assigned_events(
+        db, coordinator=actor, limit=limit, offset=offset, venue_unavailable=venue_unavailable
+    )
     return AssignedEventList(
-        items=[AssignedEventEntry.from_event(e) for e in listing.events], total=listing.total
+        items=[
+            AssignedEventEntry.from_event(
+                e,
+                is_venue_unavailable=e.id in listing.venue_unavailable_event_ids,
+                pending_replacement_venue_name=listing.pending_replacement_venues.get(e.id),
+            )
+            for e in listing.events
+        ],
+        total=listing.total,
+        venue_unavailable_count=listing.venue_unavailable_count,
     )
 
 

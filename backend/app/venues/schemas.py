@@ -289,6 +289,10 @@ class VenueSearchQuery(BaseModel):
     include_withdrawn: bool = False
     # Story 11.1 AC1: the event venues are being found for. Judges each result; filters nothing.
     event: uuid.UUID | None = None
+    # Story 12.6 AC1: a venue the results never hold - the unavailable one a replacement is being
+    # found for. Part of the search's scope, not one of its filters: whatever else is filtered, the
+    # period included, it stays out, and the removal hints never offer to bring it back.
+    exclude_venue: uuid.UUID | None = None
     # f11.1.1 (11.1 AC1): the event's venue requirement selected in the catalogue's banner (story
     # 8.4), judged against. None judges the event's attendance alone, as for an additional venue
     # (story 12.5 AC5). Read only with ``event``; filters nothing either.

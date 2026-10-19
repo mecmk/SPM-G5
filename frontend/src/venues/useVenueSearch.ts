@@ -55,6 +55,8 @@ function filtersKey(search: VenueSearch): string {
     facilities: [...(search.facilities ?? [])].sort(),
     accessibilityFeatures: [...(search.accessibilityFeatures ?? [])].sort(),
     includeWithdrawn: false,
+    // Story 12.6: the booking being replaced is not a filter.
+    replacingBookingId: undefined,
   }).toString()
 }
 
@@ -97,8 +99,11 @@ export function useVenueSearch(): VenueSearchState {
   )
 
   const clearFilters = useCallback(() => {
-    const { eventId, requirementId } = currentVenueSearch()
-    setSearchParams(venueSearchParams({ eventId, requirementId }), { replace: true })
+    // Story 12.6 AC1: the booking being replaced is not a filter, so it stays.
+    const { eventId, requirementId, replacingBookingId } = currentVenueSearch()
+    setSearchParams(venueSearchParams({ eventId, requirementId, replacingBookingId }), {
+      replace: true,
+    })
   }, [setSearchParams])
 
   return { search, updateSearch, replaceSearch, clearFilters }
