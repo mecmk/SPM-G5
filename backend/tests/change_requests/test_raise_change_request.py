@@ -1002,3 +1002,164 @@ def test_only_the_owning_organiser_withdraws(login_as, db: Session, case, expect
         assert response.json()["detail"] == expected_detail
     [row] = _change_requests(db, event.id)
     assert row.status == "PENDING"
+
+
+# --- AC11-AC13 (fix f19.1.1): change requests on Confirmed events -----------------------------
+def _confirmed_event(db: Session, **overrides) -> Event:
+    """Olivia's event once Confirmed (Q39): the same as ``_planning_event``, a step further on."""
+    return _planning_event(db, status=EventStatus.CONFIRMED, **overrides)
+
+
+def _event_status(db: Session, event_id: uuid.UUID) -> str:
+    return db.execute(text("SELECT status FROM events WHERE id = :e"), {"e": event_id}).scalar_one()
+
+
+@pytest.mark.story("19.1", ac=11)
+def test_organiser_raises_a_change_on_a_confirmed_event(organiser_client, db: Session):
+    """AC11: as on a Planning event - saved as pending, the coordinator told, and nothing on the
+    event changes yet: it stays Confirmed, with its attendance as it was."""
+    event = _confirmed_event(db)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "PENDING"
+    [row] = _change_requests(db, event.id)
+    assert row.status == "PENDING"
+    assert row.requested_by_id == Users.ORGANISER.id
+    [notification] = _notifications(db, event.id, "EVENT_CHANGE_REQUESTED")
+    assert notification.recipient_id == Users.COORDINATOR.id
+    assert _event_status(db, event.id) == EventStatus.CONFIRMED
+    assert db.get(Event, event.id).expected_attendance == 100
+
+
+@pytest.mark.story("19.1", ac=11)
+@pytest.mark.parametrize(
+    ("field", "proposed"),
+    [
+        ("schedule", None),
+        ("expected_attendance", 150),
+        ("venue_requirements", [{"name": "Breakout", "capacity": 30, "layout_code": "CLASSROOM"}]),
+        ("equipment", [{"equipment_type_code": "WIRELESS_MIC", "quantity": 4}]),
+    ],
+)
+def test_each_field_can_be_raised_on_a_confirmed_event(
+    organiser_client, db: Session, field, proposed
+):
+    """AC11: every field AC1 offers is taken on a Confirmed event too."""
+    event = _confirmed_event(db)
+
+    response = _raise(organiser_client, event.id, field, proposed or _moved_a_day(event))
+
+    assert response.status_code == 201, response.text
+    [row] = _change_requests(db, event.id)
+    assert row.field_name == field
+
+
+@pytest.mark.story("19.1", ac=11)
+def test_a_change_raised_on_a_confirmed_event_returns_it_to_planning_when_approved(
+    login_as, db: Session
+):
+    """AC11's second sentence, through 19.2: Olivia asks, Chloe approves, and the event is back
+    in Planning with the new attendance, to go through every check again (19.2 AC8)."""
+    event = _confirmed_event(db)
+    raised = _raise(login_as(Users.ORGANISER), event.id, "expected_attendance", 150)
+    assert raised.status_code == 201, raised.text
+
+    approved = login_as(Users.COORDINATOR).post(
+        f"/events/{event.id}/change-requests/{raised.json()['id']}/approve"
+    )
+
+    assert approved.status_code == 200, approved.text
+    db.expire_all()
+    assert _event_status(db, event.id) == EventStatus.PLANNING
+    assert db.get(Event, event.id).expected_attendance == 150
+
+
+@pytest.mark.story("19.1", ac=11)
+def test_a_request_written_while_the_event_became_confirmed_is_taken(organiser_client, db: Session):
+    """AC11 replaces AC8's refusal: Olivia opened her Planning event, and it was confirmed while
+    she wrote the request. It is taken, against the event as it now stands."""
+    event = _planning_event(db)
+    opened = organiser_client.get(f"/events/{event.id}")
+    assert opened.json()["status"] == EventStatus.PLANNING
+    _set_status(db, event.id, EventStatus.CONFIRMED)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 201, response.text
+    assert [row.status for row in _change_requests(db, event.id)] == ["PENDING"]
+
+
+@pytest.mark.story("19.1", ac=11)
+@pytest.mark.story("19.1", ac=6)
+def test_one_pending_request_per_field_holds_once_confirmed(organiser_client, db: Session):
+    """AC5/AC6 on a Confirmed event: a request raised while it was in Planning, still pending,
+    keeps its field - a second one is refused - while another field can still be asked for."""
+    event = _planning_event(db)
+    first = _raise(organiser_client, event.id, "expected_attendance", 150)
+    assert first.status_code == 201, first.text
+    _set_status(db, event.id, EventStatus.CONFIRMED)
+
+    second = _raise(organiser_client, event.id, "expected_attendance", 180)
+    other_field = _raise(organiser_client, event.id, "schedule", _moved_a_day(event))
+
+    assert second.status_code == 409, second.text
+    assert "already waiting for a decision" in second.json()["detail"]
+    assert other_field.status_code == 201, other_field.text
+    assert len(_change_requests(db, event.id)) == 2
+
+
+@pytest.mark.story("19.1", ac=11)
+@pytest.mark.story("19.1", ac=4)
+@pytest.mark.parametrize("case", ["the same value as now", "a date in the past"])
+def test_the_rules_for_a_change_still_apply_once_confirmed(organiser_client, db: Session, case):
+    """AC4 on a Confirmed event: a value identical to the current one, and a date the creation
+    rules refuse, are refused (422) as on a Planning event - not for the event's status."""
+    event = _confirmed_event(db)
+    field, proposed = {
+        "the same value as now": ("expected_attendance", 100),
+        "a date in the past": ("schedule", _in_the_past(event)),
+    }[case]
+
+    response = _raise(organiser_client, event.id, field, proposed)
+
+    assert response.status_code == 422, response.text
+    assert _change_requests(db, event.id) == []
+
+
+@pytest.mark.story("19.1", ac=11)
+@pytest.mark.story("19.1", ac=7)
+@pytest.mark.parametrize(
+    ("who", "expected_status"),
+    [("the coordinator", 403), ("another organiser", 404), ("nobody signed in", 401)],
+)
+def test_only_the_owning_organiser_raises_on_a_confirmed_event(
+    login_as, client, db: Session, who, expected_status
+):
+    """AC7 on a Confirmed event: Chloe, its coordinator, may not raise one for Olivia; Omar cannot
+    see it; signing in is required."""
+    event = _confirmed_event(db)
+    actor = {
+        "the coordinator": lambda: login_as(Users.COORDINATOR),
+        "another organiser": lambda: login_as(Users.ORGANISER_2),
+        "nobody signed in": lambda: client,
+    }[who]()
+
+    response = _raise(actor, event.id, "expected_attendance", 150)
+
+    assert response.status_code == expected_status, response.text
+    assert _change_requests(db, event.id) == []
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_change_request_refused_while_awaiting_the_safety_check(organiser_client, db: Session):
+    """AC12: whether change requests are offered while the event awaits its safety check waits on
+    Q20, so until then the API refuses them, saying the event's status."""
+    event = _planning_event(db, status=EventStatus.AWAITING_SAFETY_CHECK)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+    assert EventStatus.AWAITING_SAFETY_CHECK in response.json()["detail"]
+    assert _change_requests(db, event.id) == []

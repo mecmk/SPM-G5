@@ -24,6 +24,11 @@ import { ACCOUNTS, approvedEvent, changeRequests, EVENTS, inFuture, signIn } fro
 // Confirmed, Omar's (organiser 2) - only read here, never changed.
 const CONFIRMED_DINNER = '33333333-0000-0000-0000-000000000013'
 const REASON = 'The keynote speaker can only attend a day later.'
+// f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change a Confirmed event.
+const BACK_TO_PLANNING_NOTE =
+  'If this change is approved, the event goes back to Planning and needs a new safety check before it is confirmed again.'
+const PHONE = { width: 375, height: 667 }
+const MIN_TOUCH_TARGET = 44
 
 async function openChangeForm(page: Page, field: string) {
   await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
@@ -188,9 +193,7 @@ test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not
   await section.getByRole('button', { name: 'Add equipment' }).click()
   await section.getByRole('button', { name: 'Add equipment' }).click()
   for (const position of [existingItems + 1, existingItems + 2]) {
-    await section
-      .getByLabel(`Item ${position} type`)
-      .selectOption({ label: 'Wireless microphone' })
+    await section.getByLabel(`Item ${position} type`).selectOption({ label: 'Wireless microphone' })
     await section.getByLabel(`Item ${position} quantity`).fill('1')
   }
   await section.getByLabel('Reason for the change').fill(REASON)
@@ -212,4 +215,48 @@ test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not
     section.getByText('Give every venue requirement a number of people, as a whole number from 1.'),
   ).toBeVisible()
   expect(raiseCalls).toBe(0)
+})
+
+test('19.1 AC11: change requests are offered on a confirmed event, with what approval means', async ({
+  page,
+}) => {
+  // Read only: each form is opened and nothing is sent.
+  // Planning: the form, with no note - approving there does not move the event back.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await openChangeForm(page, 'Expected attendance')
+  await expect(
+    changeRequests(page).getByRole('button', { name: 'Send change request' }),
+  ).toBeVisible()
+  await expect(changeRequests(page).getByText(BACK_TO_PLANNING_NOTE)).toHaveCount(0)
+
+  // Confirmed: Omar's dinner takes change requests now (Q39), and says what approving one means.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(`/events/${CONFIRMED_DINNER}`)
+  await openChangeForm(page, 'Expected attendance')
+  await expect(
+    changeRequests(page).getByRole('button', { name: 'Send change request' }),
+  ).toBeVisible()
+  await expect(changeRequests(page).getByText(BACK_TO_PLANNING_NOTE)).toBeVisible()
+})
+
+test('19.1 AC11: the change form on a confirmed event fits a phone', async ({ page }) => {
+  // Read only: the form is opened on Omar's dinner and nothing is sent.
+  await page.setViewportSize(PHONE)
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(`/events/${CONFIRMED_DINNER}`)
+  const request = changeRequests(page).getByRole('button', { name: 'Request a change' })
+  await expect(request).toBeVisible()
+  expect((await request.boundingBox())!.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
+
+  await openChangeForm(page, 'Expected attendance')
+  const note = changeRequests(page).getByText(BACK_TO_PLANNING_NOTE)
+  await expect(note).toBeVisible()
+  const box = (await note.boundingBox())!
+  expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width)
+  const fits = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  )
+  expect(fits).toBe(true)
 })
