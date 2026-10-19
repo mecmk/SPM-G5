@@ -11,6 +11,7 @@ import { formatApiError } from '../api/client'
 import { getEvent, type EventDetail } from '../api/events'
 import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
+import { ReplacementNote } from '../components/ReplacementNote'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -331,6 +332,12 @@ export function BookingRequestDetailPage() {
       </div>
 
       {outsideHoursNotice !== null && <p className="warning">{outsideHoursNotice}</p>}
+      {/* Story 12.6 AC3/AC6: a replacement says what it replaces and what approving it releases. */}
+      <ReplacementNote
+        replacesVenueName={booking.replaces_venue_name}
+        approvalReleasesVenueName={booking.approval_releases_venue_name}
+        originalIsMarked={booking.original_is_marked}
+      />
       {/* Story 9.4 AC3: the venue is unavailable for part of this request's held period, pending or
           approved alike. AC7: a pending request cannot be approved while the closure stands; it can
           still be rejected. */}

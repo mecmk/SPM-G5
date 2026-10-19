@@ -415,13 +415,16 @@ def test_nobody_is_notified_of_their_own_action(db: Session):
 
 
 @pytest.mark.story("20.1", ac=3)
-def test_the_coordinator_who_reassigns_is_not_notified(coordinator_client, db: Session):
-    """Chloe hands Nimbus Developer Conference (Omar's) to Carl: Carl and Omar are told, Chloe,
-    who made the change, is not. 5.2 AC1's "both coordinators" holds when someone else
-    reassigns, which 5.6 (the Lead) brings."""
-    response = coordinator_client.put(
+def test_the_lead_who_reassigns_is_not_notified(login_as, db: Session):
+    """The Lead hands Nimbus Developer Conference (Omar's) from Chloe to Carl: Chloe, Carl and
+    Omar are told, and the Lead, who made the change, is not. Since story 5.6 (Q16) only the Lead
+    reassigns, so "both coordinators" (5.2 AC1) now holds."""
+    response = login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -430,6 +433,7 @@ def test_the_coordinator_who_reassigns_is_not_notified(coordinator_client, db: S
         {"id": Events.APPROVED},
     ).all()
     assert sorted(tuple(row) for row in rows) == [
+        ("EVENT_REASSIGNED_FROM", Users.COORDINATOR.id),
         ("EVENT_REASSIGNED_ORGANISER", Users.ORGANISER_2.id),
         ("EVENT_REASSIGNED_TO", Users.COORDINATOR_2.id),
     ]
@@ -608,12 +612,16 @@ def test_a_submission_that_fails_part_way_leaves_no_notification(
 
 @pytest.mark.story("20.1", ac=4)
 def test_after_a_reassignment_the_new_coordinator_gets_later_notifications(client, db: Session):
-    """Chloe asked for Grand Hall for Product Roadmap Townhall, then handed the event to Carl.
-    The decision goes to the coordinator the event has now, not the one who asked."""
-    client.login(Users.COORDINATOR)
+    """Chloe asked for Grand Hall for Product Roadmap Townhall, then the Lead handed the event to
+    Carl (story 5.6). The decision goes to the coordinator the event has now, not the one who
+    asked."""
+    client.login(Users.LEAD)
     reassigned = client.put(
         f"/events/{Events.APPROVED_3}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
     assert reassigned.status_code == 200, reassigned.text
     client.login(Users.VENUE_STAFF)
@@ -825,7 +833,7 @@ def test_simultaneous_booking_decisions_notify_once(engine: Engine):
     def approve() -> str:
         with Session(engine) as session:
             start.wait()
-            booking = bookings_service.get_booking_for_decision(session, booking_id)
+            booking = bookings_service.get_booking_for_approval(session, booking_id)
             try:
                 bookings_service.approve_booking(
                     session,

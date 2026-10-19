@@ -90,6 +90,25 @@ export const EVENTS = {
   // closure over them.
   choirShowcase: '33333333-0000-0000-0000-000000000060',
   artMarket: '33333333-0000-0000-0000-000000000061',
+  // Story 12.6, organiser: organiser2, February 2029. Each has a booking at Exhibition Foyer that
+  // its day's closure has marked "Venue unavailable - alternative needed" (the closure and the mark
+  // are seeded); Grand Hall is free for every one. Coordinator's unless said otherwise.
+  lanternShowcase: '33333333-0000-0000-0000-000000012662', // approved; read only
+  makerFaire: '33333333-0000-0000-0000-000000012663', // an approved additional venue, marked
+  springExpo: '33333333-0000-0000-0000-000000012664', // the spec raises a replacement
+  awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
+  pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
+  neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
+  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its booking still marked
+  productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
+  roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
+  wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
+  craftMarket: '33333333-0000-0000-0000-000000012680', // an additional venue, marked; its closure is removed, then a request
+  harvestFair: '33333333-0000-0000-0000-000000012681', // an additional venue, marked; replaced, then Back
+  openStudios: '33333333-0000-0000-0000-000000012682', // a marked pending replacement; read only
+  nightBazaar: '33333333-0000-0000-0000-000000012683', // a marked pending additional venue; read only
+  springFair: '33333333-0000-0000-0000-000000012684', // a replacement is raised, then rejected
+  gardenFair: '33333333-0000-0000-0000-000000012685', // a pending request and an older withdrawn one; a switch is sent
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged
@@ -101,6 +120,14 @@ export const EVENTS = {
   // Story 19.2 AC8: set up as the bootcamp is - secured, never reviewed, Seminar Room 2.1 booked
   // in November 2028 - for change-request-decisions.spec.ts to send to its safety check.
   designSprint: '33333333-0000-0000-0000-000000000051',
+  // Story 18.1's, Confirmed, organiser: organiser2, coordinator2. Story 18.3 reads their
+  // registration lists: the portfolio review's one place is held by attendee2, so it is full;
+  // the wine appreciation closed with no one registered.
+  portfolioReview: '33333333-0000-0000-0000-000000000043',
+  wineAppreciation: '33333333-0000-0000-0000-000000000044',
+  // Story 18.2's, Confirmed, organiser: organiser2. Aiden withdrew on 8 Oct 2026; 18.2 and 18.3
+  // only read it.
+  heritageTrail: '33333333-0000-0000-0000-000000000074',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
@@ -265,6 +292,21 @@ export function clarificationsSection(page: Page) {
 /** A venue card in the venue catalogue, matched by the venue's name. */
 export function venueCard(page: Page, name: string) {
   return page.getByRole('article').filter({ has: page.getByRole('heading', { name }) })
+}
+
+/** The screens the responsive checks use: a phone, a tablet and a desktop. */
+export const PHONE = { width: 375, height: 667 }
+export const TABLET = { width: 768, height: 1024 }
+export const DESKTOP = { width: 1280, height: 800 }
+/** The smallest height a control pressed with a thumb may have on a phone. */
+export const MIN_TOUCH_TARGET = 44
+
+/** The page fits its viewport: nothing scrolls sideways. */
+export async function expectNoSidewaysScroll(page: Page) {
+  const fits = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  )
+  expect(fits).toBe(true)
 }
 
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */

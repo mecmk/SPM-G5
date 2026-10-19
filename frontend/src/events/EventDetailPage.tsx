@@ -7,7 +7,6 @@ import {
   type BookingStatus,
 } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
-import { assignCoordinator, listCoordinators, type CoordinatorOption } from '../api/coordination'
 import {
   approveEvent,
   CLARIFICATION_MESSAGE_MAX_LENGTH,
@@ -21,6 +20,7 @@ import {
   type RequiredFacility,
   type VenueRequirement,
 } from '../api/events'
+import { listEventRegistrations, type EventRegistrationList } from '../api/registrations'
 import { getEventSafety } from '../api/safety'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -31,24 +31,33 @@ import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon, type IconName } from '../components/Icon'
+import { RegistrationCount } from '../components/RegistrationCount'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
   eventCoordinatorEditPath,
   HOME_PATH,
   VENUE_CATALOGUE_PATH,
+  registrationsReportPath,
   venueSearchPath,
 } from '../routes'
 import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
+  closedAt,
+  FIND_ANOTHER_LABEL,
+  FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  replacedByLine,
+  replacementRequestedLine,
+  replacesLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
+  ACTIVE_EVENT_STATUSES,
   AWAITING_DECISION_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
   CHANGE_REQUESTABLE_STATUS,
@@ -75,20 +84,18 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
+  isMarked,
+  offersWayToAnotherVenue,
+  isReplaceable,
+  replacementSearchFor,
   requirementName,
   venueSearchFor,
 } from '../shared/venueRequest'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
+import { ReassignDialog } from './ReassignDialog'
 import { SafetyReviewSection } from './SafetyReviewSection'
-
-/**
- * Story 5.5 AC3 (PO decision P7): the Lead opens an event read-only, with Reassign "available
- * (5.6)". Story 5.6 builds the Lead's reassignment; until then the backend refuses it (409), so
- * this stays false and the Lead sees no Reassign button. 5.6 turns it on.
- */
-const IS_LEAD_REASSIGNMENT_BUILT = false
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
@@ -242,6 +249,10 @@ function formatHeroMeta(event: EventDetail): string {
  *
  * Story 15.1: the Equipment requirements section is where the assigned coordinator records the
  * event's equipment and submits it to Technical Support (`EquipmentRequestsSection`).
+ *
+ * Story 18.3: for the organiser and assigned coordinator of an event past draft that takes or holds
+ * registrations, the Registration card shows only the count, with a link to the registrations
+ * report for who registered.
  */
 export function EventDetailPage() {
   const { eventId = '' } = useParams()
@@ -275,10 +286,20 @@ export function EventDetailPage() {
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [isConfirmingReassign, setIsConfirmingReassign] = useState(false)
-  const [isReassigning, setIsReassigning] = useState(false)
-  const [reassignError, setReassignError] = useState<string | null>(null)
-  const [eligibleCoordinators, setEligibleCoordinators] = useState<CoordinatorOption[] | null>(null)
-  const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('')
+  const [registrations, setRegistrations] = useState<EventRegistrationList | null>(null)
+  const [registrationsError, setRegistrationsError] = useState<string | null>(null)
+  /** Story 18.3 AC5: only the organiser and the assigned coordinator of an event past draft see
+   *  who registered - the backend's `_registration_list_viewable_by`. */
+  const canSeeRegistrations =
+    event !== null &&
+    event.status !== 'DRAFT' &&
+    user !== null &&
+    (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
+  /** Story 18.3 AC1: the count is shown for an event taking registrations, or still holding some
+   *  after Registration required was turned off (9.4 then 7.2). */
+  const showsRegistrations =
+    canSeeRegistrations &&
+    (event.registration_required || (registrations !== null && registrations.total > 0))
 
   useEffect(() => {
     let cancelled = false
@@ -327,24 +348,22 @@ export function EventDetailPage() {
     }
   }, [eventId, canReadBooking])
 
-  /** Story 5.2 AC4: loaded only once the Reassign dialog opens, leaving the event's current
-   *  coordinator out - they are not a valid target for their own event. */
+  /** Story 18.3 AC1: the count, for the Registration card. */
   useEffect(() => {
-    if (!isConfirmingReassign) return undefined
+    if (!canSeeRegistrations) return undefined
     let cancelled = false
-    listCoordinators(eventId)
-      .then((options) => {
-        if (cancelled) return
-        setEligibleCoordinators(options)
-        setSelectedCoordinatorId(options.length > 0 ? options[0].id : '')
+    // One row is enough: the counts come with every page.
+    listEventRegistrations(eventId, 0, 1)
+      .then((data) => {
+        if (!cancelled) setRegistrations(data)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setReassignError(formatApiError(err))
+        if (!cancelled) setRegistrationsError(formatApiError(err))
       })
     return () => {
       cancelled = true
     }
-  }, [isConfirmingReassign, eventId])
+  }, [eventId, canSeeRegistrations])
 
   if (error) {
     return (
@@ -487,18 +506,28 @@ export function EventDetailPage() {
       setBookings(
         (current) =>
           current &&
-          current.map((booking) =>
-            booking.id === updated.id
-              ? {
-                  ...booking,
-                  status: updated.status,
-                  decided_at: updated.decided_at,
-                  decision_reason: updated.decision_reason,
-                }
-              : booking,
-          ),
+          current.map((booking) => {
+            if (booking.id === updated.id) {
+              return {
+                ...booking,
+                status: updated.status,
+                decided_at: updated.decided_at,
+                decision_reason: updated.decision_reason,
+                // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
+                venue_unavailable_marked_at: null,
+              }
+            }
+            // Story 12.6 AC5: withdrawing a replacement ends the original's "Replacement
+            // requested", which brings its Find a replacement venue back.
+            return booking.id === pendingWithdraw.replaces_booking_id
+              ? { ...booking, pending_replacement_venue_name: null }
+              : booking
+          }),
       )
       setPendingWithdraw(null)
+      // Story 12.6 AC12: a withdrawn replacement, or a withdrawn marked booking, may have been what
+      // stopped the safety review, so its blockers are read again.
+      getEventSafety(eventId).then(setSafety, () => {})
     } catch (err) {
       setWithdrawError(formatApiError(err))
     } finally {
@@ -507,9 +536,6 @@ export function EventDetailPage() {
   }
 
   function askToReassign() {
-    setReassignError(null)
-    setEligibleCoordinators(null)
-    setSelectedCoordinatorId('')
     setIsConfirmingReassign(true)
   }
 
@@ -517,24 +543,11 @@ export function EventDetailPage() {
     setIsConfirmingReassign(false)
   }
 
-  async function confirmReassign() {
-    if (!event) return
-    if (!selectedCoordinatorId) {
-      setReassignError('There is no other active Event Coordinator to reassign this to.')
-      return
-    }
-    setIsReassigning(true)
-    setReassignError(null)
-    try {
-      await assignCoordinator(event.id, selectedCoordinatorId)
-      const updated = await getEvent(event.id)
-      setEvent(updated)
-      setIsConfirmingReassign(false)
-    } catch (err) {
-      setReassignError(formatApiError(err))
-    } finally {
-      setIsReassigning(false)
-    }
+  /** Story 5.6 AC1: the page shows the new coordinator straight away, read again as the page's
+   *  other changes are (`reloadEvent`). */
+  function handleReassigned() {
+    setIsConfirmingReassign(false)
+    void reloadEvent()
   }
 
   const backState = location.state as EventCardBackState | null
@@ -576,20 +589,14 @@ export function EventDetailPage() {
    *  awaits a response - mirroring the backend's `respond_to_clarification`. */
   const canRespondToClarification =
     user !== null && event.organiser_id === user.id && event.status === 'CLARIFICATION_REQUESTED'
-  /** Story 5.5 AC3 (PO decision P7): where story 5.6's Lead reassignment switches on. */
-  const canReassignAsLead =
-    IS_LEAD_REASSIGNMENT_BUILT &&
-    can(PERMISSIONS.EVENTS_ASSIGN) &&
-    !TERMINAL_STATUSES.includes(event.status)
-  /** Story 5.2 AC1/AC6: the currently assigned coordinator may reassign, and only on an event
-   *  that is not completed, cancelled or rejected - mirroring the backend's `ASSIGNABLE_STATUSES`
-   *  (a draft never reaches this: it has no coordinator to be one of). Story 5.6 adds the Lead,
-   *  through `canReassignAsLead`, which stays off until then (5.5 AC3). */
+  /** Story 5.6 AC1/AC5: the Lead reassigns an event that has a coordinator and is still active
+   *  (not a draft, nor completed, cancelled or rejected) - mirroring the backend's
+   *  `ASSIGNABLE_STATUSES`. Coordinators no longer reassign their own events (Q16, replacing 5.2
+   *  AC1/AC6); an event with none is assigned from 5.4's queue instead. */
   const canReassign =
-    (can(PERMISSIONS.EVENTS_REVIEW) &&
-      isAssignedCoordinator &&
-      !TERMINAL_STATUSES.includes(event.status)) ||
-    canReassignAsLead
+    can(PERMISSIONS.EVENTS_ASSIGN) &&
+    event.assigned_coordinator_id !== null &&
+    ACTIVE_EVENT_STATUSES.includes(event.status)
 
   /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
    *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
@@ -613,6 +620,11 @@ export function EventDetailPage() {
     bookings !== null &&
     event.venue_requirements.length > 0 &&
     firstRequirementNeedingVenue(event, bookings) === null
+  /** Story 12.6 AC4: while a booking is marked "Venue unavailable" the event is not all booked, and
+   *  no venue is left to find for a requirement that needs none: the way on is the marked booking's
+   *  own Find a replacement venue (or Find another venue), so the header offers neither. */
+  const hasMarkedBooking = bookings !== null && bookings.some(isMarked)
+  const isHeaderFindHidden = isEveryRequirementCovered && hasMarkedBooking
   /** Fix f2.7.4 (story 2.7 AC17, AC19): "No venue requirements", saved before the fix, still
    *  stands once a request is past its decision - an event approved with it keeps the paths for
    *  none (AC19). Before then it no longer does: such a request cannot be submitted or approved
@@ -690,7 +702,7 @@ export function EventDetailPage() {
               </button>
             )}
             {canReassign && (
-              <button type="button" className="secondary" onClick={askToReassign}>
+              <button type="button" className="secondary reassign-action" onClick={askToReassign}>
                 Reassign
               </button>
             )}
@@ -846,14 +858,34 @@ export function EventDetailPage() {
                 </div>
               </>
             )}
+            {/* Story 18.3 AC1: the count here; who registered is on the registrations report. */}
+            {showsRegistrations && registrations !== null && (
+              <RegistrationCount
+                activeCount={registrations.active_count}
+                capacity={registrations.capacity}
+                isFull={registrations.is_full}
+              />
+            )}
           </div>
+          {canSeeRegistrations && event.registration_required && registrationsError && (
+            <p role="alert" className="error">
+              {registrationsError}
+            </p>
+          )}
+          {showsRegistrations && (
+            <div className="cluster">
+              <Link to={registrationsReportPath(event.id)} className="button secondary button-sm">
+                View registrations
+              </Link>
+            </div>
+          )}
         </section>
 
         <div className="layout-half">
           <section className="card stack" aria-labelledby="venue-requirements-heading">
             <div className="card-heading">
               <h2 id="venue-requirements-heading">Venue requirements</h2>
-              {canFindVenue && (
+              {canFindVenue && !isHeaderFindHidden && (
                 <Link
                   to={findVenuePath(event, bookings ?? [])}
                   className={
@@ -1009,6 +1041,25 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
+                          once its replacement was approved - or which venue is asked for. */}
+                      {booking.replaces_venue_name !== null && (
+                        <p>
+                          <strong>{replacesLine(booking.replaces_venue_name)}</strong>
+                        </p>
+                      )}
+                      {booking.replaced_by_venue_name !== null && (
+                        <p>
+                          <strong>{replacedByLine(booking.replaced_by_venue_name)}</strong>
+                        </p>
+                      )}
+                      {booking.pending_replacement_venue_name !== null && (
+                        <p>
+                          <strong>
+                            {replacementRequestedLine(booking.pending_replacement_venue_name)}
+                          </strong>
+                        </p>
+                      )}
                       {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
                           the booking stays here for reference and the event needs another venue. */}
                       {booking.venue_unavailable_marked_at !== null && (
@@ -1048,7 +1099,7 @@ export function EventDetailPage() {
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
-                          {formatDateTime(booking.decided_at)}
+                          {formatDateTime(closedAt(booking) ?? booking.decided_at)}
                         </p>
                       )}
                       {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
@@ -1059,13 +1110,16 @@ export function EventDetailPage() {
                           {formatDateTime(booking.hold_expires_at)}
                         </p>
                       )}
-                      {booking.decision_reason !== null && (
-                        <p>
-                          <span className="fact-label">{outcomeLabels.why}</span>
-                          <br />
-                          {booking.decision_reason}
-                        </p>
-                      )}
+                      {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
+                          <venue>" above, which is also its reason, so it is not said twice. */}
+                      {booking.decision_reason !== null &&
+                        booking.replaced_by_venue_name === null && (
+                          <p>
+                            <span className="fact-label">{outcomeLabels.why}</span>
+                            <br />
+                            {booking.decision_reason}
+                          </p>
+                        )}
                       {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
                       {booking.suitability_override_reason !== null && (
                         <p>
@@ -1096,6 +1150,19 @@ export function EventDetailPage() {
                       >
                         Withdraw
                       </button>
+                    </div>
+                  )}
+                  {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
+                   *  event's assigned coordinator while it can take a booking (AC8): a replacement
+                   *  for an approved one, the catalogue's Switch for a pending one. */}
+                  {offersWayToAnotherVenue(booking) && canFindVenue && isAssignedCoordinator && (
+                    <div className="cluster">
+                      <Link
+                        to={venueSearchPath(replacementSearchFor(event, booking))}
+                        className="button button-sm"
+                      >
+                        {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
+                      </Link>
                     </div>
                   )}
                 </div>
@@ -1268,36 +1335,14 @@ export function EventDetailPage() {
           </p>
         </ConfirmDialog>
       )}
-      {isConfirmingReassign && (
-        <ConfirmDialog
-          title={`Reassign "${event.name}"?`}
-          confirmLabel="Confirm reassignment"
-          tone="primary"
-          isBusy={isReassigning}
-          error={reassignError}
-          onConfirm={confirmReassign}
+      {isConfirmingReassign && event.assigned_coordinator_id !== null && (
+        <ReassignDialog
+          eventId={event.id}
+          eventName={event.name}
+          currentCoordinatorId={event.assigned_coordinator_id}
+          onReassigned={handleReassigned}
           onCancel={cancelReassign}
-        >
-          <p>Hand this event to a different active Event Coordinator.</p>
-          <label>
-            New coordinator
-            <select
-              value={selectedCoordinatorId}
-              onChange={(e) => setSelectedCoordinatorId(e.target.value)}
-              disabled={eligibleCoordinators === null || eligibleCoordinators.length === 0}
-            >
-              {eligibleCoordinators === null && <option value="">Loading…</option>}
-              {eligibleCoordinators?.length === 0 && (
-                <option value="">No other coordinators available</option>
-              )}
-              {eligibleCoordinators?.map((coordinator) => (
-                <option key={coordinator.id} value={coordinator.id}>
-                  {coordinator.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ConfirmDialog>
+        />
       )}
     </div>
   )

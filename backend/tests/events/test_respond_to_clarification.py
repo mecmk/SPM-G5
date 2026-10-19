@@ -270,10 +270,15 @@ def test_alternating_rounds_are_kept_in_order(login_as, db: Session):
 @pytest.mark.story("4.3", ac=7)
 def test_after_a_reassignment_the_new_coordinator_is_notified(login_as, db: Session):
     # The seeded event, whose question coordinator 1 asked: a make_event() row has no assignment
-    # history, which story 5.2's reassignment needs.
+    # history, which a reassignment needs. Since story 5.6 (Q16) the Lead reassigns, naming the
+    # coordinator they saw.
     event_id = Events.CLARIFICATION_REQUESTED
-    reassigned = login_as(Users.COORDINATOR).put(
-        f"/events/{event_id}/coordinator", json={"coordinator_id": str(Users.COORDINATOR_2.id)}
+    reassigned = login_as(Users.LEAD).put(
+        f"/events/{event_id}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
     assert reassigned.status_code == 200, reassigned.text
 
