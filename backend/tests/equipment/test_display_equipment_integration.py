@@ -211,8 +211,9 @@ def test_an_items_period_is_what_its_hold_covers_after_a_correction_shortens_the
     login_as, db: Session
 ):
     """7.2 AC15 keeps every hold as it is for a move inside the period it covers, so an event a
-    correction ends an hour early still holds its accepted item to the old end, and the page says
-    what is held. A declined item holds nothing, so it is for the event's own, new period."""
+    correction starts an hour late and ends an hour early still holds its accepted item for the
+    old period, and the page says what is held. A declined item holds nothing, so it is for the
+    event's own, new period."""
     event = _correctable_event(db)
     make_equipment_item(
         db,
@@ -234,16 +235,23 @@ def test_an_items_period_is_what_its_hold_covers_after_a_correction_shortens_the
     db.commit()
     client = login_as(Users.COORDINATOR)
     read = client.get(f"/events/{event.id}").json()
-    shortened = ENDS_AT - timedelta(hours=1)
+    later_start, earlier_end = STARTS_AT + timedelta(hours=1), ENDS_AT - timedelta(hours=1)
 
     corrected = client.patch(
         f"/events/{event.id}/review-details",
-        json={"expected_updated_at": read["updated_at"], "ends_at": shortened.isoformat()},
+        json={
+            "expected_updated_at": read["updated_at"],
+            "starts_at": later_start.isoformat(),
+            "ends_at": earlier_end.isoformat(),
+        },
     )
 
     assert corrected.status_code == 200, corrected.text
     periods = {item["equipment_type_name"]: _period(item) for item in _items(client, event)}
-    assert periods == {"Held kit": (STARTS_AT, ENDS_AT), "Unheld kit": (STARTS_AT, shortened)}
+    assert periods == {
+        "Held kit": (STARTS_AT, ENDS_AT),
+        "Unheld kit": (later_start, earlier_end),
+    }
 
 
 # =============================================================================================
