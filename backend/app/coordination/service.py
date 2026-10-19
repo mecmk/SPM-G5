@@ -449,9 +449,9 @@ def _create_assignment(
     exactly the staleness the guard exists to catch, silently adopting whatever changed instead
     of noticing it changed.
 
-    Re-assigning the coordinator who already holds the event is a no-op: it returns the existing
-    assignment rather than closing and re-opening it, so the history in
-    ``event_coordinator_assignments`` stays meaningful.
+    Re-assigning the coordinator who already holds the event is a no-op - when the caller saw
+    them as its coordinator too: it returns the existing assignment rather than closing and
+    re-opening it, so the history in ``event_coordinator_assignments`` stays meaningful.
 
     Story 5.2 AC7 / 5.6 AC6: the write is conditional on ``events.assigned_coordinator_id``
     still holding ``expected_coordinator_id`` - the coordinator the Lead saw, or ``NULL`` for
@@ -460,13 +460,15 @@ def _create_assignment(
     two made at once, finds 0 rows match and raises ``AssignmentChanged`` before touching anything
     else, rather than silently overwriting the first.
     """
-    if previous is not None and previous.coordinator_id == coordinator.id:
-        return previous
-    # The Lead's view is already stale by this request's own read: refused here, so the guarded
-    # UPDATE below only ever matches the pointer ``previous`` was read with.
+    # The Lead's view is already stale by this request's own read: refused here - before the
+    # no-op below, so a second Lead who chose the coordinator the first one just gave the event
+    # is refused too, not told it worked (5.6 AC6) - and the guarded UPDATE below only ever
+    # matches the pointer ``previous`` was read with.
     read_coordinator_id = previous.coordinator_id if previous is not None else None
     if read_coordinator_id != expected_coordinator_id:
         raise AssignmentChanged(event.id)
+    if previous is not None and previous.coordinator_id == coordinator.id:
+        return previous
 
     claimed = db.execute(
         update(Event)

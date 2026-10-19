@@ -513,25 +513,30 @@ def test_the_previous_coordinator_loses_access_immediately(login_as):
 
 # --- AC6: two at once ------------------------------------------------------------------------
 @pytest.mark.story("5.6", ac=6)
-def test_a_reassignment_from_a_stale_view_is_refused(login_as, db: Session):
+@pytest.mark.parametrize("second_choice", ["another coordinator", "the coordinator who has it now"])
+def test_a_reassignment_from_a_stale_view_is_refused(login_as, db: Session, second_choice):
     """Two Leads both saw Chloe. The first hands the event to Carl; the second, still naming
-    Chloe, is refused (409) instead of taking Carl's event away. Nothing more is written, and
-    nobody else is told."""
+    Chloe, is refused (409) whoever they chose - Dana, or Carl too, as two Leads opening the
+    picker at once both could - instead of taking Carl's event away or seeming to succeed.
+    Nothing more is written, and nobody else is told."""
     dana = make_user(db, role=COORDINATOR_ROLE, full_name="Dana Coordinator")
+    chosen = {
+        "another coordinator": dana.id,
+        "the coordinator who has it now": Users.COORDINATOR_2.id,
+    }[second_choice]
     lead = login_as(Users.LEAD)
     first = _reassign(lead, Events.APPROVED, Users.COORDINATOR_2.id, expected=Users.COORDINATOR.id)
     assert first.status_code == 200, first.text
     history = _history(db, Events.APPROVED)
+    notices = _reassignment_notices(db, Events.APPROVED)
 
-    second = _reassign(lead, Events.APPROVED, dana.id, expected=Users.COORDINATOR.id)
+    second = _reassign(lead, Events.APPROVED, chosen, expected=Users.COORDINATOR.id)
 
     assert second.status_code == 409, second.text
     assert second.json()["detail"] == _CHANGED
     assert _pointer(db, Events.APPROVED) == Users.COORDINATOR_2.id
     assert _history(db, Events.APPROVED) == history
-    assert dana.id not in _reassignment_notices(db, Events.APPROVED).get(
-        "EVENT_REASSIGNED_TO", set()
-    )
+    assert _reassignment_notices(db, Events.APPROVED) == notices
 
 
 @pytest.mark.story("5.6", ac=6)
