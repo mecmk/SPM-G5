@@ -107,6 +107,14 @@ export const EVENTS = {
   // Story 19.2 AC8: set up as the bootcamp is - secured, never reviewed, Seminar Room 2.1 booked
   // in November 2028 - for change-request-decisions.spec.ts to send to its safety check.
   designSprint: '33333333-0000-0000-0000-000000000051',
+  // Story 18.1's, Confirmed, organiser: organiser2, coordinator2. Story 18.3 reads their
+  // registration lists: the portfolio review's one place is held by attendee2, so it is full;
+  // the wine appreciation closed with no one registered.
+  portfolioReview: '33333333-0000-0000-0000-000000000043',
+  wineAppreciation: '33333333-0000-0000-0000-000000000044',
+  // Story 18.2's, Confirmed, organiser: organiser2. Aiden withdrew on 8 Oct 2026; 18.2 and 18.3
+  // only read it.
+  heritageTrail: '33333333-0000-0000-0000-000000000074',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
