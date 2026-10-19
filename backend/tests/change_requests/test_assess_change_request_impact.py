@@ -1,36 +1,42 @@
 """Story 19.3 - be: assess a change request's impact before deciding it.
 
-AC1 Each pending change request shows which existing venue bookings, equipment items and attendee
-    registrations the change would affect, each individually and with why; flags a proposed
-    attendance over a booked venue's capacity; and says plainly when nothing is affected. An
-    event with several bookings has each judged on its own.
-AC2 Once approved (story 19.2), each affected arrangement goes to whoever must act on it. 19.2
-    already does this - it cancels the bookings the change no longer fits and returns changed
-    equipment to the 15.1 process - so the assessment says, for each, what the approval will do,
-    and predicts exactly what 19.2 then does.
-AC3 The assessment is worked out on the server, from the records as they stand when the
-    coordinator opens the request, and changes nothing.
-AC4 A booking that only touches another at a boundary does not conflict with it; one minute of
-    overlap does. Attendance equal to a venue's capacity fits; one more does not. Setup and
-    teardown count towards the period a venue is held, as they do for a booking request (12.1).
-AC5 A period the venue is unavailable for, a conflicting booking, the venue's opening hours, and
-    equipment shortfalls (required, available, short) are flagged.
-AC6 Only the coordinator assigned to the event may see the assessment, enforced on the backend.
-AC7 Approving re-assesses the change under the event's lock; if the assessment changed since the
-    coordinator saw it, nothing is applied and the approval is refused, so they review the new one.
+AC1 Each pending change request shows the venue bookings, equipment and registrations it would
+    affect, and why. Attendance above what the booked venues hold is flagged as a warning only.
+    If nothing is affected, that is stated.
+AC2 For each affected arrangement, the assessment says what approval (19.2) will do to it and who
+    acts on it. No new flag or notification is added.
+AC3 The assessment is worked out on the server from current records when the request is opened,
+    and changes nothing.
+AC4 New times that only touch another booking are not flagged; an overlap of one minute is, with
+    setup and teardown counted. Attendance equal to capacity is not flagged.
+AC5 Venue unavailability, a conflicting booking or times outside opening hours are flagged.
+    Equipment the change can no longer supply is flagged with the shortfall (16.1).
+AC6 Only the assigned coordinator sees the assessment.
+AC7 If the assessment changes after the request is opened, approving shows the new result before
+    anything is applied.
 
-Decisions agreed 19 Oct 2026, beyond the ACs' wording:
+Decisions agreed 19 Oct 2026 (CL-152 to CL-154), beyond the ACs' wording:
 * Bookings are reported as 19.2 would treat them: cancelled when f7.2.4's fit rule says the change
-  no longer fits them (judged on what the booking was made for), otherwise left alone. Separately,
-  a capacity warning is raised when the people a booking must hold change and the venue - the
-  booked layout's capacity where the venue records one, as story 11.1 judges it - cannot hold
-  them. A warning never means the booking is cancelled.
+  no longer fits them (judged on what the booking was made for), otherwise left alone. An event
+  with several bookings has each judged on its own.
+* A venue's capacity is a warning only and never cancels a booking. An attendance change is
+  checked against the venues in use at each moment, each venue counted once in its booked layout
+  (the layout's capacity where the venue records one, as story 11.1 judges it). Attendance one
+  above it is flagged.
 * Registrations are counted, never named. Lowering the attendance below the count, and changing
   the dates, are flagged; nothing is written to a registration and no attendee is told.
-* Equipment uses the calculation 19.2 holds equipment by, so the assessment predicts it exactly;
-  ``EquipmentChangePlan`` and ``take_units`` are shared with the approval.
+* For a booking the change cancels, the same venue is checked for the period a replacement would
+  need, as a booking request is (12.1): the held period, setup and teardown included, for other
+  bookings and unavailability, and the booking's own times for opening hours (f12.1.2).
+* Equipment uses the calculation 19.2 holds equipment by, so the assessment predicts it exactly:
+  ``EquipmentChangePlan``, ``take_units`` and the status each item ends in are shared with the
+  approval. Each shortfall gives required, available and short.
 * No new notification, flag or workflow: after approval, cancelled bookings and returned equipment
   reach Venue Staff, Technical Support and the coordinator the way 19.2 already sends them.
+* Only approving re-runs the assessment, under the event's lock. Approving sends back the
+  fingerprint of the assessment the coordinator saw; any change to it refuses the approval, with
+  nothing applied, until the new one is reviewed. Only the assigned coordinator may see the
+  assessment, enforced on the backend.
 
 Excluded, with reason:
 * How the assessment is shown, and the approval dialog showing an updated assessment before the

@@ -1,19 +1,24 @@
 /**
  * Story 19.3 - fe: assess a change request's impact before deciding it.
  *
- * AC1 the assigned coordinator sees what a pending change would affect - on the request, in the
- *     queue, and in the approval dialog - as one row each for venue bookings, equipment and registrations that
- *     says at a glance how much is affected and opens onto each arrangement, listed on its own
- *     with why; and a change that touches nothing arranged says so.
- * AC2 each affected arrangement says what approving does to it: a booking the change no longer
- *     fits is cancelled, Venue Staff are told and need do nothing, and a replacement is requested
- *     from the event page (story 19.2's own behaviour). Each booking also says where it stands
- *     now, so a decision Venue Staff make meanwhile shows on it.
- * AC7 an impact that changed after the approval dialog opened - here, another session adding
- *     equipment the new dates must hold - is shown again, marked as updated, and nothing is
- *     applied until the coordinator approves again.
+ * AC1 Each pending change request shows the venue bookings, equipment and registrations it would
+ *     affect, and why. Attendance above what the booked venues hold is flagged as a warning only.
+ *     If nothing is affected, that is stated.
+ * AC2 For each affected arrangement, the assessment says what approval (19.2) will do to it and
+ *     who acts on it. No new flag or notification is added.
+ * AC7 If the assessment changes after the request is opened, approving shows the new result
+ *     before anything is applied.
  * Definition of Done: the assessment reads at 1280 x 720 and at 390 x 844, the dialog's buttons
  *     stay on screen, and the page never scrolls sideways.
+ *
+ * Decisions agreed 19 Oct 2026 (CL-152 to CL-154), as these tests show them: the assessment is on
+ * the request, in the coordinator's queue and in the approval dialog, one row each for venue
+ * bookings, equipment and registrations that says at a glance how much is affected and opens onto
+ * each arrangement. A booking the change no longer fits is cancelled, Venue Staff are told and
+ * need do nothing, and a replacement is requested from the event page (19.2's own behaviour); each
+ * booking also says where it stands now. For AC7, another session adds equipment the new dates
+ * must hold; the new assessment is marked as updated, and nothing is applied until the coordinator
+ * approves again.
  *
  * Which bookings, items and registrations are affected and why, the boundaries (AC4),
  * unavailability and shortfalls (AC5), who may see the assessment (AC6), that assessing writes
