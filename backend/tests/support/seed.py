@@ -172,6 +172,7 @@ class Events:
     PRODUCT_SHOWCASE = _e(69)  # a marked PENDING booking
     ROBOTICS_OPEN_HOUSE = _e(70)  # coordinator 2's; read only
     WELLNESS_EXPO = _e(71)  # coordinator 2's; the spec raises a replacement
+    CRAFT_MARKET = _e(72)  # an additional venue, marked: its closure is removed, then a request
 
 
 class Bookings:
@@ -218,6 +219,8 @@ class Bookings:
     PRODUCT_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000030")  # pending
     ROBOTICS_OPEN_HOUSE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000031")
     WELLNESS_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000032")
+    CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000033")  # unmarked
+    CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000034")  # marked
 
 
 class Registrations:

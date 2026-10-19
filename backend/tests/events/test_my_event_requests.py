@@ -148,6 +148,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PRODUCT_SHOWCASE),
         str(Events.ROBOTICS_OPEN_HOUSE),
         str(Events.WELLNESS_EXPO),
+        str(Events.CRAFT_MARKET),
     }
 
 

@@ -196,6 +196,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.PRODUCT_SHOWCASE, "PLANNING"),
         (Events.ROBOTICS_OPEN_HOUSE, "PLANNING"),
         (Events.WELLNESS_EXPO, "PLANNING"),
+        (Events.CRAFT_MARKET, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -215,6 +216,8 @@ def test_seed_constants_match_database(db: Session):
         (Bookings.PRODUCT_SHOWCASE_FOYER, "PENDING", True),
         (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, "APPROVED", True),
         (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
+        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, "APPROVED", True),
     ):
         row = db.execute(
             text(

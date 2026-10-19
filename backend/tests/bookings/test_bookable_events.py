@@ -87,6 +87,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.PITCH_NIGHT),
         str(Events.NEIGHBOURHOOD_SUMMIT),
         str(Events.PRODUCT_SHOWCASE),
+        str(Events.CRAFT_MARKET),
     ]
 
 
