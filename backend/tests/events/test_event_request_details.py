@@ -899,6 +899,21 @@ def test_the_same_equipment_type_cannot_appear_twice(organiser_client):
     assert "once" in _detail(response)
 
 
+@pytest.mark.story("2.1", ac=7)
+def test_the_same_equipment_line_cannot_be_sent_twice_in_one_save(organiser_client):
+    """AC7: a save names each existing line it keeps by its id, so one id twice is refused, even
+    on two different types."""
+    line_id = str(uuid.uuid4())
+    payload = event_request_payload(
+        equipment=[_equipment("LAPTOP", 1, id=line_id), _equipment("PROJECTOR", 1, id=line_id)]
+    )
+
+    response = organiser_client.post("/events", json=payload)
+
+    assert response.status_code == 422
+    assert "each option can be chosen only once." in _detail(response)
+
+
 @pytest.mark.story("2.1", ac=6)
 def test_equipment_must_be_a_known_type(organiser_client):
     payload = event_request_payload(equipment=[_equipment("NO_SUCH_TYPE", 1)])
