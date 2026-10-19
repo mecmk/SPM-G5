@@ -121,6 +121,7 @@ export type ErrorCode =
   | 'CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID'
   | 'CHANGE_REQUEST_DECISION_REFUSED'
   | 'CHANGE_REQUEST_REJECTION_REASON_REQUIRED'
+  | 'CHANGE_REQUEST_IMPACT_CHANGED'
   | 'EVENT_CONTACT_EDIT_CLOSED'
   | 'REGISTRATION_EVENT_NOT_OPEN'
   | 'REGISTRATION_REFUSED'
@@ -728,6 +729,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   CHANGE_REQUEST_REJECTION_REASON_REQUIRED: {
     title: 'Reason needed',
     message: 'Enter a reason for rejecting this change.',
+  },
+  // Story 19.3: the impact of a change request.
+  /** AC7: the impact was re-assessed as the coordinator approved and is no longer the one they
+   *  saw, so nothing was applied; the dialog shows the new assessment to approve on again. */
+  CHANGE_REQUEST_IMPACT_CHANGED: {
+    title: 'Impact changed',
+    message:
+      'The impact of this change has changed. Review the updated impact, then approve again.',
   },
   /** AC2: the point of contact is updated directly only while the event is Planning or Confirmed. */
   EVENT_CONTACT_EDIT_CLOSED: {

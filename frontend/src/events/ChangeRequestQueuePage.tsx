@@ -22,6 +22,7 @@ import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
+import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
 import { changeTitle, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 
 type QueueTabKey = 'ALL' | ChangeRequestStatus
@@ -74,6 +75,7 @@ interface OpenDecision {
  * tab, showing who decided, when and why, and one refused because it moved on meanwhile has the
  * queue load again (AC7). AC7: a request another approval has left out of date says so, and
  * offers only Reject.
+ * Story 19.3 AC1: each pending request can show, on request, what approving it would affect.
  */
 export function ChangeRequestQueuePage() {
   const {
@@ -224,6 +226,10 @@ export function ChangeRequestQueuePage() {
                 <ChangeRequestDecision request={entry} />
 
                 {entry.is_out_of_date && <p className="warning">{OUT_OF_DATE_NOTE}</p>}
+
+                {entry.status === 'PENDING' && !entry.is_out_of_date && (
+                  <ChangeRequestImpactToggle request={entry} />
+                )}
 
                 <div
                   className={
