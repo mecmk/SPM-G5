@@ -162,6 +162,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.OPEN_STUDIOS),
         str(Events.NIGHT_BAZAAR),
         str(Events.SPRING_FAIR),
+        str(Events.GARDEN_FAIR),
     }
 
 

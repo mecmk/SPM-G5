@@ -108,6 +108,7 @@ export const EVENTS = {
   openStudios: '33333333-0000-0000-0000-000000012682', // a marked pending replacement; read only
   nightBazaar: '33333333-0000-0000-0000-000000012683', // a marked pending additional venue; read only
   springFair: '33333333-0000-0000-0000-000000012684', // a replacement is raised, then rejected
+  gardenFair: '33333333-0000-0000-0000-000000012685', // a pending request and an older withdrawn one; a switch is sent
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged

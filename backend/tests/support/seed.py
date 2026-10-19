@@ -190,6 +190,7 @@ class Events:
     OPEN_STUDIOS = _e(12682)  # a marked pending replacement of an approved booking: read only
     NIGHT_BAZAAR = _e(12683)  # a marked pending additional venue: read only
     SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
+    GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
 
 
 class Bookings:
@@ -245,6 +246,8 @@ class Bookings:
     NIGHT_BAZAAR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012639")  # unmarked
     NIGHT_BAZAAR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012640")  # pending
     SPRING_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012641")
+    GARDEN_FAIR_PENDING = uuid.UUID("44444444-0000-0000-0000-000000012642")  # plain, unmarked
+    GARDEN_FAIR_WITHDRAWN = uuid.UUID("44444444-0000-0000-0000-000000012643")  # older, closed
 
 
 class Registrations:

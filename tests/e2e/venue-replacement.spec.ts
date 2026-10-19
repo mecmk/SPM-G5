@@ -122,6 +122,11 @@ const HARVEST_FAIR = { id: EVENTS.harvestFair, name: 'Harvest Fair Weekend' }
 const OPEN_STUDIOS = { id: EVENTS.openStudios, name: 'Open Studios Day' }
 const NIGHT_BAZAAR = { id: EVENTS.nightBazaar, name: 'Night Bazaar Weekend' }
 const SPRING_FAIR = { id: EVENTS.springFair, name: 'Spring Fair Preview' }
+const GARDEN_FAIR = { id: EVENTS.gardenFair, name: 'Garden Fair Day' }
+const GRAND_HALL_ID = '22222222-0000-0000-0000-000000000001'
+const GARDEN_FAIR_REQUIREMENT = 'cccccccc-0000-0000-0126-000000008501'
+const GARDEN_FAIR_PENDING = '44444444-0000-0000-0000-000000012642'
+const GARDEN_FAIR_WITHDRAWN = '44444444-0000-0000-0000-000000012643'
 
 type SeededEvent = { id: string; name: string }
 
@@ -1054,19 +1059,20 @@ test('12.6 AC10: a stale replacing address cannot turn Switch to this venue into
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await openEvent(page, SHOWCASE)
-  await page.getByRole('link', { name: FIND_ANOTHER }).click()
-  await expect(catalogueBanner(page, SHOWCASE)).toBeVisible()
-  // The address also carries the showcase's marked booking as the one being replaced, as a link
-  // kept from before it was withdrawn or replaced would; it is pending, so it is switched, not
-  // replaced.
-  const switchHref = await venueCard(page, GRAND_HALL)
-    .getByRole('link', { name: SWITCH_TO })
-    .getAttribute('href')
-  const stale = new URL(switchHref ?? '', page.url())
-  stale.searchParams.set('replacing', stale.searchParams.get('replaces') ?? '')
-  await page.goto(`${stale.pathname}${stale.search}`)
+  // The garden fair's requirement is covered by a plain pending request, which a switch replaces.
+  // The address also names its older, withdrawn request as `replacing`, as a link kept from before
+  // would: that booking takes no replacement, so the send is the switch it was opened for.
+  await page.goto(
+    `/events/${GARDEN_FAIR.id}/request-venue/${GRAND_HALL_ID}` +
+      `?requirement=${GARDEN_FAIR_REQUIREMENT}&replaces=${GARDEN_FAIR_PENDING}` +
+      `&replacing=${GARDEN_FAIR_WITHDRAWN}`,
+  )
   await expect(page.getByRole('heading', { name: `Request ${GRAND_HALL}`, level: 1 })).toBeVisible()
-  await page.waitForLoadState('networkidle')
-  await expect(page.getByText(/^Replaces /)).toHaveCount(0)
+  await page.getByRole('button', { name: 'Switch request' }).click()
+
+  await expect(page.getByRole('heading', { name: GARDEN_FAIR.name, level: 1 })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  // The pending request was switched to Grand Hall, and nothing was asked of the withdrawn one.
+  await expect(bookingList(page)).toContainText(GRAND_HALL)
+  await expect(bookingList(page)).not.toContainText('Replaces')
 })
