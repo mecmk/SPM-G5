@@ -44,14 +44,17 @@ const RELEASED_SENTENCE = 'Nothing is held for this item any more.'
 const BADGE_STATUSES: Partial<Record<EquipmentItemStatus, string>> = { CANCELLED: 'released' }
 
 /**
- * Story 16.1 AC1-AC3 / 17.1 AC1: which way Technical Support decided a decided item. Its status
- * says so while it is Accepted or Declined; once it is released or unavailable, a recorded reason
- * marks a decline, since 16.1 AC4 refuses one without a reason and accepting takes none.
+ * Story 16.1 AC2 / 17.1 AC1: whether Technical Support declined the item. Its status says so while
+ * it is Declined; once it is released or unavailable, a recorded reason marks the decline, since
+ * 16.1 AC4 refuses one without a reason and accepting takes none.
  */
+function isDeclined(item: EquipmentLine): boolean {
+  return item.status === 'DECLINED' || item.decision_reason !== null
+}
+
+/** Story 16.1 AC3 / 17.1 AC1: which way Technical Support decided a decided item. */
 function decisionOf(item: EquipmentLine): 'Accepted' | 'Declined' {
-  if (item.status === 'ACCEPTED') return 'Accepted'
-  if (item.status === 'DECLINED' || item.decision_reason !== null) return 'Declined'
-  return 'Accepted'
+  return isDeclined(item) ? 'Declined' : 'Accepted'
 }
 
 /** Story 17.1 AC4: a released item was holding units until it was released, unless it had been
@@ -418,7 +421,7 @@ export function EquipmentRequestsSection({
                     </button>
                   </span>
                 )}
-                {(item.status === 'DECLINED' || item.decision_reason !== null) && (
+                {isDeclined(item) && (
                   <span className="decline-reason">
                     <span className="fact-label">Reason for declining</span>
                     {item.decision_reason ?? NOT_RECORDED}

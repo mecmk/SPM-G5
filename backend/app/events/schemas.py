@@ -599,6 +599,8 @@ class EquipmentLineOut(BaseModel):
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
+        # Story 17.1 AC1: what the item's hold covers, or its event's period while it holds nothing.
+        held_for = line.reserved_hold if line.reserved_hold is not None else line.event
         return cls(
             id=line.id,
             equipment_type_code=line.equipment_type.code,
@@ -613,14 +615,8 @@ class EquipmentLineOut(BaseModel):
             decision_reason=line.status_notes,
             decided_at=line.decided_at,
             decided_by_name=line.decided_by.full_name if line.decided_by is not None else None,
-            period_starts_at=(
-                line.reserved_hold.starts_at
-                if line.reserved_hold is not None
-                else line.event.starts_at
-            ),
-            period_ends_at=(
-                line.reserved_hold.ends_at if line.reserved_hold is not None else line.event.ends_at
-            ),
+            period_starts_at=held_for.starts_at,
+            period_ends_at=held_for.ends_at,
         )
 
 
