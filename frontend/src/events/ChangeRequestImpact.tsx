@@ -8,6 +8,7 @@ import {
   type EquipmentImpact,
   type EquipmentImpactChange,
   type RegistrationImpact,
+  type ShortPeriod,
 } from '../api/changeRequests'
 import { formatApiError } from '../api/client'
 import { UNAVAILABILITY_REASON_NAMES } from '../api/venues'
@@ -172,15 +173,38 @@ function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: 
   )
 }
 
-/** AC1/AC4: the venues the approval keeps hold fewer people, between them, than the attendance
- *  asked for - a warning; no booking is cancelled for it. */
+/** AC1/AC4: one stretch of the event the venues in use then are too small for. */
+function ShortPeriodFacts({ period }: { period: ShortPeriod }) {
+  return (
+    <dl className="impact-facts">
+      <Fact label="When">{formatSchedule(period.starts_at, period.ends_at)}</Fact>
+      <Fact label="In use">
+        {period.venues.map((venue) => (
+          <p key={venue.venue_id}>
+            {venue.venue_name}: holds {venue.capacity}
+            {venue.layout_name === null ? '' : ` in the ${venue.layout_name} layout`}
+          </p>
+        ))}
+      </Fact>
+      <Fact label="Short by">
+        {period.shortfall}, with room for {period.capacity}
+      </Fact>
+    </dl>
+  )
+}
+
+/** AC1/AC4: at some moments the venues the approval keeps hold fewer people, between the ones
+ *  in use then, than the attendance asked for - a warning; no booking is cancelled for it. */
 function CapacityShortfallCard({ shortfall }: { shortfall: CapacityShortfall }) {
+  const largest = Math.max(...shortfall.periods.map((period) => period.shortfall))
   return (
     <div className="impact-item">
       <div className="impact-item-header">
         <div>
           <p className="impact-item-name">Not enough room for the new attendance</p>
-          <p className="small muted">The venues booked hold fewer people between them.</p>
+          <p className="small muted">
+            At these times, the venues in use hold fewer people between them.
+          </p>
         </div>
         <div className="impact-item-pills">
           <Pill tone="warning">Too small</Pill>
@@ -188,22 +212,18 @@ function CapacityShortfallCard({ shortfall }: { shortfall: CapacityShortfall }) 
       </div>
       <div className="impact-stats">
         <Stat label="Proposed attendance" value={shortfall.proposed_attendance} />
-        <Stat label="Booked capacity" value={shortfall.booked_capacity} />
-        <Stat label="Short by" value={shortfall.shortfall} tone="warning" />
+        <Stat label="Short by up to" value={largest} tone="warning" />
       </div>
-      <dl className="impact-facts">
-        <Fact label="Counted">
-          {shortfall.venues.map((venue) => (
-            <p key={venue.venue_id}>
-              {venue.venue_name}: holds {venue.capacity}
-              {venue.layout_name === null ? '' : ` in the ${venue.layout_name} layout`}
-            </p>
-          ))}
-        </Fact>
-      </dl>
+      <ul className="impact-items">
+        {shortfall.periods.map((period) => (
+          <li key={period.starts_at}>
+            <ShortPeriodFacts period={period} />
+          </li>
+        ))}
+      </ul>
       <AfterApproval>
         The bookings stay as they are. Request another venue, or a larger one, from the event page
-        if everyone needs room.
+        if everyone needs room at those times.
       </AfterApproval>
     </div>
   )
@@ -310,7 +330,7 @@ function bookingSummary(
   }
   if (shortfall !== null) {
     parts.push(
-      `booked venues hold ${shortfall.booked_capacity} of the ${shortfall.proposed_attendance} now expected`,
+      `venues in use are too small for the ${shortfall.proposed_attendance} now expected during ${counted(shortfall.periods.length, 'period')}`,
     )
   }
   const text = sentence(parts)

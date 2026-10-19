@@ -192,7 +192,7 @@ export interface Closure {
   ends_at: string
 }
 
-/** Mirrors `CountedVenueOut`: one booked venue counted towards a `CapacityShortfall`. */
+/** Mirrors `CountedVenueOut`: one booked venue counted towards a `ShortPeriod`. */
 export interface CountedVenue {
   venue_id: string
   venue_name: string
@@ -200,13 +200,21 @@ export interface CountedVenue {
   layout_name: string | null
 }
 
-/** Mirrors `CapacityShortfallOut`: story 19.3 AC1/AC4, an attendance change asks for more people
- *  than the venues still booked after approval hold between them. A warning only. */
-export interface CapacityShortfall {
-  proposed_attendance: number
-  booked_capacity: number
+/** Mirrors `ShortPeriodOut`: story 19.3 AC1/AC4, a stretch of the event when the venues in use
+ *  hold `capacity` people between them, `shortfall` fewer than the proposed attendance. */
+export interface ShortPeriod {
+  starts_at: string
+  ends_at: string
+  capacity: number
   shortfall: number
   venues: CountedVenue[]
+}
+
+/** Mirrors `CapacityShortfallOut`: story 19.3 AC1/AC4, an attendance change asks for more people
+ *  than the venues in use hold at some moments (`periods`, in order). A warning only. */
+export interface CapacityShortfall {
+  proposed_attendance: number
+  periods: ShortPeriod[]
 }
 
 /** Mirrors `BookingImpactOut`: story 19.3 AC1/AC2, one venue booking the change affects. */
