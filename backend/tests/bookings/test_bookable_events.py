@@ -45,11 +45,12 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
     """Chloe (Users.COORDINATOR) is assigned three approved events, plus a PLANNING and a
     CONFIRMED one (story 6.1's seed data), a PLANNING one dedicated to the story 13.2.1
     reject e2e test, a PLANNING one for 11.1's e2e spec (s8.1), two PLANNING ones
-    dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 8.4's, three
-    to 12.5's, one to 12.1's real send, one to 11.1's, one to 12.7's, one to f12.1.2's, two
-    to 9.4's, two to 21.2's and seven to 12.6's (its eighth, the cancelled heritage walk, is not
-    bookable) - "approved or later" includes them all, but not 21.2's two awaiting the safety
-    check. The pick-list offers all thirty-two, soonest first."""
+    dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 17.1's, one to
+    8.4's, three to 12.5's, one to 12.1's real send, one to 11.1's, one to 12.7's, one to
+    f12.1.2's, two to 9.4's, two to 21.2's, one to 19.2's and eight to 12.6's (its other events are
+    the cancelled heritage walk, which is not bookable, and coordinator 2's two) - "approved or
+    later" includes them all, but not 21.2's two awaiting the safety check. The pick-list offers
+    all thirty-five, soonest first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -69,6 +70,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.APPROVED_6),
         str(Events.RECRUITMENT_FAIR),
         str(Events.EQUIPMENT_DECISIONS),
+        str(Events.WATERFRONT_DEMO),
         str(Events.SMART_CITIES_EXPO),
         str(Events.MOBILITY_FORUM),
         str(Events.ONBOARDING_DAY),

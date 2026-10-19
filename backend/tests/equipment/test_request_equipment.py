@@ -211,6 +211,9 @@ def test_coordinator_records_an_item_which_waits_to_be_sent(coordinator_client, 
         "decision_reason": None,
         "decided_at": None,
         "decided_by_name": None,
+        # Story 17.1 AC1: the event's period (START to END, in UTC), which the item is held for.
+        "period_starts_at": "2027-08-02T01:00:00Z",
+        "period_ends_at": "2027-08-02T09:00:00Z",
     }
     assert _lines(coordinator_client, event.id) == [body]
 
