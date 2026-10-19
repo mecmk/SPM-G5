@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import {
   approveChangeRequest,
   CHANGE_REASON_MAX_LENGTH,
@@ -16,7 +16,7 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
-import { ChangeRequestImpact } from './ChangeRequestImpact'
+import { ChangeRequestImpact, IMPACT_LOADING_LABEL } from './ChangeRequestImpact'
 import { FIELD_LABELS } from './changeRequestValues'
 
 /** Story 19.2 AC5: what approving each field may release, said before it is applied. */
@@ -81,6 +81,12 @@ export function ChangeRequestDecisionDialog({
   const label = FIELD_LABELS[request.field].toLowerCase()
   const isApprove = outcome === 'APPROVED'
 
+  // A request decided, withdrawn or gone while the assessment loads has the page load it again,
+  // as a refused decision does.
+  const onImpactRefused = useEffectEvent((err: unknown) => {
+    if (err instanceof ApiError && (err.status === 409 || err.status === 404)) onRefused()
+  })
+
   // Story 19.3 AC1/AC3: the assessment, worked out by the backend as the dialog opens.
   useEffect(() => {
     if (!isApprove) return undefined
@@ -90,7 +96,9 @@ export function ChangeRequestDecisionDialog({
         if (!cancelled) setImpact(assessed)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setImpactError(formatApiError(err))
+        if (cancelled) return
+        setImpactError(formatApiError(err))
+        onImpactRefused(err)
       })
     return () => {
       cancelled = true
@@ -165,9 +173,7 @@ export function ChangeRequestDecisionDialog({
               {impactError}
             </p>
           )}
-          {impact === null && impactError === null && (
-            <LoadingState label="Assessing the impact…" />
-          )}
+          {impact === null && impactError === null && <LoadingState label={IMPACT_LOADING_LABEL} />}
           {impact !== null && <ChangeRequestImpact impact={impact} isUpdated={isImpactUpdated} />}
         </section>
         <p className="small muted">{RELEASE_NOTES[request.field]}</p>

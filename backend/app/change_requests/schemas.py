@@ -293,7 +293,7 @@ class EquipmentImpactOut(BaseModel):
     item_id: uuid.UUID | None
     equipment_type_code: str
     equipment_type_name: str
-    change: str
+    change: Literal["removed", "changed", "added", "rechecked"]
     current_status: str | None
     required: int | None
     available: int | None

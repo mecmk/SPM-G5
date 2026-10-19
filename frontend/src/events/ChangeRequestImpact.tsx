@@ -20,6 +20,9 @@ import { OUT_OF_DATE_NOTE } from './changeRequestValues'
 /** Story 19.3 AC1: what the assessment says when the change touches nothing already arranged. */
 const NO_IMPACT_MESSAGE = 'No existing arrangements are affected.'
 
+/** Shown while the backend works the assessment out, on the request and in the approval dialog. */
+export const IMPACT_LOADING_LABEL = 'Assessing the impact…'
+
 /** How strongly something is coloured: cancelled or short, needs a look, or fine as it is. */
 type ImpactTone = 'danger' | 'warning' | 'success'
 
@@ -513,9 +516,9 @@ export function ChangeRequestImpact({ impact, isUpdated = false }: ChangeRequest
             <ImpactCategory title="Equipment" icon="box" summary={equipmentSummary(equipment)}>
               {equipment.length === 0 ? null : (
                 <ul className="impact-items">
-                  {equipment.map((item) => (
+                  {equipment.map((item, index) => (
                     <EquipmentRow
-                      key={item.item_id ?? `added-${item.equipment_type_code}`}
+                      key={item.item_id ?? `added-${item.equipment_type_code}-${index}`}
                       item={item}
                     />
                   ))}
@@ -585,9 +588,7 @@ export function ChangeRequestImpactToggle({ request }: { request: ChangeRequest 
           {error}
         </p>
       )}
-      {isOpen && error === null && impact === null && (
-        <LoadingState label="Assessing the impact…" />
-      )}
+      {isOpen && error === null && impact === null && <LoadingState label={IMPACT_LOADING_LABEL} />}
       {isOpen && impact !== null && <ChangeRequestImpact impact={impact} />}
     </div>
   )
