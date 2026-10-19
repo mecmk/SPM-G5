@@ -198,6 +198,25 @@ def _approve(login_as, request, fingerprint: str | None):
     )
 
 
+def _at(event: Event, fraction: float) -> datetime:
+    """The moment ``fraction`` of the way through ``event``."""
+    return event.starts_at + (event.ends_at - event.starts_at) * fraction
+
+
+def _short_periods(shortfall: dict) -> list[tuple]:
+    """Each flagged period as (start, end, capacity, shortfall, venue ids), times parsed."""
+    return [
+        (
+            datetime.fromisoformat(period["starts_at"]),
+            datetime.fromisoformat(period["ends_at"]),
+            period["capacity"],
+            period["shortfall"],
+            [venue["venue_id"] for venue in period["venues"]],
+        )
+        for period in shortfall["periods"]
+    ]
+
+
 def _bookings_by_id(impact: dict) -> dict[str, dict]:
     return {row["booking_id"]: row for row in impact["venue_bookings"]}
 
@@ -459,7 +478,7 @@ def test_an_out_of_date_request_says_so(login_as, db: Session):
 def test_an_attendance_beyond_what_the_booked_venues_hold_is_flagged(login_as, db: Session):
     """The Annual Wellness Summit case: its Main venue requirement is for 180, booked at a hall
     seating 250. Raising the attendance to 500 leaves the requirement - and so the booking - as it
-    is, but the venues booked hold only 250 of the 500 now expected."""
+    is, but over the hall's whole booking it holds only 250 of the 500 now expected."""
     event = _planning_event(db, expected_attendance=180)
     hall = _book(
         db, event, people=180, requirement_id=_requirement(db, event, capacity=180), capacity=250
@@ -468,19 +487,19 @@ def test_an_attendance_beyond_what_the_booked_venues_hold_is_flagged(login_as, d
 
     impact = _impact(login_as, request)
 
-    assert impact["capacity_shortfall"] == {
-        "proposed_attendance": 500,
-        "booked_capacity": 250,
-        "shortfall": 250,
-        "venues": [
-            {
-                "venue_id": str(hall.venue_id),
-                "venue_name": hall.venue.name,
-                "capacity": 250,
-                "layout_name": None,
-            }
-        ],
-    }
+    shortfall = impact["capacity_shortfall"]
+    assert shortfall["proposed_attendance"] == 500
+    assert _short_periods(shortfall) == [
+        (event.starts_at, event.ends_at, 250, 250, [str(hall.venue_id)])
+    ]
+    assert shortfall["periods"][0]["venues"] == [
+        {
+            "venue_id": str(hall.venue_id),
+            "venue_name": hall.venue.name,
+            "capacity": 250,
+            "layout_name": None,
+        }
+    ]
     assert impact["venue_bookings"] == []
     assert impact["has_impact"] is True
 
@@ -498,9 +517,10 @@ def test_an_attendance_equal_to_the_booked_capacity_fits(
 
 
 @pytest.mark.story("19.3", ac=1)
-def test_every_booked_venue_counts_towards_the_capacity(login_as, db: Session):
-    """A 500-seat hall and a 40-seat breakout room hold the 500 now expected between them: the
-    room was never meant to hold everyone, so nothing is flagged."""
+def test_venues_in_use_at_once_count_together(login_as, db: Session):
+    """A 500-seat hall and a 40-seat breakout room, both booked for the whole event, hold the 500
+    now expected between them: the room was never meant to hold everyone, so nothing is
+    flagged."""
     event = _planning_event(db, expected_attendance=300)
     hall_requirement = _requirement(db, event, capacity=300, name="Main hall")
     room_requirement = _requirement(db, event, capacity=40, name="Breakout room", position=1)
@@ -512,11 +532,76 @@ def test_every_booked_venue_counts_towards_the_capacity(login_as, db: Session):
 
 
 @pytest.mark.story("19.3", ac=1)
-def test_a_venue_booked_for_two_requirements_counts_once(login_as, db: Session):
-    """12.5 AC9: one 250-seat hall serves a morning and an afternoon requirement. Its seats are
-    counted once, so 450 people are still flagged, and the hall is listed once."""
+def test_venues_used_at_different_times_never_add_up(login_as, db: Session):
+    """A 250-seat hall in the morning and a 200-seat theatre in the afternoon add up to 450, but
+    never hold anyone at the same time: 400 people do not fit at either time, so both are
+    flagged, each with the venue in use then."""
     event = _planning_event(db, expected_attendance=200)
-    midpoint = event.starts_at + (event.ends_at - event.starts_at) / 2
+    midpoint = _at(event, 0.5)
+    morning = _requirement(db, event, capacity=200, name="Morning", ends_at=midpoint)
+    afternoon = _requirement(
+        db, event, capacity=200, name="Afternoon", position=1, starts_at=midpoint
+    )
+    hall = _book(db, event, people=200, requirement_id=morning, capacity=250, ends_at=midpoint)
+    theatre = _book(
+        db, event, people=200, requirement_id=afternoon, capacity=200, starts_at=midpoint
+    )
+    request = _raise(login_as, db, event, "expected_attendance", 400)
+
+    shortfall = _impact(login_as, request)["capacity_shortfall"]
+
+    assert _short_periods(shortfall) == [
+        (event.starts_at, midpoint, 250, 150, [str(hall.venue_id)]),
+        (midpoint, event.ends_at, 200, 200, [str(theatre.venue_id)]),
+    ]
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_only_the_times_without_enough_room_are_flagged(login_as, db: Session):
+    """A 250-seat hall all day and a 200-seat room in the afternoon: 400 people fit once the room
+    opens (450), not before it (250), so only the morning is flagged."""
+    event = _planning_event(db, expected_attendance=200)
+    midpoint = _at(event, 0.5)
+    hall = _book(
+        db, event, people=200, requirement_id=_requirement(db, event, capacity=200), capacity=250
+    )
+    room_requirement = _requirement(
+        db, event, capacity=150, name="Afternoon room", position=1, starts_at=midpoint
+    )
+    _book(db, event, people=150, requirement_id=room_requirement, capacity=200, starts_at=midpoint)
+    request = _raise(login_as, db, event, "expected_attendance", 400)
+
+    shortfall = _impact(login_as, request)["capacity_shortfall"]
+
+    assert _short_periods(shortfall) == [
+        (event.starts_at, midpoint, 250, 150, [str(hall.venue_id)])
+    ]
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_time_with_no_venue_booked_is_not_flagged(login_as, db: Session):
+    """A morning venue and an afternoon venue, each big enough, with nothing booked over lunch:
+    a break needs no room, so nothing is flagged."""
+    event = _planning_event(db, expected_attendance=200)
+    morning_ends, afternoon_starts = _at(event, 0.25), _at(event, 0.75)
+    morning = _requirement(db, event, capacity=200, name="Morning", ends_at=morning_ends)
+    afternoon = _requirement(
+        db, event, capacity=200, name="Afternoon", position=1, starts_at=afternoon_starts
+    )
+    _book(db, event, people=200, requirement_id=morning, capacity=500, ends_at=morning_ends)
+    _book(db, event, people=200, requirement_id=afternoon, capacity=500, starts_at=afternoon_starts)
+    request = _raise(login_as, db, event, "expected_attendance", 400)
+
+    assert _impact(login_as, request)["capacity_shortfall"] is None
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_venue_booked_for_two_requirements_counts_once(login_as, db: Session):
+    """12.5 AC9: one 250-seat hall serves a morning and an afternoon requirement back to back. It
+    holds 250 at every moment, so 450 people are flagged once, over both, with the hall listed
+    once."""
+    event = _planning_event(db, expected_attendance=200)
+    midpoint = _at(event, 0.5)
     hall = make_venue(db, capacity=250, name=f"Hall {uuid.uuid4().hex[:6]}")
     morning = _requirement(db, event, capacity=200, name="Morning", ends_at=midpoint)
     afternoon = _requirement(
@@ -528,8 +613,7 @@ def test_a_venue_booked_for_two_requirements_counts_once(login_as, db: Session):
 
     shortfall = _impact(login_as, request)["capacity_shortfall"]
 
-    assert (shortfall["booked_capacity"], shortfall["shortfall"]) == (250, 200)
-    assert [venue["venue_id"] for venue in shortfall["venues"]] == [str(hall.id)]
+    assert _short_periods(shortfall) == [(event.starts_at, event.ends_at, 250, 200, [str(hall.id)])]
 
 
 @pytest.mark.story("19.3", ac=1)
@@ -537,17 +621,21 @@ def test_a_booking_the_change_cancels_holds_nobody_after_it(login_as, db: Sessio
     """The additional venue was booked for 180, so 500 cancels it: only the hall that is kept
     counts, and it seats 250."""
     event = _planning_event(db, expected_attendance=180)
-    _book(db, event, people=180, requirement_id=_requirement(db, event, capacity=100), capacity=250)
+    hall = _book(
+        db, event, people=180, requirement_id=_requirement(db, event, capacity=100), capacity=250
+    )
     _book(db, event, people=180, capacity=400)
     request = _raise(login_as, db, event, "expected_attendance", 500)
 
     shortfall = _impact(login_as, request)["capacity_shortfall"]
 
-    assert (shortfall["booked_capacity"], shortfall["shortfall"]) == (250, 250)
+    assert _short_periods(shortfall) == [
+        (event.starts_at, event.ends_at, 250, 250, [str(hall.venue_id)])
+    ]
 
 
 @pytest.mark.story("19.3", ac=4)
-def test_the_booked_layouts_capacity_counts_towards_the_total(login_as, db: Session):
+def test_the_booked_layouts_capacity_is_what_a_venue_holds(login_as, db: Session):
     event = _planning_event(db, expected_attendance=100)
     venue = make_venue(db, capacity=300, layouts={"THEATRE": 120})
     requirement = _requirement(db, event, capacity=100, layout_code="THEATRE")
@@ -561,10 +649,10 @@ def test_the_booked_layouts_capacity_counts_towards_the_total(login_as, db: Sess
     )
     request = _raise(login_as, db, event, "expected_attendance", 200)
 
-    shortfall = _impact(login_as, request)["capacity_shortfall"]
+    period = _impact(login_as, request)["capacity_shortfall"]["periods"][0]
 
-    assert shortfall["booked_capacity"] == 120
-    assert shortfall["venues"][0]["layout_name"] == "Theatre"
+    assert period["capacity"] == 120
+    assert period["venues"][0]["layout_name"] == "Theatre"
 
 
 @pytest.mark.story("19.3", ac=1)
