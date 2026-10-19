@@ -4,11 +4,15 @@
  *
  * 9.4 AC1 Venue Staff add a closure from the venue's Edit venue page, where Availability and
  *         Block off time are sections of the page like the form's own, after the form that Save
- *         changes closes, under a note that closures save at once.
- * 9.4 AC6 Venue Staff edit, end ("End now") and remove a closure from the Edit venue page only.
- * 9.4 AC9 The venue's details page, and the calendar on it (9.1), keep showing each period with
- *         its reason to every internal role, Venue Staff included, with no add, edit, end or
- *         remove control. Both pages are usable at 1280x720 and 390x844.
+ *         changes closes, under a note that each closure is saved by its own buttons; while one
+ *         is edited the page still has one Save changes, the venue's.
+ * 9.4 AC6 An ended closure reads "Ended", muted and legible, on the Edit venue page and the
+ *         details page, for every internal role.
+ * 9.4 AC9 Only Venue Staff can open the Edit venue page. The venue's details page, and the
+ *         calendar on it (9.1), show each period with its reason to every internal role, Venue
+ *         Staff included, with no add, edit, end or remove control.
+ * 9.4 responsive: both pages are usable at 1280x720 and 390x844, which is the DoD's line and not
+ *         an AC, so those two tests are titled for it.
  *
  * Nothing about 9.4's rules changes - the overlap, the marking, what End now and Remove do - so
  * the steps that add, edit, end and remove are venue-unavailability.spec.ts's, which reaches them
@@ -42,7 +46,7 @@ const DESKTOP = { width: 1280, height: 720 }
 const PHONE = { width: 390, height: 844 }
 
 function availability(page: Page) {
-  // A region on the details page, a group - a form section - on the Edit venue page.
+  // A region on the details page; on the Edit venue page a fieldset, which is a group.
   return page
     .getByRole('region', { name: 'Availability', exact: true })
     .or(page.getByRole('group', { name: 'Availability', exact: true }))
@@ -269,7 +273,7 @@ test.describe('the block-off controls on the Edit venue page', () => {
     await signIn(page, ACCOUNTS.venueStaff)
     for (const open of [openEditPage, openDetailsPage]) {
       await open(page, AFTER_CLOSURE)
-      await page.getByRole('button', { name: /Previous/ }).click()
+      await page.getByRole('button', { name: /Prev/ }).click()
       await openClosureDay(page)
       const row = closureRow(page)
       await expect(row).toContainText(ENDED_LABEL)
@@ -284,6 +288,8 @@ test.describe('the block-off controls on the Edit venue page', () => {
       await expect(cell).toHaveAccessibleName(new RegExp(ENDED_LABEL))
       const resting = await cell.evaluate((element) => getComputedStyle(element).backgroundColor)
       await cell.hover()
+      // Buttons ease their background in, so read it once the transition is over.
+      await page.waitForTimeout(500)
       expect(await cell.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
         resting,
       )
@@ -297,7 +303,7 @@ test.describe('the block-off controls on the Edit venue page', () => {
         .then((context) => context.newPage())
       await signIn(other, email)
       await openDetailsPage(other, AFTER_CLOSURE)
-      await other.getByRole('button', { name: /Previous/ }).click()
+      await other.getByRole('button', { name: /Prev/ }).click()
       await openClosureDay(other)
       await expect(closureRow(other)).toContainText(ENDED_LABEL)
       await other.context().close()

@@ -56,9 +56,9 @@ const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
 const REMOVE_HINT = 'Not started yet: removes it completely'
 const END_NOW_HINT = 'Ends the whole closure now; the time already passed is kept'
 
-/** The "Availability" card, a region via its `aria-labelledby` (as venue-calendar.spec.ts). */
+/** The "Availability" card: a region on the details page, a group on the Edit venue page. */
 function availability(page: Page) {
-  // A region on the venue's details page, a group - a form section - on the Edit venue page.
+  // A region on the venue's details page; on the Edit venue page a fieldset, which is a group.
   return page
     .getByRole('region', { name: 'Availability', exact: true })
     .or(page.getByRole('group', { name: 'Availability', exact: true }))
@@ -127,7 +127,7 @@ async function openVenue(page: Page, name: string) {
   await expect(page.getByText('Loading availability…')).toHaveCount(0)
 }
 
-/** The venue's details page, which every internal role may open and which has the calendar alone. */
+/** The venue's details page, which every internal role may open and which has no controls. */
 async function openVenueRecord(page: Page, name: string) {
   await page.goto('/venues')
   await page.getByRole('link', { name }).click()
@@ -155,7 +155,7 @@ interface ClosureForm {
   description?: string
 }
 
-/** Open the add form on the venue's page and fill it. Nothing is saved. */
+/** Open the add form on the venue's Edit venue page and fill it. Nothing is saved. */
 async function fillClosure(page: Page, form: ClosureForm) {
   const section = blockOffCard(page)
   await section.getByRole('button', { name: 'Block off time' }).click()
