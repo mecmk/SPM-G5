@@ -1,4 +1,4 @@
-"""Request / response shapes for coordinator assignment (stories 5.1, 5.2, 5.4 and 5.5)."""
+"""Request / response shapes for coordinator assignment (stories 5.1, 5.2, 5.4, 5.5 and 5.6)."""
 
 from __future__ import annotations
 
@@ -36,9 +36,14 @@ class CoordinatorOption(BaseModel):
 
 
 class AssignCoordinatorIn(BaseModel):
+    """The coordinator to give the event (5.1 AC1). Story 5.6 AC6: ``expected_coordinator_id`` is
+    the coordinator the Lead saw - set to reassign from them, left out to assign an event that has
+    none yet (5.4) - so a request made from a view that has since changed is refused."""
+
     model_config = ConfigDict(extra="forbid")
 
     coordinator_id: uuid.UUID
+    expected_coordinator_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=500)
 
 

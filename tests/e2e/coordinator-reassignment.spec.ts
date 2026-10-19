@@ -1,44 +1,446 @@
 /**
- * Story 5.2 - fe/be: reassign a coordinator-holding event to a different coordinator.
+ * Stories 5.2 and 5.6 - reassigning an event to another coordinator.
  *
- * AC3 the event page has a Reassign action with a list of eligible coordinators and a
- *     confirmation step; the assignment change takes effect immediately (the page shows the new
- *     coordinator without a reload).
+ * Story 5.6 (Q16) gave reassignment to the Event Coordinator Lead and took it from coordinators,
+ * replacing 5.2 AC1 and AC6; 5.2 AC3's Reassign action on the event page is now the Lead's.
  *
- * Boundary, permission and conflict detail (AC4, AC6, AC7) are backend cases, covered by
- * backend/tests/coordination/test_reassign_coordinator.py. This spec covers the flow a
- * coordinator actually clicks through.
+ * 5.6 AC1 the Lead reassigns from the event page and from the overview (5.5), choosing from the
+ *     other active coordinators, each with their active-event count; the page shows the new
+ *     coordinator at once.
+ * 5.6 AC3 the picker can't be confirmed until the active coordinators it offers have loaded, and
+ *     with none to offer, Confirm says so and sends nothing.
+ * 5.6 AC5 a coordinator no longer sees Reassign.
+ * 5.6 AC6 a reassignment refused because the assignment changed says why.
+ * Responsive: the flow at a phone (375 x 667) and a desktop (1280 x 800), and the page and dialog
+ *     at a tablet (768 x 1024): no sideways scroll, the dialog and picker inside the screen, and
+ *     44px targets on the phone.
  *
- * The event used here is a fresh one created and submitted through the UI, not an existing seed
- * row: story 5.1's round robin means a submission can land on either seeded coordinator, and
- * reassigning a *shared* seed event (used by several other specs for its bookings, equipment and
- * accessibility data) would leave it permanently changed for the rest of this parallel run (see
- * tests/CLAUDE.md on why specs must not mutate shared seed state). Whichever coordinator the
- * round robin lands on is discovered from the page itself, the same way a person would look.
+ * The rules - who may reassign (401/403), which coordinators may be chosen (422), closed and
+ * unknown events (409/404), the stale and simultaneous reassignments (409), the notifications and
+ * what moves with the event - are backend cases:
+ * backend/tests/coordination/test_lead_reassign_coordinator.py.
+ *
+ * A reassignment is made on a fresh request, submitted through the UI and assigned to Chloe by the
+ * Lead, so no shared seed event changes (tests/CLAUDE.md). The cases that only look, or whose
+ * write is answered by a stub, use the seeded EVENTS.approved, Chloe's, in Planning.
  */
-import { expect, test } from '@playwright/test'
-import { ACCOUNTS, assignByLead, createAndSubmitRequest, signIn, uniqueName } from './support'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import {
+  ACCOUNTS,
+  COORDINATORS,
+  DESKTOP,
+  EVENTS,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  TABLET,
+  assignByLead,
+  corsHeaders,
+  createAndSubmitRequest,
+  expectNoSidewaysScroll,
+  signIn,
+  uniqueName,
+} from './support'
 
-test('5.2 AC3: a coordinator reassigns an event to another coordinator', async ({ page }) => {
-  // Two full sign-in cycles (organiser, then the auto-assigned coordinator) genuinely take
-  // longer than the default per-test budget - see bookings.spec.ts's AC3/AC4 test for the
-  // same reasoning.
-  test.setTimeout(60_000)
+/* ---------- Story 5.6: the Event Coordinator Lead reassigns ---------- */
 
-  const name = uniqueName('Reassign')
+const [CHLOE, CARL] = COORDINATORS
+const STALE_MESSAGE =
+  "This event's coordinator has changed since you opened it. Reload the event and try again."
+const NO_OTHER_COORDINATOR_MESSAGE =
+  'There is no other active Event Coordinator to reassign this to.'
+const NOT_REFRESHED_MESSAGE =
+  'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.'
+/** How the picker names a coordinator: their name and their number of active events (5.4 AC3). */
+const WITH_COUNT = /· \d+ active events?$/
+
+/**
+ * A fresh request, submitted by Olivia and assigned to Chloe by the Lead (5.4), so reassigning it
+ * changes no shared seed row. Leaves the Lead signed in; returns the request's id and name.
+ */
+async function freshEventWithChloe(page: Page, label: string) {
+  const name = uniqueName(label)
   await signIn(page, ACCOUNTS.organiser)
   const eventId = await createAndSubmitRequest(page, name)
-
   await page.goto(`/events/${eventId}`)
-  const { account, other } = await assignByLead(page)
-
+  await assignByLead(page)
   await page.getByRole('button', { name: 'Sign out' }).click()
-  await signIn(page, account)
+  await signIn(page, ACCOUNTS.lead)
+  return { eventId, name }
+}
+
+function reassignDialog(page: Page, name: string) {
+  return page.getByRole('dialog', { name: `Reassign "${name}"?` })
+}
+
+/** In the open dialog: the picker offers Carl with his count and not Chloe; choose Carl and
+ * confirm, waiting for the dialog to close. */
+async function reassignToCarl(page: Page, name: string) {
+  const dialog = reassignDialog(page, name)
+  const picker = dialog.getByLabel('New coordinator')
+  await expect(picker.getByRole('option', { name: new RegExp(`^${CARL.name} `) })).toHaveText(
+    WITH_COUNT,
+  )
+  await expect(picker.getByRole('option', { name: new RegExp(`^${CHLOE.name}`) })).toHaveCount(0)
+  await picker.selectOption(CARL.id)
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+  await expect(dialog).toHaveCount(0)
+}
+
+function overviewCard(page: Page, name: string) {
+  return page
+    .getByRole('list', { name: 'Active events' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name, exact: true }) })
+}
+
+/** The element sits wholly inside the viewport. */
+async function expectInsideScreen(page: Page, element: Locator) {
+  const box = (await element.boundingBox())!
+  const { width, height } = page.viewportSize()!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(width)
+  expect(box.y + box.height).toBeLessThanOrEqual(height)
+}
+
+test('5.6 AC1: the Lead reassigns an event from its page', async ({ page }) => {
+  test.setTimeout(90_000)
+  const { eventId, name } = await freshEventWithChloe(page, 'Lead reassigns')
   await page.goto(`/events/${eventId}`)
+  await expect(page.getByText(CHLOE.account, { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Reassign' }).click()
-  await page.getByLabel('New coordinator').selectOption({ label: other.name })
-  await page.getByRole('button', { name: 'Confirm reassignment' }).click()
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  await reassignToCarl(page, name)
 
-  await expect(page.getByText(other.name)).toBeVisible()
+  // The page shows the new coordinator straight away (AC1), and a reload agrees.
+  await expect(page.getByText(CARL.account, { exact: true })).toBeVisible()
+  await expect(page.getByText(CHLOE.account, { exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText(CARL.account, { exact: true })).toBeVisible()
+})
+
+test('5.6 AC1: the Lead reassigns an event from the overview', async ({ page }) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Overview reassign')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  const card = overviewCard(page, name)
+  await expect(card).toContainText(`Coordinator: ${CHLOE.name}`)
+
+  await card.getByRole('button', { name: 'Reassign', exact: true }).click()
+  await reassignToCarl(page, name)
+
+  // The page reads the change afresh: the card leaves Chloe's list without a reload, and the By
+  // coordinator view - read once when the page opened - lists it under Carl.
+  await expect(card).toHaveCount(0)
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  const carls = page
+    .getByRole('list', { name: 'Coordinators' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: CARL.name, exact: true }) })
+  await expect(carls.getByRole('link', { name, exact: true })).toBeVisible()
+  await page.goto(`/events/assignments?coordinator=${CARL.id}`)
+  await expect(overviewCard(page, name)).toContainText(`Coordinator: ${CARL.name}`)
+  await expect(overviewCard(page, name)).toContainText('Assigned by Lena Lead')
+})
+
+test('5.6 AC5: a coordinator no longer sees Reassign', async ({ page }) => {
+  // Read only: Chloe opens her own seeded event, which she could reassign under 5.2.
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+  // Her own actions are drawn - Edit event is hers as its coordinator (7.2) - so Reassign being
+  // absent is a finding, not a page still loading.
+  await expect(page.getByRole('link', { name: 'Edit event' })).toBeVisible()
+
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
+})
+
+test('5.6 AC6: a reassignment refused as stale says why', async ({ page }) => {
+  // The refusal itself is a backend case; here the page shows it, having sent the coordinator it
+  // showed. The PUT is answered with the server's 409, so the seeded event is never changed.
+  let sent: unknown = null
+  await page.route(
+    (url) => url.pathname === `/events/${EVENTS.approved}/coordinator`,
+    (route) => {
+      const request = route.request()
+      if (request.method() !== 'PUT') return route.fallback()
+      sent = request.postDataJSON()
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: STALE_MESSAGE }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await dialog.getByLabel('New coordinator').selectOption(CARL.id)
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+
+  await expect(dialog.getByRole('alert')).toHaveText(STALE_MESSAGE)
+  expect(sent).toEqual({ coordinator_id: CARL.id, expected_coordinator_id: CHLOE.id })
+})
+
+for (const { device, viewport } of [
+  { device: 'a phone', viewport: PHONE },
+  { device: 'a desktop', viewport: DESKTOP },
+]) {
+  test(`5.6 responsive: the Lead reassigns on ${device}`, async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize(viewport)
+    const { eventId, name } = await freshEventWithChloe(page, `Reassign ${viewport.width}`)
+
+    // The overview: each card's Reassign is in reach, and nothing scrolls sideways.
+    await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+    const cardButton = overviewCard(page, name).getByRole('button', {
+      name: 'Reassign',
+      exact: true,
+    })
+    await expect(cardButton).toBeVisible()
+    await expectNoSidewaysScroll(page)
+    if (viewport === PHONE) {
+      expect((await cardButton.boundingBox())!.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
+    }
+
+    // The event page: Reassign, then the dialog and its picker inside the screen.
+    await page.goto(`/events/${eventId}`)
+    const reassign = page.getByRole('button', { name: 'Reassign', exact: true })
+    await expect(reassign).toBeVisible()
+    await expectNoSidewaysScroll(page)
+    if (viewport === PHONE) {
+      expect((await reassign.boundingBox())!.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
+    }
+    await reassign.click()
+    const dialog = reassignDialog(page, name)
+    await expectInsideScreen(page, dialog)
+    await expectInsideScreen(page, dialog.getByLabel('New coordinator'))
+    if (viewport === PHONE) {
+      for (const target of [
+        dialog.getByLabel('New coordinator'),
+        dialog.getByRole('button', { name: 'Confirm reassignment' }),
+        dialog.getByRole('button', { name: 'Cancel' }),
+      ]) {
+        expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
+      }
+    }
+    await reassignToCarl(page, name)
+    await expect(page.getByText(CARL.account, { exact: true })).toBeVisible()
+    await expectNoSidewaysScroll(page)
+  })
+}
+
+test('5.6 responsive: reassigning fits a tablet', async ({ page }) => {
+  // Read only: the dialog is opened on the seeded event and cancelled.
+  await page.setViewportSize(TABLET)
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  await expectNoSidewaysScroll(page)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await expectInsideScreen(page, dialog)
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+  await expectNoSidewaysScroll(page)
+})
+
+test('5.6 AC1: Reassign is offered only on an active event that has a coordinator', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  // An event nobody is assigned to yet is the Lead's to assign from 5.4's queue (CL-147).
+  const name = uniqueName('Not yet assigned')
+  await signIn(page, ACCOUNTS.organiser)
+  const eventId = await createAndSubmitRequest(page, name)
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByText('Not yet assigned', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
+
+  // Nor on its overview card, while an assigned card beside it offers it.
+  await page.goto('/events/assignments?coordinator=unassigned')
+  await expect(overviewCard(page, name)).toContainText('Not yet assigned')
+  await expect(
+    overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }),
+  ).toHaveCount(0)
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await expect(
+    page
+      .getByRole('list', { name: 'Active events' })
+      .getByRole('button', { name: 'Reassign', exact: true })
+      .first(),
+  ).toBeVisible()
+
+  // A closed event needs no owner: Omar's rejected Rooftop Networking Night. Only looked at here.
+  await page.goto(`/events/${EVENTS.rejected}`)
+  await expect(page.getByRole('heading', { name: 'Rooftop Networking Night' })).toBeVisible()
+  await expect(page.getByText('Assigned coordinator')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reassign', exact: true })).toHaveCount(0)
+})
+
+test('5.6 AC3: Confirm does nothing while the coordinators are still loading', async ({ page }) => {
+  // Read only: the PUT is never sent, and the dialog is cancelled. The coordinators are held back
+  // so Confirm is pressed before the picker has anything to choose.
+  let releaseCoordinators = () => {}
+  const isHeld = new Promise<void>((resolve) => {
+    releaseCoordinators = resolve
+  })
+  const sent: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PUT') sent.push(request.url())
+  })
+  await page.route(
+    (url) => url.pathname === '/coordinators',
+    async (route) => {
+      if (route.request().resourceType() === 'fetch') await isHeld
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await expect(dialog.getByLabel('New coordinator')).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  releaseCoordinators()
+  await expect(dialog.getByLabel('New coordinator')).toBeEnabled()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(sent).toEqual([])
+})
+
+/** Answer every fetch of the API `path` with a 500, as a server that fails would; returns the
+ * matcher, for `page.unroute`. */
+async function failReadsOf(page: Page, path: string) {
+  const matches = (url: URL) => url.pathname === path
+  await page.route(matches, (route) => {
+    const request = route.request()
+    if (request.resourceType() !== 'fetch') return route.fallback()
+    return route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Internal Server Error' }),
+      headers: corsHeaders(request),
+    })
+  })
+  return matches
+}
+
+/** By coordinator: the event listed under Carl. */
+function underCarl(page: Page, name: string) {
+  return page
+    .getByRole('list', { name: 'Coordinators' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: CARL.name, exact: true }) })
+    .getByRole('link', { name, exact: true })
+}
+
+test('5.6 AC1: when the events fail to refresh after a reassignment, All active events says so until they load', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Events refresh fails')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }).click()
+  // The reassignment itself goes through; reading the events afterwards fails.
+  const activeEvents = await failReadsOf(page, '/coordination/active-events')
+
+  await reassignToCarl(page, name)
+
+  // It says the reassignment was made, so the Lead does not try again from the old card.
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  // By coordinator's list was read again, and shows the change: no notice there.
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  await expect(underCarl(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  // Back on All active events, the old list is still shown, and so is the notice.
+  await page.getByRole('link', { name: 'All active events' }).click()
+  await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+
+  // The next good load of the events - here, choosing Carl's - shows the change, and the notice
+  // goes.
+  await page.unroute(activeEvents)
+  await page.getByRole('combobox', { name: 'Coordinator' }).selectOption(CARL.id)
+  await expect(overviewCard(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('5.6 AC1: when the workloads fail to refresh after a reassignment, By coordinator says so until they load', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Workloads refresh fails')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  const card = overviewCard(page, name)
+  await card.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const workloads = await failReadsOf(page, '/coordination/workloads')
+
+  await reassignToCarl(page, name)
+
+  // All active events was read again: the card has left Chloe's list.
+  await expect(card).toHaveCount(0)
+  // By coordinator still shows the list read when the page opened, so it says so.
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  await expect(page.getByRole('list', { name: 'Coordinators' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  await expect(underCarl(page, name)).toHaveCount(0)
+  // Back on All active events - its list did refresh - there is no notice. (Checked only now, once
+  // the failure has been seen, so the absence can't be the failure not having arrived yet.)
+  await page.getByRole('link', { name: 'All active events' }).click()
+  await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+
+  // Reloading, as it says, reads the workloads again: the event is under Carl, and the notice
+  // goes.
+  await page.unroute(workloads)
+  await page.reload()
+  await expect(underCarl(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('5.6 AC3: with no other active coordinator to choose, Confirm says so and sends nothing', async ({
+  page,
+}) => {
+  // Read only: the picker's list is answered empty, and the dialog is cancelled.
+  const sent: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PUT') sent.push(request.url())
+  })
+  await page.route(
+    (url) => url.pathname === '/coordinators',
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+
+  await expect(dialog.getByRole('alert')).toHaveText(NO_OTHER_COORDINATOR_MESSAGE)
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(sent).toEqual([])
 })

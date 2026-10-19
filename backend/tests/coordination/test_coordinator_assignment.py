@@ -4,9 +4,15 @@ AC1 A submitted event can be assigned to exactly one coordinator at a time.
 AC2 Only users holding the Event Coordinator role can be selected.
 AC3 The assignment is recorded with who assigned it and when.
 AC4 The assigned coordinator's name is visible on the event.
+
+Since story 5.6 (Q16) only the Event Coordinator Lead writes an assignment: 5.4 gave the Lead the
+first one, and 5.6 the reassignments, which name the coordinator the Lead saw
+(``expected_coordinator_id``). The writes here are therefore the Lead's.
 """
 
 from __future__ import annotations
+
+import uuid
 
 import pytest
 from sqlalchemy import text
@@ -36,10 +42,14 @@ def _assigned_coordinator_id(db: Session, event_id):
 
 # --- AC1: one coordinator at a time on a submitted event -----------------------------------
 @pytest.mark.story("5.1", ac=1)
-def test_submitted_event_can_be_assigned_a_coordinator(coordinator_client, db: Session):
-    response = coordinator_client.put(
+def test_submitted_event_can_be_assigned_a_coordinator(login_as, db: Session):
+    lead = login_as(Users.LEAD)
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -53,13 +63,18 @@ def test_submitted_event_can_be_assigned_a_coordinator(coordinator_client, db: S
 
 
 @pytest.mark.story("5.1", ac=1)
-def test_assigning_replaces_the_previous_coordinator(coordinator_client, db: Session):
+def test_assigning_replaces_the_previous_coordinator(login_as, db: Session):
     """Events.APPROVED already belongs to Chloe; handing it to Carl leaves exactly one owner."""
+    lead = login_as(Users.LEAD)
     assert _assigned_coordinator_id(db, Events.APPROVED) == Users.COORDINATOR.id
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id), "note": "Chloe is on leave"},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+            "note": "Chloe is on leave",
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -81,17 +96,19 @@ def test_assigning_replaces_the_previous_coordinator(coordinator_client, db: Ses
 
 
 @pytest.mark.story("5.1", ac=1)
-def test_reassigning_the_same_coordinator_does_not_duplicate_history(
-    coordinator_client, db: Session
-):
+def test_reassigning_the_same_coordinator_does_not_duplicate_history(login_as, db: Session):
+    lead = login_as(Users.LEAD)
     before = db.execute(
         text("SELECT count(*) FROM event_coordinator_assignments WHERE event_id = :e"),
         {"e": Events.APPROVED},
     ).scalar()
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -103,10 +120,31 @@ def test_reassigning_the_same_coordinator_does_not_duplicate_history(
     assert after == before
 
 
+@pytest.mark.story("5.6", ac=3)
+def test_reassigning_the_same_coordinator_leaves_the_event_version_alone(login_as, db: Session):
+    """5.6 AC3 (CL-147 (4)): re-choosing the coordinator who has the event writes nothing to it, so
+    its ``updated_at`` - the version story 7.2's correction checks (AC9) - is unchanged, and a
+    correction Chloe has open is not refused because of it (review of #124)."""
+    version = text("SELECT updated_at FROM events WHERE id = :e")
+    before = db.execute(version, {"e": Events.APPROVED}).scalar()
+
+    response = login_as(Users.LEAD).put(
+        f"/events/{Events.APPROVED}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert db.execute(version, {"e": Events.APPROVED}).scalar() == before
+
+
 @pytest.mark.story("5.1", ac=1)
-def test_draft_event_cannot_be_assigned_a_coordinator(coordinator_client, db: Session):
+def test_draft_event_cannot_be_assigned_a_coordinator(login_as, db: Session):
     """AC1 is about a *submitted* event - a draft has not been handed over yet."""
-    response = coordinator_client.put(
+    lead = login_as(Users.LEAD)
+    response = lead.put(
         f"/events/{Events.DRAFT}/coordinator",
         json={"coordinator_id": str(Users.COORDINATOR.id)},
     )
@@ -119,10 +157,11 @@ def test_draft_event_cannot_be_assigned_a_coordinator(coordinator_client, db: Se
 
 @pytest.mark.story("5.1", ac=1)
 @pytest.mark.parametrize("status", [EventStatus.CANCELLED, EventStatus.COMPLETED])
-def test_closed_event_cannot_be_assigned_a_coordinator(coordinator_client, db: Session, status):
+def test_closed_event_cannot_be_assigned_a_coordinator(login_as, db: Session, status):
+    lead = login_as(Users.LEAD)
     event = make_event(db, status=status)
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{event.id}/coordinator",
         json={"coordinator_id": str(Users.COORDINATOR.id)},
     )
@@ -132,10 +171,11 @@ def test_closed_event_cannot_be_assigned_a_coordinator(coordinator_client, db: S
 
 
 @pytest.mark.story("5.1", ac=1)
-def test_unknown_event_is_not_found(coordinator_client):
+def test_unknown_event_is_not_found(login_as):
+    lead = login_as(Users.LEAD)
     unknown = "33333333-0000-0000-0000-000000009999"
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{unknown}/coordinator",
         json={"coordinator_id": str(Users.COORDINATOR.id)},
     )
@@ -170,14 +210,16 @@ def test_inactive_coordinators_are_not_offered(coordinator_client, db: Session):
     [Users.ORGANISER, Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ATTENDEE],
     ids=lambda u: u.role,
 )
-def test_user_without_the_coordinator_role_cannot_be_assigned(
-    coordinator_client, db: Session, user
-):
+def test_user_without_the_coordinator_role_cannot_be_assigned(login_as, db: Session, user):
+    lead = login_as(Users.LEAD)
     before = _open_assignments(db, Events.SUBMITTED)
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(user.id)},
+        json={
+            "coordinator_id": str(user.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 422, response.text
@@ -186,13 +228,17 @@ def test_user_without_the_coordinator_role_cannot_be_assigned(
 
 
 @pytest.mark.story("5.1", ac=2)
-def test_inactive_coordinator_cannot_be_assigned(coordinator_client, db: Session):
+def test_inactive_coordinator_cannot_be_assigned(login_as, db: Session):
+    lead = login_as(Users.LEAD)
     inactive = make_user(db, role="EVENT_COORDINATOR", is_active=False)
     before = _open_assignments(db, Events.SUBMITTED)
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(inactive.id)},
+        json={
+            "coordinator_id": str(inactive.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 422, response.text
@@ -200,12 +246,16 @@ def test_inactive_coordinator_cannot_be_assigned(coordinator_client, db: Session
 
 
 @pytest.mark.story("5.1", ac=2)
-def test_unknown_user_cannot_be_assigned(coordinator_client, db: Session):
+def test_unknown_user_cannot_be_assigned(login_as, db: Session):
+    lead = login_as(Users.LEAD)
     before = _open_assignments(db, Events.SUBMITTED)
 
-    response = coordinator_client.put(
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": "11111111-0000-0000-0000-000000009999"},
+        json={
+            "coordinator_id": "11111111-0000-0000-0000-000000009999",
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 422, response.text
@@ -214,29 +264,38 @@ def test_unknown_user_cannot_be_assigned(coordinator_client, db: Session):
 
 # --- AC3: who assigned it, and when --------------------------------------------------------
 @pytest.mark.story("5.1", ac=3)
-def test_assignment_records_who_assigned_it_and_when(coordinator_client, db: Session):
-    response = coordinator_client.put(
+def test_assignment_records_who_assigned_it_and_when(login_as, db: Session):
+    lead = login_as(Users.LEAD)
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id), "note": "Carl has the capacity"},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+            "note": "Carl has the capacity",
+        },
     )
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["assigned_by_id"] == str(Users.COORDINATOR.id)
-    assert body["assigned_by_name"] == Users.COORDINATOR.full_name
+    assert body["assigned_by_id"] == str(Users.LEAD.id)
+    assert body["assigned_by_name"] == Users.LEAD.full_name
     assert body["assigned_at"] is not None
     assert body["note"] == "Carl has the capacity"
 
     row = _open_assignments(db, Events.SUBMITTED)[0]
-    assert row.assigned_by_id == Users.COORDINATOR.id
+    assert row.assigned_by_id == Users.LEAD.id
     assert row.assigned_at is not None
 
 
 @pytest.mark.story("5.1", ac=3)
-def test_assignment_is_written_to_the_audit_log(coordinator_client, db: Session):
-    coordinator_client.put(
+def test_assignment_is_written_to_the_audit_log(login_as, db: Session):
+    lead = login_as(Users.LEAD)
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     entry = db.execute(
@@ -246,16 +305,20 @@ def test_assignment_is_written_to_the_audit_log(coordinator_client, db: Session)
         ),
         {"e": Events.SUBMITTED},
     ).one()
-    assert entry.actor_id == Users.COORDINATOR.id
+    assert entry.actor_id == Users.LEAD.id
     assert entry.details["coordinator_id"] == str(Users.COORDINATOR_2.id)
 
 
 # --- AC4: the coordinator's name is visible on the event -----------------------------------
 @pytest.mark.story("5.1", ac=4)
-def test_assigned_coordinator_name_is_returned_on_assignment(coordinator_client):
-    response = coordinator_client.put(
+def test_assigned_coordinator_name_is_returned_on_assignment(login_as):
+    lead = login_as(Users.LEAD)
+    response = lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -263,13 +326,17 @@ def test_assigned_coordinator_name_is_returned_on_assignment(coordinator_client)
 
 
 @pytest.mark.story("5.1", ac=4)
-def test_assigned_coordinator_name_is_visible_on_the_event(coordinator_client):
-    coordinator_client.put(
+def test_assigned_coordinator_name_is_visible_on_the_event(login_as):
+    lead = login_as(Users.LEAD)
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
-    response = coordinator_client.get(f"/events/{Events.SUBMITTED}/coordinator")
+    response = lead.get(f"/events/{Events.SUBMITTED}/coordinator")
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -278,10 +345,14 @@ def test_assigned_coordinator_name_is_visible_on_the_event(coordinator_client):
 
 
 @pytest.mark.story("5.1", ac=4)
-def test_organiser_sees_the_coordinator_of_their_own_event(coordinator_client, login_as):
-    coordinator_client.put(
+def test_organiser_sees_the_coordinator_of_their_own_event(login_as):
+    lead = login_as(Users.LEAD)
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     organiser = login_as(Users.ORGANISER)  # owns Events.SUBMITTED
@@ -312,14 +383,27 @@ def test_unrelated_organiser_cannot_see_another_organisers_event(login_as):
     assert response.status_code == 403, response.text
 
 
+@pytest.mark.story("5.1", ac=4)
+def test_the_coordinator_of_an_unknown_event_is_not_found(login_as):
+    """No such event: 404, not an empty answer that would read as "nobody assigned yet"."""
+    response = login_as(Users.LEAD).get(f"/events/{uuid.uuid4()}/coordinator")
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Event not found."
+
+
 # --- Access control (story 1.2 AC4 applied to this endpoint) -------------------------------
-@pytest.mark.story("5.1", ac=2)
+@pytest.mark.story("5.4", ac=7)
 @pytest.mark.parametrize(
     "user",
-    [Users.ORGANISER, Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ATTENDEE],
+    # Every role but the Lead's, so a role added later is refused here without editing this list.
+    [user for user in Users.ONE_PER_ROLE if user != Users.LEAD],
     ids=lambda u: u.role,
 )
-def test_only_roles_that_review_events_may_assign(login_as, db: Session, user):
+def test_only_the_lead_may_assign(login_as, db: Session, user):
+    """5.4 AC7: Event Coordinators and all other roles are refused (403). Chloe is included - the
+    coordinator Events.SUBMITTED is assigned to - since story 5.6 (Q16) took reassignment from
+    coordinators too."""
     before = _open_assignments(db, Events.SUBMITTED)
     actor = login_as(user)
 
