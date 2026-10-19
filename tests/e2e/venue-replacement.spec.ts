@@ -1025,6 +1025,22 @@ test('12.6 AC11: the Venue unavailable tab shows loading, not the last tab, whil
   await expect(page.getByRole('link', { name: new RegExp(ROBOTICS.name) })).toBeVisible()
 })
 
+test('12.6 AC11: pressing the open Venue unavailable tab again keeps its list', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(INBOX)
+  const tab = page.getByRole('tab', { name: /^Venue unavailable/ })
+  await tab.click()
+  await expect(page.getByRole('link', { name: new RegExp(ROBOTICS.name) })).toBeVisible()
+
+  await tab.click()
+
+  // Nothing changed tab, so nothing is fetched again: the list stays, and no loading state shows.
+  await expect(page.getByRole('link', { name: new RegExp(ROBOTICS.name) })).toBeVisible()
+  await expect(page.getByText('Loading events with an unavailable venue')).toHaveCount(0)
+})
+
 // --- a replacement rejected, read under the All tab ---------------------------------------------
 test('12.6 AC5: a rejected replacement under All no longer says what approving it releases', async ({
   page,
