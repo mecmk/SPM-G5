@@ -138,7 +138,14 @@ async function signedInPage(browser: Browser, email: string): Promise<Page> {
  */
 async function queueCard(page: Page, event: SeededEvent, tab?: string) {
   await page.goto('/venue-staff/booking-requests')
-  if (tab !== undefined) await page.getByRole('tab', { name: new RegExp(`^${tab}`) }).click()
+  if (tab !== undefined) {
+    const chosen = page.getByRole('tab', { name: new RegExp(`^${tab}`) })
+    await chosen.click()
+    // Wait for that tab's own list: the card is looked for page by page below, and must not be
+    // taken from the list of the tab the page opened on.
+    await expect(chosen).toHaveAttribute('aria-selected', 'true')
+    await page.waitForLoadState('networkidle')
+  }
   const card = page
     .getByRole('listitem')
     .filter({ hasText: event.name })
@@ -154,6 +161,40 @@ async function queueCard(page: Page, event: SeededEvent, tab?: string) {
     await page.waitForLoadState('networkidle')
   }
   return card
+}
+
+/**
+ * Show Venue Staff's queue as `event`'s own requests only. The queue is every request every spec
+ * raised, in the order of their dates, and under All the card can be anywhere in it; the real
+ * answer is read in full, page by page, and cut down to the event's, so the page under test is
+ * the page that really renders them.
+ */
+async function showOnlyRequestsOf(page: Page, event: SeededEvent) {
+  const QUEUE_PAGE = 100
+  await page.route(
+    (url) => url.pathname === '/bookings',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const asked = new URL(request.url())
+      const read = async (offset: number) => {
+        asked.searchParams.set('offset', String(offset))
+        asked.searchParams.set('limit', String(QUEUE_PAGE))
+        const response = await route.fetch({ url: asked.toString() })
+        return { response, body: await response.json() }
+      }
+      const first = await read(0)
+      const entries = [...first.body.items]
+      for (let offset = QUEUE_PAGE; offset < first.body.total; offset += QUEUE_PAGE) {
+        entries.push(...(await read(offset)).body.items)
+      }
+      const own = entries.filter((entry) => entry.event_name === event.name)
+      return route.fulfill({
+        response: first.response,
+        json: { ...first.body, items: own, total: own.length },
+      })
+    },
+  )
 }
 
 /** Assert nothing runs off the side of the page, and `target` sits inside it. */
@@ -342,10 +383,8 @@ test.describe('12.6 AC3 on the awards evening', () => {
     page,
     browser,
   }) => {
-    // Under All the queue is every request the other specs raised too: walking its pages for the
-    // card takes longer than the default.
-    test.setTimeout(90_000)
     const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
+    await showOnlyRequestsOf(staff, AWARDS)
     const card = await queueCard(staff, AWARDS, 'All')
     await card.getByRole('button', { name: 'Approve' }).click()
     const dialog = staff.getByRole('dialog', { name: 'Approve this booking?' })
