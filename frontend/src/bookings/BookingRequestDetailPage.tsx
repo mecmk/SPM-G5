@@ -20,7 +20,6 @@ import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
 import {
   bookingOutcomeLabels,
-  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
@@ -28,6 +27,7 @@ import {
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
+  CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
   formatTime,
@@ -379,6 +379,16 @@ export function BookingRequestDetailPage() {
             </button>
           )}
         </section>
+      )}
+
+      {/* Story 6.2 AC16: when a cancelled booking was approved, if it was, beside when it was
+          cancelled. */}
+      {booking.cancelled_at !== null && booking.decided_at !== null && (
+        <p className="subtle-block">
+          <span className="fact-label">{bookingOutcomeLabels(booking).when}</span>
+          <br />
+          {formatDateTime(booking.decided_at)}
+        </p>
       )}
 
       {/* Story 6.2 AC16: when the booking was cancelled. */}

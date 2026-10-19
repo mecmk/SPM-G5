@@ -125,8 +125,9 @@ export interface EquipmentQueueEntry {
   requested_by_name: string | null
   submitted_at: string | null
   status: EquipmentQueueStatus
-  available: number
-  shortfall: number
+  /** Story 6.2 AC15: null for a cancelled request, which holds nothing. */
+  available: number | null
+  shortfall: number | null
   decided_by_name: string | null
   decided_at: string | null
   decision_reason: string | null

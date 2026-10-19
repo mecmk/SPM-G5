@@ -42,7 +42,6 @@ import {
 } from '../routes'
 import {
   bookingOutcomeLabels,
-  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -63,6 +62,7 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import {
+  CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
   formatSchedule,
@@ -146,10 +146,15 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
   },
 }
 
-/** Story 6.2 AC16: the status sentence of a booking, saying a cancelled event's cancelled booking
- * went with it. */
+/** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
+ * with it. The cancellation stamps the event and each booking it releases with one time, so a
+ * booking an earlier change cancelled (19.2) keeps its own sentence. */
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
-  if (event.status === 'CANCELLED' && booking.status === 'CANCELLED') {
+  if (
+    booking.status === 'CANCELLED' &&
+    event.cancelled_at !== null &&
+    booking.cancelled_at === event.cancelled_at
+  ) {
     return 'This booking was cancelled with its event.'
   }
   return BOOKING_OUTCOME[booking.status].message

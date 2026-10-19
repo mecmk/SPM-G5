@@ -37,7 +37,7 @@ from app.registrations import service as registrations_service
 
 # AC6: the statuses an event can be cancelled from. A draft was never submitted, and a
 # completed, cancelled or rejected event is already over.
-CANCELLABLE_STATUSES = frozenset(
+_CANCELLABLE_STATUSES = frozenset(
     {
         EventStatus.UNDER_REVIEW,
         EventStatus.CLARIFICATION_REQUESTED,
@@ -47,6 +47,8 @@ CANCELLABLE_STATUSES = frozenset(
     }
 )
 NOT_CANCELLABLE_MESSAGE = "This event is {status}, so it can no longer be cancelled."
+# A draft was never submitted, so there was never anything to cancel.
+DRAFT_NOT_CANCELLABLE_MESSAGE = "This event is still a draft, so there is nothing to cancel."
 
 # AC5: what Venue Staff, the coordinator (or Lead) and each attendee are told.
 _BOOKING_RELEASED_BECAUSE = "its event was cancelled"
@@ -63,7 +65,9 @@ class EventNotCancellable(events_service.EventStateConflict):
 
     def __init__(self, event: Event) -> None:
         super().__init__(
-            NOT_CANCELLABLE_MESSAGE.format(status=equipment_service.as_words(event.status))
+            DRAFT_NOT_CANCELLABLE_MESSAGE
+            if event.status == EventStatus.DRAFT
+            else NOT_CANCELLABLE_MESSAGE.format(status=event.status.lower().replace("_", " "))
         )
 
 
@@ -115,7 +119,7 @@ def cancel_event(db: Session, event_id: uuid.UUID, *, actor: User, reason: str) 
     """AC1-AC13: ``actor`` cancels their own event with ``reason``.
 
     AC11: another organiser's event is not found (``EventNotFound``), as it is everywhere else;
-    the permission keeps every other role out. AC6/AC13: an event not in ``CANCELLABLE_STATUSES``
+    the permission keeps every other role out. AC6/AC13: an event not in ``_CANCELLABLE_STATUSES``
     is refused (``EventNotCancellable``), read under the event's row lock, so of two cancellations
     at once the second waits and finds it Cancelled. Then, in one transaction (AC10): the bookings
     are released (AC2), the equipment released and closed (AC3/AC4), the registrations and
@@ -123,7 +127,7 @@ def cancel_event(db: Session, event_id: uuid.UUID, *, actor: User, reason: str) 
     beside the cancellation - with a status history row and an audit entry, and the coordinator
     (or Lead) and attendees told (AC5). See the module docstring for the locking."""
     event = events_service.lock_own_event(db, event_id, actor=actor)
-    if event.status not in CANCELLABLE_STATUSES:
+    if event.status not in _CANCELLABLE_STATUSES:
         raise EventNotCancellable(event)
     from_status = event.status
     cancelled_at = datetime.now(UTC)

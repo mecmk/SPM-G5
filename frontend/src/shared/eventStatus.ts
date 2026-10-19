@@ -51,7 +51,7 @@ export const TERMINAL_STATUSES: readonly EventStatus[] = ['COMPLETED', 'CANCELLE
 
 /**
  * Story 6.2 AC6: the statuses the organiser can cancel their event from, mirroring the backend's
- * `CANCELLABLE_STATUSES` (backend/app/cancellations/service.py). A draft was never submitted, and
+ * `_CANCELLABLE_STATUSES` (backend/app/cancellations/service.py). A draft was never submitted, and
  * a completed, cancelled or rejected event is already over.
  */
 export const CANCELLABLE_STATUSES: readonly EventStatus[] = [

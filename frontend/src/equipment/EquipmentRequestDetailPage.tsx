@@ -11,7 +11,7 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -120,11 +120,10 @@ export function EquipmentRequestDetailPage() {
             </p>
           )}
           {entry.status === 'CANCELLED' && (
-            <p className="small muted">
-              Cancelled{' '}
-              {entry.cancelled_at === null
-                ? 'at a time not recorded'
-                : formatDateTime(entry.cancelled_at)}
+            <p className="subtle-block">
+              <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+              <br />
+              {entry.cancelled_at === null ? NOT_RECORDED : formatDateTime(entry.cancelled_at)}
             </p>
           )}
 
@@ -156,7 +155,7 @@ export function EquipmentRequestDetailPage() {
                     <div className="subtle-block">
                       <p className="fact-label">Shortfall</p>
                       <p className="fact-value">
-                        {entry.shortfall > 0 ? (
+                        {entry.shortfall !== null && entry.shortfall > 0 ? (
                           <span className="badge badge-warning">Short by {entry.shortfall}</span>
                         ) : (
                           'None'

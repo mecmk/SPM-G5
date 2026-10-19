@@ -329,6 +329,19 @@ def get_event(db: Session, event_id: uuid.UUID) -> Event:
     return event
 
 
+def _lock_event(db: Session, event_id: uuid.UUID) -> Event:
+    """The event, its row held until the transaction ends and read as it now stands."""
+    event = db.get(
+        Event,
+        event_id,
+        with_for_update={"of": Event, "key_share": True},
+        populate_existing=True,
+    )
+    if event is None:
+        raise EventNotFound(event_id)
+    return event
+
+
 def current_assignment(db: Session, event_id: uuid.UUID) -> EventCoordinatorAssignment | None:
     """The open assignment for an event (``unassigned_at IS NULL``), or None."""
     return db.scalars(
@@ -555,8 +568,11 @@ def assign_coordinator(
     the Event Coordinator Lead; coordinators no longer claim one. AC8: a Lead who finds it already
     assigned - before, or by another Lead a moment ago - is told so, and to whom (409).
     Story 5.2 AC6: an assigned event is handed on only by its current coordinator.
+
+    Story 6.2 AC9: the event is read under its row lock, ``FOR NO KEY UPDATE`` as a cancellation
+    takes it, so an assignment racing a cancellation waits for it and then finds it Cancelled.
     """
-    event = get_event(db, event_id)
+    event = _lock_event(db, event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
 

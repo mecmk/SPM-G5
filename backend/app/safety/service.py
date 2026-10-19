@@ -735,7 +735,13 @@ def confirm_event(db: Session, event: Event, *, actor: User) -> None:
     venue holds. AC14/AC21: refused, naming each blocker. AC8: the organiser and Safety Officers
     are told."""
     _assert_assigned_coordinator(event, actor, verb="confirm")
-    # 12.7 AC10: lock the approved bookings first, so a sweep at the same moment either waits for
+    # Story 6.2: the event first, then its bookings, the order a cancellation takes them, so the
+    # two take turns instead of each holding what the other waits for. FOR NO KEY UPDATE, as
+    # ``lock_own_event`` takes it, so a Venue Staff approval's notice never waits on it. Read as it
+    # now stands: a cancellation waited for leaves it Cancelled, which ``_change_status`` refuses.
+    db.execute(select(Event.id).where(Event.id == event.id).with_for_update(key_share=True))
+    db.refresh(event)
+    # 12.7 AC10: then the approved bookings, so a sweep at the same moment either waits for
     # this confirmation (and the trigger completes their holds) or has already expired them (and
     # the blockers name the lost booking). Whichever is saved first wins.
     db.scalars(

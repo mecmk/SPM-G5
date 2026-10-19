@@ -19,10 +19,6 @@ export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'
 export const HOLD_EXPIRES_LABEL = 'Hold expires'
 export const HOLD_EXPIRED_LABEL = 'Expired at'
 
-/** Story 6.2 AC16: how every page names when a booking or equipment request was cancelled - with
- * its event, or by an approved change (19.2). */
-export const CANCELLED_AT_LABEL = 'Cancelled at'
-
 /** Story 12.7 AC1/AC4: when an approved booking's hold expires, while it is open - not yet
  * completed by its event's confirmation, nor a booking approved before holds expired (no expiry).
  * Null for any other booking. */

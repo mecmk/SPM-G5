@@ -147,8 +147,9 @@ class EquipmentQueueEntry(BaseModel):
     requested_by_name: str | None
     submitted_at: datetime | None
     status: EquipmentQueueStatus
-    available: int
-    shortfall: int
+    # Story 6.2 AC15: None for a cancelled request, which holds nothing.
+    available: int | None
+    shortfall: int | None
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -158,7 +159,7 @@ class EquipmentQueueEntry(BaseModel):
 
     @classmethod
     def from_item(
-        cls, item: EventEquipmentRequest, event: Event, *, available: int
+        cls, item: EventEquipmentRequest, event: Event, *, available: int | None
     ) -> EquipmentQueueEntry:
         return cls(
             id=item.id,
@@ -174,7 +175,7 @@ class EquipmentQueueEntry(BaseModel):
             submitted_at=item.submitted_at,
             status=EquipmentQueueStatus(item.status),
             available=available,
-            shortfall=max(0, item.quantity - available),
+            shortfall=None if available is None else max(0, item.quantity - available),
             decided_by_name=None if item.decided_by is None else item.decided_by.full_name,
             decided_at=item.decided_at,
             decision_reason=item.status_notes,

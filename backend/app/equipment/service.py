@@ -128,9 +128,10 @@ _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentReques
 # Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
 # the queue leaves them out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
-# Story 15.2 AC3/AC5 with 6.2 AC15: what Technical Support's queue lists. An item in a tab of its
-# own, on an event still going ahead; or one cancelled after it was sent to them, whatever its
-# event - kept for their record, as a rejected event's items are not.
+# Story 15.2 AC3/AC5 with 6.2 AC9/AC15: what Technical Support's queue lists. An item in a tab of
+# its own, on an event still going ahead; one cancelled after it was sent to them, whatever its
+# event; or one they declined on an event since cancelled, which stays Declined - the last two
+# kept for their record, as a rejected event's items are not.
 _LIVE_TAB_STATUSES = (
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
@@ -144,6 +145,10 @@ _IN_QUEUE = or_(
     and_(
         EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
         EventEquipmentRequest.submitted_at.is_not(None),
+    ),
+    and_(
+        EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
+        Event.status == EventStatus.CANCELLED,
     ),
 )
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
@@ -313,11 +318,12 @@ def list_event_equipment_availability(
 @dataclass(frozen=True)
 class EquipmentQueueRow:
     """Story 15.2 AC1/AC2: one request in Technical Support's queue, its event, and how many of its
-    type the event's period has for it."""
+    type the event's period has for it. Story 6.2 AC15: ``None`` for a cancelled request, which
+    holds nothing and shows no figure."""
 
     item: EventEquipmentRequest
     event: Event
-    available: int
+    available: int | None
 
 
 @dataclass(frozen=True)
@@ -335,13 +341,15 @@ def list_equipment_requests(
     (the All tab), soonest event first; ties fall back to the order the items were recorded in,
     then id, so the list is stable. AC5: an item the coordinator removed is gone, and every item
     on a rejected event is left out, whatever its own status. Story 6.2 AC15: an item cancelled
-    once sent to Technical Support stays, under Cancelled, as does every other such item on a
-    cancelled event; one never sent is left out. Items in a status with no tab (not yet sent,
-    flagged unavailable) are left out too.
+    once sent to Technical Support stays, under Cancelled, and one they declined on an event
+    since cancelled stays under Declined; one never sent is left out. Items in a status with no
+    tab (not yet sent, flagged unavailable) are left out too.
 
     AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
     own holds left out, since a Pending item already holds its units (15.1 AC2). AC7: worked out
-    afresh on every call, once per event in the tab."""
+    afresh on every call, once per event in the tab. Story 6.2 AC15: not for a cancelled item,
+    which holds nothing: its ``available`` is ``None``, so the cancelled events kept in the queue
+    add no work."""
     tab = (
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
@@ -363,6 +371,9 @@ def list_equipment_requests(
     available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
     rows = []
     for item, event in found:
+        if item.status == EquipmentRequestStatus.CANCELLED:
+            rows.append(EquipmentQueueRow(item=item, event=event, available=None))
+            continue
         if event.id not in available_by_event:
             available_by_event[event.id] = events_service.available_by_type(
                 db, event.starts_at, event.ends_at, exclude_event_id=event.id
@@ -376,7 +387,7 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     """Story 16.1: one request as the queue shows it, for its own page, where it can be decided as
     from the queue. AC7: only what the queue lists (15.2 AC3/AC5, 6.2 AC15) - a request not yet
     sent, flagged, never sent before it was cancelled, or open on a cancelled or rejected event is
-    not found."""
+    not found. A cancelled one has no ``available`` (6.2 AC15)."""
     found = db.execute(
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
@@ -385,9 +396,12 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     if found is None:
         raise EquipmentRequestNotFound(item_id)
     item, event = found
-    return EquipmentQueueRow(
-        item=item, event=event, available=_available_to_accept(db, event, item)
+    available = (
+        None
+        if item.status == EquipmentRequestStatus.CANCELLED
+        else _available_to_accept(db, event, item)
     )
+    return EquipmentQueueRow(item=item, event=event, available=available)
 
 
 # --- writes --------------------------------------------------------------------------------------

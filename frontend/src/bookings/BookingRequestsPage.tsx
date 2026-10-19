@@ -24,7 +24,6 @@ import {
   bookingTabCount,
   bookingTabStatus,
   BOOKING_STATUS_TABS,
-  CANCELLED_AT_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -35,6 +34,7 @@ import {
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
 import {
+  CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
   formatTime,

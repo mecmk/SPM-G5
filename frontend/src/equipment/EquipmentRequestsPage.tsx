@@ -16,8 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { CANCELLED_AT_LABEL } from '../shared/bookingStatus'
-import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -228,7 +227,7 @@ export function EquipmentRequestsPage() {
                         <div className="subtle-block">
                           <p className="fact-label">Shortfall</p>
                           <p className="fact-value">
-                            {entry.shortfall > 0 ? (
+                            {entry.shortfall !== null && entry.shortfall > 0 ? (
                               <span className="badge badge-warning">
                                 Short by {entry.shortfall}
                               </span>
