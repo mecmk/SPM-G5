@@ -1,4 +1,5 @@
-"""Business rules for story 18.1: the events an attendee can register for, and registering.
+"""Business rules for story 18.1: the events an attendee can register for, and registering; and
+for story 18.2: the attendee's own registrations, and withdrawing one (its section at the end).
 
 An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19: a Private
 event is not listed) and needs registration (2.1 AC17). It is listed until it starts (AC3), and
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, Select, and_, func, select, update
+from sqlalchemy import ColumnElement, Select, and_, case, func, null, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -318,3 +319,211 @@ def cancel_for_event(db: Session, event_id: uuid.UUID) -> list[uuid.UUID]:
             .returning(EventRegistration.attendee_id)
         )
     )
+
+
+# =============================================================================================
+# Story 18.2: the attendee's own registrations, and withdrawing one
+# =============================================================================================
+REGISTRATION_WITHDRAWN_ACTION = "EVENT_REGISTRATION_WITHDRAWN"
+
+REGISTRATION_NOT_FOUND_MESSAGE = "This registration was not found."
+ALREADY_WITHDRAWN_MESSAGE = "You have already withdrawn from this event."
+EVENT_STARTED_MESSAGE = "This event has started, so you can no longer withdraw."
+WITHDRAWAL_EVENT_CANCELLED_MESSAGE = (
+    "This event was cancelled, so there is nothing to withdraw from."
+)
+
+
+class RegistrationStanding(StrEnum):
+    """18.2 AC1/AC8: where the attendee stands with an event they registered for."""
+
+    REGISTERED = "REGISTERED"
+    WITHDRAWN = "WITHDRAWN"
+    EVENT_CANCELLED = "EVENT_CANCELLED"
+
+
+class RegistrationNotFound(LookupError):
+    """18.2 AC6: no registration with this id is the attendee's - unknown, or another attendee's.
+    One answer for both, so another attendee's registration is not given away."""
+
+    def __init__(self) -> None:
+        super().__init__(REGISTRATION_NOT_FOUND_MESSAGE)
+
+
+class WithdrawalRefused(Exception):
+    """18.2 AC3/AC7/AC8: the registration is the attendee's, but it cannot be withdrawn."""
+
+
+class AlreadyWithdrawn(WithdrawalRefused):
+    def __init__(self) -> None:
+        super().__init__(ALREADY_WITHDRAWN_MESSAGE)
+
+
+class WithdrawalEventCancelled(WithdrawalRefused):
+    def __init__(self) -> None:
+        super().__init__(WITHDRAWAL_EVENT_CANCELLED_MESSAGE)
+
+
+class EventStarted(WithdrawalRefused):
+    def __init__(self) -> None:
+        super().__init__(EVENT_STARTED_MESSAGE)
+
+
+@dataclass(frozen=True)
+class MyRegistrationItem:
+    """18.2 AC1: one of the attendee's registrations, with its event, where they stand, and
+    whether it can be withdrawn now (AC3)."""
+
+    registration: EventRegistration
+    event: Event
+    standing: RegistrationStanding
+    can_withdraw: bool
+
+
+def registration_standing(*, registration_status: str, event_status: str) -> RegistrationStanding:
+    """18.2 AC1/AC8: Withdrawn when the attendee withdrew, whatever became of the event; Event
+    cancelled when the registration was cancelled with its event (6.2), or the event was
+    cancelled with it still active (an event sent back to Planning after confirmation keeps its
+    registrations, 18.1 AC4); Registered otherwise, including an event sent back to Planning."""
+    if registration_status == RegistrationStatus.WITHDRAWN:
+        return RegistrationStanding.WITHDRAWN
+    if registration_status == RegistrationStatus.CANCELLED or event_status == EventStatus.CANCELLED:
+        return RegistrationStanding.EVENT_CANCELLED
+    return RegistrationStanding.REGISTERED
+
+
+def can_withdraw(*, standing: RegistrationStanding, now: datetime, starts_at: datetime) -> bool:
+    """18.2 AC3/AC8: an active registration, until the moment its event starts."""
+    return standing is RegistrationStanding.REGISTERED and now < starts_at
+
+
+def withdrawal_refusal(*, standing: RegistrationStanding) -> WithdrawalRefused:
+    """18.2 AC3/AC7/AC8: why an attendee's own registration could not be withdrawn - already
+    withdrawn (a second click); its event cancelled, whether the registration was cancelled with
+    it or is still active on it; or, being still active, because its event has started."""
+    if standing is RegistrationStanding.WITHDRAWN:
+        return AlreadyWithdrawn()
+    if standing is RegistrationStanding.EVENT_CANCELLED:
+        return WithdrawalEventCancelled()
+    return EventStarted()
+
+
+def _my_registration_item(
+    registration: EventRegistration, event: Event, *, now: datetime
+) -> MyRegistrationItem:
+    # Registrations are only taken for Confirmed events, and ck_events_submitted_fields_complete
+    # keeps a start on every event past Draft.
+    assert event.starts_at is not None
+    standing = registration_standing(
+        registration_status=registration.status, event_status=event.status
+    )
+    return MyRegistrationItem(
+        registration=registration,
+        event=event,
+        standing=standing,
+        can_withdraw=can_withdraw(standing=standing, now=now, starts_at=event.starts_at),
+    )
+
+
+def _latest_per_event(attendee: User) -> Select[tuple[uuid.UUID]]:
+    """18.2 AC1/AC4: the id of ``attendee``'s newest registration for each event - the active one
+    once they have registered again, since it was made after the withdrawal. The id settles a
+    tie, so the same one is listed every time."""
+    return (
+        select(EventRegistration.id)
+        .where(EventRegistration.attendee_id == attendee.id)
+        .distinct(EventRegistration.event_id)
+        .order_by(
+            EventRegistration.event_id,
+            EventRegistration.registered_at.desc(),
+            EventRegistration.id.desc(),
+        )
+    )
+
+
+def list_my_registrations(
+    db: Session, *, attendee: User, now: datetime
+) -> list[MyRegistrationItem]:
+    """18.2 AC1: ``attendee``'s registrations, one per event - the latest - with each event and
+    where they stand. Events not yet started come first, soonest first; then those that have
+    started (one starting at ``now`` has, AC3), latest first; then by name, then id. AC5/AC6:
+    only ``attendee``'s own. Chosen and ordered in SQL. Not paged: the list grows by one entry for
+    each event the attendee registers for, and one attendee's list stays short."""
+    # Events not yet started by their start; those that have started have none here, so they come
+    # after them all, and then go latest first.
+    upcoming_start = case((Event.starts_at <= now, null()), else_=Event.starts_at)
+    rows = db.execute(
+        select(EventRegistration, Event)
+        .join(Event, Event.id == EventRegistration.event_id)
+        .where(EventRegistration.id.in_(_latest_per_event(attendee)))
+        .order_by(
+            upcoming_start.asc().nulls_last(),
+            Event.starts_at.desc(),
+            Event.name,
+            Event.id,
+        )
+    ).all()
+    return [_my_registration_item(registration, event, now=now) for registration, event in rows]
+
+
+def _is_withdrawable(now: datetime) -> ColumnElement[bool]:
+    """18.2 AC3/AC8: the registration's event is not cancelled and has not started."""
+    return (
+        select(Event.id)
+        .where(
+            Event.id == EventRegistration.event_id,
+            Event.status != EventStatus.CANCELLED,
+            Event.starts_at > now,
+        )
+        .exists()
+    )
+
+
+def withdraw_registration(
+    db: Session, registration_id: uuid.UUID, *, attendee: User, now: datetime
+) -> MyRegistrationItem:
+    """18.2 AC1/AC2: withdraw ``attendee``'s registration, stamped ``now``, and audit it, all in
+    one commit: the place is free once the row is no longer REGISTERED (18.1 AC2), and if the
+    audit entry cannot be written nothing is.
+
+    AC7: the update itself is conditional on the registration still being active, so of two
+    withdrawals at once the second waits on the first's row lock and then matches nothing - no
+    check runs ahead of the write it guards (backend/STYLE.md). The registration is read after
+    the update, for the answer, and when nothing was written to say why: ``RegistrationNotFound``
+    when it is not ``attendee``'s (AC6), else ``withdrawal_refusal`` (AC3/AC7/AC8)."""
+    withdrawn = db.execute(
+        update(EventRegistration)
+        .where(
+            EventRegistration.id == registration_id,
+            EventRegistration.attendee_id == attendee.id,
+            EventRegistration.status == RegistrationStatus.REGISTERED,
+            _is_withdrawable(now),
+        )
+        .values(status=RegistrationStatus.WITHDRAWN, withdrawn_at=now)
+    )
+    found = db.execute(
+        select(EventRegistration, Event)
+        .join(Event, Event.id == EventRegistration.event_id)
+        .where(
+            EventRegistration.id == registration_id,
+            EventRegistration.attendee_id == attendee.id,
+        )
+    ).one_or_none()
+    if found is None:
+        raise RegistrationNotFound()
+    registration, event = found
+    item = _my_registration_item(registration, event, now=now)
+    if withdrawn.rowcount == 0:
+        raise withdrawal_refusal(standing=item.standing)
+
+    record_audit(
+        db,
+        actor=attendee,
+        action=REGISTRATION_WITHDRAWN_ACTION,
+        entity_type=_REGISTRATION_ENTITY,
+        entity_id=registration.id,
+        details={"event_id": str(event.id)},
+        commit=False,
+    )
+    db.commit()
+    return item

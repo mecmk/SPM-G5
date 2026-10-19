@@ -11,18 +11,23 @@ export interface ConfirmDialogProps {
   /** Visual weight of the confirm button. Story 13.2 adds `primary` for a non-destructive
    * decision (approving a booking); `danger` (the default) is for actions that remove data. */
   tone?: 'danger' | 'primary'
+  /** Story 18.2: false once confirming can no longer succeed (a refusal that is final), so the
+   * confirm button is not offered at all and the cancel button, labelled `cancelLabel`, is the
+   * only one left. */
+  canConfirm?: boolean
+  /** The label of the button that closes the dialog without confirming. Story 6.2 names it
+   *  "Keep event", so it is never read as the "Cancel event" it stands beside. */
+  cancelLabel?: string
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */
   errorId?: string
-  /** The button that closes the dialog without acting. Story 6.2 names it "Keep event", so it is
-   *  never read as the "Cancel event" it stands beside. */
-  dismissLabel?: string
 }
 
 /**
- * Story 8.3 - a modal that asks before a consequential action. Escape or the dismiss button
- * (Cancel, unless `dismissLabel` names it) closes it; focus starts on that button, so a stray
- * Enter never confirms.
+ * Story 8.3 - a modal that asks before a consequential action. Escape or Cancel closes it; focus
+ * starts on Cancel, so a stray Enter never confirms. Story 18.2: focus goes back to Cancel whenever
+ * it has fallen out of the dialog - the confirm button it was on is disabled while busy, or no
+ * longer offered after a final refusal - so Escape still closes it.
  */
 export function ConfirmDialog({
   title,
@@ -33,15 +38,20 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   tone = 'danger',
+  canConfirm = true,
+  cancelLabel = 'Cancel',
   errorId,
-  dismissLabel = 'Cancel',
 }: ConfirmDialogProps) {
   const titleId = useId()
+  const dialog = useRef<HTMLDivElement>(null)
   const cancelButton = useRef<HTMLButtonElement>(null)
 
+  // On opening, and whenever the confirm button stops being one focus can stay on. While busy,
+  // Cancel is disabled too, so focus waits for the answer.
   useEffect(() => {
+    if (isBusy || dialog.current?.contains(document.activeElement)) return
     cancelButton.current?.focus()
-  }, [])
+  }, [isBusy, canConfirm])
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape' && !isBusy) onCancel()
@@ -51,6 +61,7 @@ export function ConfirmDialog({
     <>
       <div className="dialog-backdrop" />
       <div
+        ref={dialog}
         className="dialog"
         role="dialog"
         aria-modal="true"
@@ -76,17 +87,19 @@ export function ConfirmDialog({
             disabled={isBusy}
             onClick={onCancel}
           >
-            {dismissLabel}
+            {cancelLabel}
           </button>
-          <button
-            type="button"
-            className={tone === 'primary' ? 'brand' : 'danger-solid'}
-            disabled={isBusy}
-            onClick={onConfirm}
-          >
-            {isBusy && <span className="spinner button-spinner" aria-hidden="true" />}
-            {confirmLabel}
-          </button>
+          {canConfirm && (
+            <button
+              type="button"
+              className={tone === 'primary' ? 'brand' : 'danger-solid'}
+              disabled={isBusy}
+              onClick={onConfirm}
+            >
+              {isBusy && <span className="spinner button-spinner" aria-hidden="true" />}
+              {confirmLabel}
+            </button>
+          )}
         </div>
       </div>
     </>

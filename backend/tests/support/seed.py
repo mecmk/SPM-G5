@@ -162,6 +162,17 @@ class Events:
     # Story 6.2 AC14/AC15's e2e event: organiser 1, coordinator 1, PLANNING, March 2029, a pending
     # request for Sunrise Studio and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
+    # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
+    # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
+    # one of its own; the cases that only read share them, the yoga's most of all.
+    POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
+    SKETCHING_WALK = _e(71)  # CONFIRMED; the spec withdraws and registers again
+    BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
+    SUNSET_YOGA = _e(73)  # CONFIRMED; only read
+    HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
+    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
+    BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
+    LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
 
 
 class Bookings:
@@ -197,9 +208,18 @@ class Bookings:
 
 
 class Registrations:
-    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one."""
+    """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
+    Users.ATTENDEE's, one for each of 18.2's events, named after it."""
 
     PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
+    POETRY_NIGHT = uuid.UUID("18181818-0000-0000-0000-000000000002")
+    SKETCHING_WALK = uuid.UUID("18181818-0000-0000-0000-000000000003")
+    BOARD_GAMES_SOCIAL = uuid.UUID("18181818-0000-0000-0000-000000000004")
+    SUNSET_YOGA = uuid.UUID("18181818-0000-0000-0000-000000000005")
+    HERITAGE_TRAIL = uuid.UUID("18181818-0000-0000-0000-000000000006")  # WITHDRAWN
+    CHARITY_FUN_RUN = uuid.UUID("18181818-0000-0000-0000-000000000007")
+    BOOK_SWAP = uuid.UUID("18181818-0000-0000-0000-000000000008")
+    LANTERN_PAINTING = uuid.UUID("18181818-0000-0000-0000-000000000009")
 
 
 class Unavailability:

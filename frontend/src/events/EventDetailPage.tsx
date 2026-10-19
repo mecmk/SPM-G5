@@ -1344,7 +1344,7 @@ export function EventDetailPage() {
         <ConfirmDialog
           title="Cancel this event?"
           confirmLabel="Cancel event"
-          dismissLabel="Keep event"
+          cancelLabel="Keep event"
           isBusy={isCancelling}
           error={cancelError}
           errorId="cancel-event-error"

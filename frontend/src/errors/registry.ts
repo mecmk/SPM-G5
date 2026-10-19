@@ -126,6 +126,8 @@ export type ErrorCode =
   | 'EVENT_CONTACT_EDIT_CLOSED'
   | 'REGISTRATION_EVENT_NOT_OPEN'
   | 'REGISTRATION_REFUSED'
+  | 'REGISTRATION_NOT_FOUND'
+  | 'WITHDRAWAL_REFUSED'
 
 export interface ErrorEntry {
   title: string
@@ -758,6 +760,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   REGISTRATION_REFUSED: {
     title: 'Cannot register',
     message: 'This registration could not be taken.',
+  },
+
+  // Story 18.2: an attendee withdrawing a registration.
+  /** AC6: not the attendee's, or unknown. Worded as the backend's
+   *  REGISTRATION_NOT_FOUND_MESSAGE. */
+  REGISTRATION_NOT_FOUND: {
+    title: 'Cannot withdraw',
+    message: 'This registration was not found.',
+  },
+  /** AC3/AC7/AC8: the event has started, the registration is already withdrawn, or the event
+   *  was cancelled. The backend's own sentence (always sent) says which. */
+  WITHDRAWAL_REFUSED: {
+    title: 'Cannot withdraw',
+    message: 'This registration could not be withdrawn.',
   },
 }
 
