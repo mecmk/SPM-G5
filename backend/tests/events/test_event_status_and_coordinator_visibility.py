@@ -45,12 +45,14 @@ def test_the_list_and_the_details_endpoint_report_the_same_status(organiser_clie
 
 # --- AC12: the assigned coordinator's name and email are both returned -------------------------
 @pytest.mark.story("2.6", ac=12)
-def test_event_details_include_the_assigned_coordinators_name_and_email(
-    coordinator_client, login_as
-):
-    coordinator_client.put(
+def test_event_details_include_the_assigned_coordinators_name_and_email(login_as):
+    # Since story 5.6 (Q16) the Lead reassigns, naming the coordinator they saw.
+    login_as(Users.LEAD).put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     organiser = login_as(Users.ORGANISER)
@@ -98,10 +100,14 @@ def test_a_reassignment_is_reflected_on_the_next_read(login_as):
     before = organiser.get(f"/events/{Events.SUBMITTED}").json()
     assert before["assigned_coordinator_name"] == Users.COORDINATOR.full_name  # seeded default
 
-    coordinator = login_as(Users.COORDINATOR)
-    coordinator.put(
+    # Since story 5.6 (Q16) the Lead reassigns, naming the coordinator they saw.
+    lead = login_as(Users.LEAD)
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     organiser = login_as(Users.ORGANISER)
@@ -128,14 +134,22 @@ def test_an_attendee_cannot_read_the_coordinator_fields(attendee_client):
 
 # --- AC16: a reassignment leaves no trace of the previous coordinator ---------------------------
 @pytest.mark.story("2.6", ac=16)
-def test_a_reassignment_leaves_no_trace_of_the_previous_coordinator(coordinator_client, login_as):
-    coordinator_client.put(
+def test_a_reassignment_leaves_no_trace_of_the_previous_coordinator(login_as):
+    # Since story 5.6 (Q16) the Lead reassigns, naming the coordinator they saw.
+    lead = login_as(Users.LEAD)
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
-    coordinator_client.put(
+    lead.put(
         f"/events/{Events.SUBMITTED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     organiser = login_as(Users.ORGANISER)

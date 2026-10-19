@@ -14,6 +14,7 @@ import { EventCard, EventCardGrid, type EventCardBackState } from '../components
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
+import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
   ASSIGNMENT_SEARCH_PARAMS,
@@ -28,6 +29,7 @@ import {
 } from '../shared/eventStatus'
 import { formatSchedule, NOT_RECORDED, NOT_YET_ASSIGNED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ReassignDialog } from './ReassignDialog'
 
 const PAGE_TITLE = 'Assignments'
 const DEACTIVATED = 'Deactivated'
@@ -98,6 +100,14 @@ function coordinatorDetail(entry: ActiveEventEntry) {
   )
 }
 
+/** Story 5.6 AC1: the overview's two lists as they stood when reading them again failed. */
+interface NotRefreshedLists {
+  events: ActiveEventEntry[] | null
+  workloads: CoordinatorWorkloadEntry[] | null
+}
+
+const NONE_NOT_REFRESHED: NotRefreshedLists = { events: null, workloads: null }
+
 /**
  * Story 5.5 - the Event Coordinator Lead's overview of coordinators' assignments.
  * AC1: every active event with its status, dates, coordinator (or "Not yet assigned") and the
@@ -108,6 +118,8 @@ function coordinatorDetail(entry: ActiveEventEntry) {
  * 0 included, and the events themselves.
  * AC3: each event opens its read-only details page (7.1).
  * AC5: a deactivated coordinator who still holds events is flagged in both views.
+ * Story 5.6 AC1: each event with a coordinator can be reassigned from its card; both views then
+ * read the change afresh.
  */
 export function AssignmentOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -126,6 +138,15 @@ export function AssignmentOverviewPage() {
   )
   const overview = useLoaded(loadOverview)
   const workloads = useLoaded(listWorkloads)
+  const [reassigning, setReassigning] = useState<ActiveEventEntry | null>(null)
+  /** Story 5.6 AC1: each list as it stood when reading it again after a reassignment failed. */
+  const [notRefreshed, setNotRefreshed] = useState<NotRefreshedLists>(NONE_NOT_REFRESHED)
+  // Each view shows one list - All active events the events, By coordinator the workloads - so
+  // the notice shows on a view while the list it shows is still the one that failed to refresh,
+  // and goes with that list's next good load (a changed filter, the next reassignment, a reload).
+  const isShowingNotRefreshed = isCoordinatorsView
+    ? notRefreshed.workloads !== null && notRefreshed.workloads === workloads.data
+    : notRefreshed.events !== null && notRefreshed.events === overview.data
   // While a changed filter loads, the previous filter's events are hidden rather than shown under
   // the new one (`useLoaded`'s isStale).
   const freshEvents = overview.isStale ? null : overview.data
@@ -176,6 +197,30 @@ export function AssignmentOverviewPage() {
     )
   }
 
+  function askToReassign(entry: ActiveEventEntry) {
+    setReassigning(entry)
+  }
+
+  function cancelReassign() {
+    setReassigning(null)
+  }
+
+  /** Story 5.6 AC1: the card, and the coordinator's workload, show the new coordinator. The
+   *  reassignment has already been made, so a list that fails to load again says so - and that
+   *  the reassignment went through - rather than quietly showing the old coordinator. */
+  function handleReassigned() {
+    setReassigning(null)
+    setNotRefreshed(NONE_NOT_REFRESHED)
+    const eventsShown = overview.data
+    const workloadsShown = workloads.data
+    loadOverview().then(overview.setData, () =>
+      setNotRefreshed((current) => ({ ...current, events: eventsShown })),
+    )
+    listWorkloads().then(workloads.setData, () =>
+      setNotRefreshed((current) => ({ ...current, workloads: workloadsShown })),
+    )
+  }
+
   /** The address for the other view, keeping the filters. */
   function viewPath(isCoordinators: boolean): string {
     const next = new URLSearchParams(searchParams)
@@ -191,6 +236,11 @@ export function AssignmentOverviewPage() {
         title={PAGE_TITLE}
         subtitle="Every active event, and each coordinator's share of them."
       />
+      {isShowingNotRefreshed && (
+        <p role="alert" className="error">
+          {ERROR_REGISTRY.REASSIGNED_LIST_NOT_REFRESHED.message}
+        </p>
+      )}
 
       <nav className="view-switch" aria-label="View">
         <Link
@@ -285,11 +335,33 @@ export function AssignmentOverviewPage() {
                       ? []
                       : [`Assigned by ${entry.assigned_by_name ?? NOT_RECORDED}`]),
                   ]}
+                  action={
+                    // Story 5.6: an event with no coordinator is assigned from 5.4's queue.
+                    entry.coordinator_id === null ? undefined : (
+                      <button
+                        type="button"
+                        className="secondary reassign-action"
+                        onClick={() => askToReassign(entry)}
+                      >
+                        Reassign
+                      </button>
+                    )
+                  }
                 />
               ))}
             </EventCardGrid>
           )}
         </div>
+      )}
+
+      {reassigning !== null && reassigning.coordinator_id !== null && (
+        <ReassignDialog
+          eventId={reassigning.id}
+          eventName={reassigning.name}
+          currentCoordinatorId={reassigning.coordinator_id}
+          onReassigned={handleReassigned}
+          onCancel={cancelReassign}
+        />
       )}
     </div>
   )

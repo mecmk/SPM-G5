@@ -262,19 +262,20 @@ def test_a_status_filter_outside_the_active_statuses_is_refused(login_as, status
 
 
 @pytest.mark.story("5.5", ac=1)
-def test_assigned_by_me_lists_only_this_leads_current_assignments(
-    login_as, coordinator_client, db: Session
-):
-    """P2: the current assignment's assigner. Another Lead's assignment is not mine, and once a
-    coordinator reassigns an event (5.2) its current assigner is that coordinator. The fixtures
-    share one client, so Chloe acts before the Lead signs in."""
+def test_assigned_by_me_lists_only_this_leads_current_assignments(login_as, db: Session):
+    """P2: the current assignment's assigner. Another Lead's assignment is not mine, and once
+    another Lead reassigns an event this Lead assigned (5.6), its current assigner is that Lead.
+    The fixtures share one client, so the other Lead acts before this one signs in."""
     other_lead = make_user(db, role=LEAD_ROLE, full_name="Other Lead")
     mine = _assigned_event(db, Users.COORDINATOR_2.id, assigned_by_id=Users.LEAD.id)
     theirs = _assigned_event(db, Users.COORDINATOR_2.id, assigned_by_id=other_lead.id)
     handed_on = _assigned_event(db, Users.COORDINATOR.id, assigned_by_id=Users.LEAD.id)
-    reassigned = coordinator_client.put(
+    reassigned = login_as(other_lead.email).put(
         f"/events/{handed_on.id}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
     assert reassigned.status_code == 200, reassigned.text
 
@@ -444,23 +445,24 @@ def test_both_views_show_the_coordinator_after_an_assignment(login_as, db: Sessi
 
 
 @pytest.mark.story("5.5", ac=5)
-def test_both_views_show_the_new_coordinator_after_a_reassignment(
-    login_as, coordinator_client, db: Session
-):
-    """Chloe hands her event to Carl (5.2); the Lead's next read shows Carl. The fixtures share one
-    client, so Chloe acts before the Lead signs in."""
+def test_both_views_show_the_new_coordinator_after_a_reassignment(login_as, db: Session):
+    """The Lead hands Chloe's event to Carl (5.6); the Lead's next read shows Carl."""
     event = _assigned_event(db, Users.COORDINATOR.id, assigned_by_id=Users.LEAD.id)
-
-    reassigned = coordinator_client.put(
-        f"/events/{event.id}/coordinator", json={"coordinator_id": str(Users.COORDINATOR_2.id)}
-    )
     lead = login_as(Users.LEAD)
+
+    reassigned = lead.put(
+        f"/events/{event.id}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
 
     assert reassigned.status_code == 200, reassigned.text
     row = _row(_overview(lead), event)
     assert row["coordinator_id"] == str(Users.COORDINATOR_2.id)
-    # P3: Chloe made this assignment, and she is not a Lead.
-    assert row["assigned_by_name"] is None
+    # P3: the Lead made this assignment, so they are named.
+    assert row["assigned_by_name"] == Users.LEAD.full_name
     workloads = _workloads(lead)
     assert str(event.id) in {e["id"] for e in workloads[str(Users.COORDINATOR_2.id)]["events"]}
     assert str(event.id) not in {e["id"] for e in workloads[str(Users.COORDINATOR.id)]["events"]}

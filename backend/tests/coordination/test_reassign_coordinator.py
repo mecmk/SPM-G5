@@ -1,21 +1,20 @@
 """Story 5.2 - be: reassign a coordinator-holding event to a different coordinator.
 
-Reuses story 5.1's ``PUT /events/{event_id}/coordinator`` and its ``_create_assignment`` helper
-rather than adding a second endpoint - a reassignment is simply an assignment made by the event's
-*current* coordinator, which 5.1 already lets happen, just without 5.2's tighter permission rule
-(AC6) or its concurrency guard (AC7).
+Story 5.6 replaced 5.2 AC1 and AC6's first sentence (Q16, CL-144): only the Event Coordinator Lead
+reassigns, naming the coordinator they saw (``expected_coordinator_id``), and coordinators are
+refused. The tests for what was replaced went with it - 5.6's own cases, in
+test_lead_reassign_coordinator.py, prove who may reassign, the notifications and every active
+status - as story 5.4 did for 5.1's round robin (#107). The reassignments below are the Lead's.
 
-AC1  On a non-terminal event, the assigned coordinator can choose another active coordinator.
-     The change records who made it and when; both coordinators and the organiser are notified.
+What remains true of 5.2, and is tested here:
 AC2  The previous assignment is kept in the event's history.
-AC3  The event page has a Reassign action (e2e, tests/e2e/coordinator-reassignment.spec.ts); the
-     assignment change and its history entry are saved together, and access checks use the new
-     assignment immediately.
+AC3  The assignment change and its history entry are saved together, and access checks use the
+     new assignment immediately. (The event page's Reassign action is now 5.6's, in
+     tests/e2e/coordinator-reassignment.spec.ts.)
 AC4  Only active Event Coordinators are offered, and the current coordinator is excluded.
-AC5  Pending booking requests and clarification threads move with the event (change requests,
-     story 19.x, have no application code yet - nothing exists to verify moving).
-AC6  Only the currently assigned coordinator can reassign; the previous coordinator loses
-     assignment access immediately.
+AC5  Pending booking requests and clarification threads move with the event. (Change requests
+     are 5.6 AC4's, in test_lead_reassign_coordinator.py.)
+AC6  (its second sentence) The previous coordinator loses assignment access immediately.
 AC7  Two simultaneous reassignments: the second is refused because the assignment has changed.
 """
 
@@ -62,68 +61,17 @@ def _notification_recipients(db: Session, event_id) -> set:
     )
 
 
-# --- AC1: happy path -------------------------------------------------------------------------
-@pytest.mark.story("5.2", ac=1)
-def test_reassignment_updates_pointer_and_records_who_and_when(coordinator_client, db: Session):
-    """Events.APPROVED is in PLANNING, assigned to Chloe - a valid reassignment target."""
-    response = coordinator_client.put(
-        f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id), "note": "Covering while I'm on leave"},
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["coordinator_id"] == str(Users.COORDINATOR_2.id)
-    assert body["assigned_by_id"] == str(Users.COORDINATOR.id)
-    assert body["assigned_at"] is not None
-    row = _open_assignment_row(db, Events.APPROVED)
-    assert row.coordinator_id == Users.COORDINATOR_2.id
-    assert row.assigned_by_id == Users.COORDINATOR.id
-
-
-@pytest.mark.story("5.2", ac=1)
-def test_event_awaiting_the_safety_check_can_be_reassigned(login_as):
-    """Awaiting the safety check (story 21.1) sits between submission and closure, so it is
-    assignable. Events.HARBOUR_CONCERT is assigned to Carl."""
-    carl = login_as(Users.COORDINATOR_2)
-
-    response = carl.put(
-        f"/events/{Events.HARBOUR_CONCERT}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR.id)},
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["coordinator_id"] == str(Users.COORDINATOR.id)
-
-
-@pytest.mark.story("5.2", ac=1)
-def test_reassignment_notifies_the_new_coordinator_and_the_organiser(
-    coordinator_client, db: Session
-):
-    """Only the current coordinator may reassign (AC6), so the previous coordinator is always
-    the one making the change, and story 20.1 AC3 tells nobody of their own action. Both
-    coordinators are told when someone else reassigns, as the Lead will (story 5.6)."""
-    response = coordinator_client.put(
-        f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
-    )
-
-    assert response.status_code == 200, response.text
-    event_organiser_id = db.execute(
-        text("SELECT organiser_id FROM events WHERE id = :e"), {"e": Events.APPROVED}
-    ).scalar()
-    recipients = _notification_recipients(db, Events.APPROVED)
-    assert recipients == {Users.COORDINATOR_2.id, event_organiser_id}
-
-
 # --- AC2: history is kept, not deleted --------------------------------------------------------
 @pytest.mark.story("5.2", ac=2)
-def test_previous_assignment_is_kept_in_history_not_deleted(coordinator_client, db: Session):
+def test_previous_assignment_is_kept_in_history_not_deleted(login_as, db: Session):
     before = _history_row_count(db, Events.APPROVED)
 
-    response = coordinator_client.put(
+    response = login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -141,9 +89,7 @@ def test_previous_assignment_is_kept_in_history_not_deleted(coordinator_client, 
 
 # --- AC3: atomic save, and access checks use the new assignment immediately -------------------
 @pytest.mark.story("5.2", ac=3)
-def test_reassignment_failure_rolls_back_the_whole_change(
-    coordinator_client, db: Session, monkeypatch
-):
+def test_reassignment_failure_rolls_back_the_whole_change(login_as, db: Session, monkeypatch):
     """If writing the history entry fails unexpectedly, the pointer must not have moved either -
     the two are "saved together" (AC3)."""
     before_pointer = db.execute(
@@ -153,12 +99,16 @@ def test_reassignment_failure_rolls_back_the_whole_change(
     def _boom(*_args, **_kwargs):
         raise RuntimeError("simulated failure writing the history entry")
 
+    lead = login_as(Users.LEAD)
     monkeypatch.setattr(coordination_service, "record_audit", _boom)
 
     with pytest.raises(RuntimeError):
-        coordinator_client.put(
+        lead.put(
             f"/events/{Events.APPROVED}/coordinator",
-            json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+            json={
+                "coordinator_id": str(Users.COORDINATOR_2.id),
+                "expected_coordinator_id": str(Users.COORDINATOR.id),
+            },
         )
     # A real request's session is closed after the error, discarding its work; rolling back here
     # does the same for the test's session before the pointer is read again.
@@ -172,12 +122,13 @@ def test_reassignment_failure_rolls_back_the_whole_change(
 
 
 @pytest.mark.story("5.2", ac=3)
-def test_new_coordinator_can_act_on_the_event_right_after_reassignment(
-    coordinator_client, login_as
-):
-    coordinator_client.put(
+def test_new_coordinator_can_act_on_the_event_right_after_reassignment(login_as):
+    login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     carl = login_as(Users.COORDINATOR_2)
@@ -213,11 +164,15 @@ def test_current_coordinator_is_excluded_from_the_reassignment_list(coordinator_
 
 
 @pytest.mark.story("5.2", ac=4)
-def test_reassigning_to_an_inactive_or_non_coordinator_is_refused(coordinator_client, db: Session):
+def test_reassigning_to_an_inactive_or_non_coordinator_is_refused(login_as, db: Session):
     inactive = make_user(db, role="EVENT_COORDINATOR", is_active=False)
 
-    response = coordinator_client.put(
-        f"/events/{Events.APPROVED}/coordinator", json={"coordinator_id": str(inactive.id)}
+    response = login_as(Users.LEAD).put(
+        f"/events/{Events.APPROVED}/coordinator",
+        json={
+            "coordinator_id": str(inactive.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     assert response.status_code == 422, response.text
@@ -226,12 +181,15 @@ def test_reassigning_to_an_inactive_or_non_coordinator_is_refused(coordinator_cl
 
 # --- AC5: bookings and clarifications follow the event ----------------------------------------
 @pytest.mark.story("5.2", ac=5)
-def test_pending_booking_request_follows_the_new_coordinator(coordinator_client, login_as):
+def test_pending_booking_request_follows_the_new_coordinator(login_as):
     """Events.APPROVED is PLANNING - a bookable status. Reassigning it must move who may raise a
     booking request for it, the same way it moves who may decide the event itself."""
-    coordinator_client.put(
+    login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     chloe = login_as(Users.COORDINATOR)
@@ -244,16 +202,17 @@ def test_pending_booking_request_follows_the_new_coordinator(coordinator_client,
 
 
 @pytest.mark.story("5.2", ac=5)
-def test_an_existing_pending_booking_stays_tied_to_the_event_after_reassignment(
-    coordinator_client, login_as
-):
+def test_an_existing_pending_booking_stays_tied_to_the_event_after_reassignment(login_as):
     """The previous test proves *future* eligibility moves; this proves the request Events.APPROVED
     already carries (Bookings.PENDING_SEMINAR_ROOM, seeded PENDING) is not hidden, detached or
     otherwise disturbed by the reassignment - it is still readable through the event's own
     history for whoever the new assignment holds BOOKINGS_READ."""
-    coordinator_client.put(
+    login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     carl = login_as(Users.COORDINATOR_2)
@@ -263,14 +222,15 @@ def test_an_existing_pending_booking_stays_tied_to_the_event_after_reassignment(
 
 
 @pytest.mark.story("5.2", ac=5)
-def test_clarification_thread_stays_visible_after_reassignment(
-    coordinator_client, login_as, db: Session
-):
+def test_clarification_thread_stays_visible_after_reassignment(login_as, db: Session):
     make_clarification(db, event_id=Events.APPROVED, author_id=Users.COORDINATOR.id)
 
-    coordinator_client.put(
+    login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     carl = login_as(Users.COORDINATOR_2)
@@ -279,44 +239,17 @@ def test_clarification_thread_stays_visible_after_reassignment(
     assert len(response.json()) >= 1
 
 
-# --- AC6: only the current coordinator may reassign --------------------------------------------
+# --- AC6, its second sentence: the previous coordinator loses assignment access immediately --
 @pytest.mark.story("5.2", ac=6)
-def test_a_different_coordinator_cannot_reassign_someone_elses_event(login_as, db: Session):
-    """Events.APPROVED belongs to Chloe; Carl holds the Event Coordinator role too, but is not
-    its current coordinator, so AC6 refuses him."""
-    carl = login_as(Users.COORDINATOR_2)
-
-    response = carl.put(
+def test_previous_coordinator_immediately_loses_all_assignment_rights(login_as):
+    """Once the Lead hands Events.APPROVED to Carl, Chloe can no longer edit it - she is no longer
+    its coordinator. Nor can she reassign it, as no coordinator can since 5.6."""
+    login_as(Users.LEAD).put(
         f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
-    )
-
-    assert response.status_code == 403, response.text
-    assert _open_assignment_row(db, Events.APPROVED).coordinator_id == Users.COORDINATOR.id
-
-
-@pytest.mark.story("5.2", ac=6)
-@pytest.mark.parametrize(
-    "user",
-    [Users.ORGANISER, Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.ATTENDEE],
-    ids=lambda u: u.role,
-)
-def test_non_coordinator_roles_cannot_reassign(login_as, user):
-    actor = login_as(user)
-
-    response = actor.put(
-        f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
-    )
-
-    assert response.status_code == 403, response.text
-
-
-@pytest.mark.story("5.2", ac=6)
-def test_previous_coordinator_immediately_loses_all_assignment_rights(coordinator_client, login_as):
-    coordinator_client.put(
-        f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
     )
 
     chloe = login_as(Users.COORDINATOR)
@@ -332,22 +265,12 @@ def test_previous_coordinator_immediately_loses_all_assignment_rights(coordinato
     assert edit_routine.status_code == 403, edit_routine.text
 
 
-@pytest.mark.story("5.2", ac=6)
-def test_signed_out_cannot_reassign(client):
-    response = client.put(
-        f"/events/{Events.APPROVED}/coordinator",
-        json={"coordinator_id": str(Users.COORDINATOR_2.id)},
-    )
-
-    assert response.status_code == 401, response.text
-
-
 # --- AC7: concurrent reassignment ---------------------------------------------------------------
 @pytest.mark.story("5.2", ac=7)
 def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, monkeypatch):
     """Two reassignments 'at the same time' (e.g. a double submit) both read Chloe as current
-    before either writes: Chloe -> Carl, and, from a second tab, Chloe -> Dana. The second write
-    must be refused rather than silently overwrite the first.
+    before either writes: Chloe -> Carl, and, from a second tab, Chloe -> Dana. Since 5.6 both are
+    the Lead's. The second write must be refused rather than silently overwrite the first.
 
     A single test session can't host two genuinely overlapping transactions (5.4's
     test_two_leads_assigning_at_once_write_one needs real sessions, its own commits and a clean-up
@@ -355,7 +278,10 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     deterministically: the moment
     the reassignment-in-progress reads "who is current" via ``current_assignment``, a second,
     already-authorised reassignment (Chloe -> Carl) is made and committed first, simulating the
-    other request winning the race.
+    other request winning the race. Committed inside this request's own transaction, it gets past
+    the row lock 5.6 added. A real second request would wait on that lock, and then be refused by
+    the read check (``_refuse_if_changed``). So what this reaches is the guarded UPDATE, the
+    backstop behind that check.
 
     Uses the seeded Events.APPROVED rather than a hand-built event: ``make_event`` sets
     ``assigned_coordinator_id`` on the event row directly but does not create a matching open
@@ -364,7 +290,7 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     there would be no history row to match against.
     """
     event_id = Events.APPROVED
-    chloe = db.get(User, Users.COORDINATOR.id)
+    lead = db.get(User, Users.LEAD.id)
     dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator")
 
     real_current_assignment = coordination_service.current_assignment
@@ -378,8 +304,11 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
             coordination_service.assign_coordinator(
                 db_,
                 event_id_,
-                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
-                actor=chloe,
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR_2.id,
+                    expected_coordinator_id=Users.COORDINATOR.id,
+                ),
+                actor=lead,
             )
         return result
 
@@ -387,7 +316,12 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
 
     with pytest.raises(coordination_service.AssignmentChanged):
         coordination_service.assign_coordinator(
-            db, event_id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
+            db,
+            event_id,
+            AssignCoordinatorIn(
+                coordinator_id=dana.id, expected_coordinator_id=Users.COORDINATOR.id
+            ),
+            actor=lead,
         )
 
     monkeypatch.undo()
@@ -400,7 +334,7 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
     """See the previous test's docstring for why Events.APPROVED (a fully-seeded event, with a
     real open assignment row) is used rather than a hand-built one."""
     event_id = Events.APPROVED
-    chloe = db.get(User, Users.COORDINATOR.id)
+    lead = db.get(User, Users.LEAD.id)
     dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator 2")
 
     real_current_assignment = coordination_service.current_assignment
@@ -414,8 +348,11 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
             coordination_service.assign_coordinator(
                 db_,
                 event_id_,
-                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
-                actor=chloe,
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR_2.id,
+                    expected_coordinator_id=Users.COORDINATOR.id,
+                ),
+                actor=lead,
             )
         return result
 
@@ -424,7 +361,12 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
 
     with pytest.raises(coordination_service.AssignmentChanged):
         coordination_service.assign_coordinator(
-            db, event_id, AssignCoordinatorIn(coordinator_id=dana.id), actor=chloe
+            db,
+            event_id,
+            AssignCoordinatorIn(
+                coordinator_id=dana.id, expected_coordinator_id=Users.COORDINATOR.id
+            ),
+            actor=lead,
         )
 
     monkeypatch.undo()
@@ -435,16 +377,14 @@ def test_a_refused_reassignment_leaves_history_and_pointer_unchanged(db: Session
 
 
 @pytest.mark.story("5.2", ac=7)
-def test_a_stale_reassignment_over_http_is_refused_with_409(
-    coordinator_client, db: Session, monkeypatch
-):
+def test_a_stale_reassignment_over_http_is_refused_with_409(login_as, db: Session, monkeypatch):
     """The two tests above prove the guard by calling ``assign_coordinator`` directly and
     catching ``AssignmentChanged`` as a Python exception - neither exercises the router's own
     translation of that exception into an HTTP response. This drives the identical race through
     the real ``PUT /events/{event_id}/coordinator`` endpoint instead, to prove that translation
     (409, not 500 or an unhandled exception) actually happens."""
     event_id = Events.APPROVED
-    chloe = db.get(User, Users.COORDINATOR.id)
+    lead = db.get(User, Users.LEAD.id)
     dana = make_user(db, role="EVENT_COORDINATOR", full_name="Dana Coordinator HTTP")
 
     real_current_assignment = coordination_service.current_assignment
@@ -458,15 +398,19 @@ def test_a_stale_reassignment_over_http_is_refused_with_409(
             coordination_service.assign_coordinator(
                 db_,
                 event_id_,
-                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR_2.id),
-                actor=chloe,
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR_2.id,
+                    expected_coordinator_id=Users.COORDINATOR.id,
+                ),
+                actor=lead,
             )
         return result
 
     monkeypatch.setattr(coordination_service, "current_assignment", _interloper_wins_first)
 
-    response = coordinator_client.put(
-        f"/events/{event_id}/coordinator", json={"coordinator_id": str(dana.id)}
+    response = login_as(Users.LEAD).put(
+        f"/events/{event_id}/coordinator",
+        json={"coordinator_id": str(dana.id), "expected_coordinator_id": str(Users.COORDINATOR.id)},
     )
 
     assert response.status_code == 409, response.text
