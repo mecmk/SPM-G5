@@ -40,6 +40,8 @@ extend-exclude = ["mutants"]
 select = ["E", "F", "I", "RET"]
 
 # Coverage (npm run test:coverage, docs/testing/README.md): lines and branches.
+# Coverage (npm run test:coverage, docs/testing/README.md): branches as well as lines, and each
+# module's missed lines listed, set here only.
 [tool.coverage.run]
 branch = true
 relative_files = true

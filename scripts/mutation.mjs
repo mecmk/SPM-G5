@@ -13,7 +13,8 @@
  *   npm run test:mutation -- --tests tests/equipment tests/events "app.events.schemas.*"
  *
  * --tests   the tests that may kill a mutant (default: every test); mutmut then runs, for each
- *           mutant, only those of them that reached its function
+ *           mutant, only those of them that reached its function. The list ends at the first
+ *           argument that does not start with "tests", which begins the globs
  * --debug   show pytest's own output, to see why mutmut could not run the tests
  * globs     which mutants to run (default: every one), e.g. "app.events.schemas.*"
  *
@@ -43,7 +44,10 @@ function parseArgs(args) {
   return { tests, globs, isDebug }
 }
 
-/** The shell script run inside the container. Values come in as environment variables. */
+/**
+ * The shell script run inside the container. Values come in as environment variables. It calls uv
+ * directly, not through scripts/uv.mjs: the container has no Node, and installs uv itself.
+ */
 const CONTAINER_SCRIPT = String.raw`
 set -eu
 export UV_LINK_MODE=copy UV_PYTHON=3.12 UV_PYTHON_DOWNLOADS=never

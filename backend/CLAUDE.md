@@ -21,7 +21,7 @@ uv run python -m app.dbtool ready          # create + migrate + seed + verify
 uv run python -m app.dbtool reset          # drop all, then migrate + seed + docs  (local only)
 uv run python -m app.dbtool docs           # regenerate data dictionary + ERD
 uv run pytest --traceability=../docs/testing/TRACEABILITY.md   # regenerate the story matrix
-uv run pytest --cov=app.<module> --cov-branch --cov-report=term-missing --cov-report=json   # coverage
+uv run pytest --cov=app.<module> --cov-report=term --cov-report=json   # coverage ([tool.coverage])
 # mutation testing runs in Docker, from the repo root: npm run test:mutation (docs/testing/README.md)
 ```
 

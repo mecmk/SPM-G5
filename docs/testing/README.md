@@ -105,15 +105,17 @@ tables, and the DB-level guards (double-booking exclusion, mandatory fields once
 
 Both are scoped to the modules a story adds or changes, from the repo root.
 
-**Coverage** (pytest-cov, lines and branches; `[tool.coverage]` in `backend/pyproject.toml`):
+**Coverage** (pytest-cov, lines and branches, each module's missed lines listed; set in
+`[tool.coverage]` in `backend/pyproject.toml`):
 
 ```bash
 npm run test:coverage -- --cov=app.events.schemas --cov-fail-under=100
 npm run test:function-coverage -- app/events/schemas.py
 ```
 
-The first runs the whole suite, measuring only the modules named with `--cov`, and fails below
-100% of their lines and branches. It also writes `backend/coverage.json`. coverage.py has no
+The first runs the whole suite, measuring only the modules named with `--cov` (the whole `app`
+package when none is named), and fails below 100% of their lines and branches. It also writes
+`backend/coverage.json`. coverage.py has no
 function figure of its own, so the second reads that report and counts a function or method as
 covered when any of its statements ran, failing while one never did.
 
@@ -151,8 +153,9 @@ Which command touches which database:
 
 | Command | Database |
 | --- | --- |
-| `npm run test:backend`, `npm run test:trace` | `connectsphere_test` only |
+| `npm run test:backend`, `npm run test:trace`, `npm run test:coverage` | `connectsphere_test` only |
 | `npm run test:e2e` | `connectsphere_e2e` only |
+| `npm run test:mutation` | `connectsphere_mut` and `connectsphere_mut_test` only, from its Docker container |
 | `npm run db:up`, `npm run db:down` | none — starts or stops the PostgreSQL container |
 | `npm run db:status`, `npm run db:docs` | the development database, **read-only**. `db:docs` writes the generated data dictionary and ERD *from that schema*, so it is only as current as your dev database: run `db:reset` first if yours predates a schema change. The feature workflow's last step needs it |
 | `npm run db:ready`, `db:reset`, `db:seed`, or a bare `python -m app.dbtool` | **the development database, and they change it** (`DATABASE_URL`). `reset` drops everything first. `--test` targets the test database instead |
