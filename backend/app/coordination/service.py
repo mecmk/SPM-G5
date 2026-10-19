@@ -43,6 +43,7 @@ from app.auth.permissions import Permission, RoleCode, role_has
 from app.common.audit import record_audit
 from app.coordination.models import EventCoordinatorAssignment
 from app.coordination.schemas import AssignCoordinatorIn
+from app.events import service as events_service
 from app.events.models import Event, EventStatus
 from app.notifications.service import NotificationType, notify
 
@@ -329,19 +330,6 @@ def get_event(db: Session, event_id: uuid.UUID) -> Event:
     return event
 
 
-def _lock_event(db: Session, event_id: uuid.UUID) -> Event:
-    """The event, its row held until the transaction ends and read as it now stands."""
-    event = db.get(
-        Event,
-        event_id,
-        with_for_update={"of": Event, "key_share": True},
-        populate_existing=True,
-    )
-    if event is None:
-        raise EventNotFound(event_id)
-    return event
-
-
 def current_assignment(db: Session, event_id: uuid.UUID) -> EventCoordinatorAssignment | None:
     """The open assignment for an event (``unassigned_at IS NULL``), or None."""
     return db.scalars(
@@ -572,7 +560,9 @@ def assign_coordinator(
     Story 6.2 AC9: the event is read under its row lock, ``FOR NO KEY UPDATE`` as a cancellation
     takes it, so an assignment racing a cancellation waits for it and then finds it Cancelled.
     """
-    event = _lock_event(db, event_id)
+    event = events_service.lock_event(db, event_id)
+    if event is None:
+        raise EventNotFound(event_id)
     if event.status not in ASSIGNABLE_STATUSES:
         raise EventNotAssignable(event.status)
 

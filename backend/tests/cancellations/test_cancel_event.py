@@ -57,8 +57,8 @@ A declined equipment request is Technical Support's decision, not an open reques
 it Declined; under AC9 and AC15 it stays in their queue, under Declined and All, read-only.
 
 Most cases build a fresh event dated in 2030 on a fresh venue, owned by Olivia and coordinated
-by Chloe, so no seeded booking or hold is in the way. The races (AC12, AC13) run real concurrent
-transactions, so they commit and clean up after themselves.
+by Chloe, so no seeded booking or hold is in the way. The races (AC5, AC9, AC12, AC13) run real
+concurrent transactions, so they commit and clean up after themselves.
 """
 
 from __future__ import annotations
@@ -726,7 +726,7 @@ def test_another_organisers_event_is_not_found(login_as, db: Session):
     assert _status(db, Event, event.id) == EventStatus.PLANNING
 
 
-# --- AC12 / AC13: races ------------------------------------------------------------------------
+# --- AC5 / AC9 / AC12 / AC13: races ----------------------------------------------------------
 def _backend_pid(session: Session) -> int:
     return session.connection().exec_driver_sql("SELECT pg_backend_pid()").scalar()
 
@@ -938,7 +938,7 @@ def test_a_booking_request_racing_the_cancellation_is_refused(engine):
         _delete_committed(engine, event_id, venue_id=venue_id)
 
 
-@pytest.mark.story("6.2", ac=12)
+@pytest.mark.story("6.2", ac=9)
 def test_a_confirmation_racing_the_cancellation_ends_cancelled(
     engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1001,7 +1001,7 @@ def test_a_confirmation_racing_the_cancellation_ends_cancelled(
         _delete_committed(engine, event_id, booking_id, venue_id=venue_id)
 
 
-@pytest.mark.story("6.2", ac=12)
+@pytest.mark.story("6.2", ac=9)
 def test_a_switch_racing_the_cancellation_is_refused(engine):
     """Story 12.5's switch locks the event before the request it replaces, as the cancellation
     does, so it waits for the cancellation and then finds the request released. Locking the
@@ -1036,7 +1036,9 @@ def test_a_switch_racing_the_cancellation_is_refused(engine):
                     BookingSwitchIn(venue_id=other_id),
                     actor=session.get(User, Users.COORDINATOR.id),
                 )
-            except (bookings_service.BookingNotPending, bookings_service.EventNotBookable):
+            except bookings_service.BookingNotPending:
+                return "refused"
+            except bookings_service.EventNotBookable:
                 return "refused"
             return "switched"
 
@@ -1110,6 +1112,57 @@ def test_an_assignment_racing_the_cancellation_is_refused(engine):
             event = session.get(Event, event_id)
             assert event.status == EventStatus.CANCELLED
             assert event.assigned_coordinator_id is None
+    finally:
+        go.set()
+        _delete_committed(engine, event_id)
+
+
+@pytest.mark.story("6.2", ac=5)
+def test_a_cancellation_waiting_on_an_assignment_tells_the_new_coordinator(engine, monkeypatch):
+    """The other order: Lena's assignment holds the event first, and the cancellation waits for
+    it. Once the assignment commits, the cancellation must tell Chloe, the coordinator just
+    assigned, not the Leads it would have told a moment before."""
+    with Session(engine) as session:
+        event_id = _event(session, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=None).id
+        session.commit()
+    pids: dict[str, int] = {}
+    holding, go = threading.Event(), threading.Event()
+    real_current_assignment = coordination_service.current_assignment
+
+    def held_current_assignment(db: Session, event_id: uuid.UUID):
+        holding.set()
+        go.wait(LOCK_WAIT_SECONDS)
+        return real_current_assignment(db, event_id)
+
+    monkeypatch.setattr(coordination_service, "current_assignment", held_current_assignment)
+
+    def assign() -> None:
+        with Session(engine) as session:
+            coordination_service.assign_coordinator(
+                session,
+                event_id,
+                AssignCoordinatorIn(coordinator_id=Users.COORDINATOR.id),
+                actor=session.get(User, Users.LEAD.id),
+            )
+
+    def cancel() -> None:
+        holding.wait(LOCK_WAIT_SECONDS)
+        with Session(engine) as session:
+            pids["cancel"] = _backend_pid(session)
+            _cancel_in(session, event_id)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assigning = pool.submit(assign)
+            cancelling = pool.submit(cancel)
+            _wait_until_waiting(engine, pids, "cancel")
+            go.set()
+            assigning.result(timeout=LOCK_WAIT_SECONDS)
+            cancelling.result(timeout=LOCK_WAIT_SECONDS)
+
+        with Session(engine) as session:
+            assert _status(session, Event, event_id) == EventStatus.CANCELLED
+            assert _notified(session, "EVENT_CANCELLED", event_id) == [Users.COORDINATOR.id]
     finally:
         go.set()
         _delete_committed(engine, event_id)
@@ -1189,6 +1242,15 @@ def _sent_item(db: Session, event: Event, *, status: str) -> EventEquipmentReque
     return item
 
 
+def _decision(entry: dict) -> tuple[datetime | None, str | None]:
+    """When, and by whom, a queue entry or request page says the item was decided."""
+    decided_at = entry["decided_at"]
+    return (
+        None if decided_at is None else datetime.fromisoformat(decided_at),
+        entry["decided_by_name"],
+    )
+
+
 def _cancelled_by_organiser(login_as, event: Event) -> None:
     assert _cancel(login_as(Users.ORGANISER), event.id).status_code == 200
 
@@ -1216,8 +1278,18 @@ def test_venue_staff_see_a_released_booking_under_cancelled_and_all(login_as, db
 def test_technical_support_see_a_sent_item_under_cancelled_and_all(
     login_as, db: Session, status: str
 ):
+    """AC16 too: an accepted item keeps when, and by whom, it was accepted once cancelled."""
     event = _event(db)
     item = _sent_item(db, event, status=status)
+    if status == EquipmentRequestStatus.ACCEPTED:
+        item.decided_by_id = Users.TECH_SUPPORT.id
+        item.decided_at = datetime.now(UTC)
+        db.flush()
+    decision = (
+        (item.decided_at, Users.TECH_SUPPORT.full_name)
+        if status == EquipmentRequestStatus.ACCEPTED
+        else (None, None)
+    )
     before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
 
     _cancelled_by_organiser(login_as, event)
@@ -1225,7 +1297,8 @@ def test_technical_support_see_a_sent_item_under_cancelled_and_all(
     tech = login_as(Users.TECH_SUPPORT)
     cancelled = tech.get("/equipment-requests", params={"status": "CANCELLED"})
     assert cancelled.status_code == 200, cancelled.text
-    assert str(item.id) in [row["id"] for row in cancelled.json()["items"]]
+    [row] = [row for row in cancelled.json()["items"] if row["id"] == str(item.id)]
+    assert _decision(row) == decision
     assert str(item.id) in _queue_ids(tech, "/equipment-requests")
     after = tech.get("/equipment-requests").json()["counts"]
     assert after["cancelled"] == before["cancelled"] + 1
@@ -1233,6 +1306,7 @@ def test_technical_support_see_a_sent_item_under_cancelled_and_all(
     page = tech.get(f"/equipment-requests/{item.id}")
     assert page.status_code == 200, page.text
     assert page.json()["status"] == EquipmentRequestStatus.CANCELLED
+    assert _decision(page.json()) == decision
 
 
 @pytest.mark.story("6.2", ac=9)

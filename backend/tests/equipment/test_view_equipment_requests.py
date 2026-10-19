@@ -462,7 +462,7 @@ def test_an_item_the_coordinator_removes_disappears(login_as, db):
         (ACCEPTED, EventStatus.CANCELLED),
     ],
 )
-def test_any_item_on_a_cancelled_or_rejected_event_disappears(
+def test_an_open_item_on_a_cancelled_event_or_any_on_a_rejected_one_disappears(
     tech_client, db, status, event_status
 ):
     before = _queue(tech_client, status)["counts"]

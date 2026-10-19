@@ -738,7 +738,8 @@ def confirm_event(db: Session, event: Event, *, actor: User) -> None:
     # Story 6.2: the event first, then its bookings, the order a cancellation takes them, so the
     # two take turns instead of each holding what the other waits for. FOR NO KEY UPDATE, as
     # ``lock_own_event`` takes it, so a Venue Staff approval's notice never waits on it. Read as it
-    # now stands: a cancellation waited for leaves it Cancelled, which ``_change_status`` refuses.
+    # now stands: a cancellation waited for leaves it Cancelled, which ``confirm_blockers``
+    # refuses ("Only an event in Planning can be confirmed.").
     db.execute(select(Event.id).where(Event.id == event.id).with_for_update(key_share=True))
     db.refresh(event)
     # 12.7 AC10: then the approved bookings, so a sweep at the same moment either waits for

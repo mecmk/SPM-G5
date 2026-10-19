@@ -67,7 +67,7 @@ class EventNotCancellable(events_service.EventStateConflict):
         super().__init__(
             DRAFT_NOT_CANCELLABLE_MESSAGE
             if event.status == EventStatus.DRAFT
-            else NOT_CANCELLABLE_MESSAGE.format(status=event.status.lower().replace("_", " "))
+            else NOT_CANCELLABLE_MESSAGE.format(status=equipment_service.as_words(event.status))
         )
 
 

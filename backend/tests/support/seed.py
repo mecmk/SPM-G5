@@ -161,8 +161,9 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
-    # Story 6.2 AC14/AC15's e2e event: organiser 1, coordinator 1, PLANNING, March 2029, a pending
-    # request for Sunrise Studio and four wireless microphones sent to Technical Support, held.
+    # Story 6.2 AC14/AC15's e2e event: organiser 1, coordinator 1, PLANNING, March 2029, an
+    # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
+    # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
@@ -207,14 +208,11 @@ class Bookings:
     APPROVED_AI_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000018")
     # Story 19.2: Events.DESIGN_SPRINT's Studio, at Seminar Room 2.1.
     APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
-
-
-class CharityRunBookings:
-    """Story 6.2: Events.CHARITY_RUN's bookings, for tests/e2e/cancel-event.spec.ts."""
-
-    APPROVED_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")  # held until 1 Mar 2029
-    # Approved, then cancelled on 7 Oct 2026 by an earlier change, not with the event.
-    CHANGE_CANCELLED_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
+    # Story 6.2: Events.CHARITY_RUN's bookings, for tests/e2e/cancel-event.spec.ts. Sunrise
+    # Studio's is held until 1 Mar 2029; Harbour Pavilion's was approved, then cancelled on
+    # 6 Oct 2026 by an earlier change, not with the event, before the studio was requested.
+    APPROVED_CHARITY_RUN_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")
+    CANCELLED_CHARITY_RUN_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
 
 
 class Registrations:

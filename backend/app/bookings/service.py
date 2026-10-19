@@ -108,6 +108,7 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingRequestIn, BookingSwitchIn
 from app.common.audit import record_audit
 from app.config import settings
+from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
 from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
@@ -907,12 +908,7 @@ def _bookable_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     ``FOR NO KEY UPDATE`` as the cancellation takes it, so a request racing a cancellation waits
     for it and is then refused, rather than leaving a new hold on a cancelled event.
     """
-    event = db.get(
-        Event,
-        event_id,
-        with_for_update={"of": Event, "key_share": True},
-        populate_existing=True,
-    )
+    event = events_service.lock_event(db, event_id)
     if event is None:
         raise EventNotFound(event_id)
     if event.status not in _BOOKABLE_EVENT_STATUSES:

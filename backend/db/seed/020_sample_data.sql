@@ -186,7 +186,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..12-15: one event in each of the four statuses story 6.1 adds to the visible/status
     -- model (PLANNING, CONFIRMED, COMPLETED, CANCELLED) - none were seeded before, so the
-    -- coordinator's assigned-events list had nothing to show for them.
+    -- coordinator's assigned-events list had nothing to show for them. 12 to 14 follow; 15, the
+    -- cancelled one, has its own insert further down.
     ('33333333-0000-0000-0000-000000000012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Regional Sales Summit', 'Sales enablement', 'Two-day summit for the regional sales teams.', NULL, '2026-12-15 09:00+08', '2026-12-16 17:00+08', 220, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
@@ -1495,7 +1496,7 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000000063', '33333333-0000-0000-0000-000000000062', '22222222-0000-0000-0000-000000000007',
      '11111111-0000-0000-0000-000000000003', '2029-03-14 08:00+08', '2029-03-14 12:00+08', 0, 0,
      60, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-06 11:00+08', NULL, '2026-10-06 10:00+08',
-     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08', '2026-10-07 10:00+08')
+     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08', '2026-10-06 11:30+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,

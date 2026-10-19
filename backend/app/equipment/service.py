@@ -348,8 +348,9 @@ def list_equipment_requests(
     AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
     own holds left out, since a Pending item already holds its units (15.1 AC2). AC7: worked out
     afresh on every call, once per event in the tab. Story 6.2 AC15: not for a cancelled item,
-    which holds nothing: its ``available`` is ``None``, so the cancelled events kept in the queue
-    add no work."""
+    which holds nothing: its ``available`` is ``None``, so an event whose kept items are all
+    cancelled adds no work. A declined item on a cancelled event still has its figures worked
+    out."""
     tab = (
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
