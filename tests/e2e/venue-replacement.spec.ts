@@ -342,6 +342,9 @@ test.describe('12.6 AC3 on the awards evening', () => {
     page,
     browser,
   }) => {
+    // Under All the queue is every request the other specs raised too: walking its pages for the
+    // card takes longer than the default.
+    test.setTimeout(90_000)
     const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
     const card = await queueCard(staff, AWARDS, 'All')
     await card.getByRole('button', { name: 'Approve' }).click()
