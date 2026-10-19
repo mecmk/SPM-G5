@@ -1,5 +1,5 @@
-"""ORM model for event change requests (story 19.1 raises and withdraws them; 19.2-19.5 review
-and decide them).
+"""ORM model for event change requests (story 19.1 raises and withdraws them; story 19.2 reviews
+and decides them).
 
 Mirrors ``event_change_requests`` in backend/db/migrations (001, guarded by 015). Later stories in
 epic 19 should extend this class rather than mapping the table a second time - two declarative
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.events.models import Event
 
 
 class ChangeRequestStatus:
@@ -59,3 +60,8 @@ class EventChangeRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     decision_reason: Mapped[str | None] = mapped_column(Text)
 
     requested_by: Mapped[User] = relationship(foreign_keys=[requested_by_id], lazy="joined")
+    # Story 19.2 AC2/AC3: who decided, shown beside the decision.
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id], lazy="joined")
+    # Story 19.2 AC1: the queue names each request's event. Not joined by default: the queue asks
+    # for it with contains_eager, and the per-event list already has the event in hand.
+    event: Mapped[Event] = relationship()

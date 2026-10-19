@@ -29,6 +29,7 @@ export type IconName =
   | 'check-circle'
   | 'x-circle'
   | 'clock'
+  | 'message'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
@@ -156,6 +157,10 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3.5 2" />
     </>
+  ),
+  // Story 19.2: a speech bubble, beside the reason given for a change request.
+  message: (
+    <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 10h8M8 13h5" />
   ),
 }
 

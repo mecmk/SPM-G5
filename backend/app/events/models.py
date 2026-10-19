@@ -123,7 +123,9 @@ class EquipmentRequestStatus:
     ACCEPTED = "ACCEPTED"  # Technical Support reserved it (story 16.1)
     DECLINED = "DECLINED"  # Technical Support declined it (story 16.1)
     UNAVAILABLE = "UNAVAILABLE"  # the event's new dates can no longer cover it (15.1 AC8)
-    CANCELLED = "CANCELLED"  # its event was cancelled (story 6.2)
+    CANCELLED = (
+        "CANCELLED"  # its event was cancelled (6.2), or a change removed it once sent (19.2)
+    )
 
 
 class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):

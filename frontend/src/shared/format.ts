@@ -11,6 +11,9 @@ const TIME_ZONE = 'Asia/Singapore'
  * a reason for declining given before reasons were required. */
 export const NOT_RECORDED = 'Not recorded'
 
+/** What a page shows for a venue requirement or booking that asks for no particular layout. */
+export const ANY_LAYOUT = 'Any'
+
 /** What a page shows for an event that has no coordinator yet (stories 5.4 AC6, 5.5 AC1). */
 export const NOT_YET_ASSIGNED = 'Not yet assigned'
 

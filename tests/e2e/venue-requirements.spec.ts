@@ -43,6 +43,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
   assignByLead,
+  changeRequests,
   corsHeaders,
   EVENTS,
   inFuture,
@@ -141,10 +142,6 @@ function eventWrites(page: Page): string[] {
 
 /** Story 19.1's change requests on the event page, opened for one field as
  * change-requests.spec.ts opens them. */
-function changeRequests(page: Page) {
-  return page.getByRole('region', { name: 'Change requests' })
-}
-
 async function openChangeForm(page: Page, field: string) {
   await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
   await changeRequests(page).getByLabel('What to change').selectOption({ label: field })

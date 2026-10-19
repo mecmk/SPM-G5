@@ -11,6 +11,9 @@ export interface ConfirmDialogProps {
   /** Visual weight of the confirm button. Story 13.2 adds `primary` for a non-destructive
    * decision (approving a booking); `danger` (the default) is for actions that remove data. */
   tone?: 'danger' | 'primary'
+  /** The error message's id, so a field in `children` can point at it with `aria-describedby`
+   *  (story 19.2 AC4: the rejection reason). */
+  errorId?: string
 }
 
 /**
@@ -26,6 +29,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   tone = 'danger',
+  errorId,
 }: ConfirmDialogProps) {
   const titleId = useId()
   const cancelButton = useRef<HTMLButtonElement>(null)
@@ -54,7 +58,7 @@ export function ConfirmDialog({
         <div className="dialog-body">
           {children}
           {error && (
-            <p role="alert" className="error">
+            <p id={errorId} role="alert" className="error">
               {error}
             </p>
           )}
