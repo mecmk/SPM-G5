@@ -47,11 +47,12 @@ the event, then the types - still holds.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -124,7 +125,7 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 # AC6: an item in one of these takes up its type on the event; a declined or cancelled one does not.
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
-_SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
+SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
 # Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
 # the queue leaves them out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
@@ -246,9 +247,12 @@ def _visible_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
         raise EventNotFound(event_id) from None
 
 
-def _held_by_event(db: Session, event: Event) -> dict[uuid.UUID, int]:
-    """AC3: the units of each type ``event``'s own holds take over its period."""
-    rows = db.execute(
+def _held_by_event(
+    db: Session, event: Event, *, releasing: Collection[uuid.UUID] = ()
+) -> dict[uuid.UUID, int]:
+    """AC3: the units of each type ``event``'s own holds take over its period, leaving out the
+    holds of the items in ``releasing`` (story 19.3, see ``available_for_event``)."""
+    query = (
         select(
             EquipmentReservation.equipment_type_id,
             func.sum(EquipmentReservation.quantity - EquipmentReservation.released_quantity),
@@ -260,16 +264,41 @@ def _held_by_event(db: Session, event: Event) -> dict[uuid.UUID, int]:
             EquipmentReservation.ends_at > event.starts_at,
         )
         .group_by(EquipmentReservation.equipment_type_id)
-    ).all()
-    return {type_id: int(units) for type_id, units in rows}
+    )
+    if releasing:
+        query = query.where(
+            or_(
+                EquipmentReservation.equipment_request_id.is_(None),
+                EquipmentReservation.equipment_request_id.not_in(releasing),
+            )
+        )
+    return {type_id: int(units) for type_id, units in db.execute(query).all()}
 
 
-def available_for_event(db: Session, event: Event) -> dict[uuid.UUID, int]:
+def available_for_event(
+    db: Session, event: Event, *, releasing: Collection[uuid.UUID] = ()
+) -> dict[uuid.UUID, int]:
     """AC3: the units of each type ``event`` can have over its period - what is free, plus what it
-    already holds, so an item can always keep its own quantity."""
-    free = events_service.available_by_type(db, event.starts_at, event.ends_at)
-    own = _held_by_event(db, event)
+    already holds, so an item can always keep its own quantity.
+
+    Story 19.3: ``releasing`` names items whose holds a story 19.2 approval releases before it
+    holds again; their holds are left out of both figures, so the result is what
+    ``apply_equipment_change`` sees once it has released them, read without releasing anything."""
+    free = events_service.available_by_type(
+        db, event.starts_at, event.ends_at, exclude_request_ids=releasing
+    )
+    own = _held_by_event(db, event, releasing=releasing)
     return {type_id: units + own.get(type_id, 0) for type_id, units in free.items()}
+
+
+def take_units(available: dict[uuid.UUID, int], type_id: uuid.UUID, quantity: int) -> bool:
+    """Story 15.1 AC8, story 19.2 AC5: whether ``quantity`` units of a type can still be held
+    from ``available``, taking them from it when they can - items are held one after another,
+    so each sees what the ones before it left. Story 19.3's assessment takes them the same way."""
+    if quantity > available.get(type_id, 0):
+        return False
+    available[type_id] -= quantity
+    return True
 
 
 def list_event_equipment_availability(
@@ -406,9 +435,10 @@ def _editable_item(db: Session, event: Event, item_id: uuid.UUID) -> EventEquipm
     return item
 
 
-def _lock_types(db: Session, type_ids: Iterable[uuid.UUID]) -> None:
+def lock_types(db: Session, type_ids: Iterable[uuid.UUID]) -> None:
     """AC10: hold every other write to these types' stock until this transaction ends - in id
-    order, as 2.1's submission hold takes them."""
+    order, as 2.1's submission hold takes them. Story 19.3 takes them before re-assessing an
+    approval, so the stock it judged cannot move before the approval commits."""
     db.execute(
         select(EquipmentType.id)
         .where(EquipmentType.id.in_(set(type_ids)))
@@ -421,7 +451,7 @@ def _ensure_available(
     db: Session, event: Event, equipment_type: EquipmentType, quantity: int
 ) -> None:
     """AC3/AC4/AC10: lock the type, then refuse ``quantity`` if the event cannot have that many."""
-    _lock_types(db, [equipment_type.id])
+    lock_types(db, [equipment_type.id])
     if quantity > available_for_event(db, event)[equipment_type.id]:
         raise EquipmentNotAvailable(equipment_type.name)
 
@@ -645,7 +675,7 @@ def submit_equipment(
         )
     ).all()
     if unheld:
-        _lock_types(db, [item.equipment_type_id for item in unheld])
+        lock_types(db, [item.equipment_type_id for item in unheld])
         available = available_for_event(db, event)
         for item in unheld:
             if item.quantity > available[item.equipment_type_id]:
@@ -741,7 +771,7 @@ def decide_equipment_request(
         raise RequestNotPending(item)
 
     if data.outcome == EquipmentDecisionOutcome.ACCEPTED:
-        _lock_types(db, [item.equipment_type_id])
+        lock_types(db, [item.equipment_type_id])
         available = _available_to_accept(db, event, item)
         if item.quantity > available:
             raise NotEnoughToAccept(item, available=available)
@@ -776,6 +806,21 @@ def decide_equipment_request(
     )
 
 
+def open_items(db: Session, event: Event) -> list[EventEquipmentRequest]:
+    """AC8: ``event``'s open items, oldest first - the ones new dates re-check, in the order
+    they are held again. Story 19.3's assessment predicts the re-check over the same list."""
+    return list(
+        db.scalars(
+            select(EventEquipmentRequest)
+            .where(
+                EventEquipmentRequest.event_id == event.id,
+                EventEquipmentRequest.status.in_(_OPEN_ITEM_STATUSES),
+            )
+            .order_by(EventEquipmentRequest.created_at, EventEquipmentRequest.id)
+        ).all()
+    )
+
+
 def recheck_equipment_for_new_dates(
     db: Session, event: Event, *, actor: User
 ) -> list[EventEquipmentRequest]:
@@ -788,17 +833,10 @@ def recheck_equipment_for_new_dates(
     Technical Support as Pending, since that decision was for the old dates, and a flagged one
     waits to be sent again. An item that no longer fits is flagged UNAVAILABLE, holding nothing,
     for the coordinator to lower or remove. Returns the flagged items."""
-    items = db.scalars(
-        select(EventEquipmentRequest)
-        .where(
-            EventEquipmentRequest.event_id == event.id,
-            EventEquipmentRequest.status.in_(_OPEN_ITEM_STATUSES),
-        )
-        .order_by(EventEquipmentRequest.created_at, EventEquipmentRequest.id)
-    ).all()
+    items = open_items(db, event)
     if not items:
         return []
-    _lock_types(db, [item.equipment_type_id for item in items])
+    lock_types(db, [item.equipment_type_id for item in items])
     _release_holds(db, EquipmentReservation.event_id == event.id)
     available = events_service.available_by_type(db, event.starts_at, event.ends_at)
 
@@ -809,13 +847,12 @@ def recheck_equipment_for_new_dates(
         # to Technical Support or is flagged.
         item.decided_by_id = None
         item.decided_at = None
-        if item.quantity > available[item.equipment_type_id]:
+        if not take_units(available, item.equipment_type_id, item.quantity):
             item.status = EquipmentRequestStatus.UNAVAILABLE
             flagged.append(item)
             continue
-        available[item.equipment_type_id] -= item.quantity
         db.add(_new_hold(event, item, actor=actor, notes=_MOVED_HOLD_NOTE))
-        if item.status in _SENT_ITEM_STATUSES:
+        if item.status in SENT_ITEM_STATUSES:
             item.status = EquipmentRequestStatus.PENDING
             item.submitted_at = resent_at
         elif item.status == EquipmentRequestStatus.UNAVAILABLE:
@@ -835,11 +872,11 @@ def recheck_equipment_for_new_dates(
 # --- story 19.2: an approved change to the event's equipment ------------------------------------
 
 # Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from.
-_WITH_TECHNICAL_SUPPORT = frozenset(
+WITH_TECHNICAL_SUPPORT = frozenset(
     {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
 )
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
-_EVER_SENT_STATUSES = _WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
+EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
 
 
@@ -879,12 +916,70 @@ def _hold_or_flag(
     """Story 19.2 AC5: hold ``item`` for the event's period if ``available`` still has the units,
     taking them from it, and leave it Requested for the coordinator to send (15.1); otherwise flag
     it Unavailable, holding nothing, as 15.1 AC8 flags an item new dates no longer fit."""
-    if item.quantity > available.get(item.equipment_type_id, 0):
+    if not take_units(available, item.equipment_type_id, item.quantity):
         item.status = EquipmentRequestStatus.UNAVAILABLE
         return
-    available[item.equipment_type_id] -= item.quantity
     db.add(_new_hold(event, item, actor=actor, notes=_CHANGED_HOLD_NOTE))
     item.status = EquipmentRequestStatus.REQUESTED
+
+
+class EquipmentChange(StrEnum):
+    """Story 19.2 AC5: what an approved change does to one of the event's items."""
+
+    UNCHANGED = "unchanged"
+    CHANGED = "changed"
+    REMOVED = "removed"
+
+
+@dataclass(frozen=True)
+class PlannedItem:
+    """One of the event's items, the line of the approved change naming it (None when none
+    does), and what the change does to it."""
+
+    item: EventEquipmentRequest
+    line: EventEquipmentIn | None
+    change: EquipmentChange
+
+
+@dataclass(frozen=True)
+class EquipmentChangePlan:
+    """Story 19.2 AC5: what an approved equipment change does - each of the event's items, in the
+    event's order, and the new lines - before anything is written. ``apply_equipment_change``
+    carries it out; story 19.3's assessment reads it to say what will happen."""
+
+    items: list[PlannedItem]
+    added: list[EventEquipmentIn]
+
+    @property
+    def releasing_ids(self) -> set[uuid.UUID]:
+        """The items whose holds the change releases before holding again."""
+        return {
+            planned.item.id for planned in self.items if planned.change != EquipmentChange.UNCHANGED
+        }
+
+
+def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> EquipmentChangePlan:
+    """Story 19.2 AC5: match ``lines`` to ``event``'s items by id. An item no line names is
+    removed; one whose type, quantity and notes are unchanged - and is not Cancelled - is left
+    as it is; any other named item is changed. A line without an ``id`` is new."""
+    wanted = {line.id: line for line in lines if line.id is not None}
+    planned = []
+    for item in event.equipment_requests:
+        line = wanted.get(item.id)
+        if line is None:
+            planned.append(PlannedItem(item=item, line=None, change=EquipmentChange.REMOVED))
+            continue
+        is_unchanged = (line.equipment_type_code, line.quantity, line.technical_notes) == (
+            item.equipment_type.code,
+            item.quantity,
+            item.technical_notes,
+        )
+        if is_unchanged and item.status != EquipmentRequestStatus.CANCELLED:
+            change = EquipmentChange.UNCHANGED
+        else:
+            change = EquipmentChange.CHANGED
+        planned.append(PlannedItem(item=item, line=line, change=change))
+    return EquipmentChangePlan(items=planned, added=[line for line in lines if line.id is None])
 
 
 def apply_equipment_change(
@@ -906,8 +1001,8 @@ def apply_equipment_change(
     Technical Support are told of any item they had pending or accepted that was changed or
     removed. The types are locked first, as every other hold takes them (AC10). Written, not
     committed."""
-    items = list(event.equipment_requests)
-    wanted = {line.id: line for line in lines if line.id is not None}
+    plan = plan_equipment_change(event, lines)
+    items = [planned.item for planned in plan.items]
     types = {
         equipment_type.code: equipment_type
         for equipment_type in db.scalars(
@@ -916,33 +1011,24 @@ def apply_equipment_change(
             )
         )
     }
-    _lock_types(db, {item.equipment_type_id for item in items} | {t.id for t in types.values()})
+    lock_types(db, {item.equipment_type_id for item in items} | {t.id for t in types.values()})
 
     withdrawn: list[EventEquipmentRequest] = []
     to_hold: list[EventEquipmentRequest] = []
-    for item in items:
-        line = wanted.get(item.id)
-        if line is None:
-            _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
-            if item.status in _WITH_TECHNICAL_SUPPORT:
-                withdrawn.append(item)
-            if item.status in _EVER_SENT_STATUSES:
+    for planned in plan.items:
+        item, line = planned.item, planned.line
+        if planned.change == EquipmentChange.UNCHANGED:
+            continue
+        _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+        if item.status in WITH_TECHNICAL_SUPPORT:
+            withdrawn.append(item)
+        if planned.change == EquipmentChange.REMOVED:
+            if item.status in EVER_SENT_STATUSES:
                 item.status = EquipmentRequestStatus.CANCELLED
             elif item.status != EquipmentRequestStatus.CANCELLED:
                 event.equipment_requests.remove(item)
             continue
-        equipment_type = types[line.equipment_type_code]
-        is_unchanged = (equipment_type.id, line.quantity, line.technical_notes) == (
-            item.equipment_type_id,
-            item.quantity,
-            item.technical_notes,
-        )
-        if is_unchanged and item.status != EquipmentRequestStatus.CANCELLED:
-            continue
-        _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
-        if item.status in _WITH_TECHNICAL_SUPPORT:
-            withdrawn.append(item)
-        item.equipment_type = equipment_type
+        item.equipment_type = types[line.equipment_type_code]
         item.quantity = line.quantity
         item.technical_notes = line.technical_notes
         item.decided_by_id = None
@@ -951,7 +1037,7 @@ def apply_equipment_change(
         to_hold.append(item)
 
     added_at = datetime.now(UTC)
-    for position, line in enumerate(line for line in lines if line.id is None):
+    for position, line in enumerate(plan.added):
         item = EventEquipmentRequest(
             equipment_type=types[line.equipment_type_code],
             quantity=line.quantity,

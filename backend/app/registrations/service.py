@@ -174,6 +174,12 @@ def _active_registrations(event_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Sel
     )
 
 
+def count_active_registrations(db: Session, event_id: uuid.UUID) -> int:
+    """AC2: how many places ``event_id``'s registrations take. Story 19.3 reports it beside a
+    change request, so a coordinator sees who an approval would affect."""
+    return db.scalar(_active_registrations(event_id))
+
+
 def _booked_venues(db: Session, event_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Venue]]:
     """AC1: each event's venues - those of its approved bookings, in the order they start, each
     venue once even when booked more than once."""

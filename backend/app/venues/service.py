@@ -59,11 +59,14 @@ from app.venues.schemas import (
     VenueUpdate,
 )
 from app.venues.suitability import (
+    Criterion,
+    FailedCriterion,
     RequiredFacility,
     RequiredItem,
     RequirementNeeds,
     Suitability,
     VenueCharacteristics,
+    held_capacity,
     judge_suitability,
 )
 
@@ -434,14 +437,21 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     )
 
 
+def people_needed(capacity: int | None, attendance: int | None) -> int | None:
+    """Story 12.1 AC2 / 11.1 AC1: how many people a venue must hold for a requirement asking for
+    ``capacity`` at an event expecting ``attendance`` - the requirement's number, else the
+    attendance. Story 19.3 asks it of the values a change request proposes."""
+    return capacity if capacity is not None else attendance
+
+
 def people_to_hold(event: Event, requirement: VenueRequirement | None) -> int | None:
     """Story 12.1 AC2 / 11.1 AC1: how many people the venue must hold - the requirement's number,
     else the event's expected attendance, which any event past DRAFT has
     (``ck_events_submitted_fields_complete``). The booking request and the suitability indicator
     both ask this, so they cannot disagree. None only for a draft that has neither."""
-    if requirement is not None and requirement.capacity is not None:
-        return requirement.capacity
-    return event.expected_attendance
+    return people_needed(
+        None if requirement is None else requirement.capacity, event.expected_attendance
+    )
 
 
 def requirement_needs(event: Event, requirement: VenueRequirement | None) -> RequirementNeeds:
@@ -488,6 +498,30 @@ def venue_characteristics(venue: Venue) -> VenueCharacteristics:
         layouts={layout.layout_code: layout.layout_capacity for layout in venue.layouts},
         facilities={facility.facility_code: facility.quantity for facility in venue.facilities},
         accessibility=frozenset(feature.feature_code for feature in venue.accessibility_features),
+    )
+
+
+def venue_capacity(venue: Venue, *, layout: RoomLayout | None) -> int:
+    """Story 11.1 AC4: how many people ``venue`` holds in ``layout`` - its own capacity where the
+    venue records one, else its maximum. Story 19.3 totals it over an event's bookings."""
+    item = None if layout is None else RequiredItem(code=layout.code, name=layout.name)
+    return held_capacity(item, venue_characteristics(venue))
+
+
+def capacity_failure(
+    venue: Venue, *, people: int, layout: RoomLayout | None
+) -> FailedCriterion | None:
+    """Story 11.1 AC4: whether ``venue`` cannot hold ``people`` - in ``layout``'s own capacity
+    where the venue records one, else its maximum; equal fits. None when it can. Story 19.3 asks
+    it of a booked venue and the people a change request would need it to hold."""
+    needs = RequirementNeeds(
+        name=None,
+        people=people,
+        layout=None if layout is None else RequiredItem(code=layout.code, name=layout.name),
+    )
+    verdict = judge_suitability(needs, venue_characteristics(venue))
+    return next(
+        (failure for failure in verdict.failures if failure.criterion == Criterion.CAPACITY), None
     )
 
 
