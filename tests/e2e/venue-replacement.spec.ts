@@ -75,6 +75,7 @@ const HERITAGE = { id: EVENTS.heritageWalk, name: 'Heritage Walk Launch' }
 const SHOWCASE = { id: EVENTS.productShowcase, name: 'Product Showcase Day' }
 const ROBOTICS = { id: EVENTS.roboticsOpenHouse, name: 'Robotics Open House' }
 const WELLNESS = { id: EVENTS.wellnessExpo, name: 'Wellness Expo Weekend' }
+const CRAFT_MARKET = { id: EVENTS.craftMarket, name: 'Craft Market Weekend' }
 
 type SeededEvent = { id: string; name: string }
 
@@ -131,8 +132,9 @@ async function signedInPage(browser: Browser, email: string): Promise<Page> {
  * queue pages by ten and the database is shared, so the card may be on a later page: press Next
  * until it shows.
  */
-async function queueCard(page: Page, event: SeededEvent) {
+async function queueCard(page: Page, event: SeededEvent, tab?: string) {
   await page.goto('/venue-staff/booking-requests')
+  if (tab !== undefined) await page.getByRole('tab', { name: new RegExp(`^${tab}`) }).click()
   const card = page
     .getByRole('listitem')
     .filter({ hasText: event.name })
@@ -284,18 +286,23 @@ test('12.6 AC2: Request this venue raises a pending replacement shown on the eve
     'Copied from the booking it replaces; change them if needed.',
   )
   await expect(turnaround).not.toContainText('Both stay 0 unless you enter more.')
+  const setupMinutes = turnaround
+    .getByRole('group', { name: 'Setup', exact: true })
+    .getByLabel('Minutes')
   for (const part of ['Setup', 'Teardown']) {
     await expect(
       turnaround.getByRole('group', { name: part, exact: true }).getByLabel('Minutes'),
     ).toHaveValue('30')
   }
+  // Changed from the copied 30: what the coordinator typed is what is requested.
+  await setupMinutes.fill('15')
   await page.getByRole('button', { name: 'Send request' }).click()
 
   await expect(page.getByRole('heading', { name: SPRING_EXPO.name, level: 1 })).toBeVisible()
   const bookings = bookingList(page)
   await expect(bookings).toContainText(`Replaces ${FOYER}`)
   await expect(bookings).toContainText(`Replacement requested: ${GRAND_HALL}`)
-  await expect(bookings).toContainText('Setup: 30 min')
+  await expect(bookings).toContainText('Setup: 15 min')
   await expect(bookings).toContainText('Teardown: 30 min')
 })
 
@@ -332,12 +339,16 @@ test.describe('12.6 AC3 on the awards evening', () => {
     browser,
   }) => {
     const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
-    const card = await queueCard(staff, AWARDS)
+    const card = await queueCard(staff, AWARDS, 'All')
     await card.getByRole('button', { name: 'Approve' }).click()
     const dialog = staff.getByRole('dialog', { name: 'Approve this booking?' })
     await dialog.getByLabel('Hold expires').fill(HOLD_EXPIRES('08'))
     await dialog.getByRole('button', { name: 'Approve' }).click()
     await expect(dialog).not.toBeVisible()
+    // The All tab is not reloaded: the approved card stops saying what approving it will
+    // release, since that booking is released.
+    await expect(card.getByText('Approved', { exact: true })).toBeVisible()
+    await expect(card).not.toContainText(`Approving this releases ${FOYER}`)
     await staff.context().close()
 
     await signIn(page, ACCOUNTS.coordinator)
@@ -379,6 +390,18 @@ test('12.6 AC4/AC5/AC10: the banner follows the replacement, and a withdrawn one
   await signIn(page, ACCOUNTS.coordinator)
   await findReplacementFor(page, PITCH_NIGHT)
   await requestGrandHall(page, PITCH_NIGHT)
+
+  // Back to the catalogue the request was made from: it is no longer replacing anything, since
+  // a replacement is pending, so it offers no second one - not even with every filter cleared.
+  await page.goBack()
+  await expect(catalogueBanner(page, PITCH_NIGHT)).toBeVisible()
+  await expect(catalogueBanner(page, PITCH_NIGHT)).not.toContainText(`Replacing ${FOYER}`)
+  await expect(catalogueBanner(page, PITCH_NIGHT)).toContainText(
+    `Replacement requested: ${GRAND_HALL}`,
+  )
+  await page.getByRole('button', { name: 'Clear all filters' }).click()
+  await expect(filters(page).getByLabel('Capacity from')).toHaveValue('')
+  await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
 
   // AC4: while it is pending the requirement says so in the banner, and neither Switch nor a
   // second request is offered for it (AC10: a pending replacement is withdrawn, not switched).
@@ -649,4 +672,200 @@ test('12.6 AC13: the event page says a marked booking stops the safety review', 
     ),
   ).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request safety review' })).toHaveCount(0)
+})
+
+// --- review of #123 ------------------------------------------------------------------------------
+/** Venue Staff remove the foyer's closure of `day` from its details page, as 9.4 AC6 allows while
+ *  it has not started; the browser's clock is pinned to the month before, so the grid opens on it. */
+async function removeFoyerClosure(browser: Browser, day: RegExp) {
+  const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
+  await staff.clock.setFixedTime(new Date('2029-02-01T10:00:00+08:00'))
+  await staff.goto('/venues')
+  await staff.getByRole('link', { name: FOYER }).click()
+  const availability = staff.getByRole('region', { name: 'Availability', exact: true })
+  await expect(availability).toBeVisible()
+  await availability.getByRole('button', { name: day }).click()
+  const closure = staff.getByRole('listitem').filter({ hasText: 'Floor resurfacing' })
+  await closure.getByRole('button', { name: 'Remove' }).click()
+  await staff.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
+  await expect(closure).toHaveCount(0)
+  await staff.context().close()
+}
+
+/** Answer the event's booking list with its real answer, the first booking changed by `patch`. */
+async function patchFirstBooking(page: Page, event: SeededEvent, patch: Record<string, unknown>) {
+  await page.route(
+    (url) => url.pathname === `/bookings/for-event/${event.id}`,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      const bookings = (await response.json()) as Record<string, unknown>[]
+      return route.fulfill({ response, json: [{ ...bookings[0], ...patch }, ...bookings.slice(1)] })
+    },
+  )
+}
+
+test('12.6 AC2: a replacement asked for after the closure was removed is refused, not sent as a plain request', async ({
+  page,
+  browser,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await openEvent(page, CRAFT_MARKET)
+  await page.getByRole('link', { name: FIND_REPLACEMENT }).click()
+  await expect(catalogueBanner(page, CRAFT_MARKET)).toContainText(`Replacing ${FOYER}`)
+
+  // Venue Staff remove the closure of the 20th while the catalogue is open.
+  await removeFoyerClosure(browser, /^20 February 2029/)
+
+  await venueCard(page, GRAND_HALL).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+  await expect(page.getByRole('heading', { name: `Request ${GRAND_HALL}`, level: 1 })).toBeVisible()
+  await expect(page.getByText(`Replaces ${FOYER}`)).toHaveCount(0)
+  await page.getByRole('button', { name: 'Send request' }).click()
+
+  // The server's reason, and nothing was requested - the request is not taken as an additional venue.
+  await expect(page.getByRole('alert')).toContainText('no longer marked')
+  await openEvent(page, CRAFT_MARKET)
+  await expect(bookingList(page)).not.toContainText(GRAND_HALL)
+})
+
+test('12.6 AC2: when the event bookings cannot be read the step says so and cannot send', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findReplacementFor(page, LANTERN)
+  let isFailing = false
+  await page.route(
+    (url) => url.pathname === `/bookings/for-event/${LANTERN.id}`,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || !isFailing) return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'The bookings could not be read.' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+
+  isFailing = true
+  await venueCard(page, GRAND_HALL).getByRole('link', { name: REQUEST_THIS_VENUE }).click()
+
+  await expect(page.getByRole('heading', { name: `Request ${GRAND_HALL}`, level: 1 })).toBeVisible()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeDisabled()
+})
+
+test("12.6 AC1: the closed venue's own page offers no Request this venue while replacing it", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await findReplacementFor(page, LANTERN)
+
+  await page
+    .getByRole('region', { name: `Booked for ${MAIN_HALL}` })
+    .getByRole('link', { name: FOYER })
+    .click()
+
+  await expect(page.getByRole('heading', { name: FOYER, level: 1 })).toBeVisible()
+  await expect(page.getByRole('link', { name: REQUEST_THIS_VENUE })).toHaveCount(0)
+})
+
+test('12.6 AC9: a pending replacement whose own venue is closed offers no way to another venue, only Withdraw', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // The showcase's marked pending booking, as if it were a replacement: its way out is Withdraw.
+  await patchFirstBooking(page, SHOWCASE, {
+    replaces_booking_id: '44444444-0000-0000-0000-000000000022',
+    replaces_venue_name: 'Grand Hall',
+  })
+  await openEvent(page, SHOWCASE)
+
+  await expect(bookingList(page)).toContainText(UNAVAILABLE_LABEL)
+  await expect(page.getByRole('link', { name: FIND_ANOTHER })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Withdraw / })).toBeVisible()
+})
+
+test('12.6 AC9: a marked pending additional venue offers Withdraw, not a catalogue that adds a second venue', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await patchFirstBooking(page, SHOWCASE, {
+    venue_requirement_id: null,
+    venue_requirement_name: null,
+  })
+  await openEvent(page, SHOWCASE)
+
+  await expect(bookingList(page)).toContainText(UNAVAILABLE_LABEL)
+  await expect(page.getByRole('link', { name: FIND_ANOTHER })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Withdraw / })).toBeVisible()
+})
+
+test('12.6 AC9: a withdrawn marked booking no longer offers Find another venue', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  // The withdrawal itself is answered here: the seeded booking is every other test's to read.
+  await page.route(
+    (url) => /^\/bookings\/[0-9a-f-]{36}\/withdraw$/.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: new URL(request.url()).pathname.split('/')[2],
+          status: 'WITHDRAWN',
+          decided_at: new Date().toISOString(),
+          decision_reason: null,
+        }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await openEvent(page, SHOWCASE)
+  await expect(page.getByRole('link', { name: FIND_ANOTHER })).toBeVisible()
+
+  await page.getByRole('button', { name: /^Withdraw / }).click()
+  await page
+    .getByRole('dialog', { name: 'Withdraw this booking request?' })
+    .getByRole('button', { name: 'Withdraw' })
+    .click()
+
+  await expect(bookingList(page)).toContainText('Withdrawn')
+  await expect(page.getByRole('link', { name: FIND_ANOTHER })).toHaveCount(0)
+})
+
+test('12.6 AC11: reopening the Venue unavailable tab after a failed load shows the list, not the old error', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator2)
+  let isFailing = true
+  await page.route(
+    (url) =>
+      url.pathname === '/events/assigned-to-me' &&
+      url.searchParams.get('venue_unavailable') === 'true',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || !isFailing) return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'The events could not be read.' }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await page.goto(INBOX)
+  await page.getByRole('tab', { name: /^Venue unavailable/ }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+
+  isFailing = false
+  await page.getByRole('tab', { name: /^All/ }).click()
+  await page.getByRole('tab', { name: /^Venue unavailable/ }).click()
+
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: new RegExp(ROBOTICS.name) })).toBeVisible()
 })
