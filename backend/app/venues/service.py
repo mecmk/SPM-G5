@@ -66,6 +66,7 @@ from app.venues.suitability import (
     RequirementNeeds,
     Suitability,
     VenueCharacteristics,
+    facility_failures,
     held_capacity,
     judge_suitability,
 )
@@ -524,6 +525,28 @@ def capacity_failure(
     return next(
         (failure for failure in verdict.failures if failure.criterion == Criterion.CAPACITY), None
     )
+
+
+def unmet_facilities(
+    db: Session, venue: Venue, *, facilities: Iterable[tuple[str, int | None]]
+) -> tuple[FailedCriterion, ...]:
+    """Story 11.1 AC4/AC5: each of ``facilities`` - (code, how many, None for any number) - that
+    ``venue`` does not offer, offers too few of, or has not recorded, in the reference list's
+    order, as ``requirement_needs`` orders a requirement's facilities. Story 19.3 asks it of a
+    booked venue and the facilities a change request proposes."""
+    wanted = dict(facilities)
+    if not wanted:
+        return ()
+    named = db.scalars(
+        select(Facility)
+        .where(Facility.code.in_(wanted))
+        .order_by(Facility.sort_order, Facility.name)
+    )
+    required = tuple(
+        RequiredFacility(code=facility.code, name=facility.name, quantity=wanted[facility.code])
+        for facility in named
+    )
+    return facility_failures(required, venue_characteristics(venue))
 
 
 @dataclass(frozen=True)

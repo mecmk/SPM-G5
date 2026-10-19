@@ -25,6 +25,13 @@
  * nothing (AC3), and that its predictions are what the approval then does (AC2) are backend
  * cases: backend/tests/change_requests/test_assess_change_request_impact.py.
  *
+ * A booking the change keeps but whose venue lacks a facility the change needs, or a capacity
+ * shortfall, is a warning only: the booking reads Kept, never Will be cancelled, and the shortfall
+ * advises only what the coordinator can do - request an additional venue, or reject the change -
+ * since a booked venue is not swapped for a larger one. The change form keeps each requirement's
+ * facilities, so a facility change reaches the server only through its API; that test answers a
+ * real request's assessment with such a warning, as the backend tests show the server sends it.
+ *
  * Each test builds its own event (`approvedEvent`). The one that books venues dates it well away
  * from the day other specs' fresh events fall on, so the venues it requests are free and the holds
  * it leaves hide nothing another spec looks for.
@@ -45,6 +52,62 @@ const NO_IMPACT = "No existing arrangements are affected.";
 const QUEUE_PATH = "/change-requests/review";
 const IMPACT_CHANGED =
   "The impact of this change has changed since you opened it. Review the updated impact, then approve again.";
+const KEPT_WITH_WARNING =
+  "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the change. Check with them that the venue still suits it, or reject the change.";
+const SHORTFALL_ADVICE =
+  "The bookings stay as they are: approving cancels none of them, and a booked venue cannot be swapped for a larger one. If everyone needs room at those times, request an additional venue from the event page (one smaller than the whole attendance needs a justification), or reject the change and tell the organiser why.";
+
+/** A kept booking of Grand Hall for the Main venue, warned that the change needs video
+ *  conferencing it does not offer - as `BookingImpactOut` carries it. */
+const KEPT_HALL = {
+  booking_id: "00000000-0000-4000-8000-000000000001",
+  venue_id: "22222222-0000-0000-0000-000000000001",
+  venue_name: GRAND_HALL,
+  requirement_name: "Main venue",
+  status: "APPROVED",
+  starts_at: "2027-03-01T01:00:00Z",
+  ends_at: "2027-03-01T09:00:00Z",
+  will_be_cancelled: false,
+  reasons: [],
+  capacity_warning: null,
+  facility_warnings: [
+    {
+      criterion: "FACILITY",
+      outcome: "NOT_MET",
+      code: "VIDEO_CONFERENCING",
+      name: "Video conferencing",
+      required: null,
+      venue_value: null,
+    },
+  ],
+  needed_starts_at: null,
+  needed_ends_at: null,
+  held_by: null,
+  closure: null,
+  is_outside_opening_hours: false,
+  after_approval: KEPT_WITH_WARNING,
+};
+
+/** Grand Hall's 400 seats against the 600 now expected, all day - as `CapacityShortfallOut`. */
+const SHORT_HALL = {
+  proposed_attendance: 600,
+  periods: [
+    {
+      starts_at: "2027-03-01T01:00:00Z",
+      ends_at: "2027-03-01T09:00:00Z",
+      capacity: 400,
+      shortfall: 200,
+      venues: [
+        {
+          venue_id: "22222222-0000-0000-0000-000000000001",
+          venue_name: GRAND_HALL,
+          capacity: 400,
+          layout_name: null,
+        },
+      ],
+    },
+  ],
+};
 
 /** A day for an event that books venues: over a year ahead, spread out so reruns rarely meet,
  *  and early enough that a week later is within the two years an event may be planned ahead. */
@@ -66,6 +129,28 @@ async function requestDateChange(page: Page, days: number) {
   await changeRequests(page)
     .getByLabel("New end")
     .fill(inFuture(days + 7, 17));
+  await changeRequests(page)
+    .getByLabel("Reason for the change")
+    .fill(CHANGE_REASON);
+  await changeRequests(page)
+    .getByRole("button", { name: "Send change request" })
+    .click();
+  await expect(changeRequests(page).getByRole("listitem")).toContainText(
+    "Pending",
+  );
+}
+
+/** As the organiser, on the event's page: ask for a new expected attendance. */
+async function requestAttendanceChange(page: Page, attendance: string) {
+  await changeRequests(page)
+    .getByRole("button", { name: "Request a change" })
+    .click();
+  await changeRequests(page)
+    .getByLabel("What to change")
+    .selectOption({ label: "Expected attendance" });
+  await changeRequests(page)
+    .getByLabel("New expected attendance")
+    .fill(attendance);
   await changeRequests(page)
     .getByLabel("Reason for the change")
     .fill(CHANGE_REASON);
@@ -204,22 +289,7 @@ test("19.3 AC1: a change that touches nothing arranged says so, on the event and
     page,
     "Impact none",
   );
-  await changeRequests(page)
-    .getByRole("button", { name: "Request a change" })
-    .click();
-  await changeRequests(page)
-    .getByLabel("What to change")
-    .selectOption({ label: "Expected attendance" });
-  await changeRequests(page).getByLabel("New expected attendance").fill("150");
-  await changeRequests(page)
-    .getByLabel("Reason for the change")
-    .fill(CHANGE_REASON);
-  await changeRequests(page)
-    .getByRole("button", { name: "Send change request" })
-    .click();
-  await expect(changeRequests(page).getByRole("listitem")).toContainText(
-    "Pending",
-  );
+  await requestAttendanceChange(page, "150");
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await signIn(page, coordinator);
@@ -238,6 +308,70 @@ test("19.3 AC1: a change that touches nothing arranged says so, on the event and
     .filter({ hasText: name });
   await entry.getByRole("button", { name: "Show impact" }).click();
   await expect(entry.getByText(NO_IMPACT)).toBeVisible();
+});
+
+test("19.3 AC1/AC2: a facility the booked venue lacks is a warning on a kept booking, and a capacity shortfall says what can be done", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const { eventId, coordinator } = await approvedEvent(
+    page,
+    "Impact facility",
+  );
+  await requestAttendanceChange(page, "600");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, coordinator);
+
+  // The change form keeps each requirement's facilities as they are, so a facility change only
+  // reaches the server through its API: the real assessment is answered with one carrying a kept
+  // booking's facility warning and a shortfall, as the backend tests show the server sends them.
+  await page.route("**/change-requests/*/impact", async (route) => {
+    if (route.request().resourceType() !== "fetch") return route.fallback();
+    const response = await route.fetch();
+    const impact = await response.json();
+    return route.fulfill({
+      response,
+      json: {
+        ...impact,
+        venue_bookings: [KEPT_HALL],
+        capacity_shortfall: SHORT_HALL,
+        has_impact: true,
+      },
+    });
+  });
+  await page.goto(`/events/${eventId}`);
+  await changeRequests(page)
+    .getByRole("button", { name: "Show impact" })
+    .click();
+
+  const venueRow = changeRequests(page).getByRole("button", {
+    name: /^Venue bookings/,
+  });
+  await expect(venueRow).toContainText("1 venue missing a facility the change needs");
+  await expect(venueRow).not.toContainText("will be cancelled");
+  await venueRow.click();
+  const bookings = changeRequests(page).getByRole("region", {
+    name: "Venue bookings affected",
+  });
+  const hall = bookings
+    .getByRole("listitem")
+    .filter({ hasText: "After approval" })
+    .filter({ hasText: GRAND_HALL });
+  await expect(hall).toContainText("Kept");
+  await expect(hall).toContainText("Missing a facility");
+  await expect(hall).toContainText("Video conferencing not offered");
+  await expect(hall).not.toContainText("Will be cancelled");
+  await expect(hall).toContainText(KEPT_WITH_WARNING);
+
+  // The shortfall's advice names only what the coordinator can do: a booked venue is not swapped
+  // for a larger one from the event page, but an additional venue can be requested there.
+  await expect(
+    changeRequests(page).getByText("Not enough room for the new attendance"),
+  ).toBeVisible();
+  await expect(changeRequests(page).getByText(SHORTFALL_ADVICE)).toBeVisible();
+  await expect(
+    changeRequests(page).getByText(/Request another venue, or a larger one/),
+  ).toHaveCount(0);
 });
 
 test("19.3 AC7: an impact that changed after the dialog opened is shown again before anything is applied", async ({

@@ -6,7 +6,7 @@ import type {
   EventStatus,
   VenueRequirementInput,
 } from './events'
-import type { UnavailabilityReason } from './venues'
+import type { FailedCriterion, UnavailabilityReason } from './venues'
 
 /** Story 19.1 AC4: the longest reason. Keep in step with the backend's `CHANGE_REASON_MAX_LENGTH`
  * in app/change_requests/schemas.py. */
@@ -236,6 +236,9 @@ export interface BookingImpact {
   will_be_cancelled: boolean
   reasons: string[]
   capacity_warning: CapacityWarning | null
+  /** Story 11.1's failures for each facility the change newly needs and the booked venue lacks.
+   *  A warning only, like `capacity_warning`; empty for an additional venue. */
+  facility_warnings: FailedCriterion[]
   /** The period a replacement would need, for a cancelled booking whose requirement remains. */
   needed_starts_at: string | null
   needed_ends_at: string | null
