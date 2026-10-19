@@ -181,3 +181,142 @@ class ChangeRequestQueueEntryOut(ChangeRequestOut):
             event_starts_at=event.starts_at,
             event_ends_at=event.ends_at,
         )
+
+
+# --- story 19.3: the impact of a change request ------------------------------------------------
+
+# AC7: the longest fingerprint taken back - a sha256 hex digest is 64 characters.
+_FINGERPRINT_MAX_LENGTH = 128
+
+
+class ChangeRequestApprovalIn(BaseModel):
+    """Story 19.3 AC7: approving sends back the fingerprint of the assessment the coordinator
+    saw, so an approval re-assessed under the event's lock is refused when it has changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_fingerprint: str = Field(min_length=1, max_length=_FINGERPRINT_MAX_LENGTH)
+
+
+class CapacityWarningOut(BaseModel):
+    """AC1/AC4: the booked venue holds fewer people than the change needs it to - in the booked
+    layout's capacity where the venue records one (``layout_name``), else its maximum (story 11.1
+    AC4). A warning only: whether the booking is cancelled is ``will_be_cancelled``'s."""
+
+    people_needed: int
+    venue_capacity: int
+    layout_name: str | None
+
+
+class HoldingBookingOut(BaseModel):
+    """AC4/AC5: another booking holding the venue over part of the period a replacement would
+    need, setup and teardown included."""
+
+    event_name: str
+    held_from: datetime
+    held_until: datetime
+
+
+class ClosureOut(BaseModel):
+    """AC5: a period the venue is unavailable for (story 9.4) over part of that period."""
+
+    reason: str
+    notes: str | None
+    starts_at: datetime
+    ends_at: datetime
+
+
+class CountedVenueOut(BaseModel):
+    """One booked venue counted towards ``CapacityShortfallOut``: how many it holds, in the booked
+    layout (``layout_name``) where the venue records that layout's capacity (story 11.1 AC4)."""
+
+    venue_name: str
+    capacity: int
+    layout_name: str | None
+
+
+class CapacityShortfallOut(BaseModel):
+    """AC1/AC4 (decided 19 Oct 2026): an attendance change asks for more people than the venues
+    still booked after approval hold between them - the bookings it cancels hold nobody then. Equal
+    fits. A warning only: no booking is cancelled for it."""
+
+    proposed_attendance: int
+    booked_capacity: int
+    shortfall: int
+    venues: list[CountedVenueOut]
+
+
+class BookingImpactOut(BaseModel):
+    """AC1/AC2: one venue booking the change affects - one 19.2 would cancel (``reasons`` say
+    why), or one it keeps whose venue cannot hold the people now needed. ``requirement_name`` is
+    None for an additional venue (12.5). For a cancelled booking whose requirement remains,
+    ``needed_starts_at``..``needed_ends_at`` is the period a replacement needs, and ``held_by``,
+    ``closure`` and ``is_outside_opening_hours`` say whether the same venue is free for it.
+    ``after_approval`` says what the approval does to it."""
+
+    booking_id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_name: str
+    requirement_name: str | None
+    status: str
+    starts_at: datetime
+    ends_at: datetime
+    will_be_cancelled: bool
+    reasons: list[str]
+    capacity_warning: CapacityWarningOut | None
+    needed_starts_at: datetime | None
+    needed_ends_at: datetime | None
+    held_by: HoldingBookingOut | None
+    closure: ClosureOut | None
+    is_outside_opening_hours: bool
+    after_approval: str
+
+
+class EquipmentImpactOut(BaseModel):
+    """AC1/AC2/AC5: one equipment item the change affects: ``removed``, ``changed`` or ``added``
+    by an equipment change, or ``rechecked`` for new dates. ``item_id`` is None for an added one;
+    ``required``/``available`` are None for a removed one, which needs nothing. ``status_after``
+    is the item's status once approved (None: deleted), as 19.2 sets it."""
+
+    item_id: uuid.UUID | None
+    equipment_type_code: str
+    equipment_type_name: str
+    change: str
+    current_status: str | None
+    required: int | None
+    available: int | None
+    shortfall: int
+    status_after: str | None
+    technical_support_told: bool
+    after_approval: str
+
+
+class RegistrationImpactOut(BaseModel):
+    """AC1: the attendees' registrations the change affects, counted, never named. ``over_by``
+    is how many more are registered than a lowered attendance allows (0 when none);
+    ``proposed_attendance`` is None unless the attendance is what changes."""
+
+    active_count: int
+    proposed_attendance: int | None
+    over_by: int
+    dates_change: bool
+
+
+class ChangeRequestImpactOut(BaseModel):
+    """Story 19.3: what approving a pending change request would affect, worked out from the
+        records as they stand (AC3). ``capacity_shortfall`` when an attendance change outgrows the
+    venues booked (AC1). ``refused_because`` when 19.2 would refuse the approval - nothing
+        else is predicted then; ``is_out_of_date`` when it can only be rejected (19.2 AC7).
+        ``fingerprint`` identifies everything else here, so an approval can tell whether it still
+        holds (AC7)."""
+
+    change_request_id: uuid.UUID
+    assessed_at: datetime
+    fingerprint: str
+    is_out_of_date: bool
+    refused_because: str | None
+    venue_bookings: list[BookingImpactOut]
+    equipment: list[EquipmentImpactOut]
+    registrations: RegistrationImpactOut | None
+    capacity_shortfall: CapacityShortfallOut | None
+    has_impact: bool

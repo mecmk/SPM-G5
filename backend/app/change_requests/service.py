@@ -22,10 +22,11 @@ it - is marked out of date, and can only be rejected (AC7).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import ValidationError
@@ -36,22 +37,41 @@ from sqlalchemy.orm import Session, contains_eager
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings import service as bookings_service
+from app.bookings.models import VenueBooking
 from app.change_requests.models import ChangeRequestField, ChangeRequestStatus, EventChangeRequest
 from app.change_requests.schemas import (
     AttendanceChangeIn,
+    BookingImpactOut,
+    CapacityShortfallOut,
+    CapacityWarningOut,
+    ChangeRequestApprovalIn,
+    ChangeRequestImpactOut,
     ChangeRequestIn,
     ChangeRequestRejectionIn,
+    ClosureOut,
+    CountedVenueOut,
     EquipmentChangeIn,
+    EquipmentImpactOut,
+    HoldingBookingOut,
     ProposedSchedule,
+    RegistrationImpactOut,
     ScheduleChangeIn,
     VenueRequirementsChangeIn,
 )
 from app.common.audit import record_audit
 from app.equipment import service as equipment_service
 from app.events import service as events_service
-from app.events.models import EquipmentRequestStatus, Event, EventStatus, VenueRequirement
+from app.events.models import (
+    EquipmentRequestStatus,
+    EquipmentType,
+    Event,
+    EventStatus,
+    VenueRequirement,
+)
 from app.events.schemas import EventEquipmentIn, VenueRequirementIn
 from app.notifications.service import NotificationType, active_members, notify
+from app.registrations import service as registrations_service
+from app.venues import service as venue_service
 
 # The events refusals this service lets through, named here so the router imports only this
 # module (backend/CLAUDE.md), as bookings/router.py catches ``service.EventNotFound``.
@@ -808,13 +828,20 @@ def _notify_organiser(
 
 
 def approve_change_request(
-    db: Session, event_id: uuid.UUID, change_request_id: uuid.UUID, *, actor: User
+    db: Session,
+    event_id: uuid.UUID,
+    change_request_id: uuid.UUID,
+    data: ChangeRequestApprovalIn,
+    *,
+    actor: User,
 ) -> EventChangeRequest:
     """AC2: the assigned coordinator approves a pending change request. The decision, the change
     to the event, the notifications and the audit entries - the decision's, and the change's on
     the event's own history (7.4) - are written in one commit; a refusal after the request was
     claimed rolls all of it back, so the request stays pending and the event unchanged (AC5, AC7,
-    AC8)."""
+    AC8). Story 19.3 AC7: before anything is applied, the impact is re-assessed and compared
+    with the assessment the coordinator approved on (``data``); a different one refuses the
+    approval (``ImpactChanged``) the same way."""
     claim = _claim_for_decision(
         db,
         event_id,
@@ -825,7 +852,11 @@ def approve_change_request(
     )
     event, request = claim.event, claim.request
     try:
+        _check_impact_unchanged(db, event, request, data.assessment_fingerprint)
         change = _apply_approved_change(db, event, request, actor=actor)
+    except ImpactChanged:
+        db.rollback()
+        raise
     except InvalidEventRequest:
         db.rollback()
         raise
@@ -930,3 +961,622 @@ def reject_change_request(
     db.commit()
     db.refresh(request)
     return request
+
+
+# --- impact (story 19.3) -----------------------------------------------------------------------
+
+NOT_ASSIGNED_TO_ASSESS_MESSAGE = (
+    "Only the coordinator assigned to this event can view the impact of its changes."
+)
+IMPACT_CHANGED_MESSAGE = (
+    "The impact of this change has changed since you opened it. Review the updated impact, then "
+    "approve again."
+)
+
+# AC1: why 19.2 would cancel a booking, one sentence per reason.
+_REQUIREMENT_REMOVED_REASON = "The change removes the venue requirement it was booked for."
+_TIMES_REASON = "Its booked times no longer cover the times the change needs."
+_PEOPLE_REASON = "It was booked for {booked} people; the change needs room for {needed}."
+_LAYOUT_REASON = "It was booked for a different layout from the one the change asks for."
+
+# AC2: what the approval does to each booking, as 19.2 does it.
+_BOOKING_CANCELLED = (
+    "Cancelled when the change is approved, freeing the venue. Venue Staff need do nothing; "
+    "request a replacement from the event page."
+)
+_BOOKING_KEPT = "Stays as it is."
+
+# AC2: what the approval does to each equipment item, as 19.2 does it.
+_ITEM_CANCELLED = "Removed: its hold is released, and it is kept as Cancelled for the record."
+_ITEM_DELETED = "Removed: its hold is released and the item deleted."
+_ITEM_REQUESTED = "Held again, and back to Requested for you to send to Technical Support."
+_ITEM_RESENT = (
+    "Held again for the new dates, and back with Technical Support as Pending, since their "
+    "decision was for the old dates."
+)
+_ITEM_MOVED = "Held again for the new dates."
+_ITEM_UNAVAILABLE = (
+    "Not enough available: flagged Unavailable, holding nothing, for you to lower or remove."
+)
+_TOLD_TECHNICAL_SUPPORT = " Technical Support are told it was withdrawn."
+
+
+class ImpactChanged(RuntimeError):
+    """AC7: the assessment the coordinator approved on is no longer what the records give."""
+
+    def __init__(self) -> None:
+        super().__init__(IMPACT_CHANGED_MESSAGE)
+
+
+class NotAssignedToAssess(PermissionError):
+    """AC6: any coordinator may hold the permission; only this event's sees its assessments."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_ASSIGNED_TO_ASSESS_MESSAGE)
+
+
+@dataclass(frozen=True)
+class _ProposedEvent:
+    """The event as the approval would leave it - its period, attendance, venue requirements by
+    id and, for an equipment change, the plan - read without writing anything."""
+
+    starts_at: datetime
+    ends_at: datetime
+    attendance: int
+    requirements: dict[uuid.UUID, events_service.RequirementTerms]
+    is_rescheduled: bool
+    equipment: equipment_service.EquipmentChangePlan | None
+
+
+def _proposed_event(db: Session, event: Event, request: EventChangeRequest) -> _ProposedEvent:
+    """AC3: what ``request`` proposes, checked by the same rules 19.2's ``_write_field`` applies
+    before it writes - ``InvalidEventRequest`` when the approval would be refused, and a pydantic
+    ``ValidationError`` when the stored proposal no longer reads."""
+    proposed = json.loads(request.proposed_value)
+    field = request.field_name
+    current = {
+        requirement.id: events_service.RequirementTerms.of(requirement)
+        for requirement in event.venue_requirements
+    }
+    unchanged = _ProposedEvent(
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        attendance=event.expected_attendance,
+        requirements=current,
+        is_rescheduled=False,
+        equipment=None,
+    )
+    if field == ChangeRequestField.EXPECTED_ATTENDANCE:
+        events_service.check_proposed_attendance(event, proposed)
+        return replace(unchanged, attendance=proposed)
+    if field == ChangeRequestField.SCHEDULE:
+        schedule = ProposedSchedule.model_validate(proposed)
+        moved = events_service.check_proposed_schedule_change(
+            event, schedule.starts_at, schedule.ends_at
+        )
+        return replace(
+            unchanged,
+            starts_at=schedule.starts_at,
+            ends_at=schedule.ends_at,
+            requirements=moved,
+            is_rescheduled=True,
+        )
+    if field == ChangeRequestField.VENUE_REQUIREMENTS:
+        items = _proposed_requirements(event, proposed)
+        events_service.check_proposed_venue_requirements(db, event, items)
+        # A requirement given no times is needed for the whole event (2.7 AC2), as
+        # _fill_requirement_times leaves it once approved.
+        terms = {
+            item.id: events_service.RequirementTerms(
+                id=item.id,
+                name=item.name,
+                capacity=item.capacity,
+                layout_code=item.layout_code,
+                starts_at=event.starts_at if item.starts_at is None else item.starts_at,
+                ends_at=event.ends_at if item.starts_at is None else item.ends_at,
+            )
+            for item in items
+            if item.id is not None
+        }
+        return replace(unchanged, requirements=terms)
+    plan = equipment_service.plan_equipment_change(event, _proposed_equipment(event, proposed))
+    return replace(unchanged, equipment=plan)
+
+
+def _misfit_reason(
+    misfit: events_service.BookingMisfit, booking: VenueBooking, people: int | None
+) -> str:
+    if misfit == events_service.BookingMisfit.REQUIREMENT_REMOVED:
+        return _REQUIREMENT_REMOVED_REASON
+    if misfit == events_service.BookingMisfit.TIMES:
+        return _TIMES_REASON
+    if misfit == events_service.BookingMisfit.PEOPLE:
+        return _PEOPLE_REASON.format(booked=booking.expected_attendance, needed=people)
+    return _LAYOUT_REASON
+
+
+@dataclass(frozen=True)
+class _NeededTerms:
+    """What a booking would have to hold once approved: its period and people. None for a
+    booking whose requirement the change removes."""
+
+    starts_at: datetime
+    ends_at: datetime
+    people: int
+
+
+def _needed_terms(
+    booking: VenueBooking,
+    requirements: dict[uuid.UUID, events_service.RequirementTerms],
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    attendance: int,
+    is_additional: bool,
+) -> _NeededTerms | None:
+    """AC1: an additional venue (12.5) holds the event's period and attendance; a requirement's
+    booking, its requirement's times and people (``people_needed``, as 12.1 booked it)."""
+    if is_additional:
+        return _NeededTerms(starts_at=starts_at, ends_at=ends_at, people=attendance)
+    terms = requirements.get(booking.venue_requirement_id)
+    if terms is None:
+        return None
+    return _NeededTerms(
+        starts_at=terms.starts_at,
+        ends_at=terms.ends_at,
+        people=venue_service.people_needed(terms.capacity, attendance),
+    )
+
+
+def _capacity_warning(booking: VenueBooking, people: int) -> CapacityWarningOut | None:
+    """AC1/AC4: story 11.1's capacity check of the booked venue, in the booked layout."""
+    failure = venue_service.capacity_failure(
+        booking.venue, people=people, layout=booking.required_layout
+    )
+    if failure is None:
+        return None
+    return CapacityWarningOut(
+        people_needed=failure.required,
+        venue_capacity=failure.venue_value,
+        layout_name=failure.name,
+    )
+
+
+@dataclass(frozen=True)
+class _VenueImpact:
+    """The bookings the change affects, and every live booking the approval keeps - the venues
+    the event still holds afterwards."""
+
+    affected: list[BookingImpactOut]
+    kept: list[VenueBooking]
+
+
+def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _VenueImpact:
+    """AC1/AC2/AC4/AC5: each live booking, judged by 19.2's own fit rule
+    (``events_service.booking_misfits``) against the event as the approval would leave it. One
+    the rule fails is cancelled on approval; for it, the same venue is checked for the period a
+    replacement would need - another booking holding it (12.1's ``find_holding_booking``, in SQL,
+    half-open), a closure (9.4) and opening hours (12.1 AC16), setup and teardown widening the
+    period as 12.1 widens it. Separately, a booking whose people change gets 11.1's capacity
+    check. Bookings neither cancelled nor warned about are left out."""
+    booked = events_service.live_bookings(db, event)
+    current = {
+        requirement.id: events_service.RequirementTerms.of(requirement)
+        for requirement in event.venue_requirements
+    }
+    judged = [
+        (
+            item,
+            events_service.booking_misfits(
+                item,
+                requirements=proposed.requirements,
+                starts_at=proposed.starts_at,
+                ends_at=proposed.ends_at,
+                attendance=proposed.attendance,
+            ),
+        )
+        for item in booked
+    ]
+    cancelled_ids = {item.booking.id for item, misfits in judged if misfits}
+    kept = [item.booking for item, misfits in judged if not misfits]
+
+    impacts = []
+    for item, misfits in judged:
+        booking = item.booking
+        is_additional = item.requirement_name is None
+        before = _needed_terms(
+            booking,
+            current,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            attendance=event.expected_attendance,
+            is_additional=is_additional,
+        )
+        after = _needed_terms(
+            booking,
+            proposed.requirements,
+            starts_at=proposed.starts_at,
+            ends_at=proposed.ends_at,
+            attendance=proposed.attendance,
+            is_additional=is_additional,
+        )
+        is_people_changed = after is not None and (before is None or after.people != before.people)
+        warning = _capacity_warning(booking, after.people) if is_people_changed else None
+        if not misfits and warning is None:
+            continue
+
+        holding = closure = None
+        is_closed = False
+        needed = after if misfits else None
+        if needed is not None:
+            held_from = needed.starts_at - timedelta(minutes=booking.setup_minutes)
+            held_until = needed.ends_at + timedelta(minutes=booking.teardown_minutes)
+            holding = bookings_service.find_holding_booking(
+                db, booking.venue_id, held_from, held_until, exclude_ids=cancelled_ids
+            )
+            closure = venue_service.find_blocking_unavailability(
+                db, booking.venue_id, starts_at=held_from, ends_at=held_until
+            )
+            is_closed = venue_service.closed_for(
+                booking.venue, starts_at=needed.starts_at, ends_at=needed.ends_at
+            )
+        people = None if after is None else after.people
+        impacts.append(
+            BookingImpactOut(
+                booking_id=booking.id,
+                venue_id=booking.venue_id,
+                venue_name=item.venue_name,
+                requirement_name=item.requirement_name,
+                status=booking.status,
+                starts_at=booking.starts_at,
+                ends_at=booking.ends_at,
+                will_be_cancelled=bool(misfits),
+                reasons=[_misfit_reason(misfit, booking, people) for misfit in misfits],
+                capacity_warning=warning,
+                needed_starts_at=None if needed is None else needed.starts_at,
+                needed_ends_at=None if needed is None else needed.ends_at,
+                held_by=None
+                if holding is None
+                else HoldingBookingOut(
+                    event_name=holding.event.name,
+                    held_from=holding.held_from,
+                    held_until=holding.held_until,
+                ),
+                closure=None
+                if closure is None
+                else ClosureOut(
+                    reason=closure.reason,
+                    notes=closure.notes,
+                    starts_at=closure.starts_at,
+                    ends_at=closure.ends_at,
+                ),
+                is_outside_opening_hours=is_closed,
+                after_approval=_BOOKING_CANCELLED if misfits else _BOOKING_KEPT,
+            )
+        )
+    return _VenueImpact(affected=impacts, kept=kept)
+
+
+def _capacity_shortfall(
+    request: EventChangeRequest, proposed: _ProposedEvent, kept: list[VenueBooking]
+) -> CapacityShortfallOut | None:
+    """AC1/AC4 (decided 19 Oct 2026): an attendance change is judged against what the venues
+    the approval keeps hold between them, each by 11.1's capacity in its booked layout - a
+    requirement's own booking can still fit its requirement while the event outgrows it. Equal
+    fits. Nothing is judged without a kept booking, nor for any other field."""
+    if request.field_name != ChangeRequestField.EXPECTED_ATTENDANCE or not kept:
+        return None
+    venues = [
+        CountedVenueOut(
+            venue_name=booking.venue.name,
+            capacity=venue_service.venue_capacity(booking.venue, layout=booking.required_layout),
+            layout_name=_counted_layout_name(booking),
+        )
+        for booking in kept
+    ]
+    booked = sum(venue.capacity for venue in venues)
+    if proposed.attendance <= booked:
+        return None
+    return CapacityShortfallOut(
+        proposed_attendance=proposed.attendance,
+        booked_capacity=booked,
+        shortfall=proposed.attendance - booked,
+        venues=venues,
+    )
+
+
+def _counted_layout_name(booking: VenueBooking) -> str | None:
+    """The booked layout's name when the venue records that layout's own capacity - the figure
+    counted - else None, its maximum."""
+    layout = booking.required_layout
+    if layout is None:
+        return None
+    recorded = {item.layout_code: item.layout_capacity for item in booking.venue.layouts}
+    return layout.name if recorded.get(layout.code) is not None else None
+
+
+def _equipment_row(
+    *,
+    item_id: uuid.UUID | None,
+    equipment_type: EquipmentType,
+    change: str,
+    current_status: str | None,
+    required: int | None,
+    available: int | None,
+    status_after: str | None,
+    technical_support_told: bool,
+    after_approval: str,
+) -> EquipmentImpactOut:
+    told = _TOLD_TECHNICAL_SUPPORT if technical_support_told else ""
+    return EquipmentImpactOut(
+        item_id=item_id,
+        equipment_type_code=equipment_type.code,
+        equipment_type_name=equipment_type.name,
+        change=change,
+        current_status=current_status,
+        required=required,
+        available=available,
+        shortfall=0 if required is None else max(0, required - (available or 0)),
+        status_after=status_after,
+        technical_support_told=technical_support_told,
+        after_approval=after_approval + told,
+    )
+
+
+def _rechecked_equipment(
+    db: Session, event: Event, proposed: _ProposedEvent
+) -> list[EquipmentImpactOut]:
+    """AC2/AC5: new dates, as ``recheck_equipment_for_new_dates`` treats them - every hold the
+    event has is released, then each open item, oldest first, is held again from what the new
+    dates leave, or flagged Unavailable. The event's own holds are left out of the figure the way
+    releasing them leaves them out."""
+    available = events_service.available_by_type(
+        db, proposed.starts_at, proposed.ends_at, exclude_event_id=event.id
+    )
+    rows = []
+    for item in equipment_service.open_items(db, event):
+        before = available.get(item.equipment_type_id, 0)
+        is_held = equipment_service.take_units(available, item.equipment_type_id, item.quantity)
+        if not is_held:
+            status_after, after_approval = EquipmentRequestStatus.UNAVAILABLE, _ITEM_UNAVAILABLE
+        elif item.status in equipment_service.SENT_ITEM_STATUSES:
+            status_after, after_approval = EquipmentRequestStatus.PENDING, _ITEM_RESENT
+        elif item.status == EquipmentRequestStatus.UNAVAILABLE:
+            status_after, after_approval = EquipmentRequestStatus.REQUESTED, _ITEM_REQUESTED
+        else:
+            status_after, after_approval = item.status, _ITEM_MOVED
+        rows.append(
+            _equipment_row(
+                item_id=item.id,
+                equipment_type=item.equipment_type,
+                change="rechecked",
+                current_status=item.status,
+                required=item.quantity,
+                available=before,
+                status_after=status_after,
+                technical_support_told=False,
+                after_approval=after_approval,
+            )
+        )
+    return rows
+
+
+def _changed_equipment(
+    db: Session, event: Event, plan: equipment_service.EquipmentChangePlan
+) -> list[EquipmentImpactOut]:
+    """AC2/AC5: an equipment change, as ``apply_equipment_change`` carries out the same plan -
+    removed items release their holds and are kept Cancelled or deleted; changed items, in the
+    event's order, then added ones, are held again from what ``available_for_event`` gives once
+    the changing items' holds are released, or flagged Unavailable. Unchanged items are left
+    out."""
+    codes = {
+        planned.line.equipment_type_code
+        for planned in plan.items
+        if planned.change == equipment_service.EquipmentChange.CHANGED
+    } | {line.equipment_type_code for line in plan.added}
+    types = {
+        equipment_type.code: equipment_type
+        for equipment_type in db.scalars(select(EquipmentType).where(EquipmentType.code.in_(codes)))
+    }
+    available = equipment_service.available_for_event(db, event, releasing=plan.releasing_ids)
+
+    def held_row(
+        item_id: uuid.UUID | None,
+        equipment_type: EquipmentType,
+        quantity: int,
+        *,
+        change: str,
+        current_status: str | None,
+        is_told: bool,
+    ) -> EquipmentImpactOut:
+        before = available.get(equipment_type.id, 0)
+        is_held = equipment_service.take_units(available, equipment_type.id, quantity)
+        return _equipment_row(
+            item_id=item_id,
+            equipment_type=equipment_type,
+            change=change,
+            current_status=current_status,
+            required=quantity,
+            available=before,
+            status_after=(
+                EquipmentRequestStatus.REQUESTED if is_held else EquipmentRequestStatus.UNAVAILABLE
+            ),
+            technical_support_told=is_told,
+            after_approval=_ITEM_REQUESTED if is_held else _ITEM_UNAVAILABLE,
+        )
+
+    rows = []
+    for planned in plan.items:
+        item = planned.item
+        is_told = item.status in equipment_service.WITH_TECHNICAL_SUPPORT
+        if planned.change == equipment_service.EquipmentChange.CHANGED:
+            line = planned.line
+            rows.append(
+                held_row(
+                    item.id,
+                    types[line.equipment_type_code],
+                    line.quantity,
+                    change="changed",
+                    current_status=item.status,
+                    is_told=is_told,
+                )
+            )
+        elif (
+            planned.change == equipment_service.EquipmentChange.REMOVED
+            and item.status != EquipmentRequestStatus.CANCELLED
+        ):
+            is_kept = item.status in equipment_service.EVER_SENT_STATUSES
+            rows.append(
+                _equipment_row(
+                    item_id=item.id,
+                    equipment_type=item.equipment_type,
+                    change="removed",
+                    current_status=item.status,
+                    required=None,
+                    available=None,
+                    status_after=EquipmentRequestStatus.CANCELLED if is_kept else None,
+                    technical_support_told=is_told,
+                    after_approval=_ITEM_CANCELLED if is_kept else _ITEM_DELETED,
+                )
+            )
+    for line in plan.added:
+        rows.append(
+            held_row(
+                None,
+                types[line.equipment_type_code],
+                line.quantity,
+                change="added",
+                current_status=None,
+                is_told=False,
+            )
+        )
+    return rows
+
+
+def _equipment_impacts(
+    db: Session, event: Event, proposed: _ProposedEvent
+) -> list[EquipmentImpactOut]:
+    """AC1/AC5: only new dates and an equipment change touch the equipment."""
+    if proposed.is_rescheduled:
+        return _rechecked_equipment(db, event, proposed)
+    if proposed.equipment is not None:
+        return _changed_equipment(db, event, proposed.equipment)
+    return []
+
+
+def _registration_impact(
+    db: Session, event: Event, request: EventChangeRequest, proposed: _ProposedEvent
+) -> RegistrationImpactOut | None:
+    """AC1: the registrations taking a place (18.1), counted - affected when new dates move
+    them, or when a lowered attendance leaves more registered than it allows. Nothing is
+    written to any registration."""
+    count = registrations_service.count_active_registrations(db, event.id)
+    is_attendance = request.field_name == ChangeRequestField.EXPECTED_ATTENDANCE
+    over_by = max(0, count - proposed.attendance) if is_attendance else 0
+    if count == 0 or (over_by == 0 and not proposed.is_rescheduled):
+        return None
+    return RegistrationImpactOut(
+        active_count=count,
+        proposed_attendance=proposed.attendance if is_attendance else None,
+        over_by=over_by,
+        dates_change=proposed.is_rescheduled,
+    )
+
+
+def _fingerprint(impact: ChangeRequestImpactOut) -> str:
+    """AC7: everything the assessment says but when it was made, as one digest."""
+    content = impact.model_dump(mode="json", exclude={"assessed_at", "fingerprint"})
+    return hashlib.sha256(_dump(content).encode()).hexdigest()
+
+
+def _assess(db: Session, event: Event, request: EventChangeRequest) -> ChangeRequestImpactOut:
+    """AC1-AC5: what approving ``request`` would do to ``event``'s arrangements, from the
+    records as they stand. An out-of-date request (19.2 AC7) or one 19.2 would refuse is said to
+    be so, and nothing else is predicted for it. Reads only."""
+    bookings: list[BookingImpactOut] = []
+    equipment: list[EquipmentImpactOut] = []
+    registrations = None
+    capacity_shortfall = None
+    refused_because = None
+    is_out_of_date = not _matches_event(request, event)
+    if not is_out_of_date:
+        try:
+            proposed = _proposed_event(db, event, request)
+        except ValidationError:
+            refused_because = PROPOSAL_UNREADABLE_MESSAGE
+        except InvalidEventRequest as exc:
+            refused_because = str(exc)
+        else:
+            venues = _booking_impacts(db, event, proposed)
+            bookings = venues.affected
+            capacity_shortfall = _capacity_shortfall(request, proposed, venues.kept)
+            equipment = _equipment_impacts(db, event, proposed)
+            registrations = _registration_impact(db, event, request, proposed)
+    impact = ChangeRequestImpactOut(
+        change_request_id=request.id,
+        assessed_at=datetime.now(UTC),
+        fingerprint="",
+        is_out_of_date=is_out_of_date,
+        refused_because=refused_because,
+        venue_bookings=bookings,
+        equipment=equipment,
+        registrations=registrations,
+        capacity_shortfall=capacity_shortfall,
+        has_impact=bool(
+            bookings or equipment or registrations is not None or capacity_shortfall is not None
+        ),
+    )
+    return impact.model_copy(update={"fingerprint": _fingerprint(impact)})
+
+
+def get_change_request_impact(
+    db: Session, event_id: uuid.UUID, change_request_id: uuid.UUID, *, viewer: User
+) -> ChangeRequestImpactOut:
+    """AC3/AC6: the assessment of a pending change request, for the event's assigned
+    coordinator only - anyone who cannot see the event is told it is not found, as
+    ``get_event`` does. Worked out afresh from the records each time it is asked for, and
+    changes nothing: no lock is taken and nothing is written."""
+    event = events_service.get_event(db, event_id, viewer=viewer)
+    if event.assigned_coordinator_id != viewer.id:
+        raise NotAssignedToAssess()
+    request = db.scalar(
+        select(EventChangeRequest).where(
+            EventChangeRequest.id == change_request_id,
+            EventChangeRequest.event_id == event.id,
+        )
+    )
+    if request is None:
+        raise ChangeRequestNotFound(change_request_id)
+    if event.status not in _DECIDABLE_STATUSES:
+        raise DecisionsClosed(event.status)
+    if request.status != ChangeRequestStatus.PENDING:
+        raise ChangeRequestAlreadyDecided(request.status)
+    return _assess(db, event, request)
+
+
+def _lock_equipment_types(db: Session, event: Event, request: EventChangeRequest) -> None:
+    """AC7: the equipment types the approval may hold or release - the event's items' and, for
+    an equipment change, those it proposes - locked as every hold takes them, so the stock the
+    re-assessment reads cannot move before the approval commits."""
+    type_ids = {item.equipment_type_id for item in event.equipment_requests}
+    if request.field_name == ChangeRequestField.EQUIPMENT:
+        proposed = json.loads(request.proposed_value)
+        codes = {line.get("equipment_type_code") for line in proposed if isinstance(line, dict)}
+        type_ids |= set(db.scalars(select(EquipmentType.id).where(EquipmentType.code.in_(codes))))
+    equipment_service.lock_types(db, type_ids)
+
+
+def _check_impact_unchanged(
+    db: Session, event: Event, request: EventChangeRequest, fingerprint: str
+) -> None:
+    """Story 19.3 AC7: re-assess the change under the event's lock, already held by the claim,
+    and with the equipment types locked too, and refuse the approval (``ImpactChanged``) when the
+    assessment is not the one the coordinator saw. A request the event has moved on from is left
+    to 19.2's own refusal (``ChangedSinceRequested``), which names why. Venues need no lock: an
+    approval only ever releases bookings, and a replacement is re-checked by 12.1 when it is
+    requested."""
+    if not _matches_event(request, event):
+        return
+    _lock_equipment_types(db, event, request)
+    if _assess(db, event, request).fingerprint != fingerprint:
+        raise ImpactChanged()
