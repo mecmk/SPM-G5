@@ -7,7 +7,10 @@
  *     is a backend case; so is a draft's item, which has no period until the event has dates.
  * AC2 the owning organiser sees the same list, read-only: no way to add, edit, remove or send.
  * AC3 an event with no equipment says so.
- * AC4 an item released with its cancelled event shows as Released and says it holds nothing.
+ * AC4 an item released with its cancelled event shows as Released. One that was held says it
+ *     holds nothing; one declined before still shows who declined it and why, and was never held.
+ * AC1 a decided item names the decision - Accepted or Declined - and who made it and when, and only
+ *     a released item says it holds nothing.
  * AC5 Technical Support, opening the event from its queue, sees the list read-only. That every
  *     internal role is sent it, an attendee is refused (403) and another organiser is told the
  *     event is not found (404) are backend cases.
@@ -21,7 +24,7 @@
  * AC9). The waterfront demo (EVENTS.waterfrontDemo) is this spec's own: its one pending item is
  * accepted in AC6, and no other case reads it.
  */
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn } from './support'
 
 const QUEUE_PATH = '/equipment/requests'
@@ -34,6 +37,9 @@ const ACCEPTED = 'Accepted (reserved)'
 const RELEASED = 'Released'
 const HOLDS_NOTHING = 'Nothing is held for this item any more.'
 const DECLINE_REASON = 'Every portable projector is out on loan that week.'
+const MIXER_DECLINE_REASON = 'All the portable projectors are booked that evening.'
+const ACCEPTED_BY_THEO = /Accepted .* by Theo Tech/
+const DECLINED_BY_THEO = /Declined .* by Theo Tech/
 const PHONE = { width: 390, height: 844 }
 
 function equipmentSection(page: Page) {
@@ -42,6 +48,12 @@ function equipmentSection(page: Page) {
 
 function item(page: Page, typeName: string) {
   return equipmentSection(page).getByRole('listitem').filter({ hasText: typeName })
+}
+
+/** Laid out on a single line: one line box, however wide the text is. */
+async function expectOnOneLine(text: Locator) {
+  await expect(text).toBeVisible()
+  expect(await text.evaluate((element) => element.getClientRects().length)).toBe(1)
 }
 
 async function openEvent(page: Page, account: string, eventId: string, name: string) {
@@ -56,18 +68,22 @@ async function expectRoadshowItems(page: Page) {
   await expect(pending).toContainText('×10')
   await expect(pending).toContainText(ROADSHOW_PERIOD)
   await expect(pending.getByText('Pending', { exact: true })).toBeVisible()
+  await expect(pending).not.toContainText(HOLDS_NOTHING)
 
   const accepted = item(page, 'Wireless microphone')
   await expect(accepted).toContainText('×4')
   await expect(accepted).toContainText(ROADSHOW_PERIOD)
   await expect(accepted.getByText(ACCEPTED, { exact: true })).toBeVisible()
-  await expect(accepted).toContainText(/Decided .* by Theo Tech/)
+  await expect(accepted).toContainText(ACCEPTED_BY_THEO)
+  await expect(accepted).not.toContainText(HOLDS_NOTHING)
 
   const declined = item(page, 'Portable projector')
   await expect(declined).toContainText('×3')
   await expect(declined).toContainText(ROADSHOW_PERIOD)
   await expect(declined.getByText('Declined', { exact: true })).toBeVisible()
+  await expect(declined).toContainText(DECLINED_BY_THEO)
   await expect(declined).toContainText(DECLINE_REASON)
+  await expect(declined).not.toContainText(HOLDS_NOTHING)
 }
 
 /** Nothing on the section changes the equipment (AC2, AC5). */
@@ -106,15 +122,27 @@ test('17.1 AC4: items released with their cancelled event show as Released, hold
 }) => {
   await openEvent(page, ACCOUNTS.coordinator, EVENTS.cancelled, MIXER)
 
-  for (const typeName of ['Portable speaker set', 'Wireless microphone']) {
+  for (const typeName of ['Portable speaker set', 'Wireless microphone', 'Portable projector']) {
     const released = item(page, typeName)
-    await expect(released).toContainText('×2')
     await expect(released).toContainText(MIXER_PERIOD)
-    await expect(released.getByText(RELEASED, { exact: true })).toBeVisible()
-    await expect(released).toContainText(HOLDS_NOTHING)
+    const badge = released.getByText(RELEASED, { exact: true })
+    await expect(badge).toBeVisible()
+    // A released hold is neither a decision nor a problem: it reads in the neutral colour.
+    await expect(badge).toHaveClass(/\bbadge-released\b/)
   }
-  // The speakers had been accepted before the event was cancelled: who decided still shows.
-  await expect(item(page, 'Portable speaker set')).toContainText(/Decided .* by Theo Tech/)
+  // The speakers had been accepted, the microphones were still pending: both were held until the
+  // event was cancelled.
+  const speakers = item(page, 'Portable speaker set')
+  await expect(speakers).toContainText(ACCEPTED_BY_THEO)
+  await expect(speakers).toContainText(HOLDS_NOTHING)
+  const microphones = item(page, 'Wireless microphone')
+  await expect(microphones).not.toContainText(/(Accepted|Declined) .* by/)
+  await expect(microphones).toContainText(HOLDS_NOTHING)
+  // The projector was declined before: who declined it and why still show, and it held nothing.
+  const projector = item(page, 'Portable projector')
+  await expect(projector).toContainText(DECLINED_BY_THEO)
+  await expect(projector).toContainText(MIXER_DECLINE_REASON)
+  await expect(projector).not.toContainText(HOLDS_NOTHING)
   await expectReadOnly(page)
 })
 
@@ -160,16 +188,23 @@ test('17.1 AC6: a decision made while the page is open shows once it is loaded a
   await expect(laptops.getByText('Pending', { exact: true })).toBeVisible()
   await page.reload()
   await expect(laptops.getByText(ACCEPTED, { exact: true })).toBeVisible()
-  await expect(laptops).toContainText(/Decided .* by Theo Tech/)
+  await expect(laptops).toContainText(ACCEPTED_BY_THEO)
 })
 
 test('17.1 responsive: the list fits a phone', async ({ page }) => {
   await page.setViewportSize(PHONE)
   await openEvent(page, ACCOUNTS.coordinator, EVENTS.equipmentRoadshow, ROADSHOW)
 
-  for (const typeName of ['Lapel microphone', 'Wireless microphone', 'Portable projector']) {
+  // Each item's text takes the row's width, so its notes and its period each keep to one line
+  // rather than being squeezed beside the quantity, the badge and the coordinator's buttons.
+  for (const [typeName, notes] of [
+    ['Lapel microphone', 'One per panel speaker'],
+    ['Wireless microphone', 'For audience questions'],
+    ['Portable projector', 'Ceiling-mounted screens preferred'],
+  ]) {
     const row = item(page, typeName)
-    await expect(row.getByText(ROADSHOW_PERIOD)).toBeVisible()
+    await expectOnOneLine(row.getByText(notes, { exact: true }))
+    await expectOnOneLine(row.getByText(ROADSHOW_PERIOD, { exact: true }))
     const box = (await row.boundingBox())!
     expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width)
   }

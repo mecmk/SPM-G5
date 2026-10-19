@@ -1059,8 +1059,9 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- ---------------------------------------------------------------------
 -- Story 17.1: tests/e2e/equipment-display.spec.ts. The Summer Rooftop Mixer (3333..15) was
--- cancelled with two items on it, one accepted and one still pending: both were cancelled with
--- it and hold nothing, so they show as Released (17.1 AC4). The waterfront demo (3333..80) is
+-- cancelled with three items on it, one accepted, one still pending and one declined before: all
+-- were cancelled with it and hold nothing, so they show as Released (17.1 AC4), the declined one
+-- with Technical Support's reason. The waterfront demo (3333..80) is
 -- the spec's own: in planning, organiser 2, coordinator 1, dated January 2028, clear of every
 -- other hold, with one pending item that the spec has Technical Support accept while the
 -- coordinator has the page open (17.1 AC6).
@@ -1101,6 +1102,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
     ('66666666-0000-0000-0000-000000000034', '33333333-0000-0000-0000-000000000015', '77777777-0000-0000-0000-000000000005', 2, 'Music on the terrace', 'CANCELLED', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-08-25 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-08-26 10:00+08'),
     ('66666666-0000-0000-0000-000000000035', '33333333-0000-0000-0000-000000000015', '77777777-0000-0000-0000-000000000002', 2, NULL, 'CANCELLED', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-08-25 10:00+08', NULL, NULL),
+    ('66666666-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000015', '77777777-0000-0000-0000-000000000001', 1, 'For the welcome slides', 'CANCELLED', 'All the portable projectors are booked that evening.', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-08-25 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-08-26 11:00+08'),
     ('66666666-0000-0000-0000-000000000036', '33333333-0000-0000-0000-000000000080', '77777777-0000-0000-0000-000000000004', 2, 'For the two demo stations', 'PENDING', NULL, '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-10 10:00+08', NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,

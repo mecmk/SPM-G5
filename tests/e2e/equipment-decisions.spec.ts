@@ -91,7 +91,8 @@ test("16.1 AC1: Technical Support accepts a request, and the coordinator sees it
   const item = eventItem(page, "Portable speaker set");
   // Story 17.1 AC1: the event page says an accepted item is reserved.
   await expect(item.getByText("Accepted (reserved)", { exact: true })).toBeVisible();
-  await expect(item).toContainText(/Decided .* by Theo Tech/);
+  // Story 17.1: the event page names the decision.
+  await expect(item).toContainText(/Accepted .* by Theo Tech/);
 });
 
 test("16.1 AC2: Technical Support declines a request with a reason, and the coordinator sees it", async ({

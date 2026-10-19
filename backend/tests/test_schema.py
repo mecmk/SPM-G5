@@ -223,6 +223,7 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentItems.OFFSITE_CAMERAS, "PENDING"),
         (EquipmentItems.MIXER_SPEAKERS, "CANCELLED"),
         (EquipmentItems.MIXER_WIRELESS_MICS, "CANCELLED"),
+        (EquipmentItems.MIXER_PROJECTOR, "CANCELLED"),
         (EquipmentItems.DEMO_LAPTOPS, "PENDING"),
     ):
         assert (

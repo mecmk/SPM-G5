@@ -260,9 +260,10 @@ class EquipmentItems:
     CONCERT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000032")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000033")
     # Story 17.1's: cancelled with Events.CANCELLED, holding nothing - one had been accepted, one
-    # was still pending - and the pending one on Events.WATERFRONT_DEMO.
+    # was still pending, one declined - and the pending one on Events.WATERFRONT_DEMO.
     MIXER_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000034")
     MIXER_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000035")
+    MIXER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000000037")
     DEMO_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000036")
 
 
