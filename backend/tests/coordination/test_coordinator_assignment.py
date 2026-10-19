@@ -12,6 +12,8 @@ first one, and 5.6 the reassignments, which name the coordinator the Lead saw
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -118,11 +120,11 @@ def test_reassigning_the_same_coordinator_does_not_duplicate_history(login_as, d
     assert after == before
 
 
-@pytest.mark.story("5.1", ac=1)
+@pytest.mark.story("5.6", ac=3)
 def test_reassigning_the_same_coordinator_leaves_the_event_version_alone(login_as, db: Session):
-    """Re-choosing the coordinator who has the event writes nothing to it, so its ``updated_at`` -
-    the version story 7.2's correction checks (AC9) - is unchanged, and a correction Chloe has open
-    is not refused because of it (review of #124)."""
+    """5.6 AC3 (CL-147 (4)): re-choosing the coordinator who has the event writes nothing to it, so
+    its ``updated_at`` - the version story 7.2's correction checks (AC9) - is unchanged, and a
+    correction Chloe has open is not refused because of it (review of #124)."""
     version = text("SELECT updated_at FROM events WHERE id = :e")
     before = db.execute(version, {"e": Events.APPROVED}).scalar()
 
@@ -379,6 +381,15 @@ def test_unrelated_organiser_cannot_see_another_organisers_event(login_as):
     response = other.get(f"/events/{Events.SUBMITTED}/coordinator")
 
     assert response.status_code == 403, response.text
+
+
+@pytest.mark.story("5.1", ac=4)
+def test_the_coordinator_of_an_unknown_event_is_not_found(login_as):
+    """No such event: 404, not an empty answer that would read as "nobody assigned yet"."""
+    response = login_as(Users.LEAD).get(f"/events/{uuid.uuid4()}/coordinator")
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Event not found."
 
 
 # --- Access control (story 1.2 AC4 applied to this endpoint) -------------------------------

@@ -7,7 +7,8 @@
  * 5.6 AC1 the Lead reassigns from the event page and from the overview (5.5), choosing from the
  *     other active coordinators, each with their active-event count; the page shows the new
  *     coordinator at once.
- * 5.6 AC3 the picker can't be confirmed until the active coordinators it offers have loaded.
+ * 5.6 AC3 the picker can't be confirmed until the active coordinators it offers have loaded, and
+ *     with none to offer, Confirm says so and sends nothing.
  * 5.6 AC5 a coordinator no longer sees Reassign.
  * 5.6 AC6 a reassignment refused because the assignment changed says why.
  * Responsive: the flow at a phone (375 x 667) and a desktop (1280 x 800), and the page and dialog
@@ -45,6 +46,8 @@ import {
 const [CHLOE, CARL] = COORDINATORS
 const STALE_MESSAGE =
   "This event's coordinator has changed since you opened it. Reload the event and try again."
+const NO_OTHER_COORDINATOR_MESSAGE =
+  'There is no other active Event Coordinator to reassign this to.'
 const NOT_REFRESHED_MESSAGE =
   'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.'
 /** How the picker names a coordinator: their name and their number of active events (5.4 AC3). */
@@ -317,16 +320,11 @@ test('5.6 AC3: Confirm does nothing while the coordinators are still loading', a
   expect(sent).toEqual([])
 })
 
-test('5.6 AC1: a refresh of the overview that fails after a reassignment says so, until the next good load', async ({
-  page,
-}) => {
-  test.setTimeout(90_000)
-  const { name } = await freshEventWithChloe(page, 'Refresh fails')
-  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
-  await overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }).click()
-  // The reassignment itself goes through; the list read afterwards fails.
-  const isActiveEvents = (url: URL) => url.pathname === '/coordination/active-events'
-  await page.route(isActiveEvents, (route) => {
+/** Answer every fetch of the API `path` with a 500, as a server that fails would; returns the
+ * matcher, for `page.unroute`. */
+async function failReadsOf(page: Page, path: string) {
+  const matches = (url: URL) => url.pathname === path
+  await page.route(matches, (route) => {
     const request = route.request()
     if (request.resourceType() !== 'fetch') return route.fallback()
     return route.fulfill({
@@ -336,22 +334,113 @@ test('5.6 AC1: a refresh of the overview that fails after a reassignment says so
       headers: corsHeaders(request),
     })
   })
+  return matches
+}
+
+/** By coordinator: the event listed under Carl. */
+function underCarl(page: Page, name: string) {
+  return page
+    .getByRole('list', { name: 'Coordinators' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: CARL.name, exact: true }) })
+    .getByRole('link', { name, exact: true })
+}
+
+test('5.6 AC1: when the events fail to refresh after a reassignment, All active events says so until they load', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Events refresh fails')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  await overviewCard(page, name).getByRole('button', { name: 'Reassign', exact: true }).click()
+  // The reassignment itself goes through; reading the events afterwards fails.
+  const activeEvents = await failReadsOf(page, '/coordination/active-events')
 
   await reassignToCarl(page, name)
 
   // It says the reassignment was made, so the Lead does not try again from the old card.
   await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
-  // The other view loads nothing afresh, so the lists are still out of date and it stays.
+  // By coordinator's list was read again, and shows the change: no notice there.
   await page.getByRole('link', { name: 'By coordinator' }).click()
-  await expect(page.getByRole('list', { name: 'Coordinators' })).toBeVisible()
-  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  await expect(underCarl(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  // Back on All active events, the old list is still shown, and so is the notice.
   await page.getByRole('link', { name: 'All active events' }).click()
   await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
 
   // The next good load of the events - here, choosing Carl's - shows the change, and the notice
   // goes.
-  await page.unroute(isActiveEvents)
+  await page.unroute(activeEvents)
   await page.getByRole('combobox', { name: 'Coordinator' }).selectOption(CARL.id)
   await expect(overviewCard(page, name)).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('5.6 AC1: when the workloads fail to refresh after a reassignment, By coordinator says so until they load', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { name } = await freshEventWithChloe(page, 'Workloads refresh fails')
+  await page.goto(`/events/assignments?coordinator=${CHLOE.id}`)
+  const card = overviewCard(page, name)
+  await card.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const workloads = await failReadsOf(page, '/coordination/workloads')
+
+  await reassignToCarl(page, name)
+
+  // All active events was read again: the card has left Chloe's list.
+  await expect(card).toHaveCount(0)
+  // By coordinator still shows the list read when the page opened, so it says so.
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+  await expect(page.getByRole('list', { name: 'Coordinators' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText(NOT_REFRESHED_MESSAGE)
+  await expect(underCarl(page, name)).toHaveCount(0)
+  // Back on All active events - its list did refresh - there is no notice. (Checked only now, once
+  // the failure has been seen, so the absence can't be the failure not having arrived yet.)
+  await page.getByRole('link', { name: 'All active events' }).click()
+  await expect(page.getByRole('list', { name: 'Active events' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('link', { name: 'By coordinator' }).click()
+
+  // Reloading, as it says, reads the workloads again: the event is under Carl, and the notice
+  // goes.
+  await page.unroute(workloads)
+  await page.reload()
+  await expect(underCarl(page, name)).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('5.6 AC3: with no other active coordinator to choose, Confirm says so and sends nothing', async ({
+  page,
+}) => {
+  // Read only: the picker's list is answered empty, and the dialog is cancelled.
+  const sent: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PUT') sent.push(request.url())
+  })
+  await page.route(
+    (url) => url.pathname === '/coordinators',
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.lead)
+  await page.goto(`/events/${EVENTS.approved}`)
+  const name = (await page.getByRole('heading', { level: 1 }).textContent())!.trim()
+
+  await page.getByRole('button', { name: 'Reassign', exact: true }).click()
+  const dialog = reassignDialog(page, name)
+  await dialog.getByRole('button', { name: 'Confirm reassignment' }).click()
+
+  await expect(dialog.getByRole('alert')).toHaveText(NO_OTHER_COORDINATOR_MESSAGE)
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(sent).toEqual([])
 })

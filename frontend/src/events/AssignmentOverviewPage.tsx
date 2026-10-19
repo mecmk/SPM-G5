@@ -141,12 +141,12 @@ export function AssignmentOverviewPage() {
   const [reassigning, setReassigning] = useState<ActiveEventEntry | null>(null)
   /** Story 5.6 AC1: each list as it stood when reading it again after a reassignment failed. */
   const [notRefreshed, setNotRefreshed] = useState<NotRefreshedLists>(NONE_NOT_REFRESHED)
-  // The notice stays while a list that failed is still the one shown - switching views loads
-  // nothing afresh - and goes with its next good load, which replaces it (a changed filter, the
-  // next reassignment, a reload).
-  const isShowingNotRefreshed =
-    (notRefreshed.events !== null && notRefreshed.events === overview.data) ||
-    (notRefreshed.workloads !== null && notRefreshed.workloads === workloads.data)
+  // Each view shows one list - All active events the events, By coordinator the workloads - so
+  // the notice shows on a view while the list it shows is still the one that failed to refresh,
+  // and goes with that list's next good load (a changed filter, the next reassignment, a reload).
+  const isShowingNotRefreshed = isCoordinatorsView
+    ? notRefreshed.workloads !== null && notRefreshed.workloads === workloads.data
+    : notRefreshed.events !== null && notRefreshed.events === overview.data
   // While a changed filter loads, the previous filter's events are hidden rather than shown under
   // the new one (`useLoaded`'s isStale).
   const freshEvents = overview.isStale ? null : overview.data

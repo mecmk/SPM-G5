@@ -279,9 +279,9 @@ def test_second_reassignment_against_a_stale_assignment_is_refused(db: Session, 
     the reassignment-in-progress reads "who is current" via ``current_assignment``, a second,
     already-authorised reassignment (Chloe -> Carl) is made and committed first, simulating the
     other request winning the race. Committed inside this request's own transaction, it gets past
-    the row lock 5.6 added, which a real second request would wait on, and is refused by the read
-    check (``_refuse_if_changed``). So what this reaches is the guarded UPDATE, the backstop
-    behind that check.
+    the row lock 5.6 added. A real second request would wait on that lock, and then be refused by
+    the read check (``_refuse_if_changed``). So what this reaches is the guarded UPDATE, the
+    backstop behind that check.
 
     Uses the seeded Events.APPROVED rather than a hand-built event: ``make_event`` sets
     ``assigned_coordinator_id`` on the event row directly but does not create a matching open
