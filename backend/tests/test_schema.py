@@ -292,6 +292,10 @@ def test_seed_constants_match_database(db: Session):
         (Events.ROBOTICS_OPEN_HOUSE, "PLANNING"),
         (Events.WELLNESS_EXPO, "PLANNING"),
         (Events.CRAFT_MARKET, "PLANNING"),
+        (Events.HARVEST_FAIR, "PLANNING"),
+        (Events.OPEN_STUDIOS, "PLANNING"),
+        (Events.NIGHT_BAZAAR, "PLANNING"),
+        (Events.SPRING_FAIR, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -313,6 +317,13 @@ def test_seed_constants_match_database(db: Session):
         (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
         (Bookings.CRAFT_MARKET_SEMINAR_ROOM, "APPROVED", False),
         (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, "APPROVED", True),
+        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, "APPROVED", True),
+        (Bookings.OPEN_STUDIOS_HARBOUR, "APPROVED", False),
+        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, "PENDING", True),
+        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, "PENDING", True),
+        (Bookings.SPRING_FAIR_FOYER, "APPROVED", True),
     ):
         row = db.execute(
             text(

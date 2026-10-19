@@ -104,6 +104,10 @@ export const EVENTS = {
   roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
   wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
   craftMarket: '33333333-0000-0000-0000-000000012680', // an additional venue, marked; its closure is removed, then a request
+  harvestFair: '33333333-0000-0000-0000-000000012681', // an additional venue, marked; replaced, then Back
+  openStudios: '33333333-0000-0000-0000-000000012682', // a marked pending replacement; read only
+  nightBazaar: '33333333-0000-0000-0000-000000012683', // a marked pending additional venue; read only
+  springFair: '33333333-0000-0000-0000-000000012684', // a replacement is raised, then rejected
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged

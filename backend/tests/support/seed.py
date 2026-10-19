@@ -186,6 +186,10 @@ class Events:
     ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; read only
     WELLNESS_EXPO = _e(12679)  # coordinator 2's; the spec raises a replacement
     CRAFT_MARKET = _e(12680)  # an additional venue, marked: its closure is removed, then a request
+    HARVEST_FAIR = _e(12681)  # an additional venue, marked: the spec replaces it, then presses Back
+    OPEN_STUDIOS = _e(12682)  # a marked pending replacement of an approved booking: read only
+    NIGHT_BAZAAR = _e(12683)  # a marked pending additional venue: read only
+    SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
 
 
 class Bookings:
@@ -234,6 +238,13 @@ class Bookings:
     WELLNESS_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012632")
     CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012633")  # unmarked
     CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012634")  # marked
+    HARVEST_FAIR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012635")  # unmarked
+    HARVEST_FAIR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012636")  # marked
+    OPEN_STUDIOS_HARBOUR = uuid.UUID("44444444-0000-0000-0000-000000012637")  # approved, unmarked
+    OPEN_STUDIOS_REPLACEMENT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012638")  # pending
+    NIGHT_BAZAAR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012639")  # unmarked
+    NIGHT_BAZAAR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012640")  # pending
+    SPRING_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012641")
 
 
 class Registrations:
