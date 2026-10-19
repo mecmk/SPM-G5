@@ -11,6 +11,7 @@ import { VENUE_CATALOGUE_PATH, venueRequestPath, venueSwitchPath } from '../rout
 import { useLoaded } from '../shared/useLoaded'
 import { useVenueCalendar, VENUE_CALENDAR_DAY_PANEL_ID } from '../shared/useVenueCalendar'
 import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
+import { AVAILABILITY_LABEL } from './blockOffLabels'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
 
@@ -55,7 +56,7 @@ export function VenueDetailPage() {
     (startsAt: string, endsAt: string) => getVenueCalendar(venueId, startsAt, endsAt),
     [venueId],
   )
-  /** Story 12.6 AC12: the calendar shows each period and its reason to every internal role. Venue
+  /** Fix f9.4.1: the calendar shows each period and its reason to every internal role. Venue
    *  Staff add, edit, end and remove periods on the venue's Edit venue page, not here. */
   const calendar = useVenueCalendar(loadWindows, new Date())
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
@@ -272,7 +273,7 @@ export function VenueDetailPage() {
 
           <section className="card stack" aria-labelledby="venue-availability-heading">
             <p className="eyebrow" id="venue-availability-heading">
-              Availability
+              {AVAILABILITY_LABEL}
             </p>
             <VenueAvailabilityCalendar
               month={calendar.month}

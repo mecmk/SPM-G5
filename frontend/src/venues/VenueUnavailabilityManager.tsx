@@ -3,7 +3,7 @@ import { getVenueCalendar } from '../api/venues'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
 import type { DayClosure } from '../components/venueCalendarDays'
 import { useVenueCalendar, VENUE_CALENDAR_DAY_PANEL_ID } from '../shared/useVenueCalendar'
-import { blockOffLabel, CLOSURES_SAVED_NOTE } from './blockOffLabels'
+import { AVAILABILITY_LABEL, blockOffLabel, CLOSURES_SAVED_NOTE } from './blockOffLabels'
 import { ClosureActions } from './ClosureActions'
 import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
 
@@ -13,12 +13,14 @@ export interface VenueUnavailabilityManagerProps {
 }
 
 /**
- * Story 9.4 AC1/AC6/AC9, placed by story 12.6 AC12 (PO decision): Venue Staff's own controls for a
- * venue's unavailable periods - the calendar whose day lists carry each period's Edit, End now and
- * Remove, and the Block off time card that adds one. They live on the Edit venue page only; the
- * venue's details page keeps a calendar that shows each period and its reason and nothing to
- * change. Rendered only for whoever holds the permission to manage unavailability, and the backend
- * refuses the writes to anyone else. Moved, not changed: 9.4's rules are the same.
+ * Story 9.4 AC1/AC6/AC9, placed by fix f9.4.1: Venue Staff's own controls for a venue's
+ * unavailable periods - the calendar whose day lists carry each period's Edit, End now and Remove,
+ * and the Block off time card that adds one. They live on the Edit venue page only; the venue's
+ * details page keeps a calendar that shows each period and its reason and nothing to change.
+ * Rendered only for whoever holds the permission to manage unavailability, and the backend
+ * refuses the writes to anyone else. 9.4's rules are the same as when the controls were on the
+ * details page; what is new with the move is each day row's hint beside Remove and End now, and
+ * an ended closure showing as Ended.
  */
 export function VenueUnavailabilityManager({
   venueId,
@@ -64,7 +66,7 @@ export function VenueUnavailabilityManager({
     <div className="stack venue-form">
       <p className="form-hint">{CLOSURES_SAVED_NOTE}</p>
       <fieldset className="card stack">
-        <legend>Availability</legend>
+        <legend>{AVAILABILITY_LABEL}</legend>
         <VenueAvailabilityCalendar
           month={calendar.month}
           onMonthChange={calendar.setMonth}

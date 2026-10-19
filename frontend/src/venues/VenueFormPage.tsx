@@ -120,7 +120,7 @@ export function VenueFormPage() {
   const isEditing = venueId !== undefined
   const navigate = useNavigate()
   const location = useLocation()
-  /** Story 12.6 AC12: Venue Staff manage the venue's unavailable periods from this page. */
+  /** Fix f9.4.1: Venue Staff manage the venue's unavailable periods from this page. */
   const { can } = useAuth()
   const canManageUnavailability = can(PERMISSIONS.VENUE_UNAVAILABILITY_MANAGE)
   const [reference, setReference] = useState<VenueReferenceData | null>(null)
@@ -652,7 +652,7 @@ export function VenueFormPage() {
         </form>
       )}
 
-      {/* Story 12.6 AC12: a saved venue's unavailable periods - the calendar with each one's Edit,
+      {/* Fix f9.4.1: a saved venue's unavailable periods - the calendar with each one's Edit,
           End now and Remove, and the Block off time card - for Venue Staff, here and nowhere else:
           sections of the page like the form's own, after the form that Save changes closes. */}
       {isEditing && venueId !== undefined && savedName !== null && canManageUnavailability && (
