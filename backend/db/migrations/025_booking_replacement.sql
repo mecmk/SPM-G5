@@ -16,10 +16,11 @@
 --   pending replacement sit beside its original, which still holds the requirement. The index
 --   leaves out a PENDING booking whose replaces_live_original is set - and leaves out nothing
 --   else, so a normal second request is still refused, and an approved replacement counts.
---   replaces_live_original is TRUE only while the original still holds its venue: a trigger clears
---   it when the original stops being PENDING or APPROVED, by whatever route (the hold sweep, a
---   release, a cancellation), so the pending replacement is then the requirement's request and
---   no normal request can be written beside it.
+--   replaces_live_original is set on a replacement when it is requested, and a trigger clears it
+--   on a PENDING replacement when its original stops being PENDING or APPROVED, by whatever route
+--   (the hold sweep, a release, a cancellation), so the pending replacement is then the
+--   requirement's request and no normal request can be written beside it. The index reads it
+--   only for a PENDING row; on a decided replacement it keeps what it had and means nothing.
 -- =====================================================================
 
 ALTER TABLE venue_bookings
@@ -79,7 +80,7 @@ COMMENT ON COLUMN venue_bookings.replaces_booking_id IS
 COMMENT ON COLUMN venue_bookings.replaced_by_booking_id IS
     'FK -> venue_bookings.id. On an original released by its replacement: the replacement whose approval released it (story 12.6 AC3), set in that same transaction and only on a CANCELLED booking (ck_venue_bookings_replaced_by_cancelled). The event page shows "Replaced by <venue>" only when this is set, so a replacement that was never approved is never shown as having replaced it (AC8). NULL otherwise; a booking replaces at most one original (uq_venue_bookings_replaced_by).';
 COMMENT ON COLUMN venue_bookings.replaces_live_original IS
-    'TRUE while this is a replacement (replaces_booking_id) whose original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement''s request. FALSE for every other booking.';
+    'TRUE on a replacement (replaces_booking_id) from the moment it is requested, while its original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE on a PENDING replacement when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement''s request. The index reads it only for a PENDING booking: on a decided replacement it keeps what it had and means nothing. FALSE for every other booking.';
 COMMENT ON CONSTRAINT uq_venue_bookings_id_event ON venue_bookings IS
     'Story 12.6: the target of fk_venue_bookings_replaces, which needs (id, event_id) to be unique.';
 COMMENT ON CONSTRAINT fk_venue_bookings_replaces ON venue_bookings IS
@@ -99,7 +100,7 @@ COMMENT ON INDEX uq_venue_bookings_one_pending_replacement IS
 COMMENT ON INDEX uq_venue_bookings_one_per_requirement IS
     'Story 12.5 AC10-AC12, narrowed by story 12.6: at most one pending or approved request per venue requirement, so of two requests sent for one requirement at once only the first is written. A PENDING replacement whose original still holds its venue (replaces_live_original) is left out, so it can sit beside the original; an approved replacement is not, and nothing else is. Additional venues (NULL) are not limited.';
 COMMENT ON FUNCTION clear_replacement_carve_out() IS
-    'Story 12.6 AC10: clears replaces_live_original on the replacements of a booking that has just stopped being PENDING or APPROVED (trg_venue_bookings_clear_replacement_carve_out).';
+    'Story 12.6 AC10: clears replaces_live_original on the PENDING replacements of a booking that has just stopped being PENDING or APPROVED (trg_venue_bookings_clear_replacement_carve_out); a decided replacement is left as it was.';
 COMMENT ON TRIGGER trg_venue_bookings_clear_replacement_carve_out ON venue_bookings IS
     'Story 12.6 AC10: when a booking stops holding its venue, by whatever route, its pending replacements start counting as the requirement''s request (clear_replacement_carve_out).';
 COMMENT ON COLUMN venue_bookings.status IS

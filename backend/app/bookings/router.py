@@ -204,7 +204,8 @@ def approve_booking(
     period no longer overlaps it.
 
     Story 12.6 AC3: approving a replacement releases the booking it replaces, in the same
-    transaction - the two are locked in id order first (``get_booking_for_approval``).
+    transaction - the original is locked first and the replacement second
+    (``get_booking_for_approval``), the order the paths that close the original take.
     """
     try:
         booking = service.get_booking_for_approval(db, booking_id)

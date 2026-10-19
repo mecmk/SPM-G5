@@ -122,9 +122,10 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Story 12.6 AC2: the booking this one replaces, which Venue Staff's closure made unavailable -
     # a booking of the same event (composite FK fk_venue_bookings_replaces); None for any other.
     # AC3: on an original released by its replacement, the replacement whose approval released it,
-    # set in that release and only on a CANCELLED booking. AC10: replaces_live_original is True
-    # while the replacement's original still holds its venue, which the one-per-requirement index
-    # leaves out while the replacement is pending; the database clears it when the original stops.
+    # set in that release and only on a CANCELLED booking. AC10: replaces_live_original is set on
+    # a replacement when it is requested, which the one-per-requirement index reads only while the
+    # replacement is pending, leaving it out; the database clears it on a pending replacement when
+    # the original stops holding its venue, and a decided replacement keeps what it had.
     replaces_booking_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     replaced_by_booking_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venue_bookings.id")

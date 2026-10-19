@@ -80,7 +80,7 @@ requirement, or, for an additional venue, the event's own period. ``request_repl
 raises a new PENDING request linked to the original by ``replaces_booking_id``; the original stays
 approved, holding its venue, and the event is not touched (AC2, AC4). Approving the replacement
 (``approve_booking``) releases the original in the same transaction - CANCELLED, with
-``replaced_by_booking_id`` and a reason - only when it still holds its venue (AC3, AC6, AC10). The
+``replaced_by_booking_id`` and a reason - only when it still holds its venue (AC3, AC6). The
 one-per-requirement rule of 12.5 leaves out a pending replacement whose original still holds its
 venue (``replaces_live_original``), which the database clears when the original stops holding by
 any path, so the rule is otherwise as it was (AC10). Only the event's assigned coordinator, only
@@ -189,7 +189,7 @@ REPLACEMENT_CANNOT_BE_SWITCHED_MESSAGE = (
 # booking's page word it.
 REPLACED_BY_REASON = "Replaced by {venue}"
 # Story 12.6 AC3: the sentence the coordinator's approval notice adds when it released the booking
-# the approved replacement replaces - and does not, when there was nothing to release (AC10).
+# the approved replacement replaces - and does not, when there was nothing to release (AC3).
 ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
 
 # 12.1 AC3/AC12: why a request is refused when its venue is held, in words a coordinator can act
@@ -715,7 +715,7 @@ def _notify_coordinator_of_decision(
     """Story 20.1 AC1/AC4: the event's coordinator - whoever holds the event now, not necessarily
     who asked - is told 13.2's approval with the held period, or 13.2.1's rejection with its
     reason. Story 12.6 AC3: the approval of a replacement also says the booking it replaces,
-    ``released``, was released - and nothing of the kind when it was not (AC10)."""
+    ``released``, was released - and nothing of the kind when it was not (AC3)."""
     venue_name, event = booking.venue.name, booking.event
     if booking.status == BookingStatus.REJECTED:
         notification_type = NotificationType.BOOKING_REJECTED
@@ -756,9 +756,11 @@ def get_booking_for_approval(db: Session, booking_id: uuid.UUID) -> VenueBooking
     """Story 12.6 AC3: the row-locked read of ``get_booking_for_decision`` for an approval, which
     may release another booking. The booking is read unlocked to find the one it replaces; the
     original is locked first and the replacement second, and both are read afresh, so the status
-    and the link are the committed ones whichever lock was waited for. That is the order every
-    path that closes the original takes (the hold sweep, 19.2's release), where the trigger then
-    updates the replacement; taking the two in id order instead could deadlock with them."""
+    and the link are the committed ones whichever lock was waited for. That is the order the
+    paths that close the original take among the two bookings (the hold sweep, 19.2's release),
+    where the trigger then updates the replacement; taking them in id order instead could
+    deadlock with them. 19.2's decision locks the event before either, which approval does not
+    take: it locks no event row itself."""
     booking = db.get(VenueBooking, booking_id)
     if booking is None:
         raise BookingNotFound(booking_id)
@@ -783,7 +785,7 @@ def _release_replaced_booking(
     """Story 12.6 AC3: approving ``replacement`` releases the booking it replaces, through the one
     ``release_booking``. The original was locked with the replacement by
     ``get_booking_for_approval`` and is read afresh; it is released only while it still holds its
-    venue, so one that expired or was cancelled meanwhile is left alone (AC10). Returns the
+    venue, so one that expired or was cancelled meanwhile is left alone (AC3). Returns the
     booking it released, or None when it released nothing."""
     if replacement.replaces_booking_id is None:
         return None
@@ -824,7 +826,7 @@ def approve_booking(
     Story 12.6 AC3: approving a replacement releases the booking it replaces in this same
     transaction, after every refusal above and before the replacement is written approved, so the
     one-per-requirement index never sees two live bookings; a refusal after it (the write's own
-    conflict) rolls the release back with everything else. AC10: when that booking no longer holds
+    conflict) rolls the release back with everything else. AC3: when that booking no longer holds
     its venue nothing is released, and the approval says nothing of one. Callers fetch a
     replacement with ``get_booking_for_approval``.
     """

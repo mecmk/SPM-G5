@@ -501,7 +501,8 @@ def booked_venue_blockers(db: Session, event: Event) -> list[str]:
 
 def request_blockers(db: Session, event: Event) -> list[str]:
     """AC1/AC19: what stops a review being requested now; ``[]`` offers it. Story 12.6 AC12: each
-    unavailable booked venue is named too, so the event page says why before anything is sent."""
+    unavailable booked venue, and each venue with a replacement still pending, is named too, so the
+    event page says why before anything is sent."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_REVIEW_MESSAGE]
     return [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
@@ -525,7 +526,8 @@ def _change_approved_since(db: Session, event: Event, review: EventSafetyReview)
 def confirm_blockers(db: Session, event: Event) -> list[str]:
     """AC7/AC14/AC21: what stops the event being confirmed now; ``[]`` offers it. The latest
     review must be an approval that saw the facts the event has now, with no change request
-    approved since (story 19.2 AC8)."""
+    approved since (story 19.2 AC8). Story 12.6 AC12: a booking marked unavailable, or with a
+    replacement pending, is named here as it is for the review's request."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_CONFIRM_MESSAGE]
     blockers = [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
