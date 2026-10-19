@@ -51,7 +51,7 @@ import {
 import {
   AWAITING_DECISION_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
-  CHANGE_REQUESTABLE_STATUS,
+  CHANGE_REQUESTABLE_STATUSES,
   CHANGE_REQUESTS_VISIBLE_STATUSES,
   CONTACT_EDITABLE_STATUSES,
   DETAILS_LOCKED_HINT,
@@ -626,12 +626,13 @@ export function EventDetailPage() {
   const canViewClarifications =
     user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
   const isOrganiser = user !== null && event.organiser_id === user.id
-  /** Story 19.1 AC1/AC5/AC7: only the owning organiser, holding event_change_requests:create, asks
-   *  for a change, and only while the event is in Planning - mirroring the backend's checks. */
+  /** Story 19.1 AC1/AC5/AC7/AC11: only the owning organiser, holding event_change_requests:create,
+   *  asks for a change, and only while the event is in Planning or Confirmed - mirroring the
+   *  backend's checks. */
   const canRequestChanges =
     can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
     isOrganiser &&
-    event.status === CHANGE_REQUESTABLE_STATUS
+    CHANGE_REQUESTABLE_STATUSES.includes(event.status)
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
   const canViewChangeRequests =

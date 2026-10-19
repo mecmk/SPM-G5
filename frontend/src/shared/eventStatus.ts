@@ -99,11 +99,12 @@ export const EQUIPMENT_LOCKED_HINT =
   'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
 
 /**
- * Story 19.1 AC5: the one status a change request can be raised in, mirroring the backend's
- * `_REQUESTABLE_STATUS` (backend/app/change_requests/service.py). Before approval, changes go
- * through clarification; once Confirmed or closed, none are taken.
+ * Story 19.1 AC5/AC11/AC12: the statuses a change request can be raised in - Planning, and
+ * Confirmed since fix f19.1.1 (Q39) - mirroring the backend's `_REQUESTABLE_STATUSES`
+ * (backend/app/change_requests/service.py). Before approval, changes go through clarification; a
+ * completed, cancelled or rejected event takes none, and awaiting the safety check waits on Q20.
  */
-export const CHANGE_REQUESTABLE_STATUS: EventStatus = 'PLANNING'
+export const CHANGE_REQUESTABLE_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
 
 /**
  * Story 19.2 AC8: the statuses an approved change request returns an event from, to Planning, for

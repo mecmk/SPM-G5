@@ -3940,3 +3940,11 @@ button.requirement-choice.requirement-covered:hover,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Fix f19.1.1: on a phone, the organiser's Request a change - now also on a Confirmed event - is at
+   least 44px tall, to be pressed with a thumb. */
+@media (max-width: 640px) {
+  .change-requests-section .page-actions button {
+    min-height: 44px;
+  }
+}

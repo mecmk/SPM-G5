@@ -21,12 +21,18 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
+
+/** Fix f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change an event
+ *  that approval would send back to Planning - a Confirmed one. */
+const BACK_TO_PLANNING_NOTE =
+  'If this change is approved, the event goes back to Planning and needs a new safety check before it is confirmed again.'
 
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
 const WHOLE_NUMBER = /^\d+$/
@@ -126,7 +132,7 @@ function equipmentInputFrom(draft: EquipmentDraft): EquipmentInput {
 
 export interface ChangeRequestsSectionProps {
   event: EventDetail
-  /** AC1/AC5/AC7: the owning organiser, while the event is in Planning. */
+  /** AC1/AC5/AC7/AC11: the owning organiser, while the event is in Planning or Confirmed. */
   canRaise: boolean
   /** AC9: the owning organiser may withdraw their pending requests. */
   canWithdraw: boolean
@@ -146,11 +152,13 @@ interface OpenDecision {
 /**
  * Story 19.1: the event's change requests, on the event page. The organiser and the assigned
  * coordinator see each one with what is there now, what is asked for, why, and its status (AC1).
- * While the event is in Planning the organiser asks for one field to change - date and time,
- * expected attendance, venue requirements or equipment - with a reason (AC1, AC4), at most one
- * pending per field (AC5), and withdraws a pending request after confirming (AC9). Nothing
- * changes on the event until the coordinator decides. The form checks the reason and the simple
- * value rules before sending; the server re-checks every rule (AC3, AC4).
+ * While the event is in Planning or Confirmed (fix f19.1.1, AC11) the organiser asks for one field
+ * to change - date and time, expected attendance, venue requirements or equipment - with a reason
+ * (AC1, AC4), at most one pending per field (AC5), and withdraws a pending request after
+ * confirming (AC9). On a Confirmed event the form says that approving the change sends the event
+ * back to Planning for a new safety check (19.2 AC8). Nothing changes on the event until the
+ * coordinator decides. The form checks the reason and the simple value rules before sending; the
+ * server re-checks every rule (AC3, AC4).
  * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
  * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
  * saying why - and an event with none starts it with one blank row to fill in.
@@ -453,7 +461,7 @@ export function ChangeRequestsSection({
   const lastRequirementHintId = `${ids}-last-requirement`
 
   return (
-    <section className="card stack" aria-labelledby={`${ids}-heading`}>
+    <section className="card stack change-requests-section" aria-labelledby={`${ids}-heading`}>
       <div>
         <h2 id={`${ids}-heading`}>{canWithdraw ? 'Your change requests' : 'Change requests'}</h2>
         <p className="muted">
@@ -570,6 +578,9 @@ export function ChangeRequestsSection({
             Nothing changes until the coordinator decides. To update the point of contact, use
             Update point of contact above.
           </p>
+          {CHANGE_RETURNS_TO_PLANNING_STATUSES.includes(event.status) && (
+            <p className="warning">{BACK_TO_PLANNING_NOTE}</p>
+          )}
           <label>
             What to change
             <select

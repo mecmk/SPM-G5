@@ -1,9 +1,9 @@
 """Business rules for story 19.1: raise an event change request, list them, withdraw one; and for
 story 19.2: the coordinator's queue and record of them, and approving or rejecting one.
 
-A change request records one field of an event in Planning, its value now, the value proposed
-and why. Raising one changes nothing on the event, its bookings or its equipment holds (AC1/AC3):
-the coordinator decides it later (story 19.2).
+A change request records one field of an event in Planning or Confirmed (fix f19.1.1, AC11), its
+value now, the value proposed and why. Raising one changes nothing on the event, its bookings or
+its equipment holds (AC1/AC3): the coordinator decides it later (story 19.2).
 
 Values are stored as canonical JSON text - keys sorted, moments in UTC - so the same value always
 reads the same: a proposal identical to the current value is recognised and refused (AC4), and
@@ -63,9 +63,11 @@ InvalidVenueRequirement = events_service.InvalidVenueRequirement
 # AC5/AC6: the partial unique index a second pending request on one field violates (migration 015).
 PENDING_FIELD_INDEX = "uq_event_change_requests_pending_field"
 
-# AC5: change requests are taken only while the event is in Planning. Before approval, changes go
-# through clarification (stories 4.2/4.3); once Confirmed or closed, none are taken (CL-016).
-_REQUESTABLE_STATUS = EventStatus.PLANNING
+# AC5/AC11/AC12: change requests are taken while the event is in Planning or Confirmed - a change to
+# a Confirmed event goes back through every check before it is confirmed again (fix f19.1.1, Q39;
+# 19.2 AC8). Before approval, changes go through clarification (stories 4.2/4.3); a completed,
+# cancelled or rejected event takes none. Awaiting the safety check waits on Q20, so none yet.
+_REQUESTABLE_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
 _BEFORE_APPROVAL_STATUSES = (
     EventStatus.DRAFT,
     EventStatus.UNDER_REVIEW,
@@ -113,8 +115,8 @@ class ChangeRequestsNotYetOpen(EventStateConflict):
 
 
 class ChangeRequestsClosed(EventStateConflict):
-    """AC5/AC8: the event is Confirmed or closed - also when it got there while the request was
-    being written."""
+    """AC12/AC13: the event is completed, cancelled, rejected or awaiting its safety check (Q20) -
+    also when it got there while the request was being written."""
 
     def __init__(self, status: str) -> None:
         super().__init__(CHANGE_REQUESTS_CLOSED_MESSAGE.format(status=status))
@@ -290,10 +292,11 @@ def is_out_of_date(request: EventChangeRequest) -> bool:
 
 
 def _refuse_unless_requestable(event: Event) -> None:
-    """AC5/AC8: read under the event's row lock, so a confirm or cancel landing first is seen."""
+    """AC5/AC12/AC13: read under the event's row lock, so a cancel or completion landing first is
+    seen."""
     if event.status in _BEFORE_APPROVAL_STATUSES:
         raise ChangeRequestsNotYetOpen()
-    if event.status != _REQUESTABLE_STATUS:
+    if event.status not in _REQUESTABLE_STATUSES:
         raise ChangeRequestsClosed(event.status)
 
 
@@ -326,10 +329,11 @@ def _notify_coordinator(
 def raise_change_request(
     db: Session, event_id: uuid.UUID, data: ChangeRequestIn, *, actor: User
 ) -> EventChangeRequest:
-    """AC1-AC8: the owning organiser asks for one field of their Planning event to change.
+    """AC1-AC8, AC11-AC13: the owning organiser asks for one field of their Planning or Confirmed
+    event to change.
 
     The event row is locked first, so a status change racing this request either lands before
-    it (and is seen: AC8) or waits until it is saved. The proposal is checked by the creation
+    it (and is seen: AC13) or waits until it is saved. The proposal is checked by the creation
     rules and compared with the current value (AC3/AC4), then inserted; a second pending request
     for the field is refused by the database's own index (AC6), never by a check beforehand
     (backend/STYLE.md). The request, the coordinator's notification and the audit entry are

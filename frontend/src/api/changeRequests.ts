@@ -90,7 +90,8 @@ export function listChangeRequests(eventId: string): Promise<ChangeRequest[]> {
   })
 }
 
-/** Story 19.1 AC1-AC8: ask for one field of the organiser's Planning event to change. */
+/** Story 19.1 AC1-AC8, AC11-AC13: ask for one field of the organiser's Planning or Confirmed event
+ *  to change. */
 export function raiseChangeRequest(
   eventId: string,
   input: ChangeRequestInput,

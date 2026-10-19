@@ -71,7 +71,8 @@ def raise_change_request(
     db: DbSession,
     actor: Annotated[CurrentUser, CanRequestChanges],
 ) -> ChangeRequestOut:
-    """AC1-AC8: the owning organiser asks for one field of their Planning event to change."""
+    """AC1-AC8, AC11-AC13: the owning organiser asks for one field of their Planning or
+    Confirmed event to change."""
     try:
         request = service.raise_change_request(db, event_id, payload, actor=actor)
     except service.EventNotFound:

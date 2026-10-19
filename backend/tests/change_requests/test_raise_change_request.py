@@ -32,6 +32,13 @@ AC9 The organiser can withdraw their own pending change request. It is kept as W
 AC10 Only a Pending request can be withdrawn, including one decided while the organiser was
     confirming; only the owning organiser can withdraw.
 
+Change requests on Confirmed events (fix f19.1.1, Q39, CL-122)
+AC11 The organiser can raise change requests on a Confirmed event as on a Planning one. Approving
+    one returns the event to Planning for every check again (19.2 AC8).
+AC12 They are still not offered before approval, or for Completed, Cancelled or Rejected events,
+    and the API refuses them. Awaiting the safety check waits on Q20, so it is refused for now.
+AC13 If the event is cancelled or completed while a request is being written, it is refused.
+
 Decisions recorded at Checkpoint 1 that these tests rely on:
 * Date and time is one field, ``schedule``, holding ``starts_at`` and ``ends_at`` together.
 * "Venue" is requested through ``venue_requirements``; organisers cannot pick a venue.
@@ -41,11 +48,13 @@ Decisions recorded at Checkpoint 1 that these tests rely on:
   ``audit_log`` as ``EVENT_CONTACT_UPDATED`` (7.4's change history is not built yet).
 
 Excluded, with reason:
-* What the form offers (AC5's "not offered") and the reason field blocking submit (AC4's
-  client-side half) are UI behaviour, proven in tests/e2e/change-requests.spec.ts.
-* AC8's true race needs two database connections; these tests share the test's one connection,
-  so the other transaction is simulated by changing the status just before submitting. The
-  row lock that makes the real race safe is the same one story 2.7 AC12 relies on.
+* What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
+  offered before approval or while awaiting the safety check) and the reason field blocking
+  submit (AC4's client-side half) are UI behaviour, proven in tests/e2e/change-requests.spec.ts.
+* AC8's and AC13's true race needs two database connections; these tests share the test's one
+  connection, so the other transaction is simulated by changing the status just before
+  submitting. The row lock that makes the real race safe is the same one story 2.7 AC12 relies
+  on.
 """
 
 from __future__ import annotations
@@ -1041,11 +1050,13 @@ def test_organiser_raises_a_change_on_a_confirmed_event(organiser_client, db: Se
         ("venue_requirements", [{"name": "Breakout", "capacity": 30, "layout_code": "CLASSROOM"}]),
         ("equipment", [{"equipment_type_code": "WIRELESS_MIC", "quantity": 4}]),
     ],
+    ids=["schedule", "expected_attendance", "venue_requirements", "equipment"],
 )
 def test_each_field_can_be_raised_on_a_confirmed_event(
     organiser_client, db: Session, field, proposed
 ):
-    """AC11: every field AC1 offers is taken on a Confirmed event too."""
+    """AC11: every field AC1 offers is taken on a Confirmed event too. The schedule's proposal is
+    built from the event's own dates (a day later), so it is left None here."""
     event = _confirmed_event(db)
 
     response = _raise(organiser_client, event.id, field, proposed or _moved_a_day(event))
