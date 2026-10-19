@@ -99,8 +99,11 @@ export function ReviewQueuePage() {
   /** Story 12.6 AC11: opening the Venue unavailable tab starts its list afresh - an earlier failed
    *  load's alert is not this load's, and the tab shows its loading state until the list answers. */
   function openTab(next: InboxTabKey) {
+    // Pressing the tab that is already open changes nothing, so nothing is fetched again.
+    if (next === tab) return
     if (next === VENUE_UNAVAILABLE_TAB) {
       setUnavailableError(null)
+      setUnavailableLoadMoreError(null)
       setUnavailable(null)
     }
     setTab(next)
