@@ -8,11 +8,13 @@
  *     every value rule are backend cases).
  * AC11 (fix f19.1.1) change requests are offered on a Confirmed event too, saying that approving
  *     one sends the event back to Planning for a new safety check.
- * AC12 they are not offered before approval, nor while the event awaits its safety check (Q20).
+ * AC12 they are not offered before approval, while the event awaits its safety check (Q20), once
+ *     it is completed or cancelled, or within 24 hours of its set-up time - the page says when
+ *     they close, or that they have.
  * AC9 the organiser withdraws a pending request after confirming, and it reads as Withdrawn.
  *
  * Validation rules, refusals (401/403/404/409/422), the one-pending-per-field rule, the conflict
- * cases (AC8, AC10) and the notifications are backend cases:
+ * cases (AC8, AC10, AC13) and the notifications are backend cases:
  * backend/tests/change_requests/test_raise_change_request.py.
  *
  * Each test that raises a request does so on a fresh event it creates, submits and has approved
@@ -20,16 +22,25 @@
  * so a retried test, or a parallel one, would otherwise collide with a request left behind.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, approvedEvent, changeRequests, EVENTS, inFuture, signIn } from './support'
+import {
+  ACCOUNTS,
+  approvedEvent,
+  changeRequests,
+  EVENTS,
+  expectNoSidewaysScroll,
+  inFuture,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  signIn,
+} from './support'
 
-// Confirmed, Omar's (organiser 2) - only read here, never changed.
-const CONFIRMED_DINNER = '33333333-0000-0000-0000-000000000013'
 const REASON = 'The keynote speaker can only attend a day later.'
 // f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change a Confirmed event.
+// Team decision on the review of #125 (19.1 AC12): change requests close 24 hours before set-up.
+const CLOSE_NOTE = /^Change requests close 24 hours before set-up, on .+\.$/
+const CLOSED_NOTE = 'Change requests for this event closed 24 hours before its set-up time.'
 const BACK_TO_PLANNING_NOTE =
   'If this change is approved, the event goes back to Planning and needs a new safety check before it is confirmed again.'
-const PHONE = { width: 375, height: 667 }
-const MIN_TOUCH_TARGET = 44
 
 async function openChangeForm(page: Page, field: string) {
   await changeRequests(page).getByRole('button', { name: 'Request a change' }).click()
@@ -100,10 +111,11 @@ test('19.1 AC4: the change form will not submit without a reason', async ({ page
   expect(raiseCalls).toBe(0)
 })
 
-test('19.1 AC12: change requests are not offered before approval or while awaiting the safety check', async ({
+test('19.1 AC12: change requests are not offered before approval, while awaiting the safety check, or once completed or cancelled', async ({
   page,
 }) => {
-  // Planning: offered. Olivia's Regional Sales Summit is only looked at here, never changed.
+  // Every event here is only looked at, never changed.
+  // Planning: offered. Olivia's Regional Sales Summit.
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.planning}`)
   await expect(page.getByRole('button', { name: 'Request a change' })).toBeVisible()
@@ -113,11 +125,39 @@ test('19.1 AC12: change requests are not offered before approval or while awaiti
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 
-  // Awaiting its safety check: Omar's concert, until Q20 decides. Only looked at here.
+  // Completed: Olivia's New Year Town Hall still lists its change requests, and takes no new one.
+  // (It is also long past its set-up, so the 24-hour rule hides the button too; the Cancelled line
+  // below tests the status alone.)
+  await page.goto(`/events/${EVENTS.completed}`)
+  await expect(changeRequests(page)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
+
+  // Awaiting its safety check: Omar's concert, until Q20 decides.
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, ACCOUNTS.organiser2)
   await page.goto(`/events/${EVENTS.harbourConcert}`)
   await expect(page.getByRole('heading', { name: 'Harbour Lights Concert' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
+
+  // Cancelled: Omar's Charity Fun Run, still ahead (April 2027), so only its status hides it.
+  await page.goto(`/events/${EVENTS.cancelledFunRun}`)
+  await expect(changeRequests(page)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
+})
+
+test('19.1 AC12: change requests are offered until 24 hours before set-up, saying when they close', async ({
+  page,
+}) => {
+  // Read only. Omar's dinner, Confirmed and months ahead, offers them, and says until when...
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(`/events/${EVENTS.confirmed}`)
+  await expect(page.getByRole('button', { name: 'Request a change' })).toBeVisible()
+  await expect(changeRequests(page).getByText(CLOSE_NOTE)).toBeVisible()
+
+  // ...his Autumn Book Swap, still Confirmed but over since 3 Oct (Q57), is long past its set-up:
+  // none are offered, and it says why.
+  await page.goto(`/events/${EVENTS.bookSwap}`)
+  await expect(changeRequests(page).getByText(CLOSED_NOTE)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 })
 
@@ -236,7 +276,7 @@ test('19.1 AC11: change requests are offered on a confirmed event, with what app
   // Confirmed: Omar's dinner takes change requests now (Q39), and says what approving one means.
   await page.getByRole('button', { name: 'Sign out' }).click()
   await signIn(page, ACCOUNTS.organiser2)
-  await page.goto(`/events/${CONFIRMED_DINNER}`)
+  await page.goto(`/events/${EVENTS.confirmed}`)
   await openChangeForm(page, 'Expected attendance')
   await expect(
     changeRequests(page).getByRole('button', { name: 'Send change request' }),
@@ -248,7 +288,7 @@ test('19.1 AC11: the change form on a confirmed event fits a phone', async ({ pa
   // Read only: the form is opened on Omar's dinner and nothing is sent.
   await page.setViewportSize(PHONE)
   await signIn(page, ACCOUNTS.organiser2)
-  await page.goto(`/events/${CONFIRMED_DINNER}`)
+  await page.goto(`/events/${EVENTS.confirmed}`)
   const request = changeRequests(page).getByRole('button', { name: 'Request a change' })
   await expect(request).toBeVisible()
   expect((await request.boundingBox())!.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
@@ -258,8 +298,5 @@ test('19.1 AC11: the change form on a confirmed event fits a phone', async ({ pa
   await expect(note).toBeVisible()
   const box = (await note.boundingBox())!
   expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width)
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-  expect(fits).toBe(true)
+  await expectNoSidewaysScroll(page)
 })

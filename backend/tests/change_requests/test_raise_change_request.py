@@ -15,8 +15,8 @@ AC4 A reason is mandatory. New values follow the same rules as creation (date li
 
 Edge
 AC5 Only one pending request per field per event. Before final approval, change requests are not
-    offered. (Its last sentence, "once Confirmed, they are not offered and the API refuses them",
-    was replaced by AC11.)
+    offered. (Its last sentence, "Once the event is Confirmed, change requests are not offered and
+    the API refuses them", is replaced by AC11.)
 AC6 The server refuses a duplicate pending request for the same field.
 
 Permission
@@ -24,7 +24,8 @@ AC7 Only the owning organiser can raise change requests. Coordinators cannot rai
 
 Conflict
 AC8 If the event is cancelled while the request is being written, submitting it is refused.
-    (Its "or becomes Confirmed" was replaced by AC11; AC13 now says it.)
+    (Its "or becomes Confirmed" is replaced by AC11, so a request written while the event became
+    Confirmed is now taken. AC13 repeats the cancelled case and adds completed.)
 
 Withdrawal (added by the PO at Checkpoint 1)
 AC9 The organiser can withdraw their own pending change request. It is kept as Withdrawn, the
@@ -32,12 +33,15 @@ AC9 The organiser can withdraw their own pending change request. It is kept as W
 AC10 Only a Pending request can be withdrawn, including one decided while the organiser was
     confirming; only the owning organiser can withdraw.
 
-Change requests on Confirmed events (fix f19.1.1, Q39, CL-122)
-AC11 The organiser can raise change requests on a Confirmed event as on a Planning one. Approving
-    one returns the event to Planning for every check again (19.2 AC8).
-AC12 They are still not offered before approval, or for Completed, Cancelled or Rejected events,
-    and the API refuses them. Awaiting the safety check waits on Q20, so it is refused for now.
-AC13 If the event is cancelled or completed while a request is being written, it is refused.
+Change requests on Confirmed events (f19.1.1)
+AC11 The organiser can raise change requests on a Confirmed event as on a Planning one (replaces
+    AC5's last sentence, and AC8's refusal when the event becomes Confirmed) (Q39). Approving one
+    returns the event to Planning for every check again before it is confirmed again (19.2 AC8).
+AC12 Change requests are still not offered before approval (AC5) or for Completed, Cancelled or
+    Rejected events, and the API refuses them. Whether they are offered while the event is
+    Awaiting Safety Check waits on Q20.
+AC13 If the event is cancelled or completed while a request is being written, submitting it is
+    refused.
 
 Decisions recorded at Checkpoint 1 that these tests rely on:
 * Date and time is one field, ``schedule``, holding ``starts_at`` and ``ends_at`` together.
@@ -47,28 +51,45 @@ Decisions recorded at Checkpoint 1 that these tests rely on:
 * The point of contact may be updated while Planning or Confirmed, and is logged to
   ``audit_log`` as ``EVENT_CONTACT_UPDATED`` (7.4's change history is not built yet).
 
+Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
+* Until Q20 is answered, an event awaiting its safety check takes no change requests, and the API
+  refuses them with a sentence of its own (AC12).
+* On a Confirmed event the form warns the organiser, before sending, that approval returns the
+  event to Planning for a new safety check (AC11; the warning is an e2e case).
+* Change requests close 24 hours before the event's set-up time: the earliest set-up start
+  (``held_from``) among its bookings that hold a venue, Pending or Approved, or its start time if
+  that is earlier or it has none. That covers an event already under way or over, which nothing
+  marks Completed yet (Q57). (Team decision on the review of #125.)
+
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
   offered before approval or while awaiting the safety check) and the reason field blocking
   submit (AC4's client-side half) are UI behaviour, proven in tests/e2e/change-requests.spec.ts.
-* AC8's and AC13's true race needs two database connections; these tests share the test's one
-  connection, so the other transaction is simulated by changing the status just before
-  submitting. The row lock that makes the real race safe is the same one story 2.7 AC12 relies
-  on.
+* Most AC8 and AC13 cases share the test's one connection, so the other transaction is simulated
+  by changing the status just before submitting.
+  ``test_a_request_waits_for_a_cancellation_landing_at_the_same_time`` runs the real race, on two
+  connections, to pin the row lock that makes it safe.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
+from app.change_requests import service as change_requests_service
+from app.change_requests.models import EventChangeRequest
+from app.change_requests.schemas import AttendanceChangeIn
+from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus
+from app.notifications.models import Notification
 from tests.support.factories import (
     future_datetime,
     make_booking,
@@ -83,6 +104,14 @@ _REASON = "The keynote speaker can only attend a day later."
 # The service's own refusals, so a 404 is never confused with a route that does not exist.
 _EVENT_NOT_FOUND = "Event not found."
 _CHANGE_REQUEST_NOT_FOUND = "Change request not found."
+# AC12/AC13: the sentence for each status that takes no change requests.
+_CLOSED_REFUSAL = "This event is {status}, so it no longer takes change requests."
+_AWAITING_SAFETY_CHECK_REFUSAL = (
+    "This event is awaiting its safety check, so it does not take change requests."
+)
+_CLOSED_BEFORE_SETUP_REFUSAL = (
+    "Change requests for this event closed 24 hours before its set-up time."
+)
 _CURRENT_EMAIL = "olivia.events@acme.example"
 _CURRENT_PHONE = "+65 6111 2233"
 
@@ -780,7 +809,7 @@ def test_a_refused_value_reports_only_its_own_problem(
     assert problem["loc"][:2] == ["body", field]
 
 
-# --- AC5 / AC6: one pending request per field, only while Planning --------------------------
+# --- AC5 / AC6 / AC12: one pending request per field, and none before approval or once closed -
 @pytest.mark.story("19.1", ac=6)
 def test_second_pending_request_for_the_same_field_is_refused(organiser_client, db: Session):
     event = _planning_event(db)
@@ -819,6 +848,7 @@ def test_database_refuses_two_pending_requests_for_one_field(db: Session):
 
 
 @pytest.mark.story("19.1", ac=5)
+@pytest.mark.story("19.1", ac=12)
 @pytest.mark.parametrize(
     "status",
     [EventStatus.DRAFT, EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED],
@@ -837,13 +867,14 @@ def test_change_request_refused_before_approval(organiser_client, db: Session, s
     "status", [EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED]
 )
 def test_change_request_refused_once_closed(organiser_client, db: Session, status):
-    """AC12: a completed, cancelled or rejected event takes no change requests. (A Confirmed one
-    does since fix f19.1.1, AC11.)"""
+    """AC12: a completed, cancelled or rejected event takes no change requests, and the refusal
+    names its status in words. (A Confirmed one does since fix f19.1.1, AC11.)"""
     event = _planning_event(db, status=status)
 
     response = _raise(organiser_client, event.id, "expected_attendance", 150)
 
     assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CLOSED_REFUSAL.format(status=status.lower())
     assert _change_requests(db, event.id) == []
 
 
@@ -882,14 +913,15 @@ def test_organiser_cannot_raise_a_change_on_another_organisers_event(login_as, d
     assert _change_requests(db, event.id) == []
 
 
-# --- AC8: conflict -----------------------------------------------------------------------------
+# --- AC8 / AC13: conflict -------------------------------------------------------------------
+@pytest.mark.story("19.1", ac=8)
 @pytest.mark.story("19.1", ac=13)
 @pytest.mark.parametrize("new_status", [EventStatus.CANCELLED, EventStatus.COMPLETED])
 def test_raise_refused_when_event_cancelled_or_completed_meanwhile(
     organiser_client, db: Session, new_status
 ):
-    """AC13: the event was cancelled or completed while Olivia wrote the request, so it is refused.
-    (Becoming Confirmed meanwhile no longer refuses it: AC11.)"""
+    """AC8/AC13: the event was cancelled or completed while Olivia wrote the request, so submitting
+    it is refused. (Becoming Confirmed meanwhile no longer refuses it: AC11.)"""
     event = _planning_event(db)
     opened = organiser_client.get(f"/events/{event.id}")
     assert opened.json()["status"] == EventStatus.PLANNING
@@ -900,6 +932,67 @@ def test_raise_refused_when_event_cancelled_or_completed_meanwhile(
     assert response.status_code == 409, response.text
     assert _change_requests(db, event.id) == []
     assert _notifications(db, event.id, "EVENT_CHANGE_REQUESTED") == []
+
+
+@pytest.mark.story("19.1", ac=8)
+@pytest.mark.story("19.1", ac=13)
+def test_a_request_waits_for_a_cancellation_landing_at_the_same_time(engine):
+    """Real concurrent transactions, committed and cleaned up after, as 5.6's cancellation race.
+    The event is being cancelled - that transaction holds its row - while Olivia submits a change.
+    Her request waits for the row, then sees the event Cancelled and is refused, rather than
+    leaving a pending request and a notice on a cancelled event (review of #125, probe P1)."""
+    with Session(engine) as session:
+        event_id = _planning_event(session, name="Change Request Race").id
+        session.commit()
+    outcome: dict[str, str] = {}
+
+    def submit() -> None:
+        with Session(engine) as session:
+            olivia = session.get(User, Users.ORGANISER.id)
+            proposal = AttendanceChangeIn(field="expected_attendance", proposed=150, reason=_REASON)
+            try:
+                change_requests_service.raise_change_request(
+                    session, event_id, proposal, actor=olivia
+                )
+                outcome["result"] = "raised"
+            except change_requests_service.ChangeRequestsClosed:
+                session.rollback()
+                outcome["result"] = "refused"
+
+    try:
+        with Session(engine) as cancelling:
+            cancelling.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+            olivia_submitting = threading.Thread(target=submit)
+            olivia_submitting.start()
+            # Long enough for the request to have read the event, or to be waiting for it.
+            olivia_submitting.join(timeout=0.5)
+            cancelling.execute(
+                text("UPDATE events SET status = 'CANCELLED' WHERE id = :e"), {"e": event_id}
+            )
+            cancelling.commit()
+        olivia_submitting.join(timeout=30)
+
+        assert outcome == {"result": "refused"}
+        with Session(engine) as session:
+            assert (
+                session.scalars(
+                    select(EventChangeRequest).where(EventChangeRequest.event_id == event_id)
+                ).all()
+                == []
+            )
+            assert (
+                session.scalars(select(Notification).where(Notification.event_id == event_id)).all()
+                == []
+            )
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(Notification).where(Notification.event_id == event_id))
+            session.execute(delete(AuditLog).where(AuditLog.entity_id == event_id))
+            session.execute(
+                delete(EventChangeRequest).where(EventChangeRequest.event_id == event_id)
+            )
+            session.execute(delete(Event).where(Event.id == event_id))
+            session.commit()
 
 
 # --- AC9: withdraw a pending request ---------------------------------------------------------
@@ -1022,6 +1115,15 @@ def _event_status(db: Session, event_id: uuid.UUID) -> str:
     return db.execute(text("SELECT status FROM events WHERE id = :e"), {"e": event_id}).scalar_one()
 
 
+def _ended_event(db: Session, *, status: str) -> Event:
+    """Olivia's event that ended yesterday, its status left as it was: nothing marks an ended event
+    Completed yet (Q57)."""
+    starts_at = datetime.now(UTC) - timedelta(days=1, hours=8)
+    return _planning_event(
+        db, status=status, starts_at=starts_at, ends_at=starts_at + timedelta(hours=8)
+    )
+
+
 @pytest.mark.story("19.1", ac=11)
 def test_organiser_raises_a_change_on_a_confirmed_event(organiser_client, db: Session):
     """AC11: as on a Planning event - saved as pending, the coordinator told, and nothing on the
@@ -1043,23 +1145,26 @@ def test_organiser_raises_a_change_on_a_confirmed_event(organiser_client, db: Se
 
 @pytest.mark.story("19.1", ac=11)
 @pytest.mark.parametrize(
-    ("field", "proposed"),
+    ("field", "proposal"),
     [
-        ("schedule", None),
-        ("expected_attendance", 150),
-        ("venue_requirements", [{"name": "Breakout", "capacity": 30, "layout_code": "CLASSROOM"}]),
-        ("equipment", [{"equipment_type_code": "WIRELESS_MIC", "quantity": 4}]),
+        ("schedule", _moved_a_day),
+        ("expected_attendance", lambda _event: 150),
+        (
+            "venue_requirements",
+            lambda _event: [{"name": "Breakout", "capacity": 30, "layout_code": "CLASSROOM"}],
+        ),
+        ("equipment", lambda _event: [{"equipment_type_code": "WIRELESS_MIC", "quantity": 4}]),
     ],
     ids=["schedule", "expected_attendance", "venue_requirements", "equipment"],
 )
 def test_each_field_can_be_raised_on_a_confirmed_event(
-    organiser_client, db: Session, field, proposed
+    organiser_client, db: Session, field, proposal
 ):
-    """AC11: every field AC1 offers is taken on a Confirmed event too. The schedule's proposal is
-    built from the event's own dates (a day later), so it is left None here."""
+    """AC11: every field AC1 offers is taken on a Confirmed event too. Each proposal is built from
+    the event, since the schedule's is its own dates a day later."""
     event = _confirmed_event(db)
 
-    response = _raise(organiser_client, event.id, field, proposed or _moved_a_day(event))
+    response = _raise(organiser_client, event.id, field, proposal(event))
 
     assert response.status_code == 201, response.text
     [row] = _change_requests(db, event.id)
@@ -1104,8 +1209,9 @@ def test_a_request_written_while_the_event_became_confirmed_is_taken(organiser_c
 @pytest.mark.story("19.1", ac=11)
 @pytest.mark.story("19.1", ac=6)
 def test_one_pending_request_per_field_holds_once_confirmed(organiser_client, db: Session):
-    """AC5/AC6 on a Confirmed event: a request raised while it was in Planning, still pending,
-    keeps its field - a second one is refused - while another field can still be asked for."""
+    """AC11 with AC6: on a Confirmed event, a request raised while it was in Planning, still
+    pending, keeps its field - a second one is refused - while another field can still be asked
+    for."""
     event = _planning_event(db)
     first = _raise(organiser_client, event.id, "expected_attendance", 150)
     assert first.status_code == 201, first.text
@@ -1165,11 +1271,182 @@ def test_only_the_owning_organiser_raises_on_a_confirmed_event(
 @pytest.mark.story("19.1", ac=12)
 def test_change_request_refused_while_awaiting_the_safety_check(organiser_client, db: Session):
     """AC12: whether change requests are offered while the event awaits its safety check waits on
-    Q20, so until then the API refuses them, saying the event's status."""
+    Q20, so until then the API refuses them, in a sentence of its own - the event is not past
+    taking them, as "no longer" would say (CL-149)."""
     event = _planning_event(db, status=EventStatus.AWAITING_SAFETY_CHECK)
 
     response = _raise(organiser_client, event.id, "expected_attendance", 150)
 
     assert response.status_code == 409, response.text
-    assert EventStatus.AWAITING_SAFETY_CHECK in response.json()["detail"]
+    assert response.json()["detail"] == _AWAITING_SAFETY_CHECK_REFUSAL
     assert _change_requests(db, event.id) == []
+
+
+# --- AC12: change requests close 24 hours before set-up (team decision on the review of #125) -
+def _confirmed_event_starting_in(
+    db: Session, hours: float, *, status: str = EventStatus.CONFIRMED
+) -> Event:
+    """Olivia's event, Confirmed unless ``status`` says otherwise, starting ``hours`` from now."""
+    starts_at = datetime.now(UTC) + timedelta(hours=hours)
+    return _planning_event(
+        db, status=status, starts_at=starts_at, ends_at=starts_at + timedelta(hours=4)
+    )
+
+
+def _book_with_setup(db: Session, event: Event, *, setup_minutes: int, status: str = "APPROVED"):
+    """A booking for the whole event, its venue held ``setup_minutes`` before it starts. An expired
+    one carries the hold expiry it lapsed at (``ck_venue_bookings_hold_expiry``)."""
+    return make_booking(
+        db,
+        venue_id=make_venue(db).id,
+        event_id=event.id,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        setup_minutes=setup_minutes,
+        status=status,
+        hold_expires_at=datetime.now(UTC) - timedelta(hours=1) if status == "EXPIRED" else None,
+    )
+
+
+@pytest.mark.story("19.1", ac=12)
+@pytest.mark.parametrize("status", [EventStatus.PLANNING, EventStatus.CONFIRMED])
+def test_change_requests_close_24_hours_before_the_event(organiser_client, db: Session, status):
+    """With no venue booked, set-up is the event's start: 23 hours ahead is inside the last 24, so
+    the request is refused, saying when they closed. Nothing is saved or sent."""
+    event = _confirmed_event_starting_in(db, 23, status=status)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CLOSED_BEFORE_SETUP_REFUSAL
+    assert _change_requests(db, event.id) == []
+    assert _notifications(db, event.id, "EVENT_CHANGE_REQUESTED") == []
+
+
+@pytest.mark.story("19.1", ac=11)
+@pytest.mark.story("19.1", ac=12)
+def test_a_change_is_taken_more_than_24_hours_before_the_event(organiser_client, db: Session):
+    """The boundary's other side: 25 hours ahead, with nothing booked, is still open."""
+    event = _confirmed_event_starting_in(db, 25)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.story("19.1", ac=12)
+@pytest.mark.parametrize(
+    ("setup_hours", "expected_status"),
+    [(7, 409), (4, 201)],
+    ids=["set-up starts in 23 hours", "set-up starts in 26 hours"],
+)
+def test_change_requests_close_24_hours_before_set_up(
+    organiser_client, db: Session, setup_hours, expected_status
+):
+    """It is set-up that counts, not the start: the event starts in 30 hours, and its venue is held
+    from ``setup_hours`` before that."""
+    event = _confirmed_event_starting_in(db, 30)
+    _book_with_setup(db, event, setup_minutes=setup_hours * 60)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == expected_status, response.text
+
+
+@pytest.mark.story("19.1", ac=12)
+@pytest.mark.parametrize(
+    ("booking_status", "expected_status"),
+    [
+        ("PENDING", 409),
+        ("APPROVED", 409),
+        ("REJECTED", 201),
+        ("WITHDRAWN", 201),
+        ("CANCELLED", 201),
+        ("EXPIRED", 201),
+    ],
+)
+def test_only_a_booking_that_holds_a_venue_sets_the_set_up_time(
+    organiser_client, db: Session, booking_status, expected_status
+):
+    """A pending or approved booking holds its venue, set-up included (12.1 AC3), so its set-up
+    counts. A booking that no longer holds one - rejected, withdrawn, cancelled or expired - does
+    not, and the event's own start, 30 hours ahead, leaves requests open."""
+    event = _confirmed_event_starting_in(db, 30)
+    _book_with_setup(db, event, setup_minutes=7 * 60, status=booking_status)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == expected_status, response.text
+
+
+@pytest.mark.story("19.1", ac=12)
+@pytest.mark.parametrize("status", [EventStatus.PLANNING, EventStatus.CONFIRMED])
+def test_change_request_refused_once_the_event_has_ended(organiser_client, db: Session, status):
+    """AC12's "not for Completed events", while nothing marks an ended event Completed (Q57): an
+    event that is over is long past its set-up, so it takes none, whatever its status still says.
+    The seed's Autumn Book Swap, Confirmed and over since 3 Oct, is such an event."""
+    event = _ended_event(db, status=status)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == _CLOSED_BEFORE_SETUP_REFUSAL
+    assert _change_requests(db, event.id) == []
+    assert _event_status(db, event.id) == status
+
+
+def _window(client, event_id: uuid.UUID):
+    return client.get(f"/events/{event_id}/change-request-window")
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_the_organiser_is_told_when_change_requests_close(organiser_client, db: Session):
+    """So the page can stop offering them (AC12's "not offered"): the moment they close, 24 hours
+    before set-up, and whether that is still ahead."""
+    event = _confirmed_event_starting_in(db, 30)
+    booking = _book_with_setup(db, event, setup_minutes=2 * 60)
+
+    response = _window(organiser_client, event.id)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert _as_moment(body["closes_at"]) == booking.held_from - timedelta(hours=24)
+    assert body["is_open"] is True
+
+
+@pytest.mark.story("19.1", ac=12)
+def test_the_window_says_closed_inside_the_last_24_hours(organiser_client, db: Session):
+    event = _confirmed_event_starting_in(db, 23)
+
+    response = _window(organiser_client, event.id)
+
+    assert response.status_code == 200, response.text
+    assert _as_moment(response.json()["closes_at"]) == event.starts_at - timedelta(hours=24)
+    assert response.json()["is_open"] is False
+
+
+@pytest.mark.story("19.1", ac=12)
+@pytest.mark.parametrize(
+    ("who", "expected_status"),
+    [
+        ("the assigned coordinator", 200),
+        ("another coordinator", 403),
+        ("another organiser", 404),
+        ("nobody signed in", 401),
+    ],
+)
+def test_who_may_read_when_change_requests_close(
+    login_as, client, db: Session, who, expected_status
+):
+    """As the change requests themselves (AC1): the organiser and the assigned coordinator."""
+    event = _confirmed_event_starting_in(db, 30)
+    actor = {
+        "the assigned coordinator": lambda: login_as(Users.COORDINATOR),
+        "another coordinator": lambda: login_as(Users.COORDINATOR_2),
+        "another organiser": lambda: login_as(Users.ORGANISER_2),
+        "nobody signed in": lambda: client,
+    }[who]()
+
+    response = _window(actor, event.id)
+
+    assert response.status_code == expected_status, response.text

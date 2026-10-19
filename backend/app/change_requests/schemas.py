@@ -129,6 +129,15 @@ def _change_request_fields(request: EventChangeRequest, *, is_out_of_date: bool)
     }
 
 
+class ChangeRequestWindowOut(BaseModel):
+    """19.1 AC12 (fix f19.1.1): when the event stops taking change requests - 24 hours before its
+    set-up time - and whether that is still ahead. ``closes_at`` is None for an event with no
+    date yet. No defaults (response schema)."""
+
+    closes_at: datetime | None
+    is_open: bool
+
+
 class ChangeRequestOut(BaseModel):
     """AC1: a change request as the organiser and the assigned coordinator see it. The values are
     returned as JSON, in the same canonical shape they are stored in (see the service). Story 19.2

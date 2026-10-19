@@ -1,9 +1,10 @@
 """Business rules for story 19.1: raise an event change request, list them, withdraw one; and for
 story 19.2: the coordinator's queue and record of them, and approving or rejecting one.
 
-A change request records one field of an event in Planning or Confirmed (fix f19.1.1, AC11), its
-value now, the value proposed and why. Raising one changes nothing on the event, its bookings or
-its equipment holds (AC1/AC3): the coordinator decides it later (story 19.2).
+A change request records one field of an event in Planning or Confirmed, raised until 24 hours
+before its set-up time (fix f19.1.1, AC11/AC12), its value now, the value proposed and why.
+Raising one changes nothing on the event, its bookings or its equipment holds (AC1/AC3): the
+coordinator decides it later (story 19.2).
 
 Values are stored as canonical JSON text - keys sorted, moments in UTC - so the same value always
 reads the same: a proposal identical to the current value is recognised and refused (AC4), and
@@ -25,7 +26,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import ValidationError
@@ -68,6 +69,9 @@ PENDING_FIELD_INDEX = "uq_event_change_requests_pending_field"
 # 19.2 AC8). Before approval, changes go through clarification (stories 4.2/4.3); a completed,
 # cancelled or rejected event takes none. Awaiting the safety check waits on Q20, so none yet.
 _REQUESTABLE_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
+# AC12 (team decision on the review of #125): change requests close this long before the event's
+# set-up time - which also covers an event under way or over, that nothing marks Completed (Q57).
+CHANGE_REQUEST_CUTOFF = timedelta(hours=24)
 _BEFORE_APPROVAL_STATUSES = (
     EventStatus.DRAFT,
     EventStatus.UNDER_REVIEW,
@@ -87,6 +91,12 @@ NOT_YET_APPROVED_MESSAGE = (
     "change request."
 )
 CHANGE_REQUESTS_CLOSED_MESSAGE = "This event is {status}, so it no longer takes change requests."
+AWAITING_SAFETY_CHECK_MESSAGE = (
+    "This event is awaiting its safety check, so it does not take change requests."
+)
+CLOSED_BEFORE_SETUP_MESSAGE = (
+    "Change requests for this event closed 24 hours before its set-up time."
+)
 DUPLICATE_PENDING_MESSAGE = (
     "A change to the {label} is already waiting for a decision. Withdraw it before requesting "
     "another."
@@ -115,11 +125,28 @@ class ChangeRequestsNotYetOpen(EventStateConflict):
 
 
 class ChangeRequestsClosed(EventStateConflict):
-    """AC12/AC13: the event is completed, cancelled, rejected or awaiting its safety check (Q20) -
-    also when it got there while the request was being written."""
+    """AC12/AC13: the event is completed, cancelled or rejected - also when it got there while the
+    request was being written."""
 
     def __init__(self, status: str) -> None:
-        super().__init__(CHANGE_REQUESTS_CLOSED_MESSAGE.format(status=status))
+        super().__init__(
+            CHANGE_REQUESTS_CLOSED_MESSAGE.format(status=equipment_service.as_words(status))
+        )
+
+
+class AwaitingSafetyCheck(EventStateConflict):
+    """AC12: whether an event awaiting its safety check takes change requests waits on Q20, so not
+    yet. Its own sentence: the event is not past taking them, as "no longer" would say."""
+
+    def __init__(self) -> None:
+        super().__init__(AWAITING_SAFETY_CHECK_MESSAGE)
+
+
+class ClosedBeforeSetup(EventStateConflict):
+    """AC12: it is less than 24 hours before the event's set-up time, or past it."""
+
+    def __init__(self) -> None:
+        super().__init__(CLOSED_BEFORE_SETUP_MESSAGE)
 
 
 class DuplicatePendingChange(EventStateConflict):
@@ -291,13 +318,42 @@ def is_out_of_date(request: EventChangeRequest) -> bool:
 # --- raise -------------------------------------------------------------------------------------
 
 
-def _refuse_unless_requestable(event: Event) -> None:
+@dataclass(frozen=True)
+class ChangeRequestWindow:
+    """AC12: when the event stops taking change requests, and whether that is still ahead."""
+
+    closes_at: datetime | None
+    is_open: bool
+
+
+def change_requests_close_at(db: Session, event: Event) -> datetime | None:
+    """AC12: 24 hours before the event's set-up time - when set-up begins at its first venue
+    (``bookings_service.earliest_setup_start``), or the event's own start if that is earlier or
+    no venue is held. None for an event with no date yet."""
+    setup_starts = bookings_service.earliest_setup_start(db, event.id)
+    starts = [moment for moment in (setup_starts, event.starts_at) if moment is not None]
+    return min(starts) - CHANGE_REQUEST_CUTOFF if starts else None
+
+
+def _window(db: Session, event: Event) -> ChangeRequestWindow:
+    closes_at = change_requests_close_at(db, event)
+    return ChangeRequestWindow(
+        closes_at=closes_at, is_open=closes_at is not None and datetime.now(UTC) < closes_at
+    )
+
+
+def _refuse_unless_requestable(db: Session, event: Event) -> None:
     """AC5/AC12/AC13: read under the event's row lock, so a cancel or completion landing first is
-    seen."""
+    seen. An approved event takes none once it is within 24 hours of its set-up time (AC12)."""
     if event.status in _BEFORE_APPROVAL_STATUSES:
         raise ChangeRequestsNotYetOpen()
     if event.status not in _REQUESTABLE_STATUSES:
+        # Kept inside, so answering Q20 "yes" is still one word in _REQUESTABLE_STATUSES.
+        if event.status == EventStatus.AWAITING_SAFETY_CHECK:
+            raise AwaitingSafetyCheck()
         raise ChangeRequestsClosed(event.status)
+    if not _window(db, event).is_open:
+        raise ClosedBeforeSetup()
 
 
 def _notify_coordinator(
@@ -330,7 +386,7 @@ def raise_change_request(
     db: Session, event_id: uuid.UUID, data: ChangeRequestIn, *, actor: User
 ) -> EventChangeRequest:
     """AC1-AC8, AC11-AC13: the owning organiser asks for one field of their Planning or Confirmed
-    event to change.
+    event to change, until 24 hours before its set-up time.
 
     The event row is locked first, so a status change racing this request either lands before
     it (and is seen: AC13) or waits until it is saved. The proposal is checked by the creation
@@ -339,7 +395,7 @@ def raise_change_request(
     (backend/STYLE.md). The request, the coordinator's notification and the audit entry are
     saved together. The event itself is not touched (AC1/AC3)."""
     event = events_service.get_own_event_for_update(db, event_id, actor=actor)
-    _refuse_unless_requestable(event)
+    _refuse_unless_requestable(db, event)
     current, proposed = _current_and_proposed(db, event, data)
     if _without_ids(data.field, current) == _without_ids(data.field, proposed):
         raise UnchangedValue(data.field)
@@ -409,6 +465,17 @@ def list_change_requests(
             .order_by(EventChangeRequest.created_at.desc(), EventChangeRequest.id)
         ).all()
     )
+
+
+def get_change_request_window(
+    db: Session, event_id: uuid.UUID, *, viewer: User
+) -> ChangeRequestWindow:
+    """AC12: when the event stops taking change requests, for whoever may read them (AC1), so the
+    page offers them only while they are taken."""
+    event = events_service.get_event(db, event_id, viewer=viewer)
+    if viewer.id not in (event.organiser_id, event.assigned_coordinator_id):
+        raise NotRelatedParty()
+    return _window(db, event)
 
 
 # --- withdraw ------------------------------------------------------------------------------

@@ -686,9 +686,10 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.
-  /** AC5/AC6/AC8/AC10: a change request refused for the state it found - the event is no longer
-   *  in Planning, the field already has a pending request, or the request was decided before it
-   *  could be withdrawn. The backend's own sentence (always sent) says which. */
+  /** AC5/AC6/AC8/AC10/AC12/AC13: a change request refused for the state it found - the event is
+   *  not yet approved, awaiting its safety check, completed, cancelled, rejected, or within 24
+   *  hours of its set-up time; the field already has a pending request; or the request was
+   *  decided before it could be withdrawn. The backend's own sentence (always sent) says which. */
   CHANGE_REQUEST_REFUSED: {
     title: 'Change request not sent',
     message: "This change request could not be made in the event's current state.",

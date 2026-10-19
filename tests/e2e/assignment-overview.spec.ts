@@ -29,9 +29,14 @@ import { expect, test, type Locator, type Page, type Request } from '@playwright
 import {
   ACCOUNTS,
   COORDINATORS,
+  DESKTOP,
   EVENTS,
+  MIN_TOUCH_TARGET,
+  PHONE,
+  TABLET,
   corsHeaders,
   createAndSubmitRequest,
+  expectNoSidewaysScroll,
   signIn,
   uniqueName,
 } from './support'
@@ -58,10 +63,6 @@ const SMART_CITIES_EXPO = 'Smart Cities Expo'
 // by the 21.1 and 7.2 specs.
 const HARBOUR_LIGHTS = 'Harbour Lights Concert'
 const [CHLOE, CARL] = COORDINATORS
-const PHONE = { width: 375, height: 667 }
-const TABLET = { width: 768, height: 1024 }
-const DESKTOP = { width: 1280, height: 800 }
-const MIN_TOUCH_TARGET = 44
 
 function overviewItem(page: Page, eventName: string) {
   return page
@@ -216,13 +217,6 @@ async function expectOnOneLine(flag: Locator) {
     return new Set([...text.getClientRects()].map((rect) => Math.round(rect.top))).size
   })
   expect(lineCount).toBe(1)
-}
-
-async function expectNoSidewaysScroll(page: Page) {
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-  expect(fits).toBe(true)
 }
 
 test('5.5 AC1/AC5: the overview shows a new event’s coordinator and who assigned it', async ({
