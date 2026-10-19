@@ -36,7 +36,7 @@ class BookingStatus:
 
 
 def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
-    """Story 9.4 AC3 / story 12.6 AC11, AC13: the booking still holds its venue - pending or
+    """Story 9.4 AC3 / story 12.6 AC11, AC12: the booking still holds its venue - pending or
     approved - and is marked "Venue unavailable - alternative needed". One definition for every
     reader of the mark: the coordinator's list (``Venue unavailable`` tab) and the safety review
     and confirmation, which refuse while an event has such a booking. A mark left on a closed
