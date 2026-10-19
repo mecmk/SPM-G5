@@ -15,14 +15,19 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import {
+  REGISTERED_BADGE,
+  describeRegisteredAt,
+  type RegistrationBadge,
+} from './registrationLabels'
 
 /** Story 18.1 AC1/AC3: each state's label, and the badge colour it takes (App.css). */
-const STATE_BADGES: Record<RegistrationState, { status: string; label: string }> = {
+const STATE_BADGES: Record<RegistrationState, RegistrationBadge> = {
   OPEN: { status: 'success', label: 'Open' },
   NOT_YET_OPEN: { status: 'info', label: 'Not yet open' },
   FULL: { status: 'warning', label: 'Full' },
   CLOSED: { status: 'neutral', label: 'Closed' },
-  REGISTERED: { status: 'registered', label: 'Registered' },
+  REGISTERED: REGISTERED_BADGE,
 }
 
 /** Story 18.1 AC1: what a Confirmed event with no approved venue booking shows. */
@@ -39,7 +44,7 @@ function describePlacesLeft(placesLeft: number): string {
  */
 function describeRegistration(event: RegistrationEvent): string {
   if (event.registered_at !== null) {
-    return `You registered on ${formatDateTime(event.registered_at)}`
+    return describeRegisteredAt(event.registered_at)
   }
   if (event.registration_opens_at !== null && event.state === 'NOT_YET_OPEN') {
     return `Registration opens ${formatDateTime(event.registration_opens_at)}`
