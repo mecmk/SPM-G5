@@ -59,6 +59,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.common.audit import AuditLog
+from app.coordination.models import EventCoordinatorAssignment
 from app.db import get_db
 from app.events.models import EventStatus
 from app.main import app
@@ -76,6 +77,7 @@ from app.venues.models import Venue, VenueAccessibilityFeature, VenueFacility, V
 from tests.support.factories import (
     approval_payload,
     create_submittable_event_request,
+    future_datetime,
     make_event,
     make_secured_event,
     make_user,
@@ -660,6 +662,57 @@ def test_a_cancellation_with_no_coordinator_reaches_every_active_lead_with_the_e
 
     assert first["target"] == {"kind": "event", "id": str(event.id)}
     assert second["target"] == {"kind": "event", "id": str(event.id)}
+
+
+@pytest.mark.story("20.2", ac=4)
+def test_a_submission_cancelled_before_assignment_sends_the_lead_to_the_event(login_as):
+    organiser = login_as(Users.ORGANISER)
+    draft = create_submittable_event_request(organiser)
+    assert organiser.post(f"/events/{draft['id']}/submit").status_code == 200
+    cancelled = organiser.post(
+        f"/events/{draft['id']}/cancel", json={"reason": CANCELLATION_REASON}
+    )
+    assert cancelled.status_code == 200, cancelled.text
+
+    submitted = _newest_of(login_as(Users.LEAD), "EVENT_SUBMITTED")
+
+    assert submitted["event_id"] == draft["id"]
+    assert submitted["target"] == {"kind": "event", "id": draft["id"]}
+
+
+@pytest.mark.story("20.2", ac=4)
+def test_a_change_request_on_an_event_reassigned_away_sends_the_coordinator_to_the_event(
+    login_as, db: Session
+):
+    starts_at = future_datetime(days=60)
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=8),
+        expected_attendance=100,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+    db.add(EventCoordinatorAssignment(event_id=event.id, coordinator_id=Users.COORDINATOR.id))
+    db.flush()
+    raised = login_as(Users.ORGANISER).post(
+        f"/events/{event.id}/change-requests",
+        json={"field": "expected_attendance", "proposed": 150, "reason": "More sign-ups."},
+    )
+    assert raised.status_code == 201, raised.text
+    moved = login_as(Users.LEAD).put(
+        f"/events/{event.id}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+    assert moved.status_code == 200, moved.text
+
+    notice = _newest_of(login_as(Users.COORDINATOR), "EVENT_CHANGE_REQUESTED")
+
+    assert notice["event_id"] == str(event.id)
+    assert notice["target"] == {"kind": "event", "id": str(event.id)}
 
 
 # --- AC4: no target when the reader has no page for it, cannot open it, or it is gone ---------
