@@ -32,7 +32,7 @@ type QueueTabKey = 'ALL' | ChangeRequestStatus
  *  so it reads as a queue. */
 const QUEUE_TABS: { key: QueueTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
-  ...(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN'] as const).map((key) => ({
+  ...(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'CANCELLED'] as const).map((key) => ({
     key,
     label: STATUS_LABELS[key],
   })),
@@ -50,6 +50,8 @@ const EMPTY_TAB_MESSAGES: Record<QueueTabKey, string> = {
   APPROVED: 'You have not approved any change requests yet.',
   REJECTED: 'You have not rejected any change requests yet.',
   WITHDRAWN: 'No change requests on your events have been withdrawn.',
+  // Story 6.2 AC4: a pending request closes with its event when the organiser cancels it.
+  CANCELLED: 'No change requests on your events were cancelled with their event.',
   ALL: 'No change requests have been made on your events yet.',
 }
 

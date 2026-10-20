@@ -52,7 +52,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -129,6 +129,29 @@ SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequest
 # Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
 # the queue leaves them out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
+# Story 15.2 AC3/AC5 with 6.2 AC9/AC15: what Technical Support's queue lists. An item in a tab of
+# its own, on an event still going ahead; one cancelled after it was sent to them, whatever its
+# event; or one they declined on an event since cancelled, which stays Declined - the last two
+# kept for their record, as a rejected event's items are not.
+_LIVE_TAB_STATUSES = (
+    EquipmentRequestStatus.PENDING,
+    EquipmentRequestStatus.ACCEPTED,
+    EquipmentRequestStatus.DECLINED,
+)
+_IN_QUEUE = or_(
+    and_(
+        EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
+        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
+    ),
+    and_(
+        EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
+        EventEquipmentRequest.submitted_at.is_not(None),
+    ),
+    and_(
+        EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
+        Event.status == EventStatus.CANCELLED,
+    ),
+)
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
@@ -324,11 +347,12 @@ def list_event_equipment_availability(
 @dataclass(frozen=True)
 class EquipmentQueueRow:
     """Story 15.2 AC1/AC2: one request in Technical Support's queue, its event, and how many of its
-    type the event's period has for it."""
+    type the event's period has for it. Story 6.2 AC15: ``None`` for a cancelled request, which
+    holds nothing and shows no figure."""
 
     item: EventEquipmentRequest
     event: Event
-    available: int
+    available: int | None
 
 
 @dataclass(frozen=True)
@@ -342,23 +366,24 @@ class EquipmentQueueListing:
 def list_equipment_requests(
     db: Session, *, status: EquipmentQueueStatus | None = None
 ) -> EquipmentQueueListing:
-    """Story 15.2 AC1/AC3: the requests in one tab, or in all three when ``status`` is ``None`` (the
-    All tab), soonest event first; ties fall back to the order the items were recorded in, then
-    id, so the list is stable. AC5: an item the coordinator removed is gone, and every item on a
-    cancelled or rejected event is left out, whatever its own status.
-    Items in a status with no tab (not yet sent, flagged unavailable, cancelled) are left out too.
+    """Story 15.2 AC1/AC3: the requests in one tab, or in every tab when ``status`` is ``None``
+    (the All tab), soonest event first; ties fall back to the order the items were recorded in,
+    then id, so the list is stable. AC5: an item the coordinator removed is gone, and every item
+    on a rejected event is left out, whatever its own status. Story 6.2 AC15: an item cancelled
+    once sent to Technical Support stays, under Cancelled, and one they declined on an event
+    since cancelled stays under Declined; one never sent is left out. Items in a status with no
+    tab (not yet sent, flagged unavailable) are left out too.
 
     AC2: each request's ``available`` is 2.1's calculation for its event's period with the event's
     own holds left out, since a Pending item already holds its units (15.1 AC2). AC7: worked out
-    afresh on every call, once per event in the tab."""
-    in_queue = (
-        EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
-        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
-    )
+    afresh on every call, once per event in the tab. Story 6.2 AC15: not for a cancelled item,
+    which holds nothing: its ``available`` is ``None``, so an event whose kept items are all
+    cancelled adds no work. A declined item on a cancelled event still has its figures worked
+    out."""
     tab = (
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
-        .where(*in_queue)
+        .where(_IN_QUEUE)
         .order_by(Event.starts_at, EventEquipmentRequest.created_at, EventEquipmentRequest.id)
     )
     if status is not None:
@@ -368,7 +393,7 @@ def list_equipment_requests(
         db.execute(
             select(EventEquipmentRequest.status, func.count())
             .join(Event, Event.id == EventEquipmentRequest.event_id)
-            .where(*in_queue)
+            .where(_IN_QUEUE)
             .group_by(EventEquipmentRequest.status)
         ).all()
     )
@@ -376,6 +401,9 @@ def list_equipment_requests(
     available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
     rows = []
     for item, event in found:
+        if item.status == EquipmentRequestStatus.CANCELLED:
+            rows.append(EquipmentQueueRow(item=item, event=event, available=None))
+            continue
         if event.id not in available_by_event:
             available_by_event[event.id] = events_service.available_by_type(
                 db, event.starts_at, event.ends_at, exclude_event_id=event.id
@@ -387,23 +415,23 @@ def list_equipment_requests(
 
 def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     """Story 16.1: one request as the queue shows it, for its own page, where it can be decided as
-    from the queue. AC7: only what the queue lists (15.2 AC3/AC5) - a request not yet sent,
-    flagged, cancelled or on a cancelled or rejected event is not found."""
+    from the queue. AC7: only what the queue lists (15.2 AC3/AC5, 6.2 AC15) - a request not yet
+    sent, flagged, never sent before it was cancelled, or open on a cancelled or rejected event is
+    not found. A cancelled one has no ``available`` (6.2 AC15)."""
     found = db.execute(
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
-        .where(
-            EventEquipmentRequest.id == item_id,
-            EventEquipmentRequest.status.in_(list(EquipmentQueueStatus)),
-            Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
-        )
+        .where(EventEquipmentRequest.id == item_id, _IN_QUEUE)
     ).first()
     if found is None:
         raise EquipmentRequestNotFound(item_id)
     item, event = found
-    return EquipmentQueueRow(
-        item=item, event=event, available=_available_to_accept(db, event, item)
+    available = (
+        None
+        if item.status == EquipmentRequestStatus.CANCELLED
+        else _available_to_accept(db, event, item)
     )
+    return EquipmentQueueRow(item=item, event=event, available=available)
 
 
 # --- writes --------------------------------------------------------------------------------------
@@ -891,18 +919,18 @@ WITH_TECHNICAL_SUPPORT = frozenset(
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
 EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
+# What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5).
+_CHANGE_WITHDREW = 'An approved change to "{event}"'
+_CANCELLATION_WITHDREW = 'Cancelling "{event}"'
 
 
 def _notify_technical_support_of_withdrawal(
-    db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User
+    db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User, cause: str
 ) -> None:
     """Story 19.2 AC5: items Technical Support had pending or accepted were changed or removed by
-    an approved change request, so every active member is told which, as they are told of a new
-    submission (story 20.1)."""
-    message = (
-        f'An approved change to "{event.name}" withdrew equipment sent to you: '
-        f"{_describe_items(items)}."
-    )
+    an approved change request; story 6.2 AC5: their event was cancelled. Every active member is
+    told which, as they are told of a new submission (story 20.1); ``cause`` opens the sentence."""
+    message = f"{cause} withdrew equipment sent to you: {_describe_items(items)}."
     for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
         notify(
             db,
@@ -1022,7 +1050,8 @@ def apply_equipment_change(
       ones, and is held again if stock allows - Requested, for the coordinator to resubmit (15.1) -
       or flagged Unavailable. A Cancelled item named again comes back the same way.
     * A removed item releases its hold; one ever sent to Technical Support is kept as Cancelled
-      for their record, one never sent is deleted.
+      for their record, stamped with when (6.2 AC16), one never sent is deleted. A Cancelled item
+      named again loses that stamp.
     * A new item is added and held the same way a changed one is.
 
     Technical Support are told of any item they had pending or accepted that was changed or
@@ -1040,6 +1069,7 @@ def apply_equipment_change(
     }
     lock_types(db, {item.equipment_type_id for item in items} | {t.id for t in types.values()})
 
+    changed_at = datetime.now(UTC)
     withdrawn: list[EventEquipmentRequest] = []
     to_hold: list[EventEquipmentRequest] = []
     for planned in plan.items:
@@ -1053,8 +1083,9 @@ def apply_equipment_change(
             status = status_after_removal(item.status)
             if status is None:
                 event.equipment_requests.remove(item)
-            else:
+            elif item.status != EquipmentRequestStatus.CANCELLED:
                 item.status = status
+                item.cancelled_at = changed_at
             continue
         item.equipment_type = types[line.equipment_type_code]
         item.quantity = line.quantity
@@ -1062,16 +1093,16 @@ def apply_equipment_change(
         item.decided_by_id = None
         item.decided_at = None
         item.status_notes = None
+        item.cancelled_at = None
         to_hold.append(item)
 
-    added_at = datetime.now(UTC)
     for position, line in enumerate(plan.added):
         item = EventEquipmentRequest(
             equipment_type=types[line.equipment_type_code],
             quantity=line.quantity,
             technical_notes=line.technical_notes,
             created_by_id=actor.id,
-            created_at=added_at + timedelta(microseconds=position),
+            created_at=changed_at + timedelta(microseconds=position),
         )
         event.equipment_requests.append(item)
         to_hold.append(item)
@@ -1081,5 +1112,49 @@ def apply_equipment_change(
     for item in to_hold:
         _hold_or_flag(db, event, item, available, actor=actor)
     if withdrawn:
-        _notify_technical_support_of_withdrawal(db, event, withdrawn, actor=actor)
+        _notify_technical_support_of_withdrawal(
+            db,
+            event,
+            withdrawn,
+            actor=actor,
+            cause=_CHANGE_WITHDREW.format(event=event.name),
+        )
     db.flush()
+
+
+# --- story 6.2: the event was cancelled ------------------------------------------------------
+
+
+def release_for_cancelled_event(
+    db: Session, event: Event, *, actor: User, at: datetime
+) -> list[EventEquipmentRequest]:
+    """Story 6.2 AC3/AC4: ``event`` was cancelled, so every unit it still holds is released and
+    every open item is closed as Cancelled at ``at`` (AC16), kept for the record. Technical
+    Support are told of the items they had pending or accepted (AC5); one never sent changes
+    nothing for them. The caller holds the event's row lock; the types are locked after it, as
+    every other hold takes them (15.1 AC10). Returns the items closed. Written, not committed."""
+    held_type_ids = db.scalars(
+        select(EquipmentReservation.equipment_type_id).where(
+            EquipmentReservation.event_id == event.id,
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        )
+    ).all()
+    lock_types(db, held_type_ids)
+    _release_holds(db, EquipmentReservation.event_id == event.id)
+
+    # A declined item stays Technical Support's decision; a cancelled one is already closed.
+    closed = [item for item in event.equipment_requests if item.status in _OPEN_ITEM_STATUSES]
+    withdrawn = [item for item in closed if item.status in WITH_TECHNICAL_SUPPORT]
+    for item in closed:
+        item.status = EquipmentRequestStatus.CANCELLED
+        item.cancelled_at = at
+    if withdrawn:
+        _notify_technical_support_of_withdrawal(
+            db,
+            event,
+            withdrawn,
+            actor=actor,
+            cause=_CANCELLATION_WITHDREW.format(event=event.name),
+        )
+    db.flush()
+    return closed

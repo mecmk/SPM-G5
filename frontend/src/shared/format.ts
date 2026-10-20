@@ -11,6 +11,10 @@ const TIME_ZONE = 'Asia/Singapore'
  * a reason for declining given before reasons were required. */
 export const NOT_RECORDED = 'Not recorded'
 
+/** Story 6.2 AC16: how every page names when a booking or equipment request was cancelled - with
+ * its event, or by an approved change (19.2). */
+export const CANCELLED_AT_LABEL = 'Cancelled at'
+
 /** What a page shows for a venue requirement or booking that asks for no particular layout. */
 export const ANY_LAYOUT = 'Any'
 

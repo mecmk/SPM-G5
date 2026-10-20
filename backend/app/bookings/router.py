@@ -349,7 +349,7 @@ def switch_booking_request(
     refused (409).
     """
     try:
-        replaced = service.get_booking_for_decision(db, booking_id)
+        replaced = service.get_booking_for_switch(db, booking_id)
     except service.BookingNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
     try:

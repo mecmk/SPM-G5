@@ -215,6 +215,7 @@ export function ChangeRequestsSection({
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
 
+  // Story 6.2 AC4: cancelling the event closes its pending requests, so its status reloads them.
   useEffect(() => {
     let cancelled = false
     listChangeRequests(event.id)
@@ -229,7 +230,7 @@ export function ChangeRequestsSection({
     return () => {
       cancelled = true
     }
-  }, [event.id, listVersion])
+  }, [event.id, event.status, listVersion])
 
   useEffect(() => {
     let cancelled = false

@@ -85,12 +85,14 @@ class EventEquipmentAvailabilityOut(BaseModel):
 
 
 class EquipmentQueueStatus(StrEnum):
-    """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Any other item status
-    is not a tab, so asking for one is a 422 rather than an empty list."""
+    """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Story 6.2 AC15:
+    Cancelled, read-only, for the items once sent to them. Any other item status is not a tab, so
+    asking for one is a 422 rather than an empty list."""
 
     PENDING = EquipmentRequestStatus.PENDING
     ACCEPTED = EquipmentRequestStatus.ACCEPTED
     DECLINED = EquipmentRequestStatus.DECLINED
+    CANCELLED = EquipmentRequestStatus.CANCELLED
 
 
 class EquipmentDecisionOutcome(StrEnum):
@@ -145,15 +147,19 @@ class EquipmentQueueEntry(BaseModel):
     requested_by_name: str | None
     submitted_at: datetime | None
     status: EquipmentQueueStatus
-    available: int
-    shortfall: int
+    # Story 6.2 AC15: None for a cancelled request, which holds nothing.
+    available: int | None
+    shortfall: int | None
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
+    # Story 6.2 AC16: when a cancelled item was cancelled; None otherwise, and for one cancelled
+    # before migration 026.
+    cancelled_at: datetime | None
 
     @classmethod
     def from_item(
-        cls, item: EventEquipmentRequest, event: Event, *, available: int
+        cls, item: EventEquipmentRequest, event: Event, *, available: int | None
     ) -> EquipmentQueueEntry:
         return cls(
             id=item.id,
@@ -169,10 +175,11 @@ class EquipmentQueueEntry(BaseModel):
             submitted_at=item.submitted_at,
             status=EquipmentQueueStatus(item.status),
             available=available,
-            shortfall=max(0, item.quantity - available),
+            shortfall=None if available is None else max(0, item.quantity - available),
             decided_by_name=None if item.decided_by is None else item.decided_by.full_name,
             decided_at=item.decided_at,
             decision_reason=item.status_notes,
+            cancelled_at=item.cancelled_at,
         )
 
 
@@ -185,6 +192,8 @@ class EquipmentQueueCounts(BaseModel):
     pending: int
     accepted: int
     declined: int
+    # Story 6.2 AC15.
+    cancelled: int
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> EquipmentQueueCounts:

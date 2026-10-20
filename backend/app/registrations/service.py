@@ -354,6 +354,25 @@ def register(
     return registration
 
 
+def cancel_for_event(db: Session, event_id: uuid.UUID) -> list[uuid.UUID]:
+    """Story 6.2 AC4: the event was cancelled, so every registration still holding a place is
+    closed as Cancelled - by ConnectSphere, not withdrawn by the attendee - and kept for the
+    record. Returns the attendees whose place it was, to be told (AC5). The caller holds the
+    event's row lock, which ``register`` also takes, so no registration lands meanwhile. Written,
+    not committed."""
+    return list(
+        db.scalars(
+            update(EventRegistration)
+            .where(
+                EventRegistration.event_id == event_id,
+                EventRegistration.status == RegistrationStatus.REGISTERED,
+            )
+            .values(status=RegistrationStatus.CANCELLED)
+            .returning(EventRegistration.attendee_id)
+        )
+    )
+
+
 # =============================================================================================
 # Story 18.2: the attendee's own registrations, and withdrawing one
 # =============================================================================================

@@ -15,12 +15,13 @@ export const FIELD_LABELS: Record<ChangeRequestField, string> = {
   equipment: 'Equipment',
 }
 
-/** Story 19.1 AC1/AC9, story 19.2 AC2/AC3: how each request status reads. */
+/** Story 19.1 AC1/AC9, story 19.2 AC2/AC3, story 6.2 AC4: how each request status reads. */
 export const STATUS_LABELS: Record<ChangeRequestStatus, string> = {
   PENDING: 'Pending',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
   WITHDRAWN: 'Withdrawn',
+  CANCELLED: 'Cancelled',
 }
 
 /** Story 19.2 AC7: why a pending request can only be rejected - the event no longer has the value

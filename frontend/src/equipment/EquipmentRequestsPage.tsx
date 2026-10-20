@@ -16,7 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -25,12 +25,14 @@ const SHORT_ID_LENGTH = 8
 type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
 /** Story 15.2 AC3: the queue's tabs, plus All (a team request beyond the AC), in the order of
- * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. */
+ * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. Story 6.2 AC15:
+ * Cancelled, read-only, for requests whose event was cancelled after they were sent. */
 const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'ACCEPTED', label: 'Accepted' },
   { key: 'DECLINED', label: 'Declined' },
+  { key: 'CANCELLED', label: 'Cancelled' },
 ]
 
 /** The event page's back link returns here (story 7.1's back state). */
@@ -43,13 +45,15 @@ const BACK_TO_QUEUE: EventCardBackState = {
 function tabCount(tab: EquipmentQueueTabKey, counts: EquipmentQueueCounts): number {
   switch (tab) {
     case 'ALL':
-      return counts.pending + counts.accepted + counts.declined
+      return counts.pending + counts.accepted + counts.declined + counts.cancelled
     case 'PENDING':
       return counts.pending
     case 'ACCEPTED':
       return counts.accepted
     case 'DECLINED':
       return counts.declined
+    case 'CANCELLED':
+      return counts.cancelled
   }
 }
 
@@ -111,6 +115,10 @@ interface OpenDecision {
  * when they were decided. View details stays on the right of every card. AC6: a refused accept
  * leaves the card showing the shortfall it reported. AC7/AC9: any other refusal loads the tab
  * again, so a decision made elsewhere meanwhile shows.
+ *
+ * Story 6.2 AC15: a Cancelled tab lists, read-only, the requests closed when their event was
+ * cancelled; their cards leave out what is available, since nothing is held for them any more.
+ * AC16: such a card says when it was cancelled.
  */
 export function EquipmentRequestsPage() {
   const [tab, setTab] = useState<EquipmentQueueTabKey>('PENDING')
@@ -210,20 +218,26 @@ export function EquipmentRequestsPage() {
                       <p className="fact-label">Requested</p>
                       <p className="fact-value">{entry.quantity}</p>
                     </div>
-                    <div className="subtle-block">
-                      <p className="fact-label">Available</p>
-                      <p className="fact-value">{entry.available}</p>
-                    </div>
-                    <div className="subtle-block">
-                      <p className="fact-label">Shortfall</p>
-                      <p className="fact-value">
-                        {entry.shortfall > 0 ? (
-                          <span className="badge badge-warning">Short by {entry.shortfall}</span>
-                        ) : (
-                          'None'
-                        )}
-                      </p>
-                    </div>
+                    {entry.status !== 'CANCELLED' && (
+                      <>
+                        <div className="subtle-block">
+                          <p className="fact-label">Available</p>
+                          <p className="fact-value">{entry.available}</p>
+                        </div>
+                        <div className="subtle-block">
+                          <p className="fact-label">Shortfall</p>
+                          <p className="fact-value">
+                            {entry.shortfall !== null && entry.shortfall > 0 ? (
+                              <span className="badge badge-warning">
+                                Short by {entry.shortfall}
+                              </span>
+                            ) : (
+                              'None'
+                            )}
+                          </p>
+                        </div>
+                      </>
+                    )}
                     <div className="subtle-block">
                       <p className="fact-label">Requested by</p>
                       <p className="fact-value">{entry.requested_by_name ?? NOT_RECORDED}</p>
@@ -249,6 +263,17 @@ export function EquipmentRequestsPage() {
                       <p>
                         {formatDateTime(entry.decided_at)}
                         {entry.decided_by_name !== null && ` by ${entry.decided_by_name}`}
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.status === 'CANCELLED' && (
+                    <div className="subtle-block">
+                      <p className="fact-label">{CANCELLED_AT_LABEL}</p>
+                      <p>
+                        {entry.cancelled_at === null
+                          ? NOT_RECORDED
+                          : formatDateTime(entry.cancelled_at)}
                       </p>
                     </div>
                   )}

@@ -16,7 +16,8 @@ export interface ConfirmDialogProps {
    * longer succeed (a refusal that is final). Story 19.3: while the change request's impact
    * loads, and for good if it can't be read, since approving needs that assessment. */
   canConfirm?: boolean
-  /** The label of the button that closes the dialog without confirming. */
+  /** The label of the button that closes the dialog without confirming. Story 6.2 names it
+   *  "Keep event", so it is never read as the "Cancel event" it stands beside. */
   cancelLabel?: string
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */

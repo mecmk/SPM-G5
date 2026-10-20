@@ -189,7 +189,9 @@ export interface EquipmentLine {
  * means the organiser said no needs; false with no needs and no notes means not yet specified
  * (story 2.1 AC5). `venue_none_required` was the same answer for venue requirements (AC4) until
  * fix f2.7.4 retired it. `decided_by_name`/`decided_at`/`decision_reason` are all `null` until the
- * request has been decided (story 4.6 AC1).
+ * request has been decided (story 4.6 AC1). `cancelled_by_name`/`cancelled_at`/`cancellation_reason`
+ * likewise until the organiser cancels the event (story 6.2 AC5); an event cancelled before they
+ * were recorded has none.
  */
 export interface EventDetail {
   id: string
@@ -232,6 +234,9 @@ export interface EventDetail {
   decided_by_name: string | null
   decided_at: string | null
   decision_reason: string | null
+  cancelled_by_name: string | null
+  cancelled_at: string | null
+  cancellation_reason: string | null
   created_at: string
   updated_at: string
 }

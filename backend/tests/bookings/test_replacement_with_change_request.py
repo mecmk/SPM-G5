@@ -84,6 +84,7 @@ test_replacement_schema.py.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
@@ -242,7 +243,12 @@ def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_
 
     chloe = db.get(User, Users.COORDINATOR.id)
     assert service.release_booking(
-        db, _booking(db, scene.original.id), actor=chloe, change="expected attendance"
+        db,
+        _booking(db, scene.original.id),
+        actor=chloe,
+        because="an approved change to the event's expected attendance no longer fits it",
+        details={"change": "expected attendance"},
+        at=datetime.now(UTC),
     )
     db.flush()
 
@@ -272,7 +278,12 @@ def test_approving_the_replacement_of_an_original_released_by_a_change_still_wor
     body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
     chloe = db.get(User, Users.COORDINATOR.id)
     assert service.release_booking(
-        db, _booking(db, scene.original.id), actor=chloe, change="expected attendance"
+        db,
+        _booking(db, scene.original.id),
+        actor=chloe,
+        because="an approved change to the event's expected attendance no longer fits it",
+        details={"change": "expected attendance"},
+        at=datetime.now(UTC),
     )
     db.flush()
 
