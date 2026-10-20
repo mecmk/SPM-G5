@@ -1,15 +1,24 @@
 """20.2 view and act on notifications
 Happy path
-1. The bell in the main navigation shows the unread count and opens the user's newest 50 notifications, newest first, each with its title, message and time; unread notifications stand out. Opening a notification goes to its item (the page where the reader acts on it, otherwise the event) and marks it read. Notifications can also be marked read one at a time or all at once; marking all leaves unread any notification that arrived after the list was opened. The user's own recent actions stay in the same panel, below the notifications, and are not counted.
-2. Read status is stored on the server for each user, and the unread count comes from the server, so it is the same on every device. The count and the list are fetched again whenever the user opens another page or comes back to the browser tab.
+1. The bell in the main navigation shows the unread count and opens the user's newest 50
+    notifications, newest first, each with its title, message and time; unread notifications stand
+    out. Opening a notification goes to its item (the page where the reader acts on it, otherwise
+    the event) and marks it read. Notifications can also be marked read one at a time or all at
+    once; marking all leaves unread any notification that arrived after the list was opened. The
+    user's own recent actions stay in the same panel, below the notifications, and are not counted.
+2. Read status is stored on the server for each user, and the unread count comes from the server, so
+    it is the same on every device. The count and the list are fetched again whenever the user opens
+    another page or comes back to the browser tab.
 Boundary
 3. With 0 unread, no badge is shown. More than 99 unread shows "99+".
 Edge
-4. A notification whose item the reader cannot open, or which no longer exists, shows "This is no longer available to you." instead of an error, and is still marked read.
+4. A notification whose item the reader cannot open, or which no longer exists, shows "This is no
+    longer available to you." instead of an error, and is still marked read.
 Permission
 5. Users see only their own notifications and can mark only their own as read.
 Conflict
-6. Marking read in one tab shows on refresh in another. The count never goes below 0, and marking a notification read again changes nothing.
+6. Marking read in one tab shows on refresh in another. The count never goes below 0, and marking a
+    notification read again changes nothing.
 
 What is tested here, at the API (the panel, the badge text "99+", the message of AC4 and the
 refetching on a page change or on regaining focus are the browser's, in
@@ -35,8 +44,6 @@ cover every ``NotificationType`` that exists on main: whoever merges story 6.2 (
 ``REGISTRATION_CANCELLED``), or any later story that adds a type, adds its rows here, and
 ``test_every_notification_type_has_a_target_rule`` fails until they do.
 """
-# The acceptance criteria above are copied from the backlog on one line each, as the sheet has them.
-# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -730,6 +737,27 @@ def test_a_notification_with_no_target_can_still_be_marked_read(login_as, db: Se
     assert response.status_code == 200, response.text
     assert response.json()["read_at"] is not None
     assert _count(client) == 0
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_marking_all_without_a_through_id_is_refused(login_as, db: Session):
+    row = _notice(db, Users.ORGANISER)
+
+    response = login_as(Users.ORGANISER).patch("/notifications", json={"is_read": True})
+
+    assert response.status_code == 422, response.text
+    assert _read_at(db, row) is None
+
+
+@pytest.mark.story("20.2", ac=4)
+def test_a_lead_has_a_target_only_for_a_submission(login_as, db: Session):
+    """The Lead's one rule is ``EVENT_SUBMITTED``; any other type listed for a Lead has none (the
+    types story 6.2 adds for a Lead get their own row when it merges)."""
+    row = _notice(db, Users.LEAD, NotificationType.EVENT_APPROVED)
+    client = login_as(Users.LEAD)
+
+    assert _target_of(client, row) is None
+    assert _mark_one(client, row.id).status_code == 200
 
 
 # --- AC2: read state and the count are the server's, per user ---------------------------------
