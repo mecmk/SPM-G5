@@ -65,7 +65,7 @@ link simply stops appearing. Grep both sides when changing one.
 | `src/<feature>/`         | The pages of one feature area                                                                                                                                                                                                                          | `../api/*`, `../auth/authContext`, `../auth/permissions`, `../components/*`, `../errors/registry`, `../layout/LoadingState`, `../routes`, `../shared/*`       |
 | `src/auth/`              | Sign-in and the session: `AuthProvider` / `useAuth`, the route guards, the sign-in page, `permissions.ts`                                                                                                                                              | `../api/auth`, `../api/client`, `../api/health`, `../errors/registry`, `../layout/LoadingState`, `../pages/NotPermittedPage`, `../routes`, `../shared/format` |
 | `src/layout/`            | The signed-in frame (sidebar, phone bar and drawer, notification bell), `navigation.ts` (every section and the permission it needs), `LoadingState`                                                                                                    | `../auth/authContext`, `../auth/permissions`, `../components/*`, `../notifications/*`, `../routes`                                                            |
-| `src/notifications/`     | The notification centre: its provider, the bell's list and the toasts                                                                                                                                                                                  | `../api/client`, `../components/*`                                                                                                                            |
+| `src/notifications/`     | The bell and its panel: the log of the user's own actions and its toasts (team decision, 17 Sep 2026), and the user's server notifications (story 20.2)                                                                                                | `../api/client`, `../api/notifications`, `../auth/authContext`, `../components/*`, `../routes`, `../shared/format`                                            |
 | `src/pages/`             | Pages belonging to no feature area, including the component gallery at `/dev/components`, routed in development builds only                                                                                                                            | anything above                                                                                                                                                |
 | `src/App.tsx`            | The route map                                                                                                                                                                                                                                          | everything                                                                                                                                                    |
 | `public/images/events/`  | Pictures seed events point at (`/images/events/<file>`); Vite serves `public/` as-is. Uploaded pictures are stored and served by the backend, under `/uploads/events/`                                                                                 | —                                                                                                                                                             |
@@ -79,8 +79,9 @@ response cannot set state after unmount (`AuthProvider` in `src/auth/AuthProvide
 pattern). A page that only loads data when it opens uses `useLoaded` (`src/shared/useLoaded.ts`),
 which holds that pattern once and returns `{ data, error, isLoading, setData }`; give it a
 module-level function or a `useCallback`, never an inline arrow. The shared state is auth, held in
-`AuthProvider` and read through `useAuth()`, and the notification centre, held in
-`NotificationProvider` and read through `useNotifications()`.
+`AuthProvider` and read through `useAuth()`, the log of the user's own actions, held in
+`NotificationProvider` and read through `useNotifications()`, and their server notifications, held
+in `ServerNotificationProvider` and read through `useServerNotifications()`.
 There is no Redux, Zustand, TanStack Query or SWR, and adding one is a team decision.
 
 Styling is plain global CSS: colour and font tokens as custom properties in `src/index.css`
@@ -108,6 +109,23 @@ important. Only sign-in and sign-out pass `notify: false`, plus a request sent a
 that has a notice of its own, so one save gives one notice: an event's picture when the request
 is submitted (story 2.1 AC15), and a venue's pictures (story 8.3 AC5). Those show a refusal on
 the form instead. The list is per session and clears on sign-out.
+
+Since story 20.2 the same bell also lists the user's **server notifications**, above that log
+under the panel's own heading, "Your recent actions". `ServerNotificationProvider`
+(`useServerNotifications()`) holds them once for the signed-in frame, since the bell is drawn
+twice, and keys its state by the signed-in user. The badge is the server's unread count
+(`GET /notifications/unread-count`), never a count of the list, which holds the newest 50. The
+count and the list are read when the frame opens, on every page change and when the browser tab
+becomes visible again: no timer. The log has no unread state and is not counted. Marking one
+notification read (`PATCH /notifications/{id}`) and all of them (`PATCH /notifications`, through
+the newest notification of the list last loaded) are the two other `notify: false` calls: marking
+read is not a save of the user's, so it adds no toast and no entry to the log, and a refusal shows
+in the panel as `<p role="alert" className="error">`. Where opening a notification goes is the
+server's `target` (a kind and an id, never an address); `src/notifications/notificationTarget.ts`
+is the one place that turns it into a route, and a notification with no target to open says
+"This is no longer available to you." in its row. The panel's words are constants in
+`src/notifications/notificationText.ts`. Neither the panel nor its rows use `role="status"` or
+`aria-live`, which belong to the toasts.
 
 ### Permission checks here are UX, not security
 
