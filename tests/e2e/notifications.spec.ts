@@ -34,6 +34,10 @@
  * the group "walks Nadia's seeded notifications once"). Specs share one database and run in
  * parallel, so no other account's count is asserted: the count at 0 and above 99 is a stubbed
  * answer, and one test holds a request with `page.route`, both for states the seed cannot reach.
+ *
+ * Outside the walk, and repeat-safe, are the tests that stub the list the bell reads, every row
+ * already read: which page each kind of target opens, and what a notification with no target to
+ * open says. They change nothing in the database.
 
  *
  * What a row offers (the contract the panel is built to): its title is a button that opens the
@@ -41,6 +45,7 @@
  * all as read"; the log of the user's own recent actions is under the heading "Your recent
  * actions". The panel and its rows carry no role="status" or aria-live, which the toasts own.
  */
+import { randomUUID } from 'node:crypto'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
@@ -70,7 +75,7 @@ const RECENT_ACTIONS = 'Your recent actions'
 
 const bell = (page: Page) => page.getByRole('button', { name: /^Notifications/ })
 const panel = (page: Page) => page.getByRole('region', { name: 'Notifications' })
-const rowOf = (page: Page, notice: SeededNotice) =>
+const rowOf = (page: Page, notice: Pick<SeededNotice, 'title'>) =>
   panel(page).getByRole('listitem').filter({ hasText: notice.title })
 const unreadWord = (row: Locator) => row.getByText(UNREAD, { exact: true })
 /** The number on the bell: a count, or "99+". Nothing at 0. */
@@ -425,4 +430,118 @@ test.describe("walks Nadia's seeded notifications once", () => {
     await expect(badge(page)).toHaveCount(0)
     await expect(bell(page)).toHaveAccessibleName('Notifications')
   })
+})
+
+// --- AC1, AC4: where each kind of target goes ---------------------------------------------------------
+// These stub the list the bell reads (the only call stubbed), every row already read, so opening one
+// sends no request to mark it read and nothing in the database changes: they are repeat-safe, and
+// sit outside the walk above. Nadia is an organiser who may open few of these pages, but
+// RequirePermission answers in place, so the address the click lands on is the same.
+
+const STUBBED_TIME = '2026-10-19T09:00:00+00:00'
+
+interface StubbedTarget {
+  kind: string
+  id: string | null
+}
+
+function stubbedRow(title: string, target: StubbedTarget | null) {
+  return {
+    id: randomUUID(),
+    notification_type: 'EVENT_APPROVED',
+    title,
+    message: `${title}, from the stub.`,
+    event_id: null,
+    related_entity_type: null,
+    related_entity_id: null,
+    created_at: STUBBED_TIME,
+    read_at: STUBBED_TIME,
+    target,
+  }
+}
+
+async function stubNotificationList(page: Page, rows: ReturnType<typeof stubbedRow>[]) {
+  await page.route(
+    (url) => url.pathname === NOTICES_PATH,
+    (route) => {
+      const request = route.request()
+      if (request.method() !== 'GET' || request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: corsHeaders(request),
+        body: JSON.stringify(rows),
+      })
+    },
+  )
+}
+
+/** Each kind of target and the address it opens (frontend/src/routes.ts), pinned here as the other
+ * specs pin theirs. `takesId` kinds are sent a made-up id, which the address carries. */
+const TARGET_PAGES = [
+  { kind: 'event', takesId: true, path: (id: string) => `/events/${id}`, shown: '/events/<id>' },
+  {
+    kind: 'booking_request',
+    takesId: true,
+    path: (id: string) => `/venue-staff/booking-requests/${id}`,
+    shown: '/venue-staff/booking-requests/<id>',
+  },
+  {
+    kind: 'equipment_requests',
+    takesId: false,
+    path: () => '/equipment/requests',
+    shown: '/equipment/requests',
+  },
+  {
+    kind: 'safety_check',
+    takesId: true,
+    path: (id: string) => `/safety-checks/${id}`,
+    shown: '/safety-checks/<id>',
+  },
+  { kind: 'registrations', takesId: false, path: () => '/registrations', shown: '/registrations' },
+  {
+    kind: 'unassigned_events',
+    takesId: false,
+    path: () => '/events/unassigned',
+    shown: '/events/unassigned',
+  },
+  {
+    kind: 'change_request_queue',
+    takesId: false,
+    path: () => '/change-requests/review',
+    shown: '/change-requests/review',
+  },
+]
+
+for (const { kind, takesId, path, shown } of TARGET_PAGES) {
+  test(`20.2 AC1: a ${kind} notification opens ${shown}`, async ({ page }) => {
+    const id = takesId ? randomUUID() : null
+    const row = stubbedRow(`Stub ${kind}`, { kind, id })
+    await stubNotificationList(page, [row])
+    await signInAsNadia(page)
+    await openPanel(page)
+
+    await rowOf(page, row).getByRole('button', { name: row.title }).click()
+
+    await expect(page).toHaveURL((url) => url.pathname === path(id ?? '') && url.search === '')
+  })
+}
+
+test('20.2 AC4: a notification with no target, or a kind the app does not know, shows the message', async ({
+  page,
+}) => {
+  const noTarget = stubbedRow('Stub no target', null)
+  const unknownKind = stubbedRow('Stub unknown kind', { kind: 'teleporter', id: null })
+  await stubNotificationList(page, [noTarget, unknownKind])
+  await signInAsNadia(page)
+  await openPanel(page)
+  const urlBefore = page.url()
+
+  for (const row of [noTarget, unknownKind]) {
+    await rowOf(page, row).getByRole('button', { name: row.title }).click()
+
+    await expect(rowOf(page, row).getByText(NO_LONGER_AVAILABLE, { exact: true })).toBeVisible()
+    expect(page.url()).toBe(urlBefore)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  }
 })
