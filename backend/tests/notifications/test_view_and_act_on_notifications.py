@@ -40,9 +40,8 @@ tests/e2e/notifications.spec.ts):
   transaction.
 
 Targets (reader -> target) are the table in ``TARGET_CASES`` and the tests after it. The tests
-cover every ``NotificationType`` that exists on main: whoever merges story 6.2 (``EVENT_CANCELLED``,
-``REGISTRATION_CANCELLED``), or any later story that adds a type, adds its rows here, and
-``test_every_notification_type_has_a_target_rule`` fails until they do.
+cover every ``NotificationType``: a story that adds a type adds its rows here, and
+``test_every_notification_type_has_a_target_rule`` fails until it does.
 """
 
 from __future__ import annotations
@@ -65,6 +64,7 @@ from app.events.models import EventStatus
 from app.main import app
 from app.notifications.models import Notification
 from app.notifications.service import NotificationType
+from app.registrations.models import EventRegistration
 from app.safety.models import (
     EventSafetyReview,
     SafetyArrangement,
@@ -367,6 +367,11 @@ TARGET_CASES = [
         _case(kind, Users.TECH_SUPPORT, "event", "equipment_requests", None)
         for kind in (_T.EQUIPMENT_SUBMITTED, _T.EQUIPMENT_WITHDRAWN)
     ),
+    # Story 6.2: the cancelled event goes to its coordinator, or to the Leads when it has none;
+    # each registered attendee finds the registration, closed as the event's cancellation.
+    _case(_T.EVENT_CANCELLED, Users.COORDINATOR, "event", "event", "event"),
+    _case(_T.EVENT_CANCELLED, Users.LEAD, "event", "event", "event"),
+    _case(_T.REGISTRATION_CANCELLED, Users.ATTENDEE, "event", "registrations", None),
 ]
 
 # Types whose targets are tested in the tests below the table, because they depend on the state of
@@ -445,11 +450,10 @@ def test_a_safety_officer_is_sent_to_the_safety_check_of_an_event_it_opens(
 
 @pytest.mark.story("20.2", ac=1)
 def test_every_notification_type_has_a_target_rule(login_as, db: Session):
-    """Every ``NotificationType`` on main has a row in ``TARGET_CASES``, a test of its own below
-    the table, or is one of the Safety Officer's two. A story that adds a type (6.2's
-    ``EVENT_CANCELLED`` and ``REGISTRATION_CANCELLED`` when it merges, or any later one) adds its
-    rows and its target rule in the same change; until then this fails and names the type. Every
-    type is also listed with a ``target`` key, whatever its value."""
+    """Every ``NotificationType`` has a row in ``TARGET_CASES``, a test of its own below the table,
+    or is one of the Safety Officer's two. A story that adds a type adds its rows and its target
+    rule in the same change; until then this fails and names the type. Every type is also listed
+    with a ``target`` key, whatever its value."""
     in_the_table = {case.values[0] for case in TARGET_CASES}
 
     covered = in_the_table | TARGETED_BY_STATE | set(SAFETY_OFFICER_TYPES)
@@ -607,6 +611,55 @@ def test_the_targets_of_a_full_page_take_no_more_queries_than_those_of_a_short_o
 
     assert len(_listed(client)) == LIST_LIMIT
     assert len(full_page) == len(short_page)
+
+
+CANCELLATION_REASON = "Our sponsor withdrew the budget."
+
+
+def _cancel(client: TestClient, event_id: uuid.UUID):
+    return client.post(f"/events/{event_id}/cancel", json={"reason": CANCELLATION_REASON})
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_a_cancellation_reaches_the_coordinator_and_each_attendee_with_their_pages(
+    login_as, db: Session
+):
+    event = make_event(
+        db,
+        status=EventStatus.CONFIRMED,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        is_public=True,
+        registration_required=True,
+    )
+    db.add(EventRegistration(event_id=event.id, attendee_id=Users.ATTENDEE.id, status="REGISTERED"))
+    db.flush()
+    cancelled = _cancel(login_as(Users.ORGANISER), event.id)
+    assert cancelled.status_code == 200, cancelled.text
+
+    coordinator = _newest_of(login_as(Users.COORDINATOR), "EVENT_CANCELLED")
+    attendee = _newest_of(login_as(Users.ATTENDEE), "REGISTRATION_CANCELLED")
+
+    assert coordinator["target"] == {"kind": "event", "id": str(event.id)}
+    assert attendee["target"] == {"kind": "registrations", "id": None}
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_a_cancellation_with_no_coordinator_reaches_every_active_lead_with_the_event(
+    client, login_as, db: Session
+):
+    """A cancelled event is still one staff can open, so the Leads, who are told because nobody
+    coordinates it, are sent to it."""
+    second_lead = make_user(db, role="EVENT_COORDINATOR_LEAD")
+    event = make_event(db, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=None)
+    cancelled = _cancel(login_as(Users.ORGANISER), event.id)
+    assert cancelled.status_code == 200, cancelled.text
+
+    first = _newest_of(login_as(Users.LEAD), "EVENT_CANCELLED")
+    client.login(second_lead.email)
+    second = _newest_of(client, "EVENT_CANCELLED")
+
+    assert first["target"] == {"kind": "event", "id": str(event.id)}
+    assert second["target"] == {"kind": "event", "id": str(event.id)}
 
 
 # --- AC4: no target when the reader has no page for it, cannot open it, or it is gone ---------
@@ -816,9 +869,10 @@ def test_marking_all_without_a_through_id_is_refused(login_as, db: Session):
 
 
 @pytest.mark.story("20.2", ac=4)
-def test_a_lead_has_a_target_only_for_a_submission(login_as, db: Session):
-    """The Lead's one rule is ``EVENT_SUBMITTED``; any other type listed for a Lead has none (the
-    types story 6.2 adds for a Lead get their own row when it merges)."""
+def test_a_lead_has_no_target_for_a_type_it_has_no_rule_for(login_as, db: Session):
+    """A Lead has a rule for ``EVENT_SUBMITTED`` (the queue, then the event) and for
+    ``EVENT_CANCELLED`` (the event); any other type listed for a Lead, such as the approval of a
+    request, has none."""
     row = _notice(db, Users.LEAD, NotificationType.EVENT_APPROVED)
     client = login_as(Users.LEAD)
 
