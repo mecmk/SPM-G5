@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.auth.permissions import Permission, permissions_for
 from app.bookings import service as bookings_service
+from app.change_requests import service as change_requests_service
+from app.change_requests.models import EventChangeRequest
+from app.coordination import service as coordination_service
 from app.events import service as events_service
 from app.events.models import Event
 from app.notifications.models import Notification
@@ -152,8 +155,14 @@ def _kind_for(reader: User, notification: Notification) -> TargetKind | None:
 
 
 _NEEDS_THE_EVENT = frozenset(
-    {TargetKind.EVENT, TargetKind.UNASSIGNED_EVENTS, TargetKind.SAFETY_CHECK}
+    {
+        TargetKind.EVENT,
+        TargetKind.UNASSIGNED_EVENTS,
+        TargetKind.SAFETY_CHECK,
+        TargetKind.CHANGE_REQUEST_QUEUE,
+    }
 )
+_CHANGE_REQUEST = "event_change_request"
 
 
 def with_targets(
@@ -161,8 +170,9 @@ def with_targets(
 ) -> list[tuple[Notification, Target | None]]:
     """20.2 AC1/AC4: ``notifications`` (all ``viewer``'s own) with where each goes for ``viewer``.
     The events they name are read in one query and judged by the rule ``get_event`` applies, the
-    bookings in one query, and the safety checks that open in one query by the rule
-    ``get_safety_check`` applies."""
+    bookings in one query, and the safety checks that open, the events still in the Lead's queue
+    and the change requests still in the coordinator's queue in one query each, by the rules those
+    pages apply. A reader is sent to a queue only while it holds the item, else to the event."""
     kinds = {notification.id: _kind_for(viewer, notification) for notification in notifications}
 
     def event_ids_of(*wanted: TargetKind) -> set[uuid.UUID]:
@@ -185,6 +195,35 @@ def with_targets(
             db.scalars(
                 select(Event.id).where(
                     Event.id.in_(check_ids), safety_service.safety_check_is_open()
+                )
+            )
+        )
+    unassigned_ids = event_ids_of(TargetKind.UNASSIGNED_EVENTS)
+    in_unassigned_queue: set[uuid.UUID] = set()
+    if unassigned_ids:
+        in_unassigned_queue = set(
+            db.scalars(
+                select(Event.id).where(
+                    Event.id.in_(unassigned_ids), coordination_service.awaiting_a_coordinator()
+                )
+            )
+        )
+    request_ids = {
+        notification.related_entity_id
+        for notification in notifications
+        if kinds[notification.id] is TargetKind.CHANGE_REQUEST_QUEUE
+        and notification.related_entity_type == _CHANGE_REQUEST
+        and notification.related_entity_id is not None
+    }
+    in_change_request_queue: set[uuid.UUID] = set()
+    if request_ids:
+        in_change_request_queue = set(
+            db.scalars(
+                select(EventChangeRequest.id)
+                .join(EventChangeRequest.event)
+                .where(
+                    EventChangeRequest.id.in_(request_ids),
+                    change_requests_service.in_coordinator_queue(viewer),
                 )
             )
         )
@@ -211,8 +250,11 @@ def with_targets(
             case TargetKind.EVENT:
                 return event_target(notification)
             case TargetKind.UNASSIGNED_EVENTS:
-                event = events.get(notification.event_id) if notification.event_id else None
-                if event is not None and event.assigned_coordinator_id is None:
+                if notification.event_id in in_unassigned_queue:
+                    return (kind, None)
+                return event_target(notification)
+            case TargetKind.CHANGE_REQUEST_QUEUE:
+                if notification.related_entity_id in in_change_request_queue:
                     return (kind, None)
                 return event_target(notification)
             case TargetKind.SAFETY_CHECK:
