@@ -28,7 +28,6 @@ from app.events.schemas import (
     ExpectedAttendance,
     VenueRequirementIn,
 )
-from app.venues.schemas import FailedCriterionOut
 
 # AC4: a reason is mandatory; the ceiling matches a clarification message's (story 4.2).
 CHANGE_REASON_MAX_LENGTH = 2000
@@ -274,14 +273,12 @@ class CapacityShortfallOut(BaseModel):
 
 class BookingImpactOut(BaseModel):
     """AC1/AC2: one venue booking the change affects - one 19.2 would cancel (``reasons`` say
-    why), or one it keeps whose venue cannot hold the people now needed (``capacity_warning``) or
-    lacks a facility its requirement would newly need (``facility_warnings``, story 11.1's
-    failures). A warning never means the booking is cancelled: only ``will_be_cancelled`` says
-    that. ``requirement_name`` is None for an additional venue (12.5), which is never judged on
-    facilities (11.1 AC5). For a cancelled booking whose requirement remains,
-    ``needed_starts_at``..``needed_ends_at`` is the period a replacement needs, and ``held_by``,
-    ``closure`` and ``is_outside_opening_hours`` say whether the same venue is free for it.
-    ``after_approval`` says what the approval does to it."""
+    why), or one it keeps whose venue cannot hold the people now needed (``capacity_warning``). A
+    warning never means the booking is cancelled: only ``will_be_cancelled`` says that.
+    ``requirement_name`` is None for an additional venue (12.5). For a cancelled booking whose
+    requirement remains, ``needed_starts_at``..``needed_ends_at`` is the period a replacement
+    needs, and ``held_by``, ``closure`` and ``is_outside_opening_hours`` say whether the same
+    venue is free for it. ``after_approval`` says what the approval does to it."""
 
     booking_id: uuid.UUID
     venue_id: uuid.UUID
@@ -293,7 +290,6 @@ class BookingImpactOut(BaseModel):
     will_be_cancelled: bool
     reasons: list[str]
     capacity_warning: CapacityWarningOut | None
-    facility_warnings: list[FailedCriterionOut]
     needed_starts_at: datetime | None
     needed_ends_at: datetime | None
     held_by: HoldingBookingOut | None

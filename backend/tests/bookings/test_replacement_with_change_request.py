@@ -94,6 +94,7 @@ from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.change_requests.models import EventChangeRequest
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import make_venue
 from tests.support.replacement import (
     BOOKINGS_PATH,
@@ -123,12 +124,7 @@ def _approve_change(client, request: EventChangeRequest):
     test_decide_change_request.py does, so a refusal's rollback cannot undo them. Story 19.3 AC7:
     the approval carries the fingerprint of the impact assessment read just before it."""
     object_session(request).commit()
-    url = f"/events/{request.event_id}/change-requests/{request.id}"
-    seen = client.get(f"{url}/impact")
-    assert seen.status_code == 200, seen.text
-    return client.post(
-        f"{url}/approve", json={"assessment_fingerprint": seen.json()["fingerprint"]}
-    )
+    return approve_as_seen(client, request.event_id, request.id)
 
 
 def _booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:

@@ -18,7 +18,6 @@ import { Icon, type IconName } from '../components/Icon'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
 import { ADDITIONAL_VENUE, formatSchedule } from '../shared/format'
-import { describeFailure } from '../shared/suitability'
 import { NOT_THERE_REQUESTED, OUT_OF_DATE_NOTE } from './changeRequestValues'
 
 /** Story 19.3 AC1: what the assessment says when the change touches nothing already arranged. */
@@ -125,12 +124,10 @@ function AfterApproval({ children }: { children: ReactNode }) {
   )
 }
 
-/** AC1/AC2/AC4/AC5: one venue booking - whether it is cancelled and why, capacity and facility
- *  warnings apart from that, whether the same venue is free for the new times, and what happens
- *  next. */
+/** AC1/AC2/AC4/AC5: one venue booking - whether it is cancelled and why, a capacity warning
+ *  apart from that, whether the same venue is free for the new times, and what happens next. */
 function BookingRow({ booking }: { booking: BookingImpact }) {
   const warning = booking.capacity_warning
-  const facilities = booking.facility_warnings
   const hasNewTimes = booking.needed_starts_at !== null && booking.needed_ends_at !== null
   return (
     <li className="impact-item">
@@ -150,7 +147,6 @@ function BookingRow({ booking }: { booking: BookingImpact }) {
             <Pill tone="success">Kept</Pill>
           )}
           {warning !== null && <Pill tone="warning">Too small</Pill>}
-          {facilities.length > 0 && <Pill tone="warning">Missing a facility</Pill>}
         </div>
       </div>
       <dl className="impact-facts">
@@ -166,13 +162,6 @@ function BookingRow({ booking }: { booking: BookingImpact }) {
             Needs room for {warning.people_needed}; {booking.venue_name} holds{' '}
             {warning.venue_capacity}
             {warning.layout_name === null ? '' : ` in the ${warning.layout_name} layout`}.
-          </Fact>
-        )}
-        {facilities.length > 0 && (
-          <Fact label="Facilities">
-            {facilities.map((failure) => (
-              <p key={failure.code}>{describeFailure(failure)}</p>
-            ))}
           </Fact>
         )}
         {hasNewTimes && (
@@ -250,10 +239,10 @@ function CapacityShortfallCard({ shortfall }: { shortfall: CapacityShortfall }) 
         ))}
       </ul>
       <AfterApproval>
-        The bookings stay as they are: approving cancels none of them, and a booked venue cannot be
-        swapped for a larger one. If everyone needs room at those times, request an additional venue
-        from the event page (one smaller than the whole attendance needs a justification), or reject
-        the change and tell the organiser why.
+        The bookings stay as they are: approving cancels none of them. If everyone needs room at
+        those times, switch a pending request to a larger venue, request an additional venue from
+        the event page (one smaller than the whole attendance needs a justification), or reject the
+        change and tell the organiser why.
       </AfterApproval>
     </div>
   )
@@ -346,8 +335,7 @@ function sentence(parts: string[]): string {
   return `${parts.join('; ')}.`
 }
 
-/** AC1: cancellations first, then capacity and facility warnings, which never mean a
- *  cancellation. */
+/** AC1: cancellations first, then capacity warnings, which never mean a cancellation. */
 function bookingSummary(
   bookings: BookingImpact[],
   shortfall: CapacityShortfall | null,
@@ -357,16 +345,12 @@ function bookingSummary(
   }
   const cancelled = bookings.filter((booking) => booking.will_be_cancelled).length
   const warned = bookings.filter((booking) => booking.capacity_warning !== null).length
-  const lacking = bookings.filter((booking) => booking.facility_warnings.length > 0).length
   const parts: string[] = []
   if (cancelled > 0) {
     parts.push(`${counted(cancelled, 'booking')} will be cancelled on approval`)
   }
   if (warned > 0) {
     parts.push(`${counted(warned, 'venue')} too small for the people now needed`)
-  }
-  if (lacking > 0) {
-    parts.push(`${counted(lacking, 'venue')} missing a facility the change needs`)
   }
   if (shortfall !== null) {
     parts.push(

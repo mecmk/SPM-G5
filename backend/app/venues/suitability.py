@@ -176,16 +176,6 @@ def _facility_failure(
     )
 
 
-def facility_failures(
-    facilities: tuple[RequiredFacility, ...], venue: VenueCharacteristics
-) -> tuple[FailedCriterion, ...]:
-    """AC4/AC5: every facility in ``facilities`` that ``venue`` fails, judged exactly as
-    ``judge_suitability`` judges a requirement's facilities. Story 19.3 asks it of a booked venue
-    and the facilities a change request would have its requirement need."""
-    failures = (_facility_failure(facility, venue) for facility in facilities)
-    return tuple(failure for failure in failures if failure is not None)
-
-
 def judge_suitability(needs: RequirementNeeds, venue: VenueCharacteristics) -> Suitability:
     """AC1: Suitable or Unsuitable for one requirement, from that requirement and the venue's
     recorded characteristics only, listing every failed criterion. One requirement at a time,
@@ -194,7 +184,7 @@ def judge_suitability(needs: RequirementNeeds, venue: VenueCharacteristics) -> S
     failures = [_capacity_failure(needs, venue)]
     if needs.layout is not None:
         failures.append(_missing_item(needs.layout, venue.layouts, Criterion.LAYOUT))
-    failures.extend(facility_failures(needs.facilities, venue))
+    failures.extend(_facility_failure(facility, venue) for facility in needs.facilities)
     failures.extend(
         _missing_item(feature, venue.accessibility, Criterion.ACCESSIBILITY)
         for feature in needs.accessibility

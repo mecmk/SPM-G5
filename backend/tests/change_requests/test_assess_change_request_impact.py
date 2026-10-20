@@ -33,14 +33,6 @@ Decisions agreed 19 Oct 2026 (CL-152 to CL-154), beyond the ACs' wording:
   approval. Each shortfall gives required, available and short.
 * No new notification, flag or workflow: after approval, cancelled bookings and returned equipment
   reach Venue Staff, Technical Support and the coordinator the way 19.2 already sends them.
-
-Facilities (AC1's "and why", added 20 Oct 2026 from the audit of 19.2/19.3): 19.2's fit rule does
-not judge facilities, so a venue requirements change can leave a kept booking at a venue without
-a facility it now asks for. Each requirement's booking is given story 11.1's facility check of
-what the change would have it need, as a warning alongside the capacity one - only the facilities
-it newly fails, so a shortfall accepted when the venue was booked (11.1 AC2) is not repeated, and
-never for an additional venue (11.1 AC5). A warning never cancels the booking; the one it keeps
-says the coordinator follows it up, since Venue Staff are not told.
 * Only approving re-runs the assessment, under the event's lock. Approving sends back the
   fingerprint of the assessment the coordinator saw; any change to it refuses the approval, with
   nothing applied, until the new one is reviewed. Only the assigned coordinator may see the
@@ -78,6 +70,7 @@ from tests.support.factories import (
     make_venue,
     make_venue_requirement,
 )
+from tests.support.replacement import add_pending_replacement, make_scenario
 from tests.support.seed import Users
 
 _EVENT_NOT_FOUND = "Event not found."
@@ -87,12 +80,20 @@ _IMPACT_CHANGED = (
     "The impact of this change has changed since you opened it. Review the updated impact, then "
     "approve again."
 )
+# AC2: what the approval does to an item it removes, and to one it sends back for the new dates.
+_KEPT_AS_CANCELLED = (
+    "Removed: its hold is released, and it is kept as Cancelled for the record. Technical Support "
+    "are told it was withdrawn."
+)
+_BACK_WITH_TECHNICAL_SUPPORT = (
+    "Held again for the new dates, and back with Technical Support as Pending, to decide for the "
+    "new dates."
+)
 # AC2: what the approval does to a booking it keeps, which is listed only for a warning.
 _KEPT_WITH_WARNING = (
     "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the "
     "change. Check with them that the venue still suits it, or reject the change."
 )
-_PROJECTOR = "Projector & screen"
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -174,11 +175,8 @@ def _schedule(starts_at: datetime, ends_at: datetime) -> dict:
     return {"starts_at": starts_at.isoformat(), "ends_at": ends_at.isoformat()}
 
 
-def _requirement_body(
-    requirement_id, *, name: str, capacity: int, event: Event, facilities: dict | None = None
-) -> dict:
-    """One venue requirement over the whole event, as 19.1's change form sends it, needing
-    ``facilities`` (code to quantity, None for any number)."""
+def _requirement_body(requirement_id, *, name: str, capacity: int, event: Event) -> dict:
+    """One venue requirement over the whole event, as 19.1's change form sends it."""
     return {
         "id": None if requirement_id is None else str(requirement_id),
         "name": name,
@@ -186,45 +184,9 @@ def _requirement_body(
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat(),
         "layout_code": None,
-        "facilities": [
-            {"code": code, "quantity": quantity, "notes": None}
-            for code, quantity in (facilities or {}).items()
-        ],
+        "facilities": [],
         "notes": None,
     }
-
-
-def _hall_booking(db: Session, event: Event, *, has: dict, needs: dict | None = None):
-    """The event's "Main hall" requirement for 100 people, needing ``needs``, booked for 100 at a
-    fresh hall that records ``has`` (facility code to how many, None when not recorded). Returns
-    the requirement's id and the booking."""
-    venue = make_venue(db, capacity=200, facilities=tuple(has))
-    for facility in venue.facilities:
-        facility.quantity = has[facility.facility_code]
-    db.flush()
-    requirement_id = _requirement(
-        db,
-        event,
-        capacity=100,
-        facilities=tuple((code, quantity, None) for code, quantity in (needs or {}).items()),
-    )
-    return requirement_id, _book(db, event, people=100, requirement_id=requirement_id, venue=venue)
-
-
-def _facilities_change(login_as, db: Session, event: Event, requirement_id, facilities: dict):
-    """Olivia asks for the Main hall requirement to need ``facilities`` instead, nothing else
-    changing."""
-    return _raise(
-        login_as,
-        db,
-        event,
-        "venue_requirements",
-        [
-            _requirement_body(
-                requirement_id, name="Main hall", capacity=100, event=event, facilities=facilities
-            )
-        ],
-    )
 
 
 def _equipment_body(item_id, equipment_type, quantity: int) -> dict:
@@ -447,133 +409,6 @@ def test_a_cancelled_booking_can_also_carry_a_capacity_warning(login_as, db: Ses
 
 
 @pytest.mark.story("19.3", ac=1)
-def test_a_facility_the_booked_venue_lacks_is_a_warning_not_a_cancellation(login_as, db: Session):
-    """The hall offers Wi-Fi only; the change asks for a projector too. 19.2's fit rule does not
-    judge facilities, so the booking is kept - and the coordinator is warned, by 11.1's check,
-    that the venue does not offer it."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={"WIFI": None}, needs={"WIFI": None})
-    request = _facilities_change(
-        login_as, db, event, requirement_id, {"WIFI": None, "PROJECTOR": None}
-    )
-
-    impact = _impact(login_as, request)
-
-    row = _bookings_by_id(impact)[str(hall.id)]
-    assert row["will_be_cancelled"] is False
-    assert row["reasons"] == []
-    assert row["capacity_warning"] is None
-    assert row["facility_warnings"] == [
-        {
-            "criterion": "FACILITY",
-            "outcome": "NOT_MET",
-            "code": "PROJECTOR",
-            "name": _PROJECTOR,
-            "required": None,
-            "venue_value": None,
-        }
-    ]
-    assert row["needed_starts_at"] is None
-    assert row["after_approval"] == _KEPT_WITH_WARNING
-    assert impact["has_impact"] is True
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_a_venue_that_recorded_no_facilities_is_unknown_never_met(login_as, db: Session):
-    """11.1 AC5: a venue with no facilities recorded is Unknown for the projector, and an unknown
-    is never treated as met."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={})
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": None})
-
-    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
-
-    assert [(item["code"], item["outcome"]) for item in row["facility_warnings"]] == [
-        ("PROJECTOR", "UNKNOWN")
-    ]
-    assert row["will_be_cancelled"] is False
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_a_facility_the_booked_venue_offers_affects_nothing(login_as, db: Session):
-    event = _planning_event(db)
-    requirement_id, _ = _hall_booking(db, event, has={"WIFI": None, "PROJECTOR": None})
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": None})
-
-    impact = _impact(login_as, request)
-
-    assert impact["venue_bookings"] == []
-    assert impact["has_impact"] is False
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_only_a_newly_unmet_facility_is_flagged(login_as, db: Session):
-    """The hall was booked without the stage its requirement already asked for - a shortfall the
-    coordinator accepted then (11.1's justification) - so only the projector the change adds is
-    new."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={"WIFI": None}, needs={"STAGE": None})
-    request = _facilities_change(
-        login_as, db, event, requirement_id, {"STAGE": None, "PROJECTOR": None}
-    )
-
-    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
-
-    assert [item["code"] for item in row["facility_warnings"]] == ["PROJECTOR"]
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_dropping_a_facility_affects_nothing(login_as, db: Session):
-    event = _planning_event(db)
-    requirement_id, _ = _hall_booking(
-        db, event, has={"WIFI": None}, needs={"WIFI": None, "STAGE": None}
-    )
-    request = _facilities_change(login_as, db, event, requirement_id, {"WIFI": None})
-
-    assert _impact(login_as, request)["venue_bookings"] == []
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_an_additional_venue_is_not_judged_on_facilities(login_as, db: Session):
-    """An additional venue (12.5) is booked for no requirement, so 11.1 AC5 judges it on people
-    alone; the requirement's new projector is its own booking's concern."""
-    event = _planning_event(db)
-    requirement_id, _ = _hall_booking(db, event, has={"PROJECTOR": None})
-    foyer = _book(db, event, people=100, venue=make_venue(db, capacity=200))
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": None})
-
-    assert str(foyer.id) not in _bookings_by_id(_impact(login_as, request))
-
-
-@pytest.mark.story("19.3", ac=1)
-def test_a_cancelled_booking_also_names_the_facility_its_venue_lacks(login_as, db: Session):
-    """The requirement grows past the 100 booked, so 19.2 cancels the booking; that the same hall
-    has no projector either is said too, for whether to ask for it again."""
-    event = _planning_event(db, expected_attendance=150)
-    requirement_id, hall = _hall_booking(db, event, has={"WIFI": None})
-    request = _raise(
-        login_as,
-        db,
-        event,
-        "venue_requirements",
-        [
-            _requirement_body(
-                requirement_id,
-                name="Main hall",
-                capacity=150,
-                event=event,
-                facilities={"PROJECTOR": None},
-            )
-        ],
-    )
-
-    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
-
-    assert row["will_be_cancelled"] is True
-    assert [item["code"] for item in row["facility_warnings"]] == ["PROJECTOR"]
-
-
-@pytest.mark.story("19.3", ac=1)
 def test_registrations_are_counted_not_named(login_as, db: Session):
     event = _planning_event(db, expected_attendance=100)
     _register(db, event, 3)
@@ -718,6 +553,23 @@ def test_an_attendance_beyond_what_the_booked_venues_hold_is_flagged(login_as, d
     ]
     assert impact["venue_bookings"] == []
     assert impact["has_impact"] is True
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_pending_replacement_counts_in_place_of_the_booking_it_replaces(login_as, db: Session):
+    """Venue Staff closed the original's venue (9.4) and a replacement is pending (12.6): both are
+    for the Main hall at the same times, but only one of them will ever hold the people. Each hall
+    holds 100, so 150 does not fit."""
+    scenario = make_scenario(db)
+    replacement = add_pending_replacement(db, scenario)
+    request = _raise(login_as, db, scenario.event, "expected_attendance", 150)
+
+    shortfall = _impact(login_as, request)["capacity_shortfall"]
+
+    assert shortfall is not None
+    [period] = shortfall["periods"]
+    assert [venue["venue_id"] for venue in period["venues"]] == [str(replacement.venue_id)]
+    assert (period["capacity"], period["shortfall"]) == (100, 50)
 
 
 @pytest.mark.story("19.3", ac=4)
@@ -939,30 +791,6 @@ def test_a_cancelled_booking_says_what_happens_next(login_as, db: Session):
 
 
 @pytest.mark.story("19.3", ac=2)
-def test_a_booking_warned_of_a_facility_is_kept_by_the_approval(login_as, db: Session):
-    """The warning predicts no cancellation, and 19.2 makes none: the booking stays Approved and
-    Venue Staff are told nothing."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={"WIFI": None})
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": None})
-
-    impact = _impact(login_as, request)
-    response = _approve(login_as, request, impact["fingerprint"])
-
-    assert response.status_code == 200, response.text
-    assert _bookings_by_id(impact)[str(hall.id)]["will_be_cancelled"] is False
-    assert _booking_status(db, hall.id) == "APPROVED"
-    released = db.execute(
-        text(
-            "SELECT count(*) FROM notifications WHERE related_entity_id = :b"
-            " AND notification_type = 'BOOKING_RELEASED'"
-        ),
-        {"b": hall.id},
-    ).scalar_one()
-    assert released == 0
-
-
-@pytest.mark.story("19.3", ac=2)
 def test_predicted_equipment_is_what_the_approval_does(login_as, db: Session):
     """Removed after being accepted, kept as Cancelled; lowered and still in stock, held again
     and back to Requested; new and short, flagged Unavailable; unchanged, not listed."""
@@ -997,6 +825,7 @@ def test_predicted_equipment_is_what_the_approval_does(login_as, db: Session):
     assert kept_type.code not in rows
     assert rows[accepted.equipment_type.code]["change"] == "removed"
     assert rows[accepted.equipment_type.code]["status_after"] == _item_status(db, accepted.id)
+    assert rows[accepted.equipment_type.code]["after_approval"] == _KEPT_AS_CANCELLED
     assert rows[lowered_type.code]["status_after"] == _item_status(db, lowered.id) == "REQUESTED"
     assert rows[lowered_type.code]["technical_support_told"] is True
     added_status = db.execute(
@@ -1063,6 +892,7 @@ def test_an_accepted_item_that_still_fits_goes_back_to_technical_support(login_a
 
     assert response.status_code == 200, response.text
     assert row["status_after"] == _item_status(db, item.id) == "PENDING"
+    assert row["after_approval"] == _BACK_WITH_TECHNICAL_SUPPORT
 
 
 @pytest.mark.story("19.3", ac=2)
@@ -1237,31 +1067,6 @@ def test_attendance_equal_to_capacity_fits(login_as, db: Session, capacity, is_w
     row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
 
     assert (row["capacity_warning"] is not None) is is_warned
-
-
-@pytest.mark.story("19.3", ac=4)
-@pytest.mark.parametrize(("needed", "is_warned"), [(2, False), (3, True)])
-def test_a_facility_quantity_equal_to_the_venues_fits(login_as, db: Session, needed, is_warned):
-    """11.1 AC4: the hall has 2 projectors, so 2 are met and 3 are not."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={"PROJECTOR": 2})
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": needed})
-
-    rows = _bookings_by_id(_impact(login_as, request))
-
-    if not is_warned:
-        assert str(hall.id) not in rows
-        return
-    assert rows[str(hall.id)]["facility_warnings"] == [
-        {
-            "criterion": "FACILITY_QUANTITY",
-            "outcome": "NOT_MET",
-            "code": "PROJECTOR",
-            "name": _PROJECTOR,
-            "required": 3,
-            "venue_value": 2,
-        }
-    ]
 
 
 @pytest.mark.story("19.3", ac=4)
@@ -1566,26 +1371,6 @@ def test_a_capacity_shortfall_changed_meanwhile_changes_the_assessment(login_as,
     request = _raise(login_as, db, event, "expected_attendance", 500)
     seen = _impact(login_as, request)
     db.execute(text("UPDATE venues SET capacity = 200 WHERE id = :v"), {"v": hall.venue_id})
-    db.expire_all()
-
-    response = _approve(login_as, request, seen["fingerprint"])
-
-    assert response.status_code == 412
-    assert _request_status(db, request.id) == "PENDING"
-
-
-@pytest.mark.story("19.3", ac=7)
-def test_a_facility_the_venue_records_meanwhile_changes_the_assessment(login_as, db: Session):
-    """Chloe saw the hall lacking the projector; Venue Staff then recorded that it has one, so
-    the warning she approved on is gone."""
-    event = _planning_event(db)
-    requirement_id, hall = _hall_booking(db, event, has={"WIFI": None})
-    request = _facilities_change(login_as, db, event, requirement_id, {"PROJECTOR": None})
-    seen = _impact(login_as, request)
-    db.execute(
-        text("INSERT INTO venue_facilities (venue_id, facility_code) VALUES (:v, 'PROJECTOR')"),
-        {"v": hall.venue_id},
-    )
     db.expire_all()
 
     response = _approve(login_as, request, seen["fingerprint"])

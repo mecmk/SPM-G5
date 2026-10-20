@@ -58,6 +58,7 @@ from app.auth.models import User
 from app.change_requests import service as change_requests_service
 from app.change_requests.models import EventChangeRequest
 from app.events.models import Event, EventStatus
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
     SecuredEvent,
     future_datetime,
@@ -113,12 +114,7 @@ def _approve(client, request):
     request already decided, the client not its coordinator - a placeholder is sent, and the
     approval's own refusal answers, as it would have before."""
     object_session(request).commit()
-    seen = client.get(_decision_url(request.event_id, request.id, "impact"))
-    fingerprint = seen.json()["fingerprint"] if seen.status_code == 200 else _ANY_FINGERPRINT
-    return client.post(
-        _decision_url(request.event_id, request.id, "approve"),
-        json={"assessment_fingerprint": fingerprint},
-    )
+    return approve_as_seen(client, request.event_id, request.id, fallback=_ANY_FINGERPRINT)
 
 
 def _reject(client, request, reason: str | None = _REJECTION_REASON):

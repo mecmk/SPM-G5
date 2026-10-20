@@ -125,7 +125,7 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 # AC6: an item in one of these takes up its type on the event; a declined or cancelled one does not.
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
-SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
+_SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
 # Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
 # the queue leaves them out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
@@ -856,7 +856,7 @@ def status_after_new_dates(status: str, *, is_held: bool) -> str:
     reads it to say what approving a date change does."""
     if not is_held:
         return EquipmentRequestStatus.UNAVAILABLE
-    if status in SENT_ITEM_STATUSES:
+    if status in _SENT_ITEM_STATUSES:
         return EquipmentRequestStatus.PENDING
     if status == EquipmentRequestStatus.UNAVAILABLE:
         return EquipmentRequestStatus.REQUESTED
@@ -917,7 +917,7 @@ WITH_TECHNICAL_SUPPORT = frozenset(
     {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
 )
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
-EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
+_EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
 # What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5).
 _CHANGE_WITHDREW = 'An approved change to "{event}"'
@@ -956,7 +956,7 @@ def status_after_removal(status: str) -> str | None:
     """Story 19.2 AC5: the status a removed item ends in - Cancelled, kept for Technical Support's
     record, if it was ever sent to them; None if it is deleted. An item already Cancelled stays
     so, and is not removed again."""
-    if status in EVER_SENT_STATUSES or status == EquipmentRequestStatus.CANCELLED:
+    if status in _EVER_SENT_STATUSES or status == EquipmentRequestStatus.CANCELLED:
         return EquipmentRequestStatus.CANCELLED
     return None
 

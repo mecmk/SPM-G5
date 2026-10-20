@@ -82,7 +82,6 @@ from app.events.schemas import EventEquipmentIn, VenueRequirementIn
 from app.notifications.service import NotificationType, active_members, notify
 from app.registrations import service as registrations_service
 from app.venues import service as venue_service
-from app.venues.schemas import FailedCriterionOut
 
 # The events refusals this service lets through, named here so the router imports only this
 # module (backend/CLAUDE.md), as bookings/router.py catches ``service.EventNotFound``.
@@ -1133,8 +1132,7 @@ class NotAssignedToAssess(PermissionError):
 @dataclass(frozen=True)
 class _ProposedEvent:
     """The event as the approval would leave it - its period, attendance, venue requirements by
-    id, for a venue requirements change the facilities each kept requirement would need, and for
-    an equipment change the plan - read without writing anything."""
+    id and, for an equipment change, the plan - read without writing anything."""
 
     starts_at: datetime
     ends_at: datetime
@@ -1142,7 +1140,6 @@ class _ProposedEvent:
     requirements: dict[uuid.UUID, events_service.RequirementTerms]
     is_rescheduled: bool
     equipment: equipment_service.EquipmentChangePlan | None
-    facilities: dict[uuid.UUID, list[tuple[str, int | None]]] | None
 
 
 def _proposed_event(db: Session, event: Event, request: EventChangeRequest) -> _ProposedEvent:
@@ -1162,7 +1159,6 @@ def _proposed_event(db: Session, event: Event, request: EventChangeRequest) -> _
         requirements=current,
         is_rescheduled=False,
         equipment=None,
-        facilities=None,
     )
     if field == ChangeRequestField.EXPECTED_ATTENDANCE:
         events_service.check_proposed_attendance(event, proposed)
@@ -1196,12 +1192,7 @@ def _proposed_event(db: Session, event: Event, request: EventChangeRequest) -> _
             for item in items
             if item.id is not None
         }
-        facilities = {
-            item.id: [(facility.code, facility.quantity) for facility in item.facilities]
-            for item in items
-            if item.id is not None
-        }
-        return replace(unchanged, requirements=terms, facilities=facilities)
+        return replace(unchanged, requirements=terms)
     plan = equipment_service.plan_equipment_change(event, _proposed_equipment(event, proposed))
     return replace(unchanged, equipment=plan)
 
@@ -1265,38 +1256,6 @@ def _capacity_warning(booking: VenueBooking, people: int) -> CapacityWarningOut 
     )
 
 
-def _facility_warnings(
-    db: Session,
-    booking: VenueBooking,
-    *,
-    current: list[tuple[str, int | None]],
-    proposed: list[tuple[str, int | None]],
-) -> list[FailedCriterionOut]:
-    """AC1: story 11.1's facility check of the booked venue against the facilities a venue
-    requirements change would have its requirement need - only those it newly fails. One it
-    already failed for the requirement as it stands, a shortfall accepted when it was booked
-    (11.1 AC2), is not new. A warning only: 19.2's fit rule does not judge facilities, so it
-    never cancels the booking."""
-    if set(current) == set(proposed):
-        return []
-    already = {
-        failure.code
-        for failure in venue_service.unmet_facilities(db, booking.venue, facilities=current)
-    }
-    return [
-        FailedCriterionOut(
-            criterion=failure.criterion,
-            outcome=failure.outcome,
-            code=failure.code,
-            name=failure.name,
-            required=failure.required,
-            venue_value=failure.venue_value,
-        )
-        for failure in venue_service.unmet_facilities(db, booking.venue, facilities=proposed)
-        if failure.code not in already
-    ]
-
-
 @dataclass(frozen=True)
 class _VenueImpact:
     """The bookings the change affects, and every live booking the approval keeps - the venues
@@ -1313,15 +1272,10 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
     replacement would need - another booking holding it (12.1's ``find_holding_booking``, in SQL,
     half-open), a closure (9.4) and opening hours (12.1 AC16), setup and teardown widening the
     period as 12.1 widens it. Separately, a booking whose people change gets 11.1's capacity
-    check, and a requirement's booking whose facilities change gets 11.1's facility check. Bookings
-    neither cancelled nor warned about are left out."""
+    check. Bookings neither cancelled nor warned about are left out."""
     booked = events_service.live_bookings(db, event)
     current = {
         requirement.id: events_service.RequirementTerms.of(requirement)
-        for requirement in event.venue_requirements
-    }
-    current_facilities = {
-        requirement.id: [(item.facility_code, item.quantity) for item in requirement.facilities]
         for requirement in event.venue_requirements
     }
     judged = [
@@ -1362,18 +1316,7 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
         )
         is_people_changed = after is not None and (before is None or after.people != before.people)
         warning = _capacity_warning(booking, after.people) if is_people_changed else None
-        requirement_id = booking.venue_requirement_id
-        facility_warnings = (
-            []
-            if proposed.facilities is None or is_additional or after is None
-            else _facility_warnings(
-                db,
-                booking,
-                current=current_facilities.get(requirement_id, []),
-                proposed=proposed.facilities.get(requirement_id, []),
-            )
-        )
-        if not misfits and warning is None and not facility_warnings:
+        if not misfits and warning is None:
             continue
 
         holding = closure = None
@@ -1404,7 +1347,6 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                 will_be_cancelled=bool(misfits),
                 reasons=[_misfit_reason(misfit, booking, people) for misfit in misfits],
                 capacity_warning=warning,
-                facility_warnings=facility_warnings,
                 needed_starts_at=None if needed is None else needed.starts_at,
                 needed_ends_at=None if needed is None else needed.ends_at,
                 held_by=None
@@ -1449,10 +1391,13 @@ def _capacity_shortfall(
     and venues booked at different times never hold the same people. The event is split wherever
     a booking starts or ends, on the bookings' own times (setup and teardown hold nobody); a span
     no venue is booked for is a break and needs no room. Equal fits. Neighbouring short spans
-    with the same venues are one period. Nothing is judged without a kept booking, nor for any
-    other field."""
+    with the same venues are one period. A pending replacement (12.6) counts in place of the
+    booking it replaces: both are for the same requirement at the same times, and only one will
+    ever hold the people. Nothing is judged without a kept booking, nor for any other field."""
     if request.field_name != ChangeRequestField.EXPECTED_ATTENDANCE or not kept:
         return None
+    replaced = {booking.replaces_booking_id for booking in kept if booking.replaces_booking_id}
+    kept = [booking for booking in kept if booking.id not in replaced]
     moments = sorted(
         {booking.starts_at for booking in kept} | {booking.ends_at for booking in kept}
     )

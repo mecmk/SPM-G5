@@ -97,6 +97,7 @@ from app.coordination.models import EventCoordinatorAssignment
 from app.coordination.schemas import AssignCoordinatorIn
 from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
     future_datetime,
     make_booking,
@@ -1291,13 +1292,7 @@ def test_a_change_raised_on_a_confirmed_event_returns_it_to_planning_when_approv
     raised = _raise(login_as(Users.ORGANISER), event.id, "expected_attendance", 150)
     assert raised.status_code == 201, raised.text
 
-    coordinator = login_as(Users.COORDINATOR)
-    url = f"/events/{event.id}/change-requests/{raised.json()['id']}"
-    seen = coordinator.get(f"{url}/impact")
-    assert seen.status_code == 200, seen.text
-    approved = coordinator.post(
-        f"{url}/approve", json={"assessment_fingerprint": seen.json()["fingerprint"]}
-    )
+    approved = approve_as_seen(login_as(Users.COORDINATOR), event.id, raised.json()["id"])
 
     assert approved.status_code == 200, approved.text
     db.expire_all()
