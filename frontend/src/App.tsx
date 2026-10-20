@@ -18,6 +18,7 @@ import { UnassignedQueuePage } from './events/UnassignedQueuePage'
 import { AppLayout } from './layout/AppLayout'
 import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
+import { ServerNotificationProvider } from './notifications/ServerNotificationProvider'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
@@ -65,7 +66,8 @@ import './App.css'
  * The route map. Signed-in pages sit inside <RequireAuth> and render within <AppLayout>
  * (story 1.1); a role-restricted page also sits inside <RequirePermission> for its permission
  * (story 1.2). Sections whose page is not built yet (NAV_ITEMS with isAvailable: false) get a
- * placeholder. The notification centre wraps the signed-in frame, so signing out clears it.
+ * placeholder. The log of the user's own actions and their server notifications (story 20.2) wrap
+ * the signed-in frame, so signing out clears them.
  * The story c3 component gallery stays reachable in development builds.
  */
 function App() {
@@ -81,7 +83,9 @@ function App() {
             <Route
               element={
                 <NotificationProvider>
-                  <AppLayout />
+                  <ServerNotificationProvider>
+                    <AppLayout />
+                  </ServerNotificationProvider>
                 </NotificationProvider>
               }
             >

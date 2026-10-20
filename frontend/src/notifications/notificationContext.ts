@@ -1,7 +1,8 @@
 import { createContext, useContext } from 'react'
 import type { NotificationImportance } from '../api/client'
 
-/** One entry in the notification centre: the outcome of a change the user made. */
+/** One entry in the log of the user's own recent actions (story 8.3's notification centre): the
+ * outcome of a change they made. It has no read state; the bell's count is the server's (20.2). */
 export interface AppNotification {
   id: number
   title: string
@@ -9,7 +10,6 @@ export interface AppNotification {
   importance: NotificationImportance
   isSuccess: boolean
   createdAt: Date
-  isRead: boolean
 }
 
 export interface NotificationContextValue {
@@ -17,8 +17,6 @@ export interface NotificationContextValue {
   notifications: AppNotification[]
   /** Notifications still showing as a toast. */
   toasts: AppNotification[]
-  unreadCount: number
-  markAllRead: () => void
   dismissToast: (id: number) => void
 }
 

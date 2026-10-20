@@ -10,9 +10,10 @@ const TOAST_LIFETIME_MS = 5000
 const MAX_NOTIFICATIONS = 50
 
 /**
- * The notification centre (team decision, 17 Sep 2026): every change a user makes, successful or
- * not, is listed here and briefly shown as a toast. It lives inside the signed-in frame, so
- * signing out clears it.
+ * The log of the user's own recent actions (team decision, 17 Sep 2026): every change a user
+ * makes, successful or not, is listed here and briefly shown as a toast. It lives inside the
+ * signed-in frame, so signing out clears it. It has no unread state: the bell's count is the
+ * server's (story 20.2).
  */
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -27,10 +28,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     timers.current.delete(id)
   }, [])
 
-  const markAllRead = useCallback(() => {
-    setNotifications((current) => current.map((item) => ({ ...item, isRead: true })))
-  }, [])
-
   useEffect(() => {
     const pendingTimers = timers.current
 
@@ -39,7 +36,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         ...outcome,
         id: nextId.current,
         createdAt: new Date(),
-        isRead: false,
       }
       nextId.current += 1
       setNotifications((current) => [notification, ...current].slice(0, MAX_NOTIFICATIONS))
@@ -56,11 +52,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [dismissToast])
 
-  const unreadCount = notifications.filter((item) => !item.isRead).length
-
   const value = useMemo<NotificationContextValue>(
-    () => ({ notifications, toasts, unreadCount, markAllRead, dismissToast }),
-    [notifications, toasts, unreadCount, markAllRead, dismissToast],
+    () => ({ notifications, toasts, dismissToast }),
+    [notifications, toasts, dismissToast],
   )
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>
