@@ -22,12 +22,14 @@ import app.venues.models  # noqa: F401
 from app.db import Base
 from app.dbtool import migrate
 from tests.support.seed import (
+    Bookings,
     Clarifications,
     EquipmentHolds,
     EquipmentItems,
     EquipmentOutOfService,
     Events,
     Registrations,
+    Unavailability,
     Users,
     Venues,
 )
@@ -278,11 +280,69 @@ def test_seed_constants_match_database(db: Session):
         (Events.CHARITY_FUN_RUN, "CANCELLED"),
         (Events.BOOK_SWAP, "CONFIRMED"),
         (Events.LANTERN_PAINTING, "CONFIRMED"),
+        # Story 12.6's e2e events: all Planning but the heritage walk, which was cancelled.
+        (Events.LANTERN_SHOWCASE, "PLANNING"),
+        (Events.MAKER_FAIRE, "PLANNING"),
+        (Events.SPRING_EXPO, "PLANNING"),
+        (Events.AWARDS_EVENING, "PLANNING"),
+        (Events.PITCH_NIGHT, "PLANNING"),
+        (Events.NEIGHBOURHOOD_SUMMIT, "PLANNING"),
+        (Events.HERITAGE_WALK, "CANCELLED"),
+        (Events.PRODUCT_SHOWCASE, "PLANNING"),
+        (Events.ROBOTICS_OPEN_HOUSE, "PLANNING"),
+        (Events.WELLNESS_EXPO, "PLANNING"),
+        (Events.CRAFT_MARKET, "PLANNING"),
+        (Events.HARVEST_FAIR, "PLANNING"),
+        (Events.OPEN_STUDIOS, "PLANNING"),
+        (Events.NIGHT_BAZAAR, "PLANNING"),
+        (Events.SPRING_FAIR, "PLANNING"),
+        (Events.GARDEN_FAIR, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
             == status
         )
+    # Story 12.6's e2e bookings: each marked, bar the maker faire's requirement booking, with the
+    # closure of its day; the product showcase's is pending and the rest approved.
+    for booking_id, status, is_marked in (
+        (Bookings.LANTERN_SHOWCASE_FOYER, "APPROVED", True),
+        (Bookings.MAKER_FAIRE_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.MAKER_FAIRE_ADDITIONAL_FOYER, "APPROVED", True),
+        (Bookings.SPRING_EXPO_FOYER, "APPROVED", True),
+        (Bookings.AWARDS_EVENING_FOYER, "APPROVED", True),
+        (Bookings.PITCH_NIGHT_FOYER, "APPROVED", True),
+        (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, "APPROVED", True),
+        (Bookings.HERITAGE_WALK_FOYER, "APPROVED", True),
+        (Bookings.PRODUCT_SHOWCASE_FOYER, "PENDING", True),
+        (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, "APPROVED", True),
+        (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
+        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, "APPROVED", True),
+        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, "APPROVED", True),
+        (Bookings.OPEN_STUDIOS_HARBOUR, "APPROVED", False),
+        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, "PENDING", True),
+        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, "APPROVED", False),
+        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, "PENDING", True),
+        (Bookings.SPRING_FAIR_FOYER, "APPROVED", True),
+        (Bookings.GARDEN_FAIR_PENDING, "PENDING", False),
+        (Bookings.GARDEN_FAIR_WITHDRAWN, "WITHDRAWN", False),
+    ):
+        row = db.execute(
+            text(
+                "SELECT status, venue_unavailable_marked_at IS NOT NULL AS is_marked"
+                " FROM venue_bookings WHERE id = :id"
+            ),
+            {"id": booking_id},
+        ).one()
+        assert (row.status, row.is_marked) == (status, is_marked)
+    for period_id in (
+        Unavailability.FOYER_LANTERN_SHOWCASE,
+        Unavailability.FOYER_NEIGHBOURHOOD_SUMMIT,
+    ):
+        assert db.execute(
+            text("SELECT 1 FROM venue_unavailability_periods WHERE id = :id"), {"id": period_id}
+        ).scalar()
     # Story 18.1: Bella's place, the only one at the Portfolio Review Slot.
     assert (
         db.execute(

@@ -7,6 +7,7 @@ import {
   type BookingStatus,
 } from '../api/bookings'
 import { formatApiError, mediaUrl } from '../api/client'
+import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/changeRequests'
 import {
   approveEvent,
   CLARIFICATION_MESSAGE_MAX_LENGTH,
@@ -44,17 +45,23 @@ import {
 import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
+  closedAt,
+  FIND_ANOTHER_LABEL,
+  FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  replacedByLine,
+  replacementRequestedLine,
+  replacesLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
   ACTIVE_EVENT_STATUSES,
   AWAITING_DECISION_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
-  CHANGE_REQUESTABLE_STATUS,
+  CHANGE_REQUESTABLE_STATUSES,
   CHANGE_REQUESTS_VISIBLE_STATUSES,
   CONTACT_EDITABLE_STATUSES,
   DETAILS_LOCKED_HINT,
@@ -78,6 +85,10 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
+  isMarked,
+  offersWayToAnotherVenue,
+  isReplaceable,
+  replacementSearchFor,
   requirementName,
   venueSearchFor,
 } from '../shared/venueRequest'
@@ -257,6 +268,13 @@ export function EventDetailPage() {
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<BookingOutcome[] | null>(null)
+  /** Story 19.1 AC12: when change requests close - or why that couldn't be read - with the event
+   *  it was read for, so another event's answer is never shown on this one. */
+  const [requestWindow, setRequestWindow] = useState<{
+    eventId: string
+    window: ChangeRequestWindow | null
+    error: string | null
+  } | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
@@ -322,6 +340,29 @@ export function EventDetailPage() {
       cancelled = true
     }
   }, [eventId, event, user])
+
+  /** Story 19.1 AC12: when change requests close, read for the organiser of a Planning or
+   *  Confirmed event, and again whenever the event is - its bookings, and so its set-up time, may
+   *  have changed. */
+  useEffect(() => {
+    if (event === null || user === null) return undefined
+    const mayRequestChanges =
+      can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
+      event.organiser_id === user.id &&
+      CHANGE_REQUESTABLE_STATUSES.includes(event.status)
+    if (!mayRequestChanges) return undefined
+    let cancelled = false
+    fetchChangeRequestWindow(eventId)
+      .then((window) => {
+        if (!cancelled) setRequestWindow({ eventId, window, error: null })
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRequestWindow({ eventId, window: null, error: formatApiError(err) })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, event, user, can])
 
   useEffect(() => {
     if (!canReadBooking) return undefined
@@ -496,18 +537,28 @@ export function EventDetailPage() {
       setBookings(
         (current) =>
           current &&
-          current.map((booking) =>
-            booking.id === updated.id
-              ? {
-                  ...booking,
-                  status: updated.status,
-                  decided_at: updated.decided_at,
-                  decision_reason: updated.decision_reason,
-                }
-              : booking,
-          ),
+          current.map((booking) => {
+            if (booking.id === updated.id) {
+              return {
+                ...booking,
+                status: updated.status,
+                decided_at: updated.decided_at,
+                decision_reason: updated.decision_reason,
+                // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
+                venue_unavailable_marked_at: null,
+              }
+            }
+            // Story 12.6 AC5: withdrawing a replacement ends the original's "Replacement
+            // requested", which brings its Find a replacement venue back.
+            return booking.id === pendingWithdraw.replaces_booking_id
+              ? { ...booking, pending_replacement_venue_name: null }
+              : booking
+          }),
       )
       setPendingWithdraw(null)
+      // Story 12.6 AC12: a withdrawn replacement, or a withdrawn marked booking, may have been what
+      // stopped the safety review, so its blockers are read again.
+      getEventSafety(eventId).then(setSafety, () => {})
     } catch (err) {
       setWithdrawError(formatApiError(err))
     } finally {
@@ -600,6 +651,11 @@ export function EventDetailPage() {
     bookings !== null &&
     event.venue_requirements.length > 0 &&
     firstRequirementNeedingVenue(event, bookings) === null
+  /** Story 12.6 AC4: while a booking is marked "Venue unavailable" the event is not all booked, and
+   *  no venue is left to find for a requirement that needs none: the way on is the marked booking's
+   *  own Find a replacement venue (or Find another venue), so the header offers neither. */
+  const hasMarkedBooking = bookings !== null && bookings.some(isMarked)
+  const isHeaderFindHidden = isEveryRequirementCovered && hasMarkedBooking
   /** Fix f2.7.4 (story 2.7 AC17, AC19): "No venue requirements", saved before the fix, still
    *  stands once a request is past its decision - an event approved with it keeps the paths for
    *  none (AC19). Before then it no longer does: such a request cannot be submitted or approved
@@ -613,12 +669,19 @@ export function EventDetailPage() {
   const canViewClarifications =
     user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
   const isOrganiser = user !== null && event.organiser_id === user.id
-  /** Story 19.1 AC1/AC5/AC7: only the owning organiser, holding event_change_requests:create, asks
-   *  for a change, and only while the event is in Planning - mirroring the backend's checks. */
-  const canRequestChanges =
+  /** Story 19.1 AC1/AC5/AC7/AC11/AC12: only the owning organiser, holding
+   *  event_change_requests:create, asks for a change, and only while the event is in Planning or
+   *  Confirmed - never before approval, while awaiting the safety check, or once completed,
+   *  cancelled or rejected - mirroring the backend's checks. */
+  const mayRequestChanges =
     can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
     isOrganiser &&
-    event.status === CHANGE_REQUESTABLE_STATUS
+    CHANGE_REQUESTABLE_STATUSES.includes(event.status)
+  /** AC12: and only until 24 hours before its set-up time, as the server says. */
+  const readRequestWindow =
+    mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
+  const shownRequestWindow = readRequestWindow?.window ?? null
+  const canRequestChanges = shownRequestWindow?.is_open === true
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
   const canViewChangeRequests =
@@ -860,7 +923,7 @@ export function EventDetailPage() {
           <section className="card stack" aria-labelledby="venue-requirements-heading">
             <div className="card-heading">
               <h2 id="venue-requirements-heading">Venue requirements</h2>
-              {canFindVenue && (
+              {canFindVenue && !isHeaderFindHidden && (
                 <Link
                   to={findVenuePath(event, bookings ?? [])}
                   className={
@@ -1016,6 +1079,25 @@ export function EventDetailPage() {
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
                       <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
+                          once its replacement was approved - or which venue is asked for. */}
+                      {booking.replaces_venue_name !== null && (
+                        <p>
+                          <strong>{replacesLine(booking.replaces_venue_name)}</strong>
+                        </p>
+                      )}
+                      {booking.replaced_by_venue_name !== null && (
+                        <p>
+                          <strong>{replacedByLine(booking.replaced_by_venue_name)}</strong>
+                        </p>
+                      )}
+                      {booking.pending_replacement_venue_name !== null && (
+                        <p>
+                          <strong>
+                            {replacementRequestedLine(booking.pending_replacement_venue_name)}
+                          </strong>
+                        </p>
+                      )}
                       {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
                           the booking stays here for reference and the event needs another venue. */}
                       {booking.venue_unavailable_marked_at !== null && (
@@ -1055,7 +1137,7 @@ export function EventDetailPage() {
                         <p>
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
-                          {formatDateTime(booking.decided_at)}
+                          {formatDateTime(closedAt(booking) ?? booking.decided_at)}
                         </p>
                       )}
                       {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
@@ -1066,13 +1148,16 @@ export function EventDetailPage() {
                           {formatDateTime(booking.hold_expires_at)}
                         </p>
                       )}
-                      {booking.decision_reason !== null && (
-                        <p>
-                          <span className="fact-label">{outcomeLabels.why}</span>
-                          <br />
-                          {booking.decision_reason}
-                        </p>
-                      )}
+                      {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
+                          <venue>" above, which is also its reason, so it is not said twice. */}
+                      {booking.decision_reason !== null &&
+                        booking.replaced_by_venue_name === null && (
+                          <p>
+                            <span className="fact-label">{outcomeLabels.why}</span>
+                            <br />
+                            {booking.decision_reason}
+                          </p>
+                        )}
                       {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
                       {booking.suitability_override_reason !== null && (
                         <p>
@@ -1103,6 +1188,19 @@ export function EventDetailPage() {
                       >
                         Withdraw
                       </button>
+                    </div>
+                  )}
+                  {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
+                   *  event's assigned coordinator while it can take a booking (AC8): a replacement
+                   *  for an approved one, the catalogue's Switch for a pending one. */}
+                  {offersWayToAnotherVenue(booking) && canFindVenue && isAssignedCoordinator && (
+                    <div className="cluster">
+                      <Link
+                        to={venueSearchPath(replacementSearchFor(event, booking))}
+                        className="button button-sm"
+                      >
+                        {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
+                      </Link>
                     </div>
                   )}
                 </div>
@@ -1141,6 +1239,8 @@ export function EventDetailPage() {
           <ChangeRequestsSection
             event={event}
             canRaise={canRequestChanges}
+            requestWindow={shownRequestWindow}
+            requestWindowError={readRequestWindow?.error ?? null}
             canWithdraw={isOrganiser}
             canDecide={canDecideChangeRequests}
             onDecided={reloadEvent}

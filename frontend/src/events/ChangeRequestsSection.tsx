@@ -7,6 +7,7 @@ import {
   type ChangeRequest,
   type ChangeRequestField,
   type ChangeRequestInput,
+  type ChangeRequestWindow,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
 import {
@@ -21,6 +22,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
@@ -28,6 +30,14 @@ import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
 import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
+
+/** AC12 (team decision on the review of #125): why an approved event offers no change request any
+ *  more - the backend's `CLOSED_BEFORE_SETUP_MESSAGE`, word for word. */
+const CLOSED_NOTE = 'Change requests for this event closed 24 hours before its set-up time.'
+/** Fix f19.1.1 (19.1 AC11, 19.2 AC8): what the organiser is told when asking to change an event
+ *  that approval would send back to Planning - a Confirmed one. */
+const BACK_TO_PLANNING_NOTE =
+  'If this change is approved, the event goes back to Planning and needs a new safety check before it is confirmed again.'
 
 const FIELDS = Object.keys(FIELD_LABELS) as ChangeRequestField[]
 const WHOLE_NUMBER = /^\d+$/
@@ -127,8 +137,14 @@ function equipmentInputFrom(draft: EquipmentDraft): EquipmentInput {
 
 export interface ChangeRequestsSectionProps {
   event: EventDetail
-  /** AC1/AC5/AC7: the owning organiser, while the event is in Planning. */
+  /** AC1/AC5/AC7/AC11/AC12: the owning organiser, while the event is in Planning or Confirmed and
+   *  more than 24 hours before its set-up time. */
   canRaise: boolean
+  /** AC12: when change requests close, shown to the organiser of a Planning or Confirmed event;
+   *  null for anyone else, or while it loads. */
+  requestWindow: ChangeRequestWindow | null
+  /** AC12: reading when change requests close failed, so none are offered; null otherwise. */
+  requestWindowError: string | null
   /** AC9: the owning organiser may withdraw their pending requests. */
   canWithdraw: boolean
   /** Story 19.2 AC6: the assigned coordinator decides pending requests. */
@@ -147,11 +163,13 @@ interface OpenDecision {
 /**
  * Story 19.1: the event's change requests, on the event page. The organiser and the assigned
  * coordinator see each one with what is there now, what is asked for, why, and its status (AC1).
- * While the event is in Planning the organiser asks for one field to change - date and time,
- * expected attendance, venue requirements or equipment - with a reason (AC1, AC4), at most one
- * pending per field (AC5), and withdraws a pending request after confirming (AC9). Nothing
- * changes on the event until the coordinator decides. The form checks the reason and the simple
- * value rules before sending; the server re-checks every rule (AC3, AC4).
+ * While the event is in Planning or Confirmed (fix f19.1.1, AC11) the organiser asks for one field
+ * to change - date and time, expected attendance, venue requirements or equipment - with a reason
+ * (AC1, AC4), at most one pending per field (AC5), and withdraws a pending request after
+ * confirming (AC9). On a Confirmed event the form says that approving the change sends the event
+ * back to Planning for a new safety check (19.2 AC8). Nothing changes on the event until the
+ * coordinator decides. The form checks the reason and the simple value rules before sending; the
+ * server re-checks every rule (AC3, AC4).
  * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
  * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
  * saying why - and an event with none starts it with one blank row to fill in.
@@ -166,6 +184,8 @@ interface OpenDecision {
 export function ChangeRequestsSection({
   event,
   canRaise,
+  requestWindow,
+  requestWindowError,
   canWithdraw,
   canDecide,
   onDecided,
@@ -457,7 +477,7 @@ export function ChangeRequestsSection({
   const lastRequirementHintId = `${ids}-last-requirement`
 
   return (
-    <section className="card stack" aria-labelledby={`${ids}-heading`}>
+    <section className="card stack change-requests-section" aria-labelledby={`${ids}-heading`}>
       <div>
         <h2 id={`${ids}-heading`}>{canWithdraw ? 'Your change requests' : 'Change requests'}</h2>
         <p className="muted">
@@ -564,6 +584,19 @@ export function ChangeRequestsSection({
         </ul>
       )}
 
+      {requestWindowError && (
+        <p role="alert" className="error">
+          {requestWindowError}
+        </p>
+      )}
+      {requestWindow?.is_open === false && <p className="form-hint">{CLOSED_NOTE}</p>}
+      {requestWindow?.is_open && requestWindow.closes_at && (
+        <p className="form-hint">
+          Change requests close 24 hours before set-up, on {formatDateTime(requestWindow.closes_at)}
+          .
+        </p>
+      )}
+
       {canRaise && !isFormOpen && (
         <div className="page-actions">
           <button type="button" className="secondary" onClick={openForm}>
@@ -578,6 +611,9 @@ export function ChangeRequestsSection({
             Nothing changes until the coordinator decides. To update the point of contact, use
             Update point of contact above.
           </p>
+          {CHANGE_RETURNS_TO_PLANNING_STATUSES.includes(event.status) && (
+            <p className="warning">{BACK_TO_PLANNING_NOTE}</p>
+          )}
           <label>
             What to change
             <select

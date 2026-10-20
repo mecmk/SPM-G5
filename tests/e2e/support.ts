@@ -34,6 +34,12 @@ export const EVENTS = {
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
   partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; no spec writes a request for it
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
+  completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
+  // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides
+  // what a cancelled event no longer offers.
+  cancelledFunRun: '33333333-0000-0000-0000-000000000075',
+  // Confirmed, organiser: organiser2, and over since 3 Oct 2026 - nothing marks it Completed (Q57).
+  bookSwap: '33333333-0000-0000-0000-000000000076',
   // Story 15.1, both Planning, organiser: organiser, coordinator, dated May 2027. Only the
   // equipment flow changes the workshop's equipment; nothing changes the showcase's.
   equipmentWorkshop: '33333333-0000-0000-0000-000000000019',
@@ -90,6 +96,25 @@ export const EVENTS = {
   // closure over them.
   choirShowcase: '33333333-0000-0000-0000-000000000060',
   artMarket: '33333333-0000-0000-0000-000000000061',
+  // Story 12.6, organiser: organiser2, February 2029. Each has a booking at Exhibition Foyer that
+  // its day's closure has marked "Venue unavailable - alternative needed" (the closure and the mark
+  // are seeded); Grand Hall is free for every one. Coordinator's unless said otherwise.
+  lanternShowcase: '33333333-0000-0000-0000-000000012662', // approved; read only
+  makerFaire: '33333333-0000-0000-0000-000000012663', // an approved additional venue, marked
+  springExpo: '33333333-0000-0000-0000-000000012664', // the spec raises a replacement
+  awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
+  pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
+  neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
+  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its booking still marked
+  productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
+  roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
+  wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
+  craftMarket: '33333333-0000-0000-0000-000000012680', // an additional venue, marked; its closure is removed, then a request
+  harvestFair: '33333333-0000-0000-0000-000000012681', // an additional venue, marked; replaced, then Back
+  openStudios: '33333333-0000-0000-0000-000000012682', // a marked pending replacement; read only
+  nightBazaar: '33333333-0000-0000-0000-000000012683', // a marked pending additional venue; read only
+  springFair: '33333333-0000-0000-0000-000000012684', // a replacement is raised, then rejected
+  gardenFair: '33333333-0000-0000-0000-000000012685', // a pending request and an older withdrawn one; a switch is sent
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged

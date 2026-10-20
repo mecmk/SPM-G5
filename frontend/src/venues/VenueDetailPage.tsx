@@ -1,26 +1,19 @@
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { mediaUrl } from '../api/client'
-import { useAuth } from '../auth/authContext'
-import { PERMISSIONS } from '../auth/permissions'
 import { getVenue, getVenueCalendar, type Venue } from '../api/venues'
 import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { VenueAvailabilityCalendar } from '../components/VenueAvailabilityCalendar'
-import type { DayClosure } from '../components/venueCalendarDays'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH, venueRequestPath, venueSwitchPath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { useVenueCalendar } from '../shared/useVenueCalendar'
+import { useVenueCalendar, VENUE_CALENDAR_DAY_PANEL_ID } from '../shared/useVenueCalendar'
 import { describeCoveredRequirement, isBooked, requirementName } from '../shared/venueRequest'
+import { AVAILABILITY_LABEL } from './blockOffLabels'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
-import { blockOffLabel } from './blockOffLabels'
-import { VenueUnavailabilitySection } from './VenueUnavailabilitySection'
-import { ClosureActions } from './ClosureActions'
-
-const DAY_PANEL_ID = 'venue-calendar-day-panel'
 
 const STATUS_LABELS: Record<Venue['status'], string> = {
   ACTIVE: 'In service',
@@ -57,47 +50,17 @@ export function VenueDetailPage() {
     requestingEvent,
     selectedRequirement,
     selectedCovering,
+    replacingBooking,
+    replacementRefusal,
     error: eventError,
   } = useRequestingEvent()
   const loadWindows = useCallback(
     (startsAt: string, endsAt: string) => getVenueCalendar(venueId, startsAt, endsAt),
     [venueId],
   )
-  /** Story 9.4: Venue Staff may mark the venue unavailable; nobody else is offered the controls. */
-  const { can } = useAuth()
-  const canManageUnavailability = can(PERMISSIONS.VENUE_UNAVAILABILITY_MANAGE)
-  /** Story 9.4: counts the closures saved from this page, so the calendar loads them again. */
-  const [closureVersion, setClosureVersion] = useState(0)
-  const calendar = useVenueCalendar(loadWindows, new Date(), String(closureVersion))
-
-  /** Story 9.4 AC6: the closure whose row's Edit was pressed, while the form is open on it. */
-  const [editingClosure, setEditingClosure] = useState<DayClosure | null>(null)
-
-  function handleClosureSaved() {
-    setClosureVersion((version) => version + 1)
-  }
-
-  function handleEditFinished() {
-    setEditingClosure(null)
-  }
-
-  function renderClosureActions(closure: DayClosure) {
-    /** Ended or removed from its row: if its form is open, there is nothing left to edit. */
-    function handleClosureChanged() {
-      if (editingClosure?.id === closure.id) setEditingClosure(null)
-      handleClosureSaved()
-    }
-
-    return (
-      <ClosureActions
-        key={`${closure.id}:${closure.startsAt}:${closure.endsAt}`}
-        venueId={venueId}
-        closure={closure}
-        onEdit={setEditingClosure}
-        onChanged={handleClosureChanged}
-      />
-    )
-  }
+  /** Fix f9.4.1: the calendar shows each period and its reason to every internal role. Venue
+   *  Staff add, edit, end and remove periods on the venue's Edit venue page, not here. */
+  const calendar = useVenueCalendar(loadWindows, new Date())
   /** Story 8.3 AC6: a banner picture that failed to load, so the icon shows instead. */
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   /** Story 8.3 AC6: the gallery picture the carousel is open on, if it is open. */
@@ -138,35 +101,45 @@ export function VenueDetailPage() {
           <div className="page-actions">
             {/* Story 12.5 AC11: the selected requirement already has a venue, which the page
              *  names; it is switched while only requested, never once booked. */}
-            {selectedRequirement !== null && selectedCovering !== null && (
-              <p className="muted">
-                {describeCoveredRequirement(
-                  requirementName(requestingEvent, selectedRequirement),
-                  selectedCovering,
-                )}
-              </p>
-            )}
-            {selectedCovering === null && (
-              <Link
-                to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
-                className="button brand"
-              >
-                Request this venue
-              </Link>
-            )}
-            {selectedCovering !== null && !isBooked(selectedCovering) && (
-              <Link
-                to={venueSwitchPath(
-                  requestingEvent.id,
-                  venue.id,
-                  location.search,
-                  selectedCovering.id,
-                )}
-                className="button brand"
-              >
-                Switch to this venue
-              </Link>
-            )}
+            {selectedRequirement !== null &&
+              selectedCovering !== null &&
+              replacingBooking === null && (
+                <p className="muted">
+                  {describeCoveredRequirement(
+                    requirementName(requestingEvent, selectedRequirement),
+                    selectedCovering,
+                  )}
+                </p>
+              )}
+            {/* Story 12.6 AC1/AC2: opened to replace a booking, the venue is requested as its
+             *  replacement, whatever the requirement already holds - unless it is the venue being
+             *  replaced, which cannot replace itself (AC10). */}
+            {replacementRefusal === null &&
+              (selectedCovering === null ||
+                (replacingBooking !== null && replacingBooking.venue_id !== venue.id)) && (
+                <Link
+                  to={venueRequestPath(requestingEvent.id, venue.id, location.search)}
+                  className="button brand"
+                >
+                  Request this venue
+                </Link>
+              )}
+            {selectedCovering !== null &&
+              !isBooked(selectedCovering) &&
+              replacementRefusal === null &&
+              replacingBooking === null && (
+                <Link
+                  to={venueSwitchPath(
+                    requestingEvent.id,
+                    venue.id,
+                    location.search,
+                    selectedCovering.id,
+                  )}
+                  className="button brand"
+                >
+                  Switch to this venue
+                </Link>
+              )}
           </div>
         </div>
       )}
@@ -312,39 +285,18 @@ export function VenueDetailPage() {
 
           <section className="card stack" aria-labelledby="venue-availability-heading">
             <p className="eyebrow" id="venue-availability-heading">
-              Availability
+              {AVAILABILITY_LABEL}
             </p>
             <VenueAvailabilityCalendar
               month={calendar.month}
               onMonthChange={calendar.setMonth}
               windows={calendar.windows}
+              now={calendar.now}
               error={calendar.error}
               isLoading={calendar.isLoading}
-              dayPanelId={DAY_PANEL_ID}
-              renderClosureActions={canManageUnavailability ? renderClosureActions : undefined}
+              dayPanelId={VENUE_CALENDAR_DAY_PANEL_ID}
             />
           </section>
-
-          {/* Story 9.4 AC1/AC9: Venue Staff's own controls, apart from the calendar everyone sees. */}
-          {canManageUnavailability && (
-            <section className="card stack" aria-labelledby="venue-block-off-heading">
-              <p className="eyebrow" id="venue-block-off-heading">
-                {blockOffLabel(editingClosure !== null)}
-              </p>
-              <p className="muted">
-                Close this venue for a period, for example for maintenance. Any bookings in that
-                period will be flagged and their coordinators told.
-              </p>
-              <VenueUnavailabilitySection
-                key={editingClosure?.id ?? 'new'}
-                venueId={venue.id}
-                venueName={venue.name}
-                onSaved={handleClosureSaved}
-                editing={editingClosure}
-                onEditFinished={handleEditFinished}
-              />
-            </section>
-          )}
         </div>
 
         <aside className="card stack" aria-labelledby="venue-quick-facts-heading">

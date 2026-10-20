@@ -1995,6 +1995,12 @@ td.num {
   border-color: var(--danger-border);
 }
 
+.chip-muted {
+  color: var(--text-muted);
+  background: var(--surface);
+  border-color: var(--border);
+}
+
 /* ---------- tabs and filter pills ---------- */
 
 .tabs {
@@ -2254,6 +2260,12 @@ td.num {
   color: var(--success);
 }
 
+.calendar-entry-muted {
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
 .calendar-more,
 .calendar-hint {
   font-family: var(--font-mono);
@@ -2350,6 +2362,12 @@ td.num {
   background: var(--success-bg);
 }
 
+/* A day whose only entries are ended closures has no tone background of its own: its resting
+   background, so the hover does not paint it in the accent colour and hide the date. */
+.calendar-cell-openable.calendar-cell-muted:hover {
+  background: var(--surface);
+}
+
 .calendar-cell-openable:focus-visible {
   outline: 2px solid var(--info);
   outline-offset: -2px;
@@ -2437,7 +2455,16 @@ td.num {
   grid-area: actions;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+/* An action and what it will do, kept together when the row wraps. */
+.closure-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
 }
 
 /* "+3 more" on a day that opens: dark and underlined, so it reads as something to press. */
@@ -4249,6 +4276,15 @@ button.requirement-choice.requirement-covered:hover,
 @media (max-width: 640px) {
   .turnaround-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Fix f19.1.1: on a phone, the organiser's Request a change - now also on a Confirmed event - is at
+   least 44px tall, to be pressed with a thumb. Only that button: the form's own buttons keep their
+   size. */
+@media (max-width: 640px) {
+  .change-requests-section > .page-actions button {
+    min-height: 44px;
   }
 }
 

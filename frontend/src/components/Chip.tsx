@@ -1,4 +1,4 @@
-export type ChipTone = 'success' | 'info' | 'warning' | 'danger'
+export type ChipTone = 'success' | 'info' | 'warning' | 'danger' | 'muted'
 
 export interface ChipProps {
   label: string

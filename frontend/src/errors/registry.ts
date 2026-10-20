@@ -97,6 +97,7 @@ export type ErrorCode =
   | 'EVENT_REGISTRATION_CLOSES_AFTER_START'
   | 'BOOKING_NOT_ALLOWED'
   | 'BOOKING_NOT_REQUESTABLE'
+  | 'BOOKING_EVENT_BOOKINGS_UNREAD'
   | 'BOOKING_REQUIREMENT_NOT_FOUND'
   | 'BOOKING_TURNAROUND_INVALID'
   | 'BOOKING_TURNAROUND_TOO_LONG'
@@ -583,6 +584,18 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
       'Planning or Confirmed.',
   },
   /**
+   * Story 12.5 / 12.6: the request step names another booking of the event - the request a switch
+   * replaces, or the booking a replacement replaces - and the event's bookings could not be read to
+   * find it. Send is off until they are, since without it the request would be sent as something
+   * else; the read's own reason follows this sentence.
+   */
+  BOOKING_EVENT_BOOKINGS_UNREAD: {
+    title: 'Bookings could not be read',
+    message:
+      "This request cannot be sent yet: the event's other bookings could not be read, and it " +
+      'depends on one of them.',
+  },
+  /**
    * Story 12.5 AC11: the request step's address names a venue requirement that is not the
    * event's, so the page offers no request - the backend would refuse it with the same first
    * sentence.
@@ -704,9 +717,10 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.
-  /** AC5/AC6/AC8/AC10: a change request refused for the state it found - the event is no longer
-   *  in Planning, the field already has a pending request, or the request was decided before it
-   *  could be withdrawn. The backend's own sentence (always sent) says which. */
+  /** AC5/AC6/AC8/AC10/AC12/AC13: a change request refused for the state it found - the event is
+   *  not yet approved, awaiting its safety check, completed, cancelled, rejected, or within 24
+   *  hours of its set-up time; the field already has a pending request; or the request was
+   *  decided before it could be withdrawn. The backend's own sentence (always sent) says which. */
   CHANGE_REQUEST_REFUSED: {
     title: 'Change request not sent',
     message: "This change request could not be made in the event's current state.",

@@ -90,6 +90,22 @@ const CHANGE_REQUEST_DECISION_ERRORS = {
   422: 'CHANGE_REQUEST_INVALID',
 } as const
 
+/** Mirrors `ChangeRequestWindowOut` (backend/app/change_requests/schemas.py), story 19.1 AC12
+ *  (fix f19.1.1): when the event stops taking change requests - 24 hours before its set-up time -
+ *  and whether that is still ahead. `closes_at` is null for an event with no date yet. */
+export interface ChangeRequestWindow {
+  closes_at: string | null
+  is_open: boolean
+}
+
+/** Story 19.1 AC12: when the event stops taking change requests, for its organiser and its
+ *  assigned coordinator. */
+export function fetchChangeRequestWindow(eventId: string): Promise<ChangeRequestWindow> {
+  return api<ChangeRequestWindow>(`/events/${eventId}/change-request-window`, {
+    errorCodes: { 404: 'EVENT_NOT_FOUND' },
+  })
+}
+
 /** Story 19.1 AC1: the event's change requests, newest first. */
 export function listChangeRequests(eventId: string): Promise<ChangeRequest[]> {
   return api<ChangeRequest[]>(`/events/${eventId}/change-requests`, {
@@ -97,7 +113,8 @@ export function listChangeRequests(eventId: string): Promise<ChangeRequest[]> {
   })
 }
 
-/** Story 19.1 AC1-AC8: ask for one field of the organiser's Planning event to change. */
+/** Story 19.1 AC1-AC8, AC11-AC13: ask for one field of the organiser's Planning or Confirmed event
+ *  to change. */
 export function raiseChangeRequest(
   eventId: string,
   input: ChangeRequestInput,
