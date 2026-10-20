@@ -147,7 +147,7 @@ list, including a second organiser, coordinator and attendee, is in
 | Role | Email |
 | --- | --- |
 | Event Organiser | `organiser@acme.example` |
-| Event Organiser, with nine notifications | `nadia@notice.example` |
+| Event Organiser, with notifications | `nadia@notice.example` |
 | Event Coordinator | `coordinator@connectsphere.example` |
 | Event Coordinator Lead | `lead@connectsphere.example` |
 | Venue Staff | `venue@connectsphere.example` |
