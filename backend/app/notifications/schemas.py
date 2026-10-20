@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.notifications.targets import ListedNotification
+from app.notifications.models import Notification
 
 
 class NotificationTargetOut(BaseModel):
@@ -38,8 +38,9 @@ class NotificationOut(BaseModel):
     target: NotificationTargetOut | None
 
     @classmethod
-    def from_listed(cls, listed: ListedNotification) -> NotificationOut:
-        notification = listed.notification
+    def from_notification(
+        cls, notification: Notification, target: NotificationTargetOut | None
+    ) -> NotificationOut:
         return cls(
             id=notification.id,
             notification_type=notification.notification_type,
@@ -50,11 +51,7 @@ class NotificationOut(BaseModel):
             related_entity_id=notification.related_entity_id,
             created_at=notification.created_at,
             read_at=notification.read_at,
-            target=(
-                None
-                if listed.target is None
-                else NotificationTargetOut(kind=listed.target.kind, id=listed.target.id)
-            ),
+            target=target,
         )
 
 

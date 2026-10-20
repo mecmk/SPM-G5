@@ -15,7 +15,6 @@ target (AC4).
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from enum import StrEnum
 
 from sqlalchemy import select
@@ -45,18 +44,9 @@ class TargetKind(StrEnum):
     CHANGE_REQUEST_QUEUE = "change_request_queue"  # the coordinator's queue: no id
 
 
-@dataclass(frozen=True)
-class Target:
-    kind: TargetKind
-    id: uuid.UUID | None
-
-
-@dataclass(frozen=True)
-class ListedNotification:
-    """A notification and where it goes for the reader it is listed to (``None``: nowhere)."""
-
-    notification: Notification
-    target: Target | None
+# Where one notification goes: its kind of page and the record's id (``None`` for a page that
+# needs none), or ``None`` for nowhere.
+Target = tuple[TargetKind, uuid.UUID | None]
 
 
 _T = NotificationType
@@ -156,7 +146,7 @@ _NEEDS_THE_EVENT = frozenset(
 
 def with_targets(
     db: Session, *, viewer: User, notifications: list[Notification]
-) -> list[ListedNotification]:
+) -> list[tuple[Notification, Target | None]]:
     """20.2 AC1/AC4: ``notifications`` (all ``viewer``'s own) with where each goes for ``viewer``.
     The events they name are read in one query and judged by the rule ``get_event`` applies, the
     bookings in one query, and the safety checks that open in one query by the rule
@@ -199,7 +189,7 @@ def with_targets(
         event = events.get(notification.event_id) if notification.event_id else None
         if event is None or not events_service.can_view_event(viewer, event):
             return None
-        return Target(TargetKind.EVENT, event.id)
+        return (TargetKind.EVENT, event.id)
 
     def target_of(notification: Notification) -> Target | None:
         kind = kinds[notification.id]
@@ -211,19 +201,17 @@ def with_targets(
             case TargetKind.UNASSIGNED_EVENTS:
                 event = events.get(notification.event_id) if notification.event_id else None
                 if event is not None and event.assigned_coordinator_id is None:
-                    return Target(kind, None)
+                    return (kind, None)
                 return event_target(notification)
             case TargetKind.SAFETY_CHECK:
                 if notification.event_id in open_checks:
-                    return Target(kind, notification.event_id)
+                    return (kind, notification.event_id)
                 return event_target(notification)
             case TargetKind.BOOKING_REQUEST:
                 if notification.related_entity_id in bookings:
-                    return Target(kind, notification.related_entity_id)
+                    return (kind, notification.related_entity_id)
                 return None
             case _:
-                return Target(kind, None)
+                return (kind, None)
 
-    return [
-        ListedNotification(notification, target_of(notification)) for notification in notifications
-    ]
+    return [(notification, target_of(notification)) for notification in notifications]

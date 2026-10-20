@@ -22,11 +22,13 @@ from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.db import get_db
 from app.notifications import service, targets
+from app.notifications.models import Notification
 from app.notifications.schemas import (
     MarkAllReadIn,
     MarkedOut,
     MarkReadIn,
     NotificationOut,
+    NotificationTargetOut,
     UnreadCountOut,
 )
 
@@ -38,6 +40,13 @@ DbSession = Annotated[Session, Depends(get_db)]
 NOTIFICATION_NOT_FOUND_MESSAGE = "Notification not found."
 
 
+def _out(notification: Notification, target: targets.Target | None) -> NotificationOut:
+    return NotificationOut.from_notification(
+        notification,
+        None if target is None else NotificationTargetOut(kind=target[0].value, id=target[1]),
+    )
+
+
 @router.get("", response_model=list[NotificationOut])
 def list_notifications(
     db: DbSession,
@@ -46,8 +55,8 @@ def list_notifications(
     """AC2: a notification is listed for its recipient as soon as its action commits, with
     nothing for them to do first. AC5: only the viewer's own; 401 when signed out."""
     return [
-        NotificationOut.from_listed(listed)
-        for listed in targets.with_targets(
+        _out(notification, target)
+        for notification, target in targets.with_targets(
             db, viewer=viewer, notifications=service.list_notifications(db, recipient=viewer)
         )
     ]
@@ -75,8 +84,8 @@ def mark_read(
         notification = service.mark_read(db, notification_id, recipient=viewer)
     except service.NotificationNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOTIFICATION_NOT_FOUND_MESSAGE) from None
-    [listed] = targets.with_targets(db, viewer=viewer, notifications=[notification])
-    return NotificationOut.from_listed(listed)
+    [(marked, target)] = targets.with_targets(db, viewer=viewer, notifications=[notification])
+    return _out(marked, target)
 
 
 @router.patch("", response_model=MarkedOut)
