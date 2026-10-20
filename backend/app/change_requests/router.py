@@ -1,6 +1,6 @@
 """HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests, and say when
-they close (fix f19.1.1); and for story 19.2: the coordinator's queue of pending ones, and
-approving or rejecting one.
+they close (fix f19.1.1); for story 19.2: the coordinator's queue of pending ones, and approving or
+rejecting one; and for story 19.3: the impact approving one would have.
 
 They sit under the event they belong to (``/events/{event_id}/change-requests``, and
 ``/events/{event_id}/change-request-window`` for when they close - outside ``/change-requests/``
@@ -23,6 +23,8 @@ from app.auth.deps import CurrentUser, require_any_permission, require_permissio
 from app.auth.permissions import Permission
 from app.change_requests import service
 from app.change_requests.schemas import (
+    ChangeRequestApprovalIn,
+    ChangeRequestImpactOut,
     ChangeRequestIn,
     ChangeRequestOut,
     ChangeRequestQueueEntryOut,
@@ -170,14 +172,20 @@ def list_coordinator_change_requests(
 def approve_change_request(
     event_id: uuid.UUID,
     change_request_id: uuid.UUID,
+    payload: ChangeRequestApprovalIn,
     db: DbSession,
     actor: Annotated[CurrentUser, CanDecide],
 ) -> ChangeRequestOut:
     """Story 19.2 AC2: the assigned coordinator (AC6) approves a pending request, applying it.
     409 when it was already decided or withdrawn, has gone stale, or its event is closed (AC7);
-    422 when the change breaks a creation rule."""
+    422 when the change breaks a creation rule. Story 19.3 AC7: 412 when the impact is no longer
+    the assessment the coordinator approved on, so they review the new one first."""
     try:
-        request = service.approve_change_request(db, event_id, change_request_id, actor=actor)
+        request = service.approve_change_request(
+            db, event_id, change_request_id, payload, actor=actor
+        )
+    except service.ImpactChanged as exc:
+        raise HTTPException(status.HTTP_412_PRECONDITION_FAILED, str(exc)) from None
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
     except service.ChangeRequestNotFound:
@@ -189,6 +197,31 @@ def approve_change_request(
     except service.InvalidEventRequest as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return _change_request_out(request)
+
+
+@router.get(
+    "/{event_id}/change-requests/{change_request_id}/impact",
+    response_model=ChangeRequestImpactOut,
+)
+def get_change_request_impact(
+    event_id: uuid.UUID,
+    change_request_id: uuid.UUID,
+    db: DbSession,
+    viewer: Annotated[CurrentUser, CanDecide],
+) -> ChangeRequestImpactOut:
+    """Story 19.3 AC1-AC6: what approving a pending request would affect, worked out from the
+    records as they stand, for the event's assigned coordinator only. 409 once the request is
+    decided or withdrawn, or its event closed."""
+    try:
+        return service.get_change_request_impact(db, event_id, change_request_id, viewer=viewer)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.ChangeRequestNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedToAssess as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EventStateConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
 
 
 @router.post(

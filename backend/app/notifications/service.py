@@ -89,6 +89,9 @@ class NotificationType(StrEnum):
     SAFETY_APPROVED = "SAFETY_APPROVED"  # 21.2: the coordinator and the organiser
     SAFETY_CHANGES_REQUESTED = "SAFETY_CHANGES_REQUESTED"  # 21.2: the coordinator and organiser
     EVENT_CONFIRMED = "EVENT_CONFIRMED"  # 21.2: the organiser and Safety Officers
+    # 6.2: the event's coordinator, or every Event Coordinator Lead when it has none
+    EVENT_CANCELLED = "EVENT_CANCELLED"
+    REGISTRATION_CANCELLED = "REGISTRATION_CANCELLED"  # 6.2: each registered attendee
 
 
 def notify(

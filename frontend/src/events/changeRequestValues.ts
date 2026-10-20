@@ -15,12 +15,13 @@ export const FIELD_LABELS: Record<ChangeRequestField, string> = {
   equipment: 'Equipment',
 }
 
-/** Story 19.1 AC1/AC9, story 19.2 AC2/AC3: how each request status reads. */
+/** Story 19.1 AC1/AC9, story 19.2 AC2/AC3, story 6.2 AC4: how each request status reads. */
 export const STATUS_LABELS: Record<ChangeRequestStatus, string> = {
   PENDING: 'Pending',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
   WITHDRAWN: 'Withdrawn',
+  CANCELLED: 'Cancelled',
 }
 
 /** Story 19.2 AC7: why a pending request can only be rejected - the event no longer has the value
@@ -54,7 +55,7 @@ const REQUIREMENT_PART_ICONS: Record<string, IconName> = {
 
 // How a side reads when the thing is not there on it.
 const NOT_THERE_NOW = 'Not requested'
-const NOT_THERE_REQUESTED = 'Removed'
+export const NOT_THERE_REQUESTED = 'Removed'
 const NONE = 'None'
 
 /** The canonical value shapes the backend stores (app/change_requests/service.py). */

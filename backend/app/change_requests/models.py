@@ -27,6 +27,7 @@ class ChangeRequestStatus:
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     WITHDRAWN = "WITHDRAWN"
+    CANCELLED = "CANCELLED"  # its event was cancelled while it was pending (story 6.2 AC4)
 
 
 class ChangeRequestField:

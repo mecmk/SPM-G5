@@ -27,6 +27,7 @@ import { formatDateTime, inputToInstant, instantToInput } from '../shared/format
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
+import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
 import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
@@ -176,6 +177,9 @@ interface OpenDecision {
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
  * rejection its reason, to the organiser as well.
+ *
+ * Story 19.3 AC1/AC6: the assigned coordinator alone can show, on each pending request, what
+ * approving it would affect.
  */
 export function ChangeRequestsSection({
   event,
@@ -211,6 +215,7 @@ export function ChangeRequestsSection({
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
 
+  // Story 6.2 AC4: cancelling the event closes its pending requests, so its status reloads them.
   useEffect(() => {
     let cancelled = false
     listChangeRequests(event.id)
@@ -225,7 +230,7 @@ export function ChangeRequestsSection({
     return () => {
       cancelled = true
     }
-  }, [event.id, listVersion])
+  }, [event.id, event.status, listVersion])
 
   useEffect(() => {
     let cancelled = false
@@ -569,6 +574,10 @@ export function ChangeRequestsSection({
 
                 {canDecideThis && request.is_out_of_date && (
                   <p className="warning">{OUT_OF_DATE_NOTE}</p>
+                )}
+
+                {canDecideThis && !request.is_out_of_date && (
+                  <ChangeRequestImpactToggle request={request} />
                 )}
               </li>
             )

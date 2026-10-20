@@ -1,18 +1,22 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import {
   approveChangeRequest,
   CHANGE_REASON_MAX_LENGTH,
+  getChangeRequestImpact,
   rejectChangeRequest,
   type ChangeRequest,
   type ChangeRequestField,
+  type ChangeRequestImpact as Impact,
   type ChangeRequestStatus,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
 import type { EventReferenceData, EventStatus } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { LoadingState } from '../layout/LoadingState'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
+import { ChangeRequestImpact, IMPACT_LOADING_LABEL } from './ChangeRequestImpact'
 import { FIELD_LABELS } from './changeRequestValues'
 
 /** Story 19.2 AC5: what approving each field may release, said before it is applied. */
@@ -49,6 +53,12 @@ export interface ChangeRequestDecisionDialogProps {
  * a refusal stays in the dialog with the backend's sentence, and one caused by the request or its
  * event moving on has the page reload it. The confirm button is disabled while the decision is
  * saved, and a click that lands meanwhile is ignored, so a double-click decides once.
+ *
+ * Story 19.3: Approve loads the backend's assessment of what the change affects when it opens, and
+ * offers Approve only once it has (AC1, AC3). The approval carries that assessment's fingerprint;
+ * when the backend finds the impact has changed meanwhile it applies nothing (AC7), and the dialog
+ * stays open showing the updated assessment, marked as updated, for the coordinator to review and
+ * approve again - which then sends the new fingerprint.
  */
 export function ChangeRequestDecisionDialog({
   request,
@@ -63,10 +73,49 @@ export function ChangeRequestDecisionDialog({
   const [isDeciding, setIsDeciding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isReasonMissing, setIsReasonMissing] = useState(false)
+  const [impact, setImpact] = useState<Impact | null>(null)
+  const [impactError, setImpactError] = useState<string | null>(null)
+  const [isImpactUpdated, setIsImpactUpdated] = useState(false)
   const reasonInput = useRef<HTMLTextAreaElement>(null)
   const errorId = useId()
   const label = FIELD_LABELS[request.field].toLowerCase()
   const isApprove = outcome === 'APPROVED'
+
+  // A request decided, withdrawn or gone while the assessment loads has the page load it again,
+  // as a refused decision does.
+  const onImpactRefused = useEffectEvent((err: unknown) => {
+    if (err instanceof ApiError && (err.status === 409 || err.status === 404)) onRefused()
+  })
+
+  // Story 19.3 AC1/AC3: the assessment, worked out by the backend as the dialog opens.
+  useEffect(() => {
+    if (!isApprove) return undefined
+    let cancelled = false
+    getChangeRequestImpact(request.event_id, request.id)
+      .then((assessed) => {
+        if (!cancelled) setImpact(assessed)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setImpactError(formatApiError(err))
+        onImpactRefused(err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isApprove, request.event_id, request.id])
+
+  /** Story 19.3 AC7: the approval found the impact changed, so the updated assessment replaces
+   *  the one shown, and the next Approve sends its fingerprint. */
+  async function showUpdatedImpact() {
+    setIsImpactUpdated(true)
+    try {
+      setImpact(await getChangeRequestImpact(request.event_id, request.id))
+    } catch (err) {
+      setImpact(null)
+      setImpactError(formatApiError(err))
+    }
+  }
 
   async function decide(send: () => Promise<ChangeRequest>) {
     setIsDeciding(true)
@@ -75,7 +124,11 @@ export function ChangeRequestDecisionDialog({
       onDecided(await send())
     } catch (err) {
       setError(formatApiError(err))
-      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) onRefused()
+      if (err instanceof ApiError && err.code === 'CHANGE_REQUEST_IMPACT_CHANGED') {
+        await showUpdatedImpact()
+      } else if (err instanceof ApiError && (err.status === 409 || err.status === 404)) {
+        onRefused()
+      }
     } finally {
       setIsDeciding(false)
     }
@@ -84,7 +137,9 @@ export function ChangeRequestDecisionDialog({
   async function confirm() {
     if (isDeciding) return
     if (isApprove) {
-      await decide(() => approveChangeRequest(request.event_id, request.id, label))
+      if (impact === null) return
+      const { fingerprint } = impact
+      await decide(() => approveChangeRequest(request.event_id, request.id, fingerprint, label))
       return
     }
     const trimmed = reason.trim()
@@ -106,11 +161,21 @@ export function ChangeRequestDecisionDialog({
         tone="primary"
         isBusy={isDeciding}
         error={error}
+        canConfirm={impact !== null}
         onConfirm={confirm}
         onCancel={onCancel}
       >
         <p>This change is applied to the event, and the organiser will be told.</p>
         <ChangeRequestChanges request={request} references={references} />
+        <section aria-label="Impact of this change" className="change-impact-scroll">
+          {impactError !== null && (
+            <p role="alert" className="error">
+              {impactError}
+            </p>
+          )}
+          {impact === null && impactError === null && <LoadingState label={IMPACT_LOADING_LABEL} />}
+          {impact !== null && <ChangeRequestImpact impact={impact} isUpdated={isImpactUpdated} />}
+        </section>
         <p className="small muted">{RELEASE_NOTES[request.field]}</p>
         {CHANGE_RETURNS_TO_PLANNING_STATUSES.includes(eventStatus) && (
           <p className="warning">

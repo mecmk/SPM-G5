@@ -1,5 +1,12 @@
+import type { BookingStatus } from './bookings'
 import { api } from './client'
-import type { EquipmentInput, EventStatus, VenueRequirementInput } from './events'
+import type {
+  EquipmentInput,
+  EquipmentItemStatus,
+  EventStatus,
+  VenueRequirementInput,
+} from './events'
+import type { UnavailabilityReason } from './venues'
 
 /** Story 19.1 AC4: the longest reason. Keep in step with the backend's `CHANGE_REASON_MAX_LENGTH`
  * in app/change_requests/schemas.py. */
@@ -10,7 +17,7 @@ export type ChangeRequestField =
   'schedule' | 'expected_attendance' | 'venue_requirements' | 'equipment'
 
 /** Values of `ck_event_change_requests_status`. */
-export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED'
 
 /** Mirrors `ProposedSchedule`: the event's new start and end, requested together. */
 export interface ProposedSchedule {
@@ -146,15 +153,19 @@ export function listCoordinatorChangeRequests(): Promise<ChangeRequestQueueEntry
   return api<ChangeRequestQueueEntry[]>('/change-requests')
 }
 
-/** Story 19.2 AC2: approve a pending change request, applying it to the event. */
+/** Story 19.2 AC2: approve a pending change request, applying it to the event. Story 19.3 AC7:
+ *  with the fingerprint of the impact assessment the coordinator saw; a 412 means the impact has
+ *  changed since, and nothing was applied. */
 export function approveChangeRequest(
   eventId: string,
   changeRequestId: string,
+  assessmentFingerprint: string,
   fieldLabel: string,
 ): Promise<ChangeRequest> {
   return api<ChangeRequest>(`/events/${eventId}/change-requests/${changeRequestId}/approve`, {
     method: 'POST',
-    errorCodes: CHANGE_REQUEST_DECISION_ERRORS,
+    body: { assessment_fingerprint: assessmentFingerprint },
+    errorCodes: { ...CHANGE_REQUEST_DECISION_ERRORS, 412: 'CHANGE_REQUEST_IMPACT_CHANGED' },
     notify: {
       title: 'Change approved',
       message: `The change to the ${fieldLabel} was approved and applied to the event.`,
@@ -177,5 +188,130 @@ export function rejectChangeRequest(
       title: 'Change rejected',
       message: `The change to the ${fieldLabel} was rejected, and the organiser told why.`,
     },
+  })
+}
+
+/** Mirrors `CapacityWarningOut`: story 19.3 AC1/AC4, the booked venue holds fewer people than the
+ *  change needs - in the booked layout (`layout_name`) where the venue records its capacity, else
+ *  its maximum. A warning only: whether the booking is cancelled is `will_be_cancelled`. */
+export interface CapacityWarning {
+  people_needed: number
+  venue_capacity: number
+  layout_name: string | null
+}
+
+/** Mirrors `HoldingBookingOut`: another booking holding the venue over the period needed. */
+export interface HoldingBooking {
+  event_name: string
+  held_from: string
+  held_until: string
+}
+
+/** Mirrors `ClosureOut`: a period the venue is unavailable for over the period needed. */
+export interface Closure {
+  reason: UnavailabilityReason
+  notes: string | null
+  starts_at: string
+  ends_at: string
+}
+
+/** Mirrors `CountedVenueOut`: one booked venue counted towards a `ShortPeriod`. */
+export interface CountedVenue {
+  venue_id: string
+  venue_name: string
+  capacity: number
+  layout_name: string | null
+}
+
+/** Mirrors `ShortPeriodOut`: story 19.3 AC1/AC4, a stretch of the event when the venues in use
+ *  hold `capacity` people between them, `shortfall` fewer than the proposed attendance. */
+export interface ShortPeriod {
+  starts_at: string
+  ends_at: string
+  capacity: number
+  shortfall: number
+  venues: CountedVenue[]
+}
+
+/** Mirrors `CapacityShortfallOut`: story 19.3 AC1/AC4, an attendance change asks for more people
+ *  than the venues in use hold at some moments (`periods`, in order). A warning only. */
+export interface CapacityShortfall {
+  proposed_attendance: number
+  periods: ShortPeriod[]
+}
+
+/** Mirrors `BookingImpactOut`: story 19.3 AC1/AC2, one venue booking the change affects. */
+export interface BookingImpact {
+  booking_id: string
+  venue_id: string
+  venue_name: string
+  /** Null for an additional venue (12.5). */
+  requirement_name: string | null
+  status: BookingStatus
+  starts_at: string
+  ends_at: string
+  will_be_cancelled: boolean
+  reasons: string[]
+  capacity_warning: CapacityWarning | null
+  /** The period a replacement would need, for a cancelled booking whose requirement remains. */
+  needed_starts_at: string | null
+  needed_ends_at: string | null
+  held_by: HoldingBooking | null
+  closure: Closure | null
+  is_outside_opening_hours: boolean
+  after_approval: string
+}
+
+/** Values of `EquipmentImpactOut.change`. */
+export type EquipmentImpactChange = 'removed' | 'changed' | 'added' | 'rechecked'
+
+/** Mirrors `EquipmentImpactOut`: story 19.3 AC1/AC2/AC5, one equipment item the change affects.
+ *  `required`/`available` are null for a removed item; `status_after` null when it is deleted. */
+export interface EquipmentImpact {
+  item_id: string | null
+  equipment_type_code: string
+  equipment_type_name: string
+  change: EquipmentImpactChange
+  current_status: EquipmentItemStatus | null
+  required: number | null
+  available: number | null
+  shortfall: number
+  status_after: EquipmentItemStatus | null
+  technical_support_told: boolean
+  after_approval: string
+}
+
+/** Mirrors `RegistrationImpactOut`: story 19.3 AC1, the registrations affected, counted. */
+export interface RegistrationImpact {
+  active_count: number
+  proposed_attendance: number | null
+  over_by: number
+  dates_change: boolean
+}
+
+/** Mirrors `ChangeRequestImpactOut`: story 19.3, what approving a pending change request would
+ *  affect, worked out by the backend from the records as they stand. `fingerprint` goes back with
+ *  the approval (AC7). */
+export interface ChangeRequestImpact {
+  change_request_id: string
+  assessed_at: string
+  fingerprint: string
+  is_out_of_date: boolean
+  refused_because: string | null
+  venue_bookings: BookingImpact[]
+  equipment: EquipmentImpact[]
+  registrations: RegistrationImpact | null
+  capacity_shortfall: CapacityShortfall | null
+  has_impact: boolean
+}
+
+/** Story 19.3 AC1-AC6: the impact of approving a pending change request, for the event's
+ *  assigned coordinator. */
+export function getChangeRequestImpact(
+  eventId: string,
+  changeRequestId: string,
+): Promise<ChangeRequestImpact> {
+  return api<ChangeRequestImpact>(`/events/${eventId}/change-requests/${changeRequestId}/impact`, {
+    errorCodes: CHANGE_REQUEST_DECISION_ERRORS,
   })
 }

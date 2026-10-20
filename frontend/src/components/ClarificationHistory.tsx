@@ -48,6 +48,9 @@ function initialsFor(name: string): string {
  * the right. AC3: entries are historical and cannot be edited or removed - this component
  * renders no button or input, so there is nothing here to change one with. A decision and the
  * clarification thread behind it are one story, so one card carries both.
+ *
+ * Story 6.2 AC16: a cancelled event's decision was its approval (only an event going ahead can be
+ * cancelled), so its badge reads Approved, not the Cancelled the page states elsewhere.
  */
 export function ClarificationHistory({
   status,
@@ -71,7 +74,7 @@ export function ClarificationHistory({
         </p>
       ) : (
         <p>
-          <StatusBadge status={status} />{' '}
+          <StatusBadge status={status === 'CANCELLED' ? 'APPROVED' : status} />{' '}
           <span>
             Decided by {decidedByName ?? 'Not recorded'} on {formatDate(decidedAt)}
             {decisionReason !== null && ` — "${decisionReason}"`}

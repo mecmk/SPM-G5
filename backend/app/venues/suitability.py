@@ -107,17 +107,23 @@ class Suitability:
         return not self.failures
 
 
+def held_capacity(layout: RequiredItem | None, venue: VenueCharacteristics) -> int:
+    """AC4: how many people ``venue`` holds - with a layout it offers and recorded a capacity for,
+    that capacity; otherwise its maximum. Story 19.3 adds these up across an event's bookings."""
+    layout_capacity = None if layout is None else venue.layouts.get(layout.code)
+    return venue.capacity if layout_capacity is None else layout_capacity
+
+
 def _capacity_failure(
     needs: RequirementNeeds, venue: VenueCharacteristics
 ) -> FailedCriterion | None:
     """AC4: the venue holds the people when its capacity is at least that many. With a layout it
     offers and recorded a capacity for, that capacity is compared; otherwise its maximum."""
     layout = needs.layout
-    layout_capacity = None if layout is None else venue.layouts.get(layout.code)
-    if layout is None or layout_capacity is None:
-        capacity, code, name = venue.capacity, None, None
-    else:
-        capacity, code, name = layout_capacity, layout.code, layout.name
+    capacity = held_capacity(layout, venue)
+    is_layout_capacity = layout is not None and venue.layouts.get(layout.code) is not None
+    code = layout.code if is_layout_capacity else None
+    name = layout.name if is_layout_capacity else None
     if capacity >= needs.people:
         return None
     return FailedCriterion(

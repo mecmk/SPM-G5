@@ -51,6 +51,7 @@ from app.auth.permissions import Permission, RoleCode, role_has
 from app.common.audit import record_audit
 from app.coordination.models import EventCoordinatorAssignment
 from app.coordination.schemas import AssignCoordinatorIn
+from app.events import service as events_service
 from app.events.models import Event, EventStatus
 from app.notifications.service import NotificationType, notify
 
@@ -325,9 +326,10 @@ def get_event(db: Session, event_id: uuid.UUID) -> Event:
 def _get_event_for_update(db: Session, event_id: uuid.UUID) -> Event:
     """Story 5.6 AC1/AC6: the event, its row held until the transaction ends, so a cancellation,
     rejection or other assignment already under way finishes first and is what this one reads -
-    and none can land between this read and the write (review of #124, probe P1). Only the
-    event's own row is held, as in events/service.py's ``get_event_for_update``."""
-    event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
+    and none can land between this read and the write (review of #124, probe P1). Story 6.2 AC9:
+    taken as ``events_service.lock_event`` takes it, ``FOR NO KEY UPDATE`` as a cancellation
+    does, and read afresh after the lock, so the coordinator is the one now assigned."""
+    event = events_service.lock_event(db, event_id)
     if event is None:
         raise EventNotFound(event_id)
     return event

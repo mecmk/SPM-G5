@@ -164,6 +164,10 @@ class Events:
     AI_WORKSHOP = _e(49)  # AWAITING_SAFETY_CHECK; the spec approves, then confirms
     # Story 19.2 AC8's e2e event, set up as CODING_BOOTCAMP: PLANNING, secured, never reviewed.
     DESIGN_SPRINT = _e(51)
+    # Story 6.2 AC14/AC15's e2e event: organiser 1, coordinator 1, PLANNING, March 2029, an
+    # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
+    # change, and four wireless microphones sent to Technical Support, held.
+    CHARITY_RUN = _e(62)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
     # one of its own; the cases that only read share them, the yoga's most of all.
@@ -228,6 +232,11 @@ class Bookings:
     APPROVED_AI_WORKSHOP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000018")
     # Story 19.2: Events.DESIGN_SPRINT's Studio, at Seminar Room 2.1.
     APPROVED_DESIGN_SPRINT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000019")
+    # Story 6.2: Events.CHARITY_RUN's bookings, for tests/e2e/cancel-event.spec.ts. Sunrise
+    # Studio's is held until 1 Mar 2029; Harbour Pavilion's was approved, then cancelled on
+    # 6 Oct 2026 by an earlier change, not with the event, before the studio was requested.
+    APPROVED_CHARITY_RUN_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")
+    CANCELLED_CHARITY_RUN_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
@@ -314,6 +323,8 @@ class VenueRequirements:
     ONBOARDING_TRAINING_ROOM = uuid.UUID("cccccccc-0000-0000-0031-000000000001")  # CLASSROOM
     # Story 12.7: Events.CRAFT_FAIR's one, whose request expired.
     CRAFT_FAIR_HALL = uuid.UUID("cccccccc-0000-0000-0034-000000000001")  # EXHIBITION, WIFI, 120
+    # Story 6.2: Events.CHARITY_RUN's one requirement.
+    CHARITY_RUN_START_VILLAGE = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # CLASSROOM, 60
 
 
 class EquipmentItems:
@@ -345,6 +356,9 @@ class EquipmentItems:
     MIXER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000000037")
     DEMO_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000036")
 
+    # Story 6.2: Events.CHARITY_RUN's four wireless microphones, sent to Technical Support, held.
+    CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
+
 
 class EquipmentHolds:
     WORKSHOP_PROJECTORS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
@@ -361,6 +375,8 @@ class EquipmentHolds:
     CONCERT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000025")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000026")
     DEMO_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000027")
+    # Story 6.2: the hold of Events.CHARITY_RUN's four wireless microphones (item 6666..62).
+    CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
 
 
 class EquipmentOutOfService:

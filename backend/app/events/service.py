@@ -15,9 +15,10 @@ from __future__ import annotations
 import logging
 import uuid
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Iterable, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -677,10 +678,12 @@ def _get_own_event(
     """``actor``'s own request. ``for_update`` holds the row until the transaction ends, so a
     save and a submission of the same request run one after the other (story 2.7 AC12): the
     second waits, then reads what the first committed."""
-    # FOR UPDATE OF events: only the request's own row is held. Postgres refuses to lock the
-    # organiser and coordinator rows Event joins in eagerly, and nothing here needs them held.
-    lock = {"of": Event} if for_update else None
-    event = db.get(Event, event_id, with_for_update=lock, populate_existing=for_update)
+    # Only the request's own row is held, and in a statement of its own: the coordinator Event
+    # joins in eagerly is read afterwards, so a handover that landed while this waited is seen
+    # (``lock_event`` explains why one statement would miss it).
+    if for_update:
+        db.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+    event = db.get(Event, event_id, populate_existing=for_update)
     if event is None or event.organiser_id != actor.id:
         raise EventNotFound(event_id)
     return event
@@ -751,7 +754,7 @@ def _describe_requirement(name: str | None, index: int) -> str:
 
 
 def _check_venue_requirement_rules(
-    requirements: Sequence[VenueRequirementIn | VenueRequirement],
+    requirements: Sequence[VenueRequirementIn | VenueRequirement | RequirementTerms],
     *,
     event_starts_at: datetime | None,
     event_ends_at: datetime | None,
@@ -887,6 +890,7 @@ def available_by_type(
     period_end: datetime,
     *,
     exclude_event_id: uuid.UUID | None = None,
+    exclude_request_ids: Collection[uuid.UUID] = (),
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
     events over the period (a hold's quantity less what was released), less units out of service.
@@ -895,7 +899,9 @@ def available_by_type(
     Story 7.2 AC7: ``exclude_event_id`` leaves that event's own holds out, so an event being
     corrected is not counted against itself. Story 15.2 AC2 uses it the same way: the holds are
     left out before the figure is floored at zero, so units lost after the event was held show as
-    a shortfall against it."""
+    a shortfall against it. Story 19.3: ``exclude_request_ids`` leaves out the holds of those
+    equipment items - the ones an approval would release before holding again - so the figure is
+    the one the approval will see, without releasing anything."""
     held_query = (
         select(
             EquipmentReservation.equipment_type_id,
@@ -910,6 +916,13 @@ def available_by_type(
     )
     if exclude_event_id is not None:
         held_query = held_query.where(EquipmentReservation.event_id != exclude_event_id)
+    if exclude_request_ids:
+        held_query = held_query.where(
+            or_(
+                EquipmentReservation.equipment_request_id.is_(None),
+                EquipmentReservation.equipment_request_id.not_in(exclude_request_ids),
+            )
+        )
     held = dict(db.execute(held_query).all())
     out_of_service = dict(
         db.execute(
@@ -1779,7 +1792,7 @@ class NoVenueRequirementToApprove(EventStateConflict):
 class MissingDecisionReason(InvalidEventRequest):
     """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
     with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
-    clarification flow, 6.5's cancellation, a seed script, a test factory)."""
+    clarification flow, a seed script, a test factory). Story 6.2's cancellation has its own."""
 
     def __init__(self) -> None:
         super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
@@ -2371,30 +2384,91 @@ def _live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
     ]
 
 
-def _fits_booking(
-    event: Event, requirement: VenueRequirement | None, booking: VenueBooking
-) -> bool:
+@dataclass(frozen=True)
+class RequirementTerms:
+    """A venue requirement's terms - what a booking for it is judged against - as plain values,
+    so story 19.3 can judge the terms a change request proposes without writing them to the
+    requirement. ``id`` is None for a requirement the change would add."""
+
+    id: uuid.UUID | None
+    name: str | None
+    capacity: int | None
+    layout_code: str | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+
+    @classmethod
+    def of(cls, requirement: VenueRequirement) -> RequirementTerms:
+        return cls(
+            id=requirement.id,
+            name=requirement.name,
+            capacity=requirement.capacity,
+            layout_code=requirement.layout_code,
+            starts_at=requirement.starts_at,
+            ends_at=requirement.ends_at,
+        )
+
+
+class BookingMisfit(StrEnum):
+    """Why a booking no longer fits its event (AC14, story 19.2 AC5); story 19.3 explains each."""
+
+    REQUIREMENT_REMOVED = "requirement_removed"
+    TIMES = "times"
+    PEOPLE = "people"
+    LAYOUT = "layout"
+
+
+def _requirement_misfits(
+    booking: VenueBooking, terms: RequirementTerms | None, *, attendance: int
+) -> list[BookingMisfit]:
     """AC13/AC14: the requirement still asks for no more than its booking was requested for: it
     still exists, its times fall inside the booked ones, it needs room for no more people, and it
     asks for the same layout. Exactly the booked values still fit (AC13). The people are counted
-    as the booking counted them (``people_to_hold``): a requirement with no number of its own
-    was booked for the event's attendance."""
-    if requirement is None:
-        return False
-    if requirement.starts_at < booking.starts_at or requirement.ends_at > booking.ends_at:
-        return False
-    if venue_service.people_to_hold(event, requirement) > booking.expected_attendance:
-        return False
-    return requirement.layout_code == booking.required_layout_code
+    as the booking counted them (``people_needed``): a requirement with no number of its own
+    was booked for the event's attendance. Empty when it fits."""
+    if terms is None:
+        return [BookingMisfit.REQUIREMENT_REMOVED]
+    misfits = []
+    if terms.starts_at < booking.starts_at or terms.ends_at > booking.ends_at:
+        misfits.append(BookingMisfit.TIMES)
+    people = venue_service.people_needed(capacity=terms.capacity, attendance=attendance)
+    if people > booking.expected_attendance:
+        misfits.append(BookingMisfit.PEOPLE)
+    if terms.layout_code != booking.required_layout_code:
+        misfits.append(BookingMisfit.LAYOUT)
+    return misfits
 
 
-def _fits_additional_venue(event: Event, booking: VenueBooking) -> bool:
+def _additional_venue_misfits(
+    booking: VenueBooking, *, starts_at: datetime, ends_at: datetime, attendance: int
+) -> list[BookingMisfit]:
     """AC14: an additional venue (12.5) was booked for the event's own period and attendance, so
-    those have to stay inside what it was booked for."""
-    return (
-        booking.starts_at <= event.starts_at
-        and event.ends_at <= booking.ends_at
-        and event.expected_attendance <= booking.expected_attendance
+    those have to stay inside what it was booked for. Empty when it fits."""
+    misfits = []
+    if starts_at < booking.starts_at or ends_at > booking.ends_at:
+        misfits.append(BookingMisfit.TIMES)
+    if attendance > booking.expected_attendance:
+        misfits.append(BookingMisfit.PEOPLE)
+    return misfits
+
+
+def booking_misfits(
+    item: _LiveBooking,
+    *,
+    requirements: dict[uuid.UUID, RequirementTerms],
+    starts_at: datetime,
+    ends_at: datetime,
+    attendance: int,
+) -> list[BookingMisfit]:
+    """AC14, story 19.2 AC5: why ``item`` no longer fits an event with this period, attendance
+    and these requirements (by id) - empty when it still fits. The one rule an approval releases
+    bookings by (``_unfitting_bookings``) and story 19.3's assessment predicts them by."""
+    if item.requirement_name is None:
+        return _additional_venue_misfits(
+            item.booking, starts_at=starts_at, ends_at=ends_at, attendance=attendance
+        )
+    return _requirement_misfits(
+        item.booking, requirements.get(item.booking.venue_requirement_id), attendance=attendance
     )
 
 
@@ -2406,17 +2480,20 @@ def _unfitting_bookings(event: Event, booked: list[_LiveBooking]) -> list[_LiveB
     judges nothing: it is refused elsewhere first."""
     if event.starts_at is None or event.ends_at is None or event.expected_attendance is None:
         return []
-    requirements = {requirement.id: requirement for requirement in event.venue_requirements}
-    unfitting = []
-    for item in booked:
-        if item.requirement_name is None:
-            if not _fits_additional_venue(event, item.booking):
-                unfitting.append(item)
-            continue
-        requirement = requirements.get(item.booking.venue_requirement_id)
-        if not _fits_booking(event, requirement, item.booking):
-            unfitting.append(item)
-    return unfitting
+    requirements = {
+        requirement.id: RequirementTerms.of(requirement) for requirement in event.venue_requirements
+    }
+    return [
+        item
+        for item in booked
+        if booking_misfits(
+            item,
+            requirements=requirements,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            attendance=event.expected_attendance,
+        )
+    ]
 
 
 def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
@@ -2602,6 +2679,31 @@ def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -
     return _get_own_event(db, event_id, actor, for_update=True)
 
 
+def lock_event(db: Session, event_id: uuid.UUID) -> Event | None:
+    """Story 6.2: the event, its row held until the transaction ends and read as it now stands, or
+    None if there is none. A cancellation and the planning writes it races take the event this
+    way, so each waits for the other. ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a Venue Staff
+    approval holds its booking and then writes a notice that names the event, which only
+    ``FOR UPDATE`` would make wait - while the cancellation waited on that booking: a deadlock
+    (story 9.4's re-check takes the event the same way, for the same reason).
+
+    The lock is taken in one statement and the event read in the next. A locking read that waits
+    re-checks only the row it locks, so the coordinator ``Event`` joins in would come back as the
+    statement first found it - none, under an assignment that landed while it waited. The second
+    statement sees everything that landed."""
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
+    return db.get(Event, event_id, populate_existing=True)
+
+
+def lock_own_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """Story 6.2: ``actor``'s own event, held and read as ``lock_event`` does, so a cancellation
+    waits for any other write to the event already under way, and they for it."""
+    event = lock_event(db, event_id)
+    if event is None or event.organiser_id != actor.id:
+        raise EventNotFound(event_id)
+    return event
+
+
 def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
     """Story 19.2: the event as ``get_event`` shows it to ``viewer``, its row held until the
     transaction ends, so a decision on one of its change requests waits for a withdrawal or a
@@ -2631,7 +2733,7 @@ def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
 
 def bookings_no_longer_fitting(event: Event, booked: list[_LiveBooking]) -> list[VenueBooking]:
     """Story 19.2 AC5: the bookings in ``booked`` an approved change has left unfitting, by
-    f7.2.4's rule (``_fits_booking``, ``_fits_additional_venue``); every other one still fits and
+    f7.2.4's rule (``booking_misfits``); every other one still fits and
     is left as it is."""
     return [item.booking for item in _unfitting_bookings(event, booked)]
 
@@ -2644,6 +2746,38 @@ def apply_proposed_schedule(
     covered the whole old period covers the new one; any other keeps its length and shifts with
     the start (PO decision, 16 Oct 2026), and one that then falls outside the event refuses the
     change by 2.7's rule. Written, not committed."""
+    moved = check_proposed_schedule_change(event, starts_at, ends_at)
+    for requirement in event.venue_requirements:
+        terms = moved[requirement.id]
+        requirement.starts_at, requirement.ends_at = terms.starts_at, terms.ends_at
+    event.starts_at, event.ends_at = starts_at, ends_at
+    _flush_request_edit(db, event)
+
+
+def _moved_requirement(
+    requirement: VenueRequirement, event: Event, starts_at: datetime, ends_at: datetime
+) -> RequirementTerms:
+    """Story 19.2 AC2 (PO decision, 16 Oct 2026): ``requirement`` once ``event`` moves to
+    ``starts_at``..``ends_at``. One that covered the whole old period covers the new one; any
+    other keeps its length and shifts with the start; one with no times keeps none."""
+    terms = RequirementTerms.of(requirement)
+    if requirement.starts_at is None or requirement.ends_at is None:
+        return terms
+    if (requirement.starts_at, requirement.ends_at) == (event.starts_at, event.ends_at):
+        return replace(terms, starts_at=starts_at, ends_at=ends_at)
+    shift = starts_at - event.starts_at
+    return replace(
+        terms, starts_at=requirement.starts_at + shift, ends_at=requirement.ends_at + shift
+    )
+
+
+def check_proposed_schedule_change(
+    event: Event, starts_at: datetime, ends_at: datetime
+) -> dict[uuid.UUID, RequirementTerms]:
+    """Story 19.2 AC2: check moving ``event`` to ``starts_at``..``ends_at`` by 2.1 AC2's date
+    rules, AC18's registration window and 2.7's requirement rules, and return where each venue
+    requirement moves, by id - without writing anything, so story 19.3's assessment judges the
+    move by the same checks an approval makes."""
     check_proposed_schedule(starts_at, ends_at)
     _check_registration(
         required=event.registration_required,
@@ -2653,24 +2787,15 @@ def apply_proposed_schedule(
         supplied_opens_at=None,
         supplied_closes_at=None,
     )
-    old_starts_at, old_ends_at = event.starts_at, event.ends_at
-    shift = starts_at - old_starts_at
-    for requirement in event.venue_requirements:
-        if requirement.starts_at is None or requirement.ends_at is None:
-            continue
-        if (requirement.starts_at, requirement.ends_at) == (old_starts_at, old_ends_at):
-            requirement.starts_at, requirement.ends_at = starts_at, ends_at
-        else:
-            requirement.starts_at += shift
-            requirement.ends_at += shift
+    ordered = sorted(event.venue_requirements, key=lambda requirement: requirement.position)
+    moved = [_moved_requirement(item, event, starts_at, ends_at) for item in ordered]
     _check_venue_requirement_rules(
-        sorted(event.venue_requirements, key=lambda requirement: requirement.position),
+        moved,
         event_starts_at=starts_at,
         event_ends_at=ends_at,
         attendance=event.expected_attendance,
     )
-    event.starts_at, event.ends_at = starts_at, ends_at
-    _flush_request_edit(db, event)
+    return {terms.id: terms for terms in moved}
 
 
 def apply_proposed_venue_requirements(

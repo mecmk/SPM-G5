@@ -207,7 +207,7 @@
           "type": "text"
         },
         {
-          "id": "arrow-66a9576592fc",
+          "id": "arrow-98140a853ccc",
           "type": "arrow"
         }
       ],
@@ -419,11 +419,11 @@
           "type": "arrow"
         },
         {
-          "id": "arrow-8f0928a6cb55",
+          "id": "arrow-33de93e05052",
           "type": "arrow"
         },
         {
-          "id": "arrow-511228b2ce6f",
+          "id": "arrow-07565c179403",
           "type": "arrow"
         },
         {
@@ -436,6 +436,10 @@
         },
         {
           "id": "arrow-66a9576592fc",
+          "type": "arrow"
+        },
+        {
+          "id": "arrow-98140a853ccc",
           "type": "arrow"
         },
         {
@@ -607,7 +611,7 @@
           "type": "text"
         },
         {
-          "id": "arrow-f17dd88b44f8",
+          "id": "arrow-5ad77a3110d2",
           "type": "arrow"
         }
       ],
@@ -899,11 +903,11 @@
           "type": "text"
         },
         {
-          "id": "arrow-33de93e05052",
+          "id": "arrow-8f0928a6cb55",
           "type": "arrow"
         },
         {
-          "id": "arrow-5ad77a3110d2",
+          "id": "arrow-66a9576592fc",
           "type": "arrow"
         }
       ],
@@ -1399,7 +1403,7 @@
           "type": "arrow"
         },
         {
-          "id": "arrow-98140a853ccc",
+          "id": "arrow-df6faaef53ce",
           "type": "arrow"
         }
       ],
@@ -1739,7 +1743,7 @@
           "type": "text"
         },
         {
-          "id": "arrow-df6faaef53ce",
+          "id": "arrow-b83cfee55bd0",
           "type": "arrow"
         },
         {
@@ -2215,11 +2219,11 @@
           "type": "text"
         },
         {
-          "id": "arrow-98140a853ccc",
+          "id": "arrow-df6faaef53ce",
           "type": "arrow"
         },
         {
-          "id": "arrow-df6faaef53ce",
+          "id": "arrow-b83cfee55bd0",
           "type": "arrow"
         }
       ],
@@ -2763,6 +2767,10 @@
           "type": "arrow"
         },
         {
+          "id": "arrow-511228b2ce6f",
+          "type": "arrow"
+        },
+        {
           "id": "arrow-2d43812b3f1a",
           "type": "arrow"
         },
@@ -2779,7 +2787,7 @@
       "x": 1620,
       "y": 34,
       "width": 400,
-      "height": 530
+      "height": 577
     },
     {
       "angle": 0,
@@ -2808,9 +2816,9 @@
       "x": 1628,
       "y": 42,
       "width": 384,
-      "height": 514,
-      "text": "PK  id                             uuid\nFK  organiser_id                   uuid\nFK  organisation_id?               uuid\n    name                           text\n    purpose?                       text\n    description?                   text\n    cover_image_url?               text\n    starts_at?                     timestamptz\n    ends_at?                       timestamptz\n    expected_attendance?           int\n    status                         text\nFK  assigned_coordinator_id?       uuid\n    preferred_location?            text\n    venue_none_required            bool\n    accessibility_none_required    bool\n    accessibility_notes?           text\n    registration_required          bool\n    registration_capacity?         int\n    registration_opens_at?         timestamptz\n    registration_closes_at?        timestamptz\n    contact_name?                  text\n    contact_email?                 citext\n    contact_phone?                 text\n    internal_notes?                text\n    submitted_at?                  timestamptz\n    decided_at?                    timestamptz\nFK  decided_by_id?                 uuid\n    decision_reason?               text\n    confirmed_at?                  timestamptz\n    completed_at?                  timestamptz\n    created_at                     timestamptz\n    updated_at                     timestamptz\n    is_public                      bool",
-      "originalText": "PK  id                             uuid\nFK  organiser_id                   uuid\nFK  organisation_id?               uuid\n    name                           text\n    purpose?                       text\n    description?                   text\n    cover_image_url?               text\n    starts_at?                     timestamptz\n    ends_at?                       timestamptz\n    expected_attendance?           int\n    status                         text\nFK  assigned_coordinator_id?       uuid\n    preferred_location?            text\n    venue_none_required            bool\n    accessibility_none_required    bool\n    accessibility_notes?           text\n    registration_required          bool\n    registration_capacity?         int\n    registration_opens_at?         timestamptz\n    registration_closes_at?        timestamptz\n    contact_name?                  text\n    contact_email?                 citext\n    contact_phone?                 text\n    internal_notes?                text\n    submitted_at?                  timestamptz\n    decided_at?                    timestamptz\nFK  decided_by_id?                 uuid\n    decision_reason?               text\n    confirmed_at?                  timestamptz\n    completed_at?                  timestamptz\n    created_at                     timestamptz\n    updated_at                     timestamptz\n    is_public                      bool",
+      "height": 561,
+      "text": "PK  id                             uuid\nFK  organiser_id                   uuid\nFK  organisation_id?               uuid\n    name                           text\n    purpose?                       text\n    description?                   text\n    cover_image_url?               text\n    starts_at?                     timestamptz\n    ends_at?                       timestamptz\n    expected_attendance?           int\n    status                         text\nFK  assigned_coordinator_id?       uuid\n    preferred_location?            text\n    venue_none_required            bool\n    accessibility_none_required    bool\n    accessibility_notes?           text\n    registration_required          bool\n    registration_capacity?         int\n    registration_opens_at?         timestamptz\n    registration_closes_at?        timestamptz\n    contact_name?                  text\n    contact_email?                 citext\n    contact_phone?                 text\n    internal_notes?                text\n    submitted_at?                  timestamptz\n    decided_at?                    timestamptz\nFK  decided_by_id?                 uuid\n    decision_reason?               text\n    confirmed_at?                  timestamptz\n    completed_at?                  timestamptz\n    created_at                     timestamptz\n    updated_at                     timestamptz\n    is_public                      bool\n    cancelled_at?                  timestamptz\nFK  cancelled_by_id?               uuid\n    cancellation_reason?           text",
+      "originalText": "PK  id                             uuid\nFK  organiser_id                   uuid\nFK  organisation_id?               uuid\n    name                           text\n    purpose?                       text\n    description?                   text\n    cover_image_url?               text\n    starts_at?                     timestamptz\n    ends_at?                       timestamptz\n    expected_attendance?           int\n    status                         text\nFK  assigned_coordinator_id?       uuid\n    preferred_location?            text\n    venue_none_required            bool\n    accessibility_none_required    bool\n    accessibility_notes?           text\n    registration_required          bool\n    registration_capacity?         int\n    registration_opens_at?         timestamptz\n    registration_closes_at?        timestamptz\n    contact_name?                  text\n    contact_email?                 citext\n    contact_phone?                 text\n    internal_notes?                text\n    submitted_at?                  timestamptz\n    decided_at?                    timestamptz\nFK  decided_by_id?                 uuid\n    decision_reason?               text\n    confirmed_at?                  timestamptz\n    completed_at?                  timestamptz\n    created_at                     timestamptz\n    updated_at                     timestamptz\n    is_public                      bool\n    cancelled_at?                  timestamptz\nFK  cancelled_by_id?               uuid\n    cancellation_reason?           text",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -3447,7 +3455,7 @@
       "x": 2160,
       "y": 643,
       "width": 400,
-      "height": 234
+      "height": 250
     },
     {
       "angle": 0,
@@ -3476,9 +3484,9 @@
       "x": 2168,
       "y": 651,
       "width": 384,
-      "height": 218,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz",
+      "height": 234,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -3517,7 +3525,7 @@
       "id": "hdr-a30246939105",
       "type": "rectangle",
       "x": 2160,
-      "y": 937,
+      "y": 953,
       "width": 400,
       "height": 34
     },
@@ -3546,7 +3554,7 @@
       "id": "text-4023892eaf04",
       "type": "text",
       "x": 2168,
-      "y": 943,
+      "y": 959,
       "width": 384,
       "height": 22,
       "text": "event_status_history",
@@ -3597,7 +3605,7 @@
       "id": "body-66e549e0fddf",
       "type": "rectangle",
       "x": 2160,
-      "y": 971,
+      "y": 987,
       "width": 400,
       "height": 125
     },
@@ -3626,7 +3634,7 @@
       "id": "text-0a991d2cd7f0",
       "type": "text",
       "x": 2168,
-      "y": 979,
+      "y": 995,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\n    from_status?                   text\n    to_status                      text\nFK  changed_by_id?                 uuid\n    changed_at                     timestamptz\n    reason?                        text",
@@ -3669,7 +3677,7 @@
       "id": "hdr-2bf3f68f5286",
       "type": "rectangle",
       "x": 2160,
-      "y": 1156,
+      "y": 1172,
       "width": 400,
       "height": 34
     },
@@ -3698,7 +3706,7 @@
       "id": "text-6a275483d560",
       "type": "text",
       "x": 2168,
-      "y": 1162,
+      "y": 1178,
       "width": 384,
       "height": 22,
       "text": "event_coordinator_assignments",
@@ -3753,7 +3761,7 @@
       "id": "body-2d3f217cd0fc",
       "type": "rectangle",
       "x": 2160,
-      "y": 1190,
+      "y": 1206,
       "width": 400,
       "height": 125
     },
@@ -3782,7 +3790,7 @@
       "id": "text-87b02f963484",
       "type": "text",
       "x": 2168,
-      "y": 1198,
+      "y": 1214,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  coordinator_id                 uuid\nFK  assigned_by_id?                uuid\n    assigned_at                    timestamptz\n    unassigned_at?                 timestamptz\n    note?                          text",
@@ -3825,7 +3833,7 @@
       "id": "hdr-688fb10a7193",
       "type": "rectangle",
       "x": 2160,
-      "y": 1375,
+      "y": 1391,
       "width": 400,
       "height": 34
     },
@@ -3854,7 +3862,7 @@
       "id": "text-d578f3c142c8",
       "type": "text",
       "x": 2168,
-      "y": 1381,
+      "y": 1397,
       "width": 384,
       "height": 22,
       "text": "event_clarifications",
@@ -3905,7 +3913,7 @@
       "id": "body-6679df9a1566",
       "type": "rectangle",
       "x": 2160,
-      "y": 1409,
+      "y": 1425,
       "width": 400,
       "height": 109
     },
@@ -3934,7 +3942,7 @@
       "id": "text-c8fafe345762",
       "type": "text",
       "x": 2168,
-      "y": 1417,
+      "y": 1433,
       "width": 384,
       "height": 93,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  author_id                      uuid\n    kind                           text\n    message                        text\n    created_at                     timestamptz",
@@ -4427,14 +4435,6 @@
           "type": "text"
         },
         {
-          "id": "arrow-b83cfee55bd0",
-          "type": "arrow"
-        },
-        {
-          "id": "arrow-b83cfee55bd0",
-          "type": "arrow"
-        },
-        {
           "id": "arrow-edd380fca604",
           "type": "arrow"
         },
@@ -4471,7 +4471,7 @@
       "x": 2700,
       "y": 609,
       "width": 400,
-      "height": 515
+      "height": 484
     },
     {
       "angle": 0,
@@ -4500,9 +4500,9 @@
       "x": 2708,
       "y": 617,
       "width": 384,
-      "height": 499,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool",
+      "height": 468,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    cancelled_at?                  timestamptz",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    cancelled_at?                  timestamptz",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -5179,11 +5179,11 @@
           "type": "text"
         },
         {
-          "id": "arrow-07565c179403",
+          "id": "arrow-511228b2ce6f",
           "type": "arrow"
         },
         {
-          "id": "arrow-511228b2ce6f",
+          "id": "arrow-f17dd88b44f8",
           "type": "arrow"
         }
       ],
@@ -7081,9 +7081,9 @@
       "id": "arrow-b84d4c903e95",
       "type": "arrow",
       "x": 2160,
-      "y": 1435,
+      "y": 1451,
       "width": 1760,
-      "height": 1203,
+      "height": 1219,
       "points": [
         [
           0,
@@ -7091,7 +7091,7 @@
         ],
         [
           -1760,
-          -1203
+          -1219
         ]
       ],
       "lastCommittedPoint": null,
@@ -7134,7 +7134,7 @@
       "id": "text-3d4570783c94",
       "type": "text",
       "x": 1220.0,
-      "y": 825.5,
+      "y": 833.5,
       "width": 120,
       "height": 16,
       "text": "author_id",
@@ -7177,9 +7177,9 @@
       "id": "arrow-9f185f27a77b",
       "type": "arrow",
       "x": 2160,
-      "y": 1435,
+      "y": 1451,
       "width": 140,
-      "height": 1375,
+      "height": 1391,
       "points": [
         [
           0,
@@ -7187,7 +7187,7 @@
         ],
         [
           -140,
-          -1375
+          -1391
         ]
       ],
       "lastCommittedPoint": null,
@@ -7230,7 +7230,7 @@
       "id": "text-698140ea8ec4",
       "type": "text",
       "x": 2030.0,
-      "y": 739.5,
+      "y": 747.5,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -7273,9 +7273,9 @@
       "id": "arrow-0b41b999ff7f",
       "type": "arrow",
       "x": 2160,
-      "y": 1216,
+      "y": 1232,
       "width": 1760,
-      "height": 984,
+      "height": 1000,
       "points": [
         [
           0,
@@ -7283,7 +7283,7 @@
         ],
         [
           -1760,
-          -984
+          -1000
         ]
       ],
       "lastCommittedPoint": null,
@@ -7326,7 +7326,7 @@
       "id": "text-a77ae624aec2",
       "type": "text",
       "x": 1220.0,
-      "y": 716.0,
+      "y": 724.0,
       "width": 120,
       "height": 16,
       "text": "assigned_by_id",
@@ -7369,9 +7369,9 @@
       "id": "arrow-4582f5a5a3a5",
       "type": "arrow",
       "x": 2160,
-      "y": 1234,
+      "y": 1250,
       "width": 1760,
-      "height": 984,
+      "height": 1000,
       "points": [
         [
           0,
@@ -7379,7 +7379,7 @@
         ],
         [
           -1760,
-          -984
+          -1000
         ]
       ],
       "lastCommittedPoint": null,
@@ -7422,7 +7422,7 @@
       "id": "text-976c9bec20e3",
       "type": "text",
       "x": 1220.0,
-      "y": 734.0,
+      "y": 742.0,
       "width": 120,
       "height": 16,
       "text": "coordinator_id",
@@ -7465,9 +7465,9 @@
       "id": "arrow-fa3c20e8bde2",
       "type": "arrow",
       "x": 2160,
-      "y": 1216,
+      "y": 1232,
       "width": 140,
-      "height": 1156,
+      "height": 1172,
       "points": [
         [
           0,
@@ -7475,7 +7475,7 @@
         ],
         [
           -140,
-          -1156
+          -1172
         ]
       ],
       "lastCommittedPoint": null,
@@ -7518,7 +7518,7 @@
       "id": "text-eaf8fdc2aa7e",
       "type": "text",
       "x": 2030.0,
-      "y": 630.0,
+      "y": 638.0,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -8617,9 +8617,9 @@
       "id": "arrow-8d2be95cca42",
       "type": "arrow",
       "x": 2160,
-      "y": 997,
+      "y": 1013,
       "width": 1760,
-      "height": 765,
+      "height": 781,
       "points": [
         [
           0,
@@ -8627,7 +8627,7 @@
         ],
         [
           -1760,
-          -765
+          -781
         ]
       ],
       "lastCommittedPoint": null,
@@ -8670,7 +8670,7 @@
       "id": "text-172b1d223a07",
       "type": "text",
       "x": 1220.0,
-      "y": 606.5,
+      "y": 614.5,
       "width": 120,
       "height": 16,
       "text": "changed_by_id",
@@ -8713,9 +8713,9 @@
       "id": "arrow-7af12a6cba55",
       "type": "arrow",
       "x": 2160,
-      "y": 997,
+      "y": 1013,
       "width": 140,
-      "height": 937,
+      "height": 953,
       "points": [
         [
           0,
@@ -8723,7 +8723,7 @@
         ],
         [
           -140,
-          -937
+          -953
         ]
       ],
       "lastCommittedPoint": null,
@@ -8766,7 +8766,7 @@
       "id": "text-83c2af08689e",
       "type": "text",
       "x": 2030.0,
-      "y": 520.5,
+      "y": 528.5,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -8961,8 +8961,8 @@
       "y": 156.0,
       "width": 120,
       "height": 16,
-      "text": "decided_by_id",
-      "originalText": "decided_by_id",
+      "text": "cancelled_by_id",
+      "originalText": "cancelled_by_id",
       "fontSize": 11,
       "fontFamily": 3,
       "textAlign": "center",
@@ -8999,102 +8999,6 @@
       "link": null,
       "locked": false,
       "id": "arrow-33de93e05052",
-      "type": "arrow",
-      "x": 1620,
-      "y": 60,
-      "width": 1220,
-      "height": 860,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          -1220,
-          860
-        ]
-      ],
-      "lastCommittedPoint": null,
-      "startBinding": {
-        "elementId": "body-e8e9bec74064",
-        "focus": 0,
-        "gap": 2,
-        "fixedPoint": null
-      },
-      "endBinding": {
-        "elementId": "body-819bcf25531d",
-        "focus": 0,
-        "gap": 2,
-        "fixedPoint": null
-      },
-      "startArrowhead": "crowfoot_many",
-      "endArrowhead": "crowfoot_one",
-      "elbowed": false
-    },
-    {
-      "angle": 0,
-      "strokeColor": "#495057",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": null,
-      "seed": 1127979528,
-      "version": 1,
-      "versionNonce": 179541910,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1,
-      "link": null,
-      "locked": false,
-      "id": "text-45a3d5496872",
-      "type": "text",
-      "x": 950.0,
-      "y": 482.0,
-      "width": 120,
-      "height": 16,
-      "text": "organisation_id",
-      "originalText": "organisation_id",
-      "fontSize": 11,
-      "fontFamily": 3,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "arrow-33de93e05052",
-      "autoResize": true,
-      "lineHeight": 1.2
-    },
-    {
-      "angle": 0,
-      "strokeColor": "#495057",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": {
-        "type": 2
-      },
-      "seed": 1194247808,
-      "version": 1,
-      "versionNonce": 507724825,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "id": "text-528d9ebd4b77",
-          "type": "text"
-        }
-      ],
-      "updated": 1,
-      "link": null,
-      "locked": false,
-      "id": "arrow-8f0928a6cb55",
       "type": "arrow",
       "x": 1620,
       "y": 96,
@@ -9139,6 +9043,102 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
+      "seed": 1127979528,
+      "version": 1,
+      "versionNonce": 179541910,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "id": "text-45a3d5496872",
+      "type": "text",
+      "x": 950.0,
+      "y": 174.0,
+      "width": 120,
+      "height": 16,
+      "text": "decided_by_id",
+      "originalText": "decided_by_id",
+      "fontSize": 11,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "arrow-33de93e05052",
+      "autoResize": true,
+      "lineHeight": 1.2
+    },
+    {
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 1194247808,
+      "version": 1,
+      "versionNonce": 507724825,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "text-528d9ebd4b77",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "id": "arrow-8f0928a6cb55",
+      "type": "arrow",
+      "x": 1620,
+      "y": 60,
+      "width": 1220,
+      "height": 860,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -1220,
+          860
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "body-e8e9bec74064",
+        "focus": 0,
+        "gap": 2,
+        "fixedPoint": null
+      },
+      "endBinding": {
+        "elementId": "body-819bcf25531d",
+        "focus": 0,
+        "gap": 2,
+        "fixedPoint": null
+      },
+      "startArrowhead": "crowfoot_many",
+      "endArrowhead": "crowfoot_one",
+      "elbowed": false
+    },
+    {
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
       "seed": 1778820365,
       "version": 1,
       "versionNonce": 827084697,
@@ -9150,11 +9150,11 @@
       "id": "text-528d9ebd4b77",
       "type": "text",
       "x": 950.0,
-      "y": 174.0,
+      "y": 482.0,
       "width": 120,
       "height": 16,
-      "text": "organiser_id",
-      "originalText": "organiser_id",
+      "text": "organisation_id",
+      "originalText": "organisation_id",
       "fontSize": 11,
       "fontFamily": 3,
       "textAlign": "center",
@@ -9191,6 +9191,102 @@
       "link": null,
       "locked": false,
       "id": "arrow-07565c179403",
+      "type": "arrow",
+      "x": 1620,
+      "y": 114,
+      "width": 1220,
+      "height": 172,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -1220,
+          172
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "body-e8e9bec74064",
+        "focus": 0,
+        "gap": 2,
+        "fixedPoint": null
+      },
+      "endBinding": {
+        "elementId": "body-1d7c466f665d",
+        "focus": 0,
+        "gap": 2,
+        "fixedPoint": null
+      },
+      "startArrowhead": "crowfoot_many",
+      "endArrowhead": "crowfoot_one",
+      "elbowed": false
+    },
+    {
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1452209696,
+      "version": 1,
+      "versionNonce": 1806472451,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "id": "text-51cc2303e2d0",
+      "type": "text",
+      "x": 950.0,
+      "y": 192.0,
+      "width": 120,
+      "height": 16,
+      "text": "organiser_id",
+      "originalText": "organiser_id",
+      "fontSize": 11,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "arrow-07565c179403",
+      "autoResize": true,
+      "lineHeight": 1.2
+    },
+    {
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2656569,
+      "version": 1,
+      "versionNonce": 918972189,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "text-1cd06ca33cd6",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "id": "arrow-511228b2ce6f",
       "type": "arrow",
       "x": 3240,
       "y": 992,
@@ -9235,15 +9331,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 1452209696,
+      "seed": 1511719110,
       "version": 1,
-      "versionNonce": 1806472451,
+      "versionNonce": 1002144047,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-51cc2303e2d0",
+      "id": "text-1cd06ca33cd6",
       "type": "text",
       "x": 2570.0,
       "y": 518.0,
@@ -9255,7 +9351,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-07565c179403",
+      "containerId": "arrow-511228b2ce6f",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9273,20 +9369,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 2656569,
+      "seed": 1624003389,
       "version": 1,
-      "versionNonce": 918972189,
+      "versionNonce": 1645720337,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-1cd06ca33cd6",
+          "id": "text-364649657b3f",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-511228b2ce6f",
+      "id": "arrow-f17dd88b44f8",
       "type": "arrow",
       "x": 3240,
       "y": 992,
@@ -9331,15 +9427,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 1511719110,
+      "seed": 572487368,
       "version": 1,
-      "versionNonce": 1002144047,
+      "versionNonce": 847466482,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-1cd06ca33cd6",
+      "id": "text-364649657b3f",
       "type": "text",
       "x": 1760.0,
       "y": 604.0,
@@ -9351,7 +9447,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-511228b2ce6f",
+      "containerId": "arrow-f17dd88b44f8",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9369,20 +9465,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 1624003389,
+      "seed": 1401166321,
       "version": 1,
-      "versionNonce": 1645720337,
+      "versionNonce": 556558305,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-364649657b3f",
+          "id": "text-8584289d9d05",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-f17dd88b44f8",
+      "id": "arrow-5ad77a3110d2",
       "type": "arrow",
       "x": 200.0,
       "y": 453,
@@ -9427,15 +9523,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 572487368,
+      "seed": 1685813899,
       "version": 1,
-      "versionNonce": 847466482,
+      "versionNonce": 130188418,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-364649657b3f",
+      "id": "text-8584289d9d05",
       "type": "text",
       "x": 140.0,
       "y": 415.0,
@@ -9447,7 +9543,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-f17dd88b44f8",
+      "containerId": "arrow-5ad77a3110d2",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9465,20 +9561,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 1401166321,
+      "seed": 722367554,
       "version": 1,
-      "versionNonce": 556558305,
+      "versionNonce": 1798960756,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-8584289d9d05",
+          "id": "text-baa536cd3454",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-5ad77a3110d2",
+      "id": "arrow-66a9576592fc",
       "type": "arrow",
       "x": 200.0,
       "y": 393,
@@ -9523,15 +9619,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 1685813899,
+      "seed": 325637954,
       "version": 1,
-      "versionNonce": 130188418,
+      "versionNonce": 990582864,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-8584289d9d05",
+      "id": "text-baa536cd3454",
       "type": "text",
       "x": 140.0,
       "y": 618.5,
@@ -9543,7 +9639,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-5ad77a3110d2",
+      "containerId": "arrow-66a9576592fc",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9561,20 +9657,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 722367554,
+      "seed": 1661485851,
       "version": 1,
-      "versionNonce": 1798960756,
+      "versionNonce": 252488711,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-baa536cd3454",
+          "id": "text-7546e03626bb",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-66a9576592fc",
+      "id": "arrow-98140a853ccc",
       "type": "arrow",
       "x": 200.0,
       "y": 172,
@@ -9619,15 +9715,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 325637954,
+      "seed": 686887538,
       "version": 1,
-      "versionNonce": 990582864,
+      "versionNonce": 225142590,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-baa536cd3454",
+      "id": "text-7546e03626bb",
       "type": "text",
       "x": 140.0,
       "y": 134.0,
@@ -9639,7 +9735,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-66a9576592fc",
+      "containerId": "arrow-98140a853ccc",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9657,20 +9753,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 1661485851,
+      "seed": 315641279,
       "version": 1,
-      "versionNonce": 252488711,
+      "versionNonce": 1338569390,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-7546e03626bb",
+          "id": "text-1ccbfc7dafd0",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-98140a853ccc",
+      "id": "arrow-df6faaef53ce",
       "type": "arrow",
       "x": 1080,
       "y": 732,
@@ -9715,15 +9811,15 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 686887538,
+      "seed": 1980682679,
       "version": 1,
-      "versionNonce": 225142590,
+      "versionNonce": 2038801484,
       "isDeleted": false,
       "boundElements": [],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "text-7546e03626bb",
+      "id": "text-1ccbfc7dafd0",
       "type": "text",
       "x": 950.0,
       "y": 560.0,
@@ -9735,7 +9831,7 @@
       "fontFamily": 3,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "arrow-98140a853ccc",
+      "containerId": "arrow-df6faaef53ce",
       "autoResize": true,
       "lineHeight": 1.2
     },
@@ -9753,20 +9849,20 @@
       "roundness": {
         "type": 2
       },
-      "seed": 315641279,
+      "seed": 446430114,
       "version": 1,
-      "versionNonce": 1338569390,
+      "versionNonce": 1112622101,
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-1ccbfc7dafd0",
+          "id": "text-c5db8f111ba1",
           "type": "text"
         }
       ],
       "updated": 1,
       "link": null,
       "locked": false,
-      "id": "arrow-df6faaef53ce",
+      "id": "arrow-b83cfee55bd0",
       "type": "arrow",
       "x": 1280.0,
       "y": 672,
@@ -9811,102 +9907,6 @@
       "groupIds": [],
       "frameId": null,
       "roundness": null,
-      "seed": 1980682679,
-      "version": 1,
-      "versionNonce": 2038801484,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1,
-      "link": null,
-      "locked": false,
-      "id": "text-1ccbfc7dafd0",
-      "type": "text",
-      "x": 1220.0,
-      "y": 470.0,
-      "width": 120,
-      "height": 16,
-      "text": "venue_id",
-      "originalText": "venue_id",
-      "fontSize": 11,
-      "fontFamily": 3,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "arrow-df6faaef53ce",
-      "autoResize": true,
-      "lineHeight": 1.2
-    },
-    {
-      "angle": 0,
-      "strokeColor": "#495057",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": {
-        "type": 2
-      },
-      "seed": 446430114,
-      "version": 1,
-      "versionNonce": 1112622101,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "id": "text-c5db8f111ba1",
-          "type": "text"
-        }
-      ],
-      "updated": 1,
-      "link": null,
-      "locked": false,
-      "id": "arrow-b83cfee55bd0",
-      "type": "arrow",
-      "x": 2900.0,
-      "y": 575,
-      "width": 0.0,
-      "height": 549,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          0.0,
-          549
-        ]
-      ],
-      "lastCommittedPoint": null,
-      "startBinding": {
-        "elementId": "body-d4aff5773528",
-        "focus": 0,
-        "gap": 2,
-        "fixedPoint": null
-      },
-      "endBinding": {
-        "elementId": "body-d4aff5773528",
-        "focus": 0,
-        "gap": 2,
-        "fixedPoint": null
-      },
-      "startArrowhead": "crowfoot_many",
-      "endArrowhead": "crowfoot_one",
-      "elbowed": false
-    },
-    {
-      "angle": 0,
-      "strokeColor": "#495057",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": null,
       "seed": 1581650944,
       "version": 1,
       "versionNonce": 1881828990,
@@ -9917,12 +9917,12 @@
       "locked": false,
       "id": "text-c5db8f111ba1",
       "type": "text",
-      "x": 2840.0,
-      "y": 841.5,
+      "x": 1220.0,
+      "y": 470.0,
       "width": 120,
       "height": 16,
-      "text": "replaced_by_booking_id",
-      "originalText": "replaced_by_booking_id",
+      "text": "venue_id",
+      "originalText": "venue_id",
       "fontSize": 11,
       "fontFamily": 3,
       "textAlign": "center",

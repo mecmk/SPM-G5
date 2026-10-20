@@ -108,7 +108,7 @@ expiry of one hold are serialized by the row lock (AC10).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -122,6 +122,7 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingReplacementIn, BookingRequestIn, BookingSwitchIn
 from app.common.audit import record_audit
 from app.config import settings
+from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
 from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
@@ -587,10 +588,11 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
 
 
 def _notify_venue_staff_of_release(
-    db: Session, booking: VenueBooking, *, actor: User, change: str
+    db: Session, booking: VenueBooking, *, actor: User, because: str
 ) -> None:
-    """Story 19.2 AC5: every active Venue Staff member is told a booking was released, as they are
-    of a withdrawal (12.2 AC2), since their schedule changes with it."""
+    """Story 19.2 AC5, story 6.2 AC5: every active Venue Staff member is told a booking was
+    released, and ``because`` says why, as they are of a withdrawal (12.2 AC2), since their
+    schedule changes with it."""
     for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
@@ -601,7 +603,7 @@ def _notify_venue_staff_of_release(
             title="A venue booking was released",
             message=(
                 f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
-                f"an approved change to the event's {change} no longer fits it."
+                f"{because}."
             ),
             related_entity_type="venue_booking",
             related_entity_id=booking.id,
@@ -638,29 +640,34 @@ def release_booking(
     booking: VenueBooking,
     *,
     actor: User,
-    change: str | None = None,
+    because: str | None = None,
+    details: dict[str, str] | None = None,
+    at: datetime | None = None,
     replacement: VenueBooking | None = None,
 ) -> bool:
     """Releases ``booking``, cancelling it so its venue is free, and tells Venue Staff - the one
-    release both stories make. Who approved it and when stay on the record. The update is
+    release every story makes. Who approved it and when stay on the record. The update is
     conditional on the booking still holding its venue, so one Venue Staff rejected, or the sweep
     expired, meanwhile is left alone; returns whether it was released. Written, not committed:
-    the caller's decision commits it.
+    the caller commits.
 
-    Story 19.2 AC5: ``change`` names the field of the event an approved change to which no longer
-    fits ``booking`` - audited ``BOOKING_RELEASED``, Venue Staff told "an approved change ... no
-    longer fits it".
+    Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2: its
+    event was cancelled. Either way Venue Staff are told ``because``, the clause that ends their
+    notice; ``details`` join the venue and event in the ``BOOKING_RELEASED`` audit entry, and
+    ``at`` is recorded as when it was cancelled (6.2 AC16).
 
     Story 12.6 AC3: ``replacement`` is the booking whose approval releases it - the original is
     closed "Replaced by <venue>" and linked to it (``replaced_by_booking_id``, which is how an
     original's ``released_at`` is read), audited ``BOOKING_REPLACED``, Venue Staff told which
-    venue replaced it. Exactly one of the two is given."""
-    if (change is None) == (replacement is None):
-        raise ValueError("release_booking takes a change or a replacement, not both or neither.")
+    venue replaced it. Either ``replacement`` or ``because`` and ``at`` are given."""
+    if (replacement is None) == (because is None or at is None):
+        raise ValueError("release_booking takes a replacement, or a reason and a time, not both.")
     values: dict[str, object] = {"status": BookingStatus.CANCELLED}
     if replacement is not None:
         values["decision_reason"] = REPLACED_BY_REASON.format(venue=replacement.venue.name)
         values["replaced_by_booking_id"] = replacement.id
+    else:
+        values["cancelled_at"] = at
     released = db.execute(
         update(VenueBooking)
         .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
@@ -669,7 +676,7 @@ def release_booking(
     if released.rowcount == 0:
         return False
     db.refresh(booking)
-    details = {"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)}
+    base_details = {"venue_id": str(booking.venue_id), "event_id": str(booking.event_id)}
     if replacement is not None:
         record_audit(
             db,
@@ -677,7 +684,7 @@ def release_booking(
             action="BOOKING_REPLACED",
             entity_type="venue_booking",
             entity_id=booking.id,
-            details={**details, "replaced_by_booking_id": str(replacement.id)},
+            details={**base_details, "replaced_by_booking_id": str(replacement.id)},
             commit=False,
         )
         _notify_venue_staff_of_replacement(db, booking, replacement, actor=actor)
@@ -688,11 +695,41 @@ def release_booking(
         action="BOOKING_RELEASED",
         entity_type="venue_booking",
         entity_id=booking.id,
-        details={**details, "change": change},
+        details={**base_details, **(details or {})},
         commit=False,
     )
-    _notify_venue_staff_of_release(db, booking, actor=actor, change=str(change))
+    _notify_venue_staff_of_release(db, booking, actor=actor, because=str(because))
     return True
+
+
+def lock_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
+    """Story 6.2 AC2/AC12: the event's pending and approved bookings, each row locked until the
+    transaction ends and read as it now stands, in id order, as story 9.4's re-check takes them.
+    A Venue Staff decision holding one is waited for, so the booking is released as it lands."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(
+                VenueBooking.event_id == event_id,
+                VenueBooking.status.in_(_HOLDING_STATUSES),
+            )
+            .order_by(VenueBooking.id)
+            .with_for_update(of=VenueBooking)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def get_booking_for_switch(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """Story 12.5's switch, row-locked as ``get_booking_for_decision`` locks it, with its event
+    locked first. The switch requests another venue for the event, so it must read the event under
+    lock (``_bookable_event``); taking the event before the booking, as story 6.2's cancellation
+    and story 9.4's re-check do, means the two can never each hold what the other waits for."""
+    event_id = db.scalar(select(VenueBooking.event_id).where(VenueBooking.id == booking_id))
+    if event_id is None:
+        raise BookingNotFound(booking_id)
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
+    return get_booking_for_decision(db, booking_id)
 
 
 def get_booking_for_decision(db: Session, booking_id: uuid.UUID) -> VenueBooking:
@@ -1061,8 +1098,12 @@ def _bookable_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     unconditionally: ``ck_events_submitted_fields_complete`` only lets a DRAFT row leave
     ``purpose`` / ``starts_at`` / ``ends_at`` / ``expected_attendance`` null, and DRAFT is
     not a bookable status.
+
+    Story 6.2 AC12: the event's row is held until the transaction ends and read as it now stands,
+    ``FOR NO KEY UPDATE`` as the cancellation takes it, so a request racing a cancellation waits
+    for it and is then refused, rather than leaving a new hold on a cancelled event.
     """
-    event = db.get(Event, event_id)
+    event = events_service.lock_event(db, event_id)
     if event is None:
         raise EventNotFound(event_id)
     if event.status not in _BOOKABLE_EVENT_STATUSES:
@@ -1155,12 +1196,18 @@ def earliest_setup_start(db: Session, event_id: uuid.UUID) -> datetime | None:
 
 
 def find_holding_booking(
-    db: Session, venue_id: uuid.UUID, held_from: datetime, held_until: datetime
+    db: Session,
+    venue_id: uuid.UUID,
+    held_from: datetime,
+    held_until: datetime,
+    *,
+    exclude_ids: Collection[uuid.UUID] = (),
 ) -> VenueBooking | None:
     """12.1 AC3: the pending or approved booking (if any) holding ``venue_id`` during part of
     ``held_from``..``held_until``. Half-open periods, as in the exclusion constraint: touching at
-    a boundary is not an overlap (AC6); any partial overlap is (AC8)."""
-    return db.scalars(
+    a boundary is not an overlap (AC6); any partial overlap is (AC8). Story 19.3:
+    ``exclude_ids`` leaves out bookings an approval would release, which hold nothing after it."""
+    query = (
         select(VenueBooking)
         .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.event))
         .where(
@@ -1171,7 +1218,10 @@ def find_holding_booking(
         )
         .order_by(VenueBooking.held_from, VenueBooking.id)
         .limit(1)
-    ).first()
+    )
+    if exclude_ids:
+        query = query.where(VenueBooking.id.not_in(exclude_ids))
+    return db.scalars(query).first()
 
 
 def _requested_requirement(
@@ -1288,8 +1338,9 @@ def switch_booking_request(
 ) -> VenueBooking:
     """Story 12.5, decided 11 Oct 2026: switch the pending request ``replaced`` to another
     venue, for the same venue requirement (an additional venue stays one). Callers fetch
-    ``replaced`` with ``get_booking_for_decision``, as 12.2's withdrawal does, so two tabs
-    switching it at once wait on its row lock and the second finds it withdrawn.
+    ``replaced`` with ``get_booking_for_switch``, which locks it as 12.2's withdrawal does, so two
+    tabs switching it at once wait on its row lock and the second finds it withdrawn; its event is
+    locked first, so a cancellation (story 6.2) is waited for, not raced.
 
     Withdrawal's checks come first: only the event's assigned coordinator
     (``NotAssignedCoordinator``, before anything about the request is said), and only while it

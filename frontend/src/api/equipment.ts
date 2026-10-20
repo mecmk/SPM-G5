@@ -101,9 +101,9 @@ export function submitEquipment(eventId: string): Promise<EquipmentLine[]> {
   })
 }
 
-/** Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Mirrors
- * `EquipmentQueueStatus`. */
-export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED'
+/** Story 15.2 AC3: the statuses Technical Support's queue has a tab for; story 6.2 AC15:
+ * Cancelled, read-only, for requests once sent to them. Mirrors `EquipmentQueueStatus`. */
+export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED'
 
 /**
  * Mirrors `EquipmentQueueEntry`: story 15.2 AC1, a request with its event's name and dates, the
@@ -125,11 +125,15 @@ export interface EquipmentQueueEntry {
   requested_by_name: string | null
   submitted_at: string | null
   status: EquipmentQueueStatus
-  available: number
-  shortfall: number
+  /** Story 6.2 AC15: null for a cancelled request, which holds nothing. */
+  available: number | null
+  shortfall: number | null
   decided_by_name: string | null
   decided_at: string | null
   decision_reason: string | null
+  /** Story 6.2 AC16: when a cancelled request was cancelled; null otherwise, and for one
+   * cancelled before that was recorded. */
+  cancelled_at: string | null
 }
 
 /** Mirrors `EquipmentQueueCounts`: story 15.2 AC3, how many requests each tab holds. */
@@ -137,6 +141,8 @@ export interface EquipmentQueueCounts {
   pending: number
   accepted: number
   declined: number
+  /** Story 6.2 AC15. */
+  cancelled: number
 }
 
 /** Mirrors `EquipmentQueue`: story 15.2 AC1-AC3, one tab of the queue and every tab's count. */

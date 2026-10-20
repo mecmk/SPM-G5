@@ -51,7 +51,9 @@ export function EquipmentDecisionDialog({
   const isAccept = outcome === 'ACCEPTED'
   const shortFigures =
     refusedFigures ??
-    (entry.shortfall > 0 ? { available: entry.available, shortfall: entry.shortfall } : null)
+    (entry.available !== null && entry.shortfall !== null && entry.shortfall > 0
+      ? { available: entry.available, shortfall: entry.shortfall }
+      : null)
 
   async function decide(decision: EquipmentDecision) {
     setIsDeciding(true)

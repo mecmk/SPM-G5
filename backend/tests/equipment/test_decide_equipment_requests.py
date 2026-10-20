@@ -730,13 +730,13 @@ def test_a_decided_request_shows_who_decided_it_when_and_why(tech_client, db):
     [
         ("REQUESTED", EventStatus.PLANNING),
         ("UNAVAILABLE", EventStatus.PLANNING),
-        ("CANCELLED", EventStatus.PLANNING),
         (PENDING, EventStatus.CANCELLED),
         (PENDING, EventStatus.REJECTED),
     ],
 )
 def test_a_request_outside_the_queue_is_not_found(tech_client, db, item_status, event_status):
-    """Only what the queue lists (15.2 AC3/AC5) has a page of its own."""
+    """Only what the queue lists (15.2 AC3/AC5) has a page of its own. A cancelled item once sent
+    is listed, read-only, since story 6.2 AC15, so it is covered there."""
     item = _pending(
         db,
         status=item_status,

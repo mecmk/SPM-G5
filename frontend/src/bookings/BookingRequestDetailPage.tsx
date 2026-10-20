@@ -28,6 +28,7 @@ import {
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
+  CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
   formatTime,
@@ -388,9 +389,28 @@ export function BookingRequestDetailPage() {
         </section>
       )}
 
+      {/* Story 6.2 AC16: when a cancelled booking was approved, if it was, beside when it was
+          cancelled. */}
+      {booking.cancelled_at !== null && booking.decided_at !== null && (
+        <p className="subtle-block">
+          <span className="fact-label">{bookingOutcomeLabels(booking).when}</span>
+          <br />
+          {formatDateTime(booking.decided_at)}
+        </p>
+      )}
+
+      {/* Story 6.2 AC16: when the booking was cancelled. */}
+      {booking.cancelled_at !== null && (
+        <p className="subtle-block">
+          <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+          <br />
+          {formatDateTime(booking.cancelled_at)}
+        </p>
+      )}
+
       {booking.decision_reason !== null && (
         <p className="subtle-block">
-          <span className="fact-label">{bookingOutcomeLabels(booking.status).why}</span>
+          <span className="fact-label">{bookingOutcomeLabels(booking).why}</span>
           <br />
           {booking.decision_reason}
         </p>

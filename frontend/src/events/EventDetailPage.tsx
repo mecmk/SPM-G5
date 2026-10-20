@@ -6,6 +6,7 @@ import {
   type BookingOutcome,
   type BookingStatus,
 } from '../api/bookings'
+import { cancelEvent } from '../api/cancellations'
 import { formatApiError, mediaUrl } from '../api/client'
 import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/changeRequests'
 import {
@@ -60,6 +61,7 @@ import {
 import {
   ACTIVE_EVENT_STATUSES,
   AWAITING_DECISION_STATUSES,
+  CANCELLABLE_STATUSES,
   CHANGE_DECIDABLE_STATUSES,
   CHANGE_REQUESTABLE_STATUSES,
   CHANGE_REQUESTS_VISIBLE_STATUSES,
@@ -70,6 +72,7 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import {
+  CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
   formatSchedule,
@@ -149,6 +152,20 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
     message:
       "This booking's hold expired before the event was confirmed, so the venue was released.",
   },
+}
+
+/** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
+ * with it. The cancellation stamps the event and each booking it releases with one time, so a
+ * booking an earlier change cancelled (19.2) keeps its own sentence. */
+function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
+  if (
+    booking.status === 'CANCELLED' &&
+    event.cancelled_at !== null &&
+    booking.cancelled_at === event.cancelled_at
+  ) {
+    return 'This booking was cancelled with its event.'
+  }
+  return BOOKING_OUTCOME[booking.status].message
 }
 
 /** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
@@ -284,6 +301,10 @@ export function EventDetailPage() {
   const [isRejecting, setIsRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [isConfirmingCancel, setIsConfirmingCancel] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
   const [clarificationMessage, setClarificationMessage] = useState('')
   const [isRequestingClarification, setIsRequestingClarification] = useState(false)
   const [clarificationRequestError, setClarificationRequestError] = useState<string | null>(null)
@@ -471,6 +492,36 @@ export function EventDetailPage() {
       setRejectError(formatApiError(err))
     } finally {
       setIsRejecting(false)
+    }
+  }
+
+  function askToCancel() {
+    setCancelError(null)
+    setCancelReason('')
+    setIsConfirmingCancel(true)
+  }
+
+  /** Story 6.2 AC7: closing the dialog leaves the event as it was. */
+  function keepEvent() {
+    setIsConfirmingCancel(false)
+  }
+
+  async function confirmCancel() {
+    if (!event) return
+    if (!cancelReason.trim()) {
+      setCancelError(ERROR_REGISTRY.EVENT_CANCELLATION_REASON_REQUIRED.message)
+      return
+    }
+    setIsCancelling(true)
+    setCancelError(null)
+    try {
+      const updated = await cancelEvent(event.id, cancelReason, event.name)
+      setEvent(updated)
+      setIsConfirmingCancel(false)
+    } catch (err) {
+      setCancelError(formatApiError(err))
+    } finally {
+      setIsCancelling(false)
     }
   }
 
@@ -699,6 +750,10 @@ export function EventDetailPage() {
     can(PERMISSIONS.EVENTS_CREATE) &&
     isOrganiser &&
     CONTACT_EDITABLE_STATUSES.includes(event.status)
+  /** Story 6.2 AC1/AC6/AC11: only the owning organiser cancels, and only while the event is
+   *  still going ahead, mirroring the backend's permission, owner and status checks. */
+  const canCancelEvent =
+    can(PERMISSIONS.EVENTS_CANCEL) && isOrganiser && CANCELLABLE_STATUSES.includes(event.status)
 
   const clarificationEntries: ClarificationEntry[] | null =
     clarifications === null
@@ -717,7 +772,7 @@ export function EventDetailPage() {
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
-      {(canEditEvent || canApprove || canReject || canReassign) && (
+      {(canEditEvent || canApprove || canReject || canReassign || canCancelEvent) && (
         <div className="page-header actions-only">
           {/* Story 7.2: editing sits apart, on the left; the decisions stay on the right. */}
           {canEditEvent && (
@@ -742,6 +797,11 @@ export function EventDetailPage() {
             {canReassign && (
               <button type="button" className="secondary reassign-action" onClick={askToReassign}>
                 Reassign
+              </button>
+            )}
+            {canCancelEvent && (
+              <button type="button" className="danger" onClick={askToCancel}>
+                Cancel event
               </button>
             )}
           </div>
@@ -772,6 +832,30 @@ export function EventDetailPage() {
           <p className="eyebrow">Event status</p>
           <EventStatusBadge status={event.status} />
         </div>
+
+        {/* Story 6.2 AC5/AC9: who cancelled the event, when and why, kept as its record. An event
+            cancelled before these were recorded shows its status alone. */}
+        {event.cancelled_at !== null && (
+          <section className="card stack" aria-labelledby="event-cancellation-heading">
+            <p className="eyebrow" id="event-cancellation-heading">
+              Cancellation
+            </p>
+            <div className="fact-grid">
+              <div className="subtle-block">
+                <p className="fact-label">Cancelled by</p>
+                <p className="fact-value">{event.cancelled_by_name ?? NOT_RECORDED}</p>
+              </div>
+              <div className="subtle-block">
+                <p className="fact-label">Cancelled on</p>
+                <p className="fact-value">{formatDateTime(event.cancelled_at)}</p>
+              </div>
+            </div>
+            <div className="subtle-block">
+              <p className="fact-label">Reason</p>
+              <p>{event.cancellation_reason}</p>
+            </div>
+          </section>
+        )}
 
         <div className="stat-grid">
           <div className="stat">
@@ -1029,7 +1113,7 @@ export function EventDetailPage() {
 
             {bookings.map((booking) => {
               const bookingOutcome = BOOKING_OUTCOME[booking.status]
-              const outcomeLabels = bookingOutcomeLabels(booking.status)
+              const outcomeLabels = bookingOutcomeLabels(booking)
               const openHold = openHoldExpiry(booking)
               const forRequirement = bookedRequirementName(event, booking)
               return (
@@ -1078,7 +1162,7 @@ export function EventDetailPage() {
                   <div className="booking-outcome-message">
                     <Icon name={bookingOutcome.icon} size={18} />
                     <div>
-                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(event, booking)}</p>
                       {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
                           once its replacement was approved - or which venue is asked for. */}
                       {booking.replaces_venue_name !== null && (
@@ -1138,6 +1222,14 @@ export function EventDetailPage() {
                           <span className="fact-label">{outcomeLabels.when}</span>
                           <br />
                           {formatDateTime(closedAt(booking) ?? booking.decided_at)}
+                        </p>
+                      )}
+                      {/* Story 6.2 AC16: when the booking was cancelled. */}
+                      {booking.cancelled_at !== null && (
+                        <p>
+                          <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+                          <br />
+                          {formatDateTime(booking.cancelled_at)}
                         </p>
                       )}
                       {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
@@ -1356,6 +1448,33 @@ export function EventDetailPage() {
               placeholder="Shown to the organiser."
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </label>
+        </ConfirmDialog>
+      )}
+      {isConfirmingCancel && (
+        <ConfirmDialog
+          title="Cancel this event?"
+          confirmLabel="Cancel event"
+          cancelLabel="Keep event"
+          isBusy={isCancelling}
+          error={cancelError}
+          errorId="cancel-event-error"
+          onConfirm={confirmCancel}
+          onCancel={keepEvent}
+        >
+          <p>
+            {event.name} will be cancelled. Its venue bookings, equipment and attendee registrations
+            are released, and its coordinator and attendees are told. This cannot be undone.
+          </p>
+          <label>
+            Reason for cancelling
+            <textarea
+              rows={3}
+              placeholder="Shown to the coordinator and attendees."
+              value={cancelReason}
+              aria-describedby={cancelError ? 'cancel-event-error' : undefined}
+              onChange={(e) => setCancelReason(e.target.value)}
             />
           </label>
         </ConfirmDialog>

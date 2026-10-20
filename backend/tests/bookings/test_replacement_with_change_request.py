@@ -84,6 +84,7 @@ test_replacement_schema.py.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
@@ -93,6 +94,7 @@ from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.change_requests.models import EventChangeRequest
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import make_venue
 from tests.support.replacement import (
     BOOKINGS_PATH,
@@ -119,9 +121,10 @@ def _raise_attendance(login_as, db: Session, event, attendance: int) -> EventCha
 
 def _approve_change(client, request: EventChangeRequest):
     """Approve ``request`` as the assigned coordinator, the test's rows committed first as
-    test_decide_change_request.py does, so a refusal's rollback cannot undo them."""
+    test_decide_change_request.py does, so a refusal's rollback cannot undo them. Story 19.3 AC7:
+    the approval carries the fingerprint of the impact assessment read just before it."""
     object_session(request).commit()
-    return client.post(f"/events/{request.event_id}/change-requests/{request.id}/approve")
+    return approve_as_seen(client, request.event_id, request.id)
 
 
 def _booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
@@ -236,7 +239,12 @@ def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_
 
     chloe = db.get(User, Users.COORDINATOR.id)
     assert service.release_booking(
-        db, _booking(db, scene.original.id), actor=chloe, change="expected attendance"
+        db,
+        _booking(db, scene.original.id),
+        actor=chloe,
+        because="an approved change to the event's expected attendance no longer fits it",
+        details={"change": "expected attendance"},
+        at=datetime.now(UTC),
     )
     db.flush()
 
@@ -266,7 +274,12 @@ def test_approving_the_replacement_of_an_original_released_by_a_change_still_wor
     body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
     chloe = db.get(User, Users.COORDINATOR.id)
     assert service.release_booking(
-        db, _booking(db, scene.original.id), actor=chloe, change="expected attendance"
+        db,
+        _booking(db, scene.original.id),
+        actor=chloe,
+        because="an approved change to the event's expected attendance no longer fits it",
+        details={"change": "expected attendance"},
+        at=datetime.now(UTC),
     )
     db.flush()
 

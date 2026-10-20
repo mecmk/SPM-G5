@@ -119,6 +119,9 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # (PO decision, AC6/AC8). Read it through ``venue_unavailable_mark``, which leaves out a
     # booking that no longer holds the venue.
     venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 6.2 AC16: when the booking was cancelled - with its event, or by an approved change
+    # (19.2); NULL otherwise, and for one cancelled before migration 026.
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 12.6 AC2: the booking this one replaces, which Venue Staff's closure made unavailable -
     # a booking of the same event (composite FK fk_venue_bookings_replaces); None for any other.
     # AC3: on an original released by its replacement, the replacement whose approval released it,
