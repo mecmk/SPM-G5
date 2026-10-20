@@ -3337,7 +3337,6 @@ tbody tr:hover td {
 .notification-item.is-unread {
   border-left: 4px solid var(--accent);
   padding-left: calc(1rem - 4px);
-  background: var(--surface-alt);
 }
 
 .notification-body {
@@ -3381,7 +3380,7 @@ tbody tr:hover td {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .notification-unavailable {
