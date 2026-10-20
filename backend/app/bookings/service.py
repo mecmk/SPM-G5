@@ -1135,6 +1135,18 @@ def _describe_day(moment: datetime) -> str:
     return f"{moment:%a} {moment.day} {moment:%b %Y}"
 
 
+def earliest_setup_start(db: Session, event_id: uuid.UUID) -> datetime | None:
+    """When set-up begins at the first of ``event_id``'s venues: the earliest ``held_from`` - the
+    booking's start less its set-up minutes (12.1 AC1) - among its bookings that hold a venue,
+    pending or approved (12.1 AC3). None when no venue is held. Story 19.1 AC12 closes change
+    requests 24 hours before it (fix f19.1.1)."""
+    return db.scalar(
+        select(func.min(VenueBooking.held_from)).where(
+            VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES)
+        )
+    )
+
+
 def find_holding_booking(
     db: Session, venue_id: uuid.UUID, held_from: datetime, held_until: datetime
 ) -> VenueBooking | None:

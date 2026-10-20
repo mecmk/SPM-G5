@@ -34,6 +34,12 @@ export const EVENTS = {
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
   partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; no spec writes a request for it
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
+  completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
+  // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides
+  // what a cancelled event no longer offers.
+  cancelledFunRun: '33333333-0000-0000-0000-000000000075',
+  // Confirmed, organiser: organiser2, and over since 3 Oct 2026 - nothing marks it Completed (Q57).
+  bookSwap: '33333333-0000-0000-0000-000000000076',
   // Story 15.1, both Planning, organiser: organiser, coordinator, dated May 2027. Only the
   // equipment flow changes the workshop's equipment; nothing changes the showcase's.
   equipmentWorkshop: '33333333-0000-0000-0000-000000000019',

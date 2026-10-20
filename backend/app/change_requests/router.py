@@ -1,8 +1,11 @@
-"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests; and for
-story 19.2: the coordinator's queue of pending ones, and approving or rejecting one.
+"""HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests, and say when
+they close (fix f19.1.1); and for story 19.2: the coordinator's queue of pending ones, and
+approving or rejecting one.
 
-They sit under the event they belong to (``/events/{event_id}/change-requests``), except the
-queue, which spans the coordinator's events (``/change-requests``). Withdrawing, approving and
+They sit under the event they belong to (``/events/{event_id}/change-requests``, and
+``/events/{event_id}/change-request-window`` for when they close - outside ``/change-requests/``
+so it can never be read as a request's id), except the queue, which spans the coordinator's events
+(``/change-requests``). Withdrawing, approving and
 rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs like story
 12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with its own
 rules, notification and audit record (see backend/STYLE.md, Standing divergences).
@@ -24,6 +27,7 @@ from app.change_requests.schemas import (
     ChangeRequestOut,
     ChangeRequestQueueEntryOut,
     ChangeRequestRejectionIn,
+    ChangeRequestWindowOut,
 )
 from app.db import get_db
 
@@ -71,7 +75,9 @@ def raise_change_request(
     db: DbSession,
     actor: Annotated[CurrentUser, CanRequestChanges],
 ) -> ChangeRequestOut:
-    """AC1-AC8: the owning organiser asks for one field of their Planning event to change."""
+    """AC1-AC8, AC11-AC13: the owning organiser asks for one field of their Planning or
+    Confirmed event to change, until 24 hours before its set-up time. 409 otherwise (AC5, AC12,
+    AC13)."""
     try:
         request = service.raise_change_request(db, event_id, payload, actor=actor)
     except service.EventNotFound:
@@ -100,6 +106,23 @@ def list_change_requests(
     except service.NotRelatedParty as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     return [_change_request_out(request) for request in requests]
+
+
+@router.get("/{event_id}/change-request-window", response_model=ChangeRequestWindowOut)
+def get_change_request_window(
+    event_id: uuid.UUID,
+    db: DbSession,
+    viewer: Annotated[CurrentUser, CanRead],
+) -> ChangeRequestWindowOut:
+    """AC12 (fix f19.1.1): when the event stops taking change requests - 24 hours before its set-up
+    time - for its organiser and assigned coordinator."""
+    try:
+        window = service.get_change_request_window(db, event_id, viewer=viewer)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.NotRelatedParty as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    return ChangeRequestWindowOut(closes_at=window.closes_at, is_open=window.is_open)
 
 
 @router.post(
