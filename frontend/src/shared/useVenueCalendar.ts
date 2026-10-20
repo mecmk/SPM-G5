@@ -3,6 +3,10 @@ import { formatApiError } from '../api/client'
 import type { VenueUnavailableWindow } from '../api/venues'
 import { instantToInput, inputToInstant } from './format'
 
+/** The id of the calendar's day panel, which the month grid's day buttons control (story 9.1): the
+ *  same on the venue's details page and, fix f9.4.1, on the Edit venue page. */
+export const VENUE_CALENDAR_DAY_PANEL_ID = 'venue-calendar-day-panel'
+
 /** One venue's `getVenueCalendar`, bound to it: the windows overlapping `startsAt`-`endsAt`. */
 export type VenueCalendarLoader = (
   startsAt: string,
@@ -19,7 +23,14 @@ export interface VenueCalendarState {
   /** The message to show when the latest month failed to load, otherwise null. */
   error: string | null
   isLoading: boolean
+  /** The moment a closure counts as ended from (ms since the epoch; story 9.4 AC6): the one clock
+   *  for the day list's labels and tones and for each closure's buttons. It is set when the month
+   *  loads and moved on every minute after, so a page left open sees a closure end. */
+  now: number
 }
+
+/** How often `now` moves on. */
+const CLOCK_TICK_MS = 60_000
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -67,6 +78,12 @@ export function useVenueCalendar(
   const [windows, setWindows] = useState<VenueUnavailableWindow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -80,6 +97,7 @@ export function useVenueCalendar(
       .then((data) => {
         if (cancelled) return
         setWindows(data)
+        setNow(Date.now())
         setError(null)
         setIsLoading(false)
       })
@@ -97,5 +115,5 @@ export function useVenueCalendar(
     // reloadKey is not read above: it is listed only so that its change loads the month again.
   }, [loadWindows, month, reloadKey])
 
-  return { month, setMonth, windows, error, isLoading }
+  return { month, setMonth, windows, error, isLoading, now }
 }

@@ -624,20 +624,8 @@ test('12.6 AC6: when the closure is removed the button goes and the pending repl
   await requestGrandHall(page, SUMMIT)
   await expect(bookingList(page)).toContainText(`Replacement requested: ${GRAND_HALL}`)
 
-  // Venue Staff remove the closure of the 13th from the foyer's calendar. The browser's clock is
-  // pinned to the month before, as the 9.4 spec does for its venues, so the grid opens on February.
-  const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
-  await staff.clock.setFixedTime(new Date('2029-02-01T10:00:00+08:00'))
-  await staff.goto('/venues')
-  await staff.getByRole('link', { name: FOYER }).click()
-  const availability = staff.getByRole('region', { name: 'Availability', exact: true })
-  await expect(availability).toBeVisible()
-  await availability.getByRole('button', { name: /^13 February 2029/ }).click()
-  const closure = staff.getByRole('listitem').filter({ hasText: 'Floor resurfacing' })
-  await closure.getByRole('button', { name: 'Remove' }).click()
-  await staff.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
-  await expect(closure).toHaveCount(0)
-  await staff.context().close()
+  // Venue Staff remove the closure of the 13th from the foyer's calendar.
+  await removeFoyerClosure(browser, /^13 February 2029/)
 
   // The mark has cleared: no more Find a replacement venue, but the replacement is still there to
   // withdraw, and the original is kept.
@@ -802,14 +790,16 @@ test('12.6 AC12: the event page says a marked booking stops the safety review', 
 })
 
 // --- review of #123 ------------------------------------------------------------------------------
-/** Venue Staff remove the foyer's closure of `day` from its details page, as 9.4 AC6 allows while
+/** Venue Staff remove the foyer's closure of `day` from its Edit venue page, as 9.4 AC6 allows while
  *  it has not started; the browser's clock is pinned to the month before, so the grid opens on it. */
 async function removeFoyerClosure(browser: Browser, day: RegExp) {
   const staff = await signedInPage(browser, ACCOUNTS.venueStaff)
   await staff.clock.setFixedTime(new Date('2029-02-01T10:00:00+08:00'))
   await staff.goto('/venues')
-  await staff.getByRole('link', { name: FOYER }).click()
-  const availability = staff.getByRole('region', { name: 'Availability', exact: true })
+  // Venue Staff manage a venue's closures on its Edit venue page (fix f9.4.1), where Availability
+  // is a group.
+  await venueCard(staff, FOYER).getByRole('link', { name: 'Edit' }).click()
+  const availability = staff.getByRole('group', { name: 'Availability', exact: true })
   await expect(availability).toBeVisible()
   await availability.getByRole('button', { name: day }).click()
   const closure = staff.getByRole('listitem').filter({ hasText: 'Floor resurfacing' })
