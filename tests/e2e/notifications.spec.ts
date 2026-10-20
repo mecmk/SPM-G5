@@ -373,6 +373,21 @@ test('20.2 AC1: the page changes only after the notification is marked read', as
   await expect(page.getByRole('heading', { name: GALA_NAME }).first()).toBeVisible()
 })
 
+// --- AC2: opening the bell ----------------------------------------------------------------------------
+test('20.2 AC2: opening the bell reads the notifications again', async ({ page }) => {
+  await signInAsNadia(page)
+  await page.waitForLoadState('networkidle')
+  const listIsRead = page.waitForRequest(
+    (request) => request.method() === 'GET' && new URL(request.url()).pathname === NOTICES_PATH,
+    { timeout: 5000 },
+  )
+
+  await bell(page).click()
+
+  await listIsRead
+  await expect(panel(page)).toBeVisible()
+})
+
 // --- AC1: mark all as read (last: it empties the count) -----------------------------------------------
 test('20.2 AC1: mark all as read clears everything and sends the newest id it loaded', async ({
   page,
