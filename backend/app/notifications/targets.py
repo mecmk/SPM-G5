@@ -92,6 +92,7 @@ _RULES: tuple[tuple[Permission, TargetKind, frozenset[NotificationType]], ...] =
                 _T.SAFETY_APPROVED,
                 _T.SAFETY_CHANGES_REQUESTED,
                 _T.EVENT_CHANGE_REQUEST_WITHDRAWN,
+                _T.EVENT_CANCELLED,
             }
         ),
     ),
@@ -121,6 +122,17 @@ _RULES: tuple[tuple[Permission, TargetKind, frozenset[NotificationType]], ...] =
         Permission.EVENTS_ASSIGN,  # the Lead: the queue while unassigned, else the event
         TargetKind.UNASSIGNED_EVENTS,
         frozenset({_T.EVENT_SUBMITTED}),
+    ),
+    (
+        # Story 6.2: a cancelled event nobody coordinates is told to the Leads, who open the event
+        Permission.EVENTS_ASSIGN,
+        TargetKind.EVENT,
+        frozenset({_T.EVENT_CANCELLED}),
+    ),
+    (
+        Permission.REGISTRATIONS_SELF,  # the attendee: their registrations, now closed
+        TargetKind.REGISTRATIONS,
+        frozenset({_T.REGISTRATION_CANCELLED}),
     ),
 )
 
