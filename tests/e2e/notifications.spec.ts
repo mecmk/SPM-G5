@@ -319,6 +319,61 @@ test('20.2 AC1: the panel is usable on a phone', async ({ page }) => {
   ).toBeEnabled()
 })
 
+// --- AC1: opening a notification waits for the server -----------------------------------------------
+test('20.2 AC1: the page changes only after the notification is marked read', async ({ page }) => {
+  const notice = NADIA_NOTICES.confirmed
+  // The one unread notification is opened with its request held and then answered by the test, so
+  // the database is not changed: the next test still finds it unread.
+  let requestIsHeld!: () => void
+  const held = new Promise<void>((resolve) => {
+    requestIsHeld = resolve
+  })
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route(
+    (url) => url.pathname === `${NOTICES_PATH}/${notice.id}`,
+    async (route) => {
+      const request = route.request()
+      if (request.method() !== 'PATCH' || request.resourceType() !== 'fetch') return route.fallback()
+      requestIsHeld()
+      await released
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: corsHeaders(request),
+        body: JSON.stringify({
+          id: notice.id,
+          notification_type: 'EVENT_CONFIRMED',
+          title: notice.title,
+          message: notice.message,
+          event_id: EVENTS.noticeGala,
+          related_entity_type: 'event',
+          related_entity_id: EVENTS.noticeGala,
+          created_at: '2026-10-19T09:45:00+00:00',
+          read_at: new Date().toISOString(),
+          target: { kind: 'event', id: EVENTS.noticeGala },
+        }),
+      })
+    },
+  )
+  await signInAsNadia(page)
+  await openPanel(page)
+  const urlBefore = page.url()
+
+  await rowOf(page, notice).getByRole('button', { name: notice.title }).click()
+
+  await held
+  expect(page.url()).toBe(urlBefore)
+  await expect(panel(page)).toBeVisible()
+
+  release()
+
+  await expect(page).toHaveURL(new RegExp(`${GALA_PATH}$`))
+  await expect(page.getByRole('heading', { name: GALA_NAME }).first()).toBeVisible()
+})
+
 // --- AC1: mark all as read (last: it empties the count) -----------------------------------------------
 test('20.2 AC1: mark all as read clears everything and sends the newest id it loaded', async ({
   page,
