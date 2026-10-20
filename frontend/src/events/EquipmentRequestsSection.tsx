@@ -14,20 +14,10 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
-/** Story 15.1 AC1: how each item status reads on the event page. Story 17.1 AC1/AC4: an accepted
- *  item is reserved, and one cancelled with its event (6.2) or removed by an approved change (19.2)
- *  is released. */
-const STATUS_LABELS: Record<EquipmentItemStatus, string> = {
-  REQUESTED: 'Not yet sent',
-  PENDING: 'Pending',
-  ACCEPTED: 'Accepted (reserved)',
-  DECLINED: 'Declined',
-  UNAVAILABLE: 'Unavailable',
-  CANCELLED: 'Released',
-}
 /** AC2/AC7: the items the coordinator may still edit or remove, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
 const EDITABLE_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'PENDING', 'UNAVAILABLE']
@@ -399,7 +389,7 @@ export function EquipmentRequestsSection({
                 <span className="mono">×{item.quantity}</span>
                 <StatusBadge
                   status={BADGE_STATUSES[item.status] ?? item.status}
-                  label={STATUS_LABELS[item.status]}
+                  label={EQUIPMENT_STATUS_LABELS[item.status]}
                 />
                 {canChange && EDITABLE_STATUSES.includes(item.status) && (
                   <span className="row-actions">

@@ -94,6 +94,7 @@ from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.change_requests.models import EventChangeRequest
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import make_venue
 from tests.support.replacement import (
     BOOKINGS_PATH,
@@ -120,9 +121,10 @@ def _raise_attendance(login_as, db: Session, event, attendance: int) -> EventCha
 
 def _approve_change(client, request: EventChangeRequest):
     """Approve ``request`` as the assigned coordinator, the test's rows committed first as
-    test_decide_change_request.py does, so a refusal's rollback cannot undo them."""
+    test_decide_change_request.py does, so a refusal's rollback cannot undo them. Story 19.3 AC7:
+    the approval carries the fingerprint of the impact assessment read just before it."""
     object_session(request).commit()
-    return client.post(f"/events/{request.event_id}/change-requests/{request.id}/approve")
+    return approve_as_seen(client, request.event_id, request.id)
 
 
 def _booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:

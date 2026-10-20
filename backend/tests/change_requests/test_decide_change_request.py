@@ -58,6 +58,7 @@ from app.auth.models import User
 from app.change_requests import service as change_requests_service
 from app.change_requests.models import EventChangeRequest
 from app.events.models import Event, EventStatus
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
     SecuredEvent,
     future_datetime,
@@ -78,6 +79,8 @@ _REJECTION_REASON = "The hall cannot take more people on that day."
 _EVENT_NOT_FOUND = "Event not found."
 _CHANGE_REQUEST_NOT_FOUND = "Change request not found."
 _MAX_REASON = 2000
+# Story 19.3 AC7: sent with an approval whose impact could not be read, so its own refusal answers.
+_ANY_FINGERPRINT = "not-assessed"
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -104,9 +107,14 @@ def _decision_url(event_id: uuid.UUID, request_id: uuid.UUID, decision: str) -> 
 def _approve(client, request):
     """Approve ``request`` as ``client``. The test's rows are committed first - to the test's own
     transaction, which is still rolled back at the end - so a refused decision's rollback cannot
-    undo them as well (as tests/events/test_correct_event_under_review.py does)."""
+    undo them as well (as tests/events/test_correct_event_under_review.py does).
+
+    Story 19.3 AC7: an approval carries the fingerprint of the impact assessment the coordinator
+    saw, so it is read first, as the approval dialog reads it. Where it cannot be read - the
+    request already decided, the client not its coordinator - a placeholder is sent, and the
+    approval's own refusal answers, as it would have before."""
     object_session(request).commit()
-    return client.post(_decision_url(request.event_id, request.id, "approve"))
+    return approve_as_seen(client, request.event_id, request.id, fallback=_ANY_FINGERPRINT)
 
 
 def _reject(client, request, reason: str | None = _REJECTION_REASON):
@@ -872,7 +880,11 @@ def test_queue_is_only_for_coordinators(login_as, client, user, expected_status)
 
 @pytest.mark.story("19.2", ac=6)
 @pytest.mark.parametrize(
-    ("decision", "body"), [("approve", None), ("reject", {"reason": _REJECTION_REASON})]
+    ("decision", "body"),
+    [
+        ("approve", {"assessment_fingerprint": _ANY_FINGERPRINT}),
+        ("reject", {"reason": _REJECTION_REASON}),
+    ],
 )
 def test_deciding_on_an_unknown_event_or_request_is_not_found(
     coordinator_client, db: Session, decision, body

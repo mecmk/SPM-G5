@@ -108,6 +108,7 @@ expiry of one hold are serialized by the row lock (AC10).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -1189,12 +1190,18 @@ def earliest_setup_start(db: Session, event_id: uuid.UUID) -> datetime | None:
 
 
 def find_holding_booking(
-    db: Session, venue_id: uuid.UUID, held_from: datetime, held_until: datetime
+    db: Session,
+    venue_id: uuid.UUID,
+    held_from: datetime,
+    held_until: datetime,
+    *,
+    exclude_ids: Collection[uuid.UUID] = (),
 ) -> VenueBooking | None:
     """12.1 AC3: the pending or approved booking (if any) holding ``venue_id`` during part of
     ``held_from``..``held_until``. Half-open periods, as in the exclusion constraint: touching at
-    a boundary is not an overlap (AC6); any partial overlap is (AC8)."""
-    return db.scalars(
+    a boundary is not an overlap (AC6); any partial overlap is (AC8). Story 19.3:
+    ``exclude_ids`` leaves out bookings an approval would release, which hold nothing after it."""
+    query = (
         select(VenueBooking)
         .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.event))
         .where(
@@ -1205,7 +1212,10 @@ def find_holding_booking(
         )
         .order_by(VenueBooking.held_from, VenueBooking.id)
         .limit(1)
-    ).first()
+    )
+    if exclude_ids:
+        query = query.where(VenueBooking.id.not_in(exclude_ids))
+    return db.scalars(query).first()
 
 
 def _requested_requirement(

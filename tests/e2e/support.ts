@@ -189,15 +189,15 @@ export function inFuture(days: number, hour = 9): string {
  * Create and submit a fresh, minimal request with one venue requirement as the signed-in
  * organiser; returns its id. A new request starts with one venue requirement (story 2.7 AC14,
  * f2.7.4), so it is only named: its number of people follows the expected attendance of 60, and
- * its times the event's.
+ * its times the event's. It runs 09:00-17:00, `days` from today (30 unless said).
  */
-export async function createAndSubmitRequest(page: Page, name: string): Promise<string> {
+export async function createAndSubmitRequest(page: Page, name: string, days = 30): Promise<string> {
   await page.goto('/events/new')
   await page.getByLabel('Event name').fill(name)
   await page.getByLabel('Purpose').fill('Staff training')
   await page.getByLabel('Description').fill('One-day hands-on workshop.')
-  await page.getByLabel('Proposed start').fill(inFuture(30, 9))
-  await page.getByLabel('Proposed end').fill(inFuture(30, 17))
+  await page.getByLabel('Proposed start').fill(inFuture(days, 9))
+  await page.getByLabel('Proposed end').fill(inFuture(days, 17))
   await page.getByLabel('Expected attendance').fill('60')
   await page.getByLabel('Contact name').fill('Priya Nair')
   await page.getByLabel('Contact email').fill('priya.nair@example.com')
@@ -267,11 +267,12 @@ export async function assignByLead(page: Page) {
 
 /** A fresh event of the organiser's, approved by whichever coordinator it was assigned to, with
  *  the organiser signed back in on its page. Returns its id, its name and that coordinator's
- *  account. Stories 19.1 and 19.2 raise and decide change requests on it. */
-export async function approvedEvent(page: Page, label: string) {
+ *  account. Stories 19.1 and 19.2 raise and decide change requests on it; story 19.3 dates it
+ *  `days` from today (30 unless said), away from the day other specs book venues on. */
+export async function approvedEvent(page: Page, label: string, days = 30) {
   await signIn(page, ACCOUNTS.organiser)
   const name = uniqueName(label)
-  const eventId = await createAndSubmitRequest(page, name)
+  const eventId = await createAndSubmitRequest(page, name, days)
   await page.goto(`/events/${eventId}`)
   const { account } = await assignByLead(page)
 
