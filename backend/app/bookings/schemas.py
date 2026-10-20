@@ -247,6 +247,8 @@ class BookingOut(BaseModel):
     decided_at: datetime | None
     decision_reason: str | None
     alternative_suggestion: str | None
+    # Story 6.2 AC16: when a cancelled booking was cancelled; None otherwise.
+    cancelled_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -285,6 +287,9 @@ class BookingQueueEntry(BaseModel):
     decision_reason: str | None
     created_at: datetime
     decided_at: datetime | None
+    # Story 6.2 AC16: when a cancelled booking was cancelled, shown beside its approval; None
+    # otherwise, and for one cancelled before migration 026.
+    cancelled_at: datetime | None
     # Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
     # the event's confirmation completed it; R14: the booked start, which the Approve dialog's
     # expiry may not pass (AC5).
@@ -331,6 +336,7 @@ class BookingQueueEntry(BaseModel):
             decision_reason=booking.decision_reason,
             created_at=booking.created_at,
             decided_at=booking.decided_at,
+            cancelled_at=booking.cancelled_at,
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
             held_from=booking.held_from,
@@ -399,6 +405,8 @@ class BookingOutcome(BaseModel):
     status: str
     decided_at: datetime | None
     decision_reason: str | None
+    # Story 6.2 AC16: when a cancelled booking was cancelled; None otherwise.
+    cancelled_at: datetime | None
     # Story 11.1 AC6: why the coordinator requested a venue that did not suit, for the assigned
     # coordinator on the event page. None when the venue suited.
     suitability_override_reason: str | None
@@ -445,6 +453,7 @@ class BookingOutcome(BaseModel):
             status=booking.status,
             decided_at=booking.decided_at,
             decision_reason=booking.decision_reason,
+            cancelled_at=booking.cancelled_at,
             suitability_override_reason=booking.suitability_override_reason,
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,

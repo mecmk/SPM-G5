@@ -50,6 +50,19 @@ export const ACTIVE_EVENT_STATUSES: readonly EventStatus[] = [
 export const TERMINAL_STATUSES: readonly EventStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED']
 
 /**
+ * Story 6.2 AC6: the statuses the organiser can cancel their event from, mirroring the backend's
+ * `_CANCELLABLE_STATUSES` (backend/app/cancellations/service.py). A draft was never submitted, and
+ * a completed, cancelled or rejected event is already over.
+ */
+export const CANCELLABLE_STATUSES: readonly EventStatus[] = [
+  'UNDER_REVIEW',
+  'CLARIFICATION_REQUESTED',
+  'PLANNING',
+  'AWAITING_SAFETY_CHECK',
+  'CONFIRMED',
+]
+
+/**
  * Stories 4.4 AC1 / 4.5 AC1: both approving and rejecting are allowed only while a request
  * awaits a decision, mirroring the backend's `_AWAITING_DECISION_STATUSES`
  * (backend/app/events/service.py).

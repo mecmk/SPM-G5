@@ -148,6 +148,7 @@ C4Component
         Component(equipment, "Equipment service", "app/equipment, epics 15, 16, 17", "The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment an event request asks for, and its hold on submission, are handled in app/events, whose availability calculation this reuses")
         Component(registration, "Registration service", "app/registrations, epic 18", "The Confirmed, Public events taking registrations, each with its booked venues, places left and state for the attendee, and registering: the opening and closing times, capacity and one registration per attendee checked while holding the event's row, with the database's one-active-registration index behind it. An attendee's own registrations, one per event, and withdrawing one until the event starts, in one conditional update with its audit entry. An event's registration list for its organiser and assigned coordinator once past draft, a page at a time, with its active count against capacity read in the same statement, and the events whose list they can pick. An event's registration settings are recorded in app/events")
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the assigned coordinator's queue of them and decision on each. Approving applies the change by the event's own rules, reused from app/events, releases only the bookings and equipment it affects, and returns an event past Planning to Planning for a new safety check")
+        Component(cancellation, "Cancellation service", "app/cancellations, epic 6", "The organiser cancelling their own event with a reason. One transaction, under the event's row lock: its pending and approved bookings and its equipment holds are released, its open equipment items, registrations and pending change requests closed and kept for the record, and who cancelled it, when and why recorded. The coordinator (or the Lead, before one is assigned), the attendees, Venue Staff and Technical Support are told")
         Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest. The coordinator's request for a review once every arrangement is secured, the officer's decision against the review factors with findings of what must change, and confirming an approved event no change request has been approved since. Neither is allowed while a booked venue is marked unavailable or has a replacement pending")
         Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
     }
@@ -164,6 +165,12 @@ C4Component
     Rel(changes, bookings, "Releases the bookings an approved change no longer fits in")
     Rel(safety, bookings, "Reads the venue-unavailable mark, and the pending replacements, of")
     Rel(changes, equipment, "Releases and re-holds the equipment an approved change affects in")
+    Rel(cancellation, events, "Marks an event Cancelled, under its row lock, in")
+    Rel(cancellation, bookings, "Releases a cancelled event's bookings in")
+    Rel(cancellation, equipment, "Releases a cancelled event's equipment in")
+    Rel(cancellation, registration, "Closes a cancelled event's registrations in")
+    Rel(cancellation, changes, "Closes a cancelled event's pending change requests in")
+    Rel(cancellation, notifications, "Raises cancellation notices through")
     Rel(events, registration, "Opens registration for")
     Rel(events, notifications, "Raises submissions through")
     Rel(bookings, notifications, "Raises requests, withdrawals, decisions, hold expiries and releases through")
@@ -179,6 +186,7 @@ C4Component
     Rel(equipment, db, "Reads and writes")
     Rel(registration, db, "Reads and writes")
     Rel(changes, db, "Reads and writes")
+    Rel(cancellation, db, "Reads and writes")
     Rel(safety, db, "Reads and writes")
     Rel(notifications, db, "Reads and writes")
 
@@ -298,7 +306,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 3 | Draft event requests | Event request service | `events` with status `DRAFT` | `app/events` |
 | 4 | Event review and approval | Review and assignment service | `events`, `event_status_history`, `event_clarifications` | `app/events` |
 | 5 | Coordinator assignment | Review and assignment service | `event_coordinator_assignments`, `events.assigned_coordinator_id` | `app/coordination` |
-| 6 | Event status management | Event request service | `events.status`, `event_status_history` | `app/events` |
+| 6 | Event status management | Event request service, Cancellation service | `events.status`, `event_status_history`, the `events.cancelled_*` columns | `app/events`; `app/cancellations` for the organiser cancelling an event and releasing what it holds |
 | 7 | Event information management | Event request service, Audit log writer | `events`, `audit_log` | `app/events` |
 | 8 | Venue catalogue | Venue endpoints, Venue service | `venues`, `venue_facilities`, `venue_layouts`, `venue_accessibility_features` | `app/venues` |
 | 9 | Venue availability calendar | Venue availability service | `venue_unavailability_periods`, `venue_bookings` | `app/venues` |

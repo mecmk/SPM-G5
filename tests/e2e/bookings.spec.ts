@@ -94,6 +94,7 @@ function fakeQueueEntry(index: number) {
     decision_reason: null,
     created_at: '2026-09-20T01:00:00Z',
     decided_at: null,
+    cancelled_at: null,
     // Story 12.6: the queue entry's fields for a replacement and a released original, none set here.
     replaces_venue_name: null,
     approval_releases_venue_name: null,
@@ -676,6 +677,7 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     ends_at: '2026-11-20T09:00:00Z',
     setup_minutes: 60,
     teardown_minutes: 60,
+    cancelled_at: null,
     // Story 12.6: the fields every outcome now carries, none of them set for these three.
     replaces_booking_id: null,
     replaced_by_booking_id: null,

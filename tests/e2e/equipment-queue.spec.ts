@@ -143,7 +143,7 @@ test('15.2 AC5: an empty queue shows a message', async ({ page }) => {
         contentType: 'application/json',
         body: JSON.stringify({
           items: [],
-          counts: { pending: 0, accepted: 0, declined: 0 },
+          counts: { pending: 0, accepted: 0, declined: 0, cancelled: 0 },
         }),
         headers: corsHeaders(request),
       })

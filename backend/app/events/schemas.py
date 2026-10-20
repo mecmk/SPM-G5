@@ -645,7 +645,9 @@ class EventDetailOut(BaseModel):
     requirement since (story 2.7 AC14, AC17): every request created since has at least one.
 
     4.6 AC1: ``decided_by_name``/``decided_at``/``decision_reason`` are all ``None`` until the
-    request has been decided.
+    request has been decided. Story 6.2 AC5: ``cancelled_by_name``/``cancelled_at``/
+    ``cancellation_reason`` likewise until the organiser cancels it; an event cancelled before
+    they were recorded has none.
 
     ``internal_notes`` is coordinator-only (story 7.2): ``from_event`` nulls it out for a viewer
     without ``events:review``, so neither an organiser nor Venue Staff / Tech Support Staff
@@ -688,6 +690,9 @@ class EventDetailOut(BaseModel):
     decided_by_name: str | None
     decided_at: datetime | None
     decision_reason: str | None
+    cancelled_by_name: str | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -733,6 +738,9 @@ class EventDetailOut(BaseModel):
             decided_by_name=event.decided_by.full_name if event.decided_by else None,
             decided_at=event.decided_at,
             decision_reason=event.decision_reason,
+            cancelled_by_name=event.cancelled_by.full_name if event.cancelled_by else None,
+            cancelled_at=event.cancelled_at,
+            cancellation_reason=event.cancellation_reason,
             created_at=event.created_at,
             updated_at=event.updated_at,
         )

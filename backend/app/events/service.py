@@ -675,10 +675,12 @@ def _get_own_event(
     """``actor``'s own request. ``for_update`` holds the row until the transaction ends, so a
     save and a submission of the same request run one after the other (story 2.7 AC12): the
     second waits, then reads what the first committed."""
-    # FOR UPDATE OF events: only the request's own row is held. Postgres refuses to lock the
-    # organiser and coordinator rows Event joins in eagerly, and nothing here needs them held.
-    lock = {"of": Event} if for_update else None
-    event = db.get(Event, event_id, with_for_update=lock, populate_existing=for_update)
+    # Only the request's own row is held, and in a statement of its own: the coordinator Event
+    # joins in eagerly is read afterwards, so a handover that landed while this waited is seen
+    # (``lock_event`` explains why one statement would miss it).
+    if for_update:
+        db.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+    event = db.get(Event, event_id, populate_existing=for_update)
     if event is None or event.organiser_id != actor.id:
         raise EventNotFound(event_id)
     return event
@@ -1777,7 +1779,7 @@ class NoVenueRequirementToApprove(EventStateConflict):
 class MissingDecisionReason(InvalidEventRequest):
     """4.5 AC1: a reason is mandatory to reject. ``EventRejection`` already refuses a blank body
     with a 422 before ``reject_event`` runs; this is the guard for any other caller (4.6's
-    clarification flow, 6.5's cancellation, a seed script, a test factory)."""
+    clarification flow, a seed script, a test factory). Story 6.2's cancellation has its own."""
 
     def __init__(self) -> None:
         super().__init__(DECISION_REASON_REQUIRED_MESSAGE)
@@ -2598,6 +2600,31 @@ def get_own_event_for_update(db: Session, event_id: uuid.UUID, *, actor: User) -
     """``actor``'s own event, its row held until the transaction ends, so a status change racing
     a story 19.1 write waits for it (AC8) - the lock story 2.7 AC12 already relies on."""
     return _get_own_event(db, event_id, actor, for_update=True)
+
+
+def lock_event(db: Session, event_id: uuid.UUID) -> Event | None:
+    """Story 6.2: the event, its row held until the transaction ends and read as it now stands, or
+    None if there is none. A cancellation and the planning writes it races take the event this
+    way, so each waits for the other. ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a Venue Staff
+    approval holds its booking and then writes a notice that names the event, which only
+    ``FOR UPDATE`` would make wait - while the cancellation waited on that booking: a deadlock
+    (story 9.4's re-check takes the event the same way, for the same reason).
+
+    The lock is taken in one statement and the event read in the next. A locking read that waits
+    re-checks only the row it locks, so the coordinator ``Event`` joins in would come back as the
+    statement first found it - none, under an assignment that landed while it waited. The second
+    statement sees everything that landed."""
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
+    return db.get(Event, event_id, populate_existing=True)
+
+
+def lock_own_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
+    """Story 6.2: ``actor``'s own event, held and read as ``lock_event`` does, so a cancellation
+    waits for any other write to the event already under way, and they for it."""
+    event = lock_event(db, event_id)
+    if event is None or event.organiser_id != actor.id:
+        raise EventNotFound(event_id)
+    return event
 
 
 def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:

@@ -155,6 +155,9 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 6.2 AC16: when the item was cancelled - with its event, or by an approved change
+    # (19.2); NULL otherwise, for one cancelled before migration 026, and once a change revives it.
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Story 17.1 AC1: the event, whose period an item holding nothing is for.
     event: Mapped[Event] = relationship(back_populates="equipment_requests")
@@ -345,6 +348,12 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     decision_reason: Mapped[str | None] = mapped_column(Text)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # story 6.2: the organiser's cancellation, kept apart from the review decision above
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text)
 
     organiser: Mapped[User] = relationship(lazy="joined", foreign_keys=[organiser_id])
     assigned_coordinator: Mapped[User | None] = relationship(
@@ -364,3 +373,5 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Default lazy="select": only EventDetailOut's single-row read needs the decider, unlike
     # organiser/assigned_coordinator above, which every review-queue row also needs joined.
     decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id])
+    # Story 6.2 AC5: who cancelled, read for the event's details only, like the decider.
+    cancelled_by: Mapped[User | None] = relationship(foreign_keys=[cancelled_by_id])

@@ -15,7 +15,8 @@ export interface ConfirmDialogProps {
    * confirm button is not offered at all and the cancel button, labelled `cancelLabel`, is the
    * only one left. */
   canConfirm?: boolean
-  /** The label of the button that closes the dialog without confirming. */
+  /** The label of the button that closes the dialog without confirming. Story 6.2 names it
+   *  "Keep event", so it is never read as the "Cancel event" it stands beside. */
   cancelLabel?: string
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */

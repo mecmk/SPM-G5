@@ -69,18 +69,21 @@ Excluded, with reason:
 * Most AC8 and AC13 cases share the test's one connection, so the other transaction is simulated
   by changing the status just before submitting.
   ``test_a_request_waits_for_a_cancellation_landing_at_the_same_time`` runs the real race, on two
-  connections, to pin the row lock that makes it safe.
+  connections, to pin the row lock that makes it safe. AC1's handover also runs on two
+  connections: what it proves is what the waiting request reads.
 """
 
 from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import Engine, delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -89,6 +92,9 @@ from app.change_requests import service as change_requests_service
 from app.change_requests.models import EventChangeRequest
 from app.change_requests.schemas import AttendanceChangeIn
 from app.common.audit import AuditLog
+from app.coordination import service as coordination_service
+from app.coordination.models import EventCoordinatorAssignment
+from app.coordination.schemas import AssignCoordinatorIn
 from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
 from tests.support.factories import (
@@ -1107,6 +1113,106 @@ def test_only_the_owning_organiser_withdraws(login_as, db: Session, case, expect
         assert response.json()["detail"] == expected_detail
     [row] = _change_requests(db, event.id)
     assert row.status == "PENDING"
+
+
+# --- AC1: a request raised while the event changes hands -------------------------------------
+_LOCK_WAIT_SECONDS = 20
+
+
+def _wait_until_waiting(engine: Engine, pids: dict[str, int], name: str) -> None:
+    """Block until the connection ``name`` stands waiting on a row lock another holds."""
+    deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if name in pids:
+            with engine.connect() as watcher:
+                waiting_on = watcher.execute(
+                    text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"),
+                    {"pid": pids[name]},
+                ).scalar()
+            if waiting_on == "Lock":
+                return
+        time.sleep(0.05)
+    raise AssertionError(f"{name} never waited on a lock")
+
+
+@pytest.mark.story("19.1", ac=1)
+def test_a_request_waiting_on_a_handover_tells_the_new_coordinator(engine, monkeypatch):
+    """The Lead hands the event from Chloe to Carl and is held part-way, the event's row locked;
+    Olivia's request waits for it. Once the handover commits, the request must tell Carl, who is
+    assigned now (story 5.6), and not be left reading the coordinator as it stood before it
+    waited."""
+    with Session(engine) as session:
+        event = _planning_event(session)
+        session.add(
+            EventCoordinatorAssignment(
+                event_id=event.id,
+                coordinator_id=Users.COORDINATOR.id,
+                assigned_by_id=Users.LEAD.id,
+            )
+        )
+        session.commit()
+        event_id = event.id
+    pids: dict[str, int] = {}
+    holding, go = threading.Event(), threading.Event()
+    real_current_assignment = coordination_service.current_assignment
+
+    def held_current_assignment(db: Session, event_id: uuid.UUID):
+        holding.set()
+        go.wait(_LOCK_WAIT_SECONDS)
+        return real_current_assignment(db, event_id)
+
+    monkeypatch.setattr(coordination_service, "current_assignment", held_current_assignment)
+
+    def hand_over() -> None:
+        with Session(engine) as session:
+            coordination_service.assign_coordinator(
+                session,
+                event_id,
+                AssignCoordinatorIn(
+                    coordinator_id=Users.COORDINATOR_2.id,
+                    expected_coordinator_id=Users.COORDINATOR.id,
+                ),
+                actor=session.get(User, Users.LEAD.id),
+            )
+
+    def raise_request() -> None:
+        holding.wait(_LOCK_WAIT_SECONDS)
+        with Session(engine) as session:
+            pids["raise"] = session.connection().exec_driver_sql("SELECT pg_backend_pid()").scalar()
+            change_requests_service.raise_change_request(
+                session,
+                event_id,
+                AttendanceChangeIn(field="expected_attendance", proposed=150, reason=_REASON),
+                actor=session.get(User, Users.ORGANISER.id),
+            )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            handing_over = pool.submit(hand_over)
+            raising = pool.submit(raise_request)
+            _wait_until_waiting(engine, pids, "raise")
+            go.set()
+            handing_over.result(timeout=_LOCK_WAIT_SECONDS)
+            raising.result(timeout=_LOCK_WAIT_SECONDS)
+
+        with Session(engine) as session:
+            told = [
+                row.recipient_id
+                for row in _notifications(session, event_id, "EVENT_CHANGE_REQUESTED")
+            ]
+            assert told == [Users.COORDINATOR_2.id]
+    finally:
+        go.set()
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "DELETE FROM audit_log WHERE entity_id = :e OR entity_id IN"
+                    " (SELECT id FROM event_change_requests WHERE event_id = :e)"
+                ),
+                {"e": event_id},
+            )
+            session.execute(text("DELETE FROM events WHERE id = :e"), {"e": event_id})
+            session.commit()
 
 
 # --- AC11-AC13 (fix f19.1.1): change requests on Confirmed events -----------------------------

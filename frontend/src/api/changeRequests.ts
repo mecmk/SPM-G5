@@ -10,7 +10,7 @@ export type ChangeRequestField =
   'schedule' | 'expected_attendance' | 'venue_requirements' | 'equipment'
 
 /** Values of `ck_event_change_requests_status`. */
-export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED'
 
 /** Mirrors `ProposedSchedule`: the event's new start and end, requested together. */
 export interface ProposedSchedule {

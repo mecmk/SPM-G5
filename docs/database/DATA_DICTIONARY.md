@@ -384,14 +384,17 @@ An event request and, once approved, the event itself - one row for the whole li
 | `contact_phone` | `text` | yes | - | - | Contact phone. |
 | `internal_notes` | `text` | yes | - | - | Coordinator-only notes; never shown to organisers or attendees. Routine field. |
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the organiser submitted the request (NULL while DRAFT). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) or cancellation was recorded (story 4.4 AC2, 4.5). |
+| `decided_at` | `timestamp with time zone` | yes | - | - | When the review decision (approve/reject) was recorded (story 4.4 AC2, 4.5). A cancellation is recorded in cancelled_at. |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Coordinator who made the decision. |
-| `decision_reason` | `text` | yes | - | - | Reason given on rejection (mandatory, story 4.5 AC1) or cancellation (story 6.5 AC2). |
+| `decision_reason` | `text` | yes | - | - | Reason given on rejection (mandatory, story 4.5 AC1). A cancellation's reason is cancellation_reason. |
 | `confirmed_at` | `timestamp with time zone` | yes | - | - | When the coordinator confirmed the event (status CONFIRMED). |
 | `completed_at` | `timestamp with time zone` | yes | - | - | When the event was marked COMPLETED. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). Also serves as the draft last-modified time (story 3.3 AC3). |
 | `is_public` | `boolean` | no | `false` | - | Whether the event is publicly listed (TRUE) or reachable only by a shared link (FALSE),     story 2.1 AC19. Defaults to private. No public listing page or link-sharing mechanism exists     yet - this only captures and displays the organiser's choice. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the organiser cancelled the event (story 6.2 AC5). Set with cancelled_by_id and cancellation_reason, and only on a CANCELLED event. |
+| `cancelled_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The organiser who cancelled the event (story 6.2 AC5, AC11). |
+| `cancellation_reason` | `text` | yes | - | - | Why the organiser cancelled the event; mandatory, never blank (story 6.2 AC7). |
 
 Allowed values:
 
@@ -400,6 +403,9 @@ Allowed values:
 Rules and indexes:
 
 - check `ck_events_attendance_positive`: `CHECK (((expected_attendance IS NULL) OR (expected_attendance > 0)))`
+- check `ck_events_cancellation_complete`: `CHECK ((num_nonnulls(cancelled_at, cancelled_by_id, cancellation_reason) = ANY (ARRAY[0, 3])))`
+- check `ck_events_cancellation_reason`: `CHECK ((btrim(cancellation_reason) <> ''::text))`
+- check `ck_events_cancellation_status`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_events_period`: `CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (ends_at > starts_at)))`
 - check `ck_events_registration_capacity`: `CHECK (((registration_capacity IS NULL) OR (registration_capacity > 0)))`
 - check `ck_events_registration_closes_before_start`: `CHECK (((registration_closes_at IS NULL) OR (starts_at IS NULL) OR (registration_closes_at <= starts_at)))`
@@ -494,6 +500,7 @@ One item per equipment type an event needs, with quantity and technical notes. T
 | `submitted_at` | `timestamp with time zone` | yes | - | - | When the item was last sent to Technical Support: on submission, or again when the event's dates changed (story 15.1 AC1, AC8). NULL until it is sent. |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who accepted or declined the item (story 16.1 AC3). NULL until it is decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | When the item was accepted or declined (story 16.1 AC3). NULL until it is decided. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the item was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change removed it (19.2). Only on a CANCELLED item; cleared when a change brings it back. |
 
 Allowed values:
 
@@ -501,6 +508,7 @@ Allowed values:
 
 Rules and indexes:
 
+- check `ck_event_equipment_requests_cancelled_at`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_event_equipment_requests_quantity`: `CHECK ((quantity > 0))`
 - index `ix_event_equipment_requests_event`: `btree (event_id)`
 
@@ -582,7 +590,7 @@ A request by the organiser to change an important field (date and time, attendan
 | `current_value` | `text` | yes | - | - | The value when the request was raised, as canonical JSON text, for display (story 19.2 AC2). |
 | `proposed_value` | `text` | no | - | - | The requested new value, as canonical JSON text, validated by the creation rules (story 19.1 AC3/AC4). |
 | `reason` | `text` | no | - | - | Why the change is needed (mandatory). |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED or WITHDRAWN. The organiser may withdraw a PENDING request (story 19.1 AC9). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN or CANCELLED. The organiser may withdraw a PENDING request (story 19.1 AC9); cancelling the event closes it as CANCELLED (story 6.2 AC4). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Coordinator who decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | Decision time (story 19.4 AC2). |
 | `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 19.5 AC1). |
@@ -592,7 +600,7 @@ A request by the organiser to change an important field (date and time, attendan
 Allowed values:
 
 - `field_name`: `schedule`, `expected_attendance`, `venue_requirements`, `equipment`
-- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`
+- `status`: `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`
 
 Rules and indexes:
 
@@ -646,10 +654,10 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `required_layout_code` | `text` | yes | - | FK → `room_layouts.code` | FK -> room_layouts.code. Layout requested (story 12.1 AC2). |
 | `requirement_notes` | `text` | yes | - | - | Required facilities and other requirements, as stated to Venue Staff. |
 | `suitability_override_reason` | `text` | yes | - | - | Justification recorded when the coordinator books a venue the suitability check flagged as unsuitable (story 11.3 AC2). NULL when no override. |
-| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3); an APPROVED booking whose replacement is approved becomes CANCELLED, with replaced_by_booking_id set (story 12.6 AC3), and one an approved change to its event no longer fits becomes CANCELLED with no replacement (story 19.2 AC5). |
+| `status` | `text` | no | `'PENDING'` | - | PENDING, APPROVED, REJECTED, WITHDRAWN, CANCELLED or EXPIRED. PENDING and APPROVED hold the venue for the held period (story 12.1 AC3); an APPROVED booking whose event is not confirmed by hold_expires_at becomes EXPIRED (story 12.7 AC3). |
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Venue Staff member who approved or rejected (story 13.2 AC1) - for an EXPIRED booking, who approved it - or the coordinator who withdrew the request (story 12.2). NULL when the system cancelled it (migration 010). |
-| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), for a WITHDRAWN or CANCELLED request, when it was closed - except an approved booking a replacement released (story 12.6 AC3) or an approved change released (story 19.2 AC5), whose decided_at stays its approval: when a released original closed is its replacement's decided_at, or is not recorded for a change. |
-| `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). On an approved booking released by its replacement (story 12.6 AC3): "Replaced by <venue>". |
+| `decided_at` | `timestamp with time zone` | yes | - | - | Decision time; for an EXPIRED booking, when it was approved (it expired at hold_expires_at), and for a WITHDRAWN or CANCELLED request, when it was closed. |
+| `decision_reason` | `text` | yes | - | - | Mandatory when rejected (story 13.2.1 AC1/AC2). |
 | `alternative_suggestion` | `text` | yes | - | - | Optional alternative dates/venues suggested on rejection (story 13.3 AC2). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
@@ -661,9 +669,7 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `hold_expiry_changed_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Venue Staff member who last changed hold_expires_at (story 12.7 AC7, AC9). Set with hold_expiry_change_reason and hold_expiry_changed_at, or not at all (ck_venue_bookings_hold_expiry_change). |
 | `hold_expiry_changed_at` | `timestamp with time zone` | yes | - | - | When hold_expires_at was last changed by Venue Staff (story 12.7 AC7). Set with hold_expiry_change_reason and hold_expiry_changed_by_id, or not at all. |
 | `venue_unavailable_marked_at` | `timestamp with time zone` | yes | - | - | When the booking was marked "Venue unavailable - alternative needed" (story 9.4 AC3): set while a pending or approved booking's held period overlaps, from the later of now and the period's start to its end, one of its venue's unavailability periods; kept while any still does, and cleared when none does (AC6). Only the part of the held period still to come counts, so a period wholly in the past marks nothing. NULL when unmarked. A value left on a booking that is no longer pending or approved is history: readers ignore it and nothing clears it. |
-| `replaces_booking_id` | `uuid` | yes | - | - | FK -> venue_bookings.id, with event_id (fk_venue_bookings_replaces), so always a booking of the same event. The booking this one was requested to replace, because Venue Staff made its venue unavailable (story 12.6 AC2); NULL for every other booking. Set when the replacement is requested and never cleared, so a rejected or withdrawn replacement still says what it was for. The original stays approved until the replacement is approved (AC3, AC4). |
-| `replaced_by_booking_id` | `uuid` | yes | - | FK → `venue_bookings.id` | FK -> venue_bookings.id. On an original released by its replacement: the replacement whose approval released it (story 12.6 AC3), set in that same transaction and only on a CANCELLED booking (ck_venue_bookings_replaced_by_cancelled). The event page shows "Replaced by <venue>" only when this is set, so a replacement that was never approved is never shown as having replaced it (AC8). NULL otherwise; a booking replaces at most one original (uq_venue_bookings_replaced_by). |
-| `replaces_live_original` | `boolean` | no | `false` | - | TRUE on a replacement (replaces_booking_id) from the moment it is requested, while its original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE on a PENDING replacement when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement's request. The index reads it only for a PENDING booking: on a decided replacement it keeps what it had and means nothing. FALSE for every other booking. |
+| `cancelled_at` | `timestamp with time zone` | yes | - | - | When the booking was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change no longer fit it (19.2). Only on a CANCELLED booking; decided_by_id and decided_at keep its earlier decision. |
 
 Allowed values:
 
@@ -671,20 +677,15 @@ Allowed values:
 
 Rules and indexes:
 
-- unique `uq_venue_bookings_id_event`: `UNIQUE (id, event_id)`
-- unique `uq_venue_bookings_replaced_by`: `UNIQUE (replaced_by_booking_id)`
 - exclusion `ex_venue_bookings_no_double_booking`: `EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)'::text) WITH &&) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])))`
 - check `ck_venue_bookings_attendance`: `CHECK ((expected_attendance > 0))`
+- check `ck_venue_bookings_cancelled_at`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_venue_bookings_hold_completed`: `CHECK (((hold_completed_at IS NULL) OR ((hold_expires_at IS NOT NULL) AND (status <> 'EXPIRED'::text))))`
 - check `ck_venue_bookings_hold_expiry`: `CHECK ((((status <> 'PENDING'::text) OR (hold_expires_at IS NULL)) AND ((status <> 'EXPIRED'::text) OR (hold_expires_at IS NOT NULL))))`
 - check `ck_venue_bookings_hold_expiry_change`: `CHECK ((num_nonnulls(hold_expiry_change_reason, hold_expiry_changed_by_id, hold_expiry_changed_at) = ANY (ARRAY[0, 3])))`
-- check `ck_venue_bookings_live_original_is_a_replacement`: `CHECK (((NOT replaces_live_original) OR (replaces_booking_id IS NOT NULL)))`
-- check `ck_venue_bookings_not_self_replacement`: `CHECK ((replaces_booking_id IS DISTINCT FROM id))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
-- check `ck_venue_bookings_replaced_by_cancelled`: `CHECK (((replaced_by_booking_id IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
-- unique index `uq_venue_bookings_one_pending_replacement`: `btree (replaces_booking_id) WHERE ((status = 'PENDING'::text) AND (replaces_booking_id IS NOT NULL))`
-- unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])) AND (NOT ((status = 'PENDING'::text) AND replaces_live_original)))`
+- unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE (status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text]))`
 - index `ix_venue_bookings_event`: `btree (event_id)`
 - index `ix_venue_bookings_open_holds`: `btree (hold_expires_at) WHERE ((status = 'APPROVED'::text) AND (hold_completed_at IS NULL))`
 - index `ix_venue_bookings_status`: `btree (status)`
