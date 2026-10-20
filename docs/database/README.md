@@ -137,7 +137,7 @@ All passwords are `Password123!`.
 
 | Role | Email |
 | --- | --- |
-| Event Organiser | `organiser@acme.example`, `organiser@nimbus.example` |
+| Event Organiser | `organiser@acme.example`, `organiser@nimbus.example`, `nadia@notice.example` |
 | Event Coordinator | `coordinator@connectsphere.example`, `coordinator2@connectsphere.example` |
 | Event Coordinator Lead | `lead@connectsphere.example` |
 | Venue Staff | `venue@connectsphere.example` |

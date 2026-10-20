@@ -28,6 +28,7 @@ from tests.support.seed import (
     EquipmentItems,
     EquipmentOutOfService,
     Events,
+    Notifications,
     Registrations,
     Unavailability,
     Users,
@@ -436,6 +437,23 @@ def test_seed_constants_match_database(db: Session):
             text("SELECT 1 FROM equipment_unavailability_periods WHERE id = :id"),
             {"id": period_id},
         ).scalar()
+    # Story 20.2: Nadia Notice, her event and her nine notifications, newest first.
+    assert db.execute(
+        text("SELECT email, role_code FROM users WHERE id = :id"), {"id": Users.NOTICE.id}
+    ).one() == (Users.NOTICE.email, Users.NOTICE.role)
+    assert db.execute(
+        text("SELECT organiser_id, status FROM events WHERE id = :id"), {"id": Events.NOTICE_GALA}
+    ).one() == (Users.NOTICE.id, "PLANNING")
+    listed = db.execute(
+        text(
+            "SELECT id, notification_type, title, read_at IS NOT NULL FROM notifications"
+            " WHERE recipient_id = :id ORDER BY created_at DESC"
+        ),
+        {"id": Users.NOTICE.id},
+    ).all()
+    assert [tuple(row) for row in listed] == [
+        tuple(notification) for notification in Notifications.NEWEST_FIRST
+    ]
 
 
 @pytest.mark.story("1")

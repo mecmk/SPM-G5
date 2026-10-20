@@ -517,10 +517,12 @@ class _Refused(NamedTuple):
     ],
 )
 def test_a_refused_action_notifies_nobody(login_as, db: Session, refused: _Refused):
+    before = _notification_count(db)
+
     response = login_as(refused.actor).post(refused.path, json=refused.body)
 
     assert response.status_code == refused.status, response.text
-    assert _notification_count(db) == 0
+    assert _notification_count(db) == before
 
 
 class _FailsAtAudit(NamedTuple):
@@ -648,6 +650,7 @@ def test_a_submission_with_no_active_lead_notifies_nobody(organiser_client, db: 
     )
     db.expire_all()
     draft = create_submittable_event_request(organiser_client)
+    before = _notification_count(db)
 
     response = organiser_client.post(f"/events/{draft['id']}/submit")
 
@@ -657,12 +660,13 @@ def test_a_submission_with_no_active_lead_notifies_nobody(organiser_client, db: 
         {"id": draft["id"]},
     ).one()
     assert (status, coordinator_id) == (EventStatus.UNDER_REVIEW, None)
-    assert _notification_count(db) == 0
+    assert _notification_count(db) == before
 
 
 @pytest.mark.story("20.1", ac=5)
 def test_only_defined_notification_types_can_be_sent(db: Session):
     chloe = db.get(User, Users.COORDINATOR.id)
+    before = _notification_count(db)
 
     with pytest.raises(ValueError):
         notify(
@@ -674,7 +678,7 @@ def test_only_defined_notification_types_can_be_sent(db: Session):
             message="Nobody has said who receives this.",
             commit=False,
         )
-    assert _notification_count(db) == 0
+    assert _notification_count(db) == before
 
 
 @pytest.mark.story("20.1", ac=5)
