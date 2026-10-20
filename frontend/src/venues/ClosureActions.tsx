@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ApiError, formatApiError } from '../api/client'
 import { endUnavailabilityNow, removeUnavailability } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { DayClosure } from '../components/venueCalendarDays'
+import { END_CLOSURE_HINT, REMOVE_CLOSURE_HINT } from './blockOffLabels'
 
 export interface ClosureActionsProps {
   venueId: string
   closure: DayClosure
+  /** The calendar's clock (`useVenueCalendar`'s `now`), which decides what the row offers: the
+   *  same clock that labels the closure Unavailable or Ended. */
+  now: number
   /** Edit was pressed: the page opens its form on this closure. */
   onEdit: (closure: DayClosure) => void
   /** The closure was ended or removed, so the page loads its calendar again. */
@@ -15,30 +19,21 @@ export interface ClosureActionsProps {
 
 type PendingAction = 'end' | 'remove'
 
-/** How often a row looks at the clock again. */
-const CLOCK_TICK_MS = 60_000
-
 /**
  * Story 9.4 AC6: what Venue Staff can do to a closure from its row in the day list. One not yet
  * started can be edited or removed; one in force can be edited or ended now, and the calendar
  * keeps it as history; one that has ended has nothing - Venue Staff add a new closure instead.
- * Each of ending and removing asks first. The page decides from its own clock, and the backend
- * decides again, so a press that races the boundary shows the backend's sentence in the dialog.
+ * Each of ending and removing asks first. The calendar's clock decides, and the backend decides
+ * again, so a press that races the boundary shows the backend's sentence in the dialog.
  */
-export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureActionsProps) {
+export function ClosureActions({ venueId, closure, now, onEdit, onChanged }: ClosureActionsProps) {
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isGone, setIsGone] = useState(false)
 
-  // The row's own clock, moved on every minute, so a row left open across a closure's start
-  // switches from Remove to End now, and one left open across its end loses its buttons, without
-  // a reload. The backend decides again on the press.
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
-    return () => clearInterval(timer)
-  }, [])
+  // `now` moves on every minute, so a row left open across a closure's start switches from Remove
+  // to End now, and one left open across its end loses its buttons, without a reload.
   const hasEnded = Date.parse(closure.endsAt) <= now
   const hasStarted = Date.parse(closure.startsAt) < now
   if (hasEnded) return null
@@ -87,15 +82,12 @@ export function ClosureActions({ venueId, closure, onEdit, onChanged }: ClosureA
       <button type="button" className="secondary button-sm" onClick={handleEdit}>
         Edit
       </button>
-      {hasStarted ? (
+      <span className="closure-action">
         <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
-          End now
+          {hasStarted ? 'End now' : 'Remove'}
         </button>
-      ) : (
-        <button type="button" className="secondary button-sm" onClick={askToEndOrRemove}>
-          Remove
-        </button>
-      )}
+        <span className="small muted">{hasStarted ? END_CLOSURE_HINT : REMOVE_CLOSURE_HINT}</span>
+      </span>
       {pending === 'end' && (
         <ConfirmDialog
           title="End this closure now?"

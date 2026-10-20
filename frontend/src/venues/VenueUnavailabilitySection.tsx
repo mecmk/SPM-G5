@@ -73,7 +73,7 @@ interface PreviewResult {
 }
 
 /**
- * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its page. The form takes a
+ * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its Edit venue page. The form takes a
  * start, an end, a reason and a description, which every reason needs. An end that is not after
  * the start is refused in the form, beside the fields, before anything is sent. Once both ends
  * make a period, the pending and approved bookings it would affect - setup and teardown included -
@@ -367,7 +367,7 @@ export function VenueUnavailabilitySection({
 
         <div className="cluster">
           <button type="submit" className="brand" disabled={isSaving || !canSave}>
-            {editing === null ? 'Save closure' : 'Save changes'}
+            Save closure
           </button>
           <button type="button" className="secondary" onClick={close} disabled={isSaving}>
             Cancel

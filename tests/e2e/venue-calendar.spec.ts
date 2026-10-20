@@ -405,6 +405,33 @@ function plainWindow(
   }
 }
 
+test('9.4 AC1: a past booking stays red, an ended closure is muted, and a day with both keeps its red', async ({
+  page,
+}) => {
+  // The page's clock is the 15th of September; every window below is before it. A closure that has
+  // ended is history, so it is muted; a booking is not history because its day has passed.
+  await stubCalendar(page, (month) => [
+    plainWindow(month, 3, ['10:00', '12:00'], { reason: 'BOOKED', label: 'Stub Past Booking' }),
+    {
+      ...plainWindow(month, 6, ['10:00', '12:00'], { reason: 'MAINTENANCE', label: 'Maintenance' }),
+      id: 'stub-closure-6',
+    } as StubWindow,
+    {
+      ...plainWindow(month, 9, ['10:00', '12:00'], { reason: 'MAINTENANCE', label: 'Maintenance' }),
+      id: 'stub-closure-9',
+    } as StubWindow,
+    plainWindow(month, 9, ['14:00', '16:00'], { reason: 'BOOKED', label: 'Stub Same Day Booking' }),
+  ])
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+  await page.getByRole('link', { name: 'Grand Hall' }).click()
+  await expect(page.getByText('Loading availability…')).toHaveCount(0)
+
+  await expect(dayButton(page, /^3 September 2026/)).toHaveClass(/calendar-cell-danger/)
+  await expect(dayButton(page, /^6 September 2026/)).toHaveClass(/calendar-cell-muted/)
+  await expect(dayButton(page, /^9 September 2026/)).toHaveClass(/calendar-cell-danger/)
+})
+
 test('9.1 AC7/AC8: several events on one day are all listed in time order, back-to-back apart', async ({
   page,
 }) => {

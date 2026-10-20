@@ -7,7 +7,7 @@ import {
   weekdayLabels,
 } from './calendarGrid'
 
-export type CalendarEntryTone = 'danger' | 'warning' | 'info' | 'success'
+export type CalendarEntryTone = 'danger' | 'warning' | 'info' | 'success' | 'muted'
 
 export interface CalendarEntry {
   id: string
@@ -64,6 +64,7 @@ function openableDayName(dayLabel: string, dayEntries: CalendarEntry[]): string 
 }
 
 const TONE_RANK: Record<CalendarEntryTone, number> = {
+  muted: -1,
   success: 0,
   info: 1,
   warning: 2,
