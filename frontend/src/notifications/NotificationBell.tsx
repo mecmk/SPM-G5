@@ -48,7 +48,8 @@ interface NotificationBellProps {
  */
 export function NotificationBell({ placement, isSidebarCollapsed = false }: NotificationBellProps) {
   const { notifications: recentActions } = useNotifications()
-  const { notifications, unreadCount, listError, markRead, markAllRead } = useServerNotifications()
+  const { notifications, unreadCount, listError, refresh, markRead, markAllRead } =
+    useServerNotifications()
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
@@ -65,7 +66,9 @@ export function NotificationBell({ placement, isSidebarCollapsed = false }: Noti
     .filter(Boolean)
     .join(' ')
 
+  /** Story 20.2 AC2: opening the panel reads the count and the list again. */
   function togglePanel() {
+    if (!isOpen) refresh()
     setIsOpen(!isOpen)
   }
 
