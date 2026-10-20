@@ -1863,10 +1863,14 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
     ('aaaaaaaa-0000-0000-0000-000000020204', '33333333-0000-0000-0000-000000020202', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-08 09:00+08')
 ON CONFLICT (id) DO NOTHING;
 
+-- Nadia's nine notifications are fixtures for exercising the bell. They do not describe her event's
+-- real history: it has no booking, safety review or change request behind them.
 INSERT INTO notifications (id, recipient_id, event_id, notification_type, title, message, related_entity_type, related_entity_id, created_at, read_at) VALUES
     ('dddddddd-0000-0000-0000-000000020207', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
      'EVENT_CONFIRMED', '"Harbour Lights Gala" is confirmed', 'Sam Safety confirmed the event after it passed the safety review.',
      'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:45:00+08', NULL),
+    -- The change-approved notice's related_entity_id (eeeeeeee..020206) points at no row: no change
+    -- request is inserted.
     ('dddddddd-0000-0000-0000-000000020208', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
      'EVENT_CHANGE_APPROVED', 'Change approved for Harbour Lights Gala', 'Carl Coordinator approved your request to change the expected attendance.',
      'event_change_request', 'eeeeeeee-0000-0000-0000-000000020206', '2026-10-19 17:30:00+08', NULL),
@@ -1876,6 +1880,9 @@ INSERT INTO notifications (id, recipient_id, event_id, notification_type, title,
     ('dddddddd-0000-0000-0000-000000020210', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
      'BOOKING_VENUE_UNAVAILABLE', 'Exhibition Foyer is unavailable for "Harbour Lights Gala"', 'Exhibition Foyer is unavailable on Wed 9 Feb 2028 from 09:00 to 17:00 (Maintenance). Its booking for "Harbour Lights Gala" falls in that period, so the event needs another venue.',
      'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:00:00+08', NULL),
+    -- This row cannot occur in the real app: an approval of Olivia's draft, which Nadia cannot open,
+    -- sent to Nadia. It exists only to show the AC4 message ("This is no longer available to you.")
+    -- end to end.
     ('dddddddd-0000-0000-0000-000000020211', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000000001',
      'EVENT_APPROVED', '"Q1 Sales Kick-off (draft)" was approved', 'Chloe Coordinator approved your request. It is now being planned.',
      'event', '33333333-0000-0000-0000-000000000001', '2026-10-19 16:45:00+08', NULL),

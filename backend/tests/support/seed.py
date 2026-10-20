@@ -395,8 +395,9 @@ class SafetyReviews:
 
 class Notifications:
     """Story 20.2: Nadia Notice's nine notifications, newest first (the order the bell lists
-    them in), as ``(id, type, title, is_read)``. Seven are unread. The fifth is about Olivia's
-    draft (``Events.DRAFT``), which Nadia cannot open, so its target is none."""
+    them in), as ``(id, type, title, is_read)``. Seven are unread. They are fixtures for the bell,
+    not her event's history. The fifth is about Olivia's draft (``Events.DRAFT``), which Nadia
+    cannot open, so its target is none: it cannot occur in the real app."""
 
     CONFIRMED = uuid.UUID("dddddddd-0000-0000-0000-000000020207")
     CHANGE_APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020208")
@@ -407,7 +408,6 @@ class Notifications:
     APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020213")
     REJECTED = uuid.UUID("dddddddd-0000-0000-0000-000000020214")  # read
     REASSIGNED = uuid.UUID("dddddddd-0000-0000-0000-000000020215")  # read
-    CHANGE_REQUEST = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")  # named by CHANGE_APPROVED
 
     NEWEST_FIRST = (
         (CONFIRMED, "EVENT_CONFIRMED", '"Harbour Lights Gala" is confirmed', False),
