@@ -78,6 +78,7 @@ from tests.support.factories import (
     approval_payload,
     create_submittable_event_request,
     future_datetime,
+    make_change_request,
     make_event,
     make_secured_event,
     make_user,
@@ -397,7 +398,19 @@ def test_a_notification_targets_the_page_its_reader_acts_on(
         "venue_booking": Bookings.PENDING_EXHIBITION_FOYER,
         "event_change_request": uuid.uuid4(),
     }[entity_type]
-    row = _notice(db, reader, notification_type, entity_type=entity_type, entity_id=entity_id)
+    event_id = Events.SUBMITTED
+    if kind == "change_request_queue":
+        # The queue holds a real pending request on an event its coordinator still coordinates.
+        event = make_event(db, status=EventStatus.PLANNING, assigned_coordinator_id=reader.id)
+        event_id, entity_id = event.id, make_change_request(db, event=event).id
+    row = _notice(
+        db,
+        reader,
+        notification_type,
+        event_id=event_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     expected_id = {
         "event": str(Events.SUBMITTED),
         "booking": str(Bookings.PENDING_EXHIBITION_FOYER),
@@ -713,6 +726,29 @@ def test_a_change_request_on_an_event_reassigned_away_sends_the_coordinator_to_t
 
     assert notice["event_id"] == str(event.id)
     assert notice["target"] == {"kind": "event", "id": str(event.id)}
+
+
+@pytest.mark.story("20.2", ac=4)
+@pytest.mark.parametrize(
+    "status", [EventStatus.CANCELLED, EventStatus.COMPLETED, EventStatus.REJECTED]
+)
+def test_a_pending_request_on_an_event_not_going_ahead_sends_the_coordinator_to_the_event(
+    login_as, db: Session, status: str
+):
+    """The coordinator's queue leaves out a pending request on a cancelled, completed or rejected
+    event (``list_coordinator_change_requests``), so the notice goes to the event."""
+    event = make_event(db, status=status, assigned_coordinator_id=Users.COORDINATOR.id)
+    request = make_change_request(db, event=event)
+    row = _notice(
+        db,
+        Users.COORDINATOR,
+        NotificationType.EVENT_CHANGE_REQUESTED,
+        event_id=event.id,
+        entity_type="event_change_request",
+        entity_id=request.id,
+    )
+
+    assert _target_of(login_as(Users.COORDINATOR), row) == {"kind": "event", "id": str(event.id)}
 
 
 # --- AC4: no target when the reader has no page for it, cannot open it, or it is gone ---------
