@@ -614,7 +614,9 @@ def list_reference_data(db: Session) -> EventReferenceData:
     )
 
 
-def _can_view(viewer: User, event: Event) -> bool:
+def can_view_event(viewer: User, event: Event) -> bool:
+    """The rule ``get_event`` applies, for a caller holding the event already (story 20.2's
+    notification targets): the organiser sees their own, internal roles see every submitted one."""
     if event.organiser_id == viewer.id:
         return True
     is_submitted = event.status != EventStatus.DRAFT
@@ -626,7 +628,7 @@ def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
     submitted one. A draft is private to its organiser, and anything else the viewer may not
     see is simply not found."""
     event = db.get(Event, event_id)
-    if event is None or not _can_view(viewer, event):
+    if event is None or not can_view_event(viewer, event):
         raise EventNotFound(event_id)
     return event
 
@@ -2606,7 +2608,7 @@ def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> E
     reassignment already under way (and they for it), then reads what landed first. Only the
     event's own row is held, as in ``_get_own_event``."""
     event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
-    if event is None or not _can_view(viewer, event):
+    if event is None or not can_view_event(viewer, event):
         raise EventNotFound(event_id)
     return event
 

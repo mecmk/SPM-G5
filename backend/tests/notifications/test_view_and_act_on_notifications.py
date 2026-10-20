@@ -55,7 +55,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, delete, func, select
+from sqlalchemy import Engine, delete, event, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -541,6 +541,72 @@ def test_a_submission_reaches_the_lead_with_the_unassigned_queue_until_it_is_ass
     assert assigned.status_code == 200, assigned.text
     assert after_assignment["id"] == unassigned["id"]
     assert after_assignment["target"] == {"kind": "event", "id": draft["id"]}
+
+
+def _statements_run_by(db: Session, call) -> list[str]:
+    """The SQL statements ``call()`` sends, in order."""
+    sent: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        sent.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record)
+    try:
+        call()
+    finally:
+        event.remove(connection, "before_cursor_execute", record)
+    return sent
+
+
+def _awaiting_check_rows(db: Session, count: int) -> None:
+    """``count`` Safety Officer notifications, each about an event of its own awaiting the check."""
+    for _ in range(count):
+        event_row = make_event(
+            db, status=EventStatus.AWAITING_SAFETY_CHECK, assigned_coordinator_id=None
+        )
+        _notice(
+            db,
+            Users.SAFETY_OFFICER,
+            NotificationType.SAFETY_REVIEW_REQUESTED,
+            event_id=event_row.id,
+            entity_id=event_row.id,
+        )
+
+
+def _booking_request_rows(db: Session, count: int) -> None:
+    """``count`` Venue Staff notifications, each about a booking of its own (none exists)."""
+    for _ in range(count):
+        _notice(
+            db,
+            Users.VENUE_STAFF,
+            NotificationType.BOOKING_REQUESTED,
+            entity_type="venue_booking",
+            entity_id=uuid.uuid4(),
+        )
+
+
+@pytest.mark.story("20.2", ac=1)
+@pytest.mark.parametrize(
+    ("reader", "add_rows"),
+    [
+        pytest.param(Users.SAFETY_OFFICER, _awaiting_check_rows, id="events-and-safety-checks"),
+        pytest.param(Users.VENUE_STAFF, _booking_request_rows, id="bookings"),
+    ],
+)
+def test_the_targets_of_a_full_page_take_no_more_queries_than_those_of_a_short_one(
+    login_as, db: Session, reader: SeedUser, add_rows
+):
+    """The events, bookings and safety checks a page names are read in one query each, so a page
+    of 50 sends as many statements as a page of 5."""
+    client = login_as(reader)
+    add_rows(db, 5)
+    short_page = _statements_run_by(db, lambda: client.get("/notifications"))
+    add_rows(db, LIST_LIMIT - 5)
+    full_page = _statements_run_by(db, lambda: client.get("/notifications"))
+
+    assert len(_listed(client)) == LIST_LIMIT
+    assert len(full_page) == len(short_page)
 
 
 # --- AC4: no target when the reader has no page for it, cannot open it, or it is gone ---------

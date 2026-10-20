@@ -339,6 +339,8 @@ def test_a_new_notification_is_in_its_recipients_list_straight_away(client, db: 
         "related_entity_type",
         "related_entity_id",
         "created_at",
+        "read_at",
+        "target",
     }
     assert newest["notification_type"] == "EVENT_APPROVED"
     assert newest["event_id"] == str(Events.SUBMITTED)
