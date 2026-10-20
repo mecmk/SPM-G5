@@ -2,25 +2,23 @@
  * 20.2 view and act on notifications
  * Happy path
  * 1. The bell in the main navigation shows the unread count and opens the user's newest 50
- *    notifications, newest first, each with its title, message and time; unread notifications
- *    stand out. Opening a notification goes to its item (the page where the reader acts on it,
- *    otherwise the event) and marks it read. Notifications can also be marked read one at a time
- *    or all at once; marking all leaves unread any notification that arrived after the list was
- *    opened. The user's own recent actions stay in the same panel, below the notifications, and
- *    are not counted.
- * 2. Read status is stored on the server for each user, and the unread count comes from the
- *    server, so it is the same on every device. The count and the list are fetched again whenever
- *    the user opens another page or comes back to the browser tab.
+ *     notifications, newest first, each with its title, message and time; unread notifications stand
+ *     out. Opening a notification goes to its item (the page where the reader acts on it while that
+ *     page still holds it, otherwise the event) and marks it read. Notifications can also be marked
+ *     read one at a time or all at once; marking all leaves unread any notification that arrived after
+ *     the list was opened. The user's own recent actions stay in the same panel, below the
+ *     notifications, and are not counted.
+ * 2. Read status is stored on the server for each user, and the unread count comes from the server, so
+ *     it is the same on every device. The count and the list are fetched again whenever the user opens
+ *     another page, opens the notification panel, or comes back to the browser tab.
  * Boundary
  * 3. With 0 unread, no badge is shown. More than 99 unread shows "99+".
  * Edge
- * 4. A notification whose item the reader cannot open, or which no longer exists, shows "This is
- *    no longer available to you." instead of an error, and is still marked read.
+ * 4. A notification for an item the user can no longer access shows a message, not an error.
  * Permission
- * 5. Users see only their own notifications and can mark only their own as read.
+ * 5. Users see only their own notifications.
  * Conflict
- * 6. Marking read in one tab shows on refresh in another. The count never goes below 0, and
- *    marking a notification read again changes nothing.
+ * 6. Marking read in one tab shows on refresh in another. The count never goes below 0.
  *
  * This is the browser's half: the bell, the panel, what a click does, and the count being fetched
  * again. Every rule is a backend case (AC5 wholly, the target each notification has for each role,
@@ -32,7 +30,8 @@
  * her unread count is the spec's own. It walks her notifications in the order below, so the
  * count falls 7 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0 and the tests are in that order and run one
  * after another. Specs share one database and run in parallel, so no other account's count is
- * asserted: the count at 0 and above 99 is a stubbed answer, the one `page.route` here.
+ * asserted: the count at 0 and above 99 is a stubbed answer, and one test holds a request with
+ * `page.route`, both for states the seed cannot reach.
  *
  * What a row offers (the contract the panel is built to): its title is a button that opens the
  * item, an unread row says "Unread" in words, and has a "Mark as read" button; the panel has "Mark

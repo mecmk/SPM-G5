@@ -22,7 +22,6 @@ from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
 from app.db import get_db
 from app.notifications import service, targets
-from app.notifications.models import Notification
 from app.notifications.schemas import (
     MarkAllReadIn,
     MarkedOut,
@@ -40,10 +39,11 @@ DbSession = Annotated[Session, Depends(get_db)]
 NOTIFICATION_NOT_FOUND_MESSAGE = "Notification not found."
 
 
-def _out(notification: Notification, target: targets.Target | None) -> NotificationOut:
+def _out(targeted: targets.Targeted) -> NotificationOut:
+    target = targeted.target
     return NotificationOut.from_notification(
-        notification,
-        None if target is None else NotificationTargetOut(kind=target[0].value, id=target[1]),
+        targeted.notification,
+        None if target is None else NotificationTargetOut(kind=target.kind.value, id=target.id),
     )
 
 
@@ -52,11 +52,13 @@ def list_notifications(
     db: DbSession,
     viewer: Annotated[CurrentUser, CanReadOwn],
 ) -> list[NotificationOut]:
-    """AC2: a notification is listed for its recipient as soon as its action commits, with
-    nothing for them to do first. AC5: only the viewer's own; 401 when signed out."""
+    """20.1 AC2: a notification is listed for its recipient as soon as its action commits, with
+    nothing for them to do first. 20.1 AC5: only the viewer's own; 401 when signed out. 20.2 AC1:
+    each carries its ``read_at`` and where opening it goes; AC4: no target when the reader has no
+    page for it, cannot open its item, or the item is gone."""
     return [
-        _out(notification, target)
-        for notification, target in targets.with_targets(
+        _out(targeted)
+        for targeted in targets.with_targets(
             db, viewer=viewer, notifications=service.list_notifications(db, recipient=viewer)
         )
     ]
@@ -84,8 +86,8 @@ def mark_read(
         notification = service.mark_read(db, notification_id, recipient=viewer)
     except service.NotificationNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOTIFICATION_NOT_FOUND_MESSAGE) from None
-    [(marked, target)] = targets.with_targets(db, viewer=viewer, notifications=[notification])
-    return _out(marked, target)
+    [targeted] = targets.with_targets(db, viewer=viewer, notifications=[notification])
+    return _out(targeted)
 
 
 @router.patch("", response_model=MarkedOut)

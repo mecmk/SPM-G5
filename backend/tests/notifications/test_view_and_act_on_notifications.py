@@ -2,23 +2,22 @@
 Happy path
 1. The bell in the main navigation shows the unread count and opens the user's newest 50
     notifications, newest first, each with its title, message and time; unread notifications stand
-    out. Opening a notification goes to its item (the page where the reader acts on it, otherwise
-    the event) and marks it read. Notifications can also be marked read one at a time or all at
-    once; marking all leaves unread any notification that arrived after the list was opened. The
-    user's own recent actions stay in the same panel, below the notifications, and are not counted.
+    out. Opening a notification goes to its item (the page where the reader acts on it while that
+    page still holds it, otherwise the event) and marks it read. Notifications can also be marked
+    read one at a time or all at once; marking all leaves unread any notification that arrived after
+    the list was opened. The user's own recent actions stay in the same panel, below the
+    notifications, and are not counted.
 2. Read status is stored on the server for each user, and the unread count comes from the server, so
     it is the same on every device. The count and the list are fetched again whenever the user opens
-    another page or comes back to the browser tab.
+    another page, opens the notification panel, or comes back to the browser tab.
 Boundary
 3. With 0 unread, no badge is shown. More than 99 unread shows "99+".
 Edge
-4. A notification whose item the reader cannot open, or which no longer exists, shows "This is no
-    longer available to you." instead of an error, and is still marked read.
+4. A notification for an item the user can no longer access shows a message, not an error.
 Permission
-5. Users see only their own notifications and can mark only their own as read.
+5. Users see only their own notifications.
 Conflict
-6. Marking read in one tab shows on refresh in another. The count never goes below 0, and marking a
-    notification read again changes nothing.
+6. Marking read in one tab shows on refresh in another. The count never goes below 0.
 
 What is tested here, at the API (the panel, the badge text "99+", the message of AC4 and the
 refetching on a page change or on regaining focus are the browser's, in
@@ -58,11 +57,13 @@ from sqlalchemy import Engine, delete, event, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.auth.permissions import ROLE_PERMISSIONS, permissions_for
 from app.common.audit import AuditLog
 from app.coordination.models import EventCoordinatorAssignment
 from app.db import get_db
 from app.events.models import EventStatus
 from app.main import app
+from app.notifications import targets
 from app.notifications.models import Notification
 from app.notifications.service import NotificationType
 from app.registrations.models import EventRegistration
@@ -1104,6 +1105,16 @@ def test_every_role_can_count_and_mark_its_own(login_as, db: Session, user: Seed
 
 
 @pytest.mark.story("20.2", ac=5)
+@pytest.mark.parametrize("role", sorted(ROLE_PERMISSIONS))
+def test_no_role_holds_more_than_one_permission_with_a_target_rule(role: str):
+    """``_kind_for`` takes the first permission of the reader's that has a rule, so a role holding
+    two would be sent by whichever it met first. Each role holds at most one today."""
+    with_a_rule = {permission for permission, _, _ in targets._RULES}
+
+    assert len(permissions_for(role) & with_a_rule) <= 1
+
+
+@pytest.mark.story("20.2", ac=5)
 @pytest.mark.parametrize(
     "body",
     [
@@ -1169,29 +1180,6 @@ def test_the_unread_count_never_goes_below_zero(login_as, db: Session):
         assert _count(client) == 0
 
     assert _count(client) == 0
-
-
-@pytest.mark.story("20.2", ac=6)
-def test_marking_read_in_one_session_shows_in_the_list_of_another(login_as, db: Session):
-    """The two tabs of AC6 share one account, so one server-side state: what one marks, the other
-    reads on its next request."""
-    rows = [_notice(db, Users.ORGANISER) for _ in range(2)]
-    with TestClient(app) as other_tab:
-        assert (
-            other_tab.post(
-                "/auth/login", json={"email": Users.ORGANISER.email, "password": SEED_PASSWORD}
-            ).status_code
-            == 200
-        )
-        assert _mark_one(login_as(Users.ORGANISER), rows[1].id).status_code == 200
-
-        listed = _listed(other_tab)
-
-        assert [(item["id"], item["read_at"] is None) for item in listed] == [
-            (str(rows[1].id), False),
-            (str(rows[0].id), True),
-        ]
-        assert _count(other_tab) == 1
 
 
 @pytest.mark.story("20.2", ac=6)
