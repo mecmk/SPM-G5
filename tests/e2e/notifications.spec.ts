@@ -335,7 +335,8 @@ test('20.2 AC1: the page changes only after the notification is marked read', as
     (url) => url.pathname === `${NOTICES_PATH}/${notice.id}`,
     async (route) => {
       const request = route.request()
-      if (request.method() !== 'PATCH' || request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() !== 'PATCH' || request.resourceType() !== 'fetch')
+        return route.fallback()
       requestIsHeld()
       await released
       return route.fulfill({

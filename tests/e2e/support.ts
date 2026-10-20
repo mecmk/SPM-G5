@@ -406,7 +406,8 @@ export const NADIA_NOTICES = {
   rejected: {
     id: 'dddddddd-0000-0000-0000-000000020214',
     title: '"Harbour Lights Gala" was rejected',
-    message: 'Carl Coordinator rejected your request. Reason: The first date clashed with another booking.',
+    message:
+      'Carl Coordinator rejected your request. Reason: The first date clashed with another booking.',
     time: 'Sun, 18 Oct 2026, 15:00',
     isRead: true,
   },
