@@ -29,6 +29,7 @@ from app.dbtool import connection, docs, migrate
 SEED_ACCOUNTS = [
     ("Event Organiser", "organiser@acme.example"),
     ("Event Organiser", "organiser@nimbus.example"),
+    ("Event Organiser", "nadia@notice.example"),
     ("Event Coordinator", "coordinator@connectsphere.example"),
     ("Event Coordinator", "coordinator2@connectsphere.example"),
     ("Venue Staff", "venue@connectsphere.example"),
