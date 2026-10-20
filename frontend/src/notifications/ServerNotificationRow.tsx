@@ -15,7 +15,8 @@ interface ServerNotificationRowProps {
 /**
  * Story 20.2 AC1: one server notification in the panel - its title (a button that opens the item),
  * message and time, the word "Unread" and a "Mark as read" button while it is unread. The two
- * buttons sit side by side, never one inside the other.
+ * buttons sit side by side, never one inside the other. "Mark as read" is described by the title,
+ * so a screen reader says which notification it marks without the button's name changing.
  */
 export function ServerNotificationRow({
   notification,
@@ -25,6 +26,7 @@ export function ServerNotificationRow({
   onMarkAsRead,
 }: ServerNotificationRowProps) {
   const isUnread = notification.read_at === null
+  const titleId = `notification-title-${notification.id}`
 
   function handleOpen() {
     onOpen(notification)
@@ -37,7 +39,7 @@ export function ServerNotificationRow({
   return (
     <li className={isUnread ? 'notification-item is-unread' : 'notification-item'}>
       <div className="notification-body">
-        <button type="button" className="notification-open" onClick={handleOpen}>
+        <button type="button" id={titleId} className="notification-open" onClick={handleOpen}>
           {notification.title}
         </button>
         {isUnread && <span className="notification-unread-tag">{UNREAD_LABEL}</span>}
@@ -50,7 +52,12 @@ export function ServerNotificationRow({
           </p>
         )}
         {isUnread && (
-          <button type="button" className="secondary button-sm" onClick={handleMarkAsRead}>
+          <button
+            type="button"
+            className="secondary button-sm"
+            aria-describedby={titleId}
+            onClick={handleMarkAsRead}
+          >
             {MARK_AS_READ}
           </button>
         )}
