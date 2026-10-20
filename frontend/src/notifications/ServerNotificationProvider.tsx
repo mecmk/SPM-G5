@@ -31,13 +31,22 @@ function ServerNotifications({ children }: { children: ReactNode }) {
   // The newest notification of the list last shown: "mark all as read" goes through it, so one
   // that arrived since stays unread (AC1).
   const newestLoadedId = useRef<string | null>(null)
+  // False once the frame has gone (sign-out), so an answer that lands after that is dropped.
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
 
   const loadCount = useCallback(() => {
     latestCountRequest.current += 1
     const request = latestCountRequest.current
     fetchUnreadCount()
       .then((count) => {
-        if (request === latestCountRequest.current) setUnreadCount(count)
+        if (isMounted.current && request === latestCountRequest.current) setUnreadCount(count)
       })
       .catch(() => {
         // The badge keeps its last number; the list request reports a failure to the panel.
@@ -49,13 +58,15 @@ function ServerNotifications({ children }: { children: ReactNode }) {
     const request = latestListRequest.current
     listNotifications()
       .then((listed) => {
-        if (request !== latestListRequest.current) return
+        if (!isMounted.current || request !== latestListRequest.current) return
         newestLoadedId.current = listed.length > 0 ? listed[0].id : null
         setNotifications(listed)
         setListError(null)
       })
       .catch((err) => {
-        if (request === latestListRequest.current) setListError(formatApiError(err))
+        if (isMounted.current && request === latestListRequest.current) {
+          setListError(formatApiError(err))
+        }
       })
   }, [])
 
