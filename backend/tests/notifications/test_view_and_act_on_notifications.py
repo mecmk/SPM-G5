@@ -61,7 +61,7 @@ from app.auth.permissions import ROLE_PERMISSIONS, permissions_for
 from app.common.audit import AuditLog
 from app.coordination.models import EventCoordinatorAssignment
 from app.db import get_db
-from app.events.models import EventStatus
+from app.events.models import EquipmentRequestStatus, EventStatus
 from app.main import app
 from app.notifications import targets
 from app.notifications.models import Notification
@@ -80,6 +80,8 @@ from tests.support.factories import (
     create_submittable_event_request,
     future_datetime,
     make_change_request,
+    make_equipment_item,
+    make_equipment_type,
     make_event,
     make_secured_event,
     make_user,
@@ -404,6 +406,17 @@ def test_a_notification_targets_the_page_its_reader_acts_on(
         # The queue holds a real pending request on an event its coordinator still coordinates.
         event = make_event(db, status=EventStatus.PLANNING, assigned_coordinator_id=reader.id)
         event_id, entity_id = event.id, make_change_request(db, event=event).id
+    if kind == "equipment_requests":
+        # The queue lists an item of the event's that was sent to Technical Support.
+        event = make_event(db, status=EventStatus.PLANNING)
+        make_equipment_item(
+            db,
+            event=event,
+            equipment_type=make_equipment_type(db),
+            quantity=1,
+            status=EquipmentRequestStatus.PENDING,
+        )
+        event_id = entity_id = event.id
     row = _notice(
         db,
         reader,
@@ -750,6 +763,91 @@ def test_a_pending_request_on_an_event_not_going_ahead_sends_the_coordinator_to_
     )
 
     assert _target_of(login_as(Users.COORDINATOR), row) == {"kind": "event", "id": str(event.id)}
+
+
+def _send_one_item(coordinator: TestClient, db: Session, event) -> str:
+    """The coordinator records one item for ``event`` and sends it to Technical Support (15.1)."""
+    added = coordinator.post(
+        f"/events/{event.id}/equipment",
+        json={"equipment_type_code": make_equipment_type(db).code, "quantity": 1},
+    )
+    assert added.status_code == 201, added.text
+    sent = coordinator.post(f"/events/{event.id}/equipment-submissions")
+    assert sent.status_code == 201, sent.text
+    return added.json()["id"]
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_an_equipment_notice_whose_item_was_removed_sends_technical_support_to_the_event(
+    login_as, db: Session
+):
+    starts_at = future_datetime(days=60)
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=8),
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+    coordinator = login_as(Users.COORDINATOR)
+    item_id = _send_one_item(coordinator, db, event)
+    removed = coordinator.delete(f"/events/{event.id}/equipment/{item_id}")
+    assert removed.status_code == 204, removed.text
+
+    notice = _newest_of(login_as(Users.TECH_SUPPORT), "EQUIPMENT_SUBMITTED")
+
+    assert notice["event_id"] == str(event.id)
+    assert notice["target"] == {"kind": "event", "id": str(event.id)}
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_an_equipment_notice_for_an_event_since_rejected_sends_technical_support_to_the_event(
+    login_as, db: Session
+):
+    starts_at = future_datetime(days=60)
+    event = make_event(
+        db,
+        status=EventStatus.UNDER_REVIEW,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=8),
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+    coordinator = login_as(Users.COORDINATOR)
+    _send_one_item(coordinator, db, event)
+    rejected = coordinator.post(
+        f"/events/{event.id}/reject", json={"reason": "The venue cannot take this event."}
+    )
+    assert rejected.status_code == 200, rejected.text
+
+    notice = _newest_of(login_as(Users.TECH_SUPPORT), "EQUIPMENT_SUBMITTED")
+
+    assert notice["event_id"] == str(event.id)
+    assert notice["target"] == {"kind": "event", "id": str(event.id)}
+
+
+@pytest.mark.story("20.2", ac=1)
+def test_a_raised_change_request_sends_the_coordinator_to_the_queue(login_as, db: Session):
+    starts_at = future_datetime(days=60)
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=8),
+        expected_attendance=100,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+    db.add(EventCoordinatorAssignment(event_id=event.id, coordinator_id=Users.COORDINATOR.id))
+    db.flush()
+    raised = login_as(Users.ORGANISER).post(
+        f"/events/{event.id}/change-requests",
+        json={"field": "expected_attendance", "proposed": 150, "reason": "More sign-ups."},
+    )
+    assert raised.status_code == 201, raised.text
+
+    notice = _newest_of(login_as(Users.COORDINATOR), "EVENT_CHANGE_REQUESTED")
+
+    assert notice["event_id"] == str(event.id)
+    assert notice["target"] == {"kind": "change_request_queue", "id": None}
 
 
 # --- AC4: no target when the reader has no page for it, cannot open it, or it is gone ---------
