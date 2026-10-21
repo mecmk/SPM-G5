@@ -38,7 +38,6 @@
  * Outside the walk, and repeat-safe, are the tests that stub the list the bell reads, every row
  * already read: which page each kind of target opens, and what a notification with no target to
  * open says. They change nothing in the database.
-
  *
  * What a row offers (the contract the panel is built to): its title is a button that opens the
  * item, an unread row says "Unread" in words, and has a "Mark as read" button; the panel has "Mark
@@ -399,14 +398,18 @@ test.describe("walks Nadia's seeded notifications once", () => {
   test('20.2 AC2: opening the bell reads the notifications again', async ({ page }) => {
     await signInAsNadia(page)
     await page.waitForLoadState('networkidle')
-    const listIsRead = page.waitForRequest(
-      (request) => request.method() === 'GET' && new URL(request.url()).pathname === NOTICES_PATH,
-      { timeout: 5000 },
-    )
+    function isReadOf(path: string) {
+      return page.waitForRequest(
+        (request) => request.method() === 'GET' && new URL(request.url()).pathname === path,
+        { timeout: 5000 },
+      )
+    }
+    const countIsRead = isReadOf(UNREAD_COUNT_PATH)
+    const listIsRead = isReadOf(NOTICES_PATH)
 
     await bell(page).click()
 
-    await listIsRead
+    await Promise.all([countIsRead, listIsRead])
     await expect(panel(page)).toBeVisible()
   })
 
@@ -476,45 +479,46 @@ async function stubNotificationList(page: Page, rows: ReturnType<typeof stubbedR
   )
 }
 
-/** Each kind of target and the address it opens (frontend/src/routes.ts), pinned here as the other
- * specs pin theirs. `takesId` kinds are sent a made-up id, which the address carries. */
+/** Each kind of target, how the title names it, and the address it opens (frontend/src/routes.ts),
+ * pinned here as the other specs pin theirs. `takesId` kinds are sent a made-up id, which the
+ * address carries. */
 const TARGET_PAGES = [
-  { kind: 'event', takesId: true, path: (id: string) => `/events/${id}`, shown: '/events/<id>' },
+  { kind: 'event', label: 'event', takesId: true, path: (id: string) => `/events/${id}` },
   {
     kind: 'booking_request',
+    label: 'booking request',
     takesId: true,
     path: (id: string) => `/venue-staff/booking-requests/${id}`,
-    shown: '/venue-staff/booking-requests/<id>',
   },
   {
     kind: 'equipment_requests',
+    label: 'equipment requests',
     takesId: false,
     path: () => '/equipment/requests',
-    shown: '/equipment/requests',
   },
   {
     kind: 'safety_check',
+    label: 'safety check',
     takesId: true,
     path: (id: string) => `/safety-checks/${id}`,
-    shown: '/safety-checks/<id>',
   },
-  { kind: 'registrations', takesId: false, path: () => '/registrations', shown: '/registrations' },
+  { kind: 'registrations', label: 'registrations', takesId: false, path: () => '/registrations' },
   {
     kind: 'unassigned_events',
+    label: 'unassigned events',
     takesId: false,
     path: () => '/events/unassigned',
-    shown: '/events/unassigned',
   },
   {
     kind: 'change_request_queue',
+    label: 'change request queue',
     takesId: false,
     path: () => '/change-requests/review',
-    shown: '/change-requests/review',
   },
 ]
 
-for (const { kind, takesId, path, shown } of TARGET_PAGES) {
-  test(`20.2 AC1: a ${kind} notification opens ${shown}`, async ({ page }) => {
+for (const { kind, label, takesId, path } of TARGET_PAGES) {
+  test(`20.2 AC1: the ${label} target opens ${path('<id>')}`, async ({ page }) => {
     const id = takesId ? randomUUID() : null
     const row = stubbedRow(`Stub ${kind}`, { kind, id })
     await stubNotificationList(page, [row])
