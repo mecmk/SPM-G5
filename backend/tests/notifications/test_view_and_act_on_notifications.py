@@ -691,7 +691,7 @@ def test_a_cancellation_with_no_coordinator_reaches_every_active_lead_with_the_e
     assert second["target"] == {"kind": "event", "id": str(event.id)}
 
 
-@pytest.mark.story("20.2", ac=4)
+@pytest.mark.story("20.2", ac=1)
 def test_a_submission_cancelled_before_assignment_sends_the_lead_to_the_event(login_as):
     organiser = login_as(Users.ORGANISER)
     draft = create_submittable_event_request(organiser)
@@ -707,7 +707,7 @@ def test_a_submission_cancelled_before_assignment_sends_the_lead_to_the_event(lo
     assert submitted["target"] == {"kind": "event", "id": draft["id"]}
 
 
-@pytest.mark.story("20.2", ac=4)
+@pytest.mark.story("20.2", ac=1)
 def test_a_change_request_on_an_event_reassigned_away_sends_the_coordinator_to_the_event(
     login_as, db: Session
 ):
@@ -742,7 +742,7 @@ def test_a_change_request_on_an_event_reassigned_away_sends_the_coordinator_to_t
     assert notice["target"] == {"kind": "event", "id": str(event.id)}
 
 
-@pytest.mark.story("20.2", ac=4)
+@pytest.mark.story("20.2", ac=1)
 @pytest.mark.parametrize(
     "status", [EventStatus.CANCELLED, EventStatus.COMPLETED, EventStatus.REJECTED]
 )
@@ -750,7 +750,10 @@ def test_a_pending_request_on_an_event_not_going_ahead_sends_the_coordinator_to_
     login_as, db: Session, status: str
 ):
     """The coordinator's queue leaves out a pending request on a cancelled, completed or rejected
-    event (``list_coordinator_change_requests``), so the notice goes to the event."""
+    event (``list_coordinator_change_requests``), so the notice goes to the event. These states
+    cannot be reached in the real app (change requests are raised only on Planning or Confirmed
+    events, nothing sets Completed, and 6.2 closes a cancelled event's pending requests as
+    Cancelled), so this guards the shared condition only."""
     event = make_event(db, status=status, assigned_coordinator_id=Users.COORDINATOR.id)
     request = make_change_request(db, event=event)
     row = _notice(
@@ -1202,7 +1205,7 @@ def test_every_role_can_count_and_mark_its_own(login_as, db: Session, user: Seed
     assert _count(client) == 0
 
 
-@pytest.mark.story("20.2", ac=5)
+@pytest.mark.story("20.2", ac=1)
 @pytest.mark.parametrize("role", sorted(ROLE_PERMISSIONS))
 def test_no_role_holds_more_than_one_permission_with_a_target_rule(role: str):
     """``_kind_for`` takes the first permission of the reader's that has a rule, so a role holding
