@@ -27,8 +27,9 @@ from app.bookings import service as bookings_service
 from app.change_requests import service as change_requests_service
 from app.change_requests.models import EventChangeRequest
 from app.coordination import service as coordination_service
+from app.equipment import service as equipment_service
 from app.events import service as events_service
-from app.events.models import Event
+from app.events.models import Event, EventEquipmentRequest
 from app.notifications.models import Notification
 from app.notifications.service import NotificationType
 from app.safety import service as safety_service
@@ -173,6 +174,7 @@ _NEEDS_THE_EVENT = frozenset(
         TargetKind.UNASSIGNED_EVENTS,
         TargetKind.SAFETY_CHECK,
         TargetKind.CHANGE_REQUEST_QUEUE,
+        TargetKind.EQUIPMENT_REQUESTS,
     }
 )
 _CHANGE_REQUEST = "event_change_request"
@@ -217,6 +219,20 @@ def with_targets(db: Session, *, viewer: User, notifications: list[Notification]
                 select(Event.id).where(
                     Event.id.in_(unassigned_ids), coordination_service.awaiting_a_coordinator()
                 )
+            )
+        )
+    equipment_ids = event_ids_of(TargetKind.EQUIPMENT_REQUESTS)
+    in_equipment_queue: set[uuid.UUID] = set()
+    if equipment_ids:
+        in_equipment_queue = set(
+            db.scalars(
+                select(EventEquipmentRequest.event_id)
+                .join(Event, Event.id == EventEquipmentRequest.event_id)
+                .where(
+                    EventEquipmentRequest.event_id.in_(equipment_ids),
+                    equipment_service.in_technical_support_queue(),
+                )
+                .distinct()
             )
         )
     request_ids = {
@@ -266,6 +282,10 @@ def with_targets(db: Session, *, viewer: User, notifications: list[Notification]
                 return event_target(notification)
             case TargetKind.CHANGE_REQUEST_QUEUE:
                 if notification.related_entity_id in in_change_request_queue:
+                    return Target(kind, None)
+                return event_target(notification)
+            case TargetKind.EQUIPMENT_REQUESTS:
+                if notification.event_id in in_equipment_queue:
                     return Target(kind, None)
                 return event_target(notification)
             case TargetKind.SAFETY_CHECK:
