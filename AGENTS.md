@@ -166,7 +166,7 @@ frontend/
     bookings/, equipment/, events/, registrations/, safety/, venues/   # the pages of each feature area
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
-    notifications/      # the notification centre
+    notifications/      # the bell and its panel: the user's server notifications and the log of their own actions
     pages/              # pages of no feature area: home, not permitted, coming soon
     shared/             # helpers used by more than one page
     errors/             # the registry of every user-facing error

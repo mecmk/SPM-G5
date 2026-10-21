@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
@@ -261,19 +262,21 @@ def current_facts(db: Session, event: Event) -> dict[str, Any]:
     )
 
 
+def safety_check_is_open() -> ColumnElement[bool]:
+    """When an event's safety check can be opened (``get_safety_check``, and story 20.2's
+    notification targets): it is awaiting the check, or it has been reviewed (the Accepted and
+    Declined tabs open it too)."""
+    return or_(
+        Event.status == EventStatus.AWAITING_SAFETY_CHECK,
+        exists().where(EventSafetyReview.event_id == Event.id),
+    )
+
+
 def get_safety_check(db: Session, event_id: uuid.UUID) -> SafetyCheck:
     """AC3: the event's safety facts and previous reviews. AC5: what changed since the latest
     review. Raises ``SafetyCheckNotFound`` unless the event is awaiting the check or has been
     reviewed (the Accepted and Declined tabs open it too)."""
-    event = db.scalar(
-        select(Event).where(
-            Event.id == event_id,
-            or_(
-                Event.status == EventStatus.AWAITING_SAFETY_CHECK,
-                exists().where(EventSafetyReview.event_id == Event.id),
-            ),
-        )
-    )
+    event = db.scalar(select(Event).where(Event.id == event_id, safety_check_is_open()))
     if event is None:
         raise SafetyCheckNotFound(event_id)
     approved_bookings = _approved_bookings(db, [event.id])[event.id]

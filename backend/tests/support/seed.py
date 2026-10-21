@@ -42,6 +42,9 @@ class Users:
     LEAD = SeedUser(_u(10), "lead@connectsphere.example", "EVENT_COORDINATOR_LEAD", "Lena Lead")
     # Story 18.1: holds the one place at Events.PORTFOLIO_REVIEW.
     ATTENDEE_2 = SeedUser(_u(11), "attendee2@example.com", "ATTENDEE", "Bella Attendee")
+    # Story 20.2: owns the notification bell's e2e spec, with nine notifications of her own. Left
+    # out of ALL_ACTIVE and ONE_PER_ROLE, which tests take to have none.
+    NOTICE = SeedUser(_u(20201), "nadia@notice.example", "EVENT_ORGANISER", "Nadia Notice")
 
     ALL_ACTIVE = (
         ORGANISER,
@@ -195,6 +198,8 @@ class Events:
     NIGHT_BAZAAR = _e(12683)  # a marked pending additional venue: read only
     SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
+    # Story 20.2: Nadia Notice's, in planning with Carl, the event nine notifications are about.
+    NOTICE_GALA = _e(20202)
 
 
 class Bookings:
@@ -386,3 +391,62 @@ class SafetyReviews:
     NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")
     # Story 21.2: Events.DATA_SUMMIT's, with one finding flagging its venue bookings.
     DATA_SUMMIT_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000004")
+
+
+class Notifications:
+    """Story 20.2: Nadia Notice's nine notifications, newest first (the order the bell lists
+    them in), as ``(id, type, title, is_read)``. Seven are unread. They are fixtures for the bell,
+    not her event's history. The fifth is about Olivia's draft (``Events.DRAFT``), which Nadia
+    cannot open, so its target is none: it cannot occur in the real app."""
+
+    CONFIRMED = uuid.UUID("dddddddd-0000-0000-0000-000000020207")
+    CHANGE_APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020208")
+    CLARIFICATION_REQUESTED = uuid.UUID("dddddddd-0000-0000-0000-000000020209")
+    VENUE_UNAVAILABLE = uuid.UUID("dddddddd-0000-0000-0000-000000020210")
+    OLIVIAS_DRAFT_APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020211")
+    SAFETY_APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020212")
+    APPROVED = uuid.UUID("dddddddd-0000-0000-0000-000000020213")
+    REJECTED = uuid.UUID("dddddddd-0000-0000-0000-000000020214")  # read
+    REASSIGNED = uuid.UUID("dddddddd-0000-0000-0000-000000020215")  # read
+
+    NEWEST_FIRST = (
+        (CONFIRMED, "EVENT_CONFIRMED", '"Harbour Lights Gala" is confirmed', False),
+        (
+            CHANGE_APPROVED,
+            "EVENT_CHANGE_APPROVED",
+            "Change approved for Harbour Lights Gala",
+            False,
+        ),
+        (
+            CLARIFICATION_REQUESTED,
+            "EVENT_CLARIFICATION_REQUESTED",
+            'Clarification requested on "Harbour Lights Gala"',
+            False,
+        ),
+        (
+            VENUE_UNAVAILABLE,
+            "BOOKING_VENUE_UNAVAILABLE",
+            'Exhibition Foyer is unavailable for "Harbour Lights Gala"',
+            False,
+        ),
+        (
+            OLIVIAS_DRAFT_APPROVED,
+            "EVENT_APPROVED",
+            '"Q1 Sales Kick-off (draft)" was approved',
+            False,
+        ),
+        (
+            SAFETY_APPROVED,
+            "SAFETY_APPROVED",
+            '"Harbour Lights Gala" passed the safety review',
+            False,
+        ),
+        (APPROVED, "EVENT_APPROVED", '"Harbour Lights Gala" was approved', False),
+        (REJECTED, "EVENT_REJECTED", '"Harbour Lights Gala" was rejected', True),
+        (
+            REASSIGNED,
+            "EVENT_REASSIGNED_ORGANISER",
+            '"Harbour Lights Gala" has a new coordinator',
+            True,
+        ),
+    )

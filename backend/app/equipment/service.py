@@ -138,20 +138,6 @@ _LIVE_TAB_STATUSES = (
     EquipmentRequestStatus.ACCEPTED,
     EquipmentRequestStatus.DECLINED,
 )
-_IN_QUEUE = or_(
-    and_(
-        EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
-        Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
-    ),
-    and_(
-        EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
-        EventEquipmentRequest.submitted_at.is_not(None),
-    ),
-    and_(
-        EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
-        Event.status == EventStatus.CANCELLED,
-    ),
-)
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
@@ -159,6 +145,27 @@ _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
 _ACCEPTED_HOLD_NOTE = "Reserved when Technical Support accepted the request."
+
+
+def in_technical_support_queue() -> ColumnElement[bool]:
+    """Story 15.2 AC3/AC5, 6.2 AC15: the condition for an item Technical Support's queue lists.
+    It reads ``EventEquipmentRequest`` joined to its ``Event``, so the caller joins them. The queue
+    and a notification's target (20.2) both use it, so the page a notice opens is one that holds
+    the item."""
+    return or_(
+        and_(
+            EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
+            Event.status.not_in(_CLOSED_QUEUE_EVENT_STATUSES),
+        ),
+        and_(
+            EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
+            EventEquipmentRequest.submitted_at.is_not(None),
+        ),
+        and_(
+            EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
+            Event.status == EventStatus.CANCELLED,
+        ),
+    )
 
 
 def as_words(status: str) -> str:
@@ -383,7 +390,7 @@ def list_equipment_requests(
     tab = (
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
-        .where(_IN_QUEUE)
+        .where(in_technical_support_queue())
         .order_by(Event.starts_at, EventEquipmentRequest.created_at, EventEquipmentRequest.id)
     )
     if status is not None:
@@ -393,7 +400,7 @@ def list_equipment_requests(
         db.execute(
             select(EventEquipmentRequest.status, func.count())
             .join(Event, Event.id == EventEquipmentRequest.event_id)
-            .where(_IN_QUEUE)
+            .where(in_technical_support_queue())
             .group_by(EventEquipmentRequest.status)
         ).all()
     )
@@ -421,7 +428,7 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     found = db.execute(
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
-        .where(EventEquipmentRequest.id == item_id, _IN_QUEUE)
+        .where(EventEquipmentRequest.id == item_id, in_technical_support_queue())
     ).first()
     if found is None:
         raise EquipmentRequestNotFound(item_id)

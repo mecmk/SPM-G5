@@ -108,7 +108,7 @@ expiry of one hold are serialized by the row lock (AC10).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -558,6 +558,12 @@ def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     if booking is None:
         raise BookingNotFound(booking_id)
     return booking
+
+
+def existing_booking_ids(db: Session, booking_ids: Iterable[uuid.UUID]) -> set[uuid.UUID]:
+    """The ids among ``booking_ids`` that ``get_booking`` would find, in one query (story 20.2's
+    notification targets: a booking request page opens for any booking that exists)."""
+    return set(db.scalars(select(VenueBooking.id).where(VenueBooking.id.in_(list(booking_ids)))))
 
 
 def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:

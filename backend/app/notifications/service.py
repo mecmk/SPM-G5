@@ -25,7 +25,9 @@ Story 20.1:
   succession keep their order. A repeated action is refused by the action's own guard, so it
   notifies once.
 
-The list in the app - unread marking, the count, opening an item, marking read - is story 20.2.
+Story 20.2 (the list in the app): ``unread_count`` is the badge, ``mark_read`` and
+``mark_all_read`` set ``read_at`` for the recipient's own rows only, and where a notification goes
+when it is opened is worked out in ``targets.py``.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -156,3 +158,74 @@ def list_notifications(db: Session, *, recipient: User) -> list[Notification]:
             .limit(NOTIFICATION_LIST_LIMIT)
         )
     )
+
+
+class NotificationNotFound(LookupError):
+    """No notification with this id among the caller's own - unknown, or somebody else's, which
+    the caller is never told apart (story 20.2 AC5)."""
+
+    def __init__(self, notification_id: uuid.UUID) -> None:
+        super().__init__(str(notification_id))
+
+
+def unread_count(db: Session, *, recipient: User) -> int:
+    """20.2 AC2/AC3: every unread notification of ``recipient``, not only the newest 50, so the
+    badge can say "99+". Served by ``ix_notifications_recipient_unread``."""
+    return db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.recipient_id == recipient.id, Notification.read_at.is_(None))
+    )
+
+
+def mark_read(db: Session, notification_id: uuid.UUID, *, recipient: User) -> Notification:
+    """20.2 AC1/AC5/AC6: set ``read_at`` on one of ``recipient``'s own notifications. The update
+    matches only an unread row of theirs, so a second mark - or a simultaneous one, which waits
+    on the row lock and then matches nothing - changes nothing and the first ``read_at`` stays.
+    The row is then read for the answer, and when it is not ``recipient``'s there is none."""
+    db.execute(
+        update(Notification)
+        .where(
+            Notification.id == notification_id,
+            Notification.recipient_id == recipient.id,
+            Notification.read_at.is_(None),
+        )
+        .values(read_at=datetime.now(UTC))
+        .execution_options(synchronize_session="fetch")
+    )
+    db.commit()
+    notification = db.scalar(
+        select(Notification)
+        .where(Notification.id == notification_id, Notification.recipient_id == recipient.id)
+        .execution_options(populate_existing=True)
+    )
+    if notification is None:
+        raise NotificationNotFound(notification_id)
+    return notification
+
+
+def mark_all_read(db: Session, through_id: uuid.UUID, *, recipient: User) -> int:
+    """20.2 AC1/AC5: set ``read_at`` on every unread notification of ``recipient`` up to and
+    including ``through_id``, the newest one the client had loaded, in the list's own order
+    (``created_at`` then ``id``). That clears what is older than the newest 50 as well, and leaves
+    what arrived after the list was loaded unread. Returns how many it marked."""
+    marker = db.execute(
+        select(Notification.created_at, Notification.id).where(
+            Notification.id == through_id, Notification.recipient_id == recipient.id
+        )
+    ).one_or_none()
+    if marker is None:
+        raise NotificationNotFound(through_id)
+    marked = db.execute(
+        update(Notification)
+        .where(
+            Notification.recipient_id == recipient.id,
+            Notification.read_at.is_(None),
+            tuple_(Notification.created_at, Notification.id)
+            <= tuple_(marker.created_at, marker.id),
+        )
+        .values(read_at=datetime.now(UTC))
+        .execution_options(synchronize_session="fetch")
+    )
+    db.commit()
+    return marked.rowcount

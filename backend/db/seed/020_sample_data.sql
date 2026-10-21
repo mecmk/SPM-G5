@@ -1812,3 +1812,94 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0062-000000000001', '33333333-0000-0000-0000-000000000062', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
+-- Story 20.2: an organiser who owns the notification bell's e2e spec.
+-- Nadia Notice belongs to no organisation and no action by another spec reaches her, so her
+-- unread count (7) changes only as tests/e2e/notifications.spec.ts reads her notifications, in
+-- the order it walks them. Her event is in planning, coordinated by Carl and self-assigned as
+-- 3333..80 is, so it does not move story 5.1's round robin. Every id is in the story's 0202NN
+-- block: 01 her, 02 her event, 03 its venue requirement, 04 its assignment, 05 its status
+-- history, 06 the change request one notification names, 07 to 15 her nine notifications,
+-- newest first. Seven are unread; the two oldest were read. The fifth, newest first, is about
+-- Olivia's draft (3333..01), which Nadia cannot open, so its target is none (20.2 AC4).
+-- ---------------------------------------------------------------------
+INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department) VALUES
+    ('11111111-0000-0000-0000-000000020201', 'nadia@notice.example', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Nadia Notice', 'EVENT_ORGANISER', NULL, NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
+    role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
+    phone = EXCLUDED.phone, department = EXCLUDED.department;
+
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000020202', '11111111-0000-0000-0000-000000020201', NULL,
+     'Harbour Lights Gala', 'Charity gala', 'An evening gala to open the harbour lights season.', '2028-02-09 09:00+08', '2028-02-09 17:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Marina Bay', TRUE, 'Nadia Notice', 'nadia@notice.example', '+65 6222 0202',
+     '2026-10-08 09:00+08', '2026-10-09 09:00+08', '11111111-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000020203', '33333333-0000-0000-0000-000000020202', 0, 'Gala hall', 60,
+     '2028-02-09 09:00+08', '2028-02-09 17:00+08', 'STANDING')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0000-000000020205', '33333333-0000-0000-0000-000000020202', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-09 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000020204', '33333333-0000-0000-0000-000000020202', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-08 09:00+08')
+ON CONFLICT (id) DO NOTHING;
+
+-- Nadia's nine notifications are fixtures for exercising the bell. They do not describe her event's
+-- real history: it has no booking, safety review or change request behind them.
+INSERT INTO notifications (id, recipient_id, event_id, notification_type, title, message, related_entity_type, related_entity_id, created_at, read_at) VALUES
+    ('dddddddd-0000-0000-0000-000000020207', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_CONFIRMED', '"Harbour Lights Gala" is confirmed', 'Sam Safety confirmed the event after it passed the safety review.',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:45:00+08', NULL),
+    -- The change-approved notice's related_entity_id (eeeeeeee..020206) points at no row: no change
+    -- request is inserted.
+    ('dddddddd-0000-0000-0000-000000020208', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_CHANGE_APPROVED', 'Change approved for Harbour Lights Gala', 'Carl Coordinator approved your request to change the expected attendance.',
+     'event_change_request', 'eeeeeeee-0000-0000-0000-000000020206', '2026-10-19 17:30:00+08', NULL),
+    ('dddddddd-0000-0000-0000-000000020209', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_CLARIFICATION_REQUESTED', 'Clarification requested on "Harbour Lights Gala"', 'Which accessibility features should the gala hall provide?',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:15:00+08', NULL),
+    ('dddddddd-0000-0000-0000-000000020210', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'BOOKING_VENUE_UNAVAILABLE', 'Exhibition Foyer is unavailable for "Harbour Lights Gala"', 'Exhibition Foyer is unavailable on Wed 9 Feb 2028 from 09:00 to 17:00 (Maintenance). Its booking for "Harbour Lights Gala" falls in that period, so the event needs another venue.',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:00:00+08', NULL),
+    -- This row cannot occur in the real app: an approval of Olivia's draft, which Nadia cannot open,
+    -- sent to Nadia. It exists only to show the AC4 message ("This is no longer available to you.")
+    -- end to end.
+    ('dddddddd-0000-0000-0000-000000020211', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000000001',
+     'EVENT_APPROVED', '"Q1 Sales Kick-off (draft)" was approved', 'Chloe Coordinator approved your request. It is now being planned.',
+     'event', '33333333-0000-0000-0000-000000000001', '2026-10-19 16:45:00+08', NULL),
+    ('dddddddd-0000-0000-0000-000000020212', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'SAFETY_APPROVED', '"Harbour Lights Gala" passed the safety review', 'Sam Safety approved it. The coordinator can now confirm the event.',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 16:30:00+08', NULL),
+    ('dddddddd-0000-0000-0000-000000020213', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_APPROVED', '"Harbour Lights Gala" was approved', 'Carl Coordinator approved your request. It is now being planned.',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 16:15:00+08', NULL),
+    ('dddddddd-0000-0000-0000-000000020214', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_REJECTED', '"Harbour Lights Gala" was rejected', 'Carl Coordinator rejected your request. Reason: The first date clashed with another booking.',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-18 15:00:00+08', '2026-10-18 15:30:00+08'),
+    ('dddddddd-0000-0000-0000-000000020215', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
+     'EVENT_REASSIGNED_ORGANISER', '"Harbour Lights Gala" has a new coordinator', 'Carl Coordinator is now the coordinator for "Harbour Lights Gala".',
+     'event', '33333333-0000-0000-0000-000000020202', '2026-10-17 11:20:00+08', '2026-10-17 12:00:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    recipient_id = EXCLUDED.recipient_id, event_id = EXCLUDED.event_id,
+    notification_type = EXCLUDED.notification_type, title = EXCLUDED.title, message = EXCLUDED.message,
+    related_entity_type = EXCLUDED.related_entity_type, related_entity_id = EXCLUDED.related_entity_id,
+    created_at = EXCLUDED.created_at, read_at = EXCLUDED.read_at;

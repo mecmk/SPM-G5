@@ -19,6 +19,9 @@ export const ACCOUNTS = {
   attendee: 'attendee@example.com',
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
+  // Story 20.2: an organiser with nine notifications of her own, which only
+  // notifications.spec.ts reads (backend/tests/support/seed.py::Users.NOTICE).
+  notice: 'nadia@notice.example',
 } as const
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.'
@@ -140,6 +143,9 @@ export const EVENTS = {
   // Story 18.2's, Confirmed, organiser: organiser2. Aiden withdrew on 8 Oct 2026; 18.2 and 18.3
   // only read it.
   heritageTrail: '33333333-0000-0000-0000-000000000074',
+  // Story 20.2: Nadia Notice's, in planning with coordinator2 (dated February 2028). Nothing
+  // changes it; her notifications are about it.
+  noticeGala: '33333333-0000-0000-0000-000000020202',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
@@ -329,3 +335,100 @@ export function corsHeaders(request: Request) {
     'access-control-allow-credentials': 'true',
   }
 }
+
+/** One of Nadia Notice's seeded notifications, as the bell lists it (story 20.2). */
+export interface SeededNotice {
+  id: string
+  title: string
+  message: string
+  /** The row's time as `formatDateTime` writes it, in Singapore time. */
+  time: string
+  isRead: boolean
+}
+
+/**
+ * Nadia Notice's nine notifications, newest first: the order the bell lists them in, and the
+ * order notifications.spec.ts reads them in. Mirrors backend/tests/support/seed.py::Notifications
+ * (ids, titles, read state) and backend/db/seed/020_sample_data.sql (messages, created_at). The
+ * fifth is about Olivia's draft, which Nadia cannot open.
+ */
+export const NADIA_NOTICES = {
+  confirmed: {
+    id: 'dddddddd-0000-0000-0000-000000020207',
+    title: '"Harbour Lights Gala" is confirmed',
+    message: 'Sam Safety confirmed the event after it passed the safety review.',
+    time: 'Mon, 19 Oct 2026, 17:45',
+    isRead: false,
+  },
+  changeApproved: {
+    id: 'dddddddd-0000-0000-0000-000000020208',
+    title: 'Change approved for Harbour Lights Gala',
+    message: 'Carl Coordinator approved your request to change the expected attendance.',
+    time: 'Mon, 19 Oct 2026, 17:30',
+    isRead: false,
+  },
+  clarification: {
+    id: 'dddddddd-0000-0000-0000-000000020209',
+    title: 'Clarification requested on "Harbour Lights Gala"',
+    message: 'Which accessibility features should the gala hall provide?',
+    time: 'Mon, 19 Oct 2026, 17:15',
+    isRead: false,
+  },
+  venueUnavailable: {
+    id: 'dddddddd-0000-0000-0000-000000020210',
+    title: 'Exhibition Foyer is unavailable for "Harbour Lights Gala"',
+    message:
+      'Exhibition Foyer is unavailable on Wed 9 Feb 2028 from 09:00 to 17:00 (Maintenance). Its booking for "Harbour Lights Gala" falls in that period, so the event needs another venue.',
+    time: 'Mon, 19 Oct 2026, 17:00',
+    isRead: false,
+  },
+  oliviasDraft: {
+    id: 'dddddddd-0000-0000-0000-000000020211',
+    title: '"Q1 Sales Kick-off (draft)" was approved',
+    message: 'Chloe Coordinator approved your request. It is now being planned.',
+    time: 'Mon, 19 Oct 2026, 16:45',
+    isRead: false,
+  },
+  safetyApproved: {
+    id: 'dddddddd-0000-0000-0000-000000020212',
+    title: '"Harbour Lights Gala" passed the safety review',
+    message: 'Sam Safety approved it. The coordinator can now confirm the event.',
+    time: 'Mon, 19 Oct 2026, 16:30',
+    isRead: false,
+  },
+  approved: {
+    id: 'dddddddd-0000-0000-0000-000000020213',
+    title: '"Harbour Lights Gala" was approved',
+    message: 'Carl Coordinator approved your request. It is now being planned.',
+    time: 'Mon, 19 Oct 2026, 16:15',
+    isRead: false,
+  },
+  rejected: {
+    id: 'dddddddd-0000-0000-0000-000000020214',
+    title: '"Harbour Lights Gala" was rejected',
+    message:
+      'Carl Coordinator rejected your request. Reason: The first date clashed with another booking.',
+    time: 'Sun, 18 Oct 2026, 15:00',
+    isRead: true,
+  },
+  reassigned: {
+    id: 'dddddddd-0000-0000-0000-000000020215',
+    title: '"Harbour Lights Gala" has a new coordinator',
+    message: 'Carl Coordinator is now the coordinator for "Harbour Lights Gala".',
+    time: 'Sat, 17 Oct 2026, 11:20',
+    isRead: true,
+  },
+} as const satisfies Record<string, SeededNotice>
+
+/** The same nine, newest first. */
+export const NADIA_NOTICES_NEWEST_FIRST: readonly SeededNotice[] = [
+  NADIA_NOTICES.confirmed,
+  NADIA_NOTICES.changeApproved,
+  NADIA_NOTICES.clarification,
+  NADIA_NOTICES.venueUnavailable,
+  NADIA_NOTICES.oliviasDraft,
+  NADIA_NOTICES.safetyApproved,
+  NADIA_NOTICES.approved,
+  NADIA_NOTICES.rejected,
+  NADIA_NOTICES.reassigned,
+]

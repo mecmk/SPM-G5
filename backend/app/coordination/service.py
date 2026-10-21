@@ -45,6 +45,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Subquery, and_, func, or_, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import Permission, RoleCode, role_has
@@ -201,18 +202,23 @@ def list_coordinators(
     ]
 
 
+def awaiting_a_coordinator() -> ColumnElement[bool]:
+    """Story 5.4 AC2: when an event waits in the Lead's unassigned queue
+    (``list_unassigned_events``, and story 20.2's notification targets): it is open and has no
+    coordinator."""
+    return and_(
+        Event.assigned_coordinator_id.is_(None),
+        Event.status.in_(ASSIGNABLE_STATUSES),
+    )
+
+
 def list_unassigned_events(db: Session) -> list[Event]:
     """Story 5.4 AC2: every submitted event that is still open and has no coordinator, oldest
     submission first (ties broken by id, so the order is stable). A draft is not submitted, and a
     rejected, cancelled or completed event needs no owner, so neither waits here."""
     return list(
         db.scalars(
-            select(Event)
-            .where(
-                Event.assigned_coordinator_id.is_(None),
-                Event.status.in_(ASSIGNABLE_STATUSES),
-            )
-            .order_by(Event.submitted_at, Event.id)
+            select(Event).where(awaiting_a_coordinator()).order_by(Event.submitted_at, Event.id)
         ).all()
     )
 

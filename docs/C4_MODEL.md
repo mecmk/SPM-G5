@@ -150,7 +150,7 @@ C4Component
         Component(changes, "Change request service", "app/change_requests, epic 19", "An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the assigned coordinator's queue of them and decision on each. Approving applies the change by the event's own rules, reused from app/events, releases only the bookings and equipment it affects, and returns an event past Planning to Planning for a new safety check. Before deciding, the coordinator sees the impact approving would have, worked out by the same rules and checked again when approving")
         Component(cancellation, "Cancellation service", "app/cancellations, epic 6", "The organiser cancelling their own event with a reason. One transaction, under the event's row lock: its pending and approved bookings and its equipment holds are released, its open equipment items, registrations and pending change requests closed and kept for the record, and who cancelled it, when and why recorded. The coordinator (or the Lead, before one is assigned), the attendees, Venue Staff and Technical Support are told")
         Component(safety, "Safety check service", "app/safety, epic 21", "The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest. The coordinator's request for a review once every arrangement is secured, the officer's decision against the review factors with findings of what must change, and confirming an approved event no change request has been approved since. Neither is allowed while a booked venue is marked unavailable or has a replacement pending")
-        Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted, and each user's own list")
+        Component(notifications, "Notification service", "app/notifications, epic 20", "One notification per significant action, to the related users and never to whoever acted; each user's own list, which of its notifications are read, the unread count, and where opening each one goes for its reader")
     }
     ContainerDb(db, "Database", "PostgreSQL 16", "Every table the first release needs")
 
@@ -178,6 +178,11 @@ C4Component
     Rel(review, notifications, "Raises decisions through")
     Rel(changes, notifications, "Raises change requests, withdrawals and decisions through")
     Rel(safety, notifications, "Raises review requests, decisions and confirmations through")
+    Rel(notifications, events, "Reads who may open an event in")
+    Rel(notifications, review, "Reads which events wait in the Lead's unassigned queue in")
+    Rel(notifications, bookings, "Reads which bookings exist in")
+    Rel(notifications, safety, "Reads which safety checks can be opened in")
+    Rel(notifications, changes, "Reads which change requests a coordinator's queue lists in")
     Rel(shared, db, "Reads and writes")
     Rel(events, db, "Reads and writes")
     Rel(review, db, "Reads and writes")
