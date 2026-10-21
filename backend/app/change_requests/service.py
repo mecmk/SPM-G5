@@ -674,7 +674,7 @@ class ChangedSinceRequested(EventStateConflict):
         super().__init__(CHANGED_SINCE_REQUESTED_MESSAGE.format(label=FIELD_LABELS[field]))
 
 
-def in_coordinator_queue(viewer: User) -> ColumnElement[bool]:
+def in_coordinator_queue(*, viewer: User) -> ColumnElement[bool]:
     """AC1: when a change request is listed for ``viewer`` (``list_coordinator_change_requests``,
     and story 20.2's notification targets): its event is assigned to them now, and a request still
     pending is on an event still going ahead. Needs ``EventChangeRequest`` joined to its event."""
@@ -704,7 +704,7 @@ def list_coordinator_change_requests(db: Session, *, viewer: User) -> list[Event
                 ),
                 with_event.selectinload(Event.equipment_requests),
             )
-            .where(in_coordinator_queue(viewer))
+            .where(in_coordinator_queue(viewer=viewer))
             .order_by(
                 case((is_pending, 0), else_=1),
                 case((is_pending, EventChangeRequest.created_at)).asc(),

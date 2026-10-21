@@ -1,11 +1,13 @@
 """Where opening a notification goes (story 20.2 AC1, AC4).
 
 A notification is sent to one person, so where it goes is worked out for that reader: the page
-where their role acts on it, otherwise the event. ``with_targets`` answers for a whole page of
-notifications at once, with one query each for the events, the bookings and the safety checks
-they name, never one per row. It is its own module, not part of ``service.py``, because the
-services of events, bookings and safety import ``notify`` from there, and this one imports them
-for the rules that decide whether a page opens.
+where their role acts on it while that page still holds the item, otherwise the event.
+``with_targets`` answers for a whole page of notifications at once, with one query each for the
+events, the bookings, the safety checks that open, the Lead's unassigned queue, the coordinator's
+change request queue and Technical Support's equipment queue, never one per row. A queue is judged
+by the same condition the queue's own list applies. It is its own module, not part of
+``service.py``, because the services of events, bookings and safety import ``notify`` from there,
+and this one imports them for the rules that decide whether a page opens.
 
 The server sends a kind of page and the record's id, never an address (the frontend owns its
 routes). A reader who has no page for the type, cannot open the item, or finds it gone gets no
@@ -250,7 +252,7 @@ def with_targets(db: Session, *, viewer: User, notifications: list[Notification]
                 .join(EventChangeRequest.event)
                 .where(
                     EventChangeRequest.id.in_(request_ids),
-                    change_requests_service.in_coordinator_queue(viewer),
+                    change_requests_service.in_coordinator_queue(viewer=viewer),
                 )
             )
         )
