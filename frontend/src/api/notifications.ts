@@ -35,11 +35,7 @@ export interface UnreadCountOut {
   count: number
 }
 
-/** Mirrors `MarkedOut`: how many notifications a mark-all-read marked. */
-export interface MarkedOut {
-  marked: number
-}
-
+/** How many notifications the user has not read: every unread row, not only the 50 the list holds. */
 export async function fetchUnreadCount(): Promise<number> {
   const { count } = await api<UnreadCountOut>('/notifications/unread-count')
   return count
@@ -53,6 +49,11 @@ export function markNotificationRead(notificationId: string): Promise<ServerNoti
     body: { is_read: true },
     notify: false,
   })
+}
+
+/** Mirrors `MarkedOut`: how many notifications a mark-all-read marked. */
+export interface MarkedOut {
+  marked: number
 }
 
 /** Mark read every unread notification up to and including `throughId`, the newest one the user

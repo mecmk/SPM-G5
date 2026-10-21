@@ -17,9 +17,10 @@ import {
 /**
  * The user's server notifications and their unread count (story 20.2), held once for the signed-in
  * frame: the bell is drawn twice (the sidebar's and the phone's bar), and a fetch inside the bell
- * would send every request twice. Read when the frame opens, on every page change and when the tab
- * becomes visible again (AC2) - never on a timer. An answer that arrives after a newer request was
- * sent is dropped, as `useLoaded` drops one for a `load` that has changed.
+ * would send every request twice. Read when the frame opens, on every page change, when the tab
+ * becomes visible again and when the notification panel opens (AC2) - never on a timer. An answer
+ * that arrives after a newer request was sent is dropped, as `useLoaded` drops one for a `load` that
+ * has changed.
  */
 function ServerNotifications({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
@@ -90,6 +91,7 @@ function ServerNotifications({ children }: { children: ReactNode }) {
   const markRead = useCallback(
     async (notificationId: string) => {
       const marked = await markNotificationRead(notificationId)
+      if (!isMounted.current) return
       setNotifications((current) =>
         current === null
           ? current

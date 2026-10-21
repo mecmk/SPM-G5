@@ -115,9 +115,9 @@ under the panel's own heading, "Your recent actions". `ServerNotificationProvide
 (`useServerNotifications()`) holds them once for the signed-in frame, since the bell is drawn
 twice, and keys its state by the signed-in user. The badge is the server's unread count
 (`GET /notifications/unread-count`), never a count of the list, which holds the newest 50. The
-count and the list are read when the frame opens, on every page change and when the browser tab
-becomes visible again: no timer. The log has no unread state and is not counted. Marking one
-notification read (`PATCH /notifications/{id}`) and all of them (`PATCH /notifications`, through
+count and the list are read when the frame opens, on every page change, when the browser tab
+becomes visible again and when the notification panel opens: no timer. The log has no unread state
+and is not counted. Marking one notification read (`PATCH /notifications/{id}`) and all of them (`PATCH /notifications`, through
 the newest notification of the list last loaded) are the two other `notify: false` calls: marking
 read is not a save of the user's, so it adds no toast and no entry to the log, and a refusal shows
 in the panel as `<p role="alert" className="error">`. Where opening a notification goes is the
