@@ -19,6 +19,11 @@ export const ACCOUNTS = {
   attendee: 'attendee@example.com',
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
+  // Story 18.4: one attendee for each flow that changes their details (attendee-profile.spec.ts).
+  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile.
+  attendee3: 'attendee3@example.com',
+  attendee4: 'attendee4@example.com',
+  attendee5: 'attendee5@example.com',
   // Story 20.2: an organiser with nine notifications of her own, which only
   // notifications.spec.ts reads (backend/tests/support/seed.py::Users.NOTICE).
   notice: 'nadia@notice.example',
@@ -146,6 +151,11 @@ export const EVENTS = {
   // Story 20.2: Nadia Notice's, in planning with coordinator2 (dated February 2028). Nothing
   // changes it; her notifications are about it.
   noticeGala: '33333333-0000-0000-0000-000000020202',
+  // Story 18.4, Confirmed, organiser: organiser2, coordinator2, December 2028. Esme registered for
+  // the charity quiz before the spec changes her details; the food tasting walk closed on 1 Oct
+  // 2026 with Aiden and Bella registered, so its list never changes and is only read.
+  charityQuiz: '33333333-0000-0000-0000-000000018407',
+  foodTastingWalk: '33333333-0000-0000-0000-000000018408',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in

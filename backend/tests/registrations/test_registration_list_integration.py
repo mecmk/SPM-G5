@@ -34,7 +34,16 @@ from tests.support.seed import Users
 
 REGISTERED_AT = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
 NOT_FOUND = service.REGISTRATION_LIST_NOT_FOUND_MESSAGE
-ROW_KEYS = {"id", "attendee_name", "attendee_email", "registered_at", "status", "withdrawn_at"}
+ROW_KEYS = {
+    "id",
+    "attendee_name",
+    "attendee_email",
+    "attendee_phone",  # story 18.4 AC5
+    "dietary_requirements",  # story 18.4 AC5
+    "registered_at",
+    "status",
+    "withdrawn_at",
+}
 
 
 def _path(event_id: uuid.UUID) -> str:
@@ -247,6 +256,8 @@ def test_an_attendee_who_withdrew_and_registered_again_is_listed_twice_and_count
 
 # --- AC5/AC6: who may see it ------------------------------------------------------------------
 @pytest.mark.story("18.3", ac=5)
+# Story 18.4 AC10: the registrants' details travel in this list, so no one else ever sees them.
+@pytest.mark.story("18.4", ac=10)
 @pytest.mark.parametrize(
     "user",
     [

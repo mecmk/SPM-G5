@@ -141,7 +141,7 @@ The app is served at [http://localhost:5173](http://localhost:5173). The backend
 documentation (Swagger UI) is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 Sign in with one of the sample accounts, one per role (password `Password123!` for all). The full
-list, including a second organiser, coordinator and attendee, is in
+list, including the other organisers, coordinators and attendees, is in
 [docs/database/README.md](docs/database/README.md#sample-logins).
 
 | Role | Email |
@@ -153,6 +153,7 @@ list, including a second organiser, coordinator and attendee, is in
 | Venue Staff | `venue@connectsphere.example` |
 | Technical Support Staff | `tech@connectsphere.example` |
 | Attendee | `attendee@example.com` |
+| Attendee who has not given their details yet, so their first registration asks for them (story 18.4) | `attendee3@example.com` |
 | Safety Officer | `safety@connectsphere.example` |
 
 ### Database commands
