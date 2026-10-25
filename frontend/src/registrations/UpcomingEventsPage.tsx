@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import { formatApiError, mediaUrl } from '../api/client'
 import {
+  fetchProfile,
   listRegistrationEvents,
   registerForEvent,
   REGISTRATION_EVENTS_MAX_LIMIT,
   REGISTRATION_EVENTS_PAGE_SIZE,
+  updateProfile,
+  type AttendeeDetails,
+  type Profile,
   type RegistrationEvent,
   type RegistrationState,
 } from '../api/registrations'
@@ -16,8 +20,12 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
+import { detailsFrom } from './attendeeDetails'
 import {
   REGISTERED_BADGE,
+  describeDietaryRequirements,
+  describePhone,
   describeRegisteredAt,
   type RegistrationBadge,
 } from './registrationLabels'
@@ -147,6 +155,45 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
   )
 }
 
+/** Story 18.4: what the details dialog is open for - the first registration, for this event (AC2),
+ *  or changing the saved details (AC3). */
+type DetailsDialogPurpose = { event: RegistrationEvent } | { event: null }
+
+interface YourDetailsProps {
+  profile: Profile
+  onChange: () => void
+}
+
+/**
+ * Story 18.4 AC3: the details every registration uses, shown where the attendee registers, with
+ * "Change details" to change them here. Shown once they have given them; before that, their first
+ * registration asks (AC2).
+ */
+function YourDetails({ profile, onChange }: YourDetailsProps) {
+  const headingId = useId()
+  return (
+    <section className="card your-details" aria-labelledby={headingId}>
+      <div className="your-details-body">
+        <h2 id={headingId}>Your details</h2>
+        <p className="small muted">Filled in for you whenever you register.</p>
+        <dl className="attendee-details-list">
+          <div>
+            <dt>Phone number</dt>
+            <dd>{describePhone(profile.phone)}</dd>
+          </div>
+          <div>
+            <dt>Dietary requirements</dt>
+            <dd>{describeDietaryRequirements(profile.dietary_requirements)}</dd>
+          </div>
+        </dl>
+      </div>
+      <button type="button" className="secondary" onClick={onChange}>
+        Change details
+      </button>
+    </section>
+  )
+}
+
 /** The size of the list to load again after a registration: what is shown, so a refreshed list
  *  keeps the pages already loaded - up to REGISTRATION_EVENTS_MAX_LIMIT, the most the API sends
  *  at once, past which it is cut back to that many. */
@@ -170,6 +217,14 @@ function refreshLimit(shownCount: number): number {
  * AC4: an event that stopped taking registrations is gone from the reloaded list, so its refusal
  *      is shown above the list instead, naming the event.
  * AC8 (fix f18.1.1): each card shows its event's cover picture, or the placeholder.
+ *
+ * Story 18.4 - autofill attendee profile details.
+ * AC2: an attendee who has never given their details is asked for them in a dialog when they first
+ *      press Register, and is registered with them; nothing is registered until they confirm.
+ * AC3: after that Register takes one click, and "Your details" shows what every registration uses,
+ *      with Change details to change them - saved to My profile.
+ * If the profile cannot be loaded, Register sends no details and the backend says why a first
+ * registration needs them.
  */
 export function UpcomingEventsPage() {
   // What to load: the first page, then everything shown again after each registration. A new
@@ -185,6 +240,14 @@ export function UpcomingEventsPage() {
     eventName: string
     message: string
   } | null>(null)
+
+  // Story 18.4: the profile, loaded again (a new function each time) after a first registration
+  // saved the details, so the page shows them as the server stored them.
+  const [loadProfile, setLoadProfile] = useState(() => fetchProfile)
+  const { data: profile, error: profileError, setData: setProfile } = useLoaded(loadProfile)
+  const [detailsDialog, setDetailsDialog] = useState<DetailsDialogPurpose | null>(null)
+  const [detailsError, setDetailsError] = useState<string | null>(null)
+  const [isSavingDetails, setIsSavingDetails] = useState(false)
 
   const items = useMemo(() => list?.items ?? [], [list])
   const isRefusalOnItsCard = refusal !== null && items.some((event) => event.id === refusal.eventId)
@@ -206,14 +269,16 @@ export function UpcomingEventsPage() {
     }
   }, [items, setList])
 
-  const handleRegister = useCallback(
-    async (event: RegistrationEvent) => {
+  /** Register for `event`, with the attendee's details when given (18.4 AC2/AC3). Answers why it
+   *  was refused, or null when it was taken. */
+  const sendRegistration = useCallback(
+    async (event: RegistrationEvent, details?: AttendeeDetails): Promise<string | null> => {
       setRegisteringId(event.id)
       setRefusal(null)
       // The list is loaded again below, so an earlier page's failure no longer applies.
       setLoadMoreError(null)
       try {
-        const registration = await registerForEvent(event)
+        const registration = await registerForEvent(event, details)
         // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
         // again in between.
         setList((current) =>
@@ -226,8 +291,9 @@ export function UpcomingEventsPage() {
                 ),
               },
         )
+        return null
       } catch (err) {
-        setRefusal({ eventId: event.id, eventName: event.name, message: formatApiError(err) })
+        return formatApiError(err)
       } finally {
         setRegisteringId(null)
         setShown({ limit: refreshLimit(items.length) })
@@ -235,6 +301,58 @@ export function UpcomingEventsPage() {
     },
     [items, setList],
   )
+
+  /** 18.1 AC1/AC6: one click registers, and a refusal shows on the event's card. 18.4 AC2: an
+   *  attendee who has never given their details is asked for them first. */
+  const handleRegister = useCallback(
+    async (event: RegistrationEvent) => {
+      if (profile !== null && !profile.has_confirmed_details) {
+        setDetailsError(null)
+        setDetailsDialog({ event })
+        return
+      }
+      const problem = await sendRegistration(event)
+      if (problem !== null) {
+        setRefusal({ eventId: event.id, eventName: event.name, message: problem })
+      }
+    },
+    [profile, sendRegistration],
+  )
+
+  function handleChangeDetails() {
+    setDetailsError(null)
+    setDetailsDialog({ event: null })
+  }
+
+  function handleCancelDetails() {
+    setDetailsDialog(null)
+  }
+
+  /** 18.4 AC2: register with the details, kept open on a refusal so nothing typed is lost. AC3:
+   *  save them to the profile. */
+  async function handleConfirmDetails(details: AttendeeDetails) {
+    if (detailsDialog === null) return
+    setDetailsError(null)
+    if (detailsDialog.event !== null) {
+      const problem = await sendRegistration(detailsDialog.event, details)
+      if (problem !== null) {
+        setDetailsError(problem)
+        return
+      }
+      setDetailsDialog(null)
+      setLoadProfile(() => () => fetchProfile())
+      return
+    }
+    setIsSavingDetails(true)
+    try {
+      setProfile(await updateProfile(details))
+      setDetailsDialog(null)
+    } catch (err) {
+      setDetailsError(formatApiError(err))
+    } finally {
+      setIsSavingDetails(false)
+    }
+  }
 
   return (
     <div className="page page-wide upcoming-events">
@@ -250,6 +368,14 @@ export function UpcomingEventsPage() {
         </p>
       )}
       {isLoading && <LoadingState label="Loading upcoming events…" />}
+      {profileError && (
+        <p role="alert" className="error">
+          {profileError}
+        </p>
+      )}
+      {profile !== null && profile.has_confirmed_details && (
+        <YourDetails profile={profile} onChange={handleChangeDetails} />
+      )}
       {refusal !== null && !isRefusalOnItsCard && (
         <p role="alert" className="error">
           {refusal.eventName}: {refusal.message}
@@ -295,6 +421,17 @@ export function UpcomingEventsPage() {
             </div>
           )}
         </>
+      )}
+
+      {detailsDialog !== null && (
+        <AttendeeDetailsDialog
+          initial={detailsFrom(profile)}
+          eventName={detailsDialog.event?.name ?? null}
+          isBusy={registeringId !== null || isSavingDetails}
+          error={detailsError}
+          onConfirm={handleConfirmDetails}
+          onCancel={handleCancelDetails}
+        />
       )}
     </div>
   )

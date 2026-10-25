@@ -34,10 +34,10 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
+import { PHONE_MAX_LENGTH } from '../shared/phone'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
   CONTACT_NAME_MAX_LENGTH,
-  CONTACT_PHONE_MAX_LENGTH,
   COVER_IMAGE_TYPES,
   EMPTY_FACILITY,
   EMPTY_NOTE,
@@ -1003,7 +1003,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 <input
                   type="tel"
                   autoComplete="tel"
-                  maxLength={CONTACT_PHONE_MAX_LENGTH}
+                  maxLength={PHONE_MAX_LENGTH}
                   {...fieldProps(FIELD_ID.contactPhone)}
                   value={form.contactPhone}
                   onChange={(e) => updateField('contactPhone', e.target.value)}

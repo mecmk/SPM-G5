@@ -4399,3 +4399,133 @@ button.requirement-choice.requirement-covered:hover,
     min-height: 44px;
   }
 }
+
+/* ---------- attendee details: My profile, Upcoming events, the registration list (story 18.4) ---------- */
+
+/* AC1/AC3: the name and email on My profile, and the saved details on Upcoming events - each a
+   label over its value, side by side while there is room. Labels look like the form's. */
+.attendee-details-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+
+.attendee-details-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.attendee-details-list dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+}
+
+/* AC3: Your details on Upcoming events, with Change details at its right edge. */
+.your-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.your-details-body {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.your-details h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.your-details .attendee-details-list {
+  margin-top: 0.75rem;
+}
+
+/* AC2/AC3: the details dialog scrolls inside itself if a short screen cannot hold it. */
+.attendee-details-dialog {
+  max-height: calc(100svh - 2rem);
+  overflow-y: auto;
+}
+
+/* AC5: long dietary requirements wrap inside their column rather than widening the table. */
+.registration-table .registration-dietary {
+  min-width: 12rem;
+  max-width: 24rem;
+  white-space: normal;
+}
+
+@media (max-width: 640px) {
+  /* AC5: on a phone each attendee is a card of labelled lines - no columns to scroll sideways.
+     A row no longer Registered has no details, so those lines are left out. */
+  .registration-table thead {
+    display: none;
+  }
+
+  .registration-table,
+  .registration-table tbody,
+  .registration-table tr,
+  .registration-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .registration-table tr {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .registration-table tr + tr {
+    margin-top: 0.75rem;
+  }
+
+  .registration-table td {
+    padding: 0.25rem 0;
+    border-bottom: 0;
+    white-space: normal;
+  }
+
+  .registration-table td:empty {
+    display: none;
+  }
+
+  .registration-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .registration-table .registration-name {
+    font-weight: 600;
+  }
+
+  .registration-table .registration-dietary {
+    min-width: 0;
+    max-width: none;
+  }
+
+  /* Everything an attendee taps is at least 44px tall, to be pressed with a thumb. */
+  .profile-page button[type='submit'],
+  .your-details button,
+  .attendee-details-dialog .dialog-actions button {
+    min-height: 44px;
+  }
+
+  .your-details button {
+    width: 100%;
+  }
+}

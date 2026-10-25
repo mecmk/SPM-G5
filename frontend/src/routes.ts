@@ -224,6 +224,10 @@ export const UPCOMING_EVENTS_PATH = '/browse'
 // Story 18.2: the attendee's own registrations, and withdrawing one.
 export const MY_REGISTRATIONS_PATH = '/registrations'
 
+// Story 18.4: the attendee's profile - their name, email and the details filled in when they
+// register.
+export const PROFILE_PATH = '/profile'
+
 // Story 18.3: who registered for the events an organiser or coordinator manages, one at a time.
 export const REGISTRATIONS_REPORT_PATH = '/registrations/report'
 

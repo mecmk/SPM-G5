@@ -12,6 +12,9 @@ picture and dates, where they stand, when they registered and withdrew, and whet
 withdraw now - nothing more of the event.
 
 Story 18.3: an event's registration list, as its organiser and assigned coordinator see it.
+
+Story 18.4: the attendee's details - their phone number and dietary requirements - as they send
+them, on My profile or with their first registration, and as My profile shows them.
 """
 
 from __future__ import annotations
@@ -19,19 +22,84 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.auth.models import User
+from app.common.phone import PHONE_NUMBER_INVALID_MESSAGE, is_phone_number
 from app.events.models import Event
 from app.registrations.models import EventRegistration
 from app.venues.models import Venue
 
+# Story 18.4 AC6. Mirrored by the field's maxLength in frontend/src/api/registrations.ts - keep the
+# two in step; ck_users_dietary_requirements holds the database to it too.
+DIETARY_REQUIREMENTS_MAX_LENGTH = 500
+DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE = "Dietary requirements must be 500 characters or fewer."
+
+
+class AttendeeDetailsIn(BaseModel):
+    """Story 18.4: the details an attendee sends, on My profile (AC4) or with a registration (AC2,
+    AC3). Only the fields sent are changed. AC6/AC7: blank or spaces only is no value - None, shown
+    as "None" for dietary requirements. AC10: nothing else can be sent - not a name, an email or
+    whose profile it is (the signed-in attendee's, always) - so ``extra="forbid"`` refuses them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str | None = None
+    dietary_requirements: str | None = None
+
+    @field_validator("phone", "dietary_requirements", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+    @field_validator("phone")
+    @classmethod
+    def _check_phone(cls, value: str | None) -> str | None:
+        """AC7: optional; when given, the event contact phone's rule (2.1 AC13)."""
+        if value is not None and not is_phone_number(value):
+            raise ValueError(PHONE_NUMBER_INVALID_MESSAGE)
+        return value
+
+    @field_validator("dietary_requirements")
+    @classmethod
+    def _check_dietary_requirements(cls, value: str | None) -> str | None:
+        """AC6: at most 500 characters, counted once trimmed."""
+        if value is not None and len(value) > DIETARY_REQUIREMENTS_MAX_LENGTH:
+            raise ValueError(DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE)
+        return value
+
+
+class ProfileOut(BaseModel):
+    """Story 18.4 AC1: My profile - the name and email, which the attendee cannot change, and the
+    details they keep up to date. ``has_confirmed_details`` is false until they first give them,
+    so their first registration asks (AC2). No defaults (response schema)."""
+
+    full_name: str
+    email: str
+    phone: str | None
+    dietary_requirements: str | None
+    has_confirmed_details: bool
+
+    @classmethod
+    def from_user(cls, user: User) -> ProfileOut:
+        return cls(
+            full_name=user.full_name,
+            email=user.email,
+            phone=user.phone,
+            dietary_requirements=user.dietary_requirements,
+            has_confirmed_details=user.attendee_details_confirmed_at is not None,
+        )
+
 
 class RegistrationCreate(BaseModel):
     """AC1: the event to register for. The attendee is the signed-in user, never a value sent
-    with the request."""
+    with the request. Story 18.4 AC2/AC3: the attendee's details, needed with their first
+    registration and saved to their profile with any."""
 
     event_id: uuid.UUID
+    details: AttendeeDetailsIn | None = None
 
 
 class RegistrationVenueOut(BaseModel):
@@ -162,24 +230,30 @@ class MyRegistrationOut(BaseModel):
 
 class EventRegistrationOut(BaseModel):
     """18.3 AC1/AC4: one registration in an event's list - who, when, and where they stand, as
-    18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. No defaults
-    (response schema)."""
+    18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. Story 18.4
+    AC5: the attendee's phone number and dietary requirements, read from their profile, so a
+    change shows at once (AC4); null when they gave none (shown as "None", AC6) and on every row
+    no longer Registered (AC9). No defaults (response schema)."""
 
     id: uuid.UUID
     attendee_name: str
     attendee_email: str
+    attendee_phone: str | None
+    dietary_requirements: str | None
     registered_at: datetime
     status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
     withdrawn_at: datetime | None
 
     @classmethod
     def from_registration(
-        cls, registration: EventRegistration, *, attendee: User, status: str
+        cls, registration: EventRegistration, *, attendee: User, status: str, shows_details: bool
     ) -> EventRegistrationOut:
         return cls(
             id=registration.id,
             attendee_name=attendee.full_name,
             attendee_email=attendee.email,
+            attendee_phone=attendee.phone if shows_details else None,
+            dietary_requirements=attendee.dietary_requirements if shows_details else None,
             registered_at=registration.registered_at,
             status=status,
             withdrawn_at=registration.withdrawn_at,

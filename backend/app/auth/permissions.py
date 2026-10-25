@@ -74,7 +74,8 @@ class Permission(StrEnum):
     EQUIPMENT_MANAGE = "equipment:manage"  # availability, reservations, out-of-service (15.4-17.x)
 
     # --- Attendee registration (18.x) ---
-    REGISTRATIONS_SELF = "registrations:self"  # browse and register (18.1), withdraw (18.2)
+    # Browse and register (18.1), withdraw (18.2), and the attendee's own profile details (18.4).
+    REGISTRATIONS_SELF = "registrations:self"
     REGISTRATIONS_VIEW = "registrations:view"  # organiser / coordinator view list (18.3)
 
     # --- Operational safety checks (21.x) ---

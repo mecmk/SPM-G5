@@ -1918,14 +1918,32 @@ ON CONFLICT (id) DO UPDATE SET
 -- Aiden and Bella registered, so its registration list never changes: the organiser reads their
 -- details there.
 -- ---------------------------------------------------------------------
-INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department) VALUES
-    ('11111111-0000-0000-0000-000000018401', 'attendee3@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Cara Attendee', 'ATTENDEE', NULL, NULL, NULL),
-    ('11111111-0000-0000-0000-000000018402', 'attendee4@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Dion Attendee', 'ATTENDEE', NULL, NULL, NULL),
-    ('11111111-0000-0000-0000-000000018403', 'attendee5@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Esme Attendee', 'ATTENDEE', NULL, NULL, NULL)
+INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department,
+                   dietary_requirements, attendee_details_confirmed_at) VALUES
+    ('11111111-0000-0000-0000-000000018401', 'attendee3@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Cara Attendee', 'ATTENDEE', NULL, NULL, NULL,
+     NULL, NULL),
+    ('11111111-0000-0000-0000-000000018402', 'attendee4@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Dion Attendee', 'ATTENDEE', NULL, '+65 9184 0202', NULL,
+     'No pork', '2026-10-01 09:00+08'),
+    ('11111111-0000-0000-0000-000000018403', 'attendee5@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Esme Attendee', 'ATTENDEE', NULL, '+65 9184 0303', NULL,
+     'Halal', '2026-10-01 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
     role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
-    phone = EXCLUDED.phone, department = EXCLUDED.department;
+    phone = EXCLUDED.phone, department = EXCLUDED.department,
+    dietary_requirements = EXCLUDED.dietary_requirements,
+    attendee_details_confirmed_at = EXCLUDED.attendee_details_confirmed_at;
+
+-- Aiden and Bella gave their details before, so 18.1's and 18.2's registrations are never asked
+-- for them. Aiden gave no dietary requirements, so his show as "None"; Bella's are long, so the
+-- registration list's cards show them wrapping on a phone.
+UPDATE users SET phone = details.phone, dietary_requirements = details.dietary_requirements,
+                 attendee_details_confirmed_at = '2026-09-15 09:00+08'
+FROM (VALUES
+    ('11111111-0000-0000-0000-000000000007'::uuid, '+65 9700 0007', NULL),
+    ('11111111-0000-0000-0000-000000000011'::uuid, '+65 9700 0011',
+     'Vegetarian. No eggs, no mushrooms, and nothing cooked with fish sauce or oyster sauce, please - a severe shellfish allergy, so food prepared alongside shellfish is not safe either.')
+) AS details (id, phone, dietary_requirements)
+WHERE users.id = details.id;
 
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,

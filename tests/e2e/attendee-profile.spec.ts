@@ -223,7 +223,15 @@ test('18.4 AC4: a change on My profile shows on the registration list of an even
   await page.goto(PROFILE_PATH)
   await page.getByLabel('Phone number').fill('+65 9184 0399')
   await page.getByLabel('Dietary requirements').fill('Gluten free')
-  await page.getByRole('button', { name: 'Save details' }).click()
+  // The save must land before the reload, or reloading would cancel it.
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        new URL(response.url()).pathname === PROFILE_PATH,
+    ),
+    page.getByRole('button', { name: 'Save details' }).click(),
+  ])
   // Reloading shows what was saved.
   await page.reload()
   await expect(page.getByLabel('Phone number')).toHaveValue('+65 9184 0399')

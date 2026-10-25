@@ -133,6 +133,7 @@ export type ErrorCode =
   | 'REGISTRATION_NOT_FOUND'
   | 'WITHDRAWAL_REFUSED'
   | 'REGISTRATION_LIST_NOT_FOUND'
+  | 'ATTENDEE_PHONE_INVALID'
 
 export interface ErrorEntry {
   title: string
@@ -795,8 +796,9 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Cannot register',
     message: 'This event is not open for registration.',
   },
-  /** AC2/AC6: not yet open, closed, full, or already registered. The backend's own sentence
-   *  (always sent) says which. */
+  /** AC2/AC6: not yet open, closed, full, or already registered - or, story 18.4 AC2, a first
+   *  registration sent without the attendee's details. The backend's own sentence (always sent)
+   *  says which. */
   REGISTRATION_REFUSED: {
     title: 'Cannot register',
     message: 'This registration could not be taken.',
@@ -822,6 +824,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   REGISTRATION_LIST_NOT_FOUND: {
     title: 'Registrations unavailable',
     message: 'This event was not found.',
+  },
+
+  // Story 18.4: an attendee's details, on My profile and when registering.
+  /** AC7: worded as the backend's PHONE_NUMBER_INVALID_MESSAGE, the rule an event's contact phone
+   *  follows (2.1 AC13). */
+  ATTENDEE_PHONE_INVALID: {
+    title: 'Check your phone number',
+    message: 'Enter a phone number with 8 to 15 digits.',
   },
 }
 

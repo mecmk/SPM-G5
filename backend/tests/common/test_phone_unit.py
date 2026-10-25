@@ -14,6 +14,7 @@ AC7 The phone number is optional. When given, it follows the rule for an event's
 from __future__ import annotations
 
 import pytest
+
 from app.common.phone import PHONE_MAX_LENGTH, is_phone_number
 
 

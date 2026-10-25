@@ -39,6 +39,8 @@ from app.venues.models import (
 from tests.support.seed import Events, Users, Venues
 
 _counter = itertools.count(1)
+# Story 18.4 AC2: when a made attendee gave their details, so they register without being asked.
+ATTENDEE_DETAILS_CONFIRMED_AT = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
 
 def make_user(
@@ -49,7 +51,12 @@ def make_user(
     is_active: bool = True,
     **overrides,
 ) -> User:
+    """A persisted user. An ATTENDEE has given their details before, as one who has registered
+    already has (story 18.4 AC2); pass ``attendee_details_confirmed_at=None`` for one who never
+    has, whose first registration asks for them."""
     n = next(_counter)
+    if role == "ATTENDEE":
+        overrides.setdefault("attendee_details_confirmed_at", ATTENDEE_DETAILS_CONFIRMED_AT)
     user = User(
         email=overrides.pop("email", f"user{n}@test.example"),
         password_hash=hash_password(password),

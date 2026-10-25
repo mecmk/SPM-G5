@@ -16,6 +16,10 @@ Story 18.3: an event's registration list, for its organiser and assigned coordin
 past draft - anyone else is told the event was not found (AC5/AC6), as an unknown event is. Every
 registration is listed, a page at a time, each with 18.2's standing (AC4); only those still
 Registered count, so a cancelled event counts none.
+
+Story 18.4: the attendee's details - phone number and dietary requirements - live on their user
+row, so a change shows everywhere at once (AC4). They are written on My profile and with a
+registration, and the first registration needs them (AC2).
 """
 
 from __future__ import annotations
@@ -35,7 +39,7 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationStatus
-from app.registrations.schemas import RegistrationCreate
+from app.registrations.schemas import AttendeeDetailsIn, RegistrationCreate
 from app.venues.models import Venue
 
 # AC1: the list comes a page at a time; the page asks for this many unless it says otherwise.
@@ -57,6 +61,13 @@ REGISTRATION_CLOSED_MESSAGE = "Registration for this event has closed."
 EVENT_FULL_MESSAGE = "This event is full."
 ALREADY_REGISTERED_MESSAGE = "You are already registered for this event."
 REGISTRATION_LIST_NOT_FOUND_MESSAGE = "This event was not found."
+# Story 18.4: the attendee's details.
+ATTENDEE_DETAILS_UPDATED_ACTION = "ATTENDEE_DETAILS_UPDATED"
+_USER_ENTITY = "user"
+ATTENDEE_DETAILS_REQUIRED_MESSAGE = (
+    "Give your phone number and dietary requirements on My profile before your first"
+    " registration. Either may be left blank."
+)
 
 
 class RegistrationState(StrEnum):
@@ -102,6 +113,14 @@ class AlreadyRegistered(RegistrationRefused):
         super().__init__(ALREADY_REGISTERED_MESSAGE)
 
 
+class AttendeeDetailsRequired(RegistrationRefused):
+    """Story 18.4 AC2: the attendee has never given their details, and sent none with their
+    first registration."""
+
+    def __init__(self) -> None:
+        super().__init__(ATTENDEE_DETAILS_REQUIRED_MESSAGE)
+
+
 class RegistrationListNotFound(LookupError):
     """18.3 AC5/AC6: no event with this id whose list the viewer may view - unknown, someone
     else's, or still a draft. One answer for all, so the list gives nothing away."""
@@ -133,11 +152,13 @@ class RegistrationEventListing:
 @dataclass(frozen=True)
 class AttendeeRegistration:
     """18.3 AC1/AC4: one row of an event's registration list - the registration, who made it,
-    and where they stand (18.2's standing)."""
+    and where they stand (18.2's standing). Story 18.4 AC5/AC9: whether the row shows the
+    attendee's details - only while they are registered."""
 
     registration: EventRegistration
     attendee: User
     standing: RegistrationStanding
+    shows_details: bool
 
 
 @dataclass(frozen=True)
@@ -296,15 +317,49 @@ def list_registration_events(
     return RegistrationEventListing(items=items, total=total or 0)
 
 
+def _apply_details(
+    db: Session, details: AttendeeDetailsIn, *, attendee: User, now: datetime
+) -> None:
+    """Story 18.4: write the details ``attendee`` sent - only the fields sent (AC4) - and record
+    that they have now given them, so no later registration asks (AC2). The audit names the fields
+    that changed, never their values: phone numbers and dietary needs stay out of the append-only
+    log. Written, not committed, so a registration refused after it takes the details back."""
+    changed = sorted(
+        field
+        for field in details.model_fields_set
+        if getattr(attendee, field) != getattr(details, field)
+    )
+    for field in changed:
+        setattr(attendee, field, getattr(details, field))
+    if attendee.attendee_details_confirmed_at is None:
+        attendee.attendee_details_confirmed_at = now
+    if changed:
+        record_audit(
+            db,
+            actor=attendee,
+            action=ATTENDEE_DETAILS_UPDATED_ACTION,
+            entity_type=_USER_ENTITY,
+            entity_id=attendee.id,
+            details={"fields": changed},
+            commit=False,
+        )
+
+
 def register(
     db: Session, data: RegistrationCreate, *, attendee: User, now: datetime
 ) -> EventRegistration:
     """AC1: register ``attendee`` for the event, stamped ``now``, and audit it. AC7: holding the
     event's row, so every check below reads the event and its places as they stand at this moment.
 
+    Story 18.4 AC2/AC3: details sent with it are saved to the attendee's profile in the same
+    transaction. With none, an attendee who has never given theirs is refused
+    (``AttendeeDetailsRequired``) - last, so only one who would otherwise have a place is asked,
+    and one who is already registered or facing a full event is told that instead.
+
     Raises ``RegistrationEventNotFound`` (AC3/AC4) unless the event is open to attendees, then
-    ``RegistrationClosed`` or ``RegistrationNotYetOpen`` (AC2), ``AlreadyRegistered`` (AC6) and
-    ``EventFull`` (AC2/AC6), in that order. A refused registration leaves nothing written."""
+    ``RegistrationClosed`` or ``RegistrationNotYetOpen`` (AC2), ``AlreadyRegistered`` (AC6),
+    ``EventFull`` (AC2/AC6) and ``AttendeeDetailsRequired`` (18.4 AC2), in that order. A refused
+    registration leaves nothing written - details sent with it included."""
     event = db.execute(
         select(
             Event.id,
@@ -340,6 +395,11 @@ def register(
     if db.scalar(_active_registrations(event.id)) > event.expected_attendance:
         db.rollback()
         raise EventFull()
+    if data.details is not None:
+        _apply_details(db, data.details, attendee=attendee, now=now)
+    elif attendee.attendee_details_confirmed_at is None:
+        db.rollback()
+        raise AttendeeDetailsRequired()
 
     record_audit(
         db,
@@ -609,6 +669,23 @@ def _active_count() -> ColumnElement[int]:
     return func.count().filter(EventRegistration.status == RegistrationStatus.REGISTERED)
 
 
+def _attendee_registration(
+    registration: EventRegistration, *, attendee: User, event_status: str
+) -> AttendeeRegistration:
+    """18.3 AC4: one row, with 18.2's standing. 18.4 AC9: only a registration still Registered
+    shows the attendee's details - not one withdrawn, nor any on a cancelled event (PO decision,
+    24 Oct 2026) - since only those attendees are being catered for and may need contacting."""
+    standing = registration_standing(
+        registration_status=registration.status, event_status=event_status
+    )
+    return AttendeeRegistration(
+        registration=registration,
+        attendee=attendee,
+        standing=standing,
+        shows_details=standing is RegistrationStanding.REGISTERED,
+    )
+
+
 def list_event_registrations(
     db: Session, event_id: uuid.UUID, *, viewer: User, limit: int, offset: int
 ) -> EventRegistrationList:
@@ -644,13 +721,7 @@ def list_event_registrations(
         active = 0
     return EventRegistrationList(
         items=[
-            AttendeeRegistration(
-                registration=registration,
-                attendee=attendee,
-                standing=registration_standing(
-                    registration_status=registration.status, event_status=event.status
-                ),
-            )
+            _attendee_registration(registration, attendee=attendee, event_status=event.status)
             for registration, attendee, _, _ in rows
         ],
         total=total,
@@ -671,3 +742,16 @@ def list_managed_registration_events(db: Session, *, viewer: User) -> list[Event
             .order_by(Event.starts_at, Event.id)
         )
     )
+
+
+# Story 18.4: the attendee's details, on My profile
+# =============================================================================================
+def update_profile(
+    db: Session, details: AttendeeDetailsIn, *, attendee: User, now: datetime
+) -> User:
+    """18.4 AC4: save the details ``attendee`` sent on My profile, which every page then reads
+    from their one row - registrations made earlier included. AC10: only ever the signed-in
+    attendee's own. AC11: a plain write, so of two saves the later wins."""
+    _apply_details(db, details, attendee=attendee, now=now)
+    db.commit()
+    return attendee

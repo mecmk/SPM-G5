@@ -46,6 +46,45 @@ export interface Registration {
   registered_at: string
 }
 
+/** Story 18.4 AC6: the most characters of dietary requirements, as the backend's
+ *  DIETARY_REQUIREMENTS_MAX_LENGTH. */
+export const DIETARY_REQUIREMENTS_MAX_LENGTH = 500
+
+/** Mirrors `AttendeeDetailsIn`: story 18.4, the details an attendee sends, on My profile or with a
+ *  registration. Blank is no value; the backend makes it null. */
+export interface AttendeeDetails {
+  phone: string
+  dietary_requirements: string
+}
+
+/** Mirrors `ProfileOut`: story 18.4 AC1, My profile. `has_confirmed_details` is false until the
+ *  attendee first gives their details, so their first registration asks for them (AC2). */
+export interface Profile {
+  full_name: string
+  email: string
+  phone: string | null
+  dietary_requirements: string | null
+  has_confirmed_details: boolean
+}
+
+/** Story 18.4 AC1: the signed-in attendee's profile. */
+export function fetchProfile(): Promise<Profile> {
+  return api<Profile>('/profile')
+}
+
+/** Story 18.4 AC3/AC4: save the signed-in attendee's details, answered with the profile as saved.
+ *  The later of two saves wins (AC11). */
+export function updateProfile(details: AttendeeDetails): Promise<Profile> {
+  return api<Profile>('/profile', {
+    method: 'PATCH',
+    body: details,
+    notify: {
+      title: 'Details saved',
+      message: 'Your phone number and dietary requirements were saved.',
+    },
+  })
+}
+
 /** Story 18.1 AC1: how many events a page asks for - the backend's REGISTRATION_EVENTS_PAGE_SIZE.
  *  A refreshed list asks for at most REGISTRATION_EVENTS_MAX_LIMIT at once. */
 export const REGISTRATION_EVENTS_PAGE_SIZE = 20
@@ -60,11 +99,15 @@ export function listRegistrationEvents(
 }
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal
- *  (AC2-AC4, AC6) carries the backend's sentence saying why. */
-export function registerForEvent(event: RegistrationEvent): Promise<Registration> {
+ *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details`, when
+ *  given, are saved to the attendee's profile with the registration - needed with their first. */
+export function registerForEvent(
+  event: RegistrationEvent,
+  details?: AttendeeDetails,
+): Promise<Registration> {
   return api<Registration>('/registrations', {
     method: 'POST',
-    body: { event_id: event.id },
+    body: details === undefined ? { event_id: event.id } : { event_id: event.id, details },
     errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN', 409: 'REGISTRATION_REFUSED' },
     notify: { title: 'Registered', message: `You are registered for ${event.name}.` },
   })
@@ -119,6 +162,11 @@ export interface EventRegistration {
   id: string
   attendee_name: string
   attendee_email: string
+  /** Story 18.4 AC5: null when none was given, and on every row no longer Registered (AC9). */
+  attendee_phone: string | null
+  /** Story 18.4 AC5: null when none were given - shown as "None" (AC6) - and on every row no
+   *  longer Registered (AC9). */
+  dietary_requirements: string | null
   registered_at: string
   status: RegistrationStanding
   withdrawn_at: string | null
