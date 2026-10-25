@@ -8,8 +8,9 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  * Level: e2e. The rules behind what these pages show - the phone and dietary limits, who may read
  * or change a profile, which list rows show details, two saves in a row - are proven in
  * backend/tests/registrations/test_attendee_profile_*.py and backend/tests/common/, not repeated
- * here. The one exception is AC6/AC7's check in the browser, which blocks a save before any
- * request is sent, so no backend test can see it.
+ * here. The exceptions are AC6/AC7's checks in the browser, which block a save before any request
+ * is sent, so no backend test can see them, and AC9 as the page shows it: the server's rule is a
+ * backend case, while leaving a withdrawn row's details empty, not "None", is the page's.
  *
  * AC1 An attendee has a My profile page that shows their name and email, which they cannot
  *     change, and the details they keep up to date: a contact phone number and their dietary
@@ -26,6 +27,7 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  *     registration list (18.3): a table on a desktop, one card per attendee on a phone.
  * AC6 Dietary requirements are free text of up to 500 characters; none recorded shows "None".
  * AC7 The phone number, when given, has 8 to 15 digits (2.1 AC13).
+ * AC9 A withdrawn registration shows none of the attendee's details on the list.
  *
  * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
  * Esme: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in parallel and a
@@ -318,4 +320,45 @@ test('18.4 AC6/AC7: My profile shows what is wrong with the phone number before 
   await dietary.fill('v'.repeat(DIETARY_MAX_LENGTH + 1))
   await expect(dietary).toHaveValue('v'.repeat(DIETARY_MAX_LENGTH))
   expect(saves).toHaveLength(0)
+})
+
+test("18.4 AC7: the browser's phone check refuses 7 and 16 digits and accepts 8 and 15, as the server does", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const saves: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === PROFILE_PATH) {
+      saves.push(request.url())
+    }
+  })
+  await page.goto(PROFILE_PATH)
+  const phone = page.getByLabel('Phone number')
+  const problem = page.getByRole('alert').filter({ hasText: PHONE_INVALID_MESSAGE })
+
+  // Once Save was pressed, the check follows every keystroke (story 2.1 AC13's rule, shared).
+  await phone.fill('9123456')
+  await page.getByRole('button', { name: 'Save details' }).click()
+  await expect(problem).toBeVisible()
+  await phone.fill('91234567')
+  await expect(problem).toHaveCount(0)
+  await phone.fill('1234567890123456')
+  await expect(problem).toBeVisible()
+  await phone.fill('123456789012345')
+  await expect(problem).toHaveCount(0)
+  expect(saves).toHaveLength(0)
+})
+
+test('18.4 AC9: a withdrawn registration is listed with no phone number or dietary requirements', async ({
+  page,
+}) => {
+  // Aiden withdrew from the heritage trail (story 18.2's seed); his profile has a phone number.
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(reportPath(EVENTS.heritageTrail))
+
+  const aiden = registrations(page).getByRole('row').filter({ hasText: AIDEN.name })
+  await expect(aiden).toContainText('Withdrawn')
+  await expect(aiden).not.toContainText(AIDEN.phone)
+  await expect(aiden.getByText('None', { exact: true })).toHaveCount(0)
+  await expect(aiden.getByText('Not recorded', { exact: true })).toHaveCount(0)
 })

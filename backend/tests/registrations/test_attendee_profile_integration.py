@@ -402,6 +402,36 @@ def test_saving_my_profile_is_audited_naming_the_changed_fields_not_their_values
     assert "8999" not in json.dumps(audit.details)
 
 
+@pytest.mark.story("18.4", ac=4)
+def test_a_save_changes_only_the_details_sent(client, db: Session):
+    """Only the fields sent are changed: a client that sends the phone number alone leaves the
+    dietary requirements as they were."""
+    attendee = _returning_attendee(db, phone="+65 8111 2222", dietary="Halal")
+    client.login(attendee.email)
+
+    response = client.patch(PROFILE_PATH, json={"phone": "+65 8999 0000"})
+
+    assert response.status_code == 200
+    assert (response.json()["phone"], response.json()["dietary_requirements"]) == (
+        "+65 8999 0000",
+        "Halal",
+    )
+
+
+@pytest.mark.story("18.4", ac=4)
+def test_saving_unchanged_details_records_no_audit_entry(client, db: Session):
+    """The audit says what changed; a save that changed nothing adds nothing to it."""
+    attendee = _returning_attendee(db, phone="+65 8111 2222", dietary="Halal")
+    client.login(attendee.email)
+
+    response = client.patch(
+        PROFILE_PATH, json={"phone": "+65 8111 2222", "dietary_requirements": "Halal"}
+    )
+
+    assert response.status_code == 200
+    assert _details_audits(db, attendee) == []
+
+
 # --- AC6/AC7: the rules, through My profile ---------------------------------------------------
 @pytest.mark.story("18.4", ac=6)
 @pytest.mark.story("18.4", ac=7)
