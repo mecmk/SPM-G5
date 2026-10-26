@@ -18,6 +18,11 @@ Decisions agreed 16 Oct 2026, beyond the ACs' wording:
   older proposal without ids is matched by name (a requirement) or type (an item).
 * A venue booking the approved change no longer fits (f7.2.4's fit rule) is cancelled, and every
   active Venue Staff member is told; a booking that still fits is left exactly as it is.
+* Fix f19.2.1 (Week 2 clarifications, CL-153): the event's attendance outgrowing what a booking was
+  made for - an additional venue, or a requirement with no number of its own - cancels nothing.
+  Whether the venues still in use hold the new attendance between them is 19.3's warning. A
+  requirement's own number, its times and layout, its removal, and new dates an additional venue
+  no longer covers still cancel the booking.
 * Changed or added equipment is held again if stock allows, else flagged Unavailable, and goes
   back to Requested for the coordinator to resubmit; removed equipment releases its hold, and
   Technical Support is told of any item they had pending or accepted that is withdrawn. A date
@@ -1368,40 +1373,87 @@ def test_venue_requirements_changed_since_the_request_cannot_be_approved(login_a
 # --- Phase 2, AC5: only affected bookings and holds are released ---------------------------------
 
 
+def _new_dates(event: Event, *, days: int) -> dict:
+    """The event moved ``days`` later, as 19.1's change form sends it."""
+    return {
+        "starts_at": (event.starts_at + timedelta(days=days)).isoformat(),
+        "ends_at": (event.ends_at + timedelta(days=days)).isoformat(),
+    }
+
+
+def _kept_as_booked(db: Session, booking_id: uuid.UUID):
+    """What a kept booking must still hold: its status, people, period, hold and override."""
+    return db.execute(
+        text(
+            "SELECT status, expected_attendance, starts_at, ends_at, hold_expires_at,"
+            " suitability_override_reason FROM venue_bookings WHERE id = :b"
+        ),
+        {"b": booking_id},
+    ).one()
+
+
 @pytest.mark.story("19.2", ac=5)
-def test_attendance_rise_releases_only_the_bookings_too_small_for_it(login_as, db: Session):
-    """An additional venue holds the event's attendance (12.5), so a rise past it releases it; a
-    requirement with its own number of people is unaffected, so its booking stays."""
-    event = _planning_event(db, expected_attendance=100)
-    own_number = make_venue_requirement(
+def test_an_attendance_rise_keeps_every_venue_the_event_still_uses(login_as, db: Session):
+    """Fix f19.2.1: 180 to 500 with a hall (an additional venue, booked for the event's 180, its
+    unsuitability overridden), a breakout room for the morning (its requirement's own 150) and a
+    side room (a requirement with no number of its own, so booked for the 180). Each still covers
+    the times it was booked for, so each is kept exactly as it was: whether the three hold 500
+    between them is 19.3's capacity warning, never a reason to cancel one (CL-153, Week 2)."""
+    event = _planning_event(db, expected_attendance=180)
+    midday = event.starts_at + timedelta(hours=4)
+    breakout = make_venue_requirement(
+        db, event.id, name="Breakout", capacity=150, starts_at=event.starts_at, ends_at=midday
+    )
+    side = make_venue_requirement(
         db,
         event.id,
-        name="Main hall",
-        capacity=40,
+        position=1,
+        name="Side room",
+        capacity=None,
         starts_at=event.starts_at,
         ends_at=event.ends_at,
     )
-    stays = _book(db, event, requirement_id=own_number, people=40)
-    released = _book(db, event, people=100, venue_name="Harbour Room")
-    request = _raise(login_as, db, event, "expected_attendance", 150)
+    hall = _book(db, event, people=180, suitability_override_reason="Overflow seating agreed.")
+    room = _book(db, event, requirement_id=breakout, people=150, ends_at=midday)
+    side_room = _book(db, event, requirement_id=side, people=180)
+    before = {booking.id: _kept_as_booked(db, booking.id) for booking in (hall, room, side_room)}
+    request = _raise(login_as, db, event, "expected_attendance", 500)
 
     assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
 
-    assert _booking(db, stays.id).status == "APPROVED"
-    assert _booking(db, released.id).status == "CANCELLED"
-    [notice] = _notifications(db, event.id, "BOOKING_RELEASED")
-    assert notice.recipient_id == Users.VENUE_STAFF.id
-    assert notice.related_entity_id == released.id
-    assert "Harbour Room" in notice.message
+    assert _attendance(db, event.id) == 500
+    assert {booking_id: _kept_as_booked(db, booking_id) for booking_id in before} == before
+    assert _notifications(db, event.id, "BOOKING_RELEASED") == []
+    [approval] = _audit(db, request.id, "EVENT_CHANGE_APPROVED")
+    assert approval.details["released_booking_ids"] == []
+
+
+@pytest.mark.story("19.2", ac=5)
+@pytest.mark.parametrize("status", ["PENDING", "APPROVED"])
+@pytest.mark.parametrize("proposed", [101, 1000])
+def test_attendance_above_what_a_booking_was_made_for_keeps_it(
+    login_as, db: Session, status, proposed
+):
+    """Fix f19.2.1: one person over what the additional venue was booked for, or ten times it,
+    keeps it, pending or approved - a pending one stays in Venue Staff's queue."""
+    event = _planning_event(db, expected_attendance=100)
+    hold = None if status == "PENDING" else event.starts_at - timedelta(days=1)
+    booking = _book(db, event, people=100, status=status, hold_expires_at=hold)
+    request = _raise(login_as, db, event, "expected_attendance", proposed)
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, booking.id).status == status
+    assert _notifications(db, event.id, "BOOKING_RELEASED") == []
 
 
 @pytest.mark.story("19.2", ac=5)
 def test_a_pending_booking_that_no_longer_fits_is_released(login_as, db: Session):
-    """A request Venue Staff have not decided yet holds the venue too (12.1), so it is released
-    the same way."""
+    """A request Venue Staff have not decided yet holds the venue too (12.1), so new dates it no
+    longer covers release it the same way."""
     event = _planning_event(db, expected_attendance=100)
     pending = _book(db, event, people=100, status="PENDING", hold_expires_at=None)
-    request = _raise(login_as, db, event, "expected_attendance", 150)
+    request = _raise(login_as, db, event, "schedule", _new_dates(event, days=2))
 
     assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
 
@@ -1411,12 +1463,40 @@ def test_a_pending_booking_that_no_longer_fits_is_released(login_as, db: Session
 
 
 @pytest.mark.story("19.2", ac=5)
+def test_new_dates_release_only_the_bookings_that_no_longer_cover_them(login_as, db: Session):
+    """Each booking is judged on its own (Week 7, change 3): one booked a day either side of the
+    event still covers dates moved by an hour; the one booked for the event's own times does not,
+    so only it is released."""
+    event = _planning_event(db, expected_attendance=100)
+    covers = _book(
+        db,
+        event,
+        people=100,
+        starts_at=event.starts_at - timedelta(days=1),
+        ends_at=event.ends_at + timedelta(days=1),
+    )
+    released = _book(db, event, people=100)
+    moved = {
+        "starts_at": (event.starts_at + timedelta(hours=1)).isoformat(),
+        "ends_at": (event.ends_at + timedelta(hours=1)).isoformat(),
+    }
+    request = _raise(login_as, db, event, "schedule", moved)
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, covers.id).status == "APPROVED"
+    assert _booking(db, released.id).status == "CANCELLED"
+    [notice] = _notifications(db, event.id, "BOOKING_RELEASED")
+    assert notice.related_entity_id == released.id
+
+
+@pytest.mark.story("19.2", ac=5)
 def test_a_release_is_logged_with_the_approval(login_as, db: Session):
     """Auditability: the approval names the bookings it released, and each release is logged
     against its booking."""
     event = _planning_event(db, expected_attendance=100)
     released = _book(db, event, people=100)
-    request = _raise(login_as, db, event, "expected_attendance", 150)
+    request = _raise(login_as, db, event, "schedule", _new_dates(event, days=2))
 
     assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
 
@@ -1433,8 +1513,32 @@ def test_a_release_is_logged_with_the_approval(login_as, db: Session):
     assert release.details == {
         "venue_id": str(released.venue_id),
         "event_id": str(event.id),
-        "change": "expected attendance",
+        "change": "date and time",
     }
+
+
+@pytest.mark.story("19.2", ac=5)
+def test_a_requirement_whose_own_number_outgrows_its_booking_releases_it(login_as, db: Session):
+    """Unchanged by fix f19.2.1: a requirement's own number of people is a term of what its venue
+    was booked for, so growing it past the booking still releases that booking - the event's
+    attendance alone never does."""
+    event = _planning_event(db, expected_attendance=100)
+    start, end = event.starts_at, event.ends_at
+    breakout = make_venue_requirement(
+        db, event.id, name="Breakout", capacity=20, starts_at=start, ends_at=end
+    )
+    booking = _book(db, event, requirement_id=breakout, people=20)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [_requirement_body(breakout, name="Breakout", capacity=21, starts_at=start, ends_at=end)],
+    )
+
+    assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
+
+    assert _booking(db, booking.id).status == "CANCELLED"
 
 
 @pytest.mark.story("19.2", ac=5)

@@ -23,6 +23,9 @@ Decisions agreed 19 Oct 2026 (CL-152 to CL-154), beyond the ACs' wording:
   checked against the venues in use at each moment, each venue counted once in its booked layout
   (the layout's capacity where the venue records one, as story 11.1 judges it). Attendance one
   above it is flagged.
+* Fix f19.2.1: the event's attendance outgrowing what a booking was made for - an additional
+  venue, or a requirement with no number of its own - cancels nothing, so that booking is kept
+  and counts towards what the venues hold. A requirement's own number still does.
 * Registrations are counted, never named. Lowering the attendance below the count, and changing
   the dates, are flagged; nothing is written to a registration and no attendee is told.
 * For a booking the change cancels, the same venue is checked for the period a replacement would
@@ -113,8 +116,9 @@ def _planning_event(db: Session, **overrides) -> Event:
     )
 
 
-def _requirement(db: Session, event: Event, *, capacity: int, **overrides) -> uuid.UUID:
-    """A venue requirement over the whole event, for ``capacity`` people."""
+def _requirement(db: Session, event: Event, *, capacity: int | None, **overrides) -> uuid.UUID:
+    """A venue requirement over the whole event, for ``capacity`` people (None: the event's
+    attendance)."""
     return make_venue_requirement(
         db,
         event.id,
@@ -173,6 +177,13 @@ def _raise(login_as, db: Session, event: Event, field: str, proposed) -> EventCh
 
 def _schedule(starts_at: datetime, ends_at: datetime) -> dict:
     return {"starts_at": starts_at.isoformat(), "ends_at": ends_at.isoformat()}
+
+
+def _grow(login_as, db: Session, event: Event, requirement_id, capacity: int):
+    """Olivia asks for the Main hall requirement to need room for ``capacity`` people: past what
+    its booking was made for, a change 19.2 cancels the booking for (f7.2.4)."""
+    body = _requirement_body(requirement_id, name="Main hall", capacity=capacity, event=event)
+    return _raise(login_as, db, event, "venue_requirements", [body])
 
 
 def _requirement_body(requirement_id, *, name: str, capacity: int, event: Event) -> dict:
@@ -283,21 +294,65 @@ def _snapshot(db: Session, event: Event) -> dict:
 
 
 @pytest.mark.story("19.3", ac=1)
-def test_attendance_change_lists_the_booking_it_cancels_and_why(login_as, db: Session):
-    """80 to 90: the additional venue was booked for 80, so 19.2 cancels it; the hall booked for
-    its own requirement's 50 people is not affected and is not listed."""
+@pytest.mark.parametrize("proposed", [81, 800])
+def test_an_attendance_rise_cancels_no_booking(login_as, db: Session, proposed):
+    """Fix f19.2.1: one person over, or ten times over: the additional foyer and the side room
+    (a requirement with no number of its own) were both booked for the event's 80, and both seat
+    1000, so the approval keeps them and nothing is listed; the hall's own 50 is untouched."""
     event = _planning_event(db, expected_attendance=80)
     hall = _book(db, event, people=50, requirement_id=_requirement(db, event, capacity=50))
-    foyer = _book(db, event, people=80)
+    side = _requirement(db, event, capacity=None, name="Side room", position=1)
+    side_room = _book(db, event, people=80, requirement_id=side, capacity=1000)
+    foyer = _book(db, event, people=80, capacity=1000)
+    request = _raise(login_as, db, event, "expected_attendance", proposed)
+
+    impact = _impact(login_as, request)
+    response = _approve(login_as, request, impact["fingerprint"])
+
+    assert impact["venue_bookings"] == []
+    assert impact["capacity_shortfall"] is None
+    assert impact["has_impact"] is False
+    assert response.status_code == 200, response.text
+    for booking in (hall, side_room, foyer):
+        assert _booking_status(db, booking.id) == "APPROVED"
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_booking_kept_through_an_attendance_rise_keeps_its_capacity_warning(
+    login_as, db: Session
+):
+    """Fix f19.2.1: the foyer was booked for the event's 80 and seats 85, so 90 keeps it - with
+    11.1's warning that it holds fewer than the 90 now expected."""
+    event = _planning_event(db, expected_attendance=80)
+    foyer = _book(db, event, people=80, capacity=85)
     request = _raise(login_as, db, event, "expected_attendance", 90)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+
+    assert row["will_be_cancelled"] is False
+    assert row["reasons"] == []
+    assert row["capacity_warning"] == {
+        "people_needed": 90,
+        "venue_capacity": 85,
+        "layout_name": None,
+    }
+    assert row["after_approval"] == _KEPT_WITH_WARNING
+
+
+@pytest.mark.story("19.3", ac=1)
+def test_a_requirement_grown_past_its_booking_lists_it_as_cancelled_and_why(login_as, db: Session):
+    """Unchanged by fix f19.2.1: the Main hall requirement's own number going from 80 to 90 is
+    past what its booking was made for, so 19.2 cancels it."""
+    event = _planning_event(db, expected_attendance=100)
+    requirement = _requirement(db, event, capacity=80)
+    hall = _book(db, event, people=80, requirement_id=requirement)
+    request = _grow(login_as, db, event, requirement, 90)
 
     impact = _impact(login_as, request)
 
-    rows = _bookings_by_id(impact)
-    assert str(hall.id) not in rows
-    row = rows[str(foyer.id)]
+    row = _bookings_by_id(impact)[str(hall.id)]
     assert row["will_be_cancelled"] is True
-    assert row["requirement_name"] is None
+    assert row["requirement_name"] == "Main hall"
     assert row["reasons"] == ["It was booked for 80 people; the change needs room for 90."]
     assert row["capacity_warning"] is None
     assert impact["has_impact"] is True
@@ -305,13 +360,15 @@ def test_attendance_change_lists_the_booking_it_cancels_and_why(login_as, db: Se
 
 @pytest.mark.story("19.3", ac=1)
 def test_the_events_own_cancelled_booking_never_holds_the_venue(login_as, db: Session):
-    """The foyer was booked for 80, so 90 cancels it; a replacement needs the very period the
-    foyer's own booking holds, which the approval frees, so it is not shown as held."""
-    event = _planning_event(db, expected_attendance=80)
-    foyer = _book(db, event, people=80)
-    request = _raise(login_as, db, event, "expected_attendance", 90)
+    """The hall was booked for 80, so a requirement grown to 90 cancels it; a replacement needs the
+    very period the hall's own booking holds, which the approval frees, so it is not shown as
+    held."""
+    event = _planning_event(db, expected_attendance=100)
+    requirement = _requirement(db, event, capacity=80)
+    hall = _book(db, event, people=80, requirement_id=requirement)
+    request = _grow(login_as, db, event, requirement, 90)
 
-    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
     assert row["will_be_cancelled"] is True
     assert row["needed_starts_at"] is not None
@@ -398,11 +455,12 @@ def test_a_capacity_warning_is_not_a_cancellation(login_as, db: Session):
 
 @pytest.mark.story("19.3", ac=1)
 def test_a_cancelled_booking_can_also_carry_a_capacity_warning(login_as, db: Session):
-    event = _planning_event(db, expected_attendance=100)
-    foyer = _book(db, event, people=100, capacity=120)
-    request = _raise(login_as, db, event, "expected_attendance", 140)
+    event = _planning_event(db, expected_attendance=150)
+    requirement = _requirement(db, event, capacity=100)
+    hall = _book(db, event, people=100, requirement_id=requirement, capacity=120)
+    request = _grow(login_as, db, event, requirement, 140)
 
-    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
     assert row["will_be_cancelled"] is True
     assert row["capacity_warning"]["venue_capacity"] == 120
@@ -685,21 +743,21 @@ def test_a_venue_booked_for_two_requirements_counts_once(login_as, db: Session):
 
 
 @pytest.mark.story("19.3", ac=1)
-def test_a_booking_the_change_cancels_holds_nobody_after_it(login_as, db: Session):
-    """The additional venue was booked for 180, so 500 cancels it: only the hall that is kept
-    counts, and it seats 250."""
+def test_a_venue_booked_for_fewer_than_the_new_attendance_still_counts(login_as, db: Session):
+    """Fix f19.2.1: the additional foyer was booked for the event's 180, so 500 is past it - but
+    the approval keeps it, so its 200 seats count beside the 250-seat hall's: 50 short, not 250."""
     event = _planning_event(db, expected_attendance=180)
     hall = _book(
         db, event, people=180, requirement_id=_requirement(db, event, capacity=100), capacity=250
     )
-    _book(db, event, people=180, capacity=400)
+    foyer = _book(db, event, people=180, capacity=200)
     request = _raise(login_as, db, event, "expected_attendance", 500)
 
     shortfall = _impact(login_as, request)["capacity_shortfall"]
 
-    assert _short_periods(shortfall) == [
-        (event.starts_at, event.ends_at, 250, 250, [str(hall.venue_id)])
-    ]
+    [(starts_at, ends_at, capacity, short, venue_ids)] = _short_periods(shortfall)
+    assert (starts_at, ends_at, capacity, short) == (event.starts_at, event.ends_at, 450, 50)
+    assert sorted(venue_ids) == sorted([str(hall.venue_id), str(foyer.venue_id)])
 
 
 @pytest.mark.story("19.3", ac=4)
@@ -778,11 +836,12 @@ def test_predicted_cancellations_are_what_the_approval_cancels(login_as, db: Ses
 
 @pytest.mark.story("19.3", ac=2)
 def test_a_cancelled_booking_says_what_happens_next(login_as, db: Session):
-    event = _planning_event(db, expected_attendance=80)
-    foyer = _book(db, event, people=80)
-    request = _raise(login_as, db, event, "expected_attendance", 90)
+    event = _planning_event(db)
+    requirement = _requirement(db, event, capacity=80)
+    hall = _book(db, event, people=80, requirement_id=requirement)
+    request = _grow(login_as, db, event, requirement, 90)
 
-    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
     assert row["after_approval"] == (
         "Cancelled when the change is approved, freeing the venue. Venue Staff are told, and need "
@@ -921,9 +980,10 @@ def test_an_items_own_hold_does_not_count_against_dates_it_overlaps(login_as, db
 
 @pytest.mark.story("19.3", ac=2)
 def test_approval_sends_no_notice_beyond_19_2s(login_as, db: Session):
-    event = _planning_event(db, expected_attendance=80)
-    _book(db, event, people=80)
-    request = _raise(login_as, db, event, "expected_attendance", 90)
+    event = _planning_event(db)
+    requirement = _requirement(db, event, capacity=80)
+    _book(db, event, people=80, requirement_id=requirement)
+    request = _grow(login_as, db, event, requirement, 90)
 
     impact = _impact(login_as, request)
     _approve(login_as, request, impact["fingerprint"])
@@ -965,11 +1025,12 @@ def test_assessing_changes_nothing(login_as, db: Session):
 
 @pytest.mark.story("19.3", ac=3)
 def test_a_booking_made_after_the_request_is_assessed(login_as, db: Session):
-    event = _planning_event(db, expected_attendance=80)
-    request = _raise(login_as, db, event, "expected_attendance", 90)
-    foyer = _book(db, event, people=80)
+    event = _planning_event(db)
+    requirement = _requirement(db, event, capacity=80)
+    request = _grow(login_as, db, event, requirement, 90)
+    hall = _book(db, event, people=80, requirement_id=requirement)
 
-    assert str(foyer.id) in _bookings_by_id(_impact(login_as, request))
+    assert str(hall.id) in _bookings_by_id(_impact(login_as, request))
 
 
 # --- AC4: boundaries --------------------------------------------------------------------------
@@ -1060,13 +1121,15 @@ def test_teardown_time_counts_towards_the_period_needed(login_as, db: Session):
 @pytest.mark.story("19.3", ac=4)
 @pytest.mark.parametrize(("capacity", "is_warned"), [(150, False), (149, True)])
 def test_attendance_equal_to_capacity_fits(login_as, db: Session, capacity, is_warned):
+    """The foyer, booked for the event's 100, is kept through a rise to 150 (fix f19.2.1), so it
+    is listed only when it is warned about."""
     event = _planning_event(db, expected_attendance=100)
     foyer = _book(db, event, people=100, capacity=capacity)
     request = _raise(login_as, db, event, "expected_attendance", 150)
 
-    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+    rows = _bookings_by_id(_impact(login_as, request))
 
-    assert (row["capacity_warning"] is not None) is is_warned
+    assert (str(foyer.id) in rows) is is_warned
 
 
 @pytest.mark.story("19.3", ac=4)
@@ -1308,18 +1371,19 @@ def test_approving_with_the_current_assessment_applies_the_change(login_as, db: 
 def test_approving_after_the_impact_changed_is_refused_and_applies_nothing(login_as, db: Session):
     """Chloe opened the request when nothing was affected; a booking the change no longer fits
     was approved for the event before she clicked Approve."""
-    event = _planning_event(db, expected_attendance=80)
-    request = _raise(login_as, db, event, "expected_attendance", 90)
+    event = _planning_event(db)
+    requirement = _requirement(db, event, capacity=80)
+    request = _grow(login_as, db, event, requirement, 90)
     seen = _impact(login_as, request)
-    foyer = _book(db, event, people=80)
+    hall = _book(db, event, people=80, requirement_id=requirement)
 
     response = _approve(login_as, request, seen["fingerprint"])
 
     assert (response.status_code, response.json()["detail"]) == (412, _IMPACT_CHANGED)
     assert _request_status(db, request.id) == "PENDING"
-    assert _booking_status(db, foyer.id) == "APPROVED"
+    assert _booking_status(db, hall.id) == "APPROVED"
     db.expire_all()
-    assert db.get(Event, event.id).expected_attendance == 80
+    assert [item.capacity for item in db.get(Event, event.id).venue_requirements] == [80]
     fresh = _impact(login_as, request)
     assert fresh["fingerprint"] != seen["fingerprint"]
     assert _approve(login_as, request, fresh["fingerprint"]).status_code == 200
