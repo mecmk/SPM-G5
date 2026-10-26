@@ -216,12 +216,12 @@ export function UpcomingEventsPage() {
     message: string
   } | null>(null)
 
-  // Story 18.4: the profile the dialog fills in from, loaded again (a new function each time)
-  // after each registration, which saves the details confirmed with it - so the next dialog, and
-  // the frame's own name (AC1), show them as the server stored them.
+  // Story 18.4: the profile the dialog fills in from. Read again after each registration, which
+  // saves the details confirmed with it, so the next dialog - and the frame's own name (AC1) -
+  // shows them as the server stored them.
   const { setFullName } = useAuth()
-  const [loadProfile, setLoadProfile] = useState(() => fetchProfile)
-  const { data: profile, error: profileError } = useLoaded(loadProfile)
+  const { data: profile, error: profileError, setData: setProfile } = useLoaded(fetchProfile)
+  const [profileRefreshError, setProfileRefreshError] = useState<string | null>(null)
   const isProfileLoading = profile === null && profileError === null
   const [confirmingFor, setConfirmingFor] = useState<RegistrationEvent | null>(null)
   const [detailsError, setDetailsError] = useState<string | null>(null)
@@ -312,11 +312,20 @@ export function UpcomingEventsPage() {
       setRefusal({ eventId: event.id, eventName: event.name, message: problem.message })
       return
     }
-    setLoadProfile(() => async () => {
+    await refreshProfile()
+  }
+
+  /** 18.4 AC2/AC3: read the profile the registration just saved, for the next dialog and the
+   *  frame's name. The registration itself is already taken, so a failure here only says so. */
+  async function refreshProfile() {
+    try {
       const saved = await fetchProfile()
+      setProfile(saved)
       setFullName(saved.full_name)
-      return saved
-    })
+      setProfileRefreshError(null)
+    } catch (err) {
+      setProfileRefreshError(formatApiError(err))
+    }
   }
 
   return (
@@ -333,9 +342,9 @@ export function UpcomingEventsPage() {
         </p>
       )}
       {isLoading && <LoadingState label="Loading upcoming events…" />}
-      {profileError && (
+      {(profileError ?? profileRefreshError) && (
         <p role="alert" className="error">
-          {profileError}
+          {profileError ?? profileRefreshError}
         </p>
       )}
       {refusal !== null && !isRefusalOnItsCard && (

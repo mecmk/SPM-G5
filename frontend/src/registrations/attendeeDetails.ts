@@ -12,13 +12,13 @@ export function detailsFrom(profile: Profile | null): AttendeeDetails {
 }
 
 /** Story 18.4 AC1: what is wrong with the typed name, as a registry message, or null. */
-export function findNameProblem(name: string): string | null {
+export function findAttendeeNameProblem(name: string): string | null {
   return name.trim() === '' ? ERROR_REGISTRY.ATTENDEE_NAME_REQUIRED.message : null
 }
 
 /** Story 18.4 AC7: what is wrong with the typed phone number, as a registry message, or null.
  *  It is required, and follows the event contact phone's rule (2.1 AC13). */
-export function findPhoneProblem(phone: string): string | null {
+export function findAttendeePhoneProblem(phone: string): string | null {
   if (phone.trim() === '') return ERROR_REGISTRY.ATTENDEE_PHONE_REQUIRED.message
   return isBlankOrPhoneNumber(phone) ? null : ERROR_REGISTRY.ATTENDEE_PHONE_INVALID.message
 }

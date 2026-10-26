@@ -34,7 +34,7 @@ from app.venues.models import Venue
 # two in step; ck_users_dietary_requirements holds the database to it too.
 DIETARY_REQUIREMENTS_MAX_LENGTH = 500
 DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE = "Dietary requirements must be 500 characters or fewer."
-# Story 18.4 AC7 (as changed, 25 Oct 2026): the phone number is required. AC1 (as changed): the name
+# Story 18.4 AC7 (CL-166): the phone number is required. AC1 (CL-166): the name
 # is the attendee's to change, required and as long as an event's contact name may be (2.1 AC13).
 # Mirrored by the form's maxLength and checks in frontend/src/registrations/ - keep them in step.
 PHONE_NUMBER_REQUIRED_MESSAGE = "Enter your phone number."
@@ -93,9 +93,10 @@ class AttendeeDetailsIn(BaseModel):
 
 
 class ProfileOut(BaseModel):
-    """Story 18.4 AC1: My profile - the name and email, which the attendee cannot change, and the
-    details they keep up to date. ``has_confirmed_details`` is false until they first give them,
-    so their first registration asks (AC2). No defaults (response schema)."""
+    """Story 18.4 AC1: My profile - the email, which the attendee cannot change, and the details
+    they keep up to date: their name, phone number and dietary requirements.
+    ``has_confirmed_details`` is false until they first give them, so their first registration
+    asks (AC2). No defaults (response schema)."""
 
     full_name: str
     email: str

@@ -16,7 +16,8 @@ _PHONE_PATTERN = re.compile(r"^\+?[\d -]+$")
 def is_phone_number(value: str) -> bool:
     """2.1 AC13, 18.4 AC7: 8 to 15 digits, with an optional leading "+", and spaces and dashes
     allowed, in at most 50 characters. ``value`` comes trimmed: what a blank one means is the
-    caller's to decide, since a phone number is optional in both places."""
+    caller's to decide - an event's contact phone may be blank on a draft (2.1), an attendee's may
+    not (18.4 AC7)."""
     digits = sum(char.isdigit() for char in value)
     return (
         len(value) <= PHONE_MAX_LENGTH

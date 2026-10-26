@@ -1,23 +1,12 @@
-import { useId, type RefObject } from 'react'
-import {
-  DIETARY_REQUIREMENTS_MAX_LENGTH,
-  FULL_NAME_MAX_LENGTH,
-  type AttendeeDetails,
-} from '../api/registrations'
+import { useId } from 'react'
+import { DIETARY_REQUIREMENTS_MAX_LENGTH, FULL_NAME_MAX_LENGTH } from '../api/registrations'
 import { RequiredMark } from '../components/RequiredMark'
 import { PHONE_MAX_LENGTH } from '../shared/phone'
+import type { AttendeeDetailsForm } from './useAttendeeDetailsForm'
 
 interface AttendeeDetailsFieldsProps {
-  details: AttendeeDetails
-  onChange: (details: AttendeeDetails) => void
-  /** Why the name cannot be saved, once a save was tried; null when it can. */
-  nameProblem: string | null
-  /** Why the phone number cannot be saved, once a save was tried; null when it can. */
-  phoneProblem: string | null
-  /** Where focus goes when a save is stopped by the name. */
-  nameInput: RefObject<HTMLInputElement | null>
-  /** Where focus goes when a save is stopped by the phone number. */
-  phoneInput: RefObject<HTMLInputElement | null>
+  /** The form the fields show and change: its details, their problems and where focus goes. */
+  form: AttendeeDetailsForm
 }
 
 /**
@@ -30,14 +19,8 @@ interface AttendeeDetailsFieldsProps {
  * part of its name. The phone field brings up a phone keypad. AC6: dietary requirements stop at
  * 500 characters; left blank they are recorded as "None".
  */
-export function AttendeeDetailsFields({
-  details,
-  onChange,
-  nameProblem,
-  phoneProblem,
-  nameInput,
-  phoneInput,
-}: AttendeeDetailsFieldsProps) {
+export function AttendeeDetailsFields({ form }: AttendeeDetailsFieldsProps) {
+  const { details, setDetails, nameProblem, phoneProblem, nameInput, phoneInput } = form
   const ids = useId()
   const nameLabelId = `${ids}-name-label`
   const nameProblemId = `${ids}-name-problem`
@@ -62,7 +45,7 @@ export function AttendeeDetailsFields({
           value={details.full_name}
           aria-invalid={nameProblem !== null ? true : undefined}
           aria-describedby={nameProblem !== null ? nameProblemId : undefined}
-          onChange={(e) => onChange({ ...details, full_name: e.target.value })}
+          onChange={(e) => setDetails({ ...details, full_name: e.target.value })}
         />
         {nameProblem !== null && (
           <span id={nameProblemId} role="alert" className="field-error">
@@ -84,7 +67,7 @@ export function AttendeeDetailsFields({
           value={details.phone}
           aria-invalid={phoneProblem !== null ? true : undefined}
           aria-describedby={phoneProblem !== null ? phoneProblemId : undefined}
-          onChange={(e) => onChange({ ...details, phone: e.target.value })}
+          onChange={(e) => setDetails({ ...details, phone: e.target.value })}
         />
         {phoneProblem !== null && (
           <span id={phoneProblemId} role="alert" className="field-error">
@@ -98,7 +81,7 @@ export function AttendeeDetailsFields({
           rows={3}
           maxLength={DIETARY_REQUIREMENTS_MAX_LENGTH}
           value={details.dietary_requirements}
-          onChange={(e) => onChange({ ...details, dietary_requirements: e.target.value })}
+          onChange={(e) => setDetails({ ...details, dietary_requirements: e.target.value })}
         />
       </label>
     </>

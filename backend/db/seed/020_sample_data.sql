@@ -1910,7 +1910,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- that changes an attendee's details has an attendee of its own: Cara (01) has never been asked
 -- for them and registers for the first time; Dion (02) changes them on Upcoming events; Esme (03)
 -- changes them on My profile, and is registered for the charity quiz (07) from before; Finn (12)
--- changes their name (PO decision, 25 Oct 2026: the name is editable). Every id
+-- changes their name (CL-166: the name is editable). Every id
 -- is in the story's 0184NN block: 01-03 and 12 the attendees, 04-08 their events (Confirmed, Public,
 -- organiser 2 and coordinator 2, self-assigned as 3333..70-77 are, in December 2028, after
 -- every other event attendees can register for, so 18.1's list keeps its order and one page),

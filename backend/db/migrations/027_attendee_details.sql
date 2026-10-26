@@ -4,14 +4,14 @@
 --
 -- 1. users.phone (001) is also the attendee's contact phone, which their events' organiser and
 --    coordinator see on the registration list (AC5). It is required once the attendee has given
---    their details (AC7 as changed by the PO, 25 Oct 2026): ck_users_attendee_details_have_phone.
+--    their details (AC7 as changed by the PO, CL-166): ck_users_attendee_details_have_phone.
 -- 2. users.dietary_requirements: free text of up to 500 characters (AC6). None recorded is NULL,
 --    never a blank string, so the page shows "None" for one value only.
 -- 3. users.attendee_details_confirmed_at: when the attendee first gave their details, on their
 --    first registration or on My profile. NULL means they were never asked, so their first
 --    registration asks (AC2). Once set, the phone number is too; dietary requirements stay
 --    optional.
--- users.full_name (001) is the attendee's to change on My profile (AC1 as changed, 25 Oct 2026);
+-- users.full_name (001) is the attendee's to change on My profile (AC1 as changed, CL-166);
 -- the column is unchanged.
 -- =====================================================================
 

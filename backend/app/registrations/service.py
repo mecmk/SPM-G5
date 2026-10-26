@@ -69,9 +69,12 @@ REGISTRATION_LIST_NOT_FOUND_MESSAGE = "This event was not found."
 ATTENDEE_DETAILS_UPDATED_ACTION = "ATTENDEE_DETAILS_UPDATED"
 _USER_ENTITY = "user"
 ATTENDEE_DETAILS_REQUIRED_MESSAGE = (
-    "Give your phone number and dietary requirements on My profile before your first"
-    " registration. Either may be left blank."
+    "Give your name and phone number before your first registration. Dietary requirements may be"
+    " left blank."
 )
+# A first registration answers the questions, so the name and phone number travel with it even when
+# the account already has them (story 18.4 AC2, review of #129).
+_FIRST_REGISTRATION_FIELDS = frozenset({"full_name", "phone"})
 
 
 class RegistrationState(StrEnum):
@@ -126,8 +129,8 @@ class PhoneNumberRequired(ValueError):
 
 
 class AttendeeDetailsRequired(RegistrationRefused):
-    """Story 18.4 AC2: the attendee has never given their details, and sent none with their
-    first registration."""
+    """Story 18.4 AC2: the attendee has never given their details, and their first registration
+    did not send their name and phone number."""
 
     def __init__(self) -> None:
         super().__init__(ATTENDEE_DETAILS_REQUIRED_MESSAGE)
@@ -331,8 +334,10 @@ def list_registration_events(
 
 def _require_phone(details: AttendeeDetailsIn, *, attendee: User) -> None:
     """Story 18.4 AC7: the phone number may be left out of what is sent only when one is already
-    on file - so ``PhoneNumberRequired`` before anything is written, and the database's
-    ck_users_attendee_details_have_phone never has to refuse it."""
+    on file - so ``PhoneNumberRequired`` before anything is written. A licensed pre-check
+    (backend/STYLE.md, Standing divergences): it answers with a 422 naming the fix, and nothing can
+    race it, since no write clears an attendee's phone number. The database's
+    ck_users_attendee_details_have_phone stays as the backstop."""
     if "phone" not in details.model_fields_set and attendee.phone is None:
         raise PhoneNumberRequired()
 
@@ -420,11 +425,13 @@ def register(
     if db.scalar(_active_registrations(event.id)) > event.expected_attendance:
         db.rollback()
         raise EventFull()
-    if data.details is not None:
-        _apply_details(db, data.details, attendee=attendee, now=now)
-    elif attendee.attendee_details_confirmed_at is None:
+    if attendee.attendee_details_confirmed_at is None and (
+        data.details is None or not _FIRST_REGISTRATION_FIELDS <= data.details.model_fields_set
+    ):
         db.rollback()
         raise AttendeeDetailsRequired()
+    if data.details is not None:
+        _apply_details(db, data.details, attendee=attendee, now=now)
 
     record_audit(
         db,
@@ -698,8 +705,8 @@ def _attendee_registration(
     registration: EventRegistration, *, attendee: User, event_status: str
 ) -> AttendeeRegistration:
     """18.3 AC4: one row, with 18.2's standing. 18.4 AC9: only a registration still Registered
-    shows the attendee's details - not one withdrawn, nor any on a cancelled event (PO decision,
-    24 Oct 2026) - since only those attendees are being catered for and may need contacting."""
+    shows the attendee's details - not one withdrawn, nor any on a cancelled event (CL-163) -
+    since only those attendees are being catered for and may need contacting."""
     standing = registration_standing(
         registration_status=registration.status, event_status=event_status
     )
@@ -769,6 +776,7 @@ def list_managed_registration_events(db: Session, *, viewer: User) -> list[Event
     )
 
 
+# =============================================================================================
 # Story 18.4: the attendee's details, on My profile
 # =============================================================================================
 def update_profile(

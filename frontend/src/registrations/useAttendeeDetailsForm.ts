@@ -1,6 +1,6 @@
 import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AttendeeDetails } from '../api/registrations'
-import { findNameProblem, findPhoneProblem } from './attendeeDetails'
+import { findAttendeeNameProblem, findAttendeePhoneProblem } from './attendeeDetails'
 
 /** What a form of the attendee's details holds, for My profile and the details dialog alike. */
 export interface AttendeeDetailsForm {
@@ -28,11 +28,11 @@ export function useAttendeeDetailsForm(initial: AttendeeDetails): AttendeeDetail
 
   function canSend(): boolean {
     setIsChecked(true)
-    if (findNameProblem(details.full_name) !== null) {
+    if (findAttendeeNameProblem(details.full_name) !== null) {
       nameInput.current?.focus()
       return false
     }
-    if (findPhoneProblem(details.phone) !== null) {
+    if (findAttendeePhoneProblem(details.phone) !== null) {
       phoneInput.current?.focus()
       return false
     }
@@ -48,8 +48,8 @@ export function useAttendeeDetailsForm(initial: AttendeeDetails): AttendeeDetail
     details,
     setDetails,
     // Worked out from what is typed now, so they follow every keystroke once a save was tried.
-    nameProblem: isChecked ? findNameProblem(details.full_name) : null,
-    phoneProblem: isChecked ? findPhoneProblem(details.phone) : null,
+    nameProblem: isChecked ? findAttendeeNameProblem(details.full_name) : null,
+    phoneProblem: isChecked ? findAttendeePhoneProblem(details.phone) : null,
     nameInput,
     phoneInput,
     canSend,

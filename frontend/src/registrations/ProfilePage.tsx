@@ -55,14 +55,7 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
       </dl>
       <p className="small muted">Your email is set by ConnectSphere and cannot be changed here.</p>
       <form className="stack" aria-label="Your details" noValidate onSubmit={handleSave}>
-        <AttendeeDetailsFields
-          details={form.details}
-          onChange={form.setDetails}
-          nameProblem={form.nameProblem}
-          phoneProblem={form.phoneProblem}
-          nameInput={form.nameInput}
-          phoneInput={form.phoneInput}
-        />
+        <AttendeeDetailsFields form={form} />
         {saveError && (
           <p role="alert" className="error">
             {saveError}

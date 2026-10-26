@@ -59,14 +59,7 @@ export function AttendeeDetailsDialog({
           ? `Before you register for ${eventName}, give the name, phone number and dietary requirements the organiser should have. They are saved to My profile and filled in next time.`
           : `Check your details before you register for ${eventName}. Any change you make is saved to My profile.`}
       </p>
-      <AttendeeDetailsFields
-        details={form.details}
-        onChange={form.setDetails}
-        nameProblem={form.nameProblem}
-        phoneProblem={form.phoneProblem}
-        nameInput={form.nameInput}
-        phoneInput={form.phoneInput}
-      />
+      <AttendeeDetailsFields form={form} />
     </ConfirmDialog>
   )
 }
