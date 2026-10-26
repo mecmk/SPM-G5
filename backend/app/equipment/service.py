@@ -151,7 +151,8 @@ def in_technical_support_queue() -> ColumnElement[bool]:
     """Story 15.2 AC3/AC5, 6.2 AC15: the condition for an item Technical Support's queue lists.
     It reads ``EventEquipmentRequest`` joined to its ``Event``, so the caller joins them. The queue
     and a notification's target (20.2) both use it, so the page a notice opens is one that holds
-    the item."""
+    the item. Fix f4.5.1: an item a rejection closed is not kept under Cancelled, as 6.2 AC15
+    leaves a rejected event's equipment out of the queue."""
     return or_(
         and_(
             EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
@@ -160,6 +161,7 @@ def in_technical_support_queue() -> ColumnElement[bool]:
         and_(
             EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
             EventEquipmentRequest.submitted_at.is_not(None),
+            Event.status != EventStatus.REJECTED,
         ),
         and_(
             EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
@@ -926,9 +928,10 @@ WITH_TECHNICAL_SUPPORT = frozenset(
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
 _EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
-# What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5).
+# What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5, f4.5.1).
 _CHANGE_WITHDREW = 'An approved change to "{event}"'
 _CANCELLATION_WITHDREW = 'Cancelling "{event}"'
+_REJECTION_WITHDREW = 'Rejecting "{event}"'
 
 
 def _notify_technical_support_of_withdrawal(
@@ -1129,17 +1132,18 @@ def apply_equipment_change(
     db.flush()
 
 
-# --- story 6.2: the event was cancelled ------------------------------------------------------
+# --- story 6.2: the event was cancelled; fix f4.5.1: or rejected ------------------------------
 
 
-def release_for_cancelled_event(
-    db: Session, event: Event, *, actor: User, at: datetime
+def _release_for_closed_event(
+    db: Session, event: Event, *, actor: User, at: datetime, withdrew: str
 ) -> list[EventEquipmentRequest]:
-    """Story 6.2 AC3/AC4: ``event`` was cancelled, so every unit it still holds is released and
+    """Story 6.2 AC3/AC4: ``event`` will not go ahead, so every unit it still holds is released and
     every open item is closed as Cancelled at ``at`` (AC16), kept for the record. Technical
-    Support are told of the items they had pending or accepted (AC5); one never sent changes
-    nothing for them. The caller holds the event's row lock; the types are locked after it, as
-    every other hold takes them (15.1 AC10). Returns the items closed. Written, not committed."""
+    Support are told of the items they had pending or accepted (AC5), ``withdrew`` opening the
+    sentence; one never sent changes nothing for them. The caller holds the event's row lock; the
+    types are locked after it, as every other hold takes them (15.1 AC10). Returns the items
+    closed. Written, not committed."""
     held_type_ids = db.scalars(
         select(EquipmentReservation.equipment_type_id).where(
             EquipmentReservation.event_id == event.id,
@@ -1161,7 +1165,27 @@ def release_for_cancelled_event(
             event,
             withdrawn,
             actor=actor,
-            cause=_CANCELLATION_WITHDREW.format(event=event.name),
+            cause=withdrew,
         )
     db.flush()
     return closed
+
+
+def release_for_cancelled_event(
+    db: Session, event: Event, *, actor: User, at: datetime
+) -> list[EventEquipmentRequest]:
+    """Story 6.2 AC3-AC5: ``event`` was cancelled (``_release_for_closed_event``)."""
+    return _release_for_closed_event(
+        db, event, actor=actor, at=at, withdrew=_CANCELLATION_WITHDREW.format(event=event.name)
+    )
+
+
+def release_for_rejected_event(
+    db: Session, event: Event, *, actor: User, at: datetime
+) -> list[EventEquipmentRequest]:
+    """Fix f4.5.1: ``event`` was rejected, so its equipment is released as a cancelled event's is
+    (``_release_for_closed_event``), and Technical Support are told the rejection withdrew it. Its
+    items stay out of their queue all the same (``in_technical_support_queue``)."""
+    return _release_for_closed_event(
+        db, event, actor=actor, at=at, withdrew=_REJECTION_WITHDREW.format(event=event.name)
+    )
