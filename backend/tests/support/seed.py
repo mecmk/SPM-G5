@@ -46,6 +46,7 @@ class Users:
     ATTENDEE_3 = SeedUser(_u(18401), "attendee3@example.com", "ATTENDEE", "Cara Attendee")
     ATTENDEE_4 = SeedUser(_u(18402), "attendee4@example.com", "ATTENDEE", "Dion Attendee")
     ATTENDEE_5 = SeedUser(_u(18403), "attendee5@example.com", "ATTENDEE", "Esme Attendee")
+    ATTENDEE_6 = SeedUser(_u(18412), "attendee6@example.com", "ATTENDEE", "Finn Attendee")
     # Story 20.2: owns the notification bell's e2e spec, with nine notifications of her own. Left
     # out of ALL_ACTIVE and ONE_PER_ROLE, which tests take to have none.
     NOTICE = SeedUser(_u(20201), "nadia@notice.example", "EVENT_ORGANISER", "Nadia Notice")
@@ -64,6 +65,7 @@ class Users:
         ATTENDEE_3,
         ATTENDEE_4,
         ATTENDEE_5,
+        ATTENDEE_6,
     )
     ONE_PER_ROLE = (
         ORGANISER,

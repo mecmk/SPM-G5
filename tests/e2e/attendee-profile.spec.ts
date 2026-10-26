@@ -12,9 +12,10 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  * is sent, so no backend test can see them, and AC9 as the page shows it: the server's rule is a
  * backend case, while leaving a withdrawn row's details empty, not "None", is the page's.
  *
- * AC1 An attendee has a My profile page that shows their name and email, which they cannot
- *     change, and the details they keep up to date: a contact phone number and their dietary
- *     requirements.
+ * AC1 An attendee has a My profile page that shows their email, which they cannot change, and the
+ *     details they keep up to date: their name, a contact phone number and their dietary
+ *     requirements (PO decision, 25 Oct 2026: the name is editable). The name and phone number are
+ *     required, and marked *.
  * AC2 The first time an attendee registers for an event, they are asked for these details before
  *     the registration is confirmed. The details are saved to their profile, so later
  *     registrations do not ask again.
@@ -26,11 +27,11 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  * AC5 The organiser sees each registered attendee's phone number and dietary requirements on the
  *     registration list (18.3): a table on a desktop, one card per attendee on a phone.
  * AC6 Dietary requirements are free text of up to 500 characters; none recorded shows "None".
- * AC7 The phone number, when given, has 8 to 15 digits (2.1 AC13).
+ * AC7 The phone number is required (PO decision, 25 Oct 2026), with 8 to 15 digits (2.1 AC13).
  * AC9 A withdrawn registration shows none of the attendee's details on the list.
  *
  * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
- * Esme: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in parallel and a
+ * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in parallel and a
  * first registration happens once. Aiden's profile and the food tasting walk's list are only read.
  */
 
@@ -43,6 +44,9 @@ const THUMB_TARGET = 44
 const DETAILS_DIALOG = 'Your details'
 const DETAILS_REGION = 'Your details'
 const PHONE_INVALID_MESSAGE = 'Enter a phone number with 8 to 15 digits.'
+const PHONE_REQUIRED_MESSAGE = 'Enter your phone number.'
+const NAME_REQUIRED_MESSAGE = 'Enter your name.'
+const REQUIRED_NOTE = 'Fields marked * are required.'
 const DIETARY_MAX_LENGTH = 500
 
 // What the seed holds for each attendee (story 18.4's block of 020_sample_data.sql).
@@ -56,6 +60,7 @@ const BELLA = {
 }
 const DION = { phone: '+65 9184 0202', dietary: 'No pork' }
 const ESME = { name: 'Esme Attendee' }
+const FINN = { name: 'Finn Attendee' }
 
 const POTTERY_TASTER = 'Riverside Pottery Taster' // Cara's first registration
 const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, in one click
@@ -115,7 +120,7 @@ async function expectPhoneKeypad(field: Locator) {
   await expect(field).toHaveAttribute('inputmode', 'tel')
 }
 
-test('18.4 AC1: My profile shows the name and email as fixed text and the details in a form, on a desktop and a phone', async ({
+test('18.4 AC1: My profile shows the email as fixed text and the name and details in a form, on a desktop and a phone', async ({
   page,
 }) => {
   await page.setViewportSize(DESKTOP)
@@ -127,10 +132,10 @@ test('18.4 AC1: My profile shows the name and email as fixed text and the detail
 
   await expect(page.getByRole('heading', { level: 1, name: 'My profile' })).toBeVisible()
   const main = page.getByRole('main')
-  await expect(main.getByText(AIDEN.name, { exact: true })).toBeVisible()
   await expect(main.getByText(ACCOUNTS.attendee, { exact: true })).toBeVisible()
-  // Shown, never offered to change (AC1): no field holds the name or the email.
-  await expect(main.getByRole('textbox', { name: /name|email/i })).toHaveCount(0)
+  // The email is shown, never offered to change (AC1): no field holds it. The name is a field.
+  await expect(main.getByRole('textbox', { name: /email/i })).toHaveCount(0)
+  await expect(main.getByLabel('Name', { exact: true })).toHaveValue(AIDEN.name)
   const phone = main.getByLabel('Phone number')
   await expect(phone).toHaveValue(AIDEN.phone)
   await expectPhoneKeypad(phone)
@@ -138,6 +143,7 @@ test('18.4 AC1: My profile shows the name and email as fixed text and the detail
   expect(await hasNoSidewaysScroll(page)).toBe(true)
 
   await page.setViewportSize(PHONE)
+  await expectFullWidth(page, main.getByLabel('Name', { exact: true }))
   await expectFullWidth(page, phone)
   await expectFullWidth(page, main.getByLabel('Dietary requirements'))
   const save = main.getByRole('button', { name: 'Save details' })
@@ -361,4 +367,60 @@ test('18.4 AC9: a withdrawn registration is listed with no phone number or dieta
   await expect(aiden).not.toContainText(AIDEN.phone)
   await expect(aiden.getByText('None', { exact: true })).toHaveCount(0)
   await expect(aiden.getByText('Not recorded', { exact: true })).toHaveCount(0)
+})
+
+test('18.4 AC1/AC7: the name and phone number are marked as required, and leaving either blank is refused before sending', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const saves: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === PROFILE_PATH) {
+      saves.push(request.url())
+    }
+  })
+  await page.goto(PROFILE_PATH)
+  const main = page.getByRole('main')
+  const name = main.getByLabel('Name', { exact: true })
+  const phone = main.getByLabel('Phone number')
+  const dietary = main.getByLabel('Dietary requirements')
+
+  // The * is drawn beside the label; the field itself says it is required.
+  await expect(main.getByText(REQUIRED_NOTE)).toBeVisible()
+  await expect(name).toHaveAttribute('aria-required', 'true')
+  await expect(phone).toHaveAttribute('aria-required', 'true')
+  await expect(dietary).not.toHaveAttribute('aria-required', 'true')
+
+  await name.fill('   ')
+  await phone.fill('')
+  await main.getByRole('button', { name: 'Save details' }).click()
+
+  await expect(page.getByRole('alert').filter({ hasText: NAME_REQUIRED_MESSAGE })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: PHONE_REQUIRED_MESSAGE })).toBeVisible()
+  await expect(name).toBeFocused()
+  expect(saves).toHaveLength(0)
+})
+
+test('18.4 AC1: a changed name is saved, shows in the sidebar at once, and is kept after a reload', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee6)
+  await page.goto(PROFILE_PATH)
+  const newName = `Finn Tan ${Date.now()}`
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue(FINN.name)
+
+  await page.getByLabel('Name', { exact: true }).fill(newName)
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        new URL(response.url()).pathname === PROFILE_PATH,
+    ),
+    page.getByRole('button', { name: 'Save details' }).click(),
+  ])
+
+  // The sidebar names the signed-in user: it follows the save without a reload.
+  await expect(page.getByRole('complementary').getByText(newName, { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue(newName)
 })

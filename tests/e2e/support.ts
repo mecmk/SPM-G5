@@ -20,10 +20,12 @@ export const ACCOUNTS = {
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
   // Story 18.4: one attendee for each flow that changes their details (attendee-profile.spec.ts).
-  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile.
+  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile;
+  // Finn changes their name.
   attendee3: 'attendee3@example.com',
   attendee4: 'attendee4@example.com',
   attendee5: 'attendee5@example.com',
+  attendee6: 'attendee6@example.com',
   // Story 20.2: an organiser with nine notifications of her own, which only
   // notifications.spec.ts reads (backend/tests/support/seed.py::Users.NOTICE).
   notice: 'nadia@notice.example',

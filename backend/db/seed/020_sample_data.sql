@@ -37,13 +37,13 @@ INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_
     ('11111111-0000-0000-0000-000000000004', 'coordinator2@connectsphere.example', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Carl Coordinator',  'EVENT_COORDINATOR',  NULL, '+65 9200 0002', 'Events'),
     ('11111111-0000-0000-0000-000000000005', 'venue@connectsphere.example',        'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Vera Venue',        'VENUE_STAFF',        NULL, '+65 9300 0001', 'Venues'),
     ('11111111-0000-0000-0000-000000000006', 'tech@connectsphere.example',         'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Theo Tech',         'TECH_SUPPORT_STAFF', NULL, '+65 9400 0001', 'Technical Support'),
-    ('11111111-0000-0000-0000-000000000007', 'attendee@example.com',               'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Aiden Attendee',    'ATTENDEE',           NULL, NULL, NULL),
+    ('11111111-0000-0000-0000-000000000007', 'attendee@example.com',               'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Aiden Attendee',    'ATTENDEE',           NULL, '+65 9700 0007', NULL),
     ('11111111-0000-0000-0000-000000000008', 'inactive@connectsphere.example',     'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Ian Inactive',      'VENUE_STAFF',        NULL, NULL, 'Venues'),
     ('11111111-0000-0000-0000-000000000009', 'safety@connectsphere.example',       'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Sam Safety',        'SAFETY_OFFICER',     NULL, '+65 9500 0001', 'Safety'),
     ('11111111-0000-0000-0000-000000000010', 'lead@connectsphere.example',         'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Lena Lead',         'EVENT_COORDINATOR_LEAD', NULL, '+65 9200 0009', 'Events'),
     -- Story 18.1: a second attendee, who holds the one place at the Portfolio Review Slot and
     -- takes the last place at the Career Mentoring Slot in the e2e spec.
-    ('11111111-0000-0000-0000-000000000011', 'attendee2@example.com',              'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Bella Attendee',    'ATTENDEE',           NULL, NULL, NULL)
+    ('11111111-0000-0000-0000-000000000011', 'attendee2@example.com',              'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Bella Attendee',    'ATTENDEE',           NULL, '+65 9700 0011', NULL)
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
     role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
@@ -1909,8 +1909,9 @@ ON CONFLICT (id) DO UPDATE SET
 -- parallel on one database, and a first registration happens once per attendee, so each flow
 -- that changes an attendee's details has an attendee of its own: Cara (01) has never been asked
 -- for them and registers for the first time; Dion (02) changes them on Upcoming events; Esme (03)
--- changes them on My profile, and is registered for the charity quiz (07) from before. Every id
--- is in the story's 0184NN block: 01-03 the attendees, 04-08 their events (Confirmed, Public,
+-- changes them on My profile, and is registered for the charity quiz (07) from before; Finn (12)
+-- changes their name (PO decision, 25 Oct 2026: the name is editable). Every id
+-- is in the story's 0184NN block: 01-03 and 12 the attendees, 04-08 their events (Confirmed, Public,
 -- organiser 2 and coordinator 2, self-assigned as 3333..70-77 are, in December 2028, after
 -- every other event attendees can register for, so 18.1's list keeps its order and one page),
 -- 09-11 the registrations. Cara registers for the pottery taster (04), then the watercolour
@@ -1925,7 +1926,9 @@ INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_
     ('11111111-0000-0000-0000-000000018402', 'attendee4@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Dion Attendee', 'ATTENDEE', NULL, '+65 9184 0202', NULL,
      'No pork', '2026-10-01 09:00+08'),
     ('11111111-0000-0000-0000-000000018403', 'attendee5@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Esme Attendee', 'ATTENDEE', NULL, '+65 9184 0303', NULL,
-     'Halal', '2026-10-01 09:00+08')
+     'Halal', '2026-10-01 09:00+08'),
+    ('11111111-0000-0000-0000-000000018412', 'attendee6@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Finn Attendee', 'ATTENDEE', NULL, '+65 9184 0606', NULL,
+     NULL, '2026-10-01 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
     role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
@@ -1933,16 +1936,17 @@ ON CONFLICT (id) DO UPDATE SET
     dietary_requirements = EXCLUDED.dietary_requirements,
     attendee_details_confirmed_at = EXCLUDED.attendee_details_confirmed_at;
 
--- Aiden and Bella gave their details before, so 18.1's and 18.2's registrations are never asked
--- for them. Aiden gave no dietary requirements, so his show as "None"; Bella's are long, so the
--- registration list's cards show them wrapping on a phone.
-UPDATE users SET phone = details.phone, dietary_requirements = details.dietary_requirements,
+-- Aiden and Bella gave their details before (their phone numbers are in the users rows above, so
+-- no statement leaves them confirmed without one: ck_users_attendee_details_have_phone), so 18.1's
+-- and 18.2's registrations are never asked for them. Aiden gave no dietary requirements, so his
+-- show as "None"; Bella's are long, so the registration list's cards show them wrapping on a phone.
+UPDATE users SET dietary_requirements = details.dietary_requirements,
                  attendee_details_confirmed_at = '2026-09-15 09:00+08'
 FROM (VALUES
-    ('11111111-0000-0000-0000-000000000007'::uuid, '+65 9700 0007', NULL),
-    ('11111111-0000-0000-0000-000000000011'::uuid, '+65 9700 0011',
+    ('11111111-0000-0000-0000-000000000007'::uuid, NULL),
+    ('11111111-0000-0000-0000-000000000011'::uuid,
      'Vegetarian. No eggs, no mushrooms, and nothing cooked with fish sauce or oyster sauce, please - a severe shellfish allergy, so food prepared alongside shellfish is not safe either.')
-) AS details (id, phone, dietary_requirements)
+) AS details (id, dietary_requirements)
 WHERE users.id = details.id;
 
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,

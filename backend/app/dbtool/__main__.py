@@ -39,6 +39,7 @@ SEED_ACCOUNTS = [
     ("Attendee", "attendee3@example.com"),
     ("Attendee", "attendee4@example.com"),
     ("Attendee", "attendee5@example.com"),
+    ("Attendee", "attendee6@example.com"),
     ("Safety Officer", "safety@connectsphere.example"),
     ("Event Coordinator Lead", "lead@connectsphere.example"),
 ]

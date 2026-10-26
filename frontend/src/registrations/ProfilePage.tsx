@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { formatApiError } from '../api/client'
 import { fetchProfile, updateProfile, type Profile } from '../api/registrations'
+import { useAuth } from '../auth/authContext'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { useLoaded } from '../shared/useLoaded'
@@ -14,12 +15,15 @@ interface ProfileFormProps {
 }
 
 /**
- * Story 18.4 AC1: the name and email as fixed text - ConnectSphere sets up attendees' accounts
- * (AC8), so neither is offered to change - and the details in a form. AC4: saving changes them
- * everywhere they are shown. AC7: a wrong phone number stops the save before anything is sent.
- * AC11: each save sends the whole form, so the later of two saves wins.
+ * Story 18.4 AC1: the email as fixed text - ConnectSphere sets up attendees' accounts (AC8), so it
+ * is not offered to change - and the name and details in a form (AC1 as changed, 25 Oct 2026: the
+ * name is the attendee's to change). AC4: saving changes them everywhere they are shown - the
+ * frame's own name among them, at once. AC1/AC7: a missing name, or a missing or wrong phone
+ * number, stops the save before anything is sent. AC11: each save sends the whole form, so the
+ * later of two saves wins.
  */
 function ProfileForm({ profile, onSaved }: ProfileFormProps) {
+  const { setFullName } = useAuth()
   const form = useAttendeeDetailsForm(detailsFrom(profile))
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -32,6 +36,7 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
     try {
       const saved = await updateProfile(form.details)
       form.reset(detailsFrom(saved))
+      setFullName(saved.full_name)
       onSaved(saved)
     } catch (err) {
       setSaveError(formatApiError(err))
@@ -44,22 +49,18 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
     <section className="card stack profile-card">
       <dl className="attendee-details-list">
         <div>
-          <dt>Name</dt>
-          <dd>{profile.full_name}</dd>
-        </div>
-        <div>
           <dt>Email</dt>
           <dd>{profile.email}</dd>
         </div>
       </dl>
-      <p className="small muted">
-        Your name and email are set by ConnectSphere and cannot be changed here.
-      </p>
+      <p className="small muted">Your email is set by ConnectSphere and cannot be changed here.</p>
       <form className="stack" aria-label="Your details" noValidate onSubmit={handleSave}>
         <AttendeeDetailsFields
           details={form.details}
           onChange={form.setDetails}
+          nameProblem={form.nameProblem}
           phoneProblem={form.phoneProblem}
+          nameInput={form.nameInput}
           phoneInput={form.phoneInput}
         />
         {saveError && (
@@ -78,7 +79,7 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
 }
 
 /**
- * Story 18.4 - My profile: the attendee's name and email, and the phone number and dietary
+ * Story 18.4 - My profile: the attendee's email, and the name, phone number and dietary
  * requirements filled in for them whenever they register (AC1, AC3). Attendees only: App.tsx
  * guards the route, and the backend refuses everyone else (AC10).
  */

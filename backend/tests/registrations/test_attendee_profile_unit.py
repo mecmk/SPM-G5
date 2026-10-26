@@ -7,10 +7,12 @@ integration tests beside this file (``test_attendee_profile_integration.py``) pr
 endpoints apply these rules and save what they produce; ``tests/e2e/attendee-profile.spec.ts``
 proves the flows an attendee and an organiser click through.
 
+AC1 The attendee's name is theirs to keep up to date too: required, at most 200 characters, like
+    an event's contact name (PO decision, 25 Oct 2026, changing AC1). Their email stays fixed.
 AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
     are recorded as "None" (stored as no value, shown as "None": PO decision, 24 Oct 2026).
-AC7 The phone number is optional. When given, it follows the rule for an event's contact phone
-    (2.1 AC13). (Here: a blank one is not given.)
+AC7 The phone number is required (PO decision, 25 Oct 2026, changing AC7's "optional"), and follows
+    the rule for an event's contact phone (2.1 AC13). (Here: a blank one is refused.)
 """
 
 from __future__ import annotations
@@ -65,5 +67,31 @@ def test_dietary_requirements_are_trimmed_before_their_length_is_counted():
 # --- AC7: a phone number left empty -----------------------------------------------------------
 @pytest.mark.story("18.4", ac=7)
 @pytest.mark.parametrize("value", ["", "   ", None], ids=["empty", "spaces", "null"])
-def test_a_blank_or_spaces_only_phone_number_is_not_given(value: str | None):
-    assert schemas.AttendeeDetailsIn(phone=value).phone is None
+def test_a_blank_or_spaces_only_phone_number_is_refused(value: str | None):
+    assert schemas.PHONE_NUMBER_REQUIRED_MESSAGE in _refusal(phone=value)
+
+
+# --- AC1: the attendee's name -----------------------------------------------------------------
+@pytest.mark.story("18.4", ac=1)
+def test_a_name_of_200_characters_is_kept():
+    name = "n" * schemas.FULL_NAME_MAX_LENGTH
+
+    assert schemas.AttendeeDetailsIn(full_name=name).full_name == name
+
+
+@pytest.mark.story("18.4", ac=1)
+def test_a_name_of_201_characters_is_refused():
+    name = "n" * (schemas.FULL_NAME_MAX_LENGTH + 1)
+
+    assert schemas.FULL_NAME_TOO_LONG_MESSAGE in _refusal(full_name=name)
+
+
+@pytest.mark.story("18.4", ac=1)
+@pytest.mark.parametrize("value", ["", "   ", None], ids=["empty", "spaces", "null"])
+def test_a_blank_or_spaces_only_name_is_refused(value: str | None):
+    assert schemas.FULL_NAME_REQUIRED_MESSAGE in _refusal(full_name=value)
+
+
+@pytest.mark.story("18.4", ac=1)
+def test_a_name_is_trimmed():
+    assert schemas.AttendeeDetailsIn(full_name="  Esme Tan \n").full_name == "Esme Tan"

@@ -49,10 +49,14 @@ export interface Registration {
 /** Story 18.4 AC6: the most characters of dietary requirements, as the backend's
  *  DIETARY_REQUIREMENTS_MAX_LENGTH. */
 export const DIETARY_REQUIREMENTS_MAX_LENGTH = 500
+/** Story 18.4 AC1: the most characters of a name, as the backend's FULL_NAME_MAX_LENGTH. */
+export const FULL_NAME_MAX_LENGTH = 200
 
 /** Mirrors `AttendeeDetailsIn`: story 18.4, the details an attendee sends, on My profile or with a
- *  registration. Blank is no value; the backend makes it null. */
+ *  registration. The name (AC1) and phone number (AC7) are required; blank dietary requirements
+ *  are no value, which the backend makes null. */
 export interface AttendeeDetails {
+  full_name: string
   phone: string
   dietary_requirements: string
 }
@@ -80,7 +84,7 @@ export function updateProfile(details: AttendeeDetails): Promise<Profile> {
     body: details,
     notify: {
       title: 'Details saved',
-      message: 'Your phone number and dietary requirements were saved.',
+      message: 'Your name, phone number and dietary requirements were saved.',
     },
   })
 }

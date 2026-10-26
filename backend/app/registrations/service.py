@@ -17,8 +17,8 @@ past draft - anyone else is told the event was not found (AC5/AC6), as an unknow
 registration is listed, a page at a time, each with 18.2's standing (AC4); only those still
 Registered count, so a cancelled event counts none.
 
-Story 18.4: the attendee's details - phone number and dietary requirements - live on their user
-row, so a change shows everywhere at once (AC4). They are written on My profile and with a
+Story 18.4: the attendee's details - name, phone number and dietary requirements - live on their
+user row, so a change shows everywhere at once (AC4). They are written on My profile and with a
 registration, and the first registration needs them (AC2).
 """
 
@@ -39,7 +39,11 @@ from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationStatus
-from app.registrations.schemas import AttendeeDetailsIn, RegistrationCreate
+from app.registrations.schemas import (
+    PHONE_NUMBER_REQUIRED_MESSAGE,
+    AttendeeDetailsIn,
+    RegistrationCreate,
+)
 from app.venues.models import Venue
 
 # AC1: the list comes a page at a time; the page asks for this many unless it says otherwise.
@@ -111,6 +115,14 @@ class EventFull(RegistrationRefused):
 class AlreadyRegistered(RegistrationRefused):
     def __init__(self) -> None:
         super().__init__(ALREADY_REGISTERED_MESSAGE)
+
+
+class PhoneNumberRequired(ValueError):
+    """Story 18.4 AC7: the details sent would leave the attendee with no phone number on file - one
+    who has never given one, sending none."""
+
+    def __init__(self) -> None:
+        super().__init__(PHONE_NUMBER_REQUIRED_MESSAGE)
 
 
 class AttendeeDetailsRequired(RegistrationRefused):
@@ -317,6 +329,14 @@ def list_registration_events(
     return RegistrationEventListing(items=items, total=total or 0)
 
 
+def _require_phone(details: AttendeeDetailsIn, *, attendee: User) -> None:
+    """Story 18.4 AC7: the phone number may be left out of what is sent only when one is already
+    on file - so ``PhoneNumberRequired`` before anything is written, and the database's
+    ck_users_attendee_details_have_phone never has to refuse it."""
+    if "phone" not in details.model_fields_set and attendee.phone is None:
+        raise PhoneNumberRequired()
+
+
 def _apply_details(
     db: Session, details: AttendeeDetailsIn, *, attendee: User, now: datetime
 ) -> None:
@@ -356,10 +376,15 @@ def register(
     (``AttendeeDetailsRequired``) - last, so only one who would otherwise have a place is asked,
     and one who is already registered or facing a full event is told that instead.
 
+    Details that would leave no phone number on file are refused first
+    (``PhoneNumberRequired``, 18.4 AC7), before anything is read or written.
+
     Raises ``RegistrationEventNotFound`` (AC3/AC4) unless the event is open to attendees, then
     ``RegistrationClosed`` or ``RegistrationNotYetOpen`` (AC2), ``AlreadyRegistered`` (AC6),
     ``EventFull`` (AC2/AC6) and ``AttendeeDetailsRequired`` (18.4 AC2), in that order. A refused
     registration leaves nothing written - details sent with it included."""
+    if data.details is not None:
+        _require_phone(data.details, attendee=attendee)
     event = db.execute(
         select(
             Event.id,
@@ -751,7 +776,9 @@ def update_profile(
 ) -> User:
     """18.4 AC4: save the details ``attendee`` sent on My profile, which every page then reads
     from their one row - registrations made earlier included. AC10: only ever the signed-in
-    attendee's own. AC11: a plain write, so of two saves the later wins."""
+    attendee's own. AC11: a plain write, so of two saves the later wins. AC7: refused with
+    ``PhoneNumberRequired`` when it would leave no phone number on file."""
+    _require_phone(details, attendee=attendee)
     _apply_details(db, details, attendee=attendee, now=now)
     db.commit()
     return attendee

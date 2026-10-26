@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-24 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-26 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -81,20 +81,21 @@ Every person who can sign in - internal staff and external organisers/attendees.
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `email` | `citext` | no | - | - | Login identifier. Case-insensitive and unique. |
 | `password_hash` | `text` | no | - | - | Salted password hash in the form "<algorithm>$<params>$<salt>$<hash>" (see backend/app/auth/passwords.py). Never plain text (story 1.1 AC3). |
-| `full_name` | `text` | no | - | - | Display name. |
+| `full_name` | `text` | no | - | - | Display name. An attendee changes their own on My profile (story 18.4 AC1); required, at most 200 characters there. |
 | `role_code` | `text` | no | - | FK → `roles.code` | FK -> roles.code. Drives role-based access control (story 1.2). |
 | `organisation_id` | `uuid` | yes | - | FK → `client_organisations.id` | FK -> client_organisations.id. Set for Event Organisers; NULL for internal staff and attendees. |
-| `phone` | `text` | yes | - | - | Contact phone number (optional). For an attendee, the number their events' organiser and assigned coordinator see on the registration list (story 18.4 AC5); when given, 8 to 15 digits with an optional leading "+", spaces and dashes (the 2.1 AC13 rule, checked by app/common/phone.py). |
+| `phone` | `text` | yes | - | - | Contact phone number. For an attendee, the number their events' organiser and assigned coordinator see on the registration list (story 18.4 AC5): required once they have given their details (ck_users_attendee_details_have_phone, AC7), with 8 to 15 digits, an optional leading "+", spaces and dashes (the 2.1 AC13 rule, checked by app/common/phone.py). Optional for everyone else. |
 | `department` | `text` | yes | - | - | Internal staff only: department or team (optional). |
 | `is_active` | `boolean` | no | `true` | - | FALSE blocks login without deleting history that references the user. |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 | `dietary_requirements` | `text` | yes | - | - | Attendee only: dietary requirements as free text, at most 500 characters (story 18.4 AC6). NULL when none were given, shown as "None"; never blank (ck_users_dietary_requirements). |
-| `attendee_details_confirmed_at` | `timestamp with time zone` | yes | - | - | Attendee only: when the attendee first gave their phone number and dietary requirements, on their first registration or on My profile (story 18.4 AC2). NULL: never asked, so their next registration asks first. |
+| `attendee_details_confirmed_at` | `timestamp with time zone` | yes | - | - | Attendee only: when the attendee first gave their phone number and dietary requirements, on their first registration or on My profile (story 18.4 AC2). NULL: never asked, so their next registration asks first. Set only with a phone number (ck_users_attendee_details_have_phone). |
 
 Rules and indexes:
 
 - unique `users_email_key`: `UNIQUE (email)`
+- check `ck_users_attendee_details_have_phone`: `CHECK (((attendee_details_confirmed_at IS NULL) OR (phone IS NOT NULL)))`
 - check `ck_users_dietary_requirements`: `CHECK (((btrim(dietary_requirements) <> ''::text) AND (char_length(dietary_requirements) <= 500)))`
 - check `ck_users_email_format`: `CHECK ((email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'::citext))`
 

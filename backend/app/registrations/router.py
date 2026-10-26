@@ -100,9 +100,12 @@ def register(
 ) -> RegistrationOut:
     """AC1: register the signed-in attendee, stamped with this moment. AC3/AC4: an event not
     open for registration is a 404. AC2/AC6: not yet open, closed, full or already registered is
-    a 409 naming which. AC5: registrations:self only."""
+    a 409 naming which. AC5: registrations:self only. 18.4 AC7: details that would leave no phone
+    number on file are a 422."""
     try:
         registration = service.register(db, data, attendee=attendee, now=datetime.now(UTC))
+    except service.PhoneNumberRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.RegistrationEventNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
     except service.RegistrationRefused as exc:
@@ -200,9 +203,12 @@ def update_profile(
     db: DbSession,
     attendee: Annotated[CurrentUser, CanRegister],
 ) -> ProfileOut:
-    """18.4 AC4: change the signed-in attendee's details, and answer with the profile as saved.
-    AC6/AC7: details outside the rules are a 422 naming the field. AC10: a name, an email or an
-    id sent with them is a 422 too."""
-    return ProfileOut.from_user(
-        service.update_profile(db, data, attendee=attendee, now=datetime.now(UTC))
-    )
+    """18.4 AC4: change the signed-in attendee's details - their name among them (AC1) - and
+    answer with the profile as saved. AC1/AC6/AC7: details outside the rules are a 422 naming the
+    field, and so is a save that would leave no phone number on file. AC10: an email or an id sent
+    with them is a 422 too."""
+    try:
+        saved = service.update_profile(db, data, attendee=attendee, now=datetime.now(UTC))
+    except service.PhoneNumberRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return ProfileOut.from_user(saved)

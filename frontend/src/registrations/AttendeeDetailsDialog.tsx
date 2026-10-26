@@ -18,9 +18,10 @@ interface AttendeeDetailsDialogProps {
 /**
  * Story 18.4 - the attendee's details, asked for on Upcoming events. AC2: before their first
  * registration, confirming registers with them; nothing is registered until then. AC3: from "Change
- * details", confirming saves them. AC7: a wrong phone number stops the confirm before anything is
- * sent, announced and tied to its field. On a phone the dialog fits the screen and its buttons are
- * at least 44px tall (App.css `.attendee-details-dialog`).
+ * details", confirming saves them. AC1/AC7: a missing name, or a missing or wrong phone number,
+ * stops the confirm before anything is sent, announced and tied to its field. On a phone the
+ * dialog fits the screen and its buttons are at least 44px tall (App.css
+ * `.attendee-details-dialog`).
  */
 export function AttendeeDetailsDialog({
   initial,
@@ -49,14 +50,16 @@ export function AttendeeDetailsDialog({
     >
       {eventName !== null && (
         <p>
-          Before you register for {eventName}, give the phone number and dietary requirements the
-          organiser should have. They are saved to My profile, so you will not be asked again.
+          Before you register for {eventName}, give the name, phone number and dietary requirements
+          the organiser should have. They are saved to My profile, so you will not be asked again.
         </p>
       )}
       <AttendeeDetailsFields
         details={form.details}
         onChange={form.setDetails}
+        nameProblem={form.nameProblem}
         phoneProblem={form.phoneProblem}
+        nameInput={form.nameInput}
         phoneInput={form.phoneInput}
       />
     </ConfirmDialog>

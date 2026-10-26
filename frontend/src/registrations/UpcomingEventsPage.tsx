@@ -12,6 +12,7 @@ import {
   type RegistrationEvent,
   type RegistrationState,
 } from '../api/registrations'
+import { useAuth } from '../auth/authContext'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
@@ -178,6 +179,10 @@ function YourDetails({ profile, onChange }: YourDetailsProps) {
         <p className="small muted">Filled in for you whenever you register.</p>
         <dl className="attendee-details-list">
           <div>
+            <dt>Name</dt>
+            <dd>{profile.full_name}</dd>
+          </div>
+          <div>
             <dt>Phone number</dt>
             <dd>{describePhone(profile.phone)}</dd>
           </div>
@@ -242,7 +247,9 @@ export function UpcomingEventsPage() {
   } | null>(null)
 
   // Story 18.4: the profile, loaded again (a new function each time) after a first registration
-  // saved the details, so the page shows them as the server stored them.
+  // saved the details, so the page - and the frame's own name (AC1) - shows them as the server
+  // stored them.
+  const { setFullName } = useAuth()
   const [loadProfile, setLoadProfile] = useState(() => fetchProfile)
   const { data: profile, error: profileError, setData: setProfile } = useLoaded(loadProfile)
   const [detailsDialog, setDetailsDialog] = useState<DetailsDialogPurpose | null>(null)
@@ -340,12 +347,18 @@ export function UpcomingEventsPage() {
         return
       }
       setDetailsDialog(null)
-      setLoadProfile(() => () => fetchProfile())
+      setLoadProfile(() => async () => {
+        const saved = await fetchProfile()
+        setFullName(saved.full_name)
+        return saved
+      })
       return
     }
     setIsSavingDetails(true)
     try {
-      setProfile(await updateProfile(details))
+      const saved = await updateProfile(details)
+      setProfile(saved)
+      setFullName(saved.full_name)
       setDetailsDialog(null)
     } catch (err) {
       setDetailsError(formatApiError(err))

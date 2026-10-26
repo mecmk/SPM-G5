@@ -26,10 +26,13 @@ AC5 The event's organiser and assigned coordinator see each registered attendee'
     dietary requirements on the event's registration list (18.3).
 AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
     are recorded as "None" (sent as null, shown as "None").
-AC7 The phone number is optional. When given, it follows the rule for an event's contact phone
-    (2.1 AC13).
+AC7 The phone number is required (PO decision, 25 Oct 2026, changing "optional"), and follows the
+    rule for an event's contact phone (2.1 AC13): an attendee who has given their details always
+    has one (ck_users_attendee_details_have_phone).
 AC9 Withdrawn registrations do not show the attendee's details on the registration list. (Nor do
     the registrations of a cancelled event: only a Registered row shows them, PO decision.)
+AC1 (as changed, 25 Oct 2026) The attendee's name is editable and required, at most 200
+    characters; the email stays fixed.
 AC10 An attendee can see and change only their own profile. An event's registrants' details are
     shown only to its organiser and assigned coordinator. (Who may open the list at all is 18.3's
     rule, proven by ``test_registration_list_integration.py``.)
@@ -44,6 +47,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.deps import NOT_PERMITTED_MESSAGE
@@ -174,12 +178,15 @@ def _validation_issue(response, field: str) -> dict:
     return issue
 
 
-def _expected_message(field: str) -> str:
-    """Each detail's own refusal, so the two can never share a sentence."""
+def _expected_message(problem: str) -> str:
+    """Each problem's own refusal, so no two of them can share a sentence."""
     return {
-        "phone": PHONE_INVALID_MESSAGE,
-        "dietary_requirements": schemas.DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE,
-    }[field]
+        "phone-invalid": PHONE_INVALID_MESSAGE,
+        "phone-blank": schemas.PHONE_NUMBER_REQUIRED_MESSAGE,
+        "dietary-long": schemas.DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE,
+        "name-blank": schemas.FULL_NAME_REQUIRED_MESSAGE,
+        "name-long": schemas.FULL_NAME_TOO_LONG_MESSAGE,
+    }[problem]
 
 
 def _list_row(client, event: Event, attendee: User) -> dict:
@@ -262,6 +269,23 @@ def test_a_first_registration_without_details_is_refused_and_writes_nothing(clie
 
 
 @pytest.mark.story("18.4", ac=2)
+@pytest.mark.story("18.4", ac=7)
+def test_a_first_registration_without_a_phone_number_is_refused_and_writes_nothing(
+    client, db: Session
+):
+    attendee = _first_time_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, details={"dietary_requirements": "Vegan"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == schemas.PHONE_NUMBER_REQUIRED_MESSAGE
+    assert _registration_count(db, event) == 0
+    assert client.get(PROFILE_PATH).json()["has_confirmed_details"] is False
+
+
+@pytest.mark.story("18.4", ac=2)
 def test_a_refused_first_registration_does_not_save_the_details_sent_with_it(client, db: Session):
     event = _open_event(db, capacity=1)
     _add_registration(db, event, _returning_attendee(db))
@@ -315,7 +339,8 @@ def test_invalid_details_sent_with_a_registration_are_refused_and_nothing_is_wri
     response = _register(client, db, event, details=details)
 
     assert response.status_code == 422
-    assert _expected_message(field) in _validation_issue(response, field)["msg"]
+    expected = {"phone": "phone-invalid", "dietary_requirements": "dietary-long"}[field]
+    assert _expected_message(expected) in _validation_issue(response, field)["msg"]
     assert _registration_count(db, event) == 0
     assert client.get(PROFILE_PATH).json()["has_confirmed_details"] is False
 
@@ -433,41 +458,97 @@ def test_saving_unchanged_details_records_no_audit_entry(client, db: Session):
 
 
 # --- AC6/AC7: the rules, through My profile ---------------------------------------------------
+@pytest.mark.story("18.4", ac=1)
 @pytest.mark.story("18.4", ac=6)
 @pytest.mark.story("18.4", ac=7)
 @pytest.mark.parametrize(
-    ("change", "field"),
+    ("change", "field", "problem"),
     [
-        pytest.param({"phone": "9123 456a"}, "phone", id="phone"),
-        pytest.param({"dietary_requirements": "v" * 501}, "dietary_requirements", id="dietary"),
+        pytest.param({"phone": "9123 456a"}, "phone", "phone-invalid", id="phone-invalid"),
+        pytest.param({"phone": "  "}, "phone", "phone-blank", id="phone-blank"),
+        pytest.param(
+            {"dietary_requirements": "v" * 501},
+            "dietary_requirements",
+            "dietary-long",
+            id="dietary",
+        ),
+        pytest.param({"full_name": " "}, "full_name", "name-blank", id="name-blank"),
+        pytest.param({"full_name": "n" * 201}, "full_name", "name-long", id="name-long"),
     ],
 )
 def test_details_outside_the_rules_are_refused_with_their_message_and_not_saved(
-    client, db: Session, change: dict, field: str
+    client, db: Session, change: dict, field: str, problem: str
 ):
     attendee = _returning_attendee(db, phone="+65 8111 2222", dietary="Halal")
+    name = attendee.full_name
     client.login(attendee.email)
 
     response = client.patch(PROFILE_PATH, json=change)
 
     assert response.status_code == 422
-    assert _expected_message(field) in _validation_issue(response, field)["msg"]
+    assert _expected_message(problem) in _validation_issue(response, field)["msg"]
     body = client.get(PROFILE_PATH).json()
-    assert (body["phone"], body["dietary_requirements"]) == ("+65 8111 2222", "Halal")
+    assert (body["full_name"], body["phone"], body["dietary_requirements"]) == (
+        name,
+        "+65 8111 2222",
+        "Halal",
+    )
 
 
 @pytest.mark.story("18.4", ac=6)
-@pytest.mark.story("18.4", ac=7)
-def test_blank_details_are_saved_as_not_given(client, db: Session):
+def test_blank_dietary_requirements_are_saved_as_none(client, db: Session):
     attendee = _returning_attendee(db, phone="+65 8111 2222", dietary="Halal")
     client.login(attendee.email)
 
-    response = client.patch(PROFILE_PATH, json={"phone": "  ", "dietary_requirements": " \n "})
+    response = client.patch(
+        PROFILE_PATH, json={"phone": "+65 8111 2222", "dietary_requirements": " \n "}
+    )
 
     assert response.status_code == 200
     db.refresh(attendee)
-    assert attendee.phone is None
+    assert attendee.phone == "+65 8111 2222"
     assert attendee.dietary_requirements is None
+
+
+@pytest.mark.story("18.4", ac=7)
+def test_saving_details_without_a_phone_number_on_file_is_refused(client, db: Session):
+    """The phone number may be left out of a save only when one is already on file."""
+    attendee = _first_time_attendee(db)
+    client.login(attendee.email)
+
+    response = client.patch(PROFILE_PATH, json={"dietary_requirements": "Vegan"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == schemas.PHONE_NUMBER_REQUIRED_MESSAGE
+    body = client.get(PROFILE_PATH).json()
+    assert (body["dietary_requirements"], body["has_confirmed_details"]) == (None, False)
+
+
+@pytest.mark.story("18.4", ac=7)
+def test_an_attendee_cannot_be_recorded_as_having_given_their_details_without_a_phone_number(
+    db: Session,
+):
+    """The database holds the rule too, whatever writes the row."""
+    with pytest.raises(IntegrityError, match="ck_users_attendee_details_have_phone"):
+        _returning_attendee(db, phone=None)
+
+
+@pytest.mark.story("18.4", ac=1)
+@pytest.mark.story("18.4", ac=4)
+def test_a_changed_name_shows_on_my_profile_and_on_the_registration_list(client, db: Session):
+    attendee = _returning_attendee(db)
+    event = _my_event(db)
+    _add_registration(db, event, attendee)
+    client.login(attendee.email)
+
+    response = client.patch(PROFILE_PATH, json={"full_name": "  Esme Tan  "})
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Esme Tan"
+    [audit] = _details_audits(db, attendee)
+    assert audit.details == {"fields": ["full_name"]}
+    client.login(Users.ORGANISER)
+    assert _list_row(client, event, attendee)["attendee_name"] == "Esme Tan"
 
 
 # --- AC5/AC6: the registration list -----------------------------------------------------------
@@ -502,15 +583,17 @@ def test_the_assigned_coordinator_sees_the_same_details(coordinator_client, db: 
 
 @pytest.mark.story("18.4", ac=5)
 @pytest.mark.story("18.4", ac=6)
-def test_an_attendee_with_no_details_is_listed_with_both_as_null(organiser_client, db: Session):
-    """The list sends no value; the page shows "None" for the dietary requirements (AC6)."""
+def test_an_attendee_with_no_dietary_requirements_is_listed_with_them_as_null(
+    organiser_client, db: Session
+):
+    """The list sends no value; the page shows "None" (AC6)."""
     event = _my_event(db)
-    attendee = _returning_attendee(db, phone=None, dietary=None)
+    attendee = _returning_attendee(db, phone="+65 8111 2222", dietary=None)
     _add_registration(db, event, attendee)
 
     row = _list_row(organiser_client, event, attendee)
 
-    assert row["attendee_phone"] is None
+    assert row["attendee_phone"] == "+65 8111 2222"
     assert row["dietary_requirements"] is None
 
 
@@ -609,15 +692,12 @@ def test_an_attendee_saving_their_profile_changes_only_their_own(client, db: Ses
 
 
 @pytest.mark.story("18.4", ac=10)
-@pytest.mark.parametrize(
-    "field",
-    ["full_name", "email", "id"],
-)
-def test_name_email_or_an_id_cannot_be_sent_with_the_profile(client, db: Session, field: str):
+@pytest.mark.parametrize("field", ["email", "id"])
+def test_an_email_or_an_id_cannot_be_sent_with_the_profile(client, db: Session, field: str):
     attendee = _returning_attendee(db)
     other = _returning_attendee(db)
     before = (attendee.full_name, attendee.email, attendee.phone)
-    value = {"full_name": "Someone Else", "email": "else@test.example", "id": str(other.id)}[field]
+    value = {"email": "else@test.example", "id": str(other.id)}[field]
     client.login(attendee.email)
 
     response = client.patch(PROFILE_PATH, json={"phone": "+65 8999 0000", field: value})

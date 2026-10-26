@@ -143,6 +143,6 @@ All passwords are `Password123!`.
 | Venue Staff | `venue@connectsphere.example` |
 | Technical Support Staff | `tech@connectsphere.example` |
 | Attendee | `attendee@example.com`, `attendee2@example.com` |
-| Attendee, for story 18.4's e2e flows (`attendee3` has not given their details yet) | `attendee3@example.com`, `attendee4@example.com`, `attendee5@example.com` |
+| Attendee, for story 18.4's e2e flows (`attendee3` has not given their details yet) | `attendee3@example.com`, `attendee4@example.com`, `attendee5@example.com`, `attendee6@example.com` |
 | Safety Officer | `safety@connectsphere.example` |
 | (inactive, for tests) | `inactive@connectsphere.example` |

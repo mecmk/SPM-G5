@@ -13,8 +13,8 @@ withdraw now - nothing more of the event.
 
 Story 18.3: an event's registration list, as its organiser and assigned coordinator see it.
 
-Story 18.4: the attendee's details - their phone number and dietary requirements - as they send
-them, on My profile or with their first registration, and as My profile shows them.
+Story 18.4: the attendee's details - their name, phone number and dietary requirements - as they
+send them, on My profile or with their first registration, and as My profile shows them.
 """
 
 from __future__ import annotations
@@ -34,31 +34,52 @@ from app.venues.models import Venue
 # two in step; ck_users_dietary_requirements holds the database to it too.
 DIETARY_REQUIREMENTS_MAX_LENGTH = 500
 DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE = "Dietary requirements must be 500 characters or fewer."
+# Story 18.4 AC7 (as changed, 25 Oct 2026): the phone number is required. AC1 (as changed): the name
+# is the attendee's to change, required and as long as an event's contact name may be (2.1 AC13).
+# Mirrored by the form's maxLength and checks in frontend/src/registrations/ - keep them in step.
+PHONE_NUMBER_REQUIRED_MESSAGE = "Enter your phone number."
+FULL_NAME_MAX_LENGTH = 200
+FULL_NAME_REQUIRED_MESSAGE = "Enter your name."
+FULL_NAME_TOO_LONG_MESSAGE = "Your name must be 200 characters or fewer."
 
 
 class AttendeeDetailsIn(BaseModel):
     """Story 18.4: the details an attendee sends, on My profile (AC4) or with a registration (AC2,
-    AC3). Only the fields sent are changed. AC6/AC7: blank or spaces only is no value - None, shown
-    as "None" for dietary requirements. AC10: nothing else can be sent - not a name, an email or
-    whose profile it is (the signed-in attendee's, always) - so ``extra="forbid"`` refuses them."""
+    AC3). Only the fields sent are changed. Blank or spaces only is no value: refused for the name
+    (AC1) and the phone number (AC7), which are required when sent, and None - shown as "None" -
+    for dietary requirements (AC6). AC10: nothing else can be sent - not an email, nor whose
+    profile it is (the signed-in attendee's, always) - so ``extra="forbid"`` refuses them."""
 
     model_config = ConfigDict(extra="forbid")
 
+    full_name: str | None = None
     phone: str | None = None
     dietary_requirements: str | None = None
 
-    @field_validator("phone", "dietary_requirements", mode="before")
+    @field_validator("full_name", "phone", "dietary_requirements", mode="before")
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
         if not isinstance(value, str):
             return value
         return value.strip() or None
 
+    @field_validator("full_name")
+    @classmethod
+    def _check_full_name(cls, value: str | None) -> str:
+        """AC1: required when sent, and at most 200 characters once trimmed."""
+        if value is None:
+            raise ValueError(FULL_NAME_REQUIRED_MESSAGE)
+        if len(value) > FULL_NAME_MAX_LENGTH:
+            raise ValueError(FULL_NAME_TOO_LONG_MESSAGE)
+        return value
+
     @field_validator("phone")
     @classmethod
-    def _check_phone(cls, value: str | None) -> str | None:
-        """AC7: optional; when given, the event contact phone's rule (2.1 AC13)."""
-        if value is not None and not is_phone_number(value):
+    def _check_phone(cls, value: str | None) -> str:
+        """AC7: required when sent, and the event contact phone's rule (2.1 AC13)."""
+        if value is None:
+            raise ValueError(PHONE_NUMBER_REQUIRED_MESSAGE)
+        if not is_phone_number(value):
             raise ValueError(PHONE_NUMBER_INVALID_MESSAGE)
         return value
 
