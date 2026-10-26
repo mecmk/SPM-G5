@@ -4402,8 +4402,7 @@ button.requirement-choice.requirement-covered:hover,
 
 /* ---------- attendee details: My profile, Upcoming events, the registration list (story 18.4) ---------- */
 
-/* AC1/AC3: the name and email on My profile, and the saved details on Upcoming events - each a
-   label over its value, side by side while there is room. Labels look like the form's. */
+/* AC1: the email on My profile - a label over its value. Labels look like the form's. */
 .attendee-details-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
@@ -4423,30 +4422,6 @@ button.requirement-choice.requirement-covered:hover,
   margin: 0.25rem 0 0;
   overflow-wrap: anywhere;
   color: var(--text-h);
-}
-
-/* AC3: Your details on Upcoming events, with Change details at its right edge. */
-.your-details {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.your-details-body {
-  flex: 1 1 20rem;
-  min-width: 0;
-}
-
-.your-details h2 {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-}
-
-.your-details .attendee-details-list {
-  margin-top: 0.75rem;
 }
 
 /* AC2/AC3: the details dialog scrolls inside itself if a short screen cannot hold it. */
@@ -4520,12 +4495,7 @@ button.requirement-choice.requirement-covered:hover,
 
   /* Everything an attendee taps is at least 44px tall, to be pressed with a thumb. */
   .profile-page button[type='submit'],
-  .your-details button,
   .attendee-details-dialog .dialog-actions button {
     min-height: 44px;
-  }
-
-  .your-details button {
-    width: 100%;
   }
 }
