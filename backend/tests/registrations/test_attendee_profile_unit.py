@@ -7,12 +7,13 @@ integration tests beside this file (``test_attendee_profile_integration.py``) pr
 endpoints apply these rules and save what they produce; ``tests/e2e/attendee-profile.spec.ts``
 proves the flows an attendee and an organiser click through.
 
-AC1 The attendee's name is theirs to keep up to date too: required, at most 200 characters, like
-    an event's contact name (PO decision, 25 Oct 2026, changing AC1). Their email stays fixed.
+AC1 The attendee keeps their name up to date on My profile, with their phone number and dietary
+    requirements; their email stays fixed. The name and phone number are required, and the name
+    is at most 200 characters. (CL-166; here: the name's own rules.)
 AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
-    are recorded as "None" (stored as no value, shown as "None": PO decision, 24 Oct 2026).
-AC7 The phone number is required (PO decision, 25 Oct 2026, changing AC7's "optional"), and follows
-    the rule for an event's contact phone (2.1 AC13). (Here: a blank one is refused.)
+    are recorded as "None" (stored as no value, shown as "None": CL-163).
+AC7 The phone number is required. It follows the rule for an event's contact phone (2.1 AC13).
+    (CL-166; here: a blank one is refused.)
 """
 
 from __future__ import annotations

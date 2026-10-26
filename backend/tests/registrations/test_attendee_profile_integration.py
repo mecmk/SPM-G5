@@ -12,30 +12,31 @@ registration to be refused commits its own rows first: a refused registration ro
 back, and committing keeps that to the registration's own work (the commit only releases a
 savepoint; the test's transaction still rolls back).
 
-AC1 An attendee has a My profile page that shows their name and email, which they cannot change,
-    and the details they keep up to date: a contact phone number and their dietary requirements.
+AC1 An attendee has a My profile page that shows their email, which they cannot change, and the
+    details they keep up to date: their name, a contact phone number and their dietary
+    requirements. The name and phone number are required, and marked *. The name is at most 200
+    characters. (CL-166)
 AC2 The first time an attendee registers for an event (18.1), they are asked for these details
-    before the registration is confirmed. The details are saved to their profile, so later
-    registrations do not ask again. (A registration refused for any reason saves none of the
-    details sent with it: PO decision, 24 Oct 2026.)
-AC3 These details are remembered and filled in automatically for later event registrations.
-    Changing them while registering for a later event updates the profile.
+    before the registration is confirmed. The details are saved to their profile. (CL-167; and a
+    registration refused for any reason saves none of the details sent with it, CL-163.)
+AC3 For later registrations, the details are filled in from the profile and shown for the
+    attendee to confirm before the registration is made. Changing them while confirming updates
+    the profile. (CL-167)
 AC4 The attendee can change their details on My profile at any time. The change shows wherever
     their details are shown, including on events they registered for earlier.
 AC5 The event's organiser and assigned coordinator see each registered attendee's phone number and
     dietary requirements on the event's registration list (18.3).
 AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
-    are recorded as "None" (sent as null, shown as "None").
-AC7 The phone number is required (PO decision, 25 Oct 2026, changing "optional"), and follows the
-    rule for an event's contact phone (2.1 AC13): an attendee who has given their details always
-    has one (ck_users_attendee_details_have_phone).
+    are recorded as "None" (sent as null, shown as "None": CL-163).
+AC7 The phone number is required. It follows the rule for an event's contact phone (2.1 AC13): 8 to
+    15 digits, an optional leading "+", spaces and dashes allowed. (CL-166; an attendee who has
+    given their details always has one, ck_users_attendee_details_have_phone.)
 AC9 Withdrawn registrations do not show the attendee's details on the registration list. (Nor do
-    the registrations of a cancelled event: only a Registered row shows them, PO decision.)
-AC1 (as changed, 25 Oct 2026) The attendee's name is editable and required, at most 200
-    characters; the email stays fixed.
+    the registrations of a cancelled event: only a Registered row shows them, CL-163.)
 AC10 An attendee can see and change only their own profile. An event's registrants' details are
-    shown only to its organiser and assigned coordinator. (Who may open the list at all is 18.3's
-    rule, proven by ``test_registration_list_integration.py``.)
+    shown only to its organiser and assigned coordinator; other users, including other attendees,
+    never see them. (Who may open the list at all is 18.3's rule, proven by
+    ``test_registration_list_integration.py``.)
 AC11 If the attendee saves their profile in two tabs, the later save wins, and reloading shows
     what was saved.
 """
@@ -238,7 +239,11 @@ def test_a_first_registration_with_details_saves_them_and_registers(client, db: 
         client,
         db,
         event,
-        details={"phone": "+65 9876 5432", "dietary_requirements": "  Vegan  "},
+        details={
+            "full_name": attendee.full_name,
+            "phone": "+65 9876 5432",
+            "dietary_requirements": "  Vegan  ",
+        },
     )
 
     assert response.status_code == 201
@@ -302,6 +307,90 @@ def test_a_refused_first_registration_does_not_save_the_details_sent_with_it(cli
     assert (body["phone"], body["dietary_requirements"]) == (None, None)
     assert body["has_confirmed_details"] is False
     assert _details_audits(db, attendee) == []
+
+
+@pytest.mark.story("18.4", ac=2)
+def test_a_registration_refused_as_closed_saves_none_of_the_details_sent(client, db: Session):
+    starts_at = future_datetime(days=30)
+    event = make_event(
+        db,
+        status=EventStatus.CONFIRMED,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+        registration_required=True,
+        is_public=True,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=3),
+        registration_closes_at=future_datetime(days=-1),
+    )
+    attendee = _first_time_attendee(db)
+    client.login(attendee.email)
+
+    response = _register(
+        client, db, event, details={"full_name": "New Name", "phone": "+65 9876 5432"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.REGISTRATION_CLOSED_MESSAGE
+    body = client.get(PROFILE_PATH).json()
+    assert (body["full_name"], body["phone"]) == (attendee.full_name, None)
+    assert body["has_confirmed_details"] is False
+    assert _details_audits(db, attendee) == []
+
+
+@pytest.mark.story("18.4", ac=2)
+def test_a_registration_refused_as_already_registered_saves_none_of_the_details_sent(
+    client, db: Session
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    _add_registration(db, event, attendee)
+    client.login(attendee.email)
+
+    response = _register(
+        client, db, event, details={"phone": "+65 9000 1111", "dietary_requirements": "Vegan"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.ALREADY_REGISTERED_MESSAGE
+    body = client.get(PROFILE_PATH).json()
+    assert (body["phone"], body["dietary_requirements"]) == ("+65 9123 4567", "Vegetarian")
+    assert _details_audits(db, attendee) == []
+
+
+@pytest.mark.story("18.4", ac=2)
+@pytest.mark.parametrize(
+    "details",
+    [pytest.param({}, id="nothing"), pytest.param({"dietary_requirements": "Vegan"}, id="dietary")],
+)
+def test_a_first_registration_without_the_name_and_phone_is_refused_and_writes_nothing(
+    client, db: Session, details: dict
+):
+    """A first registration answers the questions: even when the account was set up with a phone
+    number, the name and phone number are sent with it, as the confirm dialog always does."""
+    attendee = make_user(
+        db, role="ATTENDEE", phone="+65 9000 0001", attendee_details_confirmed_at=None
+    )
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, details=details)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.ATTENDEE_DETAILS_REQUIRED_MESSAGE
+    assert _registration_count(db, event) == 0
+    assert client.get(PROFILE_PATH).json()["has_confirmed_details"] is False
+    assert _details_audits(db, attendee) == []
+
+
+@pytest.mark.story("18.4", ac=2)
+def test_saving_again_keeps_when_the_details_were_first_given(client, db: Session):
+    attendee = _returning_attendee(db)
+    client.login(attendee.email)
+
+    client.patch(PROFILE_PATH, json={"dietary_requirements": "Halal"})
+
+    db.refresh(attendee)
+    assert attendee.attendee_details_confirmed_at == CONFIRMED_AT
 
 
 @pytest.mark.story("18.4", ac=2)
@@ -533,6 +622,14 @@ def test_an_attendee_cannot_be_recorded_as_having_given_their_details_without_a_
         _returning_attendee(db, phone=None)
 
 
+@pytest.mark.story("18.4", ac=6)
+@pytest.mark.parametrize("value", ["   ", "v" * 501], ids=["blank", "over-500"])
+def test_the_database_refuses_blank_or_over_long_dietary_requirements(db: Session, value: str):
+    """The database holds the dietary rule too, whatever writes the row."""
+    with pytest.raises(IntegrityError, match="ck_users_dietary_requirements"):
+        _returning_attendee(db, dietary=value)
+
+
 @pytest.mark.story("18.4", ac=1)
 @pytest.mark.story("18.4", ac=4)
 def test_a_changed_name_shows_on_my_profile_and_on_the_registration_list(client, db: Session):
@@ -545,6 +642,7 @@ def test_a_changed_name_shows_on_my_profile_and_on_the_registration_list(client,
 
     assert response.status_code == 200
     assert response.json()["full_name"] == "Esme Tan"
+    assert client.get(PROFILE_PATH).json()["full_name"] == "Esme Tan"
     [audit] = _details_audits(db, attendee)
     assert audit.details == {"fields": ["full_name"]}
     client.login(Users.ORGANISER)

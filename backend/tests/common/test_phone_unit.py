@@ -7,8 +7,10 @@ tests (``tests/events/``) prove the event request still applies it, and
 What a blank phone number becomes is the details' rule, not this one's: see
 ``tests/registrations/test_attendee_profile_unit.py``.
 
-AC7 The phone number is optional. When given, it follows the rule for an event's contact phone
-    (2.1 AC13): 8 to 15 digits, an optional leading "+", spaces and dashes allowed.
+AC7 The phone number is required. It follows the rule for an event's contact phone (2.1 AC13): 8 to
+    15 digits, an optional leading "+", spaces and dashes allowed. (CL-166. The rule itself is the
+    same for both; whether a blank one is allowed is each caller's: an event's contact phone may be
+    blank on a draft, an attendee's may not.)
 """
 
 from __future__ import annotations
@@ -59,7 +61,7 @@ def test_letters_in_a_phone_number_are_refused(value: str):
 
 @pytest.mark.story("18.4", ac=7)
 def test_a_phone_number_over_50_characters_is_refused():
-    """2.1 AC13's rule also caps the whole number, spaces included (PO decision, 24 Oct 2026)."""
+    """2.1 AC13's rule also caps the whole number, spaces included (CL-163)."""
     at_limit = "9" + " " * (PHONE_MAX_LENGTH - 8) + "1234567"
     over_limit = "9" + " " * (PHONE_MAX_LENGTH - 7) + "1234567"
     assert len(at_limit) == PHONE_MAX_LENGTH
