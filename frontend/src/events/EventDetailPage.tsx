@@ -95,6 +95,7 @@ import {
   requirementName,
   venueSearchFor,
 } from '../shared/venueRequest'
+import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
@@ -1349,6 +1350,11 @@ export function EventDetailPage() {
             error={clarificationsError}
             currentUserId={user?.id ?? null}
           />
+        )}
+
+        {/* Story 7.4 AC5: the change history, for the same two people as the clarifications. */}
+        {canViewClarifications && (
+          <ChangeHistorySection eventId={event.id} version={event.updated_at} />
         )}
 
         {canRequestClarification && (
