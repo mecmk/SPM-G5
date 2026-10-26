@@ -945,6 +945,18 @@ def _notify_organiser(
     )
 
 
+def _history_changes(field: str, change: _AppliedChange) -> dict[str, dict[str, Any]]:
+    """Story 7.4 AC4: an approved change as the event's history records it. A schedule change is
+    its start and its end, each only if it moved, as a correction records them."""
+    if field != ChangeRequestField.SCHEDULE:
+        return {field: {"from": change.before, "to": change.after}}
+    return {
+        part: {"from": change.before[part], "to": change.after[part]}
+        for part in ("starts_at", "ends_at")
+        if change.before[part] != change.after[part]
+    }
+
+
 def approve_change_request(
     db: Session,
     event_id: uuid.UUID,
@@ -1015,6 +1027,13 @@ def approve_change_request(
         entity_id=request.id,
         details=details,
         commit=False,
+    )
+    events_service.record_changes(
+        db,
+        event,
+        _history_changes(field, change),
+        actor=actor,
+        change_request_id=request.id,
     )
     record_audit(
         db,
