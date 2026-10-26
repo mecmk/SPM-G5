@@ -16,7 +16,7 @@ interface ProfileFormProps {
 
 /**
  * Story 18.4 AC1: the email as fixed text - ConnectSphere sets up attendees' accounts (AC8), so it
- * is not offered to change - and the name and details in a form (AC1 as changed, 25 Oct 2026: the
+ * is not offered to change - and the name and details in a form (AC1 as changed by CL-166: the
  * name is the attendee's to change). AC4: saving changes them everywhere they are shown - the
  * frame's own name among them, at once. AC1/AC7: a missing name, or a missing or wrong phone
  * number, stops the save before anything is sent. AC11: each save sends the whole form, so the

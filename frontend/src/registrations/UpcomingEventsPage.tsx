@@ -21,7 +21,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
-import { detailsFrom } from './attendeeDetails'
+import { detailsFrom, withConfirmedDetails } from './attendeeDetails'
 import {
   REGISTERED_BADGE,
   describeRegisteredAt,
@@ -195,7 +195,7 @@ function refreshLimit(shownCount: number): number {
  * AC2: Register opens "Confirm your details". An attendee who has never given their details is
  *      asked for them there; nothing is registered until they confirm.
  * AC3: after that the dialog shows the details from their profile, filled in, to confirm before
- *      registering (PO decision, 26 Oct 2026); a change made there is saved to My profile with the
+ *      registering (CL-167); a change made there is saved to My profile with the
  *      registration. Register waits for the profile, so the dialog never opens half filled.
  * A refusal about the event closes the dialog and shows where 18.1 shows it; one about the details
  * stays in the dialog, so nothing typed is lost. If the profile cannot be loaded, the dialog opens
@@ -312,6 +312,10 @@ export function UpcomingEventsPage() {
       setRefusal({ eventId: event.id, eventName: event.name, message: problem.message })
       return
     }
+    // What was just confirmed is kept at once, so a Register pressed before the profile is read
+    // again - or when that read fails - shows it; the read then only corrects it.
+    setProfile((current) => (current === null ? current : withConfirmedDetails(current, details)))
+    setFullName(details.full_name.trim())
     await refreshProfile()
   }
 

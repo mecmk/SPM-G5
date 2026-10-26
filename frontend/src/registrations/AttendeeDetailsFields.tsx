@@ -12,7 +12,7 @@ interface AttendeeDetailsFieldsProps {
 /**
  * Story 18.4 - the attendee's name, phone number and dietary requirements, on My profile and in
  * the registration dialog alike. Each field has its label above it and spans the form (App.css
- * `label > input`). AC1/AC7 (as changed, 25 Oct 2026): the name and phone number are required,
+ * `label > input`). AC1/AC7 (CL-166): the name and phone number are required,
  * marked * (story 2.1's mark) and `aria-required`. A missing or wrong value is announced
  * (`role="alert"`) and tied to its field (`aria-describedby`); each field is named by its label's
  * words alone (`aria-labelledby`), so a problem is read once, as the field's description, not as

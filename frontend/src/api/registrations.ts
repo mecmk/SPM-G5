@@ -103,15 +103,15 @@ export function listRegistrationEvents(
 }
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal
- *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details`, when
- *  given, are saved to the attendee's profile with the registration - needed with their first. */
+ *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details` are the
+ *  ones the attendee confirmed, saved to their profile with the registration. */
 export function registerForEvent(
   event: RegistrationEvent,
-  details?: AttendeeDetails,
+  details: AttendeeDetails,
 ): Promise<Registration> {
   return api<Registration>('/registrations', {
     method: 'POST',
-    body: details === undefined ? { event_id: event.id } : { event_id: event.id, details },
+    body: { event_id: event.id, details },
     errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN', 409: 'REGISTRATION_REFUSED' },
     notify: { title: 'Registered', message: `You are registered for ${event.name}.` },
   })

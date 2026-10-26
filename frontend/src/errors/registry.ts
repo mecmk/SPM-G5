@@ -835,12 +835,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check your phone number',
     message: 'Enter a phone number with 8 to 15 digits.',
   },
-  /** AC7 (as changed, 25 Oct 2026): worded as the backend's PHONE_NUMBER_REQUIRED_MESSAGE. */
+  /** AC7 (CL-166): worded as the backend's PHONE_NUMBER_REQUIRED_MESSAGE. */
   ATTENDEE_PHONE_REQUIRED: {
     title: 'Check your phone number',
     message: 'Enter your phone number.',
   },
-  /** AC1 (as changed, 25 Oct 2026): worded as the backend's FULL_NAME_REQUIRED_MESSAGE. */
+  /** AC1 (CL-166): worded as the backend's FULL_NAME_REQUIRED_MESSAGE. */
   ATTENDEE_NAME_REQUIRED: {
     title: 'Check your name',
     message: 'Enter your name.',

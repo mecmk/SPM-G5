@@ -21,8 +21,8 @@ interface AttendeeDetailsDialogProps {
 /**
  * Story 18.4 - "Confirm your details", opened by every Register on Upcoming events; confirming
  * registers, and nothing is registered until then. AC2: the first time, the details are asked for.
- * AC3: after that they are filled in from the attendee's profile, to check before registering (PO
- * decision, 26 Oct 2026); a change made here is saved to My profile with the registration.
+ * AC3: after that they are filled in from the attendee's profile, to check before registering
+ * (CL-167); a change made here is saved to My profile with the registration.
  * AC1/AC7: a missing name, or a missing or wrong phone number, stops the confirm before anything
  * is sent, announced and tied to its field. 18.1 AC6: Confirm and register is disabled while the
  * registration is on its way, so a double-click sends one. On a phone the dialog fits the screen
