@@ -1,5 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, signIn } from './support'
+import {
+  ACCOUNTS,
+  CONFIRM_AND_REGISTER,
+  EVENTS,
+  confirmDetailsDialog,
+  confirmRegistration,
+  corsHeaders,
+  signIn,
+} from './support'
 
 /**
  * Story 18.4 - autofill attendee profile details. END-TO-END tests: what an attendee and an
@@ -17,11 +25,10 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  *     requirements (PO decision, 25 Oct 2026: the name is editable). The name and phone number are
  *     required, and marked *.
  * AC2 The first time an attendee registers for an event, they are asked for these details before
- *     the registration is confirmed. The details are saved to their profile, so later
- *     registrations do not ask again.
- * AC3 These details are remembered and filled in for later registrations. Changing them on
- *     Upcoming events, where the attendee registers, updates the profile (PO decision, 24 Oct
- *     2026: later registrations stay one click).
+ *     the registration is confirmed. The details are saved to their profile.
+ * AC3 These details are remembered and filled in for later registrations, which show them to
+ *     confirm before registering (PO decision, 26 Oct 2026). Changing them while confirming
+ *     updates the profile.
  * AC4 A change on My profile shows wherever the details are shown, including on events registered
  *     for earlier.
  * AC5 The organiser sees each registered attendee's phone number and dietary requirements on the
@@ -31,8 +38,8 @@ import { ACCOUNTS, EVENTS, signIn } from './support'
  * AC9 A withdrawn registration shows none of the attendee's details on the list.
  *
  * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
- * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in parallel and a
- * first registration happens once. Aiden's profile and the food tasting walk's list are only read.
+ * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in
+ * parallel and a first registration happens once. Aiden's profile and the food tasting walk's list are only read.
  */
 
 const PROFILE_PATH = '/profile'
@@ -41,8 +48,6 @@ const PHONE = { width: 375, height: 667 }
 const DESKTOP = { width: 1280, height: 800 }
 /** The smallest height a control on a phone may have, to be pressed with a thumb. */
 const THUMB_TARGET = 44
-const DETAILS_DIALOG = 'Your details'
-const DETAILS_REGION = 'Your details'
 const PHONE_INVALID_MESSAGE = 'Enter a phone number with 8 to 15 digits.'
 const PHONE_REQUIRED_MESSAGE = 'Enter your phone number.'
 const NAME_REQUIRED_MESSAGE = 'Enter your name.'
@@ -58,13 +63,15 @@ const BELLA = {
     'Vegetarian. No eggs, no mushrooms, and nothing cooked with fish sauce or oyster sauce, please' +
     ' - a severe shellfish allergy, so food prepared alongside shellfish is not safe either.',
 }
+const CARA = { name: 'Cara Attendee' }
 const DION = { phone: '+65 9184 0202', dietary: 'No pork' }
 const ESME = { name: 'Esme Attendee' }
 const FINN = { name: 'Finn Attendee' }
 
 const POTTERY_TASTER = 'Riverside Pottery Taster' // Cara's first registration
-const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, in one click
-const BOOK_CLUB = 'Community Book Club' // Dion's, after changing his details
+const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, confirmed as filled in
+const BOOK_CLUB = 'Community Book Club' // Dion's, changing a detail while confirming
+const JAZZ_EVENING = 'Harbourfront Jazz Evening' // 18.1's, only read: its registration is stubbed
 
 /** An event's card on Upcoming events, found by its name (as in attendee-registration.spec.ts). */
 function eventCard(page: Page, name: string) {
@@ -153,7 +160,7 @@ test('18.4 AC1: My profile shows the email as fixed text and the name and detail
   expect(await hasNoSidewaysScroll(page)).toBe(true)
 })
 
-test('18.4 AC2/AC3: the first registration asks for the details, and the next registers in one click with them filled in', async ({
+test('18.4 AC2/AC3: the first registration asks for the details, and the next shows them filled in to confirm', async ({
   page,
 }) => {
   await page.setViewportSize(PHONE)
@@ -163,13 +170,16 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next re
   await registerButton(page, POTTERY_TASTER).click()
 
   // AC2: the details are asked for first; nothing is registered yet.
-  const dialog = page.getByRole('dialog', { name: DETAILS_DIALOG })
+  const dialog = confirmDetailsDialog(page)
   await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(`Before you register for ${POTTERY_TASTER}, give the name`)
   await expect(registeredBadge(page, POTTERY_TASTER)).toHaveCount(0)
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(CARA.name)
   const phone = dialog.getByLabel('Phone number')
+  await expect(phone).toHaveValue('')
   await expectPhoneKeypad(phone)
   await expectFullWidth(page, phone)
-  const confirm = dialog.getByRole('button', { name: 'Register', exact: true })
+  const confirm = dialog.getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
   await expectThumbSized(confirm)
   await expectThumbSized(dialog.getByRole('button', { name: 'Cancel', exact: true }))
   await expectInsideScreen(page, dialog)
@@ -183,13 +193,19 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next re
   await expect(dialog).toHaveCount(0)
   await expect(registeredBadge(page, POTTERY_TASTER)).toBeVisible()
 
-  // AC3: remembered, and shown where the attendee registers; the next registration does not ask.
-  const details = page.getByRole('region', { name: DETAILS_REGION })
-  await expect(details).toContainText('+65 9184 0101')
-  await expect(details).toContainText('Vegetarian')
+  // AC3: the next registration shows the saved details to confirm, and nothing is registered
+  // until they are confirmed.
   await registerButton(page, WATERCOLOUR_CLASS).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(
+    `Check your details before you register for ${WATERCOLOUR_CLASS}.`,
+  )
+  await expect(dialog.getByLabel('Phone number')).toHaveValue('+65 9184 0101')
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Vegetarian')
+  await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toHaveCount(0)
+  await confirmRegistration(page)
+  await expect(dialog).toHaveCount(0)
   await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toBeVisible()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(await hasNoSidewaysScroll(page)).toBe(true)
 
   // AC2: saved to the profile.
@@ -198,27 +214,22 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next re
   await expect(page.getByLabel('Dietary requirements')).toHaveValue('Vegetarian')
 })
 
-test('18.4 AC3: changing the details on Upcoming events updates My profile', async ({ page }) => {
+test('18.4 AC3: a detail changed while confirming a registration is saved to My profile', async ({
+  page,
+}) => {
   await signIn(page, ACCOUNTS.attendee4)
   await page.goto(UPCOMING_EVENTS_PATH)
-  const details = page.getByRole('region', { name: DETAILS_REGION })
-  await expect(details).toContainText(DION.phone)
-  await expect(details).toContainText(DION.dietary)
 
-  await details.getByRole('button', { name: 'Change details' }).click()
+  await registerButton(page, BOOK_CLUB).click()
 
-  const dialog = page.getByRole('dialog', { name: DETAILS_DIALOG })
+  const dialog = confirmDetailsDialog(page)
   // Filled in from the profile.
   await expect(dialog.getByLabel('Phone number')).toHaveValue(DION.phone)
   await expect(dialog.getByLabel('Dietary requirements')).toHaveValue(DION.dietary)
   await dialog.getByLabel('Dietary requirements').fill('No pork, no peanuts')
-  await dialog.getByRole('button', { name: 'Save details', exact: true }).click()
+  await confirmRegistration(page)
   await expect(dialog).toHaveCount(0)
-  await expect(details).toContainText('No pork, no peanuts')
-
-  await registerButton(page, BOOK_CLUB).click()
   await expect(registeredBadge(page, BOOK_CLUB)).toBeVisible()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.goto(PROFILE_PATH)
   await expect(page.getByLabel('Dietary requirements')).toHaveValue('No pork, no peanuts')
@@ -423,4 +434,37 @@ test('18.4 AC1: a changed name is saved, shows in the sidebar at once, and is ke
   await expect(page.getByRole('complementary').getByText(newName, { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue(newName)
+})
+
+test('18.4 AC2/AC3: details the server refuses keep the dialog open, with what was typed', async ({
+  page,
+}) => {
+  // The browser's own checks stop every refusal the seed could reach, so the server's answer is
+  // stubbed: it refuses the details, and nothing is written.
+  await page.route(
+    (url) => url.pathname === '/registrations',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'POST') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        headers: corsHeaders(request),
+        body: JSON.stringify({ detail: PHONE_REQUIRED_MESSAGE }),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  const dialog = confirmDetailsDialog(page)
+  await dialog.getByLabel('Dietary requirements').fill('Pescatarian')
+  await confirmRegistration(page)
+
+  await expect(dialog.getByRole('alert')).toHaveText(PHONE_REQUIRED_MESSAGE)
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Pescatarian')
+  await expect(registeredBadge(page, JAZZ_EVENING)).toHaveCount(0)
 })

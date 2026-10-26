@@ -171,6 +171,22 @@ export const VENUES = {
   sunriseStudio: 'Sunrise Studio',
 } as const
 
+/** Story 18.4: the dialog every registration opens, showing the attendee's details to confirm -
+ *  filled in from their profile, or asked for the first time. */
+export const CONFIRM_DETAILS_DIALOG = 'Confirm your details'
+export const CONFIRM_AND_REGISTER = 'Confirm and register'
+
+export function confirmDetailsDialog(page: Page) {
+  return page.getByRole('dialog', { name: CONFIRM_DETAILS_DIALOG })
+}
+
+/** Story 18.4 AC2/AC3: confirm the details the dialog shows, which sends the registration. */
+export async function confirmRegistration(page: Page) {
+  await confirmDetailsDialog(page)
+    .getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
+    .click()
+}
+
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
 export async function signIn(page: Page, email: string, password: string = PASSWORD) {
   // A Sign out clicked just before may still be waiting on the server: let the app finish it and
