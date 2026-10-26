@@ -2479,7 +2479,8 @@ def booking_misfits(
 
     ``is_attendance_judged`` also counts the event's attendance outgrowing what a booking held
     for it (an additional venue, or a requirement with no number of its own) was made for: a
-    correction is refused for it (AC14), while an approved change keeps the booking (fix f19.2.1),
+    correction raising the attendance is refused for it (AC14, ``_check_bookings_still_fit``),
+    while an approved change keeps the booking (fix f19.2.1),
     leaving whether the venues hold everyone to 19.3's capacity warning."""
     if item.requirement_name is None:
         return _additional_venue_misfits(
@@ -2525,14 +2526,25 @@ def _unfitting_bookings(
     ]
 
 
-def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
+def _check_bookings_still_fit(
+    event: Event, booked: list[_LiveBooking], *, attendance_before: int | None
+) -> None:
     """AC14: judged on the event and its requirements as the correction leaves them, before the
     event itself is written. Requirements the correction removed have already been flushed, so
     AC16 rests on ``correct_event_under_review`` rolling the whole correction back when the first
     booking that no longer fits refuses it. A cleared date or attendance is left to
-    ``_missing_for_submission``, which refuses it as it would before approval."""
+    ``_missing_for_submission``, which refuses it as it would before approval.
+
+    The event's attendance is judged only when the correction raises it from
+    ``attendance_before``: an approved change may already have left it above a booking it kept
+    (fix f19.2.1), and a correction that does not add to that is not refused for it."""
+    is_attendance_raised = (
+        attendance_before is not None
+        and event.expected_attendance is not None
+        and event.expected_attendance > attendance_before
+    )
     requirements = {requirement.id: requirement for requirement in event.venue_requirements}
-    for item in _unfitting_bookings(event, booked, is_attendance_judged=True):
+    for item in _unfitting_bookings(event, booked, is_attendance_judged=is_attendance_raised):
         if item.requirement_name is None:
             raise BookingNoLongerFits(item.venue_name, None)
         requirement = requirements.get(item.booking.venue_requirement_id)
@@ -2559,12 +2571,13 @@ def _apply_correction(
         _check_equipment_holds_cover(db, event, data)
         booked = _live_bookings(db, event)
     before = _request_values(event)
+    attendance_before = event.expected_attendance
     edit = _validate_request_edit(
         db, event, data, recheck_resent_equipment=False, is_stock_checked=not is_arranged
     )
     _apply_request_edit(db, event, data, edit, actor=actor)
     _fill_requirement_times(event)
-    _check_bookings_still_fit(event, booked)
+    _check_bookings_still_fit(event, booked, attendance_before=attendance_before)
     after = _request_values(event)
     changes = {
         field: {"from": before[field], "to": value}
