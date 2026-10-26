@@ -11,20 +11,38 @@ Excluded, with reason:
   ``tests/notifications/test_generate_and_route_notifications.py``.
 * "without a new submission" (AC4) - re-submitting a fresh request is a different story (2.x
   epic); this file only proves the rejected request itself can no longer be approved.
+
+Fix f4.5.1 (with story 6.2): a rejected request will not go ahead, so its equipment is released
+as a cancelled event's is - in the rejection's own transaction, every hold released and every open
+item closed as Cancelled at the decision's time, a declined one left Declined, nothing deleted, and
+Technical Support told of the items they had been sent. A refused rejection releases nothing. A
+rejected event's items stay out of Technical Support's queue, Cancelled tab included (6.2 AC15).
+No venue booking or registration can exist before approval, so there is nothing else to release.
+Excluded: a real two-connection race with Technical Support's decision - the rejection's guarded
+update waits on the event row lock that decision holds, as the approval's does (see above).
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.events import service
-from app.events.models import EventStatus
-from tests.support.factories import make_event
+from app.events.models import (
+    EquipmentHoldStatus,
+    EquipmentRequestStatus,
+    EquipmentReservation,
+    Event,
+    EventEquipmentRequest,
+    EventStatus,
+)
+from app.notifications.models import Notification
+from tests.support.factories import make_equipment_item, make_equipment_type, make_event
 from tests.support.seed import Events, Users
 
 
@@ -312,3 +330,191 @@ def test_an_unassigned_request_cannot_be_rejected(coordinator_client, db: Sessio
     )
 
     assert response.status_code == 403
+
+
+# --- Fix f4.5.1: a rejection releases the event's equipment, as 6.2's cancellation does ---------
+STARTS_AT = datetime(2030, 5, 6, 1, 0, tzinfo=UTC)
+ENDS_AT = datetime(2030, 5, 6, 9, 0, tzinfo=UTC)
+REASON = "No suitable venue is free."
+# The item statuses that still hold units, and so are closed by a rejection.
+OPEN_ITEM_STATUSES = (
+    EquipmentRequestStatus.REQUESTED,
+    EquipmentRequestStatus.PENDING,
+    EquipmentRequestStatus.ACCEPTED,
+)
+
+
+def _awaiting(db: Session, status: str = EventStatus.UNDER_REVIEW) -> Event:
+    """Olivia's request awaiting Chloe's decision, dated in 2030 so no seeded hold is in the way."""
+    return make_event(
+        db,
+        status=status,
+        starts_at=STARTS_AT,
+        ends_at=ENDS_AT,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+
+
+def _item(db: Session, event: Event, *, status: str, is_held: bool = True):
+    """An equipment item of a fresh type on ``event``, so nothing else holds that type. A sent
+    one records when it was sent, as 15.1's submission does."""
+    sent = {} if status == EquipmentRequestStatus.REQUESTED else {"submitted_at": datetime.now(UTC)}
+    return make_equipment_item(
+        db,
+        event=event,
+        equipment_type=make_equipment_type(db),
+        quantity=2,
+        status=status,
+        is_held=is_held,
+        **sent,
+    )
+
+
+def _reject(client, event_id: uuid.UUID, reason: str = REASON):
+    return client.post(f"/events/{event_id}/reject", json={"reason": reason})
+
+
+def _held(db: Session, event_id: uuid.UUID) -> list[str]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(EquipmentReservation.status).where(EquipmentReservation.event_id == event_id)
+        )
+    )
+
+
+@pytest.mark.story("4.5", ac=2)
+@pytest.mark.parametrize("status", [EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED])
+def test_rejecting_releases_every_equipment_hold(coordinator_client, db: Session, status):
+    event = _awaiting(db, status)
+    items = [_item(db, event, status=item_status) for item_status in OPEN_ITEM_STATUSES]
+
+    assert _reject(coordinator_client, event.id).status_code == 200, "rejection refused"
+
+    assert _held(db, event.id) == [EquipmentHoldStatus.RELEASED] * len(items)
+    free = service.available_by_type(db, STARTS_AT, ENDS_AT)
+    for item in items:
+        assert free[item.equipment_type_id] == item.equipment_type.total_quantity
+
+
+@pytest.mark.story("4.5", ac=2)
+def test_rejecting_closes_open_items_and_keeps_declined_ones(coordinator_client, db: Session):
+    """Every open item is closed as Cancelled at the decision's time, and kept for the record; a
+    declined one stays Technical Support's decision. Nothing is deleted."""
+    event = _awaiting(db)
+    open_items = [_item(db, event, status=item_status) for item_status in OPEN_ITEM_STATUSES]
+    open_items.append(_item(db, event, status=EquipmentRequestStatus.UNAVAILABLE, is_held=False))
+    declined = _item(db, event, status=EquipmentRequestStatus.DECLINED, is_held=False)
+
+    def counts() -> list[int]:
+        return [
+            db.scalar(select(func.count()).select_from(table).where(table.event_id == event.id))
+            for table in (EventEquipmentRequest, EquipmentReservation)
+        ]
+
+    before = counts()
+    assert _reject(coordinator_client, event.id).status_code == 200
+
+    db.expire_all()
+    decided_at = db.get(Event, event.id).decided_at
+    for item in open_items:
+        closed = db.get(EventEquipmentRequest, item.id)
+        assert (closed.status, closed.cancelled_at) == (
+            EquipmentRequestStatus.CANCELLED,
+            decided_at,
+        )
+    assert db.get(EventEquipmentRequest, declined.id).status == EquipmentRequestStatus.DECLINED
+    assert counts() == before
+
+
+@pytest.mark.story("4.5", ac=2)
+@pytest.mark.parametrize(
+    ("status", "is_told"),
+    [
+        (EquipmentRequestStatus.PENDING, True),
+        (EquipmentRequestStatus.ACCEPTED, True),
+        (EquipmentRequestStatus.REQUESTED, False),
+    ],
+)
+def test_technical_support_are_told_of_items_sent_to_them(
+    coordinator_client, db: Session, status, is_told
+):
+    """An item only recorded was never sent to Technical Support, so nothing changed for them.
+    The notice says the rejection withdrew it, not a cancellation."""
+    event = _awaiting(db)
+    item = _item(db, event, status=status)
+
+    assert _reject(coordinator_client, event.id).status_code == 200
+
+    notices = db.scalars(
+        select(Notification).where(
+            Notification.notification_type == "EQUIPMENT_WITHDRAWN",
+            Notification.event_id == event.id,
+        )
+    ).all()
+    assert [notice.recipient_id for notice in notices] == (
+        [Users.TECH_SUPPORT.id] if is_told else []
+    )
+    for notice in notices:
+        assert notice.message == (
+            f'Rejecting "{event.name}" withdrew equipment sent to you: '
+            f"{item.equipment_type.name} ×2."
+        )
+
+
+@pytest.mark.story("4.5", ac=3)
+def test_the_rejection_audit_names_the_equipment_it_released(coordinator_client, db: Session):
+    event = _awaiting(db)
+    item = _item(db, event, status=EquipmentRequestStatus.PENDING)
+
+    assert _reject(coordinator_client, event.id).status_code == 200
+
+    row = db.execute(
+        text("SELECT details FROM audit_log WHERE action = 'EVENT_REJECTED' AND entity_id = :id"),
+        {"id": event.id},
+    ).one()
+    assert row.details["cancelled_equipment_ids"] == [str(item.id)]
+
+
+@pytest.mark.story("4.5", ac=1)
+@pytest.mark.parametrize(
+    ("user", "status", "reason", "code"),
+    [
+        (Users.COORDINATOR_2, EventStatus.UNDER_REVIEW, REASON, 403),
+        (Users.COORDINATOR, EventStatus.PLANNING, REASON, 409),
+        (Users.COORDINATOR, EventStatus.UNDER_REVIEW, "   ", 422),
+    ],
+    ids=["another_coordinator", "not_awaiting_decision", "blank_reason"],
+)
+def test_a_refused_rejection_releases_nothing(login_as, db: Session, user, status, reason, code):
+    event = _awaiting(db, status)
+    item = _item(db, event, status=EquipmentRequestStatus.PENDING)
+
+    assert _reject(login_as(user), event.id, reason).status_code == code
+
+    assert _held(db, event.id) == [EquipmentHoldStatus.RESERVED]
+    assert db.get(EventEquipmentRequest, item.id).status == EquipmentRequestStatus.PENDING
+
+
+@pytest.mark.story("4.5", ac=2)
+@pytest.mark.parametrize(
+    "status", [EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED]
+)
+def test_a_rejected_events_released_items_stay_out_of_technical_supports_queue(
+    login_as, db: Session, status
+):
+    """6.2 AC15 keeps a cancelled event's sent items under Cancelled; a rejected event's leave the
+    queue, as 15.2 AC5 has them do, and their own page is not found."""
+    event = _awaiting(db)
+    item = _item(db, event, status=status)
+    tech = login_as(Users.TECH_SUPPORT)
+    before = tech.get("/equipment-requests").json()["counts"]
+
+    assert _reject(login_as(Users.COORDINATOR), event.id).status_code == 200
+
+    tech = login_as(Users.TECH_SUPPORT)
+    listed = tech.get("/equipment-requests", params={"status": "CANCELLED"}).json()["items"]
+    assert str(item.id) not in [row["id"] for row in listed]
+    after = tech.get("/equipment-requests").json()["counts"]
+    assert after["cancelled"] == before["cancelled"]
+    assert tech.get(f"/equipment-requests/{item.id}").status_code == 404
