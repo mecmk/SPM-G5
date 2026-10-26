@@ -22,24 +22,32 @@ import {
  *
  * AC1 An attendee has a My profile page that shows their email, which they cannot change, and the
  *     details they keep up to date: their name, a contact phone number and their dietary
- *     requirements (PO decision, 25 Oct 2026: the name is editable). The name and phone number are
- *     required, and marked *.
- * AC2 The first time an attendee registers for an event, they are asked for these details before
- *     the registration is confirmed. The details are saved to their profile.
- * AC3 These details are remembered and filled in for later registrations, which show them to
- *     confirm before registering (PO decision, 26 Oct 2026). Changing them while confirming
- *     updates the profile.
- * AC4 A change on My profile shows wherever the details are shown, including on events registered
- *     for earlier.
- * AC5 The organiser sees each registered attendee's phone number and dietary requirements on the
- *     registration list (18.3): a table on a desktop, one card per attendee on a phone.
- * AC6 Dietary requirements are free text of up to 500 characters; none recorded shows "None".
- * AC7 The phone number is required (PO decision, 25 Oct 2026), with 8 to 15 digits (2.1 AC13).
- * AC9 A withdrawn registration shows none of the attendee's details on the list.
+ *     requirements. The name and phone number are required, and marked *. The name is at most
+ *     200 characters. (CL-166)
+ * AC2 The first time an attendee registers for an event (18.1), they are asked for these details
+ *     before the registration is confirmed. The details are saved to their profile. A
+ *     registration refused for any reason (full, closed, already registered) saves none of the
+ *     details sent with it. (CL-167)
+ * AC3 For later registrations, the details are filled in from the profile and shown for the
+ *     attendee to confirm before the registration is made. Changing them while confirming updates
+ *     the profile. (CL-167)
+ * AC4 The attendee can change their details on My profile at any time. The change shows wherever
+ *     their details are shown, including on events they registered for earlier.
+ * AC5 The event's organiser and assigned coordinator see each registered attendee's phone number
+ *     and dietary requirements on the event's registration list (18.3), so they can plan catering
+ *     and contact attendees. (Here: a table on a desktop, one card per attendee on a phone.)
+ * AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
+ *     are recorded as "None".
+ * AC7 The phone number is required. It follows the rule for an event's contact phone (2.1 AC13): 8
+ *     to 15 digits, an optional leading "+", spaces and dashes allowed, at most 50 characters in
+ *     all. (CL-166)
+ * AC9 Withdrawn registrations, and the registrations of a cancelled event, do not show the
+ *     attendee's details on the registration list.
  *
  * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
  * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in
- * parallel and a first registration happens once. Aiden's profile and the food tasting walk's list are only read.
+ * parallel and a first registration happens once. Aiden's profile and the food tasting walk's
+ * list are only read; the tests that register as Aiden stub the call, so nothing is written.
  */
 
 const PROFILE_PATH = '/profile'
@@ -50,6 +58,8 @@ const DESKTOP = { width: 1280, height: 800 }
 const THUMB_TARGET = 44
 const PHONE_INVALID_MESSAGE = 'Enter a phone number with 8 to 15 digits.'
 const PHONE_REQUIRED_MESSAGE = 'Enter your phone number.'
+// What the app shows when the server fails a request (errors/registry.ts, SERVER_ERROR).
+const SERVER_PROBLEM = 'The server hit a problem. Try again in a moment.'
 const NAME_REQUIRED_MESSAGE = 'Enter your name.'
 const REQUIRED_NOTE = 'Fields marked * are required.'
 const DIETARY_MAX_LENGTH = 500
@@ -467,4 +477,149 @@ test('18.4 AC2/AC3: details the server refuses keep the dialog open, with what w
   await expect(dialog.getByRole('alert')).toHaveText(PHONE_REQUIRED_MESSAGE)
   await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Pescatarian')
   await expect(registeredBadge(page, JAZZ_EVENING)).toHaveCount(0)
+})
+
+test('18.4 AC3: a detail changed while confirming fills the next dialog and the sidebar, even when the profile cannot be read again', async ({
+  page,
+}) => {
+  // The registration is stubbed as taken, and reading the profile again after it fails, so
+  // nothing is written: Aiden's profile is only read.
+  let hasRegistered = false
+  await page.route(
+    (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const path = new URL(request.url()).pathname
+      if (path === '/registrations' && request.method() === 'POST') {
+        hasRegistered = true
+        const sent = request.postDataJSON() as { event_id: string }
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000184',
+            event_id: sent.event_id,
+            status: 'REGISTERED',
+            registered_at: '2026-10-27T02:00:00Z',
+          }),
+        })
+      }
+      if (path === PROFILE_PATH && request.method() === 'GET' && hasRegistered) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: '{}',
+        })
+      }
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+  const changedName = 'Aiden Tan'
+  const changedDietary = 'No peanuts: severe allergy'
+
+  await registerButton(page, JAZZ_EVENING).click()
+  const dialog = confirmDetailsDialog(page)
+  await dialog.getByLabel('Name', { exact: true }).fill(changedName)
+  await dialog.getByLabel('Dietary requirements').fill(changedDietary)
+  await confirmRegistration(page)
+  await expect(dialog).toHaveCount(0)
+
+  // The re-read failed and says so, but what was just confirmed is kept.
+  await expect(page.getByRole('alert').filter({ hasText: SERVER_PROBLEM })).toBeVisible()
+  await expect(
+    page.getByRole('complementary').getByText(changedName, { exact: true }),
+  ).toBeVisible()
+  await registerButton(page, POTTERY_TASTER).click()
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(changedName)
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue(changedDietary)
+})
+
+test('18.4 AC3: Register waits for the details to load, so the dialog never opens half filled', async ({
+  page,
+}) => {
+  let releaseProfile: () => void = () => {}
+  const profileHeld = new Promise<void>((resolve) => {
+    releaseProfile = resolve
+  })
+  await signIn(page, ACCOUNTS.attendee)
+  await page.route(
+    (url) => url.pathname === PROFILE_PATH,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      await profileHeld
+      return route.fallback()
+    },
+  )
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await expect(registerButton(page, JAZZ_EVENING)).toBeDisabled()
+  releaseProfile()
+  await expect(registerButton(page, JAZZ_EVENING)).toBeEnabled()
+  await registerButton(page, JAZZ_EVENING).click()
+  await expect(confirmDetailsDialog(page).getByLabel('Phone number')).toHaveValue(AIDEN.phone)
+})
+
+test('18.4 AC3: the profile read again after a registration corrects what the page shows', async ({
+  page,
+}) => {
+  // Stubbed: the registration is taken, and the profile read after it answers with what the
+  // server stored. Nothing is written, so Aiden's profile is only read.
+  let hasRegistered = false
+  await page.route(
+    (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const path = new URL(request.url()).pathname
+      if (path === '/registrations' && request.method() === 'POST') {
+        hasRegistered = true
+        const sent = request.postDataJSON() as { event_id: string }
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000185',
+            event_id: sent.event_id,
+            status: 'REGISTERED',
+            registered_at: '2026-10-27T02:00:00Z',
+          }),
+        })
+      }
+      if (path === PROFILE_PATH && request.method() === 'GET' && hasRegistered) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            full_name: 'Aiden Tan (as stored)',
+            email: ACCOUNTS.attendee,
+            phone: AIDEN.phone,
+            dietary_requirements: 'Halal (as stored)',
+            has_confirmed_details: true,
+          }),
+        })
+      }
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  await confirmDetailsDialog(page).getByLabel('Name', { exact: true }).fill('Aiden Tan')
+  await confirmRegistration(page)
+
+  await expect(
+    page.getByRole('complementary').getByText('Aiden Tan (as stored)', { exact: true }),
+  ).toBeVisible()
+  await registerButton(page, POTTERY_TASTER).click()
+  await expect(confirmDetailsDialog(page).getByLabel('Dietary requirements')).toHaveValue(
+    'Halal (as stored)',
+  )
 })

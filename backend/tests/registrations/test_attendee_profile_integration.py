@@ -360,7 +360,12 @@ def test_a_registration_refused_as_already_registered_saves_none_of_the_details_
 @pytest.mark.story("18.4", ac=2)
 @pytest.mark.parametrize(
     "details",
-    [pytest.param({}, id="nothing"), pytest.param({"dietary_requirements": "Vegan"}, id="dietary")],
+    [
+        pytest.param({}, id="nothing"),
+        pytest.param({"dietary_requirements": "Vegan"}, id="dietary"),
+        pytest.param({"phone": "+65 9000 0001"}, id="phone-only"),
+        pytest.param({"full_name": "Pat Attendee"}, id="name-only"),
+    ],
 )
 def test_a_first_registration_without_the_name_and_phone_is_refused_and_writes_nothing(
     client, db: Session, details: dict
