@@ -1537,6 +1537,36 @@ def test_an_additional_venue_is_held_to_the_events_own_period_and_attendance(
     assert _booking_row(db, booking.id) == before
 
 
+@pytest.mark.story("7.2", ac=14)
+@pytest.mark.parametrize(
+    ("case", "is_refused"),
+    [("description_only", False), ("attendance_lowered", False), ("attendance_raised", True)],
+)
+def test_attendance_already_past_a_kept_booking_is_judged_only_when_raised(
+    login_as, db: Session, case, is_refused
+):
+    """Fix f19.2.1: an approved change raising the attendance keeps an additional venue booked
+    for fewer people, so the event already expects more than it was booked for. A correction that
+    leaves the attendance alone, or lowers it, is not refused for that; one that raises it further
+    still is. (A requirement with no number of its own cannot reach this check: a correction
+    refuses it first, as 2.1 AC10 requires a number.)"""
+    event, _ = _planning_event(db)
+    booking = _book(db, event, None, people=60)
+    db.commit()
+    client = login_as(Users.COORDINATOR)
+    read = _read(client, event.id)
+    change = {
+        "description_only": {"description": "Now with a keynote."},
+        "attendance_lowered": {"expected_attendance": event.expected_attendance - 10},
+        "attendance_raised": {"expected_attendance": event.expected_attendance + 1},
+    }[case]
+
+    response = _correct(client, read, **change)
+
+    assert response.status_code == (422 if is_refused else 200), response.text
+    assert (booking.venue.name in response.text) is is_refused
+
+
 # AC15: after approval, equipment is changed in its own section, and its holds bound the dates.
 @pytest.mark.story("7.2", ac=15)
 @pytest.mark.story("7.2", ac=16)
