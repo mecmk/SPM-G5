@@ -45,9 +45,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   )
 
+  const setFullName = useCallback((fullName: string) => {
+    setUser((current) => (current === null ? current : { ...current, full_name: fullName }))
+  }, [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, signIn, signOut, can }),
-    [user, isLoading, signIn, signOut, can],
+    () => ({ user, isLoading, signIn, signOut, can, setFullName }),
+    [user, isLoading, signIn, signOut, can, setFullName],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

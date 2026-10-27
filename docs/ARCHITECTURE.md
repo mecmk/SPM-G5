@@ -18,7 +18,7 @@ backed by PostgreSQL.
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
-  cross-cutting helpers (audit log). `app/dbtool/` is the migration/seed/docs tool.
+  cross-cutting helpers (audit log, the phone number rule). `app/dbtool/` is the migration/seed/docs tool.
 - **Database**: PostgreSQL 16, defined by plain SQL migrations in `backend/db/migrations` and
   seeded from `backend/db/seed`. See [database/README.md](database/README.md), the generated
   [data dictionary](database/DATA_DICTIONARY.md) and [ERD](database/ERD.excalidraw).

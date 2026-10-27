@@ -1,13 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
-import { formatApiError, mediaUrl } from '../api/client'
+import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
+  fetchProfile,
   listRegistrationEvents,
   registerForEvent,
   REGISTRATION_EVENTS_MAX_LIMIT,
   REGISTRATION_EVENTS_PAGE_SIZE,
+  type AttendeeDetails,
   type RegistrationEvent,
   type RegistrationState,
 } from '../api/registrations'
+import type { ErrorCode } from '../errors/registry'
+import { useAuth } from '../auth/authContext'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
@@ -16,6 +20,8 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
+import { detailsFrom, withConfirmedDetails } from './attendeeDetails'
 import {
   REGISTERED_BADGE,
   describeRegisteredAt,
@@ -89,7 +95,8 @@ function markRegistered(event: RegistrationEvent, registeredAt: string): Registr
 
 interface UpcomingEventCardProps {
   event: RegistrationEvent
-  /** A registration is being sent, for this event or another. */
+  /** A registration is being sent, for this event or another - or, story 18.4, the attendee's
+   *  details it confirms are still loading. */
   isRegistering: boolean
   /** Why the latest attempt to register was refused, null when it was not. */
   refusal: string | null
@@ -102,7 +109,8 @@ interface UpcomingEventCardProps {
  * disabled when full, closed or not yet open; not offered once registered). AC6: disabled while
  * any registration is being sent, so a double-click sends one, and a second card's answer cannot
  * enable the first card's Register while its own is still on the way. AC8 (fix f18.1.1): the
- * event's cover picture, from the API when it was uploaded (mediaUrl), or the placeholder.
+ * event's cover picture, from the API when it was uploaded (mediaUrl), or the placeholder. Story
+ * 18.4 AC2/AC3: Register opens the attendee's details to confirm; confirming registers.
  */
 function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: UpcomingEventCardProps) {
   function handleRegister() {
@@ -147,6 +155,18 @@ function UpcomingEventCard({ event, isRegistering, refusal, onRegister }: Upcomi
   )
 }
 
+/** Story 18.4: the refusals that are about the event - not open any more (18.1 AC4), or not
+ *  yet open, closed, full or already registered (AC2/AC6) - which 18.1 shows on the event's card
+ *  or above the list. Anything else is about the details, and stays in the dialog with them. */
+const EVENT_REFUSAL_CODES: ErrorCode[] = ['REGISTRATION_EVENT_NOT_OPEN', 'REGISTRATION_REFUSED']
+
+/** Why a registration was not taken, and whether that was about the event rather than the
+ *  details sent with it. */
+interface RegistrationProblem {
+  message: string
+  isAboutTheEvent: boolean
+}
+
 /** The size of the list to load again after a registration: what is shown, so a refreshed list
  *  keeps the pages already loaded - up to REGISTRATION_EVENTS_MAX_LIMIT, the most the API sends
  *  at once, past which it is cut back to that many. */
@@ -170,6 +190,16 @@ function refreshLimit(shownCount: number): number {
  * AC4: an event that stopped taking registrations is gone from the reloaded list, so its refusal
  *      is shown above the list instead, naming the event.
  * AC8 (fix f18.1.1): each card shows its event's cover picture, or the placeholder.
+ *
+ * Story 18.4 - autofill attendee profile details.
+ * AC2: Register opens "Confirm your details". An attendee who has never given their details is
+ *      asked for them there; nothing is registered until they confirm.
+ * AC3: after that the dialog shows the details from their profile, filled in, to confirm before
+ *      registering (CL-167); a change made there is saved to My profile with the
+ *      registration. Register waits for the profile, so the dialog never opens half filled.
+ * A refusal about the event closes the dialog and shows where 18.1 shows it; one about the details
+ * stays in the dialog, so nothing typed is lost. If the profile cannot be loaded, the dialog opens
+ * empty and the details are typed in.
  */
 export function UpcomingEventsPage() {
   // What to load: the first page, then everything shown again after each registration. A new
@@ -185,6 +215,16 @@ export function UpcomingEventsPage() {
     eventName: string
     message: string
   } | null>(null)
+
+  // Story 18.4: the profile the dialog fills in from. Read again after each registration, which
+  // saves the details confirmed with it, so the next dialog - and the frame's own name (AC1) -
+  // shows them as the server stored them.
+  const { setFullName } = useAuth()
+  const { data: profile, error: profileError, setData: setProfile } = useLoaded(fetchProfile)
+  const [profileRefreshError, setProfileRefreshError] = useState<string | null>(null)
+  const isProfileLoading = profile === null && profileError === null
+  const [confirmingFor, setConfirmingFor] = useState<RegistrationEvent | null>(null)
+  const [detailsError, setDetailsError] = useState<string | null>(null)
 
   const items = useMemo(() => list?.items ?? [], [list])
   const isRefusalOnItsCard = refusal !== null && items.some((event) => event.id === refusal.eventId)
@@ -206,14 +246,19 @@ export function UpcomingEventsPage() {
     }
   }, [items, setList])
 
-  const handleRegister = useCallback(
-    async (event: RegistrationEvent) => {
+  /** Register for `event` with the details the attendee confirmed (18.4 AC2/AC3). Answers why it
+   *  was refused, or null when it was taken. */
+  const sendRegistration = useCallback(
+    async (
+      event: RegistrationEvent,
+      details: AttendeeDetails,
+    ): Promise<RegistrationProblem | null> => {
       setRegisteringId(event.id)
       setRefusal(null)
       // The list is loaded again below, so an earlier page's failure no longer applies.
       setLoadMoreError(null)
       try {
-        const registration = await registerForEvent(event)
+        const registration = await registerForEvent(event, details)
         // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
         // again in between.
         setList((current) =>
@@ -226,8 +271,12 @@ export function UpcomingEventsPage() {
                 ),
               },
         )
+        return null
       } catch (err) {
-        setRefusal({ eventId: event.id, eventName: event.name, message: formatApiError(err) })
+        return {
+          message: formatApiError(err),
+          isAboutTheEvent: err instanceof ApiError && EVENT_REFUSAL_CODES.includes(err.code),
+        }
       } finally {
         setRegisteringId(null)
         setShown({ limit: refreshLimit(items.length) })
@@ -235,6 +284,53 @@ export function UpcomingEventsPage() {
     },
     [items, setList],
   )
+
+  /** 18.4 AC2/AC3: Register opens the details to confirm - filled in from the profile. */
+  function handleRegister(event: RegistrationEvent) {
+    setDetailsError(null)
+    setConfirmingFor(event)
+  }
+
+  function handleCancelDetails() {
+    setConfirmingFor(null)
+  }
+
+  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
+   *  refusal about the event shows where 18.1 shows it (AC4/AC6); one about the details stays in
+   *  the dialog, so nothing typed is lost. */
+  async function handleConfirmDetails(details: AttendeeDetails) {
+    if (confirmingFor === null) return
+    const event = confirmingFor
+    setDetailsError(null)
+    const problem = await sendRegistration(event, details)
+    if (problem !== null && !problem.isAboutTheEvent) {
+      setDetailsError(problem.message)
+      return
+    }
+    setConfirmingFor(null)
+    if (problem !== null) {
+      setRefusal({ eventId: event.id, eventName: event.name, message: problem.message })
+      return
+    }
+    // What was just confirmed is kept at once, so a Register pressed before the profile is read
+    // again - or when that read fails - shows it; the read then only corrects it.
+    setProfile((current) => (current === null ? current : withConfirmedDetails(current, details)))
+    setFullName(details.full_name.trim())
+    await refreshProfile()
+  }
+
+  /** 18.4 AC2/AC3: read the profile the registration just saved, for the next dialog and the
+   *  frame's name. The registration itself is already taken, so a failure here only says so. */
+  async function refreshProfile() {
+    try {
+      const saved = await fetchProfile()
+      setProfile(saved)
+      setFullName(saved.full_name)
+      setProfileRefreshError(null)
+    } catch (err) {
+      setProfileRefreshError(formatApiError(err))
+    }
+  }
 
   return (
     <div className="page page-wide upcoming-events">
@@ -250,6 +346,11 @@ export function UpcomingEventsPage() {
         </p>
       )}
       {isLoading && <LoadingState label="Loading upcoming events…" />}
+      {(profileError ?? profileRefreshError) && (
+        <p role="alert" className="error">
+          {profileError ?? profileRefreshError}
+        </p>
+      )}
       {refusal !== null && !isRefusalOnItsCard && (
         <p role="alert" className="error">
           {refusal.eventName}: {refusal.message}
@@ -267,7 +368,7 @@ export function UpcomingEventsPage() {
               <UpcomingEventCard
                 key={event.id}
                 event={event}
-                isRegistering={registeringId !== null}
+                isRegistering={registeringId !== null || isProfileLoading}
                 refusal={refusal?.eventId === event.id ? refusal.message : null}
                 onRegister={handleRegister}
               />
@@ -295,6 +396,18 @@ export function UpcomingEventsPage() {
             </div>
           )}
         </>
+      )}
+
+      {confirmingFor !== null && (
+        <AttendeeDetailsDialog
+          initial={detailsFrom(profile)}
+          eventName={confirmingFor.name}
+          isFirstTime={profile === null || !profile.has_confirmed_details}
+          isBusy={registeringId !== null}
+          error={detailsError}
+          onConfirm={handleConfirmDetails}
+          onCancel={handleCancelDetails}
+        />
       )}
     </div>
   )

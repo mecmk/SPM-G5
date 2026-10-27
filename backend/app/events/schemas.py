@@ -26,6 +26,7 @@ from pydantic_core import PydanticCustomError
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
+from app.common.phone import PHONE_NUMBER_INVALID_MESSAGE, is_phone_number
 from app.events.models import Event, EventClarification, EventEquipmentRequest, VenueRequirement
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
@@ -95,22 +96,18 @@ VENUE_REQUIREMENT_TIMES_TOGETHER_MESSAGE = (
 CANNOT_BE_REMOVED_MESSAGE = "This field cannot be removed; send a value or leave it out."
 
 # Story 2.1 AC13: the point of contact. Bounds mirror the form's own maxLength and the checks in
-# frontend/src/events/eventRequestForm.ts - keep the messages and limits in step.
+# frontend/src/events/eventRequestForm.ts - keep the messages and limits in step. The phone
+# number's rule is app/common/phone.py's, shared with an attendee's details (story 18.4 AC7).
 CONTACT_NAME_MAX_LENGTH = 200
 CONTACT_EMAIL_MAX_LENGTH = 254
-CONTACT_PHONE_MAX_LENGTH = 50
-CONTACT_PHONE_MIN_DIGITS = 8
-CONTACT_PHONE_MAX_DIGITS = 15
 CONTACT_NAME_TOO_LONG_MESSAGE = "The contact name must be 200 characters or fewer."
 CONTACT_EMAIL_INVALID_MESSAGE = "Enter an email address like name@example.com."
-CONTACT_PHONE_INVALID_MESSAGE = "Enter a phone number with 8 to 15 digits."
 
 # Story 4.2 AC3 / 4.3 AC5: a clarification message or response is stored in several tables (the
 # thread, the status-history reason, the notification and the audit entry), so it is bounded.
 # Mirrored by the textarea's maxLength in frontend/src/api/events.ts - keep the two in step.
 CLARIFICATION_MESSAGE_MAX_LENGTH = 2000
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_PHONE_PATTERN = re.compile(r"^\+?[\d -]+$")
 
 
 # --- review queue (story 4.1) --------------------------------------------------------------
@@ -406,16 +403,8 @@ class _EventRequestRules(BaseModel):
     @field_validator("contact_phone", check_fields=False)
     @classmethod
     def _check_contact_phone(cls, value: str | None):
-        if value is None:
-            return value
-        digits = sum(char.isdigit() for char in value)
-        is_valid = (
-            len(value) <= CONTACT_PHONE_MAX_LENGTH
-            and _PHONE_PATTERN.match(value) is not None
-            and CONTACT_PHONE_MIN_DIGITS <= digits <= CONTACT_PHONE_MAX_DIGITS
-        )
-        if not is_valid:
-            raise ValueError(CONTACT_PHONE_INVALID_MESSAGE)
+        if value is not None and not is_phone_number(value):
+            raise ValueError(PHONE_NUMBER_INVALID_MESSAGE)
         return value
 
     @field_validator("venue_none_required", check_fields=False)

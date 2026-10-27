@@ -6,6 +6,9 @@ request withdrawals: a state transition with its own rules and audit record.
 
 Story 18.3: an event's registration list, under ``/events``, and the events whose list the viewer
 may open.
+
+Story 18.4: the attendee's own profile, under ``/profile``. The URL names no attendee: it is always
+the signed-in one's (AC10).
 """
 
 from __future__ import annotations
@@ -22,10 +25,12 @@ from app.auth.permissions import Permission
 from app.db import get_db
 from app.registrations import service
 from app.registrations.schemas import (
+    AttendeeDetailsIn,
     EventRegistrationListOut,
     EventRegistrationOut,
     ManagedRegistrationEventOut,
     MyRegistrationOut,
+    ProfileOut,
     RegistrationCreate,
     RegistrationEventList,
     RegistrationEventOut,
@@ -34,6 +39,7 @@ from app.registrations.schemas import (
 
 router = APIRouter(prefix="/registrations", tags=["registrations"])
 events_router = APIRouter(prefix="/events", tags=["registrations"])
+profile_router = APIRouter(prefix="/profile", tags=["registrations"])
 
 CanRegister = Depends(require_permission(Permission.REGISTRATIONS_SELF))
 CanViewRegistrations = Depends(require_permission(Permission.REGISTRATIONS_VIEW))
@@ -94,9 +100,12 @@ def register(
 ) -> RegistrationOut:
     """AC1: register the signed-in attendee, stamped with this moment. AC3/AC4: an event not
     open for registration is a 404. AC2/AC6: not yet open, closed, full or already registered is
-    a 409 naming which. AC5: registrations:self only."""
+    a 409 naming which. AC5: registrations:self only. 18.4 AC7: details that would leave no phone
+    number on file are a 422."""
     try:
         registration = service.register(db, data, attendee=attendee, now=datetime.now(UTC))
+    except service.PhoneNumberRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.RegistrationEventNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
     except service.RegistrationRefused as exc:
@@ -154,7 +163,8 @@ def list_event_registrations(
     offset: Annotated[int, Query(ge=0, le=service.REGISTRATION_LIST_MAX_OFFSET)] = 0,
 ) -> EventRegistrationListOut:
     """18.3 AC1-AC4/AC7: one page of the event's registrations, how many there are, and its
-    active count against capacity. AC5/AC6: any signed-in user may ask, but only the organiser
+    active count against capacity. 18.4 AC5/AC9: each Registered row with the attendee's phone
+    number and dietary requirements. AC5/AC6: any signed-in user may ask, but only the organiser
     and the assigned coordinator of an event past draft get an answer - anyone else, like an
     unknown id, a 404. Signed out is a 401."""
     try:
@@ -166,7 +176,10 @@ def list_event_registrations(
     return EventRegistrationListOut(
         items=[
             EventRegistrationOut.from_registration(
-                item.registration, attendee=item.attendee, status=item.standing
+                item.registration,
+                attendee=item.attendee,
+                status=item.standing,
+                shows_details=item.shows_details,
             )
             for item in listing.items
         ],
@@ -175,3 +188,27 @@ def list_event_registrations(
         capacity=listing.capacity,
         is_full=listing.is_full,
     )
+
+
+@profile_router.get("", response_model=ProfileOut)
+def get_profile(attendee: Annotated[CurrentUser, CanRegister]) -> ProfileOut:
+    """18.4 AC1: the signed-in attendee's name, email and details. AC10: their own only, and
+    registrations:self only - other roles get 403 and signed-out users 401 from the dependency."""
+    return ProfileOut.from_user(attendee)
+
+
+@profile_router.patch("", response_model=ProfileOut)
+def update_profile(
+    data: AttendeeDetailsIn,
+    db: DbSession,
+    attendee: Annotated[CurrentUser, CanRegister],
+) -> ProfileOut:
+    """18.4 AC4: change the signed-in attendee's details - their name among them (AC1) - and
+    answer with the profile as saved. AC1/AC6/AC7: details outside the rules are a 422 naming the
+    field, and so is a save that would leave no phone number on file. AC10: an email or an id sent
+    with them is a 422 too."""
+    try:
+        saved = service.update_profile(db, data, attendee=attendee, now=datetime.now(UTC))
+    except service.PhoneNumberRequired as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return ProfileOut.from_user(saved)
