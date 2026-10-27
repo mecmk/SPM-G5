@@ -94,6 +94,7 @@ def test_organiser_sees_every_request_they_own(organiser_client):
         str(Events.AI_WORKSHOP),
         str(Events.DESIGN_SPRINT),
         str(Events.CHARITY_RUN),
+        str(Events.SAFETY_RELEASE),
     }
 
 
