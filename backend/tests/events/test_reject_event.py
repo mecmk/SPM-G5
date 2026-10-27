@@ -15,8 +15,9 @@ Excluded, with reason:
 Fix f4.5.1 (with story 6.2): a rejected request will not go ahead, so its equipment is released
 as a cancelled event's is - in the rejection's own transaction, every hold released and every open
 item closed as Cancelled at the decision's time, a declined one left Declined, nothing deleted, and
-Technical Support told of the items they had been sent. A refused rejection releases nothing. A
-rejected event's items stay out of Technical Support's queue, Cancelled tab included (6.2 AC15).
+Technical Support told of the items they had been sent. A refused rejection releases nothing.
+Technical Support keep the items they were sent in their queue, under Cancelled or Declined, as
+6.2 AC15 keeps a cancelled event's.
 No venue booking or registration can exist before approval, so there is nothing else to release.
 Excluded: a real two-connection race with Technical Support's decision - the rejection's guarded
 update waits on the event row lock that decision holds, as the approval's does (see above).
@@ -496,25 +497,51 @@ def test_a_refused_rejection_releases_nothing(login_as, db: Session, user, statu
     assert db.get(EventEquipmentRequest, item.id).status == EquipmentRequestStatus.PENDING
 
 
+def _queue_ids(client, **params) -> list[str]:
+    """Every id in one tab of Technical Support's queue, which is not paged."""
+    return [item["id"] for item in client.get("/equipment-requests", params=params).json()["items"]]
+
+
 @pytest.mark.story("4.5", ac=2)
 @pytest.mark.parametrize(
     "status", [EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED]
 )
-def test_a_rejected_events_released_items_stay_out_of_technical_supports_queue(
+def test_technical_support_see_a_rejected_events_sent_item_under_cancelled_and_all(
     login_as, db: Session, status
 ):
-    """6.2 AC15 keeps a cancelled event's sent items under Cancelled; a rejected event's leave the
-    queue, as 15.2 AC5 has them do, and their own page is not found."""
+    """As 6.2 AC15 keeps a cancelled event's sent items, for Technical Support's record."""
     event = _awaiting(db)
     item = _item(db, event, status=status)
-    tech = login_as(Users.TECH_SUPPORT)
-    before = tech.get("/equipment-requests").json()["counts"]
+    before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
 
     assert _reject(login_as(Users.COORDINATOR), event.id).status_code == 200
 
     tech = login_as(Users.TECH_SUPPORT)
-    listed = tech.get("/equipment-requests", params={"status": "CANCELLED"}).json()["items"]
-    assert str(item.id) not in [row["id"] for row in listed]
+    assert str(item.id) in _queue_ids(tech, status="CANCELLED")
+    assert str(item.id) in _queue_ids(tech)
     after = tech.get("/equipment-requests").json()["counts"]
-    assert after["cancelled"] == before["cancelled"]
-    assert tech.get(f"/equipment-requests/{item.id}").status_code == 404
+    assert after["cancelled"] == before["cancelled"] + 1
+    assert after[status.lower()] == before[status.lower()] - 1
+    page = tech.get(f"/equipment-requests/{item.id}")
+    assert page.status_code == 200, page.text
+    assert page.json()["status"] == EquipmentRequestStatus.CANCELLED
+
+
+@pytest.mark.story("4.5", ac=2)
+def test_technical_support_keep_a_declined_item_on_a_rejected_event(login_as, db: Session):
+    """A declined item stays Declined, and stays in their queue as the record of their decision,
+    as 6.2 AC15 keeps one on a cancelled event."""
+    event = _awaiting(db)
+    item = _item(db, event, status=EquipmentRequestStatus.DECLINED, is_held=False)
+    before = login_as(Users.TECH_SUPPORT).get("/equipment-requests").json()["counts"]
+
+    assert _reject(login_as(Users.COORDINATOR), event.id).status_code == 200
+
+    tech = login_as(Users.TECH_SUPPORT)
+    assert str(item.id) in _queue_ids(tech, status="DECLINED")
+    assert str(item.id) in _queue_ids(tech)
+    assert str(item.id) not in _queue_ids(tech, status="CANCELLED")
+    assert tech.get("/equipment-requests").json()["counts"] == before
+    page = tech.get(f"/equipment-requests/{item.id}")
+    assert page.status_code == 200, page.text
+    assert page.json()["status"] == EquipmentRequestStatus.DECLINED

@@ -455,14 +455,16 @@ def test_an_item_the_coordinator_removes_disappears(login_as, db):
 @pytest.mark.parametrize(
     ("status", "event_status"),
     [
-        *((status, EventStatus.REJECTED) for status in TAB_STATUSES),
-        # Story 6.2 AC15 keeps a declined item on a cancelled event, under Declined
-        # (test_cancel_event.py); an item still open on one is from before 6.2 closed them.
+        # Story 6.2 AC15 and fix f4.5.1 keep a declined item on a cancelled or rejected event,
+        # under Declined (test_cancel_event.py, test_reject_event.py); an item still open on one
+        # is from before they closed them.
         (PENDING, EventStatus.CANCELLED),
         (ACCEPTED, EventStatus.CANCELLED),
+        (PENDING, EventStatus.REJECTED),
+        (ACCEPTED, EventStatus.REJECTED),
     ],
 )
-def test_an_open_item_on_a_cancelled_event_or_any_on_a_rejected_one_disappears(
+def test_an_open_item_on_a_cancelled_or_rejected_event_disappears(
     tech_client, db, status, event_status
 ):
     before = _queue(tech_client, status)["counts"]

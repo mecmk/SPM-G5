@@ -126,13 +126,13 @@ _EDITABLE_ITEM_STATUSES = frozenset(
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
-# Story 15.2 AC5: an event that will not go ahead. Rejecting leaves its items as they were, so
-# the queue leaves them out by the event's status rather than the item's.
+# Story 15.2 AC5: an event that will not go ahead. A declined item stays Declined when its event
+# closes, so the queue leaves an event's items out by the event's status rather than the item's.
 _CLOSED_QUEUE_EVENT_STATUSES = (EventStatus.CANCELLED, EventStatus.REJECTED)
-# Story 15.2 AC3/AC5 with 6.2 AC9/AC15: what Technical Support's queue lists. An item in a tab of
-# its own, on an event still going ahead; one cancelled after it was sent to them, whatever its
-# event; or one they declined on an event since cancelled, which stays Declined - the last two
-# kept for their record, as a rejected event's items are not.
+# Story 15.2 AC3/AC5 with 6.2 AC9/AC15 and fix f4.5.1: what Technical Support's queue lists. An
+# item in a tab of its own, on an event still going ahead; one cancelled after it was sent to them,
+# whatever its event; or one they declined on an event since cancelled or rejected, which stays
+# Declined - the last two kept for their record.
 _LIVE_TAB_STATUSES = (
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
@@ -151,8 +151,7 @@ def in_technical_support_queue() -> ColumnElement[bool]:
     """Story 15.2 AC3/AC5, 6.2 AC15: the condition for an item Technical Support's queue lists.
     It reads ``EventEquipmentRequest`` joined to its ``Event``, so the caller joins them. The queue
     and a notification's target (20.2) both use it, so the page a notice opens is one that holds
-    the item. Fix f4.5.1: an item a rejection closed is not kept under Cancelled, as 6.2 AC15
-    leaves a rejected event's equipment out of the queue."""
+    the item. Fix f4.5.1: a rejected event's sent items are kept as a cancelled event's are."""
     return or_(
         and_(
             EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
@@ -161,11 +160,10 @@ def in_technical_support_queue() -> ColumnElement[bool]:
         and_(
             EventEquipmentRequest.status == EquipmentRequestStatus.CANCELLED,
             EventEquipmentRequest.submitted_at.is_not(None),
-            Event.status != EventStatus.REJECTED,
         ),
         and_(
             EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
-            Event.status == EventStatus.CANCELLED,
+            Event.status.in_(_CLOSED_QUEUE_EVENT_STATUSES),
         ),
     )
 
@@ -1184,8 +1182,7 @@ def release_for_rejected_event(
     db: Session, event: Event, *, actor: User, at: datetime
 ) -> list[EventEquipmentRequest]:
     """Fix f4.5.1: ``event`` was rejected, so its equipment is released as a cancelled event's is
-    (``_release_for_closed_event``), and Technical Support are told the rejection withdrew it. Its
-    items stay out of their queue all the same (``in_technical_support_queue``)."""
+    (``_release_for_closed_event``), and Technical Support are told the rejection withdrew it."""
     return _release_for_closed_event(
         db, event, actor=actor, at=at, withdrew=_REJECTION_WITHDREW.format(event=event.name)
     )

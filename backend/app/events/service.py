@@ -1933,10 +1933,10 @@ def _decide(
         reason=reason,
     )
     _notify_organiser_of_decision(db, event, actor=actor, to_status=to_status, reason=reason)
-    details: dict[str, Any] = {"from_status": from_status}
+    # The decision's own fields go in last, so a consequence can never overwrite them.
+    details: dict[str, Any] = {**consequences, "from_status": from_status}
     if reason is not None:
         details["reason"] = reason
-    details.update(consequences)
     record_audit(
         db,
         actor=actor,
