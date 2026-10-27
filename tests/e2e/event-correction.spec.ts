@@ -184,8 +184,8 @@ test('7.2 AC4: the assigned coordinator corrects a request under review and the 
 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(coordinator).toHaveURL(DETAILS_PATH)
-  await expect(coordinator.getByText('Corrected: a two-part hands-on workshop.')).toBeVisible()
-  await expect(coordinator.getByText('75', { exact: true })).toBeVisible()
+  await expect(coordinator.getByRole('paragraph').filter({ hasText: 'Corrected: a two-part hands-on workshop.' })).toBeVisible()
+  await expect(coordinator.getByRole('paragraph').filter({ hasText: /^75$/ })).toBeVisible()
   await expect(coordinator.getByText('Under review', { exact: true })).toBeVisible()
 })
 
@@ -211,7 +211,7 @@ test('7.2 AC4: the coordinator still corrects a request after asking the organis
 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(coordinator).toHaveURL(DETAILS_PATH)
-  await expect(coordinator.getByText('80', { exact: true })).toBeVisible()
+  await expect(coordinator.getByRole('paragraph').filter({ hasText: /^80$/ })).toBeVisible()
   await expect(status).toBeVisible()
 })
 
@@ -236,7 +236,7 @@ test('7.2 AC4: the coordinator adds a venue requirement and the details page sho
 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(coordinator).toHaveURL(DETAILS_PATH)
-  await expect(coordinator.getByText('Main hall')).toBeVisible()
+  await expect(coordinator.getByRole('region', { name: 'Venue requirements' }).getByText('Main hall')).toBeVisible()
 })
 
 test('7.2 AC7: the form leaves out the event’s own holds and marks equipment no longer free for new dates', async ({
@@ -350,7 +350,7 @@ test('7.2 AC10: the coordinator corrects an approved event and the details page 
 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(coordinator).toHaveURL(DETAILS_PATH)
-  await expect(coordinator.getByText('Corrected while planning.')).toBeVisible()
+  await expect(coordinator.getByRole('paragraph').filter({ hasText: 'Corrected while planning.' })).toBeVisible()
   await expect(coordinator.getByText('Planning', { exact: true }).first()).toBeVisible()
 })
 
@@ -415,7 +415,7 @@ test('7.2 AC15: once approved, a correction leaves the equipment out of what it 
   expect(sent.postDataJSON()).toHaveProperty('description')
   await expect(coordinator.getByRole('alert')).toHaveCount(0)
   await coordinator.getByRole('link', { name: /^← / }).click()
-  await expect(coordinator.getByText('Corrected with the kit left alone.')).toBeVisible()
+  await expect(coordinator.getByRole('paragraph').filter({ hasText: 'Corrected with the kit left alone.' })).toBeVisible()
 })
 
 test('7.2 AC12: once confirmed, the details are greyed out, the hint says why, and notes still save', async ({
