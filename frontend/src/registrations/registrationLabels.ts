@@ -1,6 +1,6 @@
 import type { RegistrationStanding } from '../api/registrations'
 import { eventBadgeStatus } from '../shared/eventStatus'
-import { formatDateTime } from '../shared/format'
+import { formatDateTime, NONE, NOT_RECORDED } from '../shared/format'
 
 /** A registration badge: the status that picks its colour (App.css's `badge-<status>`) and its
  *  label. */
@@ -26,4 +26,16 @@ export const STANDING_BADGES: Record<RegistrationStanding, RegistrationBadge> = 
 /** Stories 18.1 AC1 and 18.2 AC1: when the attendee registered, as both pages say it. */
 export function describeRegisteredAt(registeredAt: string): string {
   return `You registered on ${formatDateTime(registeredAt)}`
+}
+
+/** Story 18.4 AC6: an attendee's dietary requirements as every page shows them - "None" when they
+ *  left them blank. */
+export function describeDietaryRequirements(dietaryRequirements: string | null): string {
+  return dietaryRequirements ?? NONE
+}
+
+/** Story 18.4 AC7: an attendee's phone number as every page shows it. It is required (CL-166),
+ *  but an attendee who registered before 18.4 and has not been asked since has none yet. */
+export function describePhone(phone: string | null): string {
+  return phone ?? NOT_RECORDED
 }

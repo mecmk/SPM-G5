@@ -11,6 +11,10 @@ const TIME_ZONE = 'Asia/Singapore'
  * a reason for declining given before reasons were required. */
 export const NOT_RECORDED = 'Not recorded'
 
+/** What a page shows for something given as nothing at all, such as an attendee's dietary
+ *  requirements left blank (story 18.4 AC6). */
+export const NONE = 'None'
+
 /** Story 6.2 AC16: how every page names when a booking or equipment request was cancelled - with
  * its event, or by an approved change (19.2). */
 export const CANCELLED_AT_LABEL = 'Cancelled at'

@@ -2,12 +2,8 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { formatApiError } from '../api/client'
 import { updatePointOfContact, type EventDetail, type PointOfContactInput } from '../api/events'
 import { ERROR_REGISTRY } from '../errors/registry'
-import {
-  CONTACT_EMAIL_MAX_LENGTH,
-  CONTACT_PHONE_MAX_LENGTH,
-  isBlankOrEmailAddress,
-  isBlankOrPhoneNumber,
-} from './eventRequestForm'
+import { isBlankOrPhoneNumber, PHONE_MAX_LENGTH } from '../shared/phone'
+import { CONTACT_EMAIL_MAX_LENGTH, isBlankOrEmailAddress } from './eventRequestForm'
 
 export interface PointOfContactEditorProps {
   event: EventDetail
@@ -132,7 +128,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            maxLength={CONTACT_PHONE_MAX_LENGTH}
+            maxLength={PHONE_MAX_LENGTH}
             value={phone}
             aria-invalid={phoneProblem !== null ? true : undefined}
             aria-describedby={phoneProblem !== null ? `${ids}-phone-problem` : undefined}

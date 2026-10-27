@@ -19,6 +19,13 @@ export const ACCOUNTS = {
   attendee: 'attendee@example.com',
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
+  // Story 18.4: one attendee for each flow that changes their details (attendee-profile.spec.ts).
+  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile;
+  // Finn changes their name.
+  attendee3: 'attendee3@example.com',
+  attendee4: 'attendee4@example.com',
+  attendee5: 'attendee5@example.com',
+  attendee6: 'attendee6@example.com',
   // Story 20.2: an organiser with nine notifications of her own, which only
   // notifications.spec.ts reads (backend/tests/support/seed.py::Users.NOTICE).
   notice: 'nadia@notice.example',
@@ -146,6 +153,11 @@ export const EVENTS = {
   // Story 20.2: Nadia Notice's, in planning with coordinator2 (dated February 2028). Nothing
   // changes it; her notifications are about it.
   noticeGala: '33333333-0000-0000-0000-000000020202',
+  // Story 18.4, Confirmed, organiser: organiser2, coordinator2, December 2028. Esme registered for
+  // the charity quiz before the spec changes her details; the food tasting walk closed on 1 Oct
+  // 2026 with Aiden and Bella registered, so its list never changes and is only read.
+  charityQuiz: '33333333-0000-0000-0000-000000018407',
+  foodTastingWalk: '33333333-0000-0000-0000-000000018408',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
@@ -158,6 +170,22 @@ export const VENUES = {
   // One pending request, the art market's, at 21 October 2028: a closure marks it.
   sunriseStudio: 'Sunrise Studio',
 } as const
+
+/** Story 18.4: the dialog every registration opens, showing the attendee's details to confirm -
+ *  filled in from their profile, or asked for the first time. */
+export const CONFIRM_DETAILS_DIALOG = 'Confirm your details'
+export const CONFIRM_AND_REGISTER = 'Confirm and register'
+
+export function confirmDetailsDialog(page: Page) {
+  return page.getByRole('dialog', { name: CONFIRM_DETAILS_DIALOG })
+}
+
+/** Story 18.4 AC2/AC3: confirm the details the dialog shows, which sends the registration. */
+export async function confirmRegistration(page: Page) {
+  await confirmDetailsDialog(page)
+    .getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
+    .click()
+}
 
 /** Fill and submit the sign-in form, waiting for the backend to answer. */
 export async function signIn(page: Page, email: string, password: string = PASSWORD) {

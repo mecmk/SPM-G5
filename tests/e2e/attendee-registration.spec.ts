@@ -1,5 +1,12 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn } from './support'
+import {
+  ACCOUNTS,
+  CONFIRM_AND_REGISTER,
+  confirmDetailsDialog,
+  confirmRegistration,
+  corsHeaders,
+  signIn,
+} from './support'
 
 /**
  * Story 18.1 - browse and register for an event. END-TO-END tests: what an attendee clicks.
@@ -10,15 +17,17 @@ import { ACCOUNTS, corsHeaders, signIn } from './support'
  *
  * AC1 Confirmed, Public events with registration enabled that have not started are listed
  *     soonest first, a page at a time, with name, description, date, time, each booked venue's
- *     name and location, the places left and the registration state. Registering shows a
- *     confirmation with its time; the event then shows as Registered.
+ *     name and location, the places left and the registration state. Registering - Register,
+ *     then confirming the attendee's details (story 18.4) - shows a confirmation with its time;
+ *     the event then shows as Registered.
  * AC3 Full, closed and not-yet-open events stay listed, with Register disabled.
  * AC4 An event no longer open to attendees refuses registration, and the page says so, naming
  *     the event, once the reloaded list no longer shows it.
  * AC5 Only attendees can open Upcoming events (the API's 401/403 are backend cases).
  * AC6 A second registration is refused, also when both arrive at once; of two attendees competing
  *     for the last place, one succeeds and the other is told the event is full. No Register can be
- *     pressed while a registration is being sent.
+ *     pressed while a registration is being sent, and a double-click on Confirm and register (story
+ *     18.4) sends one.
  * AC8 (fix f18.1.1, proposed, waiting on the backlog's Change Log) Each event shows its cover
  *     picture (2.1 AC14), or the placeholder when it has none or its picture can't be loaded. An
  *     uploaded picture is loaded from the API. What the list sends is a backend case.
@@ -182,8 +191,9 @@ test.describe('registers for a seeded event once', () => {
       },
     )
 
-    const before = todayInSingapore()
     await registerButton(page, DESIGN_MASTERCLASS).click()
+    const before = todayInSingapore()
+    await confirmRegistration(page)
     const after = todayInSingapore()
 
     const confirmation = page
@@ -351,6 +361,7 @@ test('18.1 AC1: a failed next page is no longer reported once the list is loaded
   )
 
   await registerButton(page, first.name).click()
+  await confirmRegistration(page)
 
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
@@ -461,6 +472,7 @@ test('18.1 AC4: Register on an event that stopped taking registrations while the
   await openUpcomingEvents(page)
 
   await registerButton(page, JAZZ_EVENING).click()
+  await confirmRegistration(page)
 
   await expect(eventCard(page, JAZZ_EVENING)).toHaveCount(0)
   await expect(page.getByRole('alert')).toHaveText(
@@ -534,6 +546,7 @@ test('18.1 AC6: while one registration is being sent, no other Register can be p
   await openUpcomingEvents(page)
 
   await registerButton(page, sending.name).click()
+  await confirmRegistration(page)
 
   await expect(registerButton(page, sending.name)).toBeDisabled()
   await expect(registerButton(page, waiting.name)).toBeDisabled()
@@ -545,7 +558,9 @@ test('18.1 AC6: while one registration is being sent, no other Register can be p
 test.describe('registers for a seeded event once', () => {
   test.describe.configure({ retries: 0 })
 
-  test('18.1 AC6: a double-click on Register sends one registration', async ({ page }) => {
+  test('18.1 AC6: a double-click on Confirm and register sends one registration', async ({
+    page,
+  }) => {
     await openUpcomingEvents(page)
     const sent: string[] = []
     page.on('request', (request) => {
@@ -555,7 +570,10 @@ test.describe('registers for a seeded event once', () => {
     })
     const card = eventCard(page, FOUNDERS_FIRESIDE)
 
-    await registerButton(page, FOUNDERS_FIRESIDE).dblclick()
+    await registerButton(page, FOUNDERS_FIRESIDE).click()
+    await confirmDetailsDialog(page)
+      .getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
+      .dblclick()
 
     await expect(card.getByText('Registered', { exact: true })).toBeVisible()
     await expect(card.getByRole('alert')).toHaveCount(0)
@@ -574,12 +592,14 @@ test.describe('registers for a seeded event once', () => {
     const other = await otherContext.newPage()
     await openUpcomingEvents(other, ACCOUNTS.attendee2)
     await registerButton(other, MENTORING_SLOT).click()
+    await confirmRegistration(other)
     await expect(
       eventCard(other, MENTORING_SLOT).getByText('Registered', { exact: true }),
     ).toBeVisible()
     await otherContext.close()
 
     await registerButton(page, MENTORING_SLOT).click()
+    await confirmRegistration(page)
 
     await expect(card.getByRole('alert')).toHaveText('This event is full.')
     await expect(page.getByRole('status').filter({ hasText: 'This event is full.' })).toContainText(

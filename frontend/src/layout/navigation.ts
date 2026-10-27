@@ -13,6 +13,7 @@ import {
   SAFETY_CHECKS_PATH,
   UPCOMING_EVENTS_PATH,
   MY_REGISTRATIONS_PATH,
+  PROFILE_PATH,
   VENUE_CATALOGUE_PATH,
 } from '../routes'
 
@@ -233,6 +234,15 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.2',
+        isAvailable: true,
+      },
+      {
+        to: PROFILE_PATH,
+        label: 'My profile',
+        description: 'Your phone number and dietary requirements, filled in when you register.',
+        icon: 'person',
+        permission: PERMISSIONS.REGISTRATIONS_SELF,
+        story: '18.4',
         isAvailable: true,
       },
     ],
