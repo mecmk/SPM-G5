@@ -52,14 +52,14 @@ class RoomLayoutOut(BaseModel):
 
     code: str
     name: str
-    description: str | None
+    description: str
 
 
 class _RoomLayoutIn(BaseModel):
     """A layout's name and description as Venue Staff send them. Spaces around either are
-    dropped, and a blank one is None (story 8.6 AC5, AC7). Whether a name is required, and how
-    long each may be, the service judges, so a refusal is one sentence the page can show. The
-    code is the server's to make (AC2), so nothing else may be sent."""
+    dropped, and a blank one is None (story 8.6 AC5, AC7). That both are required, and how long
+    each may be, the service judges, so a refusal is one sentence the page can show. The code is
+    the server's to make (AC2), so nothing else may be sent."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -73,12 +73,12 @@ class _RoomLayoutIn(BaseModel):
 
 
 class RoomLayoutCreate(_RoomLayoutIn):
-    """Story 8.6 AC2: a layout Venue Staff add, with a name and, optionally, a description."""
+    """Story 8.6 AC2: a layout Venue Staff add, with a name and a description."""
 
 
 class RoomLayoutUpdate(_RoomLayoutIn):
-    """Story 8.6 AC3: a change to a layout. Only the fields sent change: a name sent blank is
-    refused (AC5), and a description sent blank clears it (AC7)."""
+    """Story 8.6 AC3: a change to a layout. Only the fields sent change: a name or description
+    sent blank is refused (AC5, AC7)."""
 
 
 # --- characteristic line items -----------------------------------------------------------

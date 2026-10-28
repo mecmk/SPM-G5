@@ -3,6 +3,7 @@ import { ApiError, formatApiError } from '../api/client'
 import {
   addRoomLayout,
   ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH,
+  ROOM_LAYOUT_NAME_MAX_LENGTH,
   updateRoomLayout,
   type RoomLayout,
   type RoomLayoutInput,
@@ -23,15 +24,16 @@ export interface RoomLayoutDialogProps {
 /**
  * Story 8.6 AC2/AC3: Venue Staff add a room layout, or change a layout's name or description. The
  * server judges both (AC5-AC7) and refuses a name another layout has (AC6, AC10); its sentence is
- * shown here and nothing typed is lost. AC7: the description box stops taking text at its limit,
- * and the count under it shows how much of the limit is used. AC12: a layout deleted while this
- * dialog was open is refused for good, so only Close is left.
+ * shown here and nothing typed is lost. AC5/AC7: both boxes are marked required, stop taking text
+ * at their limits, and show under them how much of the limit is used. AC12: a layout deleted
+ * while this dialog was open is refused for good, so only Close is left.
  */
 export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayoutDialogProps) {
   const [input, setInput] = useState<RoomLayoutInput>({
     name: layout?.name ?? '',
     description: layout?.description ?? '',
   })
+  const nameCountId = useId()
   const descriptionCountId = useId()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,14 +76,22 @@ export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayo
         <input
           type="text"
           aria-required="true"
+          maxLength={ROOM_LAYOUT_NAME_MAX_LENGTH}
+          aria-describedby={nameCountId}
           value={input.name}
           onChange={(e) => setInput({ ...input, name: e.target.value })}
         />
       </label>
+      <span id={nameCountId} className="small muted">
+        {input.name.length} of {ROOM_LAYOUT_NAME_MAX_LENGTH} characters
+      </span>
       <label>
-        Description
+        <span>
+          Description <RequiredMark />
+        </span>
         <textarea
           rows={3}
+          aria-required="true"
           maxLength={ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH}
           aria-describedby={descriptionCountId}
           value={input.description}

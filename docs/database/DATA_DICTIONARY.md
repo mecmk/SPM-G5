@@ -183,7 +183,7 @@ Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a ve
 | --- | --- | --- | --- | --- | --- |
 | `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with a number added when that code is taken (THEATRE_2, THEATRE_3, ...), and never changed by a rename, so every reference to the layout keeps working. |
 | `name` | `text` | no | - | - | Display name, shown wherever the layout appears (story 8.6 AC3). Required, without spaces around it, at most 100 characters (AC5, ck_room_layouts_name), and unique ignoring capitals (AC6, uq_room_layouts_name). |
-| `description` | `text` | yes | - | - | Optional longer description, at most 500 characters (story 8.6 AC7, ck_room_layouts_description). NULL when none was given; never blank. |
+| `description` | `text` | no | - | - | Longer description, shown with the name on the Room layouts page. Required, without spaces around it, at most 500 characters (story 8.6 AC7, ck_room_layouts_description); never blank. |
 | `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending): the standard layouts carry 10 to 70, and a layout added in the app the default 100, so it follows them from A to Z (story 8.6 AC1). |
 
 Rules and indexes:

@@ -180,19 +180,22 @@ export function reorderVenueImages(venueId: string, imageIds: string[]): Promise
 export interface RoomLayout {
   code: string
   name: string
-  description: string | null
+  description: string
 }
 
 /**
  * Mirrors `RoomLayoutCreate` / `RoomLayoutUpdate`: a layout's name and description as Venue Staff
- * enter them (story 8.6 AC2, AC3). The server drops the spaces around both and judges them (AC5,
- * AC7); a blank description is saved as none.
+ * enter them (story 8.6 AC2, AC3). The server drops the spaces around both and judges them: each
+ * is required (AC5, AC7).
  */
 export interface RoomLayoutInput {
   name: string
   description: string
 }
 
+/** Story 8.6 AC5: the most characters of a layout's name, as the backend's
+ *  ROOM_LAYOUT_NAME_MAX_LENGTH. */
+export const ROOM_LAYOUT_NAME_MAX_LENGTH = 100
 /** Story 8.6 AC7: the most characters of a layout's description, as the backend's
  *  ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH. */
 export const ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH = 500

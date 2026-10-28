@@ -95,7 +95,7 @@ export function RoomLayoutsPage() {
               <div className="item-card-header">
                 <div>
                   <h2 className="item-card-title">{layout.name}</h2>
-                  <p className="small muted">{layout.description ?? 'No description.'}</p>
+                  <p className="small muted">{layout.description}</p>
                 </div>
                 {canManage && (
                   <div className="row-actions">

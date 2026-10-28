@@ -148,17 +148,6 @@ export const NAV_SECTIONS: NavSection[] = [
         story: '8.1',
         isAvailable: true,
       },
-      // Story 8.6 AC1/AC9: every role that reads venues sees the room layouts; Venue Staff also
-      // add, rename and delete them there.
-      {
-        to: ROOM_LAYOUTS_PATH,
-        label: 'Room layouts',
-        description: 'The room layouts venues can offer and events can ask for.',
-        icon: 'grid',
-        permission: PERMISSIONS.VENUES_READ,
-        story: '8.6',
-        isAvailable: true,
-      },
       // f12.1.1: no "Request a venue" section. A venue is requested from its event: Find a venue
       // on the event's page, then Request this venue in the catalogue (12.1 AC15).
       {
@@ -168,6 +157,18 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'calendar-check',
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
+        isAvailable: true,
+      },
+      // Story 8.6 AC1/AC9: every role that reads venues sees the room layouts; Venue Staff also
+      // add, rename and delete them there. Kept at the bottom of the section: only the coming-soon
+      // Venue Schedule sits below it, and the story that builds that page (9.1) moves it above.
+      {
+        to: ROOM_LAYOUTS_PATH,
+        label: 'Room layouts',
+        description: 'The room layouts venues can offer and events can ask for.',
+        icon: 'grid',
+        permission: PERMISSIONS.VENUES_READ,
+        story: '8.6',
         isAvailable: true,
       },
       {

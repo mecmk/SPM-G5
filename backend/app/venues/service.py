@@ -1028,6 +1028,7 @@ ROOM_LAYOUT_NAME_MAX_LENGTH = 100
 ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH = 500
 ROOM_LAYOUT_NAME_REQUIRED_MESSAGE = "Enter the layout's name."
 ROOM_LAYOUT_NAME_TOO_LONG_MESSAGE = "A layout's name must be 100 characters or fewer."
+ROOM_LAYOUT_DESCRIPTION_REQUIRED_MESSAGE = "Enter the layout's description."
 ROOM_LAYOUT_DESCRIPTION_TOO_LONG_MESSAGE = "A layout's description must be 500 characters or fewer."
 ROOM_LAYOUT_NAME_TAKEN_MESSAGE = 'A room layout named "{name}" already exists.'
 ROOM_LAYOUT_IN_USE_MESSAGE = (
@@ -1126,9 +1127,12 @@ def _checked_name(name: str | None) -> str:
     return name
 
 
-def _checked_description(description: str | None) -> str | None:
-    """AC7: a description is optional, and has at most 500 characters."""
-    if description is not None and len(description) > ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH:
+def _checked_description(description: str | None) -> str:
+    """AC7: a description is required too, and has at most 500 characters once its spaces are
+    dropped."""
+    if description is None:
+        raise InvalidRoomLayout(ROOM_LAYOUT_DESCRIPTION_REQUIRED_MESSAGE)
+    if len(description) > ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH:
         raise InvalidRoomLayout(ROOM_LAYOUT_DESCRIPTION_TOO_LONG_MESSAGE)
     return description
 
@@ -1206,7 +1210,7 @@ def update_room_layout(
     ignoring capitals, is refused by uq_room_layouts_name. AC12: the layout is locked first
     (``_lock_room_layout``)."""
     sent = data.model_dump(exclude_unset=True)
-    wanted: dict[str, str | None] = {}
+    wanted: dict[str, str] = {}
     if "name" in sent:
         wanted["name"] = _checked_name(sent["name"])
     if "description" in sent:

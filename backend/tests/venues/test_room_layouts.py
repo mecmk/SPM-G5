@@ -7,21 +7,26 @@ AC1  Venue Staff open a Room layouts page that lists every room layout with its 
      description. The list starts with seven standard layouts: Theatre, Classroom, Boardroom,
      U-shape, Banquet, Exhibition and Standing / reception (the customer left the choice to the
      team, Q26). These come first, in that order, then any added layouts from A to Z.
-AC2  Venue Staff add a layout by giving it a name and, optionally, a description. The new layout
-     is offered the next time anyone opens a venue's form (8.3), an event's venue requirements
-     (2.7) or the venue catalogue's layout filter (8.1).
+AC2  Venue Staff add a layout by giving it a name and a description. The new layout is offered
+     the next time anyone opens a venue's form (8.3), an event's venue requirements (2.7) or the
+     venue catalogue's layout filter (8.1).
 AC3  Venue Staff can change a layout's name or description. The new name shows wherever the
      layout appears, including on the venues, venue requirements and booking requests that
      already use it. Past safety reviews keep the name they recorded.
 AC4  Venue Staff can delete a layout that no venue, venue requirement or booking request uses,
      after confirming. It is then no longer offered anywhere.
-AC5  A layout's name is required and can be at most 100 characters. Spaces at the start and end
-     are removed before saving, so a name of only spaces counts as empty.
+AC5  A layout's name is required and can be at most 100 characters. The name box is marked with
+     an asterisk (*), stops taking text at 100 characters, and shows how many are used, for
+     example "7 of 100 characters". Spaces at the start and end are removed before saving, so a
+     name of only spaces counts as empty.
 AC6  No two layouts can have the same name, ignoring capitals: while "Theatre" exists, "theatre"
      is refused. This applies to adding and to renaming. Changing only the capitals of a
      layout's own name is allowed.
-AC7  A description is optional and can be at most 500 characters. A description of only spaces
-     is saved as no description.
+AC7  A layout's description is also required, when adding and when changing a layout, and can be
+     at most 500 characters. Like the name box, the description box is marked with an asterisk
+     (*), stops taking text at 500 characters, and shows how many are used, for example "28 of
+     500 characters". Spaces at the start and end are removed before saving, so a description of
+     only spaces counts as empty.
 AC8  A layout that any venue, venue requirement or booking request uses cannot be deleted.
      Booking requests count whatever their status, since they keep their record. The message
      says which of these use the layout, and it can still be renamed.
@@ -38,8 +43,8 @@ AC12 If a layout is deleted while another Venue Staff member is changing or dele
      save or delete is refused with a message that the layout no longer exists, and their list
      refreshes.
 
-The page, its dialogs, the confirmation before a delete (AC4) and the list refreshing (AC12) are
-e2e cases: tests/e2e/room-layouts.spec.ts.
+The page, its dialogs, the boxes' asterisks, limits and counts (AC5, AC7), the confirmation before
+a delete (AC4) and the list refreshing (AC12) are e2e cases: tests/e2e/room-layouts.spec.ts.
 """
 
 from __future__ import annotations
@@ -84,20 +89,21 @@ STANDARD_LAYOUTS = [
 NOT_FOUND = "This room layout no longer exists."
 NAME_REQUIRED = "Enter the layout's name."
 NAME_TOO_LONG = "A layout's name must be 100 characters or fewer."
+DESCRIPTION_REQUIRED = "Enter the layout's description."
 DESCRIPTION_TOO_LONG = "A layout's description must be 500 characters or fewer."
+THEATRE_DESCRIPTION = "Rows of chairs facing the front; highest capacity."
+# The description a test's layout gets when the test is not about it (AC7: one is required).
+_DESCRIPTION = "Round tables facing a stage."
 # Event times for the uses a test makes; any free period of a fresh venue will do.
 _STARTS_AT = datetime(2026, 12, 1, 9, 0, tzinfo=UTC)
 _ENDS_AT = datetime(2026, 12, 1, 17, 0, tzinfo=UTC)
 
 
-def _add(client, name: str | None, description: str | None = None):
-    body = {"name": name}
-    if description is not None:
-        body["description"] = description
-    return client.post("/venues/layouts", json=body)
+def _add(client, name: str | None, description: str = _DESCRIPTION):
+    return client.post("/venues/layouts", json={"name": name, "description": description})
 
 
-def _added(client, name: str, description: str | None = None) -> dict:
+def _added(client, name: str, description: str = _DESCRIPTION) -> dict:
     response = _add(client, name, description)
     assert response.status_code == 201, response.text
     return response.json()
@@ -150,13 +156,6 @@ def test_venue_staff_add_a_layout_with_a_description(venue_staff_client):
         "description": "Round tables facing a stage.",
     }
     assert _layouts(venue_staff_client)[-1] == response.json()
-
-
-@pytest.mark.story("8.6", ac=2)
-def test_a_layout_needs_no_description(venue_staff_client):
-    added = _added(venue_staff_client, "Cabaret")
-
-    assert added["description"] is None
 
 
 @pytest.mark.story("8.6", ac=2)
@@ -481,17 +480,44 @@ def test_a_description_may_have_500_characters_but_not_501(venue_staff_client):
 
 
 @pytest.mark.story("8.6", ac=7)
-@pytest.mark.parametrize("description", ["", "   ", None])
-def test_a_blank_description_is_saved_as_none(venue_staff_client, description):
-    added = venue_staff_client.post(
-        "/venues/layouts", json={"name": "Cabaret", "description": description}
-    )
-    cleared = venue_staff_client.patch("/venues/layouts/THEATRE", json={"description": description})
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"name": "Cabaret"},
+        {"name": "Cabaret", "description": None},
+        {"name": "Cabaret", "description": ""},
+        {"name": "Cabaret", "description": "   "},
+    ],
+)
+def test_a_new_layout_needs_a_description(venue_staff_client, body):
+    response = venue_staff_client.post("/venues/layouts", json=body)
 
-    assert added.status_code == 201, added.text
-    assert added.json()["description"] is None
-    assert cleared.status_code == 200, cleared.text
-    assert cleared.json()["description"] is None
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == DESCRIPTION_REQUIRED
+    assert len(_layouts(venue_staff_client)) == len(STANDARD_LAYOUTS)
+
+
+@pytest.mark.story("8.6", ac=7)
+@pytest.mark.parametrize("description", [None, "", "   "])
+def test_a_layout_cannot_lose_its_description(venue_staff_client, description):
+    response = venue_staff_client.patch(
+        "/venues/layouts/THEATRE", json={"description": description}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == DESCRIPTION_REQUIRED
+    assert _layouts(venue_staff_client)[0]["description"] == THEATRE_DESCRIPTION
+
+
+@pytest.mark.story("8.6", ac=7)
+def test_spaces_around_a_description_are_removed(venue_staff_client):
+    added = _added(venue_staff_client, "Cabaret", "  Round tables.  ")
+    changed = venue_staff_client.patch(
+        "/venues/layouts/CABARET", json={"description": " Dinner seating. "}
+    )
+
+    assert added["description"] == "Round tables."
+    assert changed.json()["description"] == "Dinner seating."
 
 
 # --- AC8: a layout in use ---------------------------------------------------------------------
@@ -584,7 +610,9 @@ def test_a_signed_out_visitor_cannot_read_the_list(client):
 
 
 _CHANGES = {
-    "add": lambda client: client.post("/venues/layouts", json={"name": "Cabaret"}),
+    "add": lambda client: client.post(
+        "/venues/layouts", json={"name": "Cabaret", "description": _DESCRIPTION}
+    ),
     "rename": lambda client: client.patch("/venues/layouts/THEATRE", json={"name": "Hall"}),
     "delete": lambda client: client.delete("/venues/layouts/U_SHAPE"),
 }
@@ -670,7 +698,9 @@ def test_two_venue_staff_adding_one_name_at_once_create_one_layout(engine, secon
             start.wait(timeout=10)
             try:
                 service.create_room_layout(
-                    session, venue_schemas.RoomLayoutCreate(name=attempted), actor=actor
+                    session,
+                    venue_schemas.RoomLayoutCreate(name=attempted, description=_DESCRIPTION),
+                    actor=actor,
                 )
             except service.RoomLayoutNameTaken as refusal:
                 return str(refusal)
@@ -750,7 +780,7 @@ def test_a_layout_deleted_between_the_venue_saves_check_and_its_write_is_refused
     tag = uuid.uuid4().hex[:8].upper()
     code = f"RACE_{tag}"
     with Session(engine) as session:
-        session.add(RoomLayout(code=code, name=f"Race layout {tag}"))
+        session.add(RoomLayout(code=code, name=f"Race layout {tag}", description=_DESCRIPTION))
         venue_id = make_venue(session, name=f"Race Venue {tag}").id
         session.commit()
     checked = threading.Event()
@@ -817,7 +847,7 @@ def test_a_rename_waiting_on_a_delete_is_refused_once_the_delete_lands(engine, m
     tag = uuid.uuid4().hex[:8].upper()
     code = f"RACE_{tag}"
     with Session(engine) as session:
-        session.add(RoomLayout(code=code, name=f"Race layout {tag}"))
+        session.add(RoomLayout(code=code, name=f"Race layout {tag}", description=_DESCRIPTION))
         session.commit()
     deleting = threading.Event()
     proceed = threading.Event()

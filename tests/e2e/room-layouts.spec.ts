@@ -6,7 +6,8 @@
  *     filter opens.
  * AC3 a renamed layout shows its new name wherever it appears, such as on a venue's page.
  * AC4 Venue Staff delete a layout nothing uses, after confirming.
- * AC7 the description box shows its 500-character limit and stops taking text there.
+ * AC5 the name box is marked required, shows its 100-character limit and stops taking text there.
+ * AC7 so is the description box, at 500 characters.
  * AC8 a layout in use cannot be deleted: the dialog says where it is used.
  * AC9 other staff open the page and see the list, without Add, Edit or Delete.
  * AC12 a layout deleted while another Venue Staff member is changing it: their save is refused,
@@ -44,11 +45,11 @@ function layoutEntry(page: Page, name: string) {
 }
 
 /** Add a layout from the Room layouts page and wait until it is listed. */
-async function addLayout(page: Page, name: string, description?: string) {
+async function addLayout(page: Page, name: string, description: string) {
   await page.getByRole('button', { name: 'Add layout' }).click()
   const dialog = page.getByRole('dialog', { name: 'Add a room layout' })
   await dialog.getByLabel('Name').fill(name)
-  if (description !== undefined) await dialog.getByLabel('Description').fill(description)
+  await dialog.getByLabel('Description').fill(description)
   await dialog.getByRole('button', { name: 'Add layout' }).click()
   await expect(dialog).toBeHidden()
   await expect(layoutEntry(page, name)).toBeVisible()
@@ -88,7 +89,7 @@ test('8.6 AC3: a renamed layout shows its new name on the venue that offers it',
   const venue = uniqueName('Layout Room')
   await signIn(page, ACCOUNTS.venueStaff)
   await openRoomLayouts(page)
-  await addLayout(page, layout)
+  await addLayout(page, layout, 'Tables in a closed square.')
 
   await page.goto('/venues/new')
   await page.getByLabel('Venue name').fill(venue)
@@ -117,7 +118,7 @@ test('8.6 AC4: Venue Staff delete a layout nothing uses, after confirming', asyn
   const name = uniqueName('Fishbowl')
   await signIn(page, ACCOUNTS.venueStaff)
   await openRoomLayouts(page)
-  await addLayout(page, name)
+  await addLayout(page, name, 'An inner circle of chairs inside an outer one.')
 
   await layoutEntry(page, name)
     .getByRole('button', { name: `Delete ${name}` })
@@ -129,7 +130,28 @@ test('8.6 AC4: Venue Staff delete a layout nothing uses, after confirming', asyn
   await expect(layoutEntry(page, name)).toHaveCount(0)
 })
 
-test('8.6 AC7: the description box shows its 500-character limit and stops taking text there', async ({
+test('8.6 AC5: the name box is marked required, shows its 100-character limit and stops taking text there', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openRoomLayouts(page)
+  await page.getByRole('button', { name: 'Add layout' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add a room layout' })
+  const name = dialog.getByLabel('Name')
+
+  await expect(name).toHaveAttribute('aria-required', 'true')
+  await expect(dialog.getByText('0 of 100 characters', { exact: true })).toBeVisible()
+  await expect(name).toHaveAccessibleDescription('0 of 100 characters')
+  await name.fill('Cabaret')
+  await expect(dialog.getByText('7 of 100 characters', { exact: true })).toBeVisible()
+
+  // Pasting more than the limit keeps the first 100 characters.
+  await name.fill('x'.repeat(101))
+  await expect(name).toHaveValue('x'.repeat(100))
+  await expect(dialog.getByText('100 of 100 characters', { exact: true })).toBeVisible()
+})
+
+test('8.6 AC7: the description box is marked required, shows its 500-character limit and stops taking text there', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -138,15 +160,16 @@ test('8.6 AC7: the description box shows its 500-character limit and stops takin
   const dialog = page.getByRole('dialog', { name: 'Add a room layout' })
   const description = dialog.getByLabel('Description')
 
-  await expect(dialog.getByText('0 of 500 characters')).toBeVisible()
+  await expect(description).toHaveAttribute('aria-required', 'true')
+  await expect(dialog.getByText('0 of 500 characters', { exact: true })).toBeVisible()
   await expect(description).toHaveAccessibleDescription('0 of 500 characters')
   await description.fill('Round tables facing a stage.')
-  await expect(dialog.getByText('28 of 500 characters')).toBeVisible()
+  await expect(dialog.getByText('28 of 500 characters', { exact: true })).toBeVisible()
 
   // Pasting more than the limit keeps the first 500 characters.
   await description.fill('x'.repeat(501))
   await expect(description).toHaveValue('x'.repeat(500))
-  await expect(dialog.getByText('500 of 500 characters')).toBeVisible()
+  await expect(dialog.getByText('500 of 500 characters', { exact: true })).toBeVisible()
 })
 
 test('8.6 AC8: deleting a layout in use is refused, and the dialog says where it is used', async ({
@@ -182,7 +205,7 @@ test('8.6 AC12: a layout deleted while another Venue Staff member renames it is 
   const name = uniqueName('Banquet rounds')
   await signIn(page, ACCOUNTS.venueStaff)
   await openRoomLayouts(page)
-  await addLayout(page, name)
+  await addLayout(page, name, 'Round tables of ten for dining.')
   await layoutEntry(page, name)
     .getByRole('button', { name: `Edit ${name}` })
     .click()
