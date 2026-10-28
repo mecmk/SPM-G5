@@ -1,9 +1,10 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
 event review (story 4.1), requesting clarification from the organiser (story 4.2) and the
-organiser's response (story 4.3), the approve/reject decision (stories 4.4, 4.5), the decision /
-clarification history an organiser sees (story 4.6), routine information edits and corrections
-to a request until it is confirmed (story 7.2, fix f7.2.4), the coordinator's assigned events in
-any status (story 6.1), and the notifications a submission and a decision send (story 20.1).
+organiser's response (story 4.3), the approve/reject decision and the equipment a rejection
+releases (stories 4.4, 4.5, fix f4.5.1), the decision / clarification history an organiser sees
+(story 4.6), routine information edits and corrections to a request until it is confirmed (story
+7.2, fix f7.2.4), the coordinator's assigned events in any status (story 6.1), and the
+notifications a submission and a decision send (story 20.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not

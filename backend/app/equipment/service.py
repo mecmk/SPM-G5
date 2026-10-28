@@ -936,8 +936,9 @@ def _notify_technical_support_of_withdrawal(
     db: Session, event: Event, items: list[EventEquipmentRequest], *, actor: User, cause: str
 ) -> None:
     """Story 19.2 AC5: items Technical Support had pending or accepted were changed or removed by
-    an approved change request; story 6.2 AC5: their event was cancelled. Every active member is
-    told which, as they are told of a new submission (story 20.1); ``cause`` opens the sentence."""
+    an approved change request; story 6.2 AC5: their event was cancelled; fix f4.5.1: their event
+    was rejected. Every active member is told which, as they are told of a new submission (story
+    20.1); ``cause`` opens the sentence."""
     message = f"{cause} withdrew equipment sent to you: {_describe_items(items)}."
     for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
         notify(
