@@ -121,25 +121,65 @@ function findWaitingRequirementsChange(requests: ChangeRequest[]): ChangeRequest
   )
 }
 
+/** Fix f19.1.2 (CL-172 (3)): what holds a pending attendance change back - the venue requirement
+ *  needing more people than it asks for, as "Main venue needs room for 60 people" - and whether a
+ *  waiting venue requirements change would make room for it. */
+interface AttendanceWait {
+  needs: string
+  isRoomWaiting: boolean
+}
+
 /**
- * Fix f19.1.2 (19.2 AC2, Q81): why a pending attendance change cannot be approved yet - a venue
- * requirement still needs room for more people than it asks for - and what to do: approve the
- * waiting venue requirements change first, or wait for one that lowers it. Null when the change
- * is not a pending attendance change, or nothing stands in its way. The server refuses the
- * approval either way; this tells the coordinator before they try.
+ * Fix f19.1.2 (CL-172 (3)): what holds `request` back, when it is a pending attendance change the
+ * venue requirements as they stand do not allow - null otherwise. The server refuses its approval
+ * until they do; a waiting venue requirements change counts only when it would make room.
  */
+function findAttendanceWait(
+  request: ChangeRequest,
+  requirements: SizedRequirement[],
+  requests: ChangeRequest[],
+): AttendanceWait | null {
+  if (request.field !== 'expected_attendance' || request.status !== 'PENDING') return null
+  const asked = request.proposed_value as number
+  const current = findAttendanceMinimum(requirements)
+  if (current === null || asked >= current.minimum) return null
+  const waiting = findWaitingRequirementsChange(requests)
+  const proposed =
+    waiting === undefined
+      ? null
+      : findAttendanceMinimum(waiting.proposed_value as RequirementValue[])
+  return {
+    needs: `${current.requirement} needs room for ${current.minimum} people`,
+    isRoomWaiting: waiting !== undefined && (proposed === null || proposed.minimum <= asked),
+  }
+}
+
+/** Fix f19.1.2 (19.2 AC2, CL-172 (3)): what the coordinator is told on an attendance change they
+ *  cannot approve yet, and what to do. Null when nothing stands in its way. */
 export function describeAttendanceWait(
   request: ChangeRequest,
   requirements: SizedRequirement[],
   requests: ChangeRequest[],
 ): string | null {
-  if (request.field !== 'expected_attendance' || request.status !== 'PENDING') return null
-  const current = findAttendanceMinimum(requirements)
-  if (current === null || (request.proposed_value as number) >= current.minimum) return null
-  const needs = `${current.requirement} needs room for ${current.minimum} people`
-  return findWaitingRequirementsChange(requests) === undefined
-    ? `${needs}, so this cannot be approved until a venue requirements change lowers it.`
-    : `${needs} until the venue requirements change is approved, so approve that first.`
+  const wait = findAttendanceWait(request, requirements, requests)
+  if (wait === null) return null
+  return wait.isRoomWaiting
+    ? `${wait.needs} until the venue requirements change is approved, so approve that first.`
+    : `${wait.needs}, so this cannot be approved until a venue requirements change lowers it.`
+}
+
+/** Fix f19.1.2 (19.1 AC4, CL-172 (3)): what the organiser is told on their own attendance change
+ *  that cannot be approved yet, and what they can do. Null when nothing stands in its way. */
+export function describeOwnAttendanceWait(
+  request: ChangeRequest,
+  requirements: SizedRequirement[],
+  requests: ChangeRequest[],
+): string | null {
+  const wait = findAttendanceWait(request, requirements, requests)
+  if (wait === null) return null
+  return wait.isRoomWaiting
+    ? `This waits for your venue requirements change to be approved first, since ${wait.needs} until then.`
+    : `${wait.needs}, so this cannot be approved yet. Ask for a venue requirements change that lowers it, or withdraw this request.`
 }
 
 /**

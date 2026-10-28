@@ -273,7 +273,7 @@ test('19.1 AC4: the attendance field says the lowest it can go, and why lower is
   ).toHaveCount(0)
 })
 
-test('19.1 AC4: with a venue requirements change waiting, the attendance field says its minimum', async ({
+test('19.1 AC4: with a venue requirements change waiting, the attendance field says its minimum and the request what it waits for', async ({
   page,
 }) => {
   // Three sign-ins in approvedEvent. The fresh event is for 60, its Main venue for 60.
@@ -297,9 +297,13 @@ test('19.1 AC4: with a venue requirements change waiting, the attendance field s
   await attendance.fill('40')
   await section.getByLabel('Reason for the change').fill(REASON)
   await section.getByRole('button', { name: 'Send change request' }).click()
-  await expect(
-    section.getByRole('listitem').filter({ hasText: 'Changes to expected attendance' }),
-  ).toContainText('Pending')
+  const raised = section
+    .getByRole('listitem')
+    .filter({ hasText: 'Changes to expected attendance' })
+  await expect(raised).toContainText('Pending')
+  await expect(raised).toContainText(
+    'This waits for your venue requirements change to be approved first, since Main venue needs room for 60 people until then.',
+  )
 })
 
 test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not sent', async ({
