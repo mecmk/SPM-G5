@@ -61,7 +61,7 @@ Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
   that is earlier or it has none. That covers an event already under way or over, which nothing
   marks Completed yet (Q57). (Team decision on the review of #125.)
 
-Minimum attendance (fix f19.1.2; Q80 to Q82, CL-172, replacing CL-143's refusal on raising)
+Minimum attendance (fix f19.1.2; Q80 to Q82, CL-172, replacing CL-143's refusal on raising; CL-179)
 AC14 The change form shows, beneath the new attendance, the lowest allowed and the venue
      requirement setting it - a pending venue requirements change's when lower (e2e).
 AC15 An attendance below a venue requirement's number of people is taken when the event's pending
@@ -70,7 +70,7 @@ AC15 An attendance below a venue requirement's number of people is taken when th
 AC16 Otherwise it is refused, naming the requirement needing the most people (the first on the
      form when two tie), the exact minimum, and that the venue requirements change comes first.
 AC17 A pending attendance change the venue requirements do not allow yet says what it waits for,
-     to the organiser and to the coordinator (e2e).
+     to the organiser and to the coordinator (e2e). (CL-179, Proposed until the PO agrees.)
 
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
@@ -701,7 +701,7 @@ def test_an_unnamed_limiting_requirement_is_named_by_its_position(organiser_clie
     )
 
 
-# --- AC15 (fix f19.1.2, CL-172): raised beside a venue requirements change that makes room -----
+# --- AC15 (fix f19.1.2, CL-172, CL-179): raised beside a venue requirements change that makes room
 
 
 def _requirement_body(requirement_id: uuid.UUID, *, name: str, capacity: int, event: Event):

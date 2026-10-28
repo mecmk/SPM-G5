@@ -121,7 +121,7 @@ function findWaitingRequirementsChange(requests: ChangeRequest[]): ChangeRequest
   )
 }
 
-/** Fix f19.1.2 (CL-172 (3)): what holds a pending attendance change back - the venue requirement
+/** Fix f19.1.2 (CL-179): what holds a pending attendance change back - the venue requirement
  *  needing more people than it asks for, as "Main venue needs room for 60 people" - and whether a
  *  waiting venue requirements change would make room for it. */
 interface AttendanceWait {
@@ -130,7 +130,7 @@ interface AttendanceWait {
 }
 
 /**
- * Fix f19.1.2 (CL-172 (3)): what holds `request` back, when it is a pending attendance change the
+ * Fix f19.1.2 (CL-179): what holds `request` back, when it is a pending attendance change the
  * venue requirements as they stand do not allow - null otherwise. The server refuses its approval
  * until they do; a waiting venue requirements change counts only when it would make room.
  */
@@ -154,7 +154,7 @@ function findAttendanceWait(
   }
 }
 
-/** Fix f19.1.2 (19.2 AC2, CL-172 (3)): what the coordinator is told on an attendance change they
+/** Fix f19.1.2 (19.2 AC2, CL-179): what the coordinator is told on an attendance change they
  *  cannot approve yet, and what to do. Null when nothing stands in its way. */
 export function describeAttendanceWait(
   request: ChangeRequest,
@@ -168,7 +168,7 @@ export function describeAttendanceWait(
     : `${wait.needs}, so this cannot be approved until a venue requirements change lowers it.`
 }
 
-/** Fix f19.1.2 (19.1 AC4, CL-172 (3)): what the organiser is told on their own attendance change
+/** Fix f19.1.2 (19.1 AC4, CL-179): what the organiser is told on their own attendance change
  *  that cannot be approved yet, and what they can do. Null when nothing stands in its way. */
 export function describeOwnAttendanceWait(
   request: ChangeRequest,
@@ -183,11 +183,11 @@ export function describeOwnAttendanceWait(
 }
 
 /**
- * Fix f19.1.2 (19.1 AC4, CL-172 (4)): what the change form says beneath the new attendance - the
- * lowest the server takes, by its own rule. That is the lowest the event's venue requirements
- * allow, or, when a venue requirements change waiting for a decision (and not out of date, 19.2
- * AC7) allows lower, the lowest that change allows, saying it is approved first. Null when no
- * requirement gives a number of people.
+ * Fix f19.1.2 (19.1 AC4, CL-172 (4), CL-179): what the change form says beneath the new
+ * attendance - the lowest the server takes, by its own rule. That is the lowest the event's venue
+ * requirements allow, or, when a venue requirements change waiting for a decision (and not out of
+ * date, 19.2 AC7) allows lower, the lowest that change allows, saying it is approved first. Null
+ * when no requirement gives a number of people.
  */
 export function describeAttendanceMinimum(
   requirements: SizedRequirement[],
