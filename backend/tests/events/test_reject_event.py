@@ -339,8 +339,8 @@ def test_an_unassigned_request_cannot_be_rejected(coordinator_client, db: Sessio
 STARTS_AT = datetime(2030, 5, 6, 1, 0, tzinfo=UTC)
 ENDS_AT = datetime(2030, 5, 6, 9, 0, tzinfo=UTC)
 REASON = "No suitable venue is free."
-# The item statuses that still hold units, and so are closed by a rejection.
-OPEN_ITEM_STATUSES = (
+# The item statuses that hold units.
+HELD_ITEM_STATUSES = (
     EquipmentRequestStatus.REQUESTED,
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
@@ -390,7 +390,7 @@ def _held(db: Session, event_id: uuid.UUID) -> list[str]:
 @pytest.mark.parametrize("status", [EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED])
 def test_rejecting_releases_every_equipment_hold(coordinator_client, db: Session, status):
     event = _awaiting(db, status)
-    items = [_item(db, event, status=item_status) for item_status in OPEN_ITEM_STATUSES]
+    items = [_item(db, event, status=item_status) for item_status in HELD_ITEM_STATUSES]
 
     assert _reject(coordinator_client, event.id).status_code == 200, "rejection refused"
 
@@ -405,7 +405,7 @@ def test_rejecting_closes_open_items_and_keeps_declined_ones(coordinator_client,
     """Every open item is closed as Cancelled at the decision's time, and kept for the record; a
     declined one stays Technical Support's decision. Nothing is deleted."""
     event = _awaiting(db)
-    open_items = [_item(db, event, status=item_status) for item_status in OPEN_ITEM_STATUSES]
+    open_items = [_item(db, event, status=item_status) for item_status in HELD_ITEM_STATUSES]
     open_items.append(_item(db, event, status=EquipmentRequestStatus.UNAVAILABLE, is_held=False))
     declined = _item(db, event, status=EquipmentRequestStatus.DECLINED, is_held=False)
 
