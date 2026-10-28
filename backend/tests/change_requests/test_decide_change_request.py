@@ -1375,11 +1375,12 @@ def test_venue_requirements_changed_since_the_request_cannot_be_approved(login_a
 # --- Phase 2, AC5: only affected bookings and holds are released ---------------------------------
 
 
-def _new_dates(event: Event, *, days: int) -> dict:
-    """The event moved ``days`` later, as 19.1's change form sends it."""
+def _new_dates(event: Event, *, days: int = 0, hours: int = 0) -> dict:
+    """The event moved ``days`` and ``hours`` later, as 19.1's change form sends it."""
+    shift = timedelta(days=days, hours=hours)
     return {
-        "starts_at": (event.starts_at + timedelta(days=days)).isoformat(),
-        "ends_at": (event.ends_at + timedelta(days=days)).isoformat(),
+        "starts_at": (event.starts_at + shift).isoformat(),
+        "ends_at": (event.ends_at + shift).isoformat(),
     }
 
 
@@ -1478,11 +1479,7 @@ def test_new_dates_release_only_the_bookings_that_no_longer_cover_them(login_as,
         ends_at=event.ends_at + timedelta(days=1),
     )
     released = _book(db, event, people=100)
-    moved = {
-        "starts_at": (event.starts_at + timedelta(hours=1)).isoformat(),
-        "ends_at": (event.ends_at + timedelta(hours=1)).isoformat(),
-    }
-    request = _raise(login_as, db, event, "schedule", moved)
+    request = _raise(login_as, db, event, "schedule", _new_dates(event, hours=1))
 
     assert _approve(login_as(Users.COORDINATOR), request).status_code == 200
 

@@ -1129,9 +1129,12 @@ def test_attendance_equal_to_capacity_fits(login_as, db: Session, capacity, is_w
     foyer = _book(db, event, people=100, capacity=capacity)
     request = _raise(login_as, db, event, "expected_attendance", 150)
 
-    row = _bookings_by_id(_impact(login_as, request)).get(str(foyer.id), {})
+    rows = _bookings_by_id(_impact(login_as, request))
 
-    assert (row.get("capacity_warning") is not None) is is_warned
+    if is_warned:
+        assert rows[str(foyer.id)]["capacity_warning"] is not None
+    else:
+        assert str(foyer.id) not in rows
 
 
 @pytest.mark.story("19.3", ac=4)
