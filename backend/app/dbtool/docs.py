@@ -65,6 +65,7 @@ GROUPS: list[tuple[str, str, list[str]]] = [
             "event_clarifications",
             "event_change_requests",
             "event_safety_reviews",
+            "event_safety_finding_bookings",
         ],
     ),
     ("Venue bookings", "#ffc9c9", ["venue_bookings"]),

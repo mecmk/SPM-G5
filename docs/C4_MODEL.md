@@ -164,6 +164,7 @@ C4Component
     Rel(changes, events, "Applies approved changes and returns events to Planning through")
     Rel(changes, bookings, "Releases the bookings an approved change no longer fits in")
     Rel(safety, bookings, "Reads the venue-unavailable mark, and the pending replacements, of")
+    Rel(safety, bookings, "Releases the bookings a safety finding names in")
     Rel(changes, equipment, "Releases and re-holds the equipment an approved change affects in")
     Rel(cancellation, events, "Marks an event Cancelled, under its row lock, in")
     Rel(cancellation, bookings, "Releases a cancelled event's bookings in")
