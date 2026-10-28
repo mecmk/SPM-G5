@@ -28,7 +28,13 @@ import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
-import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
+import {
+  changeTitle,
+  describeAttendanceMinimum,
+  FIELD_LABELS,
+  OUT_OF_DATE_NOTE,
+  STATUS_LABELS,
+} from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
 /** AC12 (team decision on the review of #125): why an approved event offers no change request any
@@ -173,6 +179,9 @@ interface OpenDecision {
  * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
  * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
  * saying why - and an event with none starts it with one blank row to fill in.
+ * Fix f19.1.2: beneath the new attendance, the form says the lowest the venue requirements allow and
+ * which one sets it, and how far a waiting venue requirements change would lower that (Q80). The
+ * form does not block a lower figure: whether a waiting change makes room is the server's to judge.
  *
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
@@ -476,6 +485,13 @@ export function ChangeRequestsSection({
   // Story 2.7 AC18 (fix f2.7.4): the only row left cannot be removed, and a hint says why.
   const isOnlyRequirement = requirements.length === 1
   const lastRequirementHintId = `${ids}-last-requirement`
+  // Fix f19.1.2: the lowest attendance the venue requirements allow, said beneath the field.
+  const attendanceHint = describeAttendanceMinimum(event.venue_requirements, requests ?? [])
+  const attendanceHintId = `${ids}-attendance-minimum`
+  const attendanceDescription =
+    [attendanceHint === null ? null : attendanceHintId, describedBy('value')]
+      .filter((id) => id !== null && id !== undefined)
+      .join(' ') || undefined
 
   return (
     <section className="card stack change-requests-section" aria-labelledby={`${ids}-heading`}>
@@ -662,19 +678,26 @@ export function ChangeRequestsSection({
           )}
 
           {field === 'expected_attendance' && (
-            <label>
-              New expected attendance
-              <input
-                ref={valueInput}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={attendance}
-                aria-invalid={isInvalid('value')}
-                aria-describedby={describedBy('value')}
-                onChange={(e) => setAttendance(e.target.value)}
-              />
-            </label>
+            <>
+              <label>
+                New expected attendance
+                <input
+                  ref={valueInput}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={attendance}
+                  aria-invalid={isInvalid('value')}
+                  aria-describedby={attendanceDescription}
+                  onChange={(e) => setAttendance(e.target.value)}
+                />
+              </label>
+              {attendanceHint !== null && (
+                <p id={attendanceHintId} className="form-hint">
+                  {attendanceHint}
+                </p>
+              )}
+            </>
           )}
 
           {field === 'venue_requirements' && (

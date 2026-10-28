@@ -5,7 +5,8 @@
  *     and submits; the request shows as Pending to the organiser and to the assigned coordinator.
  * AC2 the point of contact is updated directly from the same page.
  * AC4 the form will not submit without a reason (the client-side half; the server's refusal and
- *     every value rule are backend cases).
+ *     every value rule are backend cases). Fix f19.1.2: the attendance field says the lowest it
+ *     can go and which venue requirement sets it, and a lower one shows the server's refusal.
  * AC11 (fix f19.1.1) change requests are offered on a Confirmed event too, saying that approving
  *     one sends the event back to Planning for a new safety check.
  * AC12 they are not offered before approval, while the event awaits its safety check (Q20), once
@@ -244,6 +245,32 @@ test('19.1 AC4: the reason message clears once a reason is typed', async ({ page
   await reason.fill(REASON)
   await expect(changeRequests(page).getByText('Enter a reason for the change.')).toHaveCount(0)
   await expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+})
+
+test('19.1 AC4: the attendance field says the lowest it can go, and why lower is refused', async ({
+  page,
+}) => {
+  // Nothing is saved: the server refuses the request, so Olivia's Regional Sales Summit, for 220
+  // with its Main venue for 220, is unchanged.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await openChangeForm(page, 'Expected attendance')
+  const attendance = changeRequests(page).getByLabel('New expected attendance')
+  await expect(attendance).toHaveAccessibleDescription(
+    'At least 220: Main venue needs room for 220 people.',
+  )
+
+  await attendance.fill('150')
+  await changeRequests(page).getByLabel('Reason for the change').fill(REASON)
+  await changeRequests(page).getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    changeRequests(page).getByText(
+      'The expected attendance cannot be lower than 220 while Main venue needs room for 220 people. Ask for a venue requirements change that lowers it first.',
+    ),
+  ).toBeVisible()
+  await expect(
+    changeRequests(page).getByRole('listitem').filter({ hasText: 'Expected attendance' }),
+  ).toHaveCount(0)
 })
 
 test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not sent', async ({

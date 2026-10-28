@@ -1,4 +1,4 @@
-import type { ChangeRequestField, ChangeRequestStatus } from '../api/changeRequests'
+import type { ChangeRequest, ChangeRequestField, ChangeRequestStatus } from '../api/changeRequests'
 import type { EventReferenceData } from '../api/events'
 import type { IconName } from '../components/Icon'
 import { ANY_LAYOUT, formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
@@ -77,6 +77,66 @@ interface RequirementValue extends ScheduleValue {
   notes: string | null
   facilities: FacilityValue[]
 }
+/** A venue requirement as far as the attendance is concerned: its name and number of people. */
+interface SizedRequirement {
+  name: string | null
+  capacity: number | null
+}
+
+/** Fix f19.1.2 (2.7 AC6): the fewest people the event can expect, and the requirement that sets
+ *  it. */
+interface AttendanceMinimum {
+  minimum: number
+  requirement: string
+}
+
+/**
+ * Fix f19.1.2 (2.7 AC6): the most people any of `requirements` needs room for, which the expected
+ * attendance cannot go below, and the requirement needing it - the first on the form when two tie,
+ * one without a name named by its place. Null when none gives a number. Mirrors the backend's
+ * `check_attendance_leaves_room` (app/events/service.py).
+ */
+function findAttendanceMinimum(requirements: SizedRequirement[]): AttendanceMinimum | null {
+  let found: AttendanceMinimum | null = null
+  for (const [index, requirement] of requirements.entries()) {
+    if (requirement.capacity === null) continue
+    if (found === null || requirement.capacity > found.minimum) {
+      found = {
+        minimum: requirement.capacity,
+        requirement: requirement.name || `Venue requirement ${index + 1}`,
+      }
+    }
+  }
+  return found
+}
+
+/**
+ * Fix f19.1.2 (19.1 AC4, Q80): what the change form says beneath the new attendance - the lowest
+ * the event's venue requirements allow and the one that sets it, and, when a venue requirements
+ * change waiting for a decision (and not out of date, 19.2 AC7) would lower that, how far. Null
+ * when no requirement gives a number of people.
+ */
+export function describeAttendanceMinimum(
+  requirements: SizedRequirement[],
+  requests: ChangeRequest[],
+): string | null {
+  const current = findAttendanceMinimum(requirements)
+  if (current === null) return null
+  const hint = `At least ${current.minimum}: ${current.requirement} needs room for ${current.minimum} people.`
+  const pending = requests.find(
+    (request) =>
+      request.field === 'venue_requirements' &&
+      request.status === 'PENDING' &&
+      !request.is_out_of_date,
+  )
+  const proposed =
+    pending === undefined
+      ? null
+      : findAttendanceMinimum(pending.proposed_value as RequirementValue[])
+  if (proposed === null || proposed.minimum >= current.minimum) return hint
+  return `${hint} Your venue requirements change would lower this to ${proposed.minimum} once it is approved.`
+}
+
 interface EquipmentValue {
   /** Story 19.2: kept since then; absent from a request raised before it. */
   id?: string | null
