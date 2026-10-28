@@ -1548,8 +1548,7 @@ def test_attendance_already_past_a_kept_booking_is_judged_only_when_raised(
     """Fix f19.2.1: an approved change raising the attendance keeps an additional venue booked
     for fewer people, so the event already expects more than it was booked for. A correction that
     leaves the attendance alone, or lowers it, is not refused for that; one that raises it further
-    still is. (A requirement with no number of its own cannot reach this check: a correction
-    refuses it first, as 2.1 AC10 requires a number.)"""
+    still is."""
     event, _ = _planning_event(db)
     booking = _book(db, event, None, people=60)
     db.commit()
