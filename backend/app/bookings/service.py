@@ -118,7 +118,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.bookings.schemas import BookingReplacementIn, BookingRequestIn, BookingSwitchIn
 from app.common.audit import record_audit
 from app.config import settings
@@ -193,6 +193,12 @@ REPLACED_BY_REASON = "Replaced by {venue}"
 # Story 12.6 AC3: the sentence the coordinator's approval notice adds when it released the booking
 # the approved replacement replaces - and does not, when there was nothing to release (AC3).
 ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
+# Story 21.3 AC4: what Venue Staff are told when the Safety Officer's finding released a booking:
+# the booked period (setup and teardown included, 12.1 AC1) and the finding's required change.
+SAFETY_RELEASE_NOTICE = (
+    'The booking of {venue} for "{event}" {period} was released by the safety review. '
+    "Required change: {reason}"
+)
 
 # 12.1 AC3/AC12: why a request is refused when its venue is held, in words a coordinator can act
 # on - the venue, whether it is booked or only requested, the event, and the held period in
@@ -588,11 +594,24 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
 
 
 def _notify_venue_staff_of_release(
-    db: Session, booking: VenueBooking, *, actor: User, because: str
+    db: Session, booking: VenueBooking, *, actor: User, cause: str, because: str, reason: str
 ) -> None:
     """Story 19.2 AC5, story 6.2 AC5: every active Venue Staff member is told a booking was
     released, and ``because`` says why, as they are of a withdrawal (12.2 AC2), since their
-    schedule changes with it."""
+    schedule changes with it. Story 21.3 AC4: a booking the safety review released is told with its
+    booked period and the finding's required change, ``reason``."""
+    if cause == ReleaseCause.SAFETY_REVIEW:
+        message = SAFETY_RELEASE_NOTICE.format(
+            venue=booking.venue.name,
+            event=booking.event.name,
+            period=_describe_held_period(booking.held_from, booking.held_until),
+            reason=reason,
+        )
+    else:
+        message = (
+            f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
+            f"{because}."
+        )
     for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
         notify(
             db,
@@ -601,10 +620,7 @@ def _notify_venue_staff_of_release(
             notification_type=NotificationType.BOOKING_RELEASED,
             event_id=booking.event_id,
             title="A venue booking was released",
-            message=(
-                f'The booking of {booking.venue.name} for "{booking.event.name}" was released: '
-                f"{because}."
-            ),
+            message=message,
             related_entity_type="venue_booking",
             related_entity_id=booking.id,
             commit=False,
@@ -640,6 +656,8 @@ def release_booking(
     booking: VenueBooking,
     *,
     actor: User,
+    cause: str = ReleaseCause.CHANGE_APPROVED,
+    reason: str | None = None,
     because: str | None = None,
     details: dict[str, str] | None = None,
     at: datetime | None = None,
@@ -651,6 +669,12 @@ def release_booking(
     expired, meanwhile is left alone; returns whether it was released. Written, not committed:
     the caller commits.
 
+    Story 21.3: ``cause`` (``ReleaseCause``) says which path released it, and with ``actor`` and
+    ``reason`` it is recorded on the booking beside the status. The default is the cause of the
+    call this function began as (19.2's); every path names its own: 6.2 EVENT_CANCELLED, 12.6
+    REPLACED, 21.3 SAFETY_REVIEW, which takes ``reason`` (the finding's required change) for its
+    notice and its record instead of ``because``.
+
     Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2: its
     event was cancelled. Either way Venue Staff are told ``because``, the clause that ends their
     notice; ``details`` join the venue and event in the ``BOOKING_RELEASED`` audit entry, and
@@ -660,9 +684,21 @@ def release_booking(
     closed "Replaced by <venue>" and linked to it (``replaced_by_booking_id``, which is how an
     original's ``released_at`` is read), audited ``BOOKING_REPLACED``, Venue Staff told which
     venue replaced it. Either ``replacement`` or ``because`` and ``at`` are given."""
-    if (replacement is None) == (because is None or at is None):
-        raise ValueError("release_booking takes a replacement, or a reason and a time, not both.")
-    values: dict[str, object] = {"status": BookingStatus.CANCELLED}
+    if (cause == ReleaseCause.REPLACED) != (replacement is not None):
+        raise ValueError("release_booking takes a replacement for REPLACED, and only for it.")
+    if replacement is None and at is None:
+        raise ValueError("release_booking needs the time of a release that has no replacement.")
+    if cause == ReleaseCause.SAFETY_REVIEW:
+        if reason is None:
+            raise ValueError("release_booking needs the required change of a safety release.")
+    elif cause != ReleaseCause.REPLACED and because is None:
+        raise ValueError("release_booking needs the clause its notice ends with.")
+    values: dict[str, object] = {
+        "status": BookingStatus.CANCELLED,
+        "release_cause": cause,
+        "release_reason": reason,
+        "released_by_id": actor.id,
+    }
     if replacement is not None:
         values["decision_reason"] = REPLACED_BY_REASON.format(venue=replacement.venue.name)
         values["replaced_by_booking_id"] = replacement.id
@@ -698,7 +734,9 @@ def release_booking(
         details={**base_details, **(details or {})},
         commit=False,
     )
-    _notify_venue_staff_of_release(db, booking, actor=actor, because=str(because))
+    _notify_venue_staff_of_release(
+        db, booking, actor=actor, cause=cause, because=str(because), reason=str(reason)
+    )
     return True
 
 
@@ -834,7 +872,9 @@ def _release_replaced_booking(
     if replacement.replaces_booking_id is None:
         return None
     original = db.get(VenueBooking, replacement.replaces_booking_id)
-    if original is None or not release_booking(db, original, actor=actor, replacement=replacement):
+    if original is None or not release_booking(
+        db, original, actor=actor, cause=ReleaseCause.REPLACED, replacement=replacement
+    ):
         return None
     return original
 
