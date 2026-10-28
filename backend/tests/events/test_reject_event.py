@@ -45,7 +45,12 @@ from app.events.models import (
     EventStatus,
 )
 from app.notifications.models import Notification
-from tests.support.factories import make_equipment_item, make_equipment_type, make_event
+from tests.support.factories import (
+    make_equipment_item,
+    make_equipment_type,
+    make_event,
+    make_venue_requirement,
+)
 from tests.support.seed import Events, Users
 
 
@@ -497,6 +502,22 @@ def test_a_refused_rejection_releases_nothing(login_as, db: Session, user, statu
 
     assert _held(db, event.id) == [EquipmentHoldStatus.RESERVED]
     assert db.get(EventEquipmentRequest, item.id).status == EquipmentRequestStatus.PENDING
+
+
+@pytest.mark.story("4.5", ac=5)
+def test_approving_keeps_the_equipment_held(coordinator_client, db: Session):
+    """``_decide`` is shared with approval (4.4), and only a rejection releases: an approved
+    event goes on to planning with its holds and items as they were."""
+    event = _awaiting(db)
+    make_venue_requirement(db, event.id)  # approval needs one (f2.7.4)
+    items = [_item(db, event, status=item_status) for item_status in HELD_ITEM_STATUSES]
+
+    assert coordinator_client.post(f"/events/{event.id}/approve").status_code == 200
+
+    assert _held(db, event.id) == [EquipmentHoldStatus.RESERVED] * len(items)
+    assert [db.get(EventEquipmentRequest, item.id).status for item in items] == list(
+        HELD_ITEM_STATUSES
+    )
 
 
 def _queue_ids(client, **params) -> list[str]:
