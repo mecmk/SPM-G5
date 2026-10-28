@@ -77,8 +77,10 @@ from app.safety import service as safety_service
 from app.safety.models import EventSafetyReview, SafetyReviewFinding
 from app.safety.schemas import SafetyDecisionIn
 from app.venues.models import Venue
+from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
     approval_payload,
+    future_datetime,
     make_booking,
     make_event,
     make_secured_event,
@@ -609,6 +611,55 @@ def test_the_other_release_paths_record_their_cause_and_actor(db: Session, two_b
         f'The booking of {_venue_name(db, replaced)} for "{event_name}" was released: '
         f"{_venue_name(db, replacement)} was approved as its replacement.",
     )
+
+
+@pytest.mark.story("21.3", ac=2)
+def test_a_change_request_records_its_cause_when_it_releases_a_booking(login_as, db: Session):
+    """Story 19.2's own approval, through its API: the booking the new dates no longer cover is
+    released with the cause of a change, by the coordinator who decided it, and 19.2 records no
+    reason of its own - its clause is in the notice and the audit entry, as it has always been."""
+    event = make_event(
+        db,
+        status=EventStatus.PLANNING,
+        starts_at=future_datetime(days=60),
+        ends_at=future_datetime(days=60, hours=8),
+        expected_attendance=100,
+        assigned_coordinator_id=Users.COORDINATOR.id,
+    )
+    booking = _approved(db, event, expected_attendance=100, hold_expires_at=event.starts_at)
+    moved = {
+        "starts_at": (event.starts_at + timedelta(days=2)).isoformat(),
+        "ends_at": (event.ends_at + timedelta(days=2)).isoformat(),
+    }
+    raised = login_as(Users.ORGANISER).post(
+        f"/events/{event.id}/change-requests",
+        json={"field": "schedule", "proposed": moved, "reason": "Plans have changed."},
+    )
+    assert raised.status_code == 201, raised.text
+    db.commit()
+
+    approved = approve_as_seen(
+        login_as(Users.COORDINATOR), event.id, raised.json()["id"], fallback="not-assessed"
+    )
+
+    assert approved.status_code == 200, approved.text
+    row = _fresh(db, booking)
+    assert row.status == BookingStatus.CANCELLED
+    assert row.release_cause == "CHANGE_APPROVED"
+    assert row.released_by_id == Users.COORDINATOR.id
+    assert row.release_reason is None
+    [notice] = _notices(db, event.id, "BOOKING_RELEASED")
+    assert notice.message == (
+        f'The booking of {_venue_name(db, booking)} for "{event.name}" was released: '
+        "an approved change to the event's date and time no longer fits it."
+    )
+    [entry] = _audit(db, "BOOKING_RELEASED", booking.id)
+    assert entry.actor_id == Users.COORDINATOR.id
+    assert entry.details == {
+        "venue_id": str(booking.venue_id),
+        "event_id": str(event.id),
+        "change": "date and time",
+    }
 
 
 @pytest.mark.story("21.3", ac=2)
