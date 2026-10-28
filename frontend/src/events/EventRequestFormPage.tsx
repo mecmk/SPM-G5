@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventStatusBadge } from '../components/EventStatusBadge'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { RequiredMark } from '../components/RequiredMark'
 import { useAuth } from '../auth/authContext'
 import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
@@ -34,10 +35,10 @@ import {
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
+import { PHONE_MAX_LENGTH } from '../shared/phone'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
   CONTACT_NAME_MAX_LENGTH,
-  CONTACT_PHONE_MAX_LENGTH,
   COVER_IMAGE_TYPES,
   EMPTY_FACILITY,
   EMPTY_NOTE,
@@ -106,15 +107,6 @@ function findIncompleteDateField(): string | null {
     if (input instanceof HTMLInputElement && input.validity.badInput) return id
   }
   return null
-}
-
-/** Marks something a request needs before it can be submitted (story 2.1 AC10). */
-function RequiredMark() {
-  return (
-    <span className="req" aria-hidden="true">
-      *
-    </span>
-  )
 }
 
 /** The message a refused submission leaves for the edit page it lands on after saving. */
@@ -1003,7 +995,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 <input
                   type="tel"
                   autoComplete="tel"
-                  maxLength={CONTACT_PHONE_MAX_LENGTH}
+                  maxLength={PHONE_MAX_LENGTH}
                   {...fieldProps(FIELD_ID.contactPhone)}
                   value={form.contactPhone}
                   onChange={(e) => updateField('contactPhone', e.target.value)}

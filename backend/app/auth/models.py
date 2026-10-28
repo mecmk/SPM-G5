@@ -42,6 +42,10 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     phone: Mapped[str | None] = mapped_column(Text)
     department: Mapped[str | None] = mapped_column(Text)
+    # Story 18.4: an attendee's details. NULL dietary requirements are shown as "None" (AC6); a
+    # NULL confirmation means the attendee's first registration asks for the details (AC2).
+    dietary_requirements: Mapped[str | None] = mapped_column(Text)
+    attendee_details_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
     role: Mapped[Role] = relationship(lazy="joined")

@@ -23,6 +23,7 @@ import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import { MyRegistrationsPage } from './registrations/MyRegistrationsPage'
+import { ProfilePage } from './registrations/ProfilePage'
 import { RegistrationReportPage } from './registrations/RegistrationReportPage'
 import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
@@ -46,6 +47,7 @@ import {
   HOME_PATH,
   LOGIN_PATH,
   MY_REGISTRATIONS_PATH,
+  PROFILE_PATH,
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
   REGISTRATIONS_REPORT_PATH,
@@ -176,10 +178,12 @@ function App() {
               </Route>
 
               {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only).
-                  Story 18.2: their own registrations, and withdrawing one (AC5: attendees only). */}
+                  Story 18.2: their own registrations, and withdrawing one (AC5: attendees only).
+                  Story 18.4: their profile (AC10: attendees only, each their own). */}
               <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
                 <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
                 <Route path={MY_REGISTRATIONS_PATH} element={<MyRegistrationsPage />} />
+                <Route path={PROFILE_PATH} element={<ProfilePage />} />
               </Route>
 
               {/* Story 18.3: the organiser's and coordinator's registrations report. */}

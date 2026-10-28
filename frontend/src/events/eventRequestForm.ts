@@ -1,6 +1,7 @@
 import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
+import { isBlankOrPhoneNumber } from '../shared/phone'
 
 /**
  * Story 2.1: the event request form's state and rules, kept apart from the page. Numbers and
@@ -83,14 +84,11 @@ export interface EventFormState {
 export const EMPTY_NOTE: NoteDraft = { notes: '' }
 export const EMPTY_FACILITY: FacilityDraft = { quantity: '', notes: '' }
 const WHOLE_NUMBER = /^\d+$/
-// Story 2.1 AC13: mirrored from the backend's schemas.
+// Story 2.1 AC13: mirrored from the backend's schemas. The phone number's rule is
+// ../shared/phone.ts, shared with an attendee's details (story 18.4 AC7).
 const EMAIL_ADDRESS = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-const PHONE_NUMBER = /^\+?[\d -]+$/
 export const CONTACT_NAME_MAX_LENGTH = 200
 export const CONTACT_EMAIL_MAX_LENGTH = 254
-export const CONTACT_PHONE_MAX_LENGTH = 50
-const CONTACT_PHONE_MIN_DIGITS = 8
-const CONTACT_PHONE_MAX_DIGITS = 15
 /** Story 2.1 AC14: what a cover picture may be, mirrored from the backend's service. */
 export const MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
 export const COVER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -446,19 +444,6 @@ export function isBlankOrEmailAddress(value: string): boolean {
   const trimmed = value.trim()
   return (
     trimmed === '' || (trimmed.length <= CONTACT_EMAIL_MAX_LENGTH && EMAIL_ADDRESS.test(trimmed))
-  )
-}
-
-/** Story 2.1 AC13: blank is fine on a draft; anything typed must be 8 to 15 digits. */
-export function isBlankOrPhoneNumber(value: string): boolean {
-  const trimmed = value.trim()
-  if (trimmed === '') return true
-  const digitCount = trimmed.replace(/\D/g, '').length
-  return (
-    trimmed.length <= CONTACT_PHONE_MAX_LENGTH &&
-    PHONE_NUMBER.test(trimmed) &&
-    digitCount >= CONTACT_PHONE_MIN_DIGITS &&
-    digitCount <= CONTACT_PHONE_MAX_DIGITS
   )
 }
 

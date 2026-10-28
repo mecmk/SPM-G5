@@ -42,6 +42,11 @@ class Users:
     LEAD = SeedUser(_u(10), "lead@connectsphere.example", "EVENT_COORDINATOR_LEAD", "Lena Lead")
     # Story 18.1: holds the one place at Events.PORTFOLIO_REVIEW.
     ATTENDEE_2 = SeedUser(_u(11), "attendee2@example.com", "ATTENDEE", "Bella Attendee")
+    # Story 18.4: one attendee per e2e flow that changes their details (attendee-profile.spec.ts).
+    ATTENDEE_3 = SeedUser(_u(18401), "attendee3@example.com", "ATTENDEE", "Cara Attendee")
+    ATTENDEE_4 = SeedUser(_u(18402), "attendee4@example.com", "ATTENDEE", "Dion Attendee")
+    ATTENDEE_5 = SeedUser(_u(18403), "attendee5@example.com", "ATTENDEE", "Esme Attendee")
+    ATTENDEE_6 = SeedUser(_u(18412), "attendee6@example.com", "ATTENDEE", "Finn Attendee")
     # Story 20.2: owns the notification bell's e2e spec, with nine notifications of her own. Left
     # out of ALL_ACTIVE and ONE_PER_ROLE, which tests take to have none.
     NOTICE = SeedUser(_u(20201), "nadia@notice.example", "EVENT_ORGANISER", "Nadia Notice")
@@ -57,6 +62,10 @@ class Users:
         SAFETY_OFFICER,
         LEAD,
         ATTENDEE_2,
+        ATTENDEE_3,
+        ATTENDEE_4,
+        ATTENDEE_5,
+        ATTENDEE_6,
     )
     ONE_PER_ROLE = (
         ORGANISER,
@@ -200,6 +209,12 @@ class Events:
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
     # Story 20.2: Nadia Notice's, in planning with Carl, the event nine notifications are about.
     NOTICE_GALA = _e(20202)
+    # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028.
+    POTTERY_TASTER = _e(18404)  # open; Users.ATTENDEE_3's first registration
+    WATERCOLOUR_CLASS = _e(18405)  # open; Users.ATTENDEE_3's second, in one click
+    BOOK_CLUB = _e(18406)  # open; Users.ATTENDEE_4 registers after changing their details
+    CHARITY_QUIZ = _e(18407)  # open; Users.ATTENDEE_5 registered for it before
+    FOOD_TASTING_WALK = _e(18408)  # registration closed 1 Oct 2026; Aiden and Bella registered
 
 
 class Bookings:
@@ -266,7 +281,9 @@ class Bookings:
 
 class Registrations:
     """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
-    Users.ATTENDEE's, one for each of 18.2's events, named after it."""
+    Users.ATTENDEE's, one for each of 18.2's events, named after it. Story 18.4: Users.ATTENDEE_5's
+    at Events.CHARITY_QUIZ, and Users.ATTENDEE's and Users.ATTENDEE_2's at
+    Events.FOOD_TASTING_WALK."""
 
     PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
     POETRY_NIGHT = uuid.UUID("18181818-0000-0000-0000-000000000002")
@@ -277,6 +294,9 @@ class Registrations:
     CHARITY_FUN_RUN = uuid.UUID("18181818-0000-0000-0000-000000000007")
     BOOK_SWAP = uuid.UUID("18181818-0000-0000-0000-000000000008")
     LANTERN_PAINTING = uuid.UUID("18181818-0000-0000-0000-000000000009")
+    CHARITY_QUIZ_ESME = uuid.UUID("18181818-0000-0000-0000-000000018409")
+    FOOD_TASTING_WALK_AIDEN = uuid.UUID("18181818-0000-0000-0000-000000018410")
+    FOOD_TASTING_WALK_BELLA = uuid.UUID("18181818-0000-0000-0000-000000018411")
 
 
 class Unavailability:

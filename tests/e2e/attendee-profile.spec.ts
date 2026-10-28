@@ -1,0 +1,625 @@
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import {
+  ACCOUNTS,
+  CONFIRM_AND_REGISTER,
+  EVENTS,
+  confirmDetailsDialog,
+  confirmRegistration,
+  corsHeaders,
+  signIn,
+} from './support'
+
+/**
+ * Story 18.4 - autofill attendee profile details. END-TO-END tests: what an attendee and an
+ * organiser click through, at a phone's width (375x667) and a desktop's (1280x800).
+ *
+ * Level: e2e. The rules behind what these pages show - the phone and dietary limits, who may read
+ * or change a profile, which list rows show details, two saves in a row - are proven in
+ * backend/tests/registrations/test_attendee_profile_*.py and backend/tests/common/, not repeated
+ * here. The exceptions are AC6/AC7's checks in the browser, which block a save before any request
+ * is sent, so no backend test can see them, and AC9 as the page shows it: the server's rule is a
+ * backend case, while leaving a withdrawn row's details empty, not "None", is the page's.
+ *
+ * AC1 An attendee has a My profile page that shows their email, which they cannot change, and the
+ *     details they keep up to date: their name, a contact phone number and their dietary
+ *     requirements. The name and phone number are required, and marked *. The name is at most
+ *     200 characters. (CL-166)
+ * AC2 The first time an attendee registers for an event (18.1), they are asked for these details
+ *     before the registration is confirmed. The details are saved to their profile. A
+ *     registration refused for any reason (full, closed, already registered) saves none of the
+ *     details sent with it. (CL-167)
+ * AC3 For later registrations, the details are filled in from the profile and shown for the
+ *     attendee to confirm before the registration is made. Changing them while confirming updates
+ *     the profile. (CL-167)
+ * AC4 The attendee can change their details on My profile at any time. The change shows wherever
+ *     their details are shown, including on events they registered for earlier.
+ * AC5 The event's organiser and assigned coordinator see each registered attendee's phone number
+ *     and dietary requirements on the event's registration list (18.3), so they can plan catering
+ *     and contact attendees. (Here: a table on a desktop, one card per attendee on a phone.)
+ * AC6 Dietary requirements are free text of up to 500 characters. Left blank, or only spaces, they
+ *     are recorded as "None".
+ * AC7 The phone number is required. It follows the rule for an event's contact phone (2.1 AC13): 8
+ *     to 15 digits, an optional leading "+", spaces and dashes allowed, at most 50 characters in
+ *     all. (CL-166)
+ * AC9 Withdrawn registrations, and the registrations of a cancelled event, do not show the
+ *     attendee's details on the registration list.
+ *
+ * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
+ * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in
+ * parallel and a first registration happens once. Aiden's profile and the food tasting walk's
+ * list are only read; the tests that register as Aiden stub the call, so nothing is written.
+ */
+
+const PROFILE_PATH = '/profile'
+const UPCOMING_EVENTS_PATH = '/browse'
+const PHONE = { width: 375, height: 667 }
+const DESKTOP = { width: 1280, height: 800 }
+/** The smallest height a control on a phone may have, to be pressed with a thumb. */
+const THUMB_TARGET = 44
+const PHONE_INVALID_MESSAGE = 'Enter a phone number with 8 to 15 digits.'
+const PHONE_REQUIRED_MESSAGE = 'Enter your phone number.'
+// What the app shows when the server fails a request (errors/registry.ts, SERVER_ERROR).
+const SERVER_PROBLEM = 'The server hit a problem. Try again in a moment.'
+const NAME_REQUIRED_MESSAGE = 'Enter your name.'
+const REQUIRED_NOTE = 'Fields marked * are required.'
+const DIETARY_MAX_LENGTH = 500
+
+// What the seed holds for each attendee (story 18.4's block of 020_sample_data.sql).
+const AIDEN = { name: 'Aiden Attendee', phone: '+65 9700 0007' } // no dietary requirements
+const BELLA = {
+  name: 'Bella Attendee',
+  phone: '+65 9700 0011',
+  dietary:
+    'Vegetarian. No eggs, no mushrooms, and nothing cooked with fish sauce or oyster sauce, please' +
+    ' - a severe shellfish allergy, so food prepared alongside shellfish is not safe either.',
+}
+const CARA = { name: 'Cara Attendee' }
+const DION = { phone: '+65 9184 0202', dietary: 'No pork' }
+const ESME = { name: 'Esme Attendee' }
+const FINN = { name: 'Finn Attendee' }
+
+const POTTERY_TASTER = 'Riverside Pottery Taster' // Cara's first registration
+const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, confirmed as filled in
+const BOOK_CLUB = 'Community Book Club' // Dion's, changing a detail while confirming
+const JAZZ_EVENING = 'Harbourfront Jazz Evening' // 18.1's, only read: its registration is stubbed
+
+/** An event's card on Upcoming events, found by its name (as in attendee-registration.spec.ts). */
+function eventCard(page: Page, name: string) {
+  return page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3, name }) })
+}
+
+function registerButton(page: Page, name: string) {
+  return eventCard(page, name).getByRole('button', { name: `Register for ${name}` })
+}
+
+function registeredBadge(page: Page, name: string) {
+  return eventCard(page, name).getByText('Registered', { exact: true })
+}
+
+function registrations(page: Page) {
+  return page.getByRole('region', { name: 'Registered attendees', exact: true })
+}
+
+function reportPath(eventId: string): string {
+  return `/registrations/report?event=${eventId}`
+}
+
+async function hasNoSidewaysScroll(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  )
+}
+
+/** The element sits wholly inside the viewport. */
+async function expectInsideScreen(page: Page, element: Locator) {
+  const box = (await element.boundingBox())!
+  const { width, height } = page.viewportSize()!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(width)
+  expect(box.y + box.height).toBeLessThanOrEqual(height)
+}
+
+/** On a phone a field spans the form: here, most of the screen's width. */
+async function expectFullWidth(page: Page, field: Locator) {
+  const box = (await field.boundingBox())!
+  expect(box.width).toBeGreaterThanOrEqual(page.viewportSize()!.width * 0.75)
+}
+
+async function expectThumbSized(control: Locator) {
+  const box = (await control.boundingBox())!
+  expect(box.height).toBeGreaterThanOrEqual(THUMB_TARGET)
+}
+
+/** The phone field brings up the phone keypad. */
+async function expectPhoneKeypad(field: Locator) {
+  await expect(field).toHaveAttribute('type', 'tel')
+  await expect(field).toHaveAttribute('inputmode', 'tel')
+}
+
+test('18.4 AC1: My profile shows the email as fixed text and the name and details in a form, on a desktop and a phone', async ({
+  page,
+}) => {
+  await page.setViewportSize(DESKTOP)
+  await signIn(page, ACCOUNTS.attendee)
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'My profile', exact: true })
+    .click()
+
+  await expect(page.getByRole('heading', { level: 1, name: 'My profile' })).toBeVisible()
+  const main = page.getByRole('main')
+  await expect(main.getByText(ACCOUNTS.attendee, { exact: true })).toBeVisible()
+  // The email is shown, never offered to change (AC1): no field holds it. The name is a field.
+  await expect(main.getByRole('textbox', { name: /email/i })).toHaveCount(0)
+  await expect(main.getByLabel('Name', { exact: true })).toHaveValue(AIDEN.name)
+  const phone = main.getByLabel('Phone number')
+  await expect(phone).toHaveValue(AIDEN.phone)
+  await expectPhoneKeypad(phone)
+  await expect(main.getByLabel('Dietary requirements')).toHaveValue('')
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+
+  await page.setViewportSize(PHONE)
+  await expectFullWidth(page, main.getByLabel('Name', { exact: true }))
+  await expectFullWidth(page, phone)
+  await expectFullWidth(page, main.getByLabel('Dietary requirements'))
+  const save = main.getByRole('button', { name: 'Save details' })
+  await save.scrollIntoViewIfNeeded()
+  await expectThumbSized(save)
+  await expectInsideScreen(page, save)
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+})
+
+test('18.4 AC2/AC3: the first registration asks for the details, and the next shows them filled in to confirm', async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE)
+  await signIn(page, ACCOUNTS.attendee3)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, POTTERY_TASTER).click()
+
+  // AC2: the details are asked for first; nothing is registered yet.
+  const dialog = confirmDetailsDialog(page)
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(`Before you register for ${POTTERY_TASTER}, give the name`)
+  await expect(registeredBadge(page, POTTERY_TASTER)).toHaveCount(0)
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(CARA.name)
+  const phone = dialog.getByLabel('Phone number')
+  await expect(phone).toHaveValue('')
+  await expectPhoneKeypad(phone)
+  await expectFullWidth(page, phone)
+  const confirm = dialog.getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
+  await expectThumbSized(confirm)
+  await expectThumbSized(dialog.getByRole('button', { name: 'Cancel', exact: true }))
+  await expectInsideScreen(page, dialog)
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+
+  await phone.fill('+65 9184 0101')
+  await dialog.getByLabel('Dietary requirements').fill('Vegetarian')
+  await page.setViewportSize(DESKTOP)
+  await confirm.click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(registeredBadge(page, POTTERY_TASTER)).toBeVisible()
+
+  // AC3: the next registration shows the saved details to confirm, and nothing is registered
+  // until they are confirmed.
+  await registerButton(page, WATERCOLOUR_CLASS).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(
+    `Check your details before you register for ${WATERCOLOUR_CLASS}.`,
+  )
+  await expect(dialog.getByLabel('Phone number')).toHaveValue('+65 9184 0101')
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Vegetarian')
+  await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toHaveCount(0)
+  await confirmRegistration(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toBeVisible()
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+
+  // AC2: saved to the profile.
+  await page.goto(PROFILE_PATH)
+  await expect(page.getByLabel('Phone number')).toHaveValue('+65 9184 0101')
+  await expect(page.getByLabel('Dietary requirements')).toHaveValue('Vegetarian')
+})
+
+test('18.4 AC3: a detail changed while confirming a registration is saved to My profile', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee4)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, BOOK_CLUB).click()
+
+  const dialog = confirmDetailsDialog(page)
+  // Filled in from the profile.
+  await expect(dialog.getByLabel('Phone number')).toHaveValue(DION.phone)
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue(DION.dietary)
+  await dialog.getByLabel('Dietary requirements').fill('No pork, no peanuts')
+  await confirmRegistration(page)
+  await expect(dialog).toHaveCount(0)
+  await expect(registeredBadge(page, BOOK_CLUB)).toBeVisible()
+
+  await page.goto(PROFILE_PATH)
+  await expect(page.getByLabel('Dietary requirements')).toHaveValue('No pork, no peanuts')
+})
+
+test('18.4 AC4: a change on My profile shows on the registration list of an event registered for earlier', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee5)
+  await page.goto(PROFILE_PATH)
+  await page.getByLabel('Phone number').fill('+65 9184 0399')
+  await page.getByLabel('Dietary requirements').fill('Gluten free')
+  // The save must land before the reload, or reloading would cancel it.
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        new URL(response.url()).pathname === PROFILE_PATH,
+    ),
+    page.getByRole('button', { name: 'Save details' }).click(),
+  ])
+  // Reloading shows what was saved.
+  await page.reload()
+  await expect(page.getByLabel('Phone number')).toHaveValue('+65 9184 0399')
+  await expect(page.getByLabel('Dietary requirements')).toHaveValue('Gluten free')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(reportPath(EVENTS.charityQuiz))
+
+  const esme = registrations(page).getByRole('row').filter({ hasText: ESME.name })
+  await expect(esme).toContainText('+65 9184 0399')
+  await expect(esme).toContainText('Gluten free')
+})
+
+test("18.4 AC5: the organiser sees each attendee's phone and dietary requirements, as a table on a desktop and as cards on a phone", async ({
+  page,
+}) => {
+  await page.setViewportSize(DESKTOP)
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(reportPath(EVENTS.foodTastingWalk))
+
+  const list = registrations(page)
+  await expect(list.getByRole('columnheader', { name: 'Phone', exact: true })).toBeVisible()
+  await expect(
+    list.getByRole('columnheader', { name: 'Dietary requirements', exact: true }),
+  ).toBeVisible()
+  const aiden = list.getByRole('row').filter({ hasText: AIDEN.name })
+  await expect(aiden).toContainText(AIDEN.phone)
+  // AC6: none recorded shows as "None".
+  await expect(aiden.getByRole('cell', { name: 'None', exact: true })).toBeVisible()
+  const bella = list.getByRole('row').filter({ hasText: BELLA.name })
+  await expect(bella).toContainText(BELLA.phone)
+  await expect(bella).toContainText(BELLA.dietary)
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+
+  // On a phone each attendee is a card: no column headings, nothing wider than the screen, and
+  // long dietary requirements wrap onto more lines.
+  await page.setViewportSize(PHONE)
+  await expect(list.getByRole('columnheader', { name: 'Phone', exact: true })).toBeHidden()
+  for (const text of [AIDEN.name, AIDEN.phone, BELLA.name, BELLA.phone]) {
+    await expect(list.getByText(text, { exact: true })).toBeVisible()
+  }
+  await expect(list.getByText('None', { exact: true })).toBeVisible()
+  const bellaDietary = list.getByText(BELLA.dietary, { exact: true })
+  await bellaDietary.scrollIntoViewIfNeeded()
+  await expectInsideScreen(page, bellaDietary)
+  expect((await bellaDietary.boundingBox())!.height).toBeGreaterThan(40)
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
+  // Nothing in the list scrolls sideways either, so no text is hidden past its edge.
+  expect(
+    await list.evaluate((section) =>
+      [section, ...section.querySelectorAll('*')].every(
+        (element) => element.scrollWidth <= element.clientWidth + 1,
+      ),
+    ),
+  ).toBe(true)
+})
+
+test('18.4 AC6/AC7: My profile shows what is wrong with the phone number before sending, and takes no more than 500 characters of dietary requirements', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const saves: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === PROFILE_PATH) {
+      saves.push(request.url())
+    }
+  })
+  await page.goto(PROFILE_PATH)
+
+  const phone = page.getByLabel('Phone number')
+  await phone.fill('9123 456a')
+  await page.getByRole('button', { name: 'Save details' }).click()
+
+  const problem = page.getByRole('alert').filter({ hasText: PHONE_INVALID_MESSAGE })
+  await expect(problem).toBeVisible()
+  await expect(phone).toHaveAttribute('aria-invalid', 'true')
+  const problemId = await problem.getAttribute('id')
+  expect(problemId).not.toBeNull()
+  expect((await phone.getAttribute('aria-describedby'))?.split(' ')).toContain(problemId)
+  await expect(phone).toBeFocused()
+
+  const dietary = page.getByLabel('Dietary requirements')
+  await dietary.fill('v'.repeat(DIETARY_MAX_LENGTH + 1))
+  await expect(dietary).toHaveValue('v'.repeat(DIETARY_MAX_LENGTH))
+  expect(saves).toHaveLength(0)
+})
+
+test("18.4 AC7: the browser's phone check refuses 7 and 16 digits and accepts 8 and 15, as the server does", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const saves: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === PROFILE_PATH) {
+      saves.push(request.url())
+    }
+  })
+  await page.goto(PROFILE_PATH)
+  const phone = page.getByLabel('Phone number')
+  const problem = page.getByRole('alert').filter({ hasText: PHONE_INVALID_MESSAGE })
+
+  // Once Save was pressed, the check follows every keystroke (story 2.1 AC13's rule, shared).
+  await phone.fill('9123456')
+  await page.getByRole('button', { name: 'Save details' }).click()
+  await expect(problem).toBeVisible()
+  await phone.fill('91234567')
+  await expect(problem).toHaveCount(0)
+  await phone.fill('1234567890123456')
+  await expect(problem).toBeVisible()
+  await phone.fill('123456789012345')
+  await expect(problem).toHaveCount(0)
+  expect(saves).toHaveLength(0)
+})
+
+test('18.4 AC9: a withdrawn registration is listed with no phone number or dietary requirements', async ({
+  page,
+}) => {
+  // Aiden withdrew from the heritage trail (story 18.2's seed); his profile has a phone number.
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(reportPath(EVENTS.heritageTrail))
+
+  const aiden = registrations(page).getByRole('row').filter({ hasText: AIDEN.name })
+  await expect(aiden).toContainText('Withdrawn')
+  await expect(aiden).not.toContainText(AIDEN.phone)
+  await expect(aiden.getByText('None', { exact: true })).toHaveCount(0)
+  await expect(aiden.getByText('Not recorded', { exact: true })).toHaveCount(0)
+})
+
+test('18.4 AC1/AC7: the name and phone number are marked as required, and leaving either blank is refused before sending', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const saves: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === PROFILE_PATH) {
+      saves.push(request.url())
+    }
+  })
+  await page.goto(PROFILE_PATH)
+  const main = page.getByRole('main')
+  const name = main.getByLabel('Name', { exact: true })
+  const phone = main.getByLabel('Phone number')
+  const dietary = main.getByLabel('Dietary requirements')
+
+  // The * is drawn beside the label; the field itself says it is required.
+  await expect(main.getByText(REQUIRED_NOTE)).toBeVisible()
+  await expect(name).toHaveAttribute('aria-required', 'true')
+  await expect(phone).toHaveAttribute('aria-required', 'true')
+  await expect(dietary).not.toHaveAttribute('aria-required', 'true')
+
+  await name.fill('   ')
+  await phone.fill('')
+  await main.getByRole('button', { name: 'Save details' }).click()
+
+  await expect(page.getByRole('alert').filter({ hasText: NAME_REQUIRED_MESSAGE })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: PHONE_REQUIRED_MESSAGE })).toBeVisible()
+  await expect(name).toBeFocused()
+  expect(saves).toHaveLength(0)
+})
+
+test('18.4 AC1: a changed name is saved, shows in the sidebar at once, and is kept after a reload', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee6)
+  await page.goto(PROFILE_PATH)
+  const newName = `Finn Tan ${Date.now()}`
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue(FINN.name)
+
+  await page.getByLabel('Name', { exact: true }).fill(newName)
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        new URL(response.url()).pathname === PROFILE_PATH,
+    ),
+    page.getByRole('button', { name: 'Save details' }).click(),
+  ])
+
+  // The sidebar names the signed-in user: it follows the save without a reload.
+  await expect(page.getByRole('complementary').getByText(newName, { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue(newName)
+})
+
+test('18.4 AC2/AC3: details the server refuses keep the dialog open, with what was typed', async ({
+  page,
+}) => {
+  // The browser's own checks stop every refusal the seed could reach, so the server's answer is
+  // stubbed: it refuses the details, and nothing is written.
+  await page.route(
+    (url) => url.pathname === '/registrations',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'POST') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        headers: corsHeaders(request),
+        body: JSON.stringify({ detail: PHONE_REQUIRED_MESSAGE }),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  const dialog = confirmDetailsDialog(page)
+  await dialog.getByLabel('Dietary requirements').fill('Pescatarian')
+  await confirmRegistration(page)
+
+  await expect(dialog.getByRole('alert')).toHaveText(PHONE_REQUIRED_MESSAGE)
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Pescatarian')
+  await expect(registeredBadge(page, JAZZ_EVENING)).toHaveCount(0)
+})
+
+test('18.4 AC3: a detail changed while confirming fills the next dialog and the sidebar, even when the profile cannot be read again', async ({
+  page,
+}) => {
+  // The registration is stubbed as taken, and reading the profile again after it fails, so
+  // nothing is written: Aiden's profile is only read.
+  let hasRegistered = false
+  await page.route(
+    (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const path = new URL(request.url()).pathname
+      if (path === '/registrations' && request.method() === 'POST') {
+        hasRegistered = true
+        const sent = request.postDataJSON() as { event_id: string }
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000184',
+            event_id: sent.event_id,
+            status: 'REGISTERED',
+            registered_at: '2026-10-27T02:00:00Z',
+          }),
+        })
+      }
+      if (path === PROFILE_PATH && request.method() === 'GET' && hasRegistered) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: '{}',
+        })
+      }
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+  const changedName = 'Aiden Tan'
+  const changedDietary = 'No peanuts: severe allergy'
+
+  await registerButton(page, JAZZ_EVENING).click()
+  const dialog = confirmDetailsDialog(page)
+  await dialog.getByLabel('Name', { exact: true }).fill(changedName)
+  await dialog.getByLabel('Dietary requirements').fill(changedDietary)
+  await confirmRegistration(page)
+  await expect(dialog).toHaveCount(0)
+
+  // The re-read failed and says so, but what was just confirmed is kept.
+  await expect(page.getByRole('alert').filter({ hasText: SERVER_PROBLEM })).toBeVisible()
+  await expect(
+    page.getByRole('complementary').getByText(changedName, { exact: true }),
+  ).toBeVisible()
+  await registerButton(page, POTTERY_TASTER).click()
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(changedName)
+  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue(changedDietary)
+})
+
+test('18.4 AC3: Register waits for the details to load, so the dialog never opens half filled', async ({
+  page,
+}) => {
+  let releaseProfile: () => void = () => {}
+  const profileHeld = new Promise<void>((resolve) => {
+    releaseProfile = resolve
+  })
+  await signIn(page, ACCOUNTS.attendee)
+  await page.route(
+    (url) => url.pathname === PROFILE_PATH,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      await profileHeld
+      return route.fallback()
+    },
+  )
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await expect(registerButton(page, JAZZ_EVENING)).toBeDisabled()
+  releaseProfile()
+  await expect(registerButton(page, JAZZ_EVENING)).toBeEnabled()
+  await registerButton(page, JAZZ_EVENING).click()
+  await expect(confirmDetailsDialog(page).getByLabel('Phone number')).toHaveValue(AIDEN.phone)
+})
+
+test('18.4 AC3: the profile read again after a registration corrects what the page shows', async ({
+  page,
+}) => {
+  // Stubbed: the registration is taken, and the profile read after it answers with what the
+  // server stored. Nothing is written, so Aiden's profile is only read.
+  let hasRegistered = false
+  await page.route(
+    (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const path = new URL(request.url()).pathname
+      if (path === '/registrations' && request.method() === 'POST') {
+        hasRegistered = true
+        const sent = request.postDataJSON() as { event_id: string }
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000185',
+            event_id: sent.event_id,
+            status: 'REGISTERED',
+            registered_at: '2026-10-27T02:00:00Z',
+          }),
+        })
+      }
+      if (path === PROFILE_PATH && request.method() === 'GET' && hasRegistered) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            full_name: 'Aiden Tan (as stored)',
+            email: ACCOUNTS.attendee,
+            phone: AIDEN.phone,
+            dietary_requirements: 'Halal (as stored)',
+            has_confirmed_details: true,
+          }),
+        })
+      }
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(UPCOMING_EVENTS_PATH)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  await confirmDetailsDialog(page).getByLabel('Name', { exact: true }).fill('Aiden Tan')
+  await confirmRegistration(page)
+
+  await expect(
+    page.getByRole('complementary').getByText('Aiden Tan (as stored)', { exact: true }),
+  ).toBeVisible()
+  await registerButton(page, POTTERY_TASTER).click()
+  await expect(confirmDetailsDialog(page).getByLabel('Dietary requirements')).toHaveValue(
+    'Halal (as stored)',
+  )
+})

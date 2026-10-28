@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn } from './support'
+import { ACCOUNTS, confirmRegistration, corsHeaders, signIn } from './support'
 
 /**
  * Story 18.2 - view and withdraw my registrations. END-TO-END tests: what an attendee clicks.
@@ -524,6 +524,7 @@ test.describe('withdraws its seeded registration once', () => {
     await eventCard(page, SKETCHING_WALK)
       .getByRole('button', { name: `Register for ${SKETCHING_WALK}` })
       .click()
+    await confirmRegistration(page)
     await expect(
       eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
     ).toBeVisible()

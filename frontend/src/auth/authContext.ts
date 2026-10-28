@@ -13,6 +13,9 @@ export interface AuthContextValue {
   signOut: () => Promise<void>
   /** Story 1.2 AC2: whether the signed-in role holds a permission, to hide what it cannot use. */
   can: (permission: Permission) => boolean
+  /** Story 18.4 AC1: the signed-in user's name as they just saved it on their profile, so the
+   *  frame shows it at once. Given the saved name, never a typed one. */
+  setFullName: (fullName: string) => void
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

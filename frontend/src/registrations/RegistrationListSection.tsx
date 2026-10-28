@@ -7,7 +7,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { STANDING_BADGES } from './registrationLabels'
+import { STANDING_BADGES, describeDietaryRequirements, describePhone } from './registrationLabels'
 
 /**
  * Story 18.3 - who has registered for the event, for its organiser and assigned coordinator, on
@@ -16,6 +16,11 @@ import { STANDING_BADGES } from './registrationLabels'
  * whether it is full come from the server with each page. AC3: an empty list says so, and a full
  * event says "Full". AC4: withdrawn and cancelled rows show where they stand, as 18.2 tells the
  * attendee, and when they withdrew. Status comes second so a phone shows it beside the name.
+ *
+ * Story 18.4 AC5: each Registered attendee's phone number and dietary requirements, for catering
+ * and contact - "None" when none were given (AC6). A row no longer Registered leaves both empty
+ * (AC9): the server sends neither. On a desktop the list is a table; on a phone each attendee is a
+ * card of labelled lines (App.css `.registration-table`), and long dietary requirements wrap.
  */
 export function RegistrationListSection({ eventId }: { eventId: string }) {
   const load = useCallback(() => listEventRegistrations(eventId), [eventId])
@@ -62,28 +67,41 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
             <EmptyState>No one has registered yet.</EmptyState>
           ) : (
             <div className="table-wrap">
-              <table>
+              <table className="registration-table">
                 <thead>
                   <tr>
                     <th>Name</th>
                     <th>Status</th>
                     <th>Email</th>
+                    <th>Phone</th>
+                    <th>Dietary requirements</th>
                     <th>Registered</th>
                   </tr>
                 </thead>
                 <tbody>
                   {list.items.map((registration) => {
                     const badge = STANDING_BADGES[registration.status]
+                    const isRegistered = registration.status === 'REGISTERED'
                     return (
                       <tr key={registration.id}>
-                        <td>{registration.attendee_name}</td>
-                        <td>
+                        <td className="registration-name">{registration.attendee_name}</td>
+                        <td data-label="Status">
                           <StatusBadge status={badge.status} label={badge.label} />
                           {registration.withdrawn_at !== null &&
                             ` ${formatDateTime(registration.withdrawn_at)}`}
                         </td>
-                        <td>{registration.attendee_email}</td>
-                        <td>{formatDateTime(registration.registered_at)}</td>
+                        <td data-label="Email">{registration.attendee_email}</td>
+                        <td data-label="Phone">
+                          {isRegistered ? describePhone(registration.attendee_phone) : ''}
+                        </td>
+                        <td data-label="Dietary requirements" className="registration-dietary">
+                          {isRegistered
+                            ? describeDietaryRequirements(registration.dietary_requirements)
+                            : ''}
+                        </td>
+                        <td data-label="Registered">
+                          {formatDateTime(registration.registered_at)}
+                        </td>
                       </tr>
                     )
                   })}
