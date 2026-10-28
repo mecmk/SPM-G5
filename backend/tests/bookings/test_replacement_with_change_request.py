@@ -70,6 +70,7 @@ to the event's pending and approved bookings alike) judges the two together:
 * a change that unfits a flagged original unfits its pending replacement as well, so both are
   released by 19.2 - the original with no "Replaced by", since no replacement approved took its
   place - and the requirement needs a venue again (AC8, 12.5 AC11);
+* an attendance rise past what they were booked for unfits neither (fix f19.2.1), so both stay;
 * a release of the original alone (here through ``release_booking`` itself - the fit rule never
   separates the two, but a rejection or the sweep can close one meanwhile) leaves the pending
   replacement covering the requirement, a normal request refused beside it, and its approval
@@ -84,7 +85,7 @@ test_replacement_schema.py.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -119,6 +120,21 @@ def _raise_attendance(login_as, db: Session, event, attendance: int) -> EventCha
     return db.get(EventChangeRequest, uuid.UUID(response.json()["id"]))
 
 
+def _raise_later_start(login_as, db: Session, event) -> EventChangeRequest:
+    """Olivia asks, through 19.1's own endpoint, for the event to run an hour later: a period the
+    bookings made for its old one no longer cover (f7.2.4)."""
+    proposed = {
+        "starts_at": (event.starts_at + timedelta(hours=1)).isoformat(),
+        "ends_at": (event.ends_at + timedelta(hours=1)).isoformat(),
+    }
+    response = login_as(Users.ORGANISER).post(
+        f"/events/{event.id}/change-requests",
+        json={"field": "schedule", "proposed": proposed, "reason": "The keynote moved."},
+    )
+    assert response.status_code == 201, response.text
+    return db.get(EventChangeRequest, uuid.UUID(response.json()["id"]))
+
+
 def _approve_change(client, request: EventChangeRequest):
     """Approve ``request`` as the assigned coordinator, the test's rows committed first as
     test_decide_change_request.py does, so a refusal's rollback cannot undo them. Story 19.3 AC7:
@@ -134,13 +150,13 @@ def _booking(db: Session, booking_id: uuid.UUID) -> VenueBooking:
 
 @pytest.mark.story("12.6", ac=8)
 def test_a_change_that_unfits_a_flagged_original_releases_its_pending_replacement_too(login_as, db):
-    """The event's attendance outgrows an additional venue's booking: the original and the
-    replacement requested for it were booked for the same people, so both go, as 19.2 releases any
-    booking it unfits. Neither is "Replaced by" anything, and the audit and Venue Staff's notices
-    are 19.2's."""
+    """The event moves to a period an additional venue's booking no longer covers: the original
+    and the replacement requested for it were booked for the same period, so both go, as 19.2
+    releases any booking it unfits. Neither is "Replaced by" anything, and the audit and Venue
+    Staff's notices are 19.2's."""
     scene = make_scenario(db, additional=True)
     body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
-    request = _raise_attendance(login_as, db, scene.event, 80)
+    request = _raise_later_start(login_as, db, scene.event)
 
     approval = _approve_change(login_as(Users.COORDINATOR), request)
 
@@ -174,6 +190,28 @@ def test_a_change_that_unfits_a_flagged_original_releases_its_pending_replacemen
     released = [notice for notice in notices if notice.notification_type == "BOOKING_RELEASED"]
     assert {notice.related_entity_id for notice in released} == {original.id, replacement.id}
     assert not [notice for notice in notices if notice.notification_type == "BOOKING_REPLACED"]
+
+
+@pytest.mark.story("12.6", ac=8)
+def test_an_attendance_rise_keeps_a_flagged_original_and_its_pending_replacement(login_as, db):
+    """Fix f19.2.1: the event's attendance outgrowing what an additional venue was booked for
+    releases neither the original nor its pending replacement, so the replacement can still be
+    approved in its place and nothing is shown as replaced meanwhile."""
+    scene = make_scenario(db, additional=True)
+    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    request = _raise_attendance(login_as, db, scene.event, 80)
+
+    approval = _approve_change(login_as(Users.COORDINATOR), request)
+
+    assert approval.status_code == 200, approval.text
+    original, replacement = _booking(db, scene.original.id), _booking(db, uuid.UUID(body["id"]))
+    assert (original.status, replacement.status) == (
+        BookingStatus.APPROVED,
+        BookingStatus.PENDING,
+    )
+    assert column(db, original.id, "replaced_by_booking_id") is None
+    notices = notifications_of(db, Users.VENUE_STAFF.id, event_id=scene.event.id)
+    assert not [notice for notice in notices if notice.notification_type == "BOOKING_RELEASED"]
 
 
 def _raise_requirement_layout(login_as, db: Session, scene, layout_code: str) -> EventChangeRequest:
