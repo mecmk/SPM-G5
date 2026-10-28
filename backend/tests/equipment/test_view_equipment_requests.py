@@ -13,10 +13,11 @@ AC3 Tabs show Pending, Accepted and Declined requests. A decided request leaves 
 AC4 A request exactly equal to the available quantity shows no shortfall. Holds and reservations
     whose periods only touch the event's period at a boundary are not deducted.
 AC5 An item the coordinator removes, or any item on a cancelled or rejected event, disappears from
-    the queue. Story 6.2 AC15 replaces this for an item cancelled once it was sent: it stays,
-    under a Cancelled tab, and so does a declined one, under Declined
-    (backend/tests/cancellations/test_cancel_event.py). An item still open on a cancelled event -
-    one cancelled before 6.2 closed its items - still disappears.
+    the queue. Story 6.2 AC15 and fix f4.5.1 replace this for an item cancelled once it was sent,
+    with its event cancelled or rejected: it stays, under a Cancelled tab, and so does a declined
+    one, under Declined (backend/tests/cancellations/test_cancel_event.py,
+    backend/tests/events/test_reject_event.py). An item still open on a cancelled or rejected
+    event - one from before 6.2 or f4.5.1 closed its items - still disappears.
     An empty queue shows a message (tests/e2e/equipment-queue.spec.ts).
 AC6 Only Technical Support Staff can see the queue. Other roles are refused, including through
     the API.
