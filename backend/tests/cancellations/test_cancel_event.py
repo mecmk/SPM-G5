@@ -48,7 +48,8 @@ AC14 Venue Staff see the cancelled event's venue bookings under a read-only Canc
 AC15 Technical Support see the cancelled event's equipment requests that had been sent to them
      under a read-only Cancelled tab in their equipment queue, and under All. Requests never sent
      to them are not shown. No Accept or Decline is offered. This replaces 15.2 AC5 for cancelled
-     events; fix f4.5.1 does the same for rejected events (4.5 AC5).
+     events. Amended by CL-177 (fix f4.5.1): a rejected event's requests are kept the same way,
+     as 15.2 AC5 now says.
 AC16 A cancelled venue booking or equipment request shows when it was cancelled, alongside (not
      instead of) when it was approved. On the event page, the coordinator sees "This booking was
      cancelled with its event."

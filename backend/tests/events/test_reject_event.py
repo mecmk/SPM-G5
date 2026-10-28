@@ -4,9 +4,9 @@ AC1 A reason must be provided when rejecting.
 AC2 The event's status changes to rejected and it leaves the review queue.
 AC3 The reason and the deciding coordinator are visible to the organiser.
 AC4 A rejected request cannot be approved afterwards without a new submission.
-AC5 (Fix f4.5.1) Rejecting releases the event's equipment in the same transaction: every hold is
-    released, every open equipment request is closed as Cancelled at the decision time (a declined
-    one stays Declined), and Technical Support are told of the requests they had been sent. A
+AC5 (Fix f4.5.1) Rejecting an event releases its equipment, as cancelling one does (6.2): its
+    holds are released, its open equipment requests are closed as Cancelled, and Technical
+    Support are told of any request they had been sent. A declined request stays Declined, and a
     refused rejection releases nothing.
 
 Excluded, with reason:
