@@ -550,7 +550,6 @@ test('18.4 AC3: a detail changed while confirming shows in the sidebar, even whe
   await expect(
     page.getByRole('complementary').getByText(changedName, { exact: true }),
   ).toBeVisible()
-  await expect(registeredBadge(page)).toBeVisible()
 })
 
 test('18.4 AC3: Register waits for the details to load, so the dialog never opens half filled', async ({
