@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router'
 export const QUEUE_SEARCH_MAX_LENGTH = 100
 
 /** Story 13.3 AC7: the names a queue's view goes by in the page address. */
-export const QUEUE_VIEW_PARAMS = {
+const QUEUE_VIEW_PARAMS = {
   tab: 'status',
   search: 'search',
   order: 'order',
@@ -60,7 +60,7 @@ function oneOf<T extends string>(value: string | null, allowed: readonly T[]): T
  * not offer, a page that is not a whole number from 1 - is the queue's default instead, and a
  * search is cut to the longest one the queue takes (AC5), so a mangled address still opens a list.
  */
-export function readQueueView<TTab extends string, TOrder extends string>(
+function readQueueView<TTab extends string, TOrder extends string>(
   params: URLSearchParams,
   options: QueueViewOptions<TTab, TOrder>,
 ): QueueView<TTab, TOrder> {
@@ -75,7 +75,7 @@ export function readQueueView<TTab extends string, TOrder extends string>(
 
 /** The address query for `view`, holding only what differs from the queue's default view, so the
  * plain queue address is the view a queue opens on. A blank search is no search (AC5). */
-export function queueViewParams<TTab extends string, TOrder extends string>(
+function queueViewParams<TTab extends string, TOrder extends string>(
   view: QueueView<TTab, TOrder>,
   options: QueueViewOptions<TTab, TOrder>,
 ): URLSearchParams {
@@ -88,7 +88,7 @@ export function queueViewParams<TTab extends string, TOrder extends string>(
 }
 
 /** A queue page's view, as its address holds it. */
-export interface QueueViewState<TTab extends string, TOrder extends string> {
+interface QueueViewState<TTab extends string, TOrder extends string> {
   view: QueueView<TTab, TOrder>
   /** The view's address query, for a link that should lead back to this list. */
   query: string

@@ -41,6 +41,7 @@ import {
 } from '../shared/bookingStatus'
 import {
   CANCELLED_AT_LABEL,
+  CLEAR_SEARCH,
   formatDate,
   formatDateTime,
   formatTime,
@@ -371,7 +372,7 @@ export function BookingRequestsPage() {
             <EmptyState>
               No requests match your search.{' '}
               <button type="button" className="link" onClick={clearSearch}>
-                Clear search
+                {CLEAR_SEARCH}
               </button>
             </EmptyState>
           )}

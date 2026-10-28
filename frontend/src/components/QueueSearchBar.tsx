@@ -21,10 +21,8 @@ export interface QueueSearchBarProps<TOrder extends string> {
  * the box takes no more than the longest search the queue takes, and spaces around the text are no
  * change. AC3: an order is chosen from the queue's own list and goes into the address at once.
  *
- * Both show what was typed or chosen at once, while the address - which react-router updates in a
- * transition - catches up. A change the address gets from elsewhere (Clear search, Back) replaces
- * what the box shows; the address catching up with what was typed does not, so letters typed
- * meanwhile are kept.
+ * A search the page gets from elsewhere (Clear search, Back) replaces what the box shows; the page
+ * taking up what was typed does not, so a space typed after a word is kept.
  */
 export function QueueSearchBar<TOrder extends string>({
   search,
@@ -35,26 +33,16 @@ export function QueueSearchBar<TOrder extends string>({
   onOrder,
 }: QueueSearchBarProps<TOrder>) {
   const [typed, setTyped] = useState(search)
-  const [sent, setSent] = useState(search)
-  const [shownSearch, setShownSearch] = useState(search)
-  if (search !== shownSearch) {
-    setShownSearch(search)
-    if (search !== sent) setTyped(search)
-  }
-  const [shownOrder, setShownOrder] = useState(order)
-  const [lastOrder, setLastOrder] = useState(order)
-  if (order !== lastOrder) {
-    setLastOrder(order)
-    setShownOrder(order)
+  const [lastSearch, setLastSearch] = useState(search)
+  if (search !== lastSearch) {
+    setLastSearch(search)
+    if (search !== typed.trim()) setTyped(search)
   }
 
   useEffect(() => {
     const text = typed.trim()
     if (text === search.trim()) return undefined
-    const timer = setTimeout(() => {
-      setSent(text)
-      onSearch(text)
-    }, TYPING_PAUSE_MS)
+    const timer = setTimeout(() => onSearch(text), TYPING_PAUSE_MS)
     return () => clearTimeout(timer)
   }, [typed, search, onSearch])
 
@@ -65,7 +53,6 @@ export function QueueSearchBar<TOrder extends string>({
   function handleOrder(change: ChangeEvent<HTMLSelectElement>) {
     const chosen = orders.find((option) => option.key === change.target.value)
     if (chosen === undefined) return
-    setShownOrder(chosen.key)
     onOrder(chosen.key)
   }
 
@@ -83,7 +70,7 @@ export function QueueSearchBar<TOrder extends string>({
       </label>
       <label>
         Order by
-        <select value={shownOrder} onChange={handleOrder}>
+        <select value={order} onChange={handleOrder}>
           {orders.map((option) => (
             <option key={option.key} value={option.key}>
               {option.label}

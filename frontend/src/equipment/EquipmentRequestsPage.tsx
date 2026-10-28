@@ -18,7 +18,13 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import {
+  CANCELLED_AT_LABEL,
+  CLEAR_SEARCH,
+  NOT_RECORDED,
+  formatDateTime,
+  formatSchedule,
+} from '../shared/format'
 import {
   COMMON_QUEUE_ORDERS,
   DEFAULT_QUEUE_ORDER,
@@ -248,7 +254,7 @@ export function EquipmentRequestsPage() {
             <EmptyState>
               No equipment requests match your search.{' '}
               <button type="button" className="link" onClick={clearSearch}>
-                Clear search
+                {CLEAR_SEARCH}
               </button>
             </EmptyState>
           )}
