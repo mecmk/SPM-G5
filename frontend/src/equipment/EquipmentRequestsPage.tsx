@@ -16,11 +16,15 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import {
+  CANCELLED_AT_LABEL,
+  NOT_RECORDED,
+  formatDateTime,
+  formatSchedule,
+  shortReference,
+} from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
-
-const SHORT_ID_LENGTH = 8
 
 type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
@@ -195,9 +199,7 @@ export function EquipmentRequestsPage() {
                   <div className="item-card-header">
                     <div className="cluster">
                       <StatusBadge status={entry.status} />
-                      <span className="small muted mono">
-                        #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
-                      </span>
+                      <span className="small muted mono">{shortReference(entry.id)}</span>
                     </div>
                     <div className="item-card-capacity item-card-period">
                       <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>

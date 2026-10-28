@@ -4,6 +4,8 @@
  *     when.
  * AC3 an event with no changes shows "No changes yet"; a long value is shortened, with a way to
  *     expand it.
+ * AC1/AC4 an approved equipment change shows at once, without reloading the page, naming the kit
+ *     rather than its code and giving the change request's reference as its card shows it.
  * What is recorded for each save, the order, change request references, who may read the history
  * and the internal-notes filter (AC1, AC2, AC4-AC7) are covered by
  * backend/tests/events/test_event_change_history.py.
@@ -12,7 +14,15 @@
  * same event, and has the Lead assign it to Chloe before she corrects it.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, assignByLead, createAndSubmitRequest, signIn, uniqueName } from './support'
+import {
+  ACCOUNTS,
+  approvedEvent,
+  assignByLead,
+  changeRequests,
+  createAndSubmitRequest,
+  signIn,
+  uniqueName,
+} from './support'
 
 const LONG_DESCRIPTION =
   'Corrected: a two-part hands-on workshop, the morning on reading charts and the afternoon on ' +
@@ -65,4 +75,40 @@ test('7.4 AC1/AC3: the organiser sees no changes yet, then the coordinator’s c
   await description.getByRole('button', { name: 'Show more' }).click()
   await expect(description.getByText(LONG_DESCRIPTION)).toBeVisible()
   await expect(description.getByRole('button', { name: 'Show less' })).toBeVisible()
+})
+
+test('7.4 AC1/AC4: an approved equipment change shows by name at once, with its request’s reference', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const { eventId, coordinator } = await approvedEvent(page, 'Kit history')
+  const requests = changeRequests(page)
+  await requests.getByRole('button', { name: 'Request a change' }).click()
+  await requests.getByLabel('What to change').selectOption({ label: 'Equipment' })
+  await requests.getByRole('button', { name: 'Add equipment' }).click()
+  await requests.getByLabel('Item 1 type').selectOption({ label: 'Presentation laptop' })
+  await requests.getByLabel('Item 1 quantity').fill('1')
+  await requests.getByLabel('Reason for the change').fill('We need slides after all.')
+  await requests.getByRole('button', { name: 'Send change request' }).click()
+  await expect(requests.getByRole('listitem')).toContainText('Pending')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await page.goto(`/events/${eventId}`)
+  await expect(changeHistory(page).getByText('No changes yet')).toBeVisible()
+  const reference = await requests.getByText(/^#[0-9A-F]{8}$/).textContent()
+  await requests.getByRole('button', { name: 'Approve' }).click()
+  await page
+    .getByRole('dialog', { name: 'Approve this change?' })
+    .getByRole('button', { name: 'Approve' })
+    .click()
+  await expect(requests.getByRole('listitem')).toContainText('Approved')
+
+  const laptop = changeHistory(page)
+    .getByRole('listitem')
+    .filter({ hasText: 'Presentation laptop' })
+  await expect(laptop).toContainText('Not requested')
+  await expect(laptop).toContainText('×1')
+  await expect(laptop).toContainText(`from change request ${reference}`)
+  await expect(changeHistory(page).getByText(/LAPTOP/)).toHaveCount(0)
 })

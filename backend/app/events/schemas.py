@@ -630,6 +630,12 @@ class EquipmentLineOut(BaseModel):
         )
 
 
+def can_see_internal_notes(viewer: User) -> bool:
+    """Story 7.2 AC2: who may read an event's internal notes. Story 7.4 AC5/AC6: the same people
+    see the notes' change history, so both read this one rule."""
+    return role_has(viewer.role_code, Permission.EVENTS_REVIEW)
+
+
 class EventDetailOut(BaseModel):
     """AC1/AC4-AC6/AC8: everything recorded on a request, as the organiser and the reviewing
     coordinator both see it. No defaults (response schema).
@@ -694,7 +700,7 @@ class EventDetailOut(BaseModel):
     @classmethod
     def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
-        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
+        is_notes_visible = can_see_internal_notes(viewer)
         return cls(
             id=event.id,
             name=event.name,
@@ -704,7 +710,7 @@ class EventDetailOut(BaseModel):
             contact_name=event.contact_name,
             contact_email=event.contact_email,
             contact_phone=event.contact_phone,
-            internal_notes=event.internal_notes if can_see_internal_notes else None,
+            internal_notes=event.internal_notes if is_notes_visible else None,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             expected_attendance=event.expected_attendance,
