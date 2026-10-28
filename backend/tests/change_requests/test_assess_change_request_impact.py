@@ -507,8 +507,10 @@ def test_a_change_the_approval_would_refuse_says_why(login_as, db: Session):
 
     impact = _impact(login_as, request)
 
-    assert impact["refused_because"] is not None
-    assert "Main hall" in impact["refused_because"]
+    assert impact["refused_because"] == (
+        "The expected attendance cannot be lower than 60 while Main hall needs room for 60"
+        " people. Approve a venue requirements change that lowers it first."
+    )
     assert impact["venue_bookings"] == []
 
 

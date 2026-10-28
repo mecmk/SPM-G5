@@ -120,6 +120,12 @@ _AWAITING_SAFETY_CHECK_REFUSAL = (
 _CLOSED_BEFORE_SETUP_REFUSAL = (
     "Change requests for this event closed 24 hours before its set-up time."
 )
+# Fix f19.1.2: an attendance below a venue requirement's number of people names the requirement
+# that sets the minimum, the minimum itself, and what to change first.
+_ATTENDANCE_BELOW_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. Ask for a venue requirements change that lowers it first."
+)
 _CURRENT_EMAIL = "olivia.events@acme.example"
 _CURRENT_PHONE = "+65 6111 2233"
 
@@ -633,9 +639,54 @@ def test_proposed_attendance_leaves_room_for_every_venue_requirement(
     assert response.status_code == expected_status, response.text
     assert len(_change_requests(db, event.id)) == (1 if expected_status == 201 else 0)
     if expected_status == 422:
-        assert response.json()["detail"] == (
-            "Main hall needs room for more people than the new expected attendance."
+        assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+            minimum=80, requirement="Main hall"
         )
+
+
+@pytest.mark.story("19.1", ac=4)
+def test_the_refusal_names_the_requirement_needing_the_most_people(organiser_client, db: Session):
+    """Fix f19.1.2: the minimum is the most people any requirement needs, not the first one found
+    over the new attendance - Hall comes first but Breakout sets the minimum."""
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=100)
+    make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=150)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 90)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Breakout"
+    )
+
+
+@pytest.mark.story("19.1", ac=4)
+def test_two_requirements_needing_the_most_people_name_the_first(organiser_client, db: Session):
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=150)
+    make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=150)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 90)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+
+
+@pytest.mark.story("19.1", ac=4)
+def test_an_unnamed_limiting_requirement_is_named_by_its_position(organiser_client, db: Session):
+    """2.7's own rule names a requirement without a name by where it sits on the form."""
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=50)
+    make_venue_requirement(db, event.id, position=1, name=None, capacity=151)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Venue requirement 2"
+    )
 
 
 def _over_attendance(event: Event) -> list:

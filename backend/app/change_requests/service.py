@@ -136,6 +136,11 @@ NOT_RELATED_PARTY_MESSAGE = (
     "Only the organiser and the coordinator assigned to this event may view its change requests."
 )
 NOT_PENDING_MESSAGE = "This change request is {status}, so it can no longer be withdrawn."
+# Fix f19.1.2: 2.7 AC6 refusing a new attendance as it is asked for, told to the organiser.
+ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. Ask for a venue requirements change that lowers it first."
+)
 
 _REQUESTED_TITLE = "Change requested for {event}"
 _REQUESTED_MESSAGE = '{organiser} asked to change the {label}: "{reason}"'
@@ -191,6 +196,18 @@ class UnchangedValue(InvalidEventRequest):
 
     def __init__(self, field: str) -> None:
         super().__init__(UNCHANGED_VALUE_MESSAGE.format(label=FIELD_LABELS[field]))
+
+
+class AttendanceNeedsRequirementsChange(InvalidEventRequest):
+    """AC4, fix f19.1.2: a new attendance below what a venue requirement needs room for (2.7
+    AC6), naming the requirement that sets the minimum and the minimum, for the organiser."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE.format(
+                requirement=requirement, minimum=minimum
+            )
+        )
 
 
 class NotRelatedParty(PermissionError):
@@ -305,6 +322,15 @@ def _without_ids(field: str, value: Any) -> Any:
     return [{key: item[key] for key in item if key != "id"} for item in value]
 
 
+def _check_attendance_request(event: Event, attendance: int) -> None:
+    """AC4: a new attendance leaves room for every venue requirement (2.7 AC6), as 19.2 checks it
+    on approval; fix f19.1.2 tells the organiser the minimum and what to change first."""
+    try:
+        events_service.check_proposed_attendance(event, attendance)
+    except events_service.AttendanceBelowRequirement as exc:
+        raise AttendanceNeedsRequirementsChange(exc.requirement, exc.minimum) from exc
+
+
 def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> tuple[Any, Any]:
     """AC3/AC4: check the proposed value by the creation rules for its field, then return the
     field's current value and the proposed one, both canonical."""
@@ -314,7 +340,7 @@ def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> t
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
         return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
-        events_service.check_proposed_attendance(event, data.proposed)
+        _check_attendance_request(event, data.proposed)
         return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)

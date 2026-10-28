@@ -81,6 +81,12 @@ _CHANGE_REQUEST_NOT_FOUND = "Change request not found."
 _MAX_REASON = 2000
 # Story 19.3 AC7: sent with an approval whose impact could not be read, so its own refusal answers.
 _ANY_FINGERPRINT = "not-assessed"
+# Fix f19.1.2: an approval that would leave a venue requirement needing more people than the new
+# attendance names the requirement that sets the minimum, the minimum itself, and what comes first.
+_ATTENDANCE_BELOW_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. Approve a venue requirements change that lowers it first."
+)
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -599,8 +605,8 @@ def test_approval_refused_by_a_creation_rule_changes_nothing(coordinator_client,
     response = _approve(coordinator_client, request)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Main hall needs room for more people than the new expected attendance."
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Main hall"
     )
     assert _attendance(db, event.id) == 200
     _assert_undecided(db, request)
@@ -618,8 +624,8 @@ def test_an_unnamed_requirement_is_named_by_its_position(coordinator_client, db:
     response = _approve(coordinator_client, request)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Venue requirement 2 needs room for more people than the new expected attendance."
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Venue requirement 2"
     )
 
 

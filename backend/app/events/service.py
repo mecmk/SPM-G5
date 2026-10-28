@@ -100,8 +100,10 @@ REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
     "{requirement} cannot need room for more people than the expected attendance."
 )
 # Story 19.2: the same rule, said of a change to the attendance rather than of the form's field.
+# Fix f19.1.2: it names the requirement that sets the minimum, the minimum, and what comes first.
 ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
-    "{requirement} needs room for more people than the new expected attendance."
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. Approve a venue requirements change that lowers it first."
 )
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.
@@ -364,10 +366,15 @@ class MissingVenueRequirement(InvalidEventRequest):
 
 class AttendanceBelowRequirement(InvalidEventRequest):
     """Story 19.2 AC2: a proposed attendance smaller than a venue requirement needs room for
-    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance."""
+    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance.
+    Fix f19.1.2: ``requirement`` is the one needing the most people, and ``minimum`` how many."""
 
-    def __init__(self, requirement: str) -> None:
-        super().__init__(ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement))
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement, minimum=minimum)
+        )
+        self.requirement = requirement
+        self.minimum = minimum
 
 
 class InvalidVenueRequirement(InvalidEventRequest):
@@ -2718,11 +2725,19 @@ def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> E
 def check_proposed_attendance(event: Event, attendance: int) -> None:
     """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
     room for more people than the event's expected attendance - judged with the proposed
-    figure against the requirements as they stand. Also checked when the request is raised."""
+    figure against the requirements as they stand. Also checked when the request is raised.
+    Fix f19.1.2: the requirement needing the most people sets the minimum, the first of them
+    on the form when two need the same."""
     ordered = sorted(event.venue_requirements, key=lambda item: item.position)
-    for index, requirement in enumerate(ordered):
-        if requirement.capacity is not None and requirement.capacity > attendance:
-            raise AttendanceBelowRequirement(_describe_requirement(requirement.name, index))
+    sized = [(index, item) for index, item in enumerate(ordered) if item.capacity is not None]
+    if not sized:
+        return
+    # max() keeps the first of equal values, so a tie names the one higher on the form.
+    index, limiting = max(sized, key=lambda pair: pair[1].capacity)
+    if limiting.capacity > attendance:
+        raise AttendanceBelowRequirement(
+            _describe_requirement(limiting.name, index), limiting.capacity
+        )
 
 
 def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
