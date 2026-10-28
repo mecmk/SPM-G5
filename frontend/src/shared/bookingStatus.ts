@@ -1,4 +1,5 @@
 import type { Booking, BookingStatus, BookingStatusCounts } from '../api/bookings'
+import { formatTime } from './format'
 
 export type BookingStatusTabKey =
   'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED'
@@ -47,6 +48,46 @@ export function replacementAlreadyRequestedLine(venueName: string): string {
 /** Story 12.6 AC1/AC9: what the catalogue says for an address that names a booking which is not
  *  an approved, marked booking any more, so it replaces nothing. */
 export const NO_LONGER_REPLACEABLE_LINE = 'That booking is no longer waiting for a replacement.'
+
+/** Story 21.3 AC2: how the event page and Venue Staff's pages say a booking the Safety Officer's
+ * finding named was released, and what the event page adds to that. */
+export const RELEASED_BY_SAFETY_REVIEW_LABEL = 'Released by the safety review'
+export const RELEASED_BY_SAFETY_REVIEW_MESSAGE =
+  'The Safety Officer released this booking, so the venue is free for other events.'
+
+/** Story 21.3 AC2: whether the safety review released this booking. */
+export function isReleasedBySafetyReview(booking: Pick<Booking, 'release_cause'>): boolean {
+  return booking.release_cause === 'SAFETY_REVIEW'
+}
+
+/** Story 21.3 AC2: why a closed booking was closed, as its page words it - the finding's required
+ * change for a booking the safety review released, otherwise the decision's own reason. */
+export function closingReason(
+  booking: Pick<Booking, 'decision_reason' | 'release_cause' | 'release_reason'>,
+): string | null {
+  return isReleasedBySafetyReview(booking) ? booking.release_reason : booking.decision_reason
+}
+
+/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
+function formatMinutesDuration(minutes: number): string {
+  if (minutes === 0) return 'None'
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`)
+  if (remainder > 0) parts.push(`${remainder} min`)
+  return parts.join(' ')
+}
+
+/** Story 12.1 AC1/AC17, and story 21.3 AC1: the line that says what a booking's period is made of -
+ * "Setup: 30 min · Event: 09:00–17:00 · Teardown: None" - on the event page's booking card and
+ * under each booking the Safety Officer may release. */
+export function turnaroundLine(
+  booking: Pick<Booking, 'setup_minutes' | 'teardown_minutes' | 'starts_at' | 'ends_at'>,
+): string {
+  const event = `${formatTime(booking.starts_at)}–${formatTime(booking.ends_at)}`
+  return `Setup: ${formatMinutesDuration(booking.setup_minutes)} · Event: ${event} · Teardown: ${formatMinutesDuration(booking.teardown_minutes)}`
+}
 
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */
 export const EXPIRED_BOOKING_STATUS: BookingStatus = 'EXPIRED'

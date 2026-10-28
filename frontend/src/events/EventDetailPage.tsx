@@ -47,15 +47,20 @@ import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
   closedAt,
+  closingReason,
   FIND_ANOTHER_LABEL,
   FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
+  isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  RELEASED_BY_SAFETY_REVIEW_LABEL,
+  RELEASED_BY_SAFETY_REVIEW_MESSAGE,
   replacedByLine,
   replacementRequestedLine,
   replacesLine,
+  turnaroundLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -158,6 +163,7 @@ const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
  * booking an earlier change cancelled (19.2) keeps its own sentence. */
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
   if (
     booking.status === 'CANCELLED' &&
     event.cancelled_at !== null &&
@@ -179,17 +185,6 @@ function describeFacility(facility: RequiredFacility): string {
   const quantity = facility.quantity === null ? '' : ` ×${facility.quantity}`
   const notes = facility.notes === null ? '' : ` (${facility.notes})`
   return `${facility.name}${quantity}${notes}`
-}
-
-/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
-function formatMinutesDuration(minutes: number): string {
-  if (minutes === 0) return 'None'
-  const hours = Math.floor(minutes / 60)
-  const remainder = minutes % 60
-  const parts: string[] = []
-  if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`)
-  if (remainder > 0) parts.push(`${remainder} min`)
-  return parts.join(' ')
 }
 
 /**
@@ -1151,11 +1146,7 @@ export function EventDetailPage() {
                           {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
                         </span>
                       </div>
-                      <p className="small muted">
-                        Setup: {formatMinutesDuration(booking.setup_minutes)} · Event:{' '}
-                        {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)} · Teardown:{' '}
-                        {formatMinutesDuration(booking.teardown_minutes)}
-                      </p>
+                      <p className="small muted">{turnaroundLine(booking)}</p>
                     </div>
                   </div>
 
@@ -1168,6 +1159,12 @@ export function EventDetailPage() {
                       {booking.replaces_venue_name !== null && (
                         <p>
                           <strong>{replacesLine(booking.replaces_venue_name)}</strong>
+                        </p>
+                      )}
+                      {/* Story 21.3 AC2: a booking the Safety Officer's finding named. */}
+                      {isReleasedBySafetyReview(booking) && (
+                        <p>
+                          <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
                         </p>
                       )}
                       {booking.replaced_by_venue_name !== null && (
@@ -1242,12 +1239,12 @@ export function EventDetailPage() {
                       )}
                       {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
                           <venue>" above, which is also its reason, so it is not said twice. */}
-                      {booking.decision_reason !== null &&
+                      {closingReason(booking) !== null &&
                         booking.replaced_by_venue_name === null && (
                           <p>
                             <span className="fact-label">{outcomeLabels.why}</span>
                             <br />
-                            {booking.decision_reason}
+                            {closingReason(booking)}
                           </p>
                         )}
                       {/* Story 11.1 AC6: why a venue that did not suit was requested. */}

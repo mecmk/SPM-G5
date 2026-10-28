@@ -27,6 +27,9 @@ import {
   BOOKING_STATUS_TABS,
   APPROVED_BOOKING_STATUS,
   closedAt,
+  closingReason,
+  isReleasedBySafetyReview,
+  RELEASED_BY_SAFETY_REVIEW_LABEL,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
@@ -396,10 +399,15 @@ export function BookingRequestsPage() {
                     </div>
                   )}
 
-                  {entry.decision_reason !== null && (
+                  {closingReason(entry) !== null && (
                     <div className="subtle-block">
+                      {isReleasedBySafetyReview(entry) && (
+                        <p>
+                          <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
+                        </p>
+                      )}
                       <p className="fact-label">{bookingOutcomeLabels(entry).why}</p>
-                      <p>{entry.decision_reason}</p>
+                      <p>{closingReason(entry)}</p>
                     </div>
                   )}
 

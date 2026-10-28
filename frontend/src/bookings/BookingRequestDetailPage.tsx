@@ -21,10 +21,13 @@ import { LoadingState } from '../layout/LoadingState'
 import { BOOKING_REQUESTS_PATH } from '../routes'
 import {
   bookingOutcomeLabels,
+  closingReason,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRES_LABEL,
+  isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  RELEASED_BY_SAFETY_REVIEW_LABEL,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -408,11 +411,17 @@ export function BookingRequestDetailPage() {
         </p>
       )}
 
-      {booking.decision_reason !== null && (
+      {closingReason(booking) !== null && (
         <p className="subtle-block">
+          {isReleasedBySafetyReview(booking) && (
+            <>
+              <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
+              <br />
+            </>
+          )}
           <span className="fact-label">{bookingOutcomeLabels(booking).why}</span>
           <br />
-          {booking.decision_reason}
+          {closingReason(booking)}
         </p>
       )}
 
