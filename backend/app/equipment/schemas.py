@@ -95,6 +95,19 @@ class EquipmentQueueStatus(StrEnum):
     CANCELLED = EquipmentRequestStatus.CANCELLED
 
 
+class EquipmentQueueOrder(StrEnum):
+    """Story 13.3 AC3: the orders the equipment queue offers - its event's date, soonest (the
+    default) or latest first; when it was sent to Technical Support, oldest or newest first; its
+    event's name and its equipment type's name, A to Z. AC5: any other is a 422."""
+
+    DATE = "date"
+    DATE_DESC = "date_desc"
+    REQUESTED = "requested"
+    REQUESTED_DESC = "requested_desc"
+    EVENT_NAME = "event_name"
+    EQUIPMENT_TYPE = "equipment_type"
+
+
 class EquipmentDecisionOutcome(StrEnum):
     """Story 16.1 AC1/AC2: what Technical Support may decide. Anything else is a 422."""
 
