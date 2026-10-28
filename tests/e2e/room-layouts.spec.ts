@@ -6,6 +6,7 @@
  *     filter opens.
  * AC3 a renamed layout shows its new name wherever it appears, such as on a venue's page.
  * AC4 Venue Staff delete a layout nothing uses, after confirming.
+ * AC7 the description box shows its 500-character limit and stops taking text there.
  * AC8 a layout in use cannot be deleted: the dialog says where it is used.
  * AC9 other staff open the page and see the list, without Add, Edit or Delete.
  * AC12 a layout deleted while another Venue Staff member is changing it: their save is refused,
@@ -126,6 +127,26 @@ test('8.6 AC4: Venue Staff delete a layout nothing uses, after confirming', asyn
 
   await expect(dialog).toBeHidden()
   await expect(layoutEntry(page, name)).toHaveCount(0)
+})
+
+test('8.6 AC7: the description box shows its 500-character limit and stops taking text there', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await openRoomLayouts(page)
+  await page.getByRole('button', { name: 'Add layout' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add a room layout' })
+  const description = dialog.getByLabel('Description')
+
+  await expect(dialog.getByText('0 of 500 characters')).toBeVisible()
+  await expect(description).toHaveAccessibleDescription('0 of 500 characters')
+  await description.fill('Round tables facing a stage.')
+  await expect(dialog.getByText('28 of 500 characters')).toBeVisible()
+
+  // Pasting more than the limit keeps the first 500 characters.
+  await description.fill('x'.repeat(501))
+  await expect(description).toHaveValue('x'.repeat(500))
+  await expect(dialog.getByText('500 of 500 characters')).toBeVisible()
 })
 
 test('8.6 AC8: deleting a layout in use is refused, and the dialog says where it is used', async ({

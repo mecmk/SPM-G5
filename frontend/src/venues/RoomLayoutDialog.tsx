@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ApiError, formatApiError } from '../api/client'
 import {
   addRoomLayout,
+  ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH,
   updateRoomLayout,
   type RoomLayout,
   type RoomLayoutInput,
@@ -22,14 +23,16 @@ export interface RoomLayoutDialogProps {
 /**
  * Story 8.6 AC2/AC3: Venue Staff add a room layout, or change a layout's name or description. The
  * server judges both (AC5-AC7) and refuses a name another layout has (AC6, AC10); its sentence is
- * shown here and nothing typed is lost. AC12: a layout deleted while this dialog was open is
- * refused for good, so only Close is left.
+ * shown here and nothing typed is lost. AC7: the description box stops taking text at its limit,
+ * and the count under it shows how much of the limit is used. AC12: a layout deleted while this
+ * dialog was open is refused for good, so only Close is left.
  */
 export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayoutDialogProps) {
   const [input, setInput] = useState<RoomLayoutInput>({
     name: layout?.name ?? '',
     description: layout?.description ?? '',
   })
+  const descriptionCountId = useId()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isGone, setIsGone] = useState(false)
@@ -79,10 +82,15 @@ export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayo
         Description
         <textarea
           rows={3}
+          maxLength={ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH}
+          aria-describedby={descriptionCountId}
           value={input.description}
           onChange={(e) => setInput({ ...input, description: e.target.value })}
         />
       </label>
+      <span id={descriptionCountId} className="small muted">
+        {input.description.length} of {ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH} characters
+      </span>
     </ConfirmDialog>
   )
 }

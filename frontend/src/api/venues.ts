@@ -193,6 +193,10 @@ export interface RoomLayoutInput {
   description: string
 }
 
+/** Story 8.6 AC7: the most characters of a layout's description, as the backend's
+ *  ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH. */
+export const ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH = 500
+
 /** Story 8.6 AC1: every room layout, the standard ones first, then the others from A to Z. */
 export function listRoomLayouts(): Promise<RoomLayout[]> {
   return api<RoomLayout[]>('/venues/layouts')
