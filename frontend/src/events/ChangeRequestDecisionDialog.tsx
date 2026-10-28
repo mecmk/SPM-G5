@@ -19,11 +19,13 @@ import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestImpact, IMPACT_LOADING_LABEL } from './ChangeRequestImpact'
 import { FIELD_LABELS } from './changeRequestValues'
 
-/** Story 19.2 AC5: what approving each field may release, said before it is applied. */
+/** Story 19.2 AC5: what approving each field may release, said before it is applied. Fix f19.2.1:
+ *  an attendance change releases no booking, so the coordinator checks the room themselves. */
 const RELEASE_NOTES: Record<ChangeRequestField, string> = {
   schedule:
     'Venue bookings that no longer cover the new dates are released, and the equipment is held again for them.',
-  expected_attendance: 'Venue bookings made for fewer people than the new attendance are released.',
+  expected_attendance:
+    'Venue bookings are kept as they are. Check that the venues booked still hold everyone between them, and request an additional venue from the event page if they do not.',
   venue_requirements:
     'Bookings of venue requirements that are removed, or that no longer fit what was booked, are released.',
   equipment:

@@ -69,6 +69,16 @@ def booked_capacity(booking: VenueBooking) -> int:
     return booking.venue.capacity if layout_capacity is None else layout_capacity
 
 
+def people_to_hold(event: Event, booking: VenueBooking) -> int:
+    """AC4: what the venue must hold - a requirement's booking its own number (2.7), an additional
+    venue the event's attendance now (12.5). Fix f19.2.1 (CL-176): an approved change can raise the
+    attendance past what an additional venue was booked for and keep the booking."""
+    if booking.venue_requirement_id is not None:
+        return booking.expected_attendance
+    assert event.expected_attendance is not None
+    return event.expected_attendance
+
+
 class SafetyVenueOut(BaseModel):
     """AC3: one approved venue with its full record (story 8.2), nulls passed through for AC5's
     "Not recorded". AC4: ``over_capacity`` when the booking's ``people_to_hold`` (what this room
@@ -194,8 +204,8 @@ class SafetyCheckDetail(BaseModel):
                         else None
                     ),
                     capacity=booked_capacity(booking),
-                    people_to_hold=booking.expected_attendance,
-                    over_capacity=booking.expected_attendance > booked_capacity(booking),
+                    people_to_hold=people_to_hold(event, booking),
+                    over_capacity=people_to_hold(event, booking) > booked_capacity(booking),
                 )
                 for booking in approved_bookings
             ],
