@@ -92,7 +92,7 @@ from sqlalchemy.orm import Session, object_session
 
 from app.auth.models import User
 from app.bookings import service
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.change_requests.models import EventChangeRequest
 from tests.support.change_requests import approve_as_seen
 from tests.support.factories import make_venue
@@ -242,6 +242,7 @@ def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_
         db,
         _booking(db, scene.original.id),
         actor=chloe,
+        cause=ReleaseCause.CHANGE_APPROVED,
         because="an approved change to the event's expected attendance no longer fits it",
         details={"change": "expected attendance"},
         at=datetime.now(UTC),
@@ -277,6 +278,7 @@ def test_approving_the_replacement_of_an_original_released_by_a_change_still_wor
         db,
         _booking(db, scene.original.id),
         actor=chloe,
+        cause=ReleaseCause.CHANGE_APPROVED,
         because="an approved change to the event's expected attendance no longer fits it",
         details={"change": "expected attendance"},
         at=datetime.now(UTC),

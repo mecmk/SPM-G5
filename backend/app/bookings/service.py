@@ -656,7 +656,7 @@ def release_booking(
     booking: VenueBooking,
     *,
     actor: User,
-    cause: str = ReleaseCause.CHANGE_APPROVED,
+    cause: str,
     reason: str | None = None,
     because: str | None = None,
     details: dict[str, str] | None = None,
@@ -670,10 +670,10 @@ def release_booking(
     the caller commits.
 
     Story 21.3: ``cause`` (``ReleaseCause``) says which path released it, and with ``actor`` and
-    ``reason`` it is recorded on the booking beside the status. The default is the cause of the
-    call this function began as (19.2's); every path names its own: 6.2 EVENT_CANCELLED, 12.6
-    REPLACED, 21.3 SAFETY_REVIEW, which takes ``reason`` (the finding's required change) for its
-    notice and its record instead of ``because``.
+    ``reason`` it is recorded on the booking beside the status. Every path names its own, with no
+    default: 6.2 EVENT_CANCELLED, 19.2 CHANGE_APPROVED, 12.6 REPLACED, 21.3 SAFETY_REVIEW, which
+    takes ``reason`` (the finding's required change) for its notice and its record instead of
+    ``because``.
 
     Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2: its
     event was cancelled. Either way Venue Staff are told ``because``, the clause that ends their
