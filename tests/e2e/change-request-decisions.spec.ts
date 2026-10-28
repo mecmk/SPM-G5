@@ -5,6 +5,8 @@
  *     the current and proposed value, the reason, who asked and when - and, under its other tabs,
  *     the requests already decided or withdrawn (team request, 16 Oct 2026).
  * AC2 approving a change applies it: the event shows the new value and the request reads Approved.
+ *     Fix f19.1.2: an attendance change raised beside the venue requirements change that makes room
+ *     for it says to approve that first, until it is.
  * AC3 rejecting takes a reason, leaves the event as it was, and the organiser reads the reason.
  * AC4 a blank or spaces-only rejection reason is not sent (the client-side half; the server's
  *     refusal is a backend case).
@@ -88,6 +90,57 @@ test('19.2 AC1: the coordinator sees a pending change in their queue with what w
   await entry.getByRole('link', { name: 'View event →' }).click()
   await page.getByRole('link', { name: '← Change requests' }).click()
   await expect(page).toHaveURL(QUEUE_PATH)
+})
+
+test('19.2 AC2: an attendance change waiting on a venue requirements change says to approve that first', async ({
+  page,
+}) => {
+  // Four sign-ins (organiser, coordinator, coordinator, organiser) and two raised requests.
+  test.setTimeout(120_000)
+  const { eventId, coordinator } = await approvedEvent(page, 'Wait on requirements')
+  const section = changeRequests(page)
+  // The fresh event is for 60, its Main venue for 60: Olivia asks for 40 of both together.
+  await section.getByRole('button', { name: 'Request a change' }).click()
+  await section.getByLabel('What to change').selectOption({ label: 'Venue requirements' })
+  await section.getByLabel('Requirement 1 number of people').fill('40')
+  await section.getByLabel('Reason for the change').fill(CHANGE_REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  const requirements = section
+    .getByRole('listitem')
+    .filter({ hasText: 'Changes to venue requirements' })
+  await expect(requirements).toContainText('Pending')
+  await section.getByRole('button', { name: 'Request a change' }).click()
+  await section.getByLabel('What to change').selectOption({ label: 'Expected attendance' })
+  await section.getByLabel('New expected attendance').fill('40')
+  await section.getByLabel('Reason for the change').fill(CHANGE_REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  const attendance = section
+    .getByRole('listitem')
+    .filter({ hasText: 'Changes to expected attendance' })
+  await expect(attendance).toContainText('Pending')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await page.goto(`/events/${eventId}`)
+  const waiting = attendance.getByText(
+    'Main venue needs room for 60 people until the venue requirements change is approved, so approve that first.',
+  )
+  await expect(waiting).toBeVisible()
+
+  await requirements.getByRole('button', { name: 'Approve' }).click()
+  await page
+    .getByRole('dialog', { name: 'Approve this change?' })
+    .getByRole('button', { name: 'Approve' })
+    .click()
+  await expect(requirements).toContainText('Approved')
+  await expect(waiting).toHaveCount(0)
+
+  await attendance.getByRole('button', { name: 'Approve' }).click()
+  await page
+    .getByRole('dialog', { name: 'Approve this change?' })
+    .getByRole('button', { name: 'Approve' })
+    .click()
+  await expect(attendance).toContainText('Approved')
 })
 
 test('19.2 AC2: the coordinator approves an attendance change and the event takes it', async ({

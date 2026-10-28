@@ -110,6 +110,38 @@ function findAttendanceMinimum(requirements: SizedRequirement[]): AttendanceMini
   return found
 }
 
+/** Fix f19.1.2 (Q80): the venue requirements change waiting for a decision that can still be
+ *  approved - not out of date (19.2 AC7) - if there is one. */
+function findWaitingRequirementsChange(requests: ChangeRequest[]): ChangeRequest | undefined {
+  return requests.find(
+    (request) =>
+      request.field === 'venue_requirements' &&
+      request.status === 'PENDING' &&
+      !request.is_out_of_date,
+  )
+}
+
+/**
+ * Fix f19.1.2 (19.2 AC2, Q81): why a pending attendance change cannot be approved yet - a venue
+ * requirement still needs room for more people than it asks for - and what to do: approve the
+ * waiting venue requirements change first, or wait for one that lowers it. Null when the change
+ * is not a pending attendance change, or nothing stands in its way. The server refuses the
+ * approval either way; this tells the coordinator before they try.
+ */
+export function describeAttendanceWait(
+  request: ChangeRequest,
+  requirements: SizedRequirement[],
+  requests: ChangeRequest[],
+): string | null {
+  if (request.field !== 'expected_attendance' || request.status !== 'PENDING') return null
+  const current = findAttendanceMinimum(requirements)
+  if (current === null || (request.proposed_value as number) >= current.minimum) return null
+  const needs = `${current.requirement} needs room for ${current.minimum} people`
+  return findWaitingRequirementsChange(requests) === undefined
+    ? `${needs}, so this cannot be approved until a venue requirements change lowers it.`
+    : `${needs} until the venue requirements change is approved, so approve that first.`
+}
+
 /**
  * Fix f19.1.2 (19.1 AC4, Q80): what the change form says beneath the new attendance - the lowest
  * the event's venue requirements allow and the one that sets it, and, when a venue requirements
@@ -123,12 +155,7 @@ export function describeAttendanceMinimum(
   const current = findAttendanceMinimum(requirements)
   if (current === null) return null
   const hint = `At least ${current.minimum}: ${current.requirement} needs room for ${current.minimum} people.`
-  const pending = requests.find(
-    (request) =>
-      request.field === 'venue_requirements' &&
-      request.status === 'PENDING' &&
-      !request.is_out_of_date,
-  )
+  const pending = findWaitingRequirementsChange(requests)
   const proposed =
     pending === undefined
       ? null

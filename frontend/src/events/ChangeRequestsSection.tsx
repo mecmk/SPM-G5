@@ -31,6 +31,7 @@ import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
 import {
   changeTitle,
   describeAttendanceMinimum,
+  describeAttendanceWait,
   FIELD_LABELS,
   OUT_OF_DATE_NOTE,
   STATUS_LABELS,
@@ -186,6 +187,9 @@ interface OpenDecision {
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
  * rejection its reason, to the organiser as well.
+ *
+ * Fix f19.1.2 (Q81): a pending attendance change that a venue requirement still holds back tells
+ * the coordinator so, and to approve the waiting venue requirements change first.
  *
  * Story 19.3 AC1/AC6: the assigned coordinator alone can show, on each pending request, what
  * approving it would affect.
@@ -523,6 +527,11 @@ export function ChangeRequestsSection({
             const isPending = request.status === 'PENDING'
             const canDecideThis = canDecide && isPending
             const isOwnRequest = canWithdraw && request.requested_by_id === event.organiser_id
+            // Fix f19.1.2: an attendance change the venue requirements still hold back says so.
+            const waitNote =
+              canDecideThis && !request.is_out_of_date
+                ? describeAttendanceWait(request, event.venue_requirements, requests)
+                : null
             return (
               <li key={request.id} className="card card-tight stack">
                 <div className="item-card-header">
@@ -591,6 +600,8 @@ export function ChangeRequestsSection({
                 {canDecideThis && request.is_out_of_date && (
                   <p className="warning">{OUT_OF_DATE_NOTE}</p>
                 )}
+
+                {waitNote !== null && <p className="warning">{waitNote}</p>}
 
                 {canDecideThis && !request.is_out_of_date && (
                   <ChangeRequestImpactToggle request={request} />
