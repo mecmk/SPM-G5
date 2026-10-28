@@ -23,9 +23,6 @@ Decisions agreed 19 Oct 2026 (CL-152 to CL-154), beyond the ACs' wording:
   checked against the venues in use at each moment, each venue counted once in its booked layout
   (the layout's capacity where the venue records one, as story 11.1 judges it). Attendance one
   above it is flagged.
-* Fix f19.2.1: the event's attendance outgrowing what a booking was made for - an additional
-  venue, or a requirement with no number of its own - cancels nothing, so that booking is kept
-  and counts towards what the venues hold. A requirement's own number still does.
 * Registrations are counted, never named. Lowering the attendance below the count, and changing
   the dates, are flagged; nothing is written to a registration and no attendee is told.
 * For a booking the change cancels, the same venue is checked for the period a replacement would
@@ -40,6 +37,11 @@ Decisions agreed 19 Oct 2026 (CL-152 to CL-154), beyond the ACs' wording:
   fingerprint of the assessment the coordinator saw; any change to it refuses the approval, with
   nothing applied, until the new one is reviewed. Only the assigned coordinator may see the
   assessment, enforced on the backend.
+
+Fix f19.2.1 (CL-176, replacing CL-141 (2)):
+* The event's attendance outgrowing what a booking was made for - an additional venue, or a
+  requirement with no number of its own - cancels nothing, so that booking is kept and counts
+  towards what the venues hold. A requirement's own number still does.
 
 Excluded, with reason:
 * How the assessment is shown, and the approval dialog showing an updated assessment before the

@@ -18,11 +18,6 @@ Decisions agreed 16 Oct 2026, beyond the ACs' wording:
   older proposal without ids is matched by name (a requirement) or type (an item).
 * A venue booking the approved change no longer fits (f7.2.4's fit rule) is cancelled, and every
   active Venue Staff member is told; a booking that still fits is left exactly as it is.
-* Fix f19.2.1 (Week 2 clarifications, CL-153): the event's attendance outgrowing what a booking was
-  made for - an additional venue, or a requirement with no number of its own - cancels nothing.
-  Whether the venues still in use hold the new attendance between them is 19.3's warning. A
-  requirement's own number, its times and layout, its removal, and new dates an additional venue
-  no longer covers still cancel the booking.
 * Changed or added equipment is held again if stock allows, else flagged Unavailable, and goes
   back to Requested for the coordinator to resubmit; removed equipment releases its hold, and
   Technical Support is told of any item they had pending or accepted that is withdrawn. A date
@@ -34,6 +29,13 @@ Decisions agreed 16 Oct 2026, beyond the ACs' wording:
   lets the event be confirmed (21.2's Confirm), whatever status the change was approved in.
 * A pending request whose recorded current value no longer matches the event - another request's
   approval moved it - is marked out of date, and can only be rejected.
+
+Fix f19.2.1 (CL-176, replacing CL-141 (2)):
+* The event's attendance outgrowing what a booking was made for - an additional venue, or a
+  requirement with no number of its own - cancels nothing. Whether the venues still in use hold
+  the new attendance between them is 19.3's warning (CL-153). A requirement's own number, its times
+  and layout, its removal, and new dates an additional venue no longer covers still cancel the
+  booking.
 
 Excluded, with reason:
 * What the queue and dialogs show, and the reason box blocking a blank reason before sending
@@ -1398,7 +1400,7 @@ def test_an_attendance_rise_keeps_every_venue_the_event_still_uses(login_as, db:
     unsuitability overridden), a breakout room for the morning (its requirement's own 150) and a
     side room (a requirement with no number of its own, so booked for the 180). Each still covers
     the times it was booked for, so each is kept exactly as it was: whether the three hold 500
-    between them is 19.3's capacity warning, never a reason to cancel one (CL-153, Week 2)."""
+    between them is 19.3's capacity warning, never a reason to cancel one (CL-153, CL-176)."""
     event = _planning_event(db, expected_attendance=180)
     midday = event.starts_at + timedelta(hours=4)
     breakout = make_venue_requirement(

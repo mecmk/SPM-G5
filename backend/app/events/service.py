@@ -2781,7 +2781,7 @@ def bookings_no_longer_fitting(event: Event, booked: list[_LiveBooking]) -> list
     Fix f19.2.1: the event's own attendance outgrowing what a booking was made for releases
     nothing. Whether the event's venues hold the new attendance between them is 19.3's capacity
     warning, which never cancels a booking (CL-153): pax changes are adjusted by staff, not by
-    automatic un-booking (Week 2 clarifications), and releasing a venue the event still uses would
+    automatic un-booking (CL-176), and releasing a venue the event still uses would
     only leave it less room. A requirement's own number of people still counts, as do its times,
     layout and removal, and the event's period for an additional venue."""
     return [item.booking for item in _unfitting_bookings(event, booked, is_attendance_judged=False)]
