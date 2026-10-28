@@ -322,13 +322,40 @@ def _without_ids(field: str, value: Any) -> Any:
     return [{key: item[key] for key in item if key != "id"} for item in value]
 
 
-def _check_attendance_request(event: Event, attendance: int) -> None:
+def _pending_requirements(db: Session, event: Event) -> list[VenueRequirementIn] | None:
+    """Fix f19.1.2 (Q80): the venue requirements a pending change to them asks for - None when
+    none waits, when it is out of date (19.2 AC7), or when its stored proposal no longer reads."""
+    request = db.scalar(
+        select(EventChangeRequest).where(
+            EventChangeRequest.event_id == event.id,
+            EventChangeRequest.field_name == ChangeRequestField.VENUE_REQUIREMENTS,
+            EventChangeRequest.status == ChangeRequestStatus.PENDING,
+        )
+    )
+    if request is None or is_out_of_date(request):
+        return None
+    try:
+        return _proposed_requirements(event, json.loads(request.proposed_value))
+    except ValidationError:
+        return None
+
+
+def _check_attendance_request(db: Session, event: Event, attendance: int) -> None:
     """AC4: a new attendance leaves room for every venue requirement (2.7 AC6), as 19.2 checks it
-    on approval; fix f19.1.2 tells the organiser the minimum and what to change first."""
+    on approval. Fix f19.1.2 (Q80, CL-172): or for every one a pending venue requirements change
+    asks for, so the two can wait together - 19.2 still approves the requirements first. A refusal
+    tells the organiser the minimum and what to change first, judged on the pending change when
+    one counts, since that is what the organiser would change next."""
     try:
         events_service.check_proposed_attendance(event, attendance)
     except events_service.AttendanceBelowRequirement as exc:
-        raise AttendanceNeedsRequirementsChange(exc.requirement, exc.minimum) from exc
+        pending = _pending_requirements(db, event)
+        if pending is None:
+            raise AttendanceNeedsRequirementsChange(exc.requirement, exc.minimum) from exc
+        try:
+            events_service.check_attendance_leaves_room(pending, attendance)
+        except events_service.AttendanceBelowRequirement as still:
+            raise AttendanceNeedsRequirementsChange(still.requirement, still.minimum) from still
 
 
 def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> tuple[Any, Any]:
@@ -340,7 +367,7 @@ def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> t
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
         return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
-        _check_attendance_request(event, data.proposed)
+        _check_attendance_request(db, event, data.proposed)
         return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)

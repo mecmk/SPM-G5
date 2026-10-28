@@ -515,6 +515,29 @@ def test_a_change_the_approval_would_refuse_says_why(login_as, db: Session):
 
 
 @pytest.mark.story("19.3", ac=1)
+def test_an_attendance_change_waiting_on_a_requirements_change_says_so(login_as, db: Session):
+    """Fix f19.1.2: raised beside a change bringing the hall to 50, the attendance change is
+    judged on the hall as it stands until that change is approved, as 19.2 approves it."""
+    event = _planning_event(db, expected_attendance=100)
+    hall = _requirement(db, event, capacity=60)
+    _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [_requirement_body(hall, name="Main hall", capacity=50, event=event)],
+    )
+    request = _raise(login_as, db, event, "expected_attendance", 50)
+
+    impact = _impact(login_as, request)
+
+    assert impact["refused_because"] == (
+        "The expected attendance cannot be lower than 60 while Main hall needs room for 60"
+        " people. Approve a venue requirements change that lowers it first."
+    )
+
+
+@pytest.mark.story("19.3", ac=1)
 def test_an_out_of_date_request_says_so(login_as, db: Session):
     event = _planning_event(db, expected_attendance=100)
     request = _raise(login_as, db, event, "expected_attendance", 120)

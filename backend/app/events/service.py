@@ -2729,7 +2729,16 @@ def check_proposed_attendance(event: Event, attendance: int) -> None:
     Fix f19.1.2: the requirement needing the most people sets the minimum, the first of them
     on the form when two need the same."""
     ordered = sorted(event.venue_requirements, key=lambda item: item.position)
-    sized = [(index, item) for index, item in enumerate(ordered) if item.capacity is not None]
+    check_attendance_leaves_room(ordered, attendance)
+
+
+def check_attendance_leaves_room(
+    requirements: Sequence[VenueRequirement | VenueRequirementIn], attendance: int
+) -> None:
+    """Fix f19.1.2: 2.7 AC6 for ``attendance`` against ``requirements`` in their order on the
+    form - the event's own, or those a pending change asks for - refused with the requirement
+    needing the most people (``AttendanceBelowRequirement``)."""
+    sized = [(index, item) for index, item in enumerate(requirements) if item.capacity is not None]
     if not sized:
         return
     # max() keeps the first of equal values, so a tie names the one higher on the form.
