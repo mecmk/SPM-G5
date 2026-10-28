@@ -5,8 +5,8 @@
  *     the current and proposed value, the reason, who asked and when - and, under its other tabs,
  *     the requests already decided or withdrawn (team request, 16 Oct 2026).
  * AC2 approving a change applies it: the event shows the new value and the request reads Approved.
- *     Fix f19.1.2: an attendance change raised beside the venue requirements change that makes room
- *     for it says to approve that first, until it is.
+ * 19.1 AC17 (f19.1.2) an attendance change raised beside the venue requirements change that makes
+ *     room for it tells the coordinator to approve that first, until it is.
  * AC3 rejecting takes a reason, leaves the event as it was, and the organiser reads the reason.
  * AC4 a blank or spaces-only rejection reason is not sent (the client-side half; the server's
  *     refusal is a backend case).
@@ -92,7 +92,7 @@ test('19.2 AC1: the coordinator sees a pending change in their queue with what w
   await expect(page).toHaveURL(QUEUE_PATH)
 })
 
-test('19.2 AC2: an attendance change waiting on a venue requirements change says to approve that first', async ({
+test('19.1 AC17: an attendance change waiting on a venue requirements change tells the coordinator to approve that first', async ({
   page,
 }) => {
   // Four sign-ins (organiser, coordinator, coordinator, organiser) and two raised requests.

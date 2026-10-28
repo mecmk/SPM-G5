@@ -5,8 +5,12 @@
  *     and submits; the request shows as Pending to the organiser and to the assigned coordinator.
  * AC2 the point of contact is updated directly from the same page.
  * AC4 the form will not submit without a reason (the client-side half; the server's refusal and
- *     every value rule are backend cases). Fix f19.1.2: the attendance field says the lowest it
- *     can go and which venue requirement sets it, and a lower one shows the server's refusal.
+ *     every value rule are backend cases).
+ * AC14 (f19.1.2) the attendance field says the lowest it can go and which venue requirement sets
+ *     it - a waiting venue requirements change's, when lower.
+ * AC16 (f19.1.2) a lower attendance shows the server's refusal, saying what to change first.
+ * AC17 (f19.1.2) an attendance change raised beside that venue requirements change says it waits
+ *     for it.
  * AC11 (fix f19.1.1) change requests are offered on a Confirmed event too, saying that approving
  *     one sends the event back to Planning for a new safety check.
  * AC12 they are not offered before approval, while the event awaits its safety check (Q20), once
@@ -247,7 +251,7 @@ test('19.1 AC4: the reason message clears once a reason is typed', async ({ page
   await expect(reason).not.toHaveAttribute('aria-invalid', 'true')
 })
 
-test('19.1 AC4: the attendance field says the lowest it can go, and why lower is refused', async ({
+test('19.1 AC14/AC16: the attendance field says the lowest it can go, and why lower is refused', async ({
   page,
 }) => {
   // Nothing is saved: the server refuses the request, so Olivia's Regional Sales Summit, for 220
@@ -273,7 +277,7 @@ test('19.1 AC4: the attendance field says the lowest it can go, and why lower is
   ).toHaveCount(0)
 })
 
-test('19.1 AC4: with a venue requirements change waiting, the attendance field says its minimum and the request what it waits for', async ({
+test('19.1 AC14/AC17: with a venue requirements change waiting, the attendance field says its minimum and the request what it waits for', async ({
   page,
 }) => {
   // Three sign-ins in approvedEvent. The fresh event is for 60, its Main venue for 60.

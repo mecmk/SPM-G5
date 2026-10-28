@@ -61,13 +61,16 @@ Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
   that is earlier or it has none. That covers an event already under way or over, which nothing
   marks Completed yet (Q57). (Team decision on the review of #125.)
 
-Decisions recorded for fix f19.1.2 (Q80 to Q82, CL-172; replaces CL-143's refusal on raising):
-* An attendance below a venue requirement's number of people is refused with the minimum - the
-  most people any requirement needs - and the requirement setting it, the first on the form when
-  two tie, and is told to ask for a venue requirements change first (AC4).
-* It is taken while a venue requirements change waits that would bring every requirement to or
-  below it; one that is out of date (19.2 AC7) does not count. 19.2 approves the requirements
-  change first, and the two are not linked.
+Minimum attendance (fix f19.1.2; Q80 to Q82, CL-172, replacing CL-143's refusal on raising)
+AC14 The change form shows, beneath the new attendance, the lowest allowed and the venue
+     requirement setting it - a pending venue requirements change's when lower (e2e).
+AC15 An attendance below a venue requirement's number of people is taken when the event's pending
+     venue requirements change would bring every requirement to or below it. One that is out of
+     date (19.2 AC7) does not count. (AC3's exception.)
+AC16 Otherwise it is refused, naming the requirement needing the most people (the first on the
+     form when two tie), the exact minimum, and that the venue requirements change comes first.
+AC17 A pending attendance change the venue requirements do not allow yet says what it waits for,
+     to the organiser and to the coordinator (e2e).
 
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
@@ -633,6 +636,7 @@ def test_proposed_attendance_must_be_a_positive_whole_number(organiser_client, d
 
 
 @pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=16)
 @pytest.mark.parametrize(("proposed", "expected_status"), [(79, 422), (80, 201)])
 def test_proposed_attendance_leaves_room_for_every_venue_requirement(
     organiser_client, db: Session, proposed, expected_status
@@ -652,7 +656,7 @@ def test_proposed_attendance_leaves_room_for_every_venue_requirement(
         )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=16)
 def test_the_refusal_names_the_requirement_needing_the_most_people(organiser_client, db: Session):
     """Fix f19.1.2: the minimum is the most people any requirement needs, not the first one found
     over the new attendance - Hall comes first but Breakout sets the minimum."""
@@ -668,7 +672,7 @@ def test_the_refusal_names_the_requirement_needing_the_most_people(organiser_cli
     )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=16)
 def test_two_requirements_needing_the_most_people_name_the_first(organiser_client, db: Session):
     event = _planning_event(db, expected_attendance=200)
     make_venue_requirement(db, event.id, position=0, name="Hall", capacity=150)
@@ -682,7 +686,7 @@ def test_two_requirements_needing_the_most_people_name_the_first(organiser_clien
     )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=16)
 def test_an_unnamed_limiting_requirement_is_named_by_its_position(organiser_client, db: Session):
     """2.7's own rule names a requirement without a name by where it sits on the form."""
     event = _planning_event(db, expected_attendance=200)
@@ -697,8 +701,7 @@ def test_an_unnamed_limiting_requirement_is_named_by_its_position(organiser_clie
     )
 
 
-# Fix f19.1.2 (Q80, CL-172): the attendance change may be raised while a venue requirements
-# change waits that would bring every requirement to or below it; 19.2 approves them in order.
+# --- AC15 (fix f19.1.2, CL-172): raised beside a venue requirements change that makes room -----
 
 
 def _requirement_body(requirement_id: uuid.UUID, *, name: str, capacity: int, event: Event):
@@ -720,7 +723,7 @@ def _ask_for_requirements(client, event: Event, *requirements: dict) -> None:
     assert response.status_code == 201, response.text
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=15)
 @pytest.mark.parametrize(("hall", "expected_status"), [(100, 201), (120, 201), (121, 422)])
 def test_attendance_is_taken_beside_a_requirements_change_that_makes_room(
     organiser_client, db: Session, hall, expected_status
@@ -748,7 +751,7 @@ def test_attendance_is_taken_beside_a_requirements_change_that_makes_room(
         )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=15)
 def test_a_requirements_change_lowering_only_some_requirements_is_not_enough(
     organiser_client, db: Session
 ):
@@ -772,7 +775,7 @@ def test_a_requirements_change_lowering_only_some_requirements_is_not_enough(
     )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=15)
 def test_an_out_of_date_requirements_change_does_not_count(organiser_client, db: Session):
     """19.2 AC7: the requirements changed after the change to them was raised, so it can only be
     rejected, and the attendance is judged on the requirements as they stand."""
@@ -792,7 +795,7 @@ def test_an_out_of_date_requirements_change_does_not_count(organiser_client, db:
     )
 
 
-@pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=15)
 @pytest.mark.parametrize("status", ["WITHDRAWN", "REJECTED"])
 def test_a_requirements_change_no_longer_waiting_does_not_count(
     organiser_client, db: Session, status
