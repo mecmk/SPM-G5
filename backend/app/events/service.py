@@ -2505,20 +2505,26 @@ class BookingMisfit(StrEnum):
 
 
 def _requirement_misfits(
-    booking: VenueBooking, terms: RequirementTerms | None, *, attendance: int
+    booking: VenueBooking,
+    terms: RequirementTerms | None,
+    *,
+    attendance: int,
+    is_attendance_judged: bool,
 ) -> list[BookingMisfit]:
     """AC13/AC14: the requirement still asks for no more than its booking was requested for: it
     still exists, its times fall inside the booked ones, it needs room for no more people, and it
     asks for the same layout. Exactly the booked values still fit (AC13). The people are counted
     as the booking counted them (``people_needed``): a requirement with no number of its own
-    was booked for the event's attendance. Empty when it fits."""
+    was booked for the event's attendance, which is judged only with ``is_attendance_judged``.
+    Empty when it fits."""
     if terms is None:
         return [BookingMisfit.REQUIREMENT_REMOVED]
     misfits = []
     if terms.starts_at < booking.starts_at or terms.ends_at > booking.ends_at:
         misfits.append(BookingMisfit.TIMES)
+    is_people_judged = terms.capacity is not None or is_attendance_judged
     people = venue_service.people_needed(capacity=terms.capacity, attendance=attendance)
-    if people > booking.expected_attendance:
+    if is_people_judged and people > booking.expected_attendance:
         misfits.append(BookingMisfit.PEOPLE)
     if terms.layout_code != booking.required_layout_code:
         misfits.append(BookingMisfit.LAYOUT)
@@ -2526,14 +2532,20 @@ def _requirement_misfits(
 
 
 def _additional_venue_misfits(
-    booking: VenueBooking, *, starts_at: datetime, ends_at: datetime, attendance: int
+    booking: VenueBooking,
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    attendance: int,
+    is_attendance_judged: bool,
 ) -> list[BookingMisfit]:
     """AC14: an additional venue (12.5) was booked for the event's own period and attendance, so
-    those have to stay inside what it was booked for. Empty when it fits."""
+    the period has to stay inside what it was booked for, and the attendance too with
+    ``is_attendance_judged``. Empty when it fits."""
     misfits = []
     if starts_at < booking.starts_at or ends_at > booking.ends_at:
         misfits.append(BookingMisfit.TIMES)
-    if attendance > booking.expected_attendance:
+    if is_attendance_judged and attendance > booking.expected_attendance:
         misfits.append(BookingMisfit.PEOPLE)
     return misfits
 
@@ -2545,25 +2557,42 @@ def booking_misfits(
     starts_at: datetime,
     ends_at: datetime,
     attendance: int,
+    is_attendance_judged: bool,
 ) -> list[BookingMisfit]:
     """AC14, story 19.2 AC5: why ``item`` no longer fits an event with this period, attendance
     and these requirements (by id) - empty when it still fits. The one rule an approval releases
-    bookings by (``_unfitting_bookings``) and story 19.3's assessment predicts them by."""
+    bookings by (``_unfitting_bookings``) and story 19.3's assessment predicts them by.
+
+    ``is_attendance_judged`` also counts the event's attendance outgrowing what a booking held
+    for it (an additional venue, or a requirement with no number of its own) was made for: a
+    correction raising the attendance is refused for it (AC14, ``_check_bookings_still_fit``),
+    while an approved change keeps the booking (fix f19.2.1),
+    leaving whether the venues hold everyone to 19.3's capacity warning."""
     if item.requirement_name is None:
         return _additional_venue_misfits(
-            item.booking, starts_at=starts_at, ends_at=ends_at, attendance=attendance
+            item.booking,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            attendance=attendance,
+            is_attendance_judged=is_attendance_judged,
         )
     return _requirement_misfits(
-        item.booking, requirements.get(item.booking.venue_requirement_id), attendance=attendance
+        item.booking,
+        requirements.get(item.booking.venue_requirement_id),
+        attendance=attendance,
+        is_attendance_judged=is_attendance_judged,
     )
 
 
-def _unfitting_bookings(event: Event, booked: list[_LiveBooking]) -> list[_LiveBooking]:
+def _unfitting_bookings(
+    event: Event, booked: list[_LiveBooking], *, is_attendance_judged: bool
+) -> list[_LiveBooking]:
     """AC14, story 19.2 AC5: the bookings in ``booked`` that the event and its requirements, as
-    they now stand, no longer fit - a requirement removed, grown, retimed or relaid, or the event's
-    own period or attendance outgrowing an additional venue. ``booked`` is read before the change,
-    so a requirement removed meanwhile is still known by its name. A cleared date or attendance
-    judges nothing: it is refused elsewhere first."""
+    they now stand, no longer fit (``booking_misfits``) - a requirement removed, grown, retimed or
+    relaid, or the event's own period outgrowing an additional venue; with
+    ``is_attendance_judged``, its attendance outgrowing one too. ``booked`` is read before the
+    change, so a requirement removed meanwhile is still known by its name. A cleared date or
+    attendance judges nothing: it is refused elsewhere first."""
     if event.starts_at is None or event.ends_at is None or event.expected_attendance is None:
         return []
     requirements = {
@@ -2578,18 +2607,30 @@ def _unfitting_bookings(event: Event, booked: list[_LiveBooking]) -> list[_LiveB
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             attendance=event.expected_attendance,
+            is_attendance_judged=is_attendance_judged,
         )
     ]
 
 
-def _check_bookings_still_fit(event: Event, booked: list[_LiveBooking]) -> None:
+def _check_bookings_still_fit(
+    event: Event, booked: list[_LiveBooking], *, attendance_before: int | None
+) -> None:
     """AC14: judged on the event and its requirements as the correction leaves them, before the
     event itself is written. Requirements the correction removed have already been flushed, so
     AC16 rests on ``correct_event_under_review`` rolling the whole correction back when the first
     booking that no longer fits refuses it. A cleared date or attendance is left to
-    ``_missing_for_submission``, which refuses it as it would before approval."""
+    ``_missing_for_submission``, which refuses it as it would before approval.
+
+    The event's attendance is judged only when the correction raises it from
+    ``attendance_before``: an approved change may already have left it above a booking it kept
+    (fix f19.2.1), and a correction that does not add to that is not refused for it."""
+    is_attendance_raised = (
+        attendance_before is not None
+        and event.expected_attendance is not None
+        and event.expected_attendance > attendance_before
+    )
     requirements = {requirement.id: requirement for requirement in event.venue_requirements}
-    for item in _unfitting_bookings(event, booked):
+    for item in _unfitting_bookings(event, booked, is_attendance_judged=is_attendance_raised):
         if item.requirement_name is None:
             raise BookingNoLongerFits(item.venue_name, None)
         requirement = requirements.get(item.booking.venue_requirement_id)
@@ -2616,12 +2657,13 @@ def _apply_correction(
         _check_equipment_holds_cover(db, event, data)
         booked = _live_bookings(db, event)
     before = _request_values(event)
+    attendance_before = event.expected_attendance
     edit = _validate_request_edit(
         db, event, data, recheck_resent_equipment=False, is_stock_checked=not is_arranged
     )
     _apply_request_edit(db, event, data, edit, actor=actor)
     _fill_requirement_times(event)
-    _check_bookings_still_fit(event, booked)
+    _check_bookings_still_fit(event, booked, attendance_before=attendance_before)
     after = _request_values(event)
     changes = {
         field: {"from": before[field], "to": value}
@@ -2822,8 +2864,15 @@ def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
 def bookings_no_longer_fitting(event: Event, booked: list[_LiveBooking]) -> list[VenueBooking]:
     """Story 19.2 AC5: the bookings in ``booked`` an approved change has left unfitting, by
     f7.2.4's rule (``booking_misfits``); every other one still fits and
-    is left as it is."""
-    return [item.booking for item in _unfitting_bookings(event, booked)]
+    is left as it is.
+
+    Fix f19.2.1: the event's own attendance outgrowing what a booking was made for releases
+    nothing. Whether the event's venues hold the new attendance between them is 19.3's capacity
+    warning, which never cancels a booking (CL-153): pax changes are adjusted by staff, not by
+    automatic un-booking (CL-176), and releasing a venue the event still uses would
+    only leave it less room. A requirement's own number of people still counts, as do its times,
+    layout and removal, and the event's period for an additional venue."""
+    return [item.booking for item in _unfitting_bookings(event, booked, is_attendance_judged=False)]
 
 
 def apply_proposed_schedule(

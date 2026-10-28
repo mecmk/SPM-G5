@@ -45,6 +45,8 @@ const IMPACT_CHANGED =
   'The impact of this change has changed since you opened it. Review the updated impact, then approve again.'
 const SHORTFALL_ADVICE =
   'The bookings stay as they are: approving cancels none of them. If everyone needs room at those times, switch a pending request to a larger venue, request an additional venue from the event page (one smaller than the whole attendance needs a justification), or reject the change and tell the organiser why.'
+const ATTENDANCE_KEEPS_BOOKINGS =
+  'Venue bookings are kept as they are. Check that the venues booked still hold everyone between them, and request an additional venue from the event page if they do not.'
 
 /** A day for an event that books venues: over a year ahead, spread out so reruns rarely meet,
  *  and early enough that a week later is within the two years an event may be planned ahead. */
@@ -216,6 +218,10 @@ test('19.3 AC1/AC2: attendance beyond what the booked venues hold is a warning t
     changeRequests(page).getByText('Not enough room for the new attendance'),
   ).toBeVisible()
   await expect(changeRequests(page).getByText(SHORTFALL_ADVICE)).toBeVisible()
+
+  // Fix f19.2.1: approving says the bookings are kept, in the same words as the advice above.
+  await changeRequests(page).getByRole('button', { name: 'Approve', exact: true }).click()
+  await expect(approvalDialog(page).getByText(ATTENDANCE_KEEPS_BOOKINGS)).toBeVisible()
 })
 
 test('19.3 AC7: an impact that changed after the dialog opened is shown again before anything is applied', async ({

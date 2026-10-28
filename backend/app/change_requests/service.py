@@ -856,8 +856,9 @@ def _apply_approved_change(
     Refused, changing nothing, when the field no longer holds the value the organiser asked to
     change (AC7), or the change breaks a creation rule. The event's bookings are read before the
     change and judged after it by f7.2.4's fit rule: each one it no longer fits is released and
-    Venue Staff told (AC5); equipment is released and held again by the equipment service. An
-    event past Planning goes back to it (AC8), as story 9.4 sends one back."""
+    Venue Staff told (AC5). The event's attendance alone never releases one (fix f19.2.1, in
+    ``bookings_no_longer_fitting``); equipment is released and held again by the equipment
+    service. An event past Planning goes back to it (AC8), as story 9.4 sends one back."""
     field = request.field_name
     if not _matches_event(request, event):
         raise ChangedSinceRequested(field)
@@ -1315,6 +1316,7 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                 starts_at=proposed.starts_at,
                 ends_at=proposed.ends_at,
                 attendance=proposed.attendance,
+                is_attendance_judged=False,
             ),
         )
         for item in booked
