@@ -25,7 +25,7 @@ const RELEASE_NOTES: Record<ChangeRequestField, string> = {
   schedule:
     'Venue bookings that no longer cover the new dates are released, and the equipment is held again for them.',
   expected_attendance:
-    'Venue bookings are kept as they are. Check that the venues booked still hold everyone between them, and request another venue if they do not.',
+    'Venue bookings are kept as they are. Check that the venues booked still hold everyone between them, and request an additional venue from the event page if they do not.',
   venue_requirements:
     'Bookings of venue requirements that are removed, or that no longer fit what was booked, are released.',
   equipment:
