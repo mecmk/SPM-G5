@@ -366,6 +366,7 @@ def test_previous_reviews_are_newest_first(safety_client, db: Session):
                 "factor_name": "Expected attendance",
                 "required_change": "Confirm the attendance and the microphones.",
                 "arrangement": None,
+                "released_bookings": [],
             }
         ],
         "flagged_arrangements": [],

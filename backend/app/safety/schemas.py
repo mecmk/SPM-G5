@@ -14,6 +14,7 @@ from app.events.models import Event, EventEquipmentRequest
 from app.events.schemas import AccessibilityNeedOut, EquipmentLineOut
 from app.safety.models import (
     EventSafetyReview,
+    SafetyArrangement,
     SafetyReviewFactor,
     SafetyReviewFinding,
     SafetyReviewOutcome,
@@ -69,6 +70,15 @@ def booked_capacity(booking: VenueBooking) -> int:
     return booking.venue.capacity if layout_capacity is None else layout_capacity
 
 
+class ReleasedBookingOut(BaseModel):
+    """21.3 AC9: a booking a finding named, which the decision released: its venue and the
+    requirement it was for (None for an additional venue)."""
+
+    booking_id: uuid.UUID
+    venue_name: str
+    requirement_name: str | None
+
+
 class SafetyVenueOut(BaseModel):
     """AC3: one approved venue with its full record (story 8.2), nulls passed through for AC5's
     "Not recorded". AC4: ``over_capacity`` when the booking's ``people_to_hold`` (what this room
@@ -79,6 +89,12 @@ class SafetyVenueOut(BaseModel):
     capacity: int
     people_to_hold: int
     over_capacity: bool
+    # Story 21.3 AC1: what the officer chooses a booking to release by - which booking, the
+    # requirement it is for (None for an additional venue) and its own times.
+    booking_id: uuid.UUID
+    requirement_name: str | None
+    starts_at: datetime
+    ends_at: datetime
 
 
 class SafetyFactorOut(BaseModel):
@@ -100,6 +116,7 @@ class SafetyFindingOut(BaseModel):
     factor_name: str
     required_change: str
     arrangement: str | None
+    released_bookings: list[ReleasedBookingOut]  # 21.3 AC9
 
     @classmethod
     def from_finding(cls, finding: SafetyReviewFinding) -> SafetyFindingOut:
@@ -108,6 +125,14 @@ class SafetyFindingOut(BaseModel):
             factor_name=finding.factor.name,
             required_change=finding.required_change,
             arrangement=finding.arrangement,
+            released_bookings=[
+                ReleasedBookingOut(
+                    booking_id=booking.id,
+                    venue_name=booking.venue.name,
+                    requirement_name=booking.requirement_label,
+                )
+                for booking in finding.released_bookings
+            ],
         )
 
 
@@ -196,6 +221,10 @@ class SafetyCheckDetail(BaseModel):
                     capacity=booked_capacity(booking),
                     people_to_hold=booking.expected_attendance,
                     over_capacity=booking.expected_attendance > booked_capacity(booking),
+                    booking_id=booking.id,
+                    requirement_name=booking.requirement_label,
+                    starts_at=booking.starts_at,
+                    ends_at=booking.ends_at,
                 )
                 for booking in approved_bookings
             ],
@@ -220,6 +249,7 @@ MAX_SAFETY_TEXT_LENGTH = 2000
 FINDINGS_REQUIRED_MESSAGE = "Add at least one finding saying what must change."
 FINDINGS_NOT_ALLOWED_MESSAGE = "Only a request for changes has findings."
 REQUIRED_CHANGE_BLANK_MESSAGE = "Say what must change for each finding."
+BOOKINGS_ON_OTHER_FINDING_MESSAGE = "Only a finding about venue bookings can name bookings."
 
 SafetyText = Annotated[str, Field(max_length=MAX_SAFETY_TEXT_LENGTH)]
 
@@ -238,6 +268,7 @@ class SafetyFindingIn(BaseModel):
     factor_code: str
     required_change: SafetyText
     arrangement: Literal["VENUE_BOOKINGS", "EQUIPMENT"] | None = None
+    booking_ids: list[uuid.UUID] = []
 
     @field_validator("required_change")
     @classmethod
@@ -245,6 +276,15 @@ class SafetyFindingIn(BaseModel):
         if not value.strip():
             raise ValueError(REQUIRED_CHANGE_BLANK_MESSAGE)
         return value
+
+    @model_validator(mode="after")
+    def _bookings_only_on_a_venue_finding(self) -> SafetyFindingIn:
+        """21.3 AC7: bookings are named on a finding about venue bookings, and only there; a
+        booking named twice on one finding is named once."""
+        if self.booking_ids and self.arrangement != SafetyArrangement.VENUE_BOOKINGS:
+            raise ValueError(BOOKINGS_ON_OTHER_FINDING_MESSAGE)
+        self.booking_ids = list(dict.fromkeys(self.booking_ids))
+        return self
 
 
 class SafetyDecisionIn(BaseModel):

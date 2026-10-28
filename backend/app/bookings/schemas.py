@@ -249,6 +249,9 @@ class BookingOut(BaseModel):
     alternative_suggestion: str | None
     # Story 6.2 AC16: when a cancelled booking was cancelled; None otherwise.
     cancelled_at: datetime | None
+    # Story 21.3 AC2: how a cancelled booking was released and why; None otherwise.
+    release_cause: str | None
+    release_reason: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -315,6 +318,9 @@ class BookingQueueEntry(BaseModel):
     # Story 12.6 AC3: when a released original was released - its replacement's approval, shown as
     # "Closed at" in place of its own earlier approval; None for any other request.
     released_at: datetime | None
+    # Story 21.3 AC8: how a cancelled booking was released and why, for the Cancelled tab.
+    release_cause: str | None
+    release_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -350,6 +356,8 @@ class BookingQueueEntry(BaseModel):
             approval_releases_venue_name=booking.approval_releases_venue_name,
             original_is_marked=booking.original_is_marked,
             released_at=booking.released_at,
+            release_cause=booking.release_cause,
+            release_reason=booking.release_reason,
         )
 
 
@@ -434,6 +442,9 @@ class BookingOutcome(BaseModel):
     # Story 12.6 AC3: when the original was released - its replacement's approval - which the card
     # shows as "Closed at" rather than the original's own, earlier approval; None otherwise.
     released_at: datetime | None
+    # Story 21.3 AC2: how a cancelled booking was released and why, for the event page.
+    release_cause: str | None
+    release_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -471,4 +482,6 @@ class BookingOutcome(BaseModel):
             replaced_by_venue_name=booking.replaced_by_venue_name,
             pending_replacement_venue_name=booking.pending_replacement_venue_name,
             released_at=booking.released_at,
+            release_cause=booking.release_cause,
+            release_reason=booking.release_reason,
         )

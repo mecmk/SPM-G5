@@ -191,6 +191,16 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     @property
+    def requirement_label(self) -> str | None:
+        """Story 21.3 AC1: the venue requirement this booking is for, as the safety review names
+        it - its name, or "Venue n" by its place when it has none, as story 21.2's blockers do -
+        or None for an additional venue."""
+        requirement = self.venue_requirement
+        if requirement is None:
+            return None
+        return requirement.name or f"Venue {requirement.position + 1}"
+
+    @property
     def venue_unavailable_mark(self) -> datetime | None:
         """Story 9.4 AC3: the mark as readers see it - only on a booking still pending or
         approved. A value left on a rejected, withdrawn, cancelled or expired booking is history

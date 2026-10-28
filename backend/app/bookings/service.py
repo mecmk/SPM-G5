@@ -704,9 +704,13 @@ def release_booking(
         values["replaced_by_booking_id"] = replacement.id
     else:
         values["cancelled_at"] = at
+    # Story 21.3 AC7: the safety review releases an approved booking only, never a pending one.
+    releasable = (
+        (BookingStatus.APPROVED,) if cause == ReleaseCause.SAFETY_REVIEW else _HOLDING_STATUSES
+    )
     released = db.execute(
         update(VenueBooking)
-        .where(VenueBooking.id == booking.id, VenueBooking.status.in_(_HOLDING_STATUSES))
+        .where(VenueBooking.id == booking.id, VenueBooking.status.in_(releasable))
         .values(**values)
     )
     if released.rowcount == 0:
@@ -751,6 +755,25 @@ def lock_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking
                 VenueBooking.event_id == event_id,
                 VenueBooking.status.in_(_HOLDING_STATUSES),
             )
+            .order_by(VenueBooking.id)
+            .with_for_update(of=VenueBooking)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def lock_named_bookings(
+    db: Session, event_id: uuid.UUID, booking_ids: Collection[uuid.UUID]
+) -> list[VenueBooking]:
+    """Story 21.3 AC11: the bookings of ``event_id`` among ``booking_ids``, whatever their status,
+    each row locked until the transaction ends and read as it now stands, in id order, as
+    ``lock_holding_bookings`` takes the event's holding ones. A booking another transaction holds
+    - Venue Staff deciding it, the sweep expiring it - is waited for. An id that is not returned
+    is not a booking of this event."""
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(VenueBooking.event_id == event_id, VenueBooking.id.in_(list(booking_ids)))
             .order_by(VenueBooking.id)
             .with_for_update(of=VenueBooking)
             .execution_options(populate_existing=True)
