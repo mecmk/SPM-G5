@@ -90,11 +90,14 @@ class SafetyVenueOut(BaseModel):
     people_to_hold: int
     over_capacity: bool
     # Story 21.3 AC1: what the officer chooses a booking to release by - which booking, the
-    # requirement it is for (None for an additional venue) and its own times.
+    # requirement it is for (None for an additional venue), its own times and its setup and
+    # teardown.
     booking_id: uuid.UUID
     requirement_name: str | None
     starts_at: datetime
     ends_at: datetime
+    setup_minutes: int
+    teardown_minutes: int
 
 
 class SafetyFactorOut(BaseModel):
@@ -225,6 +228,8 @@ class SafetyCheckDetail(BaseModel):
                     requirement_name=booking.requirement_label,
                     starts_at=booking.starts_at,
                     ends_at=booking.ends_at,
+                    setup_minutes=booking.setup_minutes,
+                    teardown_minutes=booking.teardown_minutes,
                 )
                 for booking in approved_bookings
             ],
