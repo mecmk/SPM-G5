@@ -13,10 +13,11 @@
  * Every other AC (AC3, AC4, AC6, AC7, AC10, AC11) is a backend case:
  * backend/tests/safety/test_release_flagged_bookings.py.
  *
- * The four tests run in order on one seeded event, the venue safety walkthrough, which the first
+ * The tests run in order on one seeded event, the venue safety walkthrough, which the first
  * sends for its safety review (the coordinator clicks, as in safety-decision.spec.ts) and the
- * second moves on for good by releasing a booking. Each reads what the one before did, and a
- * retry could only fail on the moved event and hide the first trace: serial, no retries.
+ * second moves on for good by releasing a booking. Each proves one AC and reads what the ones
+ * before did, and a retry could only fail on the moved event and hide the first trace: serial, no
+ * retries.
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn } from './support'
@@ -84,7 +85,7 @@ test('21.3 AC1: the review page lists each approved booking, and offers them onl
   ).not.toBeChecked()
 })
 
-test('21.3 AC2/AC9: the officer releases a booking, and Previous reviews names what the round released', async ({
+test('21.3 AC2: recording the decision releases the booking the officer ticked', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.safetyOfficer)
@@ -101,15 +102,11 @@ test('21.3 AC2/AC9: the officer releases a booking, and Previous reviews names w
     .check()
   await decision.getByRole('button', { name: 'Record decision' }).click()
 
-  const reviews = section(page, 'Previous reviews')
-  await expect(reviews).toContainText('Changes requested')
-  await expect(reviews).toContainText(CHANGE)
-  await expect(reviews).toContainText('Released: Seminar Room 2.1 (Main hall)')
-  await expect(reviews).not.toContainText('Released: Exhibition Foyer')
+  await expect(section(page, 'Previous reviews')).toContainText('Changes requested')
   await expect(section(page, 'Decision')).toHaveCount(0)
 })
 
-test('21.3 AC2/AC5/AC9: the event page shows the booking released by the safety review, and the requirement needs a venue again', async ({
+test('21.3 AC2: the event page shows the booking released by the safety review, with the required change', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -122,10 +119,17 @@ test('21.3 AC2/AC5/AC9: the event page shows the booking released by the safety 
   await expect(bookings.getByText('Reason', { exact: true })).toBeVisible()
   await expect(bookings).toContainText(CHANGE)
   await expect(bookings).toContainText('Exhibition Foyer')
+})
 
-  const safety = section(page, 'Safety review')
-  await expect(safety).toContainText('Released: Seminar Room 2.1 (Main hall)')
-  await expect(safety).toContainText('Main hall has no approved venue booking.')
+test('21.3 AC5: the released requirement needs a venue again, and the review cannot be sent', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.safetyRelease}`)
+
+  await expect(section(page, 'Safety review')).toContainText(
+    'Main hall has no approved venue booking.',
+  )
   await expect(page.getByText('All required venues booked')).toHaveCount(0)
   await page.getByRole('link', { name: 'Find a venue' }).click()
   const main = page
@@ -133,6 +137,24 @@ test('21.3 AC2/AC5/AC9: the event page shows the booking released by the safety 
     .getByRole('listitem')
     .filter({ hasText: 'Main hall' })
   await expect(main).toContainText('Needs a venue')
+})
+
+test('21.3 AC9: the officer and the coordinator read which booking the round released', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.safetyOfficer)
+  await page.goto(`/safety-checks/${EVENTS.safetyRelease}`)
+  const reviews = section(page, 'Previous reviews')
+  await expect(reviews).toContainText(CHANGE)
+  await expect(reviews).toContainText('Released: Seminar Room 2.1 (Main hall)')
+  await expect(reviews).not.toContainText('Released: Exhibition Foyer')
+  await signOut(page)
+
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.safetyRelease}`)
+  const safety = section(page, 'Safety review')
+  await expect(safety).toContainText('Released: Seminar Room 2.1 (Main hall)')
+  await expect(safety).not.toContainText('Released: Exhibition Foyer')
 })
 
 test('21.3 AC8: Venue Staff find the released booking under Cancelled and All, read-only', async ({
