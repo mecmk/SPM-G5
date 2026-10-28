@@ -1,6 +1,15 @@
-import type { RegistrationStanding } from '../api/registrations'
+import type {
+  RegistrationEvent,
+  RegistrationStanding,
+  RegistrationState,
+} from '../api/registrations'
+import { FULL_LABEL } from '../components/RegistrationCount'
 import { eventBadgeStatus } from '../shared/eventStatus'
 import { formatDateTime, NONE, NOT_RECORDED } from '../shared/format'
+
+/** Story 18.1: the title of the list of events an attendee can register for, which an event's
+ *  page links back to (AC9, fix f18.1.2). */
+export const UPCOMING_EVENTS_TITLE = 'Upcoming events'
 
 /** A registration badge: the status that picks its colour (App.css's `badge-<status>`) and its
  *  label. */
@@ -12,6 +21,73 @@ export interface RegistrationBadge {
 /** Stories 18.1 AC1 and 18.2 AC1: an attendee's active registration, as Upcoming events and My
  *  registrations both show it. */
 export const REGISTERED_BADGE: RegistrationBadge = { status: 'registered', label: 'Registered' }
+
+/** Story 18.1 AC1/AC3/AC9: each state's label, and the badge colour it takes (App.css), on an
+ *  event's card and its page. */
+export const STATE_BADGES: Record<RegistrationState, RegistrationBadge> = {
+  OPEN: { status: 'success', label: 'Open' },
+  NOT_YET_OPEN: { status: 'info', label: 'Not yet open' },
+  FULL: { status: 'warning', label: FULL_LABEL },
+  CLOSED: { status: 'neutral', label: 'Closed' },
+  REGISTERED: REGISTERED_BADGE,
+}
+
+/** Story 18.1 AC1: what a Confirmed event with no approved venue booking shows. */
+const NO_VENUE_YET = 'Venue to be confirmed'
+
+/** Story 18.1 AC1/AC9: each booked venue's name and location, on an event's card and its page. */
+export function describeVenues(event: RegistrationEvent): string[] {
+  return event.venues.length === 0
+    ? [NO_VENUE_YET]
+    : event.venues.map((venue) => `${venue.name}, ${venue.location}`)
+}
+
+/** Story 18.1 AC1/AC9: the places left are shown (decided 14 Oct 2026). */
+export function describePlacesLeft(placesLeft: number): string {
+  return `${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left`
+}
+
+/** Story 18.1 AC2/AC3: when registration opens, while it has not. */
+function describeOpening(opensAt: string): string {
+  return `Registration opens ${formatDateTime(opensAt)}`
+}
+
+/** Story 18.1 AC2: when registration closes, or closed - the closing time, or the event's start
+ *  where none was recorded, as the server sends it. */
+function describeClosing(event: RegistrationEvent): string {
+  const verb = event.state === 'CLOSED' ? 'closed' : 'closes'
+  return `Registration ${verb} ${formatDateTime(event.registration_closes_at)}`
+}
+
+/**
+ * Story 18.1 AC1-AC3: the one time an event's card gives - when the attendee registered (AC1's
+ * confirmation, kept after a reload), when registration opens while it has not, or when it
+ * closes or closed.
+ */
+export function describeRegistration(event: RegistrationEvent): string {
+  if (event.registered_at !== null) {
+    return describeRegisteredAt(event.registered_at)
+  }
+  if (event.registration_opens_at !== null && event.state === 'NOT_YET_OPEN') {
+    return describeOpening(event.registration_opens_at)
+  }
+  return describeClosing(event)
+}
+
+/**
+ * Story 18.1 AC9 (fix f18.1.2): the times an event's page gives - when the attendee registered,
+ * once they have; otherwise when registration opens, while it has not, and when it closes or
+ * closed.
+ */
+export function describeRegistrationTimes(event: RegistrationEvent): string[] {
+  if (event.registered_at !== null) {
+    return [describeRegisteredAt(event.registered_at)]
+  }
+  if (event.registration_opens_at !== null && event.state === 'NOT_YET_OPEN') {
+    return [describeOpening(event.registration_opens_at), describeClosing(event)]
+  }
+  return [describeClosing(event)]
+}
 
 /** Stories 18.2 AC1/AC8 and 18.3 AC4: each standing's label, and the badge colour it takes
  *  (App.css), as the attendee and the event's organiser and coordinator both see it. Registered

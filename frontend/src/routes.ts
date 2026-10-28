@@ -220,6 +220,12 @@ export const CHANGE_REQUEST_QUEUE_PATH = '/change-requests/review'
 
 // Story 18.1: the events an attendee can browse and register for.
 export const UPCOMING_EVENTS_PATH = '/browse'
+// Story 18.1 AC9 (fix f18.1.2): one event's page, where the attendee registers.
+export const UPCOMING_EVENT_PATH = '/browse/:eventId'
+
+export function upcomingEventPath(eventId: string): string {
+  return UPCOMING_EVENT_PATH.replace(':eventId', encodeURIComponent(eventId))
+}
 
 // Story 18.2: the attendee's own registrations, and withdrawing one.
 export const MY_REGISTRATIONS_PATH = '/registrations'

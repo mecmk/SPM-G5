@@ -22,6 +22,7 @@ import { ServerNotificationProvider } from './notifications/ServerNotificationPr
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
+import { AttendeeEventPage } from './registrations/AttendeeEventPage'
 import { MyRegistrationsPage } from './registrations/MyRegistrationsPage'
 import { ProfilePage } from './registrations/ProfilePage'
 import { RegistrationReportPage } from './registrations/RegistrationReportPage'
@@ -51,6 +52,7 @@ import {
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
   REGISTRATIONS_REPORT_PATH,
+  UPCOMING_EVENT_PATH,
   UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
@@ -177,11 +179,13 @@ function App() {
                 <Route path={CHANGE_REQUEST_QUEUE_PATH} element={<ChangeRequestQueuePage />} />
               </Route>
 
-              {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only).
+              {/* Story 18.1: the events an attendee can browse, and each one's page, where they
+                  register (AC5: attendees only; AC9, fix f18.1.2).
                   Story 18.2: their own registrations, and withdrawing one (AC5: attendees only).
                   Story 18.4: their profile (AC10: attendees only, each their own). */}
               <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
                 <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
+                <Route path={UPCOMING_EVENT_PATH} element={<AttendeeEventPage />} />
                 <Route path={MY_REGISTRATIONS_PATH} element={<MyRegistrationsPage />} />
                 <Route path={PROFILE_PATH} element={<ProfilePage />} />
               </Route>

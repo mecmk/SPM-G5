@@ -4323,10 +4323,15 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* Story 18.1: on a phone each event's Register button - the card's action, full width below its
-   details (story 5.4) - is at least 44px tall, to be pressed with a thumb. */
+/* Story 18.1 AC9 (fix f18.1.2): an event's page, as an attendee sees it. The description keeps the
+   organiser's line breaks. On a phone Register - full width, as everywhere - is at least 44px
+   tall, to be pressed with a thumb. */
+.attendee-event-description {
+  white-space: pre-line;
+}
+
 @media (max-width: 640px) {
-  .upcoming-events .event-card-action button {
+  .attendee-event-registration button {
     min-height: 44px;
   }
 }
