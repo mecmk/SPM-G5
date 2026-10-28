@@ -273,6 +273,35 @@ test('19.1 AC4: the attendance field says the lowest it can go, and why lower is
   ).toHaveCount(0)
 })
 
+test('19.1 AC4: with a venue requirements change waiting, the attendance field says its minimum', async ({
+  page,
+}) => {
+  // Three sign-ins in approvedEvent. The fresh event is for 60, its Main venue for 60.
+  test.setTimeout(90_000)
+  await approvedEvent(page, 'Minimum with change')
+  const section = changeRequests(page)
+  await openChangeForm(page, 'Venue requirements')
+  await section.getByLabel('Requirement 1 number of people').fill('40')
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    section.getByRole('listitem').filter({ hasText: 'Changes to venue requirements' }),
+  ).toContainText('Pending')
+
+  // CL-172 (4): the minimum is the one the server takes now - the waiting change's.
+  await openChangeForm(page, 'Expected attendance')
+  const attendance = section.getByLabel('New expected attendance')
+  await expect(attendance).toHaveAccessibleDescription(
+    'At least 40: your venue requirements change brings Main venue to 40 people, and is approved before this one.',
+  )
+  await attendance.fill('40')
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    section.getByRole('listitem').filter({ hasText: 'Changes to expected attendance' }),
+  ).toContainText('Pending')
+})
+
 test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not sent', async ({
   page,
 }) => {

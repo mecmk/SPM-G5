@@ -180,9 +180,9 @@ interface OpenDecision {
  * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
  * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
  * saying why - and an event with none starts it with one blank row to fill in.
- * Fix f19.1.2: beneath the new attendance, the form says the lowest the venue requirements allow and
- * which one sets it, and how far a waiting venue requirements change would lower that (Q80). The
- * form does not block a lower figure: whether a waiting change makes room is the server's to judge.
+ * Fix f19.1.2: beneath the new attendance, the form says the lowest the server takes and which
+ * venue requirement sets it - a waiting venue requirements change's, when it allows lower (CL-172).
+ * The form does not block a lower figure: the server judges it.
  *
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a

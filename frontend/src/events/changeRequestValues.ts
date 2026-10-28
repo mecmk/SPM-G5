@@ -143,10 +143,11 @@ export function describeAttendanceWait(
 }
 
 /**
- * Fix f19.1.2 (19.1 AC4, Q80): what the change form says beneath the new attendance - the lowest
- * the event's venue requirements allow and the one that sets it, and, when a venue requirements
- * change waiting for a decision (and not out of date, 19.2 AC7) would lower that, how far. Null
- * when no requirement gives a number of people.
+ * Fix f19.1.2 (19.1 AC4, CL-172 (4)): what the change form says beneath the new attendance - the
+ * lowest the server takes, by its own rule. That is the lowest the event's venue requirements
+ * allow, or, when a venue requirements change waiting for a decision (and not out of date, 19.2
+ * AC7) allows lower, the lowest that change allows, saying it is approved first. Null when no
+ * requirement gives a number of people.
  */
 export function describeAttendanceMinimum(
   requirements: SizedRequirement[],
@@ -154,14 +155,15 @@ export function describeAttendanceMinimum(
 ): string | null {
   const current = findAttendanceMinimum(requirements)
   if (current === null) return null
-  const hint = `At least ${current.minimum}: ${current.requirement} needs room for ${current.minimum} people.`
   const pending = findWaitingRequirementsChange(requests)
   const proposed =
     pending === undefined
       ? null
       : findAttendanceMinimum(pending.proposed_value as RequirementValue[])
-  if (proposed === null || proposed.minimum >= current.minimum) return hint
-  return `${hint} Your venue requirements change would lower this to ${proposed.minimum} once it is approved.`
+  if (proposed === null || proposed.minimum >= current.minimum) {
+    return `At least ${current.minimum}: ${current.requirement} needs room for ${current.minimum} people.`
+  }
+  return `At least ${proposed.minimum}: your venue requirements change brings ${proposed.requirement} to ${proposed.minimum} people, and is approved before this one.`
 }
 
 interface EquipmentValue {
