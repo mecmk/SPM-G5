@@ -250,6 +250,51 @@ class MyRegistrationOut(BaseModel):
         )
 
 
+class AttendeeEventOut(BaseModel):
+    """Story 18.1 AC9 / 18.2 AC9-AC10 (fixes f18.1.2, f18.2.1): one event's page for the signed-in
+    attendee - the event and the venues it has booked; ``listing``, what its card on Upcoming events
+    shows (18.1 AC1), null once it is not listed (18.2 AC10); and ``registration``, the attendee's
+    own latest registration for it (18.2 AC1/AC4), null if they never registered. 18.1 AC5:
+    nothing internal. No defaults (response schema)."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    cover_image_url: str | None  # 18.1 AC8: the event's cover picture, if any
+    starts_at: datetime
+    ends_at: datetime
+    venues: list[RegistrationVenueOut]
+    listing: RegistrationEventOut | None
+    registration: MyRegistrationOut | None
+
+    @classmethod
+    def from_event(
+        cls,
+        event: Event,
+        *,
+        venues: list[Venue],
+        listing: RegistrationEventOut | None,
+        registration: MyRegistrationOut | None,
+    ) -> AttendeeEventOut:
+        # A page opens only for a listed event or one the attendee registered for, and
+        # registrations are only taken for Confirmed events: past Draft, so it has its dates.
+        assert event.starts_at is not None
+        assert event.ends_at is not None
+        return cls(
+            id=event.id,
+            name=event.name,
+            description=event.description,
+            cover_image_url=event.cover_image_url,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            venues=[
+                RegistrationVenueOut(name=venue.name, location=venue.location) for venue in venues
+            ],
+            listing=listing,
+            registration=registration,
+        )
+
+
 class EventRegistrationOut(BaseModel):
     """18.3 AC1/AC4: one registration in an event's list - who, when, and where they stand, as
     18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. Story 18.4

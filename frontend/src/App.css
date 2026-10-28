@@ -4324,8 +4324,8 @@ button.requirement-choice.requirement-covered:hover,
 }
 
 /* Story 18.1 AC9 (fix f18.1.2): an event's page, as an attendee sees it. The description keeps the
-   organiser's line breaks. On a phone Register - full width, as everywhere - is at least 44px
-   tall, to be pressed with a thumb. */
+   organiser's line breaks. On a phone Register - and, story 18.2 AC9 (fix f18.2.1), Withdraw -
+   full width, as everywhere, is at least 44px tall, to be pressed with a thumb. */
 .attendee-event-description {
   white-space: pre-line;
 }
@@ -4393,14 +4393,6 @@ button.requirement-choice.requirement-covered:hover,
   .reassign-action,
   .reassign-dialog select,
   .reassign-dialog .dialog-actions button {
-    min-height: 44px;
-  }
-}
-
-/* Story 18.2: on a phone each registration's Withdraw button on My registrations is at least
-   44px tall, to be pressed with a thumb, as 18.1's Register is. */
-@media (max-width: 640px) {
-  .my-registrations .event-card-action button {
     min-height: 44px;
   }
 }

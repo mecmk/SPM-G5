@@ -49,7 +49,7 @@ function UpcomingEventCard({ event }: { event: RegistrationEvent }) {
   const details = [
     <StatusBadge key="state" status={badge.status} label={badge.label} />,
     formatSchedule(event.starts_at, event.ends_at),
-    ...describeVenues(event),
+    ...describeVenues(event.venues),
     describePlacesLeft(event.places_left),
     describeRegistration(event),
   ]

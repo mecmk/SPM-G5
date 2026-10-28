@@ -144,6 +144,23 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** AC9: an event's page as the API sends it for a listed event the attendee never registered for:
+ *  the event, what its card shows, and no registration of theirs (18.2's fix f18.2.1). */
+function eventPage(listed: ReturnType<typeof listedEvent>) {
+  const { id, name, description, cover_image_url, starts_at, ends_at, venues } = listed
+  return {
+    id,
+    name,
+    description,
+    cover_image_url,
+    starts_at,
+    ends_at,
+    venues,
+    listing: listed,
+    registration: null,
+  }
+}
+
 /**
  * Answer the page's list call with `answer(offset)` instead of the API. Only the `fetch` is
  * stubbed; the CORS headers go with it, since the app and the API run on different ports.
@@ -264,7 +281,11 @@ test.describe('registers for a seeded event once', () => {
     await expect(box.getByText('Registered', { exact: true })).toBeVisible()
     await expect(box).toContainText(registeredToday(before, after))
     await expect(box).toContainText('59 places left')
-    await expect(box.getByRole('button')).toHaveCount(0)
+    // No second Register; the page offers Withdraw instead (story 18.2 AC9, fix f18.2.1).
+    await expect(registerButton(page, DESIGN_MASTERCLASS)).toHaveCount(0)
+    await expect(
+      box.getByRole('button', { name: `Withdraw from ${DESIGN_MASTERCLASS}` }),
+    ).toBeEnabled()
     releaseReload()
 
     await page.reload()
@@ -347,7 +368,7 @@ test("18.1 AC8: on an event's page, an uploaded picture is asked of the API, one
         status: 200,
         contentType: 'application/json',
         headers: corsHeaders(request),
-        body: JSON.stringify(id === pictured.id ? pictured : plain),
+        body: JSON.stringify(eventPage(id === pictured.id ? pictured : plain)),
       })
     },
   )

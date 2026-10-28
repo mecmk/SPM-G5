@@ -1,12 +1,12 @@
 """Business rules for story 18.1: the events an attendee can register for, each one's page, and
-registering; and for story 18.2: the attendee's own registrations, and withdrawing one (its section
-at the end).
+registering; and for story 18.2: the attendee's own registrations, each one's event page, and
+withdrawing one (its section at the end).
 
 An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19: a Private
 event is not listed) and needs registration (2.1 AC17). It is listed until it starts (AC3), and
 its capacity is its expected attendance (2.1 AC17, AC2). Only a REGISTERED row takes a place. A
-listed event has a page (AC9, fix f18.1.2) showing what its entry in the list does; any other has
-none (AC10).
+listed event has a page (AC9, fix f18.1.2) showing what its entry in the list does, and so does
+one the attendee registered for (18.2 AC10, fix f18.2.1); any other has none (AC10).
 
 AC7: ``register`` holds the event's row (``FOR NO KEY UPDATE``) while it checks the event and
 counts the places, so two registrations for one event take turns, and an event cancelled or sent
@@ -646,6 +646,64 @@ def list_my_registrations(
         )
     ).all()
     return [_my_registration_item(registration, event, now=now) for registration, event in rows]
+
+
+@dataclass(frozen=True)
+class AttendeeEvent:
+    """18.1 AC9 / 18.2 AC9 (fixes f18.1.2, f18.2.1): one event's page for an attendee - the event
+    and the venues it has booked; what its card on Upcoming events shows, while it is listed, None
+    once it is not (AC10); and the attendee's own latest registration for it (AC1/AC4), None if
+    they never registered."""
+
+    event: Event
+    venues: list[Venue]
+    listing: RegistrationEventItem | None
+    registration: MyRegistrationItem | None
+
+
+def _my_registration_for(
+    db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
+) -> MyRegistrationItem | None:
+    """AC9: ``attendee``'s latest registration for the event - the one My registrations lists
+    (AC1/AC4) - with where they stand, or None if they never registered for it."""
+    row = db.execute(
+        select(EventRegistration, Event)
+        .join(Event, Event.id == EventRegistration.event_id)
+        .where(
+            EventRegistration.id.in_(_latest_per_event(attendee)),
+            EventRegistration.event_id == event_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    registration, event = row
+    return _my_registration_item(registration, event, now=now)
+
+
+def get_attendee_event(
+    db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
+) -> AttendeeEvent:
+    """AC9 (fix f18.2.1): one event's page for ``attendee`` - 18.1's page of a listed event, with
+    their own registration beside it. AC10: an event they registered for opens even once it is no
+    longer listed - started, cancelled, sent back to Planning or made Private - with no listing and
+    only the venues it still has booked. 18.1 AC10 / AC6: an event that is neither listed nor
+    registered for by them is not found, as an unknown one is."""
+    registration = _my_registration_for(db, event_id, attendee=attendee, now=now)
+    try:
+        listing = get_registration_event(db, event_id, attendee=attendee, now=now)
+    except RegistrationEventNotFound:
+        if registration is None:
+            raise
+        event = registration.event
+        return AttendeeEvent(
+            event=event,
+            venues=_booked_venues(db, [event.id])[event.id],
+            listing=None,
+            registration=registration,
+        )
+    return AttendeeEvent(
+        event=listing.event, venues=listing.venues, listing=listing, registration=registration
+    )
 
 
 def _is_withdrawable(now: datetime) -> ColumnElement[bool]:

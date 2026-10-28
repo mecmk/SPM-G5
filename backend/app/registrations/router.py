@@ -1,6 +1,6 @@
 """HTTP endpoints for story 18.1: the events an attendee can browse and register for, each one's
 page (fix f18.1.2), and registering for one; and for story 18.2: the attendee's own
-registrations, and withdrawing one.
+registrations, each one's event page (fix f18.2.1), and withdrawing one.
 
 18.2's withdrawal is ``POST .../withdraw``, an action URL like 12.2's booking and 19.1's change
 request withdrawals: a state transition with its own rules and audit record.
@@ -27,6 +27,7 @@ from app.db import get_db
 from app.registrations import service
 from app.registrations.schemas import (
     AttendeeDetailsIn,
+    AttendeeEventOut,
     EventRegistrationListOut,
     EventRegistrationOut,
     ManagedRegistrationEventOut,
@@ -58,6 +59,12 @@ def _registration_event_out(item: service.RegistrationEventItem) -> Registration
     )
 
 
+def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
+    return MyRegistrationOut.from_registration(
+        item.registration, event=item.event, status=item.standing, can_withdraw=item.can_withdraw
+    )
+
+
 @router.get("/events", response_model=RegistrationEventList)
 def list_registration_events(
     db: DbSession,
@@ -79,23 +86,29 @@ def list_registration_events(
     )
 
 
-@router.get("/events/{event_id}", response_model=RegistrationEventOut)
-def get_registration_event(
+@router.get("/events/{event_id}", response_model=AttendeeEventOut)
+def get_attendee_event(
     event_id: uuid.UUID,
     db: DbSession,
     attendee: Annotated[CurrentUser, CanRegister],
-) -> RegistrationEventOut:
-    """AC9 (fix f18.1.2): one listed event, as its page shows it to the signed-in attendee - what
-    its list entry carries, and nothing internal (AC5). AC10: an event that is not listed is a
-    404, the same as an unknown one. AC5: registrations:self only - other roles get 403 and
-    signed-out users 401 from the dependency."""
+) -> AttendeeEventOut:
+    """18.1 AC9 (fix f18.1.2): one event's page for the signed-in attendee - while it is listed,
+    what its list entry carries, and nothing internal (AC5). 18.2 AC9 (fix f18.2.1): with their
+    own latest registration for it; AC10: an event they registered for opens even once it is no
+    longer listed. 18.1 AC10 / 18.2 AC6: any other is a 404, the same as an unknown one. 18.1 AC5:
+    registrations:self only - other roles get 403 and signed-out users 401 from the dependency."""
     try:
-        item = service.get_registration_event(
-            db, event_id, attendee=attendee, now=datetime.now(UTC)
-        )
+        page = service.get_attendee_event(db, event_id, attendee=attendee, now=datetime.now(UTC))
     except service.RegistrationEventNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
-    return _registration_event_out(item)
+    return AttendeeEventOut.from_event(
+        page.event,
+        venues=page.venues,
+        listing=None if page.listing is None else _registration_event_out(page.listing),
+        registration=(
+            None if page.registration is None else _my_registration_out(page.registration)
+        ),
+    )
 
 
 @router.get("/managed", response_model=list[ManagedRegistrationEventOut])
@@ -131,12 +144,6 @@ def register(
     except service.RegistrationRefused as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return RegistrationOut.from_registration(registration)
-
-
-def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
-    return MyRegistrationOut.from_registration(
-        item.registration, event=item.event, status=item.standing, can_withdraw=item.can_withdraw
-    )
 
 
 @router.get("", response_model=list[MyRegistrationOut])

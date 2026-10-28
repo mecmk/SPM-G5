@@ -15,23 +15,40 @@ can be hit to the microsecond. Their attendees are made by the test, so a list h
 registrations the test made. API tests run on the real clock, so they make events relative to
 today and find rows by id.
 
-AC1 The attendee sees their registrations - one per event, the latest - with event name, date and
-    status (Registered, Withdrawn or Event cancelled), events not yet started first (soonest
-    first), then those that have started (latest first). An active registration can be withdrawn
-    after confirmation, and the place returns to capacity.
+AC1 The attendee sees their registrations - one per event, the latest - each card with its event's
+    name, picture, date and status (Registered, Withdrawn or Event cancelled) and when they
+    registered and withdrew, events not yet started first (soonest first), then those that have
+    started (latest first). An active registration is withdrawn from its event's page (AC9) after
+    confirmation, and the place returns to capacity.
 AC2 Withdrawal updates the registration and frees the place in one step on the server: the status,
     the moment it was withdrawn and the audit entry are written together, or not at all.
 AC3 Withdrawal is allowed until the event starts; the registration closing time does not stop it.
+    Once the event has started, its page offers no Withdraw and says why.
 AC4 Registering again after withdrawing creates a new active registration under 18.1's rules; only
     one can be active at a time. The earlier one stays Withdrawn.
-AC5 Attendees see only their own registrations, and nothing internal to the event's planning.
+AC5 Attendees see only their own registrations, on the list and on each event's page, and nothing
+    internal to the event's planning.
 AC6 The API returns only the caller's own registrations: 401 signed out, 403 for other roles, and
-    another attendee's registration is answered as not found, as an unknown one is.
+    another attendee's registration is answered as not found, as an unknown one is - as is the
+    page of an unlisted event only another attendee registered for.
 AC7 A double-click withdraws once: one status change, one withdrawal time, one audit entry, also
     when both requests arrive at once.
 AC8 A registration shows as Event cancelled when its event was cancelled or it was cancelled with
     the event, and cannot be withdrawn. One on an event sent back to Planning stays Registered and
     can be withdrawn.
+
+Event page (fix f18.2.1), waiting on the backlog's Change Log:
+AC9 Clicking anywhere on a registration's card opens its event's page (18.1 AC9), which also shows
+    where the attendee stands and when they registered and withdrew. Withdraw is only on this
+    page; once withdrawn, it offers Register again while the event is open (AC4). A back link
+    returns to My registrations.
+AC10 The page of an event the attendee registered for opens even once it is no longer listed -
+    started, cancelled, sent back to Planning or made Private - with no places left or Register,
+    and venues only while it still has them booked. Withdraw is offered only while AC3 and AC8
+    allow it.
+AC11 A withdrawal refused because the event started or was cancelled while its page was open says
+    why, and the page then shows where the attendee stands: no Withdraw once it started, Event
+    cancelled once it was cancelled.
 """
 
 from __future__ import annotations
@@ -50,13 +67,24 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.bookings.models import BookingStatus
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus
 from app.registrations import service
 from app.registrations.models import EventRegistration, RegistrationStatus
 from app.registrations.schemas import RegistrationCreate
-from app.registrations.service import RegistrationStanding, RegistrationState
-from tests.support.factories import future_datetime, make_event, make_user
+from app.registrations.service import (
+    REGISTRATION_EVENT_NOT_FOUND_MESSAGE,
+    RegistrationStanding,
+    RegistrationState,
+)
+from tests.support.factories import (
+    future_datetime,
+    make_booking,
+    make_event,
+    make_user,
+    make_venue,
+)
 from tests.support.seed import Users
 
 MINE_PATH = "/registrations"
@@ -83,6 +111,32 @@ MY_REGISTRATION_KEYS = {
     "can_withdraw",
 }
 
+# AC9 (fix f18.2.1): everything an event's page carries - the event, what its card on Upcoming
+# events shows while it is listed (18.1 AC9), and the attendee's own registration.
+PAGE_KEYS = {
+    "id",
+    "name",
+    "description",
+    "cover_image_url",
+    "starts_at",
+    "ends_at",
+    "venues",
+    "listing",
+    "registration",
+}
+
+# AC10 (fix f18.2.1): what takes a registered event off the list, as a change to its row.
+_UNLISTING = {
+    "started": {
+        "starts_at": NOW - timedelta(hours=1),
+        "ends_at": NOW + timedelta(hours=2),
+        "registration_closes_at": NOW - timedelta(hours=2),
+    },
+    "cancelled": {"status": EventStatus.CANCELLED},
+    "sent back to Planning": {"status": EventStatus.PLANNING},
+    "made Private": {"is_public": False},
+}
+
 # The contract: the audit action and the sentences an attendee is shown.
 WITHDRAWN_ACTION = "EVENT_REGISTRATION_WITHDRAWN"
 NOT_FOUND_MESSAGE = "This registration was not found."
@@ -98,6 +152,11 @@ NOT_ATTENDEES = [user for user in Users.ONE_PER_ROLE if user.role != "ATTENDEE"]
 
 def _withdraw_path(registration_id: uuid.UUID | str) -> str:
     return f"/registrations/{registration_id}/withdraw"
+
+
+def _page_path(event_id: uuid.UUID) -> str:
+    """AC9 (fix f18.2.1): the address of an event's page (18.1 AC9)."""
+    return f"/registrations/events/{event_id}"
 
 
 def _fixed_id(n: int) -> uuid.UUID:
@@ -176,6 +235,13 @@ def _register(
 
 def _mine(db: Session, attendee: User, *, now: datetime = NOW) -> list[service.MyRegistrationItem]:
     return service.list_my_registrations(db, attendee=attendee, now=now)
+
+
+def _page(
+    db: Session, attendee: User, event: Event, *, now: datetime = NOW
+) -> service.AttendeeEvent:
+    """AC9 (fix f18.2.1): the event as its page shows it to ``attendee``."""
+    return service.get_attendee_event(db, event.id, attendee=attendee, now=now)
 
 
 def _row(db: Session, registration_id: uuid.UUID) -> tuple[str, datetime | None]:
@@ -768,6 +834,190 @@ def test_a_second_withdrawal_is_refused_and_leaves_the_first_one_as_it_was(
         _when(first.json()["withdrawn_at"]),
     )
     assert len(_withdrawal_audits(db, registration.id)) == 1
+
+
+# =============================================================================================
+# AC9-AC11 - the event's page (fix f18.2.1)
+# =============================================================================================
+@pytest.mark.story("18.2", ac=5)
+@pytest.mark.story("18.2", ac=9)
+def test_an_events_page_carries_the_attendees_registration_as_their_list_does(
+    attendee_client, db: Session
+):
+    event = _event(db, starts_at=future_datetime(days=40), name="Poetry Page 18.2")
+    registration = _registration(db, event, Users.ATTENDEE.id)
+
+    response = attendee_client.get(_page_path(event.id))
+
+    assert response.status_code == 200
+    page = response.json()
+    assert set(page) == PAGE_KEYS  # AC5: nothing about the event's planning
+    assert page["registration"] == _api_item(attendee_client, registration.id)
+    assert (page["name"], page["listing"]["state"]) == ("Poetry Page 18.2", "REGISTERED")
+
+
+@pytest.mark.story("18.2", ac=9)
+def test_an_events_page_has_no_registration_for_an_attendee_who_never_registered(db: Session):
+    event = _event(db)
+
+    page = _page(db, _attendee(db), event)
+
+    assert page.registration is None
+    assert page.listing is not None
+    assert page.listing.state == RegistrationState.OPEN
+
+
+@pytest.mark.story("18.2", ac=4)
+@pytest.mark.story("18.2", ac=9)
+def test_an_events_page_shows_a_withdrawal_and_then_the_registration_made_again(db: Session):
+    event = _event(db)
+    attendee = _attendee(db)
+    first = _registration(db, event, attendee.id)
+    _withdraw(db, first.id, attendee)
+
+    withdrawn = _page(db, attendee, event)
+    again = _register(db, event, attendee)
+    registered = _page(db, attendee, event, now=LATER)
+
+    assert withdrawn.registration is not None
+    assert (withdrawn.registration.registration.id, withdrawn.registration.standing) == (
+        first.id,
+        RegistrationStanding.WITHDRAWN,
+    )
+    assert withdrawn.registration.registration.withdrawn_at == NOW
+    # AC4: open again, so it can be registered for from the page.
+    assert withdrawn.listing is not None
+    assert withdrawn.listing.state == RegistrationState.OPEN
+    assert registered.registration is not None
+    assert (registered.registration.registration.id, registered.registration.standing) == (
+        again.id,
+        RegistrationStanding.REGISTERED,
+    )
+
+
+@pytest.mark.story("18.2", ac=10)
+@pytest.mark.parametrize(
+    ("change", "standing", "can_withdraw"),
+    [
+        ("started", RegistrationStanding.REGISTERED, False),
+        ("cancelled", RegistrationStanding.EVENT_CANCELLED, False),
+        ("sent back to Planning", RegistrationStanding.REGISTERED, True),
+        ("made Private", RegistrationStanding.REGISTERED, True),
+    ],
+)
+def test_a_registered_events_page_opens_once_it_is_no_longer_listed(
+    db: Session, change: str, standing: RegistrationStanding, can_withdraw: bool
+):
+    event = _event(db, name=f"No longer listed: {change}")
+    attendee = _attendee(db)
+    _registration(db, event, attendee.id)
+    db.execute(update(Event).where(Event.id == event.id).values(**_UNLISTING[change]))
+    db.expire(event)
+
+    page = _page(db, attendee, event)
+
+    assert page.event.name == f"No longer listed: {change}"
+    assert page.listing is None  # no places left, no Register
+    assert page.registration is not None
+    assert (page.registration.standing, page.registration.can_withdraw) == (standing, can_withdraw)
+
+
+@pytest.mark.story("18.2", ac=3)
+@pytest.mark.story("18.2", ac=10)
+def test_a_registered_events_page_offers_withdrawal_until_the_moment_the_event_starts(
+    db: Session,
+):
+    attendee = _attendee(db)
+    starting_soon = _event(db, starts_at=NOW + TICK, registration_closes_at=None)
+    starting_now = _event(db, starts_at=NOW, registration_closes_at=None)
+    _registration(db, starting_soon, attendee.id)
+    _registration(db, starting_now, attendee.id)
+
+    soon = _page(db, attendee, starting_soon)
+    now = _page(db, attendee, starting_now)
+
+    assert soon.listing is not None
+    assert soon.registration is not None
+    assert soon.registration.can_withdraw is True
+    assert now.listing is None
+    assert now.registration is not None
+    assert now.registration.can_withdraw is False
+
+
+@pytest.mark.story("18.2", ac=10)
+def test_an_unlisted_events_page_names_only_the_venues_it_still_has_booked(db: Session):
+    attendee = _attendee(db)
+    cancelled = _event(db, status=EventStatus.CANCELLED)
+    planning = _event(db, status=EventStatus.PLANNING)
+    released = make_venue(db, name="Released Hall 18.2", location="Pier 3")
+    kept = make_venue(db, name="Kept Hall 18.2", location="Pier 4")
+    for event, venue, status in (
+        (cancelled, released, BookingStatus.CANCELLED),
+        (planning, kept, BookingStatus.APPROVED),
+    ):
+        make_booking(
+            db,
+            event_id=event.id,
+            venue_id=venue.id,
+            status=status,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+        )
+        _registration(db, event, attendee.id)
+
+    assert _page(db, attendee, cancelled).venues == []
+    assert [venue.name for venue in _page(db, attendee, planning).venues] == ["Kept Hall 18.2"]
+
+
+@pytest.mark.story("18.2", ac=5)
+@pytest.mark.story("18.2", ac=6)
+def test_an_events_page_never_shows_another_attendees_registration(db: Session):
+    event = _event(db)
+    mine, theirs = _attendee(db), _attendee(db)
+    _registration(db, event, theirs.id)
+
+    page = _page(db, mine, event)
+
+    assert page.registration is None
+
+
+@pytest.mark.story("18.2", ac=6)
+def test_an_unlisted_event_only_another_attendee_registered_for_is_not_found(
+    attendee_client, db: Session
+):
+    """18.1 AC10: one answer for it and an unknown event, so whose registrations exist is not
+    given away."""
+    event = _event(db, starts_at=future_datetime(days=40), status=EventStatus.CANCELLED)
+    _registration(db, event, _attendee(db).id)
+
+    theirs = attendee_client.get(_page_path(event.id))
+    unknown = attendee_client.get(_page_path(uuid.uuid4()))
+
+    assert theirs.status_code == unknown.status_code == 404
+    assert theirs.json() == unknown.json() == {"detail": REGISTRATION_EVENT_NOT_FOUND_MESSAGE}
+
+
+@pytest.mark.story("18.2", ac=11)
+def test_after_a_withdrawal_refused_because_the_event_was_cancelled_its_page_says_cancelled(
+    db: Session,
+):
+    """What the page shows once it is loaded again after the refusal."""
+    event = _event(db)
+    attendee = _attendee(db)
+    registration = _registration(db, event, attendee.id)
+    db.execute(update(Event).where(Event.id == event.id).values(status=EventStatus.CANCELLED))
+    db.expire(event)
+
+    with pytest.raises(service.WithdrawalEventCancelled):
+        _withdraw(db, registration.id, attendee)
+    page = _page(db, attendee, event)
+
+    assert page.listing is None
+    assert page.registration is not None
+    assert (page.registration.standing, page.registration.can_withdraw) == (
+        RegistrationStanding.EVENT_CANCELLED,
+        False,
+    )
 
 
 # --- real concurrent transactions. These commit, so each cleans up after itself. -------------

@@ -111,6 +111,19 @@ LISTED_EVENT_KEYS = {
     "registered_at",
 }
 REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at"}
+# AC9: everything an event's page carries - the event, what its card shows while it is listed, and
+# (18.2's fix f18.2.1) the attendee's own registration.
+PAGE_KEYS = {
+    "id",
+    "name",
+    "description",
+    "cover_image_url",
+    "starts_at",
+    "ends_at",
+    "venues",
+    "listing",
+    "registration",
+}
 
 REGISTERED = "registered"
 NOT_FOUND = "not found"
@@ -872,10 +885,15 @@ def test_an_open_events_page_carries_what_its_list_entry_does(attendee_client, d
 
     assert response.status_code == 200
     page = response.json()
-    assert page == _api_item(attendee_client, event.id)
+    # What its card shows, while it is listed (18.2's fix f18.2.1 adds the attendee's own
+    # registration beside it: none here).
+    assert page["listing"] == _api_item(attendee_client, event.id)
+    assert page["registration"] is None
+    assert page["name"] == "Harbour Jazz Page 18.1"
     assert page["description"] == "Jazz on the waterfront, with food stalls in the foyer."
+    assert page["cover_image_url"] == "/uploads/events/harbour-jazz-page.png"
     assert page["venues"] == [{"name": "Jazz Page Hall 18.1", "location": "Pier 1, Level 2"}]
-    assert (page["state"], page["places_left"]) == ("OPEN", 50)
+    assert (page["listing"]["state"], page["listing"]["places_left"]) == ("OPEN", 50)
 
 
 @pytest.mark.story("18.1", ac=1)
@@ -1029,7 +1047,8 @@ def test_an_events_page_carries_no_internal_planning_information(attendee_client
 
     response = attendee_client.get(_event_path(event.id))
 
-    assert set(response.json()) == LISTED_EVENT_KEYS
+    assert set(response.json()) == PAGE_KEYS
+    assert set(response.json()["listing"]) == LISTED_EVENT_KEYS
     for internal in (
         "Purpose-page-18.1-internal",
         "Internal-notes-page-18.1",

@@ -1,7 +1,9 @@
 import type {
+  MyRegistration,
   RegistrationEvent,
   RegistrationStanding,
   RegistrationState,
+  RegistrationVenue,
 } from '../api/registrations'
 import { FULL_LABEL } from '../components/RegistrationCount'
 import { eventBadgeStatus } from '../shared/eventStatus'
@@ -10,6 +12,13 @@ import { formatDateTime, NONE, NOT_RECORDED } from '../shared/format'
 /** Story 18.1: the title of the list of events an attendee can register for, which an event's
  *  page links back to (AC9, fix f18.1.2). */
 export const UPCOMING_EVENTS_TITLE = 'Upcoming events'
+
+/** Story 18.2: the title of the attendee's own registrations, which an event's page opened from
+ *  one links back to (AC9, fix f18.2.1). */
+export const MY_REGISTRATIONS_TITLE = 'My registrations'
+
+/** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
+export const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 
 /** A registration badge: the status that picks its colour (App.css's `badge-<status>`) and its
  *  label. */
@@ -35,11 +44,15 @@ export const STATE_BADGES: Record<RegistrationState, RegistrationBadge> = {
 /** Story 18.1 AC1: what a Confirmed event with no approved venue booking shows. */
 const NO_VENUE_YET = 'Venue to be confirmed'
 
-/** Story 18.1 AC1/AC9: each booked venue's name and location, on an event's card and its page. */
-export function describeVenues(event: RegistrationEvent): string[] {
-  return event.venues.length === 0
-    ? [NO_VENUE_YET]
-    : event.venues.map((venue) => `${venue.name}, ${venue.location}`)
+/** Story 18.1 AC1/AC9: a booked venue's name and location. */
+export function describeVenue(venue: RegistrationVenue): string {
+  return `${venue.name}, ${venue.location}`
+}
+
+/** Story 18.1 AC1/AC9: each venue a listed event has booked, on its card and its page - or that
+ *  one is still to be confirmed. */
+export function describeVenues(venues: RegistrationVenue[]): string[] {
+  return venues.length === 0 ? [NO_VENUE_YET] : venues.map(describeVenue)
 }
 
 /** Story 18.1 AC1/AC9: the places left are shown (decided 14 Oct 2026). */
@@ -102,6 +115,16 @@ export const STANDING_BADGES: Record<RegistrationStanding, RegistrationBadge> = 
 /** Stories 18.1 AC1 and 18.2 AC1: when the attendee registered, as both pages say it. */
 export function describeRegisteredAt(registeredAt: string): string {
   return `You registered on ${formatDateTime(registeredAt)}`
+}
+
+/** Story 18.2 AC1/AC9: when the attendee registered, and when they withdrew, if they did - on
+ *  their card on My registrations and on the event's page. */
+export function describeRegistrationHistory(registration: MyRegistration): string[] {
+  const lines = [describeRegisteredAt(registration.registered_at)]
+  if (registration.withdrawn_at !== null) {
+    lines.push(`You withdrew on ${formatDateTime(registration.withdrawn_at)}`)
+  }
+  return lines
 }
 
 /** Story 18.4 AC6: an attendee's dietary requirements as every page shows them - "None" when they

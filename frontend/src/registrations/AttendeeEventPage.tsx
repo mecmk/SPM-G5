@@ -1,15 +1,20 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
+  fetchAttendeeEvent,
   fetchProfile,
-  fetchRegistrationEvent,
   registerForEvent,
+  withdrawRegistration,
   type AttendeeDetails,
+  type AttendeeEvent,
+  type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
 import type { ErrorCode } from '../errors/registry'
 import { useAuth } from '../auth/authContext'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import type { EventCardBackState } from '../components/EventCard'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
@@ -19,11 +24,16 @@ import { useLoaded } from '../shared/useLoaded'
 import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
 import { detailsFrom, withConfirmedDetails } from './attendeeDetails'
 import {
+  STANDING_BADGES,
+  STARTED_NOTE,
   STATE_BADGES,
   UPCOMING_EVENTS_TITLE,
   describePlacesLeft,
+  describeRegistrationHistory,
   describeRegistrationTimes,
+  describeVenue,
   describeVenues,
+  type RegistrationBadge,
 } from './registrationLabels'
 
 /** Story 18.4: the refusals that are about the event - not open any more (18.1 AC4/AC10), or not
@@ -38,40 +48,102 @@ interface RegistrationProblem {
   isAboutTheEvent: boolean
 }
 
-/** Story 18.1 AC1: a loader for the event that is not the one before it, so the page loads the
- *  event again after a registration. */
-function eventLoader(eventId: string): () => Promise<RegistrationEvent> {
-  return () => fetchRegistrationEvent(eventId)
+/** What loading the page found: the event, or - story 18.1 AC10 - why there is none for this
+ *  attendee, in the server's words: it is not listed, and they never registered for it. */
+interface LoadedEvent {
+  event: AttendeeEvent | null
+  reason: string | null
+}
+
+/** Story 18.1 AC1 / 18.2 AC1: a loader for the event that is not the one before it, so the page
+ *  loads the event again after a registration or a withdrawal. A 404 is the server saying there
+ *  is no page (18.1 AC10/AC11): an answer, not a failure to load, so the event is no longer shown.
+ *  Any other failure is one, and the page keeps showing the event as it last had it. */
+function eventLoader(eventId: string): () => Promise<LoadedEvent> {
+  return async () => {
+    try {
+      return { event: await fetchAttendeeEvent(eventId), reason: null }
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'REGISTRATION_EVENT_NOT_OPEN') {
+        return { event: null, reason: formatApiError(err) }
+      }
+      throw err
+    }
+  }
 }
 
 /** Story 18.1 AC1: the event as the server now has it for this attendee, until it is loaded
- *  again. */
-function markRegistered(event: RegistrationEvent, registeredAt: string): RegistrationEvent {
+ *  again: Registered, a place fewer, and the registration just made - which, the event being
+ *  listed and so not started, can be withdrawn (18.2 AC3). */
+function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent {
+  const listing: RegistrationEvent | null =
+    event.listing === null
+      ? null
+      : {
+          ...event.listing,
+          state: 'REGISTERED',
+          registered_at: made.registered_at,
+          places_left: event.listing.places_left - 1,
+        }
   return {
     ...event,
-    state: 'REGISTERED',
-    registered_at: registeredAt,
-    places_left: event.places_left - 1,
+    listing,
+    registration: {
+      id: made.id,
+      event_id: event.id,
+      event_name: event.name,
+      cover_image_url: event.cover_image_url,
+      starts_at: event.starts_at,
+      ends_at: event.ends_at,
+      status: 'REGISTERED',
+      registered_at: made.registered_at,
+      withdrawn_at: null,
+      can_withdraw: true,
+    },
   }
+}
+
+/** Story 18.2 AC3/AC6-AC8: whether a refusal is the server's final word on this registration -
+ *  its event started or was cancelled, it was already withdrawn, or it is gone - so trying
+ *  again cannot succeed. A server that could not be reached may answer next time. */
+function isFinalRefusal(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.code === 'WITHDRAWAL_REFUSED' || err.code === 'REGISTRATION_NOT_FOUND')
+  )
 }
 
 /**
  * Story 18.1 AC9 (fix f18.1.2) - an event's page, as an attendee opens it from its card on
- * Upcoming events: its cover picture (AC8), name, description, date and time, each booked venue,
- * the places left, where registration stands and when it opens and closes. A back link returns to
- * Upcoming events.
+ * Upcoming events or, story 18.2 AC9 (fix f18.2.1), on My registrations: its cover picture (AC8),
+ * name, description, date and time and venues; while it is listed, the places left, where
+ * registration stands and when it opens and closes; and where the attendee stands, if they
+ * registered. A back link returns to the list it was opened from (Upcoming events otherwise).
+ *
+ * Story 18.1:
  * AC1: the attendee registers here - Register, then confirming their details (story 18.4) - and
  *      the page then shows the event Registered, with when they registered, at once from the
  *      registration's answer and then as the server has it.
- * AC3: Register is disabled while the event is full, closed or not yet open, and not offered once
+ * AC3: Register is disabled while the event is full, closed or not yet open, and not offered while
  *      the attendee is registered.
  * AC6: Register and the dialog's Confirm and register are disabled while a registration is sent,
  *      so a double-click sends one.
- * AC10: an event that is not listed has no page: the server's 404 says it is not open for
- *      registration, as for an unknown event.
+ * AC10: an event that is neither listed nor registered for has no page: the server's 404 says it
+ *      is not open for registration, as for an unknown event.
  * AC11: a refused registration says why here, and the event is loaded again, so the page shows
- *      where it now stands - or, once it is no longer listed, that it is not open (AC10).
+ *      where it now stands - or, once it has no page, that it is not open (AC10).
  * AC5: attendees only - App.tsx guards the route, and the backend refuses everyone else.
+ *
+ * Story 18.2:
+ * AC1/AC9: the attendee withdraws here, after confirming; the page then shows them Withdrawn, with
+ *      when, and offers Register again while the event is open (AC4).
+ * AC3: once the event has started there is no Withdraw, and the page says why.
+ * AC10: an event they registered for opens even once it is no longer listed, with no places left
+ *      or Register, and only the venues it still has booked.
+ * AC11: a refused withdrawal says why in the dialog - which then offers only Close if it is final
+ *      (AC3/AC6-AC8) - and the event is loaded again, so the page shows where they now stand.
+ * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
+ *      one.
  *
  * Story 18.4 AC2/AC3: Register opens "Confirm your details", filled in from the attendee's
  * profile (once it has loaded, so the dialog never opens half filled); confirming registers and
@@ -83,47 +155,67 @@ function markRegistered(event: RegistrationEvent, registeredAt: string): Registr
  */
 export function AttendeeEventPage() {
   const { eventId = '' } = useParams()
-  return <AttendeeEvent key={eventId} eventId={eventId} />
+  return <AttendeeEventView key={eventId} eventId={eventId} />
 }
 
-function AttendeeEvent({ eventId }: { eventId: string }) {
-  // Replaced by a fresh loader after every registration, so useLoaded loads the event again; it
-  // keeps showing the event until the new answer arrives.
+function AttendeeEventView({ eventId }: { eventId: string }) {
+  // Story 7.1's back state, set by the card that opened the page.
+  const backState = useLocation().state as EventCardBackState | null
+  // Replaced by a fresh loader after every registration and withdrawal, so useLoaded loads the
+  // event again; it keeps showing the event until the new answer arrives.
   const [loadEvent, setLoadEvent] = useState(() => eventLoader(eventId))
-  const { data: event, error, isLoading, setData: setEvent } = useLoaded(loadEvent)
+  const { data: loaded, error, isLoading, setData: setLoaded } = useLoaded(loadEvent)
+  const event = loaded?.event ?? null
+  const registration = event?.registration ?? null
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [isRegistering, setIsRegistering] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [isConfirmingWithdrawal, setIsConfirmingWithdrawal] = useState(false)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawalRefusal, setWithdrawalRefusal] = useState<{
+    message: string
+    isFinal: boolean
+  } | null>(null)
 
   // Story 18.4: the profile the dialog fills in from. Read again after a registration, which
-  // saves the details confirmed with it, so the frame's own name (AC1) - and the next dialog -
-  // shows them as the server stored them.
+  // saves the details confirmed with it, so the frame's own name (AC1) - and the next dialog, once
+  // the attendee withdraws and registers again - shows them as the server stored them.
   const { setFullName } = useAuth()
   const { data: profile, error: profileError, setData: setProfile } = useLoaded(fetchProfile)
   const [profileRefreshError, setProfileRefreshError] = useState<string | null>(null)
   const isProfileLoading = profile === null && profileError === null
-  const [isConfirming, setIsConfirming] = useState(false)
+  const [isConfirmingDetails, setIsConfirmingDetails] = useState(false)
   const [detailsError, setDetailsError] = useState<string | null>(null)
 
   function markImageFailed() {
     setHasImageFailed(true)
   }
 
+  function updateEvent(change: (current: AttendeeEvent) => AttendeeEvent) {
+    setLoaded((current) =>
+      current === null || current.event === null
+        ? current
+        : { ...current, event: change(current.event) },
+    )
+  }
+
+  function loadEventAgain() {
+    setLoadEvent(() => eventLoader(eventId))
+  }
+
   /** Register for `registering` with the details the attendee confirmed (18.4 AC2/AC3). Answers
    *  why it was refused, or null when it was taken. */
   async function sendRegistration(
-    registering: RegistrationEvent,
+    registering: AttendeeEvent,
     details: AttendeeDetails,
   ): Promise<RegistrationProblem | null> {
     setIsRegistering(true)
     setRefusal(null)
     try {
-      const registration = await registerForEvent(registering, details)
-      // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
-      // again in between.
-      setEvent((current) =>
-        current === null ? current : markRegistered(current, registration.registered_at),
-      )
+      const made = await registerForEvent(registering, details)
+      // 18.1 AC1: Registered at once, not only when the reload lands, so Register cannot be
+      // pressed again in between.
+      updateEvent((current) => markRegistered(current, made))
       return null
     } catch (err) {
       return {
@@ -132,19 +224,19 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
       }
     } finally {
       setIsRegistering(false)
-      // AC1/AC11: whether it was taken or refused, show where the event now stands.
-      setLoadEvent(() => eventLoader(eventId))
+      // 18.1 AC1/AC11: whether it was taken or refused, show where the event now stands.
+      loadEventAgain()
     }
   }
 
   /** 18.4 AC2/AC3: Register opens the details to confirm - filled in from the profile. */
   function handleRegister() {
     setDetailsError(null)
-    setIsConfirming(true)
+    setIsConfirmingDetails(true)
   }
 
   function handleCancelDetails() {
-    setIsConfirming(false)
+    setIsConfirmingDetails(false)
   }
 
   /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
@@ -158,7 +250,7 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
       setDetailsError(problem.message)
       return
     }
-    setIsConfirming(false)
+    setIsConfirmingDetails(false)
     if (problem !== null) {
       setRefusal(problem.message)
       return
@@ -183,15 +275,56 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
     }
   }
 
+  /** 18.2 AC1: Withdraw asks first. */
+  function handleWithdraw() {
+    setRefusal(null)
+    setWithdrawalRefusal(null)
+    setIsConfirmingWithdrawal(true)
+  }
+
+  function handleCancelWithdrawal() {
+    setIsConfirmingWithdrawal(false)
+  }
+
+  /** 18.2 AC1/AC11: withdraw the attendee's registration. Whether it went through, was refused or
+   *  never reached the server, the event is loaded again, so the page shows where they now stand;
+   *  a refusal stays in the dialog, which offers only Close once it is final. */
+  async function handleConfirmWithdrawal() {
+    if (registration === null) return
+    setIsWithdrawing(true)
+    setWithdrawalRefusal(null)
+    try {
+      const withdrawn = await withdrawRegistration(registration)
+      updateEvent((current) => ({ ...current, registration: withdrawn }))
+      setIsConfirmingWithdrawal(false)
+    } catch (err) {
+      setWithdrawalRefusal({ message: formatApiError(err), isFinal: isFinalRefusal(err) })
+    } finally {
+      setIsWithdrawing(false)
+      loadEventAgain()
+    }
+  }
+
+  const venues =
+    event === null
+      ? []
+      : event.listing === null
+        ? event.venues.map(describeVenue)
+        : describeVenues(event.venues)
   return (
     <div className="page page-wide attendee-event">
-      <Link to={UPCOMING_EVENTS_PATH} className="back-link">
-        ← {UPCOMING_EVENTS_TITLE}
+      <Link to={backState?.from ?? UPCOMING_EVENTS_PATH} className="back-link">
+        ← {backState?.fromLabel ?? UPCOMING_EVENTS_TITLE}
       </Link>
 
       {error && (
         <p role="alert" className="error">
           {error}
+        </p>
+      )}
+      {loaded?.reason && (
+        <p role="alert" className="error">
+          {loaded.reason}
         </p>
       )}
       {isLoading && <LoadingState label="Loading the event…" />}
@@ -201,8 +334,7 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
         </p>
       )}
 
-      {/* AC10/AC11: once the event cannot be loaded - it is no longer listed - only why is shown. */}
-      {event !== null && error === null && (
+      {event !== null && (
         <>
           <div className="venue-hero">
             {event.cover_image_url !== null && !hasImageFailed ? (
@@ -233,29 +365,32 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
                   <p className="attendee-event-description">{event.description}</p>
                 </section>
               )}
-              <section className="card stack" aria-labelledby="attendee-event-venues-heading">
-                <p className="eyebrow" id="attendee-event-venues-heading">
-                  Where
-                </p>
-                <ul className="check-list">
-                  {describeVenues(event).map((venue) => (
-                    <li key={venue}>{venue}</li>
-                  ))}
-                </ul>
-              </section>
+              {venues.length > 0 && (
+                <section className="card stack" aria-labelledby="attendee-event-venues-heading">
+                  <p className="eyebrow" id="attendee-event-venues-heading">
+                    Where
+                  </p>
+                  <ul className="check-list">
+                    {venues.map((venue) => (
+                      <li key={venue}>{venue}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </div>
 
             <RegistrationPanel
               event={event}
               refusal={refusal}
-              isBusy={isRegistering || isProfileLoading}
+              isRegisterBusy={isRegistering || isProfileLoading}
               onRegister={handleRegister}
+              onWithdraw={handleWithdraw}
             />
           </div>
         </>
       )}
 
-      {isConfirming && event !== null && (
+      {isConfirmingDetails && event !== null && (
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={event.name}
@@ -266,24 +401,82 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
           onCancel={handleCancelDetails}
         />
       )}
+
+      {isConfirmingWithdrawal && registration !== null && (
+        <ConfirmDialog
+          title={`Withdraw from ${registration.event_name}?`}
+          confirmLabel="Withdraw"
+          isBusy={isWithdrawing}
+          error={withdrawalRefusal?.message ?? null}
+          canConfirm={withdrawalRefusal === null || !withdrawalRefusal.isFinal}
+          cancelLabel={withdrawalRefusal?.isFinal ? 'Close' : undefined}
+          onConfirm={handleConfirmWithdrawal}
+          onCancel={handleCancelWithdrawal}
+        >
+          <p>
+            Your place will be given up for someone else. If registration has closed or the event
+            fills up, you may not be able to register again.
+          </p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
 
+/** Story 18.2 AC9: where the attendee stands, if they registered; and, while the event is listed
+ *  and they are not registered, where registration stands (18.1 AC1) - say Withdrawn, and Open. */
+function panelBadges(event: AttendeeEvent): RegistrationBadge[] {
+  const { listing, registration } = event
+  const badges = registration === null ? [] : [STANDING_BADGES[registration.status]]
+  if (listing !== null && (registration === null || listing.state !== 'REGISTERED')) {
+    badges.push(STATE_BADGES[listing.state])
+  }
+  return badges
+}
+
+/** Story 18.2 AC1/AC3/AC9: when the attendee registered and withdrew, and why there is no
+ *  Withdraw once the event has started; and, story 18.1 AC9, while the event is listed and they
+ *  are not registered, when registration opens and closes. */
+function panelTimes(event: AttendeeEvent): string[] {
+  const { listing, registration } = event
+  if (registration === null) {
+    return listing === null ? [] : describeRegistrationTimes(listing)
+  }
+  const lines = describeRegistrationHistory(registration)
+  if (registration.status === 'REGISTERED' && !registration.can_withdraw) {
+    lines.push(STARTED_NOTE)
+  }
+  if (listing !== null && listing.registered_at === null) {
+    lines.push(...describeRegistrationTimes(listing))
+  }
+  return lines
+}
+
 interface RegistrationPanelProps {
-  event: RegistrationEvent
+  event: AttendeeEvent
   /** Why the latest attempt to register was refused, null when it was not. */
   refusal: string | null
   /** A registration is being sent - or, story 18.4, the details it confirms are still loading. */
-  isBusy: boolean
+  isRegisterBusy: boolean
   onRegister: () => void
+  onWithdraw: () => void
 }
 
-/** Story 18.1 AC1/AC3/AC9/AC11: where registration stands, the places left, when it opens and
- *  closes (or when the attendee registered), why the latest attempt was refused, and Register -
- *  enabled only while the event is open, and not offered once the attendee is registered. */
-function RegistrationPanel({ event, refusal, isBusy, onRegister }: RegistrationPanelProps) {
-  const badge = STATE_BADGES[event.state]
+/**
+ * Story 18.1 AC1/AC3/AC9/AC11 and 18.2 AC3/AC9/AC10: where the attendee and registration stand,
+ * the places left while the event is listed, the times that go with them, why the latest attempt
+ * to register was refused, and the one thing the attendee can do: Register - enabled only while
+ * the event is open, offered only while it is listed and they are not registered - or Withdraw,
+ * offered only while the server says their registration can be withdrawn.
+ */
+function RegistrationPanel({
+  event,
+  refusal,
+  isRegisterBusy,
+  onRegister,
+  onWithdraw,
+}: RegistrationPanelProps) {
+  const { listing, registration } = event
   return (
     <section
       className="card stack attendee-event-registration"
@@ -293,10 +486,12 @@ function RegistrationPanel({ event, refusal, isBusy, onRegister }: RegistrationP
         Registration
       </p>
       <div className="cluster">
-        <StatusBadge status={badge.status} label={badge.label} />
+        {panelBadges(event).map((badge) => (
+          <StatusBadge key={badge.label} status={badge.status} label={badge.label} />
+        ))}
       </div>
-      <p>{describePlacesLeft(event.places_left)}</p>
-      {describeRegistrationTimes(event).map((line) => (
+      {listing !== null && <p>{describePlacesLeft(listing.places_left)}</p>}
+      {panelTimes(event).map((line) => (
         <p key={line} className="muted small">
           {line}
         </p>
@@ -306,15 +501,25 @@ function RegistrationPanel({ event, refusal, isBusy, onRegister }: RegistrationP
           {refusal}
         </p>
       )}
-      {event.state !== 'REGISTERED' && (
+      {listing !== null && listing.state !== 'REGISTERED' && (
         <button
           type="button"
           className="button-block"
           aria-label={`Register for ${event.name}`}
-          disabled={event.state !== 'OPEN' || isBusy}
+          disabled={listing.state !== 'OPEN' || isRegisterBusy}
           onClick={onRegister}
         >
           Register
+        </button>
+      )}
+      {registration?.can_withdraw && (
+        <button
+          type="button"
+          className="button-block secondary"
+          aria-label={`Withdraw from ${event.name}`}
+          onClick={onWithdraw}
+        >
+          Withdraw
         </button>
       )}
     </section>
