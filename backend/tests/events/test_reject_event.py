@@ -4,6 +4,10 @@ AC1 A reason must be provided when rejecting.
 AC2 The event's status changes to rejected and it leaves the review queue.
 AC3 The reason and the deciding coordinator are visible to the organiser.
 AC4 A rejected request cannot be approved afterwards without a new submission.
+AC5 (Fix f4.5.1) Rejecting releases the event's equipment in the same transaction: every hold is
+    released, every open equipment request is closed as Cancelled at the decision time (a declined
+    one stays Declined), and Technical Support are told of the requests they had been sent. A
+    refused rejection releases nothing.
 
 Excluded, with reason:
 * A genuine multi-connection concurrency test - same reasoning as ``test_approve_event.py``.
@@ -12,12 +16,10 @@ Excluded, with reason:
 * "without a new submission" (AC4) - re-submitting a fresh request is a different story (2.x
   epic); this file only proves the rejected request itself can no longer be approved.
 
-Fix f4.5.1 (with story 6.2): a rejected request will not go ahead, so its equipment is released
-as a cancelled event's is - in the rejection's own transaction, every hold released and every open
-item closed as Cancelled at the decision's time, a declined one left Declined, nothing deleted, and
-Technical Support told of the items they had been sent. A refused rejection releases nothing.
-Technical Support keep the items they were sent in their queue, under Cancelled or Declined, as
-6.2 AC15 keeps a cancelled event's.
+AC5 releases a rejected event's equipment as story 6.2 releases a cancelled one's, and deletes
+nothing. Approval (4.4) shares the decision with rejection and releases nothing. Technical Support
+keep the items they were sent in their queue, under Cancelled or Declined - 15.2 AC5 as amended
+by f4.5.1, tested here as 15.2's.
 No venue booking or registration can exist before approval, so there is nothing else to release.
 Excluded: a real two-connection race with Technical Support's decision - the rejection's guarded
 update waits on the event row lock that decision holds, as the approval's does (see above).
@@ -384,7 +386,7 @@ def _held(db: Session, event_id: uuid.UUID) -> list[str]:
     )
 
 
-@pytest.mark.story("4.5", ac=2)
+@pytest.mark.story("4.5", ac=5)
 @pytest.mark.parametrize("status", [EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED])
 def test_rejecting_releases_every_equipment_hold(coordinator_client, db: Session, status):
     event = _awaiting(db, status)
@@ -398,7 +400,7 @@ def test_rejecting_releases_every_equipment_hold(coordinator_client, db: Session
         assert free[item.equipment_type_id] == item.equipment_type.total_quantity
 
 
-@pytest.mark.story("4.5", ac=2)
+@pytest.mark.story("4.5", ac=5)
 def test_rejecting_closes_open_items_and_keeps_declined_ones(coordinator_client, db: Session):
     """Every open item is closed as Cancelled at the decision's time, and kept for the record; a
     declined one stays Technical Support's decision. Nothing is deleted."""
@@ -428,7 +430,7 @@ def test_rejecting_closes_open_items_and_keeps_declined_ones(coordinator_client,
     assert counts() == before
 
 
-@pytest.mark.story("4.5", ac=2)
+@pytest.mark.story("4.5", ac=5)
 @pytest.mark.parametrize(
     ("status", "is_told"),
     [
@@ -463,7 +465,7 @@ def test_technical_support_are_told_of_items_sent_to_them(
         )
 
 
-@pytest.mark.story("4.5", ac=3)
+@pytest.mark.story("4.5", ac=5)
 def test_the_rejection_audit_names_the_equipment_it_released(coordinator_client, db: Session):
     event = _awaiting(db)
     item = _item(db, event, status=EquipmentRequestStatus.PENDING)
@@ -477,7 +479,7 @@ def test_the_rejection_audit_names_the_equipment_it_released(coordinator_client,
     assert row.details["cancelled_equipment_ids"] == [str(item.id)]
 
 
-@pytest.mark.story("4.5", ac=1)
+@pytest.mark.story("4.5", ac=5)
 @pytest.mark.parametrize(
     ("user", "status", "reason", "code"),
     [
@@ -502,7 +504,7 @@ def _queue_ids(client, **params) -> list[str]:
     return [item["id"] for item in client.get("/equipment-requests", params=params).json()["items"]]
 
 
-@pytest.mark.story("4.5", ac=2)
+@pytest.mark.story("15.2", ac=5)
 @pytest.mark.parametrize(
     "status", [EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED]
 )
@@ -527,7 +529,7 @@ def test_technical_support_see_a_rejected_events_sent_item_under_cancelled_and_a
     assert page.json()["status"] == EquipmentRequestStatus.CANCELLED
 
 
-@pytest.mark.story("4.5", ac=2)
+@pytest.mark.story("15.2", ac=5)
 def test_technical_support_keep_a_declined_item_on_a_rejected_event(login_as, db: Session):
     """A declined item stays Declined, and stays in their queue as the record of their decision,
     as 6.2 AC15 keeps one on a cancelled event."""
