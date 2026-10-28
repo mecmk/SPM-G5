@@ -29,6 +29,7 @@ from tests.support.factories import (
     make_equipment_item,
     make_equipment_type,
     make_event,
+    make_venue_requirement,
 )
 from tests.support.seed import Bookings, EquipmentItems, Events, SafetyReviews, Users, Venues
 
@@ -449,6 +450,7 @@ def test_each_venue_is_judged_on_the_people_its_booking_holds(safety_client, db:
         ends_at=datetime(2029, 3, 1, 9, 0, tzinfo=UTC),
         status=BookingStatus.APPROVED,
         expected_attendance=12,
+        venue_requirement_id=make_venue_requirement(db, event.id, name="Breakout", capacity=12),
     )
 
     venues = safety_client.get(_detail_path(event.id)).json()["venues"]
@@ -457,6 +459,20 @@ def test_each_venue_is_judged_on_the_people_its_booking_holds(safety_client, db:
         "Grand Hall": False,
         "Boardroom 3.4": False,
     }
+
+
+@pytest.mark.story("21.1", ac=4)
+def test_an_additional_venue_is_judged_on_the_events_attendance_now(safety_client, db: Session):
+    """Fix f19.2.1 (CL-176): an approved change can raise the attendance past what an additional
+    venue was booked for and keep the booking, so the venue is judged on what it must hold now -
+    the event's attendance (12.5) - not on the number it was booked for."""
+    event = _book_for_safety(db, venue_id=Venues.BOARDROOM, people=12)
+    event.expected_attendance = 40  # raised by an approved change since the booking
+    db.flush()
+
+    [venue] = safety_client.get(_detail_path(event.id)).json()["venues"]
+
+    assert (venue["capacity"], venue["people_to_hold"], venue["over_capacity"]) == (16, 40, True)
 
 
 # --- AC5: changes since the last review, and what was never recorded ----------------------------
