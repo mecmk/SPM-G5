@@ -176,6 +176,69 @@ export function reorderVenueImages(venueId: string, imageIds: string[]): Promise
   })
 }
 
+/** Mirrors `RoomLayoutOut` in backend/app/venues/schemas.py: one room layout (story 8.6 AC1). */
+export interface RoomLayout {
+  code: string
+  name: string
+  description: string | null
+}
+
+/**
+ * Mirrors `RoomLayoutCreate` / `RoomLayoutUpdate`: a layout's name and description as Venue Staff
+ * enter them (story 8.6 AC2, AC3). The server drops the spaces around both and judges them (AC5,
+ * AC7); a blank description is saved as none.
+ */
+export interface RoomLayoutInput {
+  name: string
+  description: string
+}
+
+/** Story 8.6 AC1: every room layout, the standard ones first, then the others from A to Z. */
+export function listRoomLayouts(): Promise<RoomLayout[]> {
+  return api<RoomLayout[]>('/venues/layouts')
+}
+
+/** Story 8.6 AC2. AC6/AC10: refused (409) when another layout has the name. */
+export function addRoomLayout(input: RoomLayoutInput): Promise<RoomLayout> {
+  return api<RoomLayout>('/venues/layouts', {
+    method: 'POST',
+    body: input,
+    errorCodes: { 409: 'ROOM_LAYOUT_NAME_TAKEN' },
+    notify: {
+      title: 'Room layout added',
+      message: `${input.name.trim()} can now be chosen for venues and events.`,
+    },
+  })
+}
+
+/** Story 8.6 AC3. AC6/AC10: refused (409) when another layout has the name; AC12: (404) when the
+ *  layout was deleted meanwhile. */
+export function updateRoomLayout(code: string, input: RoomLayoutInput): Promise<RoomLayout> {
+  return api<RoomLayout>(`/venues/layouts/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    body: input,
+    errorCodes: { 404: 'ROOM_LAYOUT_NOT_FOUND', 409: 'ROOM_LAYOUT_NAME_TAKEN' },
+    notify: {
+      title: 'Room layout updated',
+      message: `Changes to ${input.name.trim()} were saved.`,
+    },
+  })
+}
+
+/** Story 8.6 AC4. AC8: refused (409) while venues, venue requirements or booking requests use it;
+ *  AC12: (404) when it was deleted meanwhile. */
+export function deleteRoomLayout(code: string, name: string): Promise<void> {
+  return api<void>(`/venues/layouts/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+    errorCodes: { 404: 'ROOM_LAYOUT_NOT_FOUND', 409: 'ROOM_LAYOUT_IN_USE' },
+    notify: {
+      title: 'Room layout deleted',
+      message: `${name} can no longer be chosen for venues and events.`,
+      importance: 'important',
+    },
+  })
+}
+
 /** Story 8.1 AC12: Venue Staff can delete a venue that has no bookings. */
 export function deleteVenue(venueId: string, venueName: string): Promise<void> {
   return api<void>(`/venues/${venueId}`, {

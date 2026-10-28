@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-26 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-28 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -26,7 +26,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Identity & access | [`login_attempts`](#login_attempts) | 1.1 (AC6) | Failed sign-in counter per e-mail address, used to lock sign-in for a while after repeated failures |
 | Identity & access | [`client_organisations`](#client_organisations) | 2.x, 7.1 (organiser context) | External client organisations that Event Organisers belong to |
 | Reference lists | [`facilities`](#facilities) | 8.2, 8.3, 10.3, 11.1 | Facilities a venue can offer and an event can require (projector, sound system, video conferencing, ...) |
-| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
+| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 8.6, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
 | Reference lists | [`accessibility_features`](#accessibility_features) | 2.1, 8.2, 8.3, 11.1 | Accessibility features a venue provides and an event may need (wheelchair access, hearing loop, ...) |
 | Reference lists | [`equipment_types`](#equipment_types) | 2.1, 15.x, 16.x, 17.x | The equipment catalogue, modelled as pooled stock per type (e.g |
 | Venues | [`venues`](#venues) | 8.1, 8.2, 8.3, 8.4, 9.x, 10.x, 11.x | The venue catalogue: rooms and spaces ConnectSphere owns |
@@ -175,16 +175,22 @@ Facilities a venue can offer and an event can require (projector, sound system, 
 
 ### room_layouts
 
-**Stories:** 2.1, 8.2, 8.3, 12.1
+**Stories:** 2.1, 8.2, 8.3, 8.6, 12.1
 
-Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require.
+Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require. Venue Staff add, rename and delete them in the app (story 8.6); the seed only adds the standard ones where they are missing. A layout a venue, venue requirement or booking request uses cannot be deleted (AC8).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
-| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. |
-| `name` | `text` | no | - | - | Display name. |
-| `description` | `text` | yes | - | - | Optional longer description. |
-| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending). |
+| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with _2, _3, ... when taken, and never changed by a rename, so every reference to the layout keeps working. |
+| `name` | `text` | no | - | - | Display name, shown wherever the layout appears (story 8.6 AC3). Required, without spaces around it, at most 100 characters (AC5, ck_room_layouts_name), and unique ignoring capitals (AC6, uq_room_layouts_name). |
+| `description` | `text` | yes | - | - | Optional longer description, at most 500 characters (story 8.6 AC7, ck_room_layouts_description). NULL when none was given; never blank. |
+| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending): the standard layouts carry 10 to 70, and a layout added in the app the default 100, so it follows them from A to Z (story 8.6 AC1). |
+
+Rules and indexes:
+
+- check `ck_room_layouts_description`: `CHECK (((description = btrim(description)) AND (description <> ''::text) AND (char_length(description) <= 500)))`
+- check `ck_room_layouts_name`: `CHECK (((name = btrim(name)) AND (name <> ''::text) AND (char_length(name) <= 100)))`
+- unique index `uq_room_layouts_name`: `btree (lower(name))`
 
 ### accessibility_features
 

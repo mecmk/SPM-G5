@@ -152,7 +152,7 @@ backend/
     notifications/      # who is told of each action, and each user's own notifications
     registrations/      # the events attendees can register for, registering, their own registrations and withdrawing, their profile details, and an event's registration list for its organiser and coordinator
     safety/             # requesting a safety review, the Safety Officer's queue and decision, confirming an approved event
-    venues/             # the venue catalogue, its search and its availability calendar
+    venues/             # the venue catalogue, its search, its availability calendar and the room layouts venues can offer
     common/             # shared by feature areas: the audit log, the phone number rule
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
   db/
