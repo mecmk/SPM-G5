@@ -35,6 +35,17 @@ class BookingStatus:
     EXPIRED = "EXPIRED"
 
 
+class ReleaseCause:
+    """Values allowed by ``ck_venue_bookings_release_cause``: why a CANCELLED booking was released
+    (story 21.3). Each path that closes an approved booking through ``release_booking`` names
+    its own."""
+
+    EVENT_CANCELLED = "EVENT_CANCELLED"  # story 6.2: its event was cancelled
+    CHANGE_APPROVED = "CHANGE_APPROVED"  # story 19.2: an approved change no longer fits it
+    REPLACED = "REPLACED"  # story 12.6: its replacement was approved
+    SAFETY_REVIEW = "SAFETY_REVIEW"  # story 21.3: the Safety Officer named it in a finding
+
+
 def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
     """Story 9.4 AC3 / story 12.6 AC11, AC12: the booking still holds its venue - pending or
     approved - and is marked "Venue unavailable - alternative needed". One definition for every
@@ -135,6 +146,14 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     replaces_live_original: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+    # Story 21.3: how a CANCELLED booking was released (``ReleaseCause``), the reason, and who
+    # released it, set together with the status by ``release_booking``. NULL for a booking never
+    # released, and for a CANCELLED row written without a cause (ck_venue_bookings_release_fields).
+    release_cause: Mapped[str | None] = mapped_column(Text)
+    release_reason: Mapped[str | None] = mapped_column(Text)
+    released_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
     )
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.

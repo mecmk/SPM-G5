@@ -1771,15 +1771,16 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
 
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
-                            venue_requirement_id, hold_expires_at, cancelled_at) VALUES
+                            venue_requirement_id, hold_expires_at, cancelled_at, release_cause) VALUES
     ('44444444-0000-0000-0000-000000000063', '33333333-0000-0000-0000-000000000062', '22222222-0000-0000-0000-000000000007',
      '11111111-0000-0000-0000-000000000003', '2029-03-14 08:00+08', '2029-03-14 12:00+08', 0, 0,
      60, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-06 11:00+08', NULL, '2026-10-06 10:00+08',
-     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08', '2026-10-06 11:30+08')
+     'cccccccc-0000-0000-0062-000000000001', '2029-03-01 09:00+08', '2026-10-06 11:30+08', 'CHANGE_APPROVED')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -1788,7 +1789,8 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at;
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at,
+    release_cause = EXCLUDED.release_cause, release_reason = NULL, released_by_id = NULL;
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
     ('66666666-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '77777777-0000-0000-0000-000000000002', 4, 'Start line and finish line', 'PENDING', NULL,
@@ -2066,7 +2068,8 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0000-000000021305', '33333333-0000-0000-0000-000000021301', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)
