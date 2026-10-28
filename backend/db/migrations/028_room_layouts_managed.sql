@@ -25,7 +25,7 @@ ALTER TABLE room_layouts
 COMMENT ON TABLE room_layouts IS
     'Stories: 2.1, 8.2, 8.3, 8.6, 12.1. Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require. Venue Staff add, rename and delete them in the app (story 8.6); the seed only adds the standard ones where they are missing. A layout a venue, venue requirement or booking request uses cannot be deleted (AC8).';
 COMMENT ON COLUMN room_layouts.code IS
-    'Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with _2, _3, ... when taken, and never changed by a rename, so every reference to the layout keeps working.';
+    'Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with a number added when that code is taken (THEATRE_2, THEATRE_3, ...), and never changed by a rename, so every reference to the layout keeps working.';
 COMMENT ON COLUMN room_layouts.name IS
     'Display name, shown wherever the layout appears (story 8.6 AC3). Required, without spaces around it, at most 100 characters (AC5, ck_room_layouts_name), and unique ignoring capitals (AC6, uq_room_layouts_name).';
 COMMENT ON COLUMN room_layouts.description IS
