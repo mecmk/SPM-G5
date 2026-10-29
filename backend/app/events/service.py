@@ -103,7 +103,7 @@ REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
 # Fix f19.1.2: it names the requirement that sets the minimum, the minimum, and what comes first.
 ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
     "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
-    "{minimum} people. Approve a venue requirements change that lowers it first."
+    "{minimum} people. A venue requirements change that lowers it must be approved first."
 )
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.

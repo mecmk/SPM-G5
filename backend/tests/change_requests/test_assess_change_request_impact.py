@@ -569,7 +569,7 @@ def test_a_change_the_approval_would_refuse_says_why(login_as, db: Session):
 
     assert impact["refused_because"] == (
         "The expected attendance cannot be lower than 60 while Main hall needs room for 60"
-        " people. Approve a venue requirements change that lowers it first."
+        " people. A venue requirements change that lowers it must be approved first."
     )
     assert impact["venue_bookings"] == []
 
@@ -593,7 +593,7 @@ def test_an_attendance_change_waiting_on_a_requirements_change_says_so(login_as,
 
     assert impact["refused_because"] == (
         "The expected attendance cannot be lower than 60 while Main hall needs room for 60"
-        " people. Approve a venue requirements change that lowers it first."
+        " people. A venue requirements change that lowers it must be approved first."
     )
 
 

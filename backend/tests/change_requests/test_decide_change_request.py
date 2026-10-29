@@ -95,7 +95,7 @@ _ANY_FINGERPRINT = "not-assessed"
 # attendance names the requirement that sets the minimum, the minimum itself, and what comes first.
 _ATTENDANCE_BELOW_REFUSAL = (
     "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
-    " {minimum} people. Approve a venue requirements change that lowers it first."
+    " {minimum} people. A venue requirements change that lowers it must be approved first."
 )
 
 
@@ -645,7 +645,8 @@ def test_an_unnamed_requirement_is_named_by_its_position(coordinator_client, db:
 
 def _hall_and_both_changes(login_as, db: Session):
     """An event for 200 with a 150-person hall, and Olivia asking both to bring the hall to 100
-    and the attendance to 100. Returns the requirements change, then the attendance change."""
+    and the attendance to 100. Returns the event, the hall, the requirements change, then the
+    attendance change."""
     event = _planning_event(db, expected_attendance=200)
     hall = make_venue_requirement(
         db, event.id, name="Hall", capacity=150, starts_at=event.starts_at, ends_at=event.ends_at
