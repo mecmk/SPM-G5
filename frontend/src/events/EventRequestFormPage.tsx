@@ -36,6 +36,7 @@ import {
 } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import { PHONE_MAX_LENGTH } from '../shared/phone'
+import { unnamedRequirementLabel } from '../shared/venueRequest'
 import {
   CONTACT_EMAIL_MAX_LENGTH,
   CONTACT_NAME_MAX_LENGTH,
@@ -1090,7 +1091,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               const requirementLabel = `venue requirement ${index + 1}`
               return (
                 <fieldset key={requirement.key} className="equipment-item">
-                  <legend>{`Venue requirement ${index + 1}`}</legend>
+                  <legend>{unnamedRequirementLabel(index + 1)}</legend>
                   <div className="form-grid">
                     <label className="span-2">
                       Requirement name
