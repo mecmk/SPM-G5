@@ -37,7 +37,13 @@ GROUPS: list[tuple[str, str, list[str]]] = [
     (
         "Reference lists",
         "#e9ecef",
-        ["facilities", "room_layouts", "accessibility_features", "equipment_types"],
+        [
+            "facilities",
+            "room_layouts",
+            "deleted_room_layouts",
+            "accessibility_features",
+            "equipment_types",
+        ],
     ),
     (
         "Venues",

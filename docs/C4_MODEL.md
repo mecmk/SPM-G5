@@ -313,7 +313,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 5 | Coordinator assignment | Review and assignment service | `event_coordinator_assignments`, `events.assigned_coordinator_id` | `app/coordination` |
 | 6 | Event status management | Event request service, Cancellation service | `events.status`, `event_status_history`, the `events.cancelled_*` columns | `app/events`; `app/cancellations` for the organiser cancelling an event and releasing what it holds |
 | 7 | Event information management | Event request service, Audit log writer | `events`, `audit_log` | `app/events` |
-| 8 | Venue catalogue | Venue endpoints, Venue service | `venues`, `venue_facilities`, `venue_layouts`, `venue_accessibility_features`, `room_layouts` | `app/venues` |
+| 8 | Venue catalogue | Venue endpoints, Venue service | `venues`, `venue_facilities`, `venue_layouts`, `venue_accessibility_features`, `room_layouts`, `deleted_room_layouts` | `app/venues` |
 | 9 | Venue availability calendar | Venue availability service | `venue_unavailability_periods`, `venue_bookings` | `app/venues` |
 | 10 | Venue search and filtering | Venue availability service | `venues` and its join tables, `venue_bookings` | `app/venues` |
 | 11 | Venue suitability checking | Venue availability service | `venues.capacity`, venue join tables against event requirements | `app/venues`, as search filters |

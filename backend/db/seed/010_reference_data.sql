@@ -41,9 +41,11 @@ DELETE FROM facilities WHERE code = 'RECORDING';
 -- Story 8.6: Venue Staff add, rename and delete room layouts in the app, so these are only the
 -- standard ones a new database starts with. A row is added only where it is missing - no
 -- conflict target, so a layout whose code or name is now taken is skipped too - and a rename or
--- a new description made in the app is never undone. A standard layout deleted in the app comes
--- back on the next run.
-INSERT INTO room_layouts (code, name, description, sort_order) VALUES
+-- a new description made in the app is never undone. A standard layout deleted in the app stays
+-- deleted: its code is in deleted_room_layouts, and no layout takes it again.
+INSERT INTO room_layouts (code, name, description, sort_order)
+SELECT standard.code, standard.name, standard.description, standard.sort_order
+FROM (VALUES
     ('THEATRE',    'Theatre',    'Rows of chairs facing the front; highest capacity.', 10),
     ('CLASSROOM',  'Classroom',  'Rows of tables and chairs facing the front.', 20),
     ('BOARDROOM',  'Boardroom',  'Single large table.', 30),
@@ -51,6 +53,8 @@ INSERT INTO room_layouts (code, name, description, sort_order) VALUES
     ('BANQUET',    'Banquet',    'Round tables for dining.', 50),
     ('EXHIBITION', 'Exhibition', 'Open floor for booths and stands.', 60),
     ('STANDING',   'Standing / reception', 'No seating; networking style.', 70)
+) AS standard (code, name, description, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM deleted_room_layouts deleted WHERE deleted.code = standard.code)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO accessibility_features (code, name, description, sort_order) VALUES

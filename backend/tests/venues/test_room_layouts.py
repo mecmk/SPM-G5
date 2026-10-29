@@ -66,7 +66,7 @@ from app.events.models import EventStatus
 from app.safety.models import EventSafetyReview
 from app.venues import schemas as venue_schemas
 from app.venues import service
-from app.venues.models import RoomLayout, Venue
+from app.venues.models import DeletedRoomLayout, RoomLayout, Venue
 from tests.support.factories import (
     create_event_request,
     make_booking,
@@ -144,6 +144,14 @@ def test_added_layouts_follow_the_standard_ones_from_a_to_z(venue_staff_client):
     assert _names(venue_staff_client)[7:] == ["amphitheatre", "Cabaret", "Zigzag rows"]
 
 
+@pytest.mark.story("8.6", ac=1)
+def test_an_accented_name_sorts_with_its_letter(venue_staff_client):
+    for name in ("Fishbowl", "Élan lounge", "dais"):
+        _added(venue_staff_client, name)
+
+    assert _names(venue_staff_client)[7:] == ["dais", "Élan lounge", "Fishbowl"]
+
+
 # --- AC2: adding ------------------------------------------------------------------------------
 @pytest.mark.story("8.6", ac=2)
 def test_venue_staff_add_a_layout_with_a_description(venue_staff_client):
@@ -186,6 +194,20 @@ def test_a_code_already_taken_gets_the_next_free_number(venue_staff_client):
 
 
 @pytest.mark.story("8.6", ac=2)
+@pytest.mark.story("8.6", ac=4)
+def test_a_deleted_layouts_code_is_never_given_to_a_new_layout(venue_staff_client):
+    """A code stands for one layout for good, so what kept a deleted layout's code (a pending
+    change request, a saved catalogue link, the audit log) is never taken for a new layout of the
+    same name. The same holds for a standard layout's code."""
+    _added(venue_staff_client, "Cabaret")
+    assert venue_staff_client.delete("/venues/layouts/CABARET").status_code == 204
+    assert venue_staff_client.delete("/venues/layouts/U_SHAPE").status_code == 204
+
+    assert _added(venue_staff_client, "Cabaret")["code"] == "CABARET_2"
+    assert _added(venue_staff_client, "U-shape")["code"] == "U_SHAPE_2"
+
+
+@pytest.mark.story("8.6", ac=2)
 def test_a_new_layout_is_offered_on_the_venue_form_and_the_request_form(login_as):
     client = login_as(Users.VENUE_STAFF)
     _added(client, "Cabaret")
@@ -197,6 +219,30 @@ def test_a_new_layout_is_offered_on_the_venue_form_and_the_request_form(login_as
     assert ("CABARET", "Cabaret") in [
         (x["code"], x["name"]) for x in request_form.json()["layouts"]
     ]
+
+
+@pytest.mark.story("8.6", ac=1)
+@pytest.mark.story("8.6", ac=2)
+def test_every_pick_list_offers_the_layouts_in_the_pages_order(login_as):
+    """The venue form and the catalogue filter (/venues/reference-data), and an event's venue
+    requirements and its change requests (/events/reference-data), list the layouts as the page
+    does: from A to Z ignoring capitals, also after a rename, which keeps the code (ZIGZAG is
+    "Aardvark" here)."""
+    client = login_as(Users.VENUE_STAFF)
+    for name in ("Cabaret", "Zigzag", "amphitheatre"):
+        _added(client, name)
+    renamed = client.patch("/venues/layouts/ZIGZAG", json={"name": "Aardvark"})
+    assert renamed.status_code == 200, renamed.text
+    expected = [code for code, _name in STANDARD_LAYOUTS] + ["ZIGZAG", "AMPHITHEATRE", "CABARET"]
+
+    page = [layout["code"] for layout in _layouts(client)]
+    venue_form = [x["code"] for x in client.get("/venues/reference-data").json()["layouts"]]
+    client.logout()
+    request_form = login_as(Users.ORGANISER).get("/events/reference-data").json()["layouts"]
+
+    assert page == expected
+    assert venue_form == expected
+    assert [x["code"] for x in request_form] == expected
 
 
 @pytest.mark.story("8.6", ac=2)
@@ -390,6 +436,19 @@ def test_deleting_a_layout_is_audited(venue_staff_client, db):
     assert entry.actor_id == Users.VENUE_STAFF.id
     assert entry.entity_type == "room_layout"
     assert entry.details == {"code": "U_SHAPE", "name": "U-shape"}
+
+
+@pytest.mark.story("8.6", ac=4)
+def test_rerunning_the_seed_does_not_bring_back_a_deleted_layout(venue_staff_client, db):
+    """``npm run db:ready`` re-runs the seed, which adds the standard layouts. One Venue Staff
+    deleted stays deleted, so it is offered nowhere, and its code is never used again."""
+    assert venue_staff_client.delete("/venues/layouts/U_SHAPE").status_code == 204
+
+    conn = db.connection()
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+    assert "U_SHAPE" not in [layout["code"] for layout in _layouts(venue_staff_client)]
 
 
 # --- AC5: the name ----------------------------------------------------------------------------
@@ -664,6 +723,7 @@ def _clean_up(engine, *, codes: list[str], venue_ids: list[uuid.UUID] = ()) -> N
         session.execute(delete(AuditLog).where(AuditLog.entity_id.in_(venue_ids)))
         session.execute(delete(Venue).where(Venue.id.in_(venue_ids)))
         session.execute(delete(RoomLayout).where(RoomLayout.code.in_(codes)))
+        session.execute(delete(DeletedRoomLayout).where(DeletedRoomLayout.code.in_(codes)))
         session.commit()
 
 
@@ -745,7 +805,7 @@ def test_saving_a_venue_with_a_deleted_layout_is_refused_naming_it(venue_staff_c
 
     assert response.status_code == 422, response.text
     assert response.json()["detail"] == (
-        "The room layout CABARET no longer exists. Untick it and save again."
+        'The room layout "Cabaret" no longer exists. Untick it and save again.'
     )
     assert db.scalar(select(func.count()).where(Venue.name == "Supper Club")) == 0
     boardroom = venue_staff_client.get(f"/venues/{Venues.BOARDROOM}").json()
@@ -754,7 +814,7 @@ def test_saving_a_venue_with_a_deleted_layout_is_refused_naming_it(venue_staff_c
 
 @pytest.mark.story("8.6", ac=11)
 def test_two_deleted_layouts_are_named_together(venue_staff_client):
-    for name in ("Cabaret", "Supper club"):
+    for name in ("Supper club", "Cabaret"):
         _added(venue_staff_client, name)
     for code in ("CABARET", "SUPPER_CLUB"):
         venue_staff_client.delete(f"/venues/layouts/{code}")
@@ -766,8 +826,28 @@ def test_two_deleted_layouts_are_named_together(venue_staff_client):
 
     assert response.status_code == 422, response.text
     assert response.json()["detail"] == (
-        "The room layouts CABARET and SUPPER_CLUB no longer exist. Untick them and save again."
+        'The room layouts "Cabaret" and "Supper club" no longer exist. Untick them and save again.'
     )
+
+
+@pytest.mark.story("8.6", ac=11)
+@pytest.mark.parametrize("save", ["create", "update"])
+def test_a_layout_code_that_never_existed_is_refused_as_unknown(venue_staff_client, save):
+    """Only a deleted layout is said to no longer exist. A code no layout ever had, such as a
+    typo sent from outside the app, keeps the catalogue's own refusal."""
+    layouts = [{"code": "THEATER"}]
+
+    if save == "create":
+        response = venue_staff_client.post(
+            "/venues", json=venue_payload(name="Supper Club", layouts=layouts)
+        )
+    else:
+        response = venue_staff_client.patch(
+            f"/venues/{Venues.BOARDROOM}", json={"layouts": layouts}
+        )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "Unknown layout code(s): THEATER"
 
 
 @pytest.mark.story("8.6", ac=11)
@@ -816,7 +896,9 @@ def test_a_layout_deleted_between_the_venue_saves_check_and_its_write_is_refused
                 deleted.set()
             outcome = saving.result(timeout=30)
 
-        assert outcome == f"The room layout {code} no longer exists. Untick it and save again."
+        assert outcome == (
+            f'The room layout "Race layout {tag}" no longer exists. Untick it and save again.'
+        )
         with Session(engine) as session:
             assert session.get(Venue, venue_id).layouts == []
     finally:
@@ -837,6 +919,26 @@ def test_changing_a_layout_that_no_longer_exists_is_refused(venue_staff_client, 
     assert response.status_code == 404, response.text
     assert response.json()["detail"] == NOT_FOUND
     assert "Bistro" not in _names(venue_staff_client)
+
+
+@pytest.mark.story("8.6", ac=12)
+@pytest.mark.parametrize(
+    "change",
+    [{"name": ""}, {"description": "   "}, {"name": "A" * 101}],
+    ids=["blank name", "blank description", "name too long"],
+)
+def test_a_deleted_layout_is_said_to_be_gone_before_its_fields_are_checked(
+    venue_staff_client, change
+):
+    """Correcting the field would not save the change, so the first answer says the layout no
+    longer exists rather than asking for the field to be fixed."""
+    _added(venue_staff_client, "Cabaret")
+    assert venue_staff_client.delete("/venues/layouts/CABARET").status_code == 204
+
+    response = venue_staff_client.patch("/venues/layouts/CABARET", json=change)
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == NOT_FOUND
 
 
 @pytest.mark.story("8.6", ac=12)
@@ -893,3 +995,56 @@ def test_a_rename_waiting_on_a_delete_is_refused_once_the_delete_lands(engine, m
             assert session.get(RoomLayout, code) is None
     finally:
         _clean_up(engine, codes=[code])
+
+
+@pytest.mark.story("8.6", ac=12)
+def test_a_rename_in_progress_does_not_hold_up_a_venue_saved_with_the_layout(engine, monkeypatch):
+    """A rename locks the layout only against other changes to it, so a venue saved with that
+    layout meanwhile goes through at once instead of waiting for the rename to finish."""
+    tag = uuid.uuid4().hex[:8].upper()
+    code = f"RACE_{tag}"
+    with Session(engine) as session:
+        session.add(RoomLayout(code=code, name=f"Race layout {tag}", description=_DESCRIPTION))
+        venue_id = make_venue(session, name=f"Race Venue {tag}").id
+        session.commit()
+    renaming = threading.Event()
+    proceed = threading.Event()
+    audit = service.record_audit
+
+    def audit_then_wait(db: Session, **kwargs: object) -> AuditLog:
+        if kwargs["action"] == "ROOM_LAYOUT_UPDATED":
+            renaming.set()
+            assert proceed.wait(timeout=10)
+        return audit(db, **kwargs)
+
+    monkeypatch.setattr(service, "record_audit", audit_then_wait)
+
+    def rename_layout() -> None:
+        with Session(engine) as session:
+            actor = session.get(User, Users.VENUE_STAFF.id)
+            change = venue_schemas.RoomLayoutUpdate(name=f"Renamed {tag}")
+            service.update_room_layout(session, code, change, actor=actor)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            renamed = pool.submit(rename_layout)
+            try:
+                assert renaming.wait(timeout=10)
+                with Session(engine) as session:
+                    # A save that has to wait for the rename fails here rather than hanging.
+                    session.execute(text("SET LOCAL lock_timeout = '2s'"))
+                    actor = session.get(User, Users.VENUE_STAFF.id)
+                    change = venue_schemas.VenueUpdate(
+                        layouts=[venue_schemas.VenueLayoutIn(code=code)]
+                    )
+                    service.update_venue(session, venue_id, change, actor=actor)
+            finally:
+                proceed.set()
+            renamed.result(timeout=30)
+
+        with Session(engine) as session:
+            venue = session.get(Venue, venue_id)
+            assert [layout.layout_code for layout in venue.layouts] == [code]
+            assert session.get(RoomLayout, code).name == f"Renamed {tag}"
+    finally:
+        _clean_up(engine, codes=[code], venue_ids=[venue_id])

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { formatApiError } from '../api/client'
 import { listRoomLayouts, type RoomLayout } from '../api/venues'
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
@@ -22,24 +21,23 @@ type OpenDialog =
  * in the server's order: the standard ones first, then the others from A to Z. AC9: every role
  * that reads venues sees the list; only Venue Staff (venues:manage) get Add layout, and Edit and
  * Delete on each layout (AC2-AC4). The server refuses everyone else regardless. After a change, or
- * a refusal that found a layout deleted elsewhere (AC12), the list is read again.
+ * a refusal that found a layout deleted elsewhere (AC12), the list is read again: only the newest
+ * read's answer is shown, and once a read succeeds an earlier failure's message goes.
  */
 export function RoomLayoutsPage() {
   const { can } = useAuth()
   const canManage = can(PERMISSIONS.VENUES_MANAGE)
-  const { data: layouts, error, isLoading, setData: setLayouts } = useLoaded(listRoomLayouts)
+  // A new function for each read of the list. useLoaded drops the answer to a read it has
+  // replaced, should that answer arrive late, and clears its error when a read succeeds.
+  const [loadLayouts, setLoadLayouts] = useState<() => Promise<RoomLayout[]>>(() => listRoomLayouts)
+  const { data: layouts, error, isLoading } = useLoaded(loadLayouts)
   const [openDialog, setOpenDialog] = useState<OpenDialog | null>(null)
-  const [reloadError, setReloadError] = useState<string | null>(null)
 
   /** The list in the server's order again. A failed read is shown on the page, since the dialog
    *  that asked for it may have closed. */
-  async function reloadLayouts() {
-    setReloadError(null)
-    try {
-      setLayouts(await listRoomLayouts())
-    } catch (err) {
-      setReloadError(formatApiError(err))
-    }
+  function reloadLayouts() {
+    // Wrapped in an arrow: a function handed to a state setter would be called as an updater.
+    setLoadLayouts(() => () => listRoomLayouts())
   }
 
   function openAddDialog() {
@@ -53,7 +51,7 @@ export function RoomLayoutsPage() {
   /** AC2-AC4: the change is saved, so the dialog closes and the list shows it in its place. */
   function finishChange() {
     setOpenDialog(null)
-    void reloadLayouts()
+    reloadLayouts()
   }
 
   return (
@@ -77,11 +75,6 @@ export function RoomLayoutsPage() {
       {error && (
         <p role="alert" className="error">
           {error}
-        </p>
-      )}
-      {reloadError && (
-        <p role="alert" className="error">
-          {reloadError}
         </p>
       )}
       {isLoading && <LoadingState label="Loading room layouts…" />}

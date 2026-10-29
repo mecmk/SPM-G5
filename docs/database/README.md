@@ -61,7 +61,8 @@ Both, deliberately:
   sample rows (fixed UUIDs) without duplicating them or touching yours. If you mangle a sample
   venue, the next run heals it. Room layouts are the exception: Venue Staff manage them in the app
   (story 8.6), so the seed only adds a standard layout that is missing and never undoes a rename.
-  A standard layout deleted in the app comes back on the next run.
+  A standard layout deleted in the app stays deleted: its code is in `deleted_room_layouts`, and
+  no layout takes it again.
 - **`npm run db:reset`** gives you a clean slate whenever you want one.
 - **Tests never use your dev database.** `backend/tests/conftest.py` drops and rebuilds
   `connectsphere_test` from the same migrations + seed on every run, and wraps each test in a
@@ -113,8 +114,9 @@ Edit `backend/db/seed/010_reference_data.sql`. No migration needed. The next `np
 upserts it, and `npm run db:docs` lists it in the dictionary.
 
 Room layouts are added, renamed and deleted by Venue Staff on the app's Room layouts page (story
-8.6). A layout added to the seed file is only inserted where its code and name are both free, and
-a change to one already there is not applied, since the app owns the list.
+8.6). A layout added to the seed file is only inserted where its code and name are both free and
+no deleted layout had its code, and a change to one already there is not applied, since the app
+owns the list.
 
 ### Adding sample rows
 
