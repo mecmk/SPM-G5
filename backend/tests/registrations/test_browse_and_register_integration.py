@@ -97,7 +97,7 @@ LISTED_EVENT_KEYS = {
     "state",
     "registered_at",
 }
-REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at"}
+REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at", "guests"}  # guests: 18.5 AC1
 
 REGISTERED = "registered"
 NOT_FOUND = "not found"

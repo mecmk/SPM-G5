@@ -81,6 +81,8 @@ MY_REGISTRATION_KEYS = {
     "registered_at",
     "withdrawn_at",
     "can_withdraw",
+    "guests",  # story 18.5 AC4
+    "can_change_guests",  # story 18.5 AC9
 }
 
 # The contract: the audit action and the sentences an attendee is shown.
