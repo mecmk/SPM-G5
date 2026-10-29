@@ -7,7 +7,12 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { STANDING_BADGES, describeDietaryRequirements, describePhone } from './registrationLabels'
+import {
+  STANDING_BADGES,
+  describeDietaryRequirements,
+  describeGuests,
+  describePhone,
+} from './registrationLabels'
 
 /**
  * Story 18.3 - who has registered for the event, for its organiser and assigned coordinator, on
@@ -21,6 +26,9 @@ import { STANDING_BADGES, describeDietaryRequirements, describePhone } from './r
  * and contact - "None" when none were given (AC6). A row no longer Registered leaves both empty
  * (AC9): the server sends neither. On a desktop the list is a table; on a phone each attendee is a
  * card of labelled lines (App.css `.registration-table`), and long dietary requirements wrap.
+ *
+ * Story 18.5 AC5: the guests each attendee brings, with their dietary requirements beside them -
+ * on a row no longer Registered, by name only - and a count that includes them.
  */
 export function RegistrationListSection({ eventId }: { eventId: string }) {
   const load = useCallback(() => listEventRegistrations(eventId), [eventId])
@@ -75,6 +83,7 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
                     <th>Email</th>
                     <th>Phone</th>
                     <th>Dietary requirements</th>
+                    <th>Guests</th>
                     <th>Registered</th>
                   </tr>
                 </thead>
@@ -98,6 +107,9 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
                           {isRegistered
                             ? describeDietaryRequirements(registration.dietary_requirements)
                             : ''}
+                        </td>
+                        <td data-label="Guests" className="registration-dietary">
+                          {describeGuests(registration.guests)}
                         </td>
                         <td data-label="Registered">
                           {formatDateTime(registration.registered_at)}

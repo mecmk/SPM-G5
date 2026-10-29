@@ -1,4 +1,4 @@
-import type { RegistrationStanding } from '../api/registrations'
+import type { Guest, RegistrationStanding } from '../api/registrations'
 import { eventBadgeStatus } from '../shared/eventStatus'
 import { formatDateTime, NONE, NOT_RECORDED } from '../shared/format'
 
@@ -38,4 +38,19 @@ export function describeDietaryRequirements(dietaryRequirements: string | null):
  *  but an attendee who registered before 18.4 and has not been asked since has none yet. */
 export function describePhone(phone: string | null): string {
   return phone ?? NOT_RECORDED
+}
+
+/** Story 18.5 AC4/AC5: one guest as the attendee and the organiser see them - their name, and
+ *  their dietary requirements beside it when there are any to show. */
+export function describeGuest(guest: Guest): string {
+  return guest.dietary_requirements === null
+    ? guest.full_name
+    : `${guest.full_name} (${guest.dietary_requirements})`
+}
+
+/** Story 18.5 AC4/AC5: the guests registered with an attendee, in order - nothing for none, so
+ *  an attendee alone shows no guests rather than a second "None" beside their own dietary
+ *  requirements. */
+export function describeGuests(guests: Guest[]): string {
+  return guests.map(describeGuest).join(', ')
 }

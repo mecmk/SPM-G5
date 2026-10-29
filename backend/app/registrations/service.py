@@ -20,6 +20,13 @@ Registered count, so a cancelled event counts none.
 Story 18.4: the attendee's details - name, phone number and dietary requirements - live on their
 user row, so a change shows everywhere at once (AC4). They are written on My profile and with a
 registration, and the first registration needs them (AC2).
+
+Story 18.5: an attendee registers with up to ten guests, as one group (AC1). Each guest takes a
+place (AC2), so every count of places here - 18.1's places left, 18.3's active count and 19.3's
+count of those affected (AC10) - is the Registered registrations plus their guests. Guests are
+written with the registration and checked against the places as 18.1's place is: inserted first,
+counted after, the event's row held (AC12). Changed afterwards with ``update_guests`` (AC3), their
+own section at the end.
 """
 
 from __future__ import annotations
@@ -30,7 +37,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, Select, and_, case, func, null, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    case,
+    delete,
+    func,
+    null,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -38,10 +56,12 @@ from app.auth.models import User
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import record_audit
 from app.events.models import Event, EventStatus
-from app.registrations.models import EventRegistration, RegistrationStatus
+from app.registrations.models import EventRegistration, RegistrationGuest, RegistrationStatus
 from app.registrations.schemas import (
     PHONE_NUMBER_REQUIRED_MESSAGE,
     AttendeeDetailsIn,
+    GuestIn,
+    GuestsUpdate,
     RegistrationCreate,
 )
 from app.venues.models import Venue
@@ -63,6 +83,8 @@ REGISTRATION_EVENT_NOT_FOUND_MESSAGE = "This event is not open for registration.
 REGISTRATION_NOT_YET_OPEN_MESSAGE = "Registration for this event has not opened yet."
 REGISTRATION_CLOSED_MESSAGE = "Registration for this event has closed."
 EVENT_FULL_MESSAGE = "This event is full."
+# Story 18.5 AC12: a group that does not fit. An attendee alone is still told EVENT_FULL_MESSAGE.
+NOT_ENOUGH_PLACES_MESSAGE = "There are not enough places left for you and your guests."
 ALREADY_REGISTERED_MESSAGE = "You are already registered for this event."
 REGISTRATION_LIST_NOT_FOUND_MESSAGE = "This event was not found."
 # Story 18.4: the attendee's details.
@@ -120,6 +142,13 @@ class AlreadyRegistered(RegistrationRefused):
         super().__init__(ALREADY_REGISTERED_MESSAGE)
 
 
+class NotEnoughPlaces(RegistrationRefused):
+    """Story 18.5 AC12: the attendee and their guests together need more places than are left."""
+
+    def __init__(self) -> None:
+        super().__init__(NOT_ENOUGH_PLACES_MESSAGE)
+
+
 class PhoneNumberRequired(ValueError):
     """Story 18.4 AC7: the details sent would leave the attendee with no phone number on file - one
     who has never given one, sending none."""
@@ -174,12 +203,14 @@ class AttendeeRegistration:
     attendee: User
     standing: RegistrationStanding
     shows_details: bool
+    guests: list[RegistrationGuest]  # story 18.5 AC5, in the attendee's order
 
 
 @dataclass(frozen=True)
 class EventRegistrationList:
     """18.3 AC1-AC3/AC7: one page of an event's registrations, oldest first; how many there are
-    in all; how many are active against its capacity; and whether that count has reached it."""
+    in all; how many places the active ones take against its capacity, guests included (18.5
+    AC5); and whether that count has reached it."""
 
     items: list[AttendeeRegistration]
     total: int
@@ -247,19 +278,40 @@ def _is_open_to_attendees() -> ColumnElement[bool]:
     )
 
 
-def _active_registrations(event_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Select[tuple[int]]:
-    """AC2: the registrations that take a place at the event - REGISTERED ones only. Counted
-    from ``uq_event_registrations_active``, whose rows are exactly these."""
-    return select(func.count()).where(
-        EventRegistration.event_id == event_id,
-        EventRegistration.status == RegistrationStatus.REGISTERED,
+def _guest_count() -> ColumnElement[int]:
+    """Story 18.5 AC2: how many guests came with the registration in the enclosing statement."""
+    return (
+        select(func.count())
+        .where(RegistrationGuest.registration_id == EventRegistration.id)
+        .correlate(EventRegistration)
+        .scalar_subquery()
     )
 
 
+def _places_held() -> ColumnElement[int]:
+    """AC2: the places one registration takes - one while REGISTERED, and story 18.5 AC2 one more
+    for each of its guests; none otherwise. Summed over rows, as a total or a window."""
+    return case(
+        (EventRegistration.status == RegistrationStatus.REGISTERED, 1 + _guest_count()),
+        else_=0,
+    )
+
+
+def _places() -> ColumnElement[int]:
+    """AC2: the places the counted registrations take, 0 for none."""
+    return func.coalesce(func.sum(_places_held()), 0)
+
+
+def _places_taken(event_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Select[tuple[int]]:
+    """AC2: the places taken at the event - its REGISTERED registrations and their guests."""
+    return select(_places()).where(EventRegistration.event_id == event_id)
+
+
 def count_active_registrations(db: Session, event_id: uuid.UUID) -> int:
-    """AC2: how many places ``event_id``'s registrations take. Story 19.3 reports it beside a
-    change request, so a coordinator sees who an approval would affect."""
-    return db.scalar(_active_registrations(event_id))
+    """AC2: how many places ``event_id``'s registrations take, guests included (18.5 AC2). Story
+    19.3 reports it beside a change request, so a coordinator sees who an approval would affect -
+    each attendee and their guests (18.5 AC10)."""
+    return db.scalar(_places_taken(event_id))
 
 
 def _booked_venues(db: Session, event_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Venue]]:
@@ -286,7 +338,7 @@ def list_registration_events(
     for ``attendee``. AC3: full, closed and not-yet-open events stay listed until they start.
     Filtered, ordered, paged and counted in SQL."""
     is_listed = and_(_is_open_to_attendees(), Event.starts_at > now)
-    registered = _active_registrations(Event.id).correlate(Event).scalar_subquery()
+    registered = _places_taken(Event.id).correlate(Event).scalar_subquery()
     mine = (
         select(EventRegistration.registered_at)
         .where(
@@ -370,6 +422,47 @@ def _apply_details(
         )
 
 
+def _add_guests(
+    db: Session, registration: EventRegistration, guests: list[GuestIn]
+) -> list[RegistrationGuest]:
+    """Story 18.5 AC1/AC3: write ``guests`` to ``registration``, numbered in the order given.
+    Flushed, not committed, so the places can be counted with them and a refusal takes them
+    back."""
+    rows = [
+        RegistrationGuest(
+            registration_id=registration.id,
+            position=position,
+            full_name=guest.full_name,
+            dietary_requirements=guest.dietary_requirements,
+        )
+        for position, guest in enumerate(guests, start=1)
+    ]
+    db.add_all(rows)
+    db.flush()
+    return rows
+
+
+def _guests_by_registration(
+    db: Session, registration_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[RegistrationGuest]]:
+    """Story 18.5 AC4/AC5: each registration's guests, in the attendee's order, read at once for
+    a whole list. A registration with none is absent: read it with ``.get(id, [])``."""
+    guests = db.scalars(
+        select(RegistrationGuest)
+        .where(RegistrationGuest.registration_id.in_(registration_ids))
+        .order_by(RegistrationGuest.registration_id, RegistrationGuest.position)
+    ).all()
+    by_registration: dict[uuid.UUID, list[RegistrationGuest]] = defaultdict(list)
+    for guest in guests:
+        by_registration[guest.registration_id].append(guest)
+    return by_registration
+
+
+def list_guests(db: Session, registration_id: uuid.UUID) -> list[RegistrationGuest]:
+    """Story 18.5 AC1: the guests registered with one registration, in the attendee's order."""
+    return _guests_by_registration(db, [registration_id]).get(registration_id, [])
+
+
 def register(
     db: Session, data: RegistrationCreate, *, attendee: User, now: datetime
 ) -> EventRegistration:
@@ -384,10 +477,15 @@ def register(
     Details that would leave no phone number on file are refused first
     (``PhoneNumberRequired``, 18.4 AC7), before anything is read or written.
 
+    Story 18.5 AC1/AC2: the guests sent with it are written with it, and counted with it: a group
+    that does not fit is refused whole (``NotEnoughPlaces``, AC12) - an attendee alone, as before,
+    with ``EventFull``.
+
     Raises ``RegistrationEventNotFound`` (AC3/AC4) unless the event is open to attendees, then
     ``RegistrationClosed`` or ``RegistrationNotYetOpen`` (AC2), ``AlreadyRegistered`` (AC6),
-    ``EventFull`` (AC2/AC6) and ``AttendeeDetailsRequired`` (18.4 AC2), in that order. A refused
-    registration leaves nothing written - details sent with it included."""
+    ``EventFull`` or ``NotEnoughPlaces`` (AC2/AC6, 18.5 AC12) and ``AttendeeDetailsRequired``
+    (18.4 AC2), in that order. A refused registration leaves nothing written - details and guests
+    sent with it included."""
     if data.details is not None:
         _require_phone(data.details, attendee=attendee)
     event = db.execute(
@@ -422,9 +520,10 @@ def register(
         if ACTIVE_REGISTRATION_INDEX in str(exc.orig):
             raise AlreadyRegistered() from exc
         raise
-    if db.scalar(_active_registrations(event.id)) > event.expected_attendance:
+    guests = _add_guests(db, registration, data.guests)
+    if db.scalar(_places_taken(event.id)) > event.expected_attendance:
         db.rollback()
-        raise EventFull()
+        raise NotEnoughPlaces() if guests else EventFull()
     if attendee.attendee_details_confirmed_at is None and (
         data.details is None or not _FIRST_REGISTRATION_FIELDS <= data.details.model_fields_set
     ):
@@ -516,12 +615,15 @@ class EventStarted(WithdrawalRefused):
 @dataclass(frozen=True)
 class MyRegistrationItem:
     """18.2 AC1: one of the attendee's registrations, with its event, where they stand, and
-    whether it can be withdrawn now (AC3)."""
+    whether it can be withdrawn now (AC3). Story 18.5 AC4/AC9: its guests, and whether they can
+    still be changed."""
 
     registration: EventRegistration
     event: Event
     standing: RegistrationStanding
     can_withdraw: bool
+    guests: list[RegistrationGuest]
+    can_change_guests: bool
 
 
 def registration_standing(*, registration_status: str, event_status: str) -> RegistrationStanding:
@@ -553,7 +655,11 @@ def withdrawal_refusal(*, standing: RegistrationStanding) -> WithdrawalRefused:
 
 
 def _my_registration_item(
-    registration: EventRegistration, event: Event, *, now: datetime
+    registration: EventRegistration,
+    event: Event,
+    *,
+    now: datetime,
+    guests: list[RegistrationGuest],
 ) -> MyRegistrationItem:
     # Registrations are only taken for Confirmed events, and ck_events_submitted_fields_complete
     # keeps a start on every event past Draft.
@@ -566,6 +672,8 @@ def _my_registration_item(
         event=event,
         standing=standing,
         can_withdraw=can_withdraw(standing=standing, now=now, starts_at=event.starts_at),
+        guests=guests,
+        can_change_guests=guests_change_refusal(standing=standing, event=event, now=now) is None,
     )
 
 
@@ -607,7 +715,11 @@ def list_my_registrations(
             Event.id,
         )
     ).all()
-    return [_my_registration_item(registration, event, now=now) for registration, event in rows]
+    guests = _guests_by_registration(db, [registration.id for registration, _ in rows])
+    return [
+        _my_registration_item(registration, event, now=now, guests=guests.get(registration.id, []))
+        for registration, event in rows
+    ]
 
 
 def _is_withdrawable(now: datetime) -> ColumnElement[bool]:
@@ -634,7 +746,10 @@ def withdraw_registration(
     withdrawals at once the second waits on the first's row lock and then matches nothing - no
     check runs ahead of the write it guards (backend/STYLE.md). The registration is read after
     the update, for the answer, and when nothing was written to say why: ``RegistrationNotFound``
-    when it is not ``attendee``'s (AC6), else ``withdrawal_refusal`` (AC3/AC7/AC8)."""
+    when it is not ``attendee``'s (AC6), else ``withdrawal_refusal`` (AC3/AC7/AC8).
+
+    Story 18.5 AC8: the guests go with it. Their places are counted only while the registration
+    is Registered, so they are freed with it, and they stay on it for the record."""
     withdrawn = db.execute(
         update(EventRegistration)
         .where(
@@ -656,7 +771,8 @@ def withdraw_registration(
     if found is None:
         raise RegistrationNotFound()
     registration, event = found
-    item = _my_registration_item(registration, event, now=now)
+    guests = list_guests(db, registration.id)
+    item = _my_registration_item(registration, event, now=now, guests=guests)
     if withdrawn.rowcount == 0:
         raise withdrawal_refusal(standing=item.standing)
 
@@ -696,17 +812,17 @@ def _takes_or_holds_registrations() -> ColumnElement[bool]:
     )
 
 
-def _active_count() -> ColumnElement[int]:
-    """18.3 AC1/AC7: how many of the counted registrations are REGISTERED."""
-    return func.count().filter(EventRegistration.status == RegistrationStatus.REGISTERED)
-
-
 def _attendee_registration(
-    registration: EventRegistration, *, attendee: User, event_status: str
+    registration: EventRegistration,
+    *,
+    attendee: User,
+    event_status: str,
+    guests: list[RegistrationGuest],
 ) -> AttendeeRegistration:
     """18.3 AC4: one row, with 18.2's standing. 18.4 AC9: only a registration still Registered
     shows the attendee's details - not one withdrawn, nor any on a cancelled event (CL-163) -
-    since only those attendees are being catered for and may need contacting."""
+    since only those attendees are being catered for and may need contacting. Story 18.5 AC5: the
+    guests registered with them, whose dietary requirements follow the same rule."""
     standing = registration_standing(
         registration_status=registration.status, event_status=event_status
     )
@@ -715,6 +831,7 @@ def _attendee_registration(
         attendee=attendee,
         standing=standing,
         shows_details=standing is RegistrationStanding.REGISTERED,
+        guests=guests,
     )
 
 
@@ -728,7 +845,8 @@ def list_event_registrations(
     AC7: the total and active count are window counts over every row of the event, in the
     statement that reads the page, so a registration made meanwhile can never leave the count
     and the list apart. A page past the end has no row to carry them, so they are counted
-    alone. A cancelled event's registrations, still active or not, count for none (18.2)."""
+    alone. A cancelled event's registrations, still active or not, count for none (18.2). Story
+    18.5 AC5: the active count is of places, so each active registration's guests count too."""
     event = db.scalar(
         select(Event).where(Event.id == event_id, _registration_list_viewable_by(viewer))
     )
@@ -738,7 +856,7 @@ def list_event_registrations(
     assert event.expected_attendance is not None
     is_this_event = EventRegistration.event_id == event.id
     rows = db.execute(
-        select(EventRegistration, User, func.count().over(), _active_count().over())
+        select(EventRegistration, User, func.count().over(), func.sum(_places_held()).over())
         .join(User, User.id == EventRegistration.attendee_id)
         .where(is_this_event)
         .order_by(EventRegistration.registered_at, EventRegistration.id)
@@ -748,12 +866,18 @@ def list_event_registrations(
     if rows:
         total, active = rows[0][2], rows[0][3]
     else:
-        total, active = db.execute(select(func.count(), _active_count()).where(is_this_event)).one()
+        total, active = db.execute(select(func.count(), _places()).where(is_this_event)).one()
     if event.status == EventStatus.CANCELLED:
         active = 0
+    guests = _guests_by_registration(db, [registration.id for registration, _, _, _ in rows])
     return EventRegistrationList(
         items=[
-            _attendee_registration(registration, attendee=attendee, event_status=event.status)
+            _attendee_registration(
+                registration,
+                attendee=attendee,
+                event_status=event.status,
+                guests=guests.get(registration.id, []),
+            )
             for registration, attendee, _, _ in rows
         ],
         total=total,
@@ -790,3 +914,135 @@ def update_profile(
     _apply_details(db, details, attendee=attendee, now=now)
     db.commit()
     return attendee
+
+
+# =============================================================================================
+# Story 18.5: changing the guests registered with an attendee
+# =============================================================================================
+REGISTRATION_GUESTS_UPDATED_ACTION = "EVENT_REGISTRATION_GUESTS_UPDATED"
+
+GUESTS_REGISTRATION_CLOSED_MESSAGE = (
+    "Registration for this event has closed, so your guests can no longer be changed."
+)
+GUESTS_WITHDRAWN_MESSAGE = (
+    "You have withdrawn from this event, so your guests can no longer be changed."
+)
+GUESTS_EVENT_CANCELLED_MESSAGE = (
+    "This event was cancelled, so your guests can no longer be changed."
+)
+GUESTS_NOT_ENOUGH_PLACES_MESSAGE = "There are not enough places left for these guests."
+
+
+class GuestsChangeRefused(Exception):
+    """AC9/AC12: the registration is the attendee's, but its guests cannot be changed so."""
+
+
+class GuestsRegistrationClosed(GuestsChangeRefused):
+    def __init__(self) -> None:
+        super().__init__(GUESTS_REGISTRATION_CLOSED_MESSAGE)
+
+
+class GuestsAfterWithdrawal(GuestsChangeRefused):
+    def __init__(self) -> None:
+        super().__init__(GUESTS_WITHDRAWN_MESSAGE)
+
+
+class GuestsEventCancelled(GuestsChangeRefused):
+    def __init__(self) -> None:
+        super().__init__(GUESTS_EVENT_CANCELLED_MESSAGE)
+
+
+class GuestsNotEnoughPlaces(GuestsChangeRefused):
+    def __init__(self) -> None:
+        super().__init__(GUESTS_NOT_ENOUGH_PLACES_MESSAGE)
+
+
+def guests_change_refusal(
+    *, standing: RegistrationStanding, event: Event, now: datetime
+) -> GuestsChangeRefused | None:
+    """AC9: why the guests of a registration standing so can no longer be changed, or None while
+    they can - withdrawn; its event cancelled; or its registration no longer open: closed by time
+    (18.1 AC2), or the event no longer taking registrations (sent back to Planning, 9.4). The one
+    rule behind both My registrations' ``can_change_guests`` and ``update_guests``."""
+    if standing is RegistrationStanding.WITHDRAWN:
+        return GuestsAfterWithdrawal()
+    if standing is RegistrationStanding.EVENT_CANCELLED:
+        return GuestsEventCancelled()
+    # ck_events_submitted_fields_complete keeps a start on every event past Draft.
+    assert event.starts_at is not None
+    closes_at = closing_time(closes_at=event.registration_closes_at, starts_at=event.starts_at)
+    is_taking_registrations = (
+        event.status == EventStatus.CONFIRMED
+        and event.is_public
+        and event.registration_required
+        and now < closes_at
+    )
+    if not is_taking_registrations:
+        return GuestsRegistrationClosed()
+    return None
+
+
+def update_guests(
+    db: Session, registration_id: uuid.UUID, data: GuestsUpdate, *, attendee: User, now: datetime
+) -> MyRegistrationItem:
+    """AC3: replace the guests of ``attendee``'s registration with ``data``'s, in order, and audit
+    how many there now are - never their names. AC11: another attendee's registration, like an
+    unknown one, is ``RegistrationNotFound``.
+
+    AC12: the event's row is held first, as ``register`` holds it, then the registration's, so
+    every change to an event's places takes turns and a withdrawal (18.2) waits for this one. The
+    standing is read under those locks, so nothing changes between ``guests_change_refusal``
+    (AC9) and the write. The new guests are written first and the places counted after, as in
+    ``register``: more guests than the places left is rolled back (``GuestsNotEnoughPlaces``).
+    Fewer guests are never refused, even on an event already over its capacity (19.2)."""
+    found = db.execute(
+        select(EventRegistration.event_id).where(
+            EventRegistration.id == registration_id,
+            EventRegistration.attendee_id == attendee.id,
+        )
+    ).one_or_none()
+    if found is None:
+        raise RegistrationNotFound()
+    event = db.scalar(
+        select(Event).where(Event.id == found.event_id).with_for_update(key_share=True, of=Event)
+    )
+    registration = db.scalar(
+        select(EventRegistration)
+        .where(EventRegistration.id == registration_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    # The registration's event is its foreign key, and nothing deletes a registration.
+    assert event is not None
+    assert registration is not None
+    standing = registration_standing(
+        registration_status=registration.status, event_status=event.status
+    )
+    refusal = guests_change_refusal(standing=standing, event=event, now=now)
+    if refusal is not None:
+        raise refusal
+
+    before = db.scalar(
+        select(func.count()).where(RegistrationGuest.registration_id == registration.id)
+    )
+    db.execute(
+        delete(RegistrationGuest).where(RegistrationGuest.registration_id == registration.id)
+    )
+    guests = _add_guests(db, registration, data.guests)
+    # ck_events_submitted_fields_complete: a Confirmed event has its expected attendance.
+    assert event.expected_attendance is not None
+    if len(guests) > before and db.scalar(_places_taken(event.id)) > event.expected_attendance:
+        db.rollback()
+        raise GuestsNotEnoughPlaces()
+
+    record_audit(
+        db,
+        actor=attendee,
+        action=REGISTRATION_GUESTS_UPDATED_ACTION,
+        entity_type=_REGISTRATION_ENTITY,
+        entity_id=registration.id,
+        details={"event_id": str(event.id), "guest_count": len(guests)},
+        commit=False,
+    )
+    db.commit()
+    return _my_registration_item(registration, event, now=now, guests=guests)

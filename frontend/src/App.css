@@ -4430,6 +4430,20 @@ button.requirement-choice.requirement-covered:hover,
   overflow-y: auto;
 }
 
+/* Story 18.5: the guests an attendee brings, one bordered group each, inside the "Guests" group. */
+.guest-fields,
+.guest-entry {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+.guest-entry > button {
+  align-self: flex-start;
+}
+
 /* AC5: long dietary requirements wrap inside their column rather than widening the table. */
 .registration-table .registration-dietary {
   min-width: 12rem;
@@ -4495,7 +4509,8 @@ button.requirement-choice.requirement-covered:hover,
 
   /* Everything an attendee taps is at least 44px tall, to be pressed with a thumb. */
   .profile-page button[type='submit'],
-  .attendee-details-dialog .dialog-actions button {
+  .attendee-details-dialog .dialog-actions button,
+  .guest-fields button {
     min-height: 44px;
   }
 }

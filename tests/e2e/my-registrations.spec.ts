@@ -335,6 +335,8 @@ test.describe('on an iPhone 12 Pro', () => {
           registered_at: '2026-10-11T02:00:00Z',
           withdrawn_at: null,
           can_withdraw: true,
+          guests: [],
+          can_change_guests: false,
         },
       ],
     })

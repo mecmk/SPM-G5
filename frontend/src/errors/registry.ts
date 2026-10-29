@@ -136,6 +136,9 @@ export type ErrorCode =
   | 'ATTENDEE_PHONE_INVALID'
   | 'ATTENDEE_PHONE_REQUIRED'
   | 'ATTENDEE_NAME_REQUIRED'
+  | 'GUEST_NAME_REQUIRED'
+  | 'GUESTS_TOO_MANY'
+  | 'GUESTS_CHANGE_REFUSED'
 
 export interface ErrorEntry {
   title: string
@@ -844,6 +847,25 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   ATTENDEE_NAME_REQUIRED: {
     title: 'Check your name',
     message: 'Enter your name.',
+  },
+
+  // Story 18.5: the guests an attendee registers with them.
+  /** AC7: worded as the backend's GUEST_FULL_NAME_REQUIRED_MESSAGE. */
+  GUEST_NAME_REQUIRED: {
+    title: "Check your guest's name",
+    message: "Enter your guest's name.",
+  },
+  /** AC6: shown once ten guests are added and no more can be; worded as the backend's
+   *  TOO_MANY_GUESTS_MESSAGE, its answer to an eleventh. */
+  GUESTS_TOO_MANY: {
+    title: 'Too many guests',
+    message: 'You can bring at most 10 guests.',
+  },
+  /** AC9/AC12: registration closed, the attendee withdrew, the event was cancelled, or not enough
+   *  places are left for the guests. The backend's own sentence (always sent) says which. */
+  GUESTS_CHANGE_REFUSED: {
+    title: 'Guests not saved',
+    message: 'Your guests could not be changed.',
   },
 }
 

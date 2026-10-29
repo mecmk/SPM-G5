@@ -9,6 +9,9 @@ may open.
 
 Story 18.4: the attendee's own profile, under ``/profile``. The URL names no attendee: it is always
 the signed-in one's (AC10).
+
+Story 18.5: the guests registered with an attendee, sent with the registration and replaced whole
+afterwards with ``PUT /registrations/{registration_id}/guests`` (AC3).
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from app.registrations.schemas import (
     AttendeeDetailsIn,
     EventRegistrationListOut,
     EventRegistrationOut,
+    GuestsUpdate,
     ManagedRegistrationEventOut,
     MyRegistrationOut,
     ProfileOut,
@@ -101,7 +105,8 @@ def register(
     """AC1: register the signed-in attendee, stamped with this moment. AC3/AC4: an event not
     open for registration is a 404. AC2/AC6: not yet open, closed, full or already registered is
     a 409 naming which. AC5: registrations:self only. 18.4 AC7: details that would leave no phone
-    number on file are a 422."""
+    number on file are a 422. 18.5 AC1: the guests sent with it are registered with it, and named
+    back; AC6/AC7: guests outside the rules are a 422, and AC12: a group that does not fit a 409."""
     try:
         registration = service.register(db, data, attendee=attendee, now=datetime.now(UTC))
     except service.PhoneNumberRequired as exc:
@@ -110,12 +115,19 @@ def register(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
     except service.RegistrationRefused as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    return RegistrationOut.from_registration(registration)
+    return RegistrationOut.from_registration(
+        registration, guests=service.list_guests(db, registration.id)
+    )
 
 
 def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
     return MyRegistrationOut.from_registration(
-        item.registration, event=item.event, status=item.standing, can_withdraw=item.can_withdraw
+        item.registration,
+        event=item.event,
+        status=item.standing,
+        can_withdraw=item.can_withdraw,
+        guests=item.guests,
+        can_change_guests=item.can_change_guests,
     )
 
 
@@ -152,6 +164,29 @@ def withdraw_registration(
     return _my_registration_out(item)
 
 
+@router.put("/{registration_id}/guests", response_model=MyRegistrationOut)
+def update_guests(
+    registration_id: uuid.UUID,
+    data: GuestsUpdate,
+    db: DbSession,
+    attendee: Annotated[CurrentUser, CanRegister],
+) -> MyRegistrationOut:
+    """18.5 AC3: replace the guests of the signed-in attendee's registration, and answer with it
+    as My registrations shows it. AC6/AC7: guests outside the rules are a 422. AC9/AC12: closed,
+    withdrawn, cancelled or more guests than the places left is a 409 naming which. AC11: another
+    attendee's registration is a 404, as an unknown one is; registrations:self only - other roles
+    get 403 and signed-out users 401 from the dependency."""
+    try:
+        item = service.update_guests(
+            db, registration_id, data, attendee=attendee, now=datetime.now(UTC)
+        )
+    except service.RegistrationNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    except service.GuestsChangeRefused as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return _my_registration_out(item)
+
+
 @events_router.get("/{event_id}/registrations", response_model=EventRegistrationListOut)
 def list_event_registrations(
     event_id: uuid.UUID,
@@ -164,9 +199,10 @@ def list_event_registrations(
 ) -> EventRegistrationListOut:
     """18.3 AC1-AC4/AC7: one page of the event's registrations, how many there are, and its
     active count against capacity. 18.4 AC5/AC9: each Registered row with the attendee's phone
-    number and dietary requirements. AC5/AC6: any signed-in user may ask, but only the organiser
-    and the assigned coordinator of an event past draft get an answer - anyone else, like an
-    unknown id, a 404. Signed out is a 401."""
+    number and dietary requirements. 18.5 AC5: each row with its guests, counted as places.
+    AC5/AC6: any signed-in user may ask, but only the organiser and the assigned coordinator of an
+    event past draft get an answer - anyone else, like an unknown id, a 404. Signed out is a
+    401."""
     try:
         listing = service.list_event_registrations(
             db, event_id, viewer=viewer, limit=limit, offset=offset
@@ -180,6 +216,7 @@ def list_event_registrations(
                 attendee=item.attendee,
                 status=item.standing,
                 shows_details=item.shows_details,
+                guests=item.guests,
             )
             for item in listing.items
         ],

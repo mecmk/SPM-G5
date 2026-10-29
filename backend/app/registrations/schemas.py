@@ -15,6 +15,11 @@ Story 18.3: an event's registration list, as its organiser and assigned coordina
 
 Story 18.4: the attendee's details - their name, phone number and dietary requirements - as they
 send them, on My profile or with their first registration, and as My profile shows them.
+
+Story 18.5: the guests an attendee registers with them - each a name and optional dietary
+requirements, and nothing else (AC7), at most ten (AC6) - as sent with a registration or as a
+change afterwards (AC3), and as the attendee (AC4) and the event's organiser and coordinator
+(AC5) are shown them.
 """
 
 from __future__ import annotations
@@ -22,12 +27,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.auth.models import User
 from app.common.phone import PHONE_NUMBER_INVALID_MESSAGE, is_phone_number
 from app.events.models import Event
-from app.registrations.models import EventRegistration
+from app.registrations.models import EventRegistration, RegistrationGuest
 from app.venues.models import Venue
 
 # Story 18.4 AC6. Mirrored by the field's maxLength in frontend/src/api/registrations.ts - keep the
@@ -41,6 +46,24 @@ PHONE_NUMBER_REQUIRED_MESSAGE = "Enter your phone number."
 FULL_NAME_MAX_LENGTH = 200
 FULL_NAME_REQUIRED_MESSAGE = "Enter your name."
 FULL_NAME_TOO_LONG_MESSAGE = "Your name must be 200 characters or fewer."
+# Story 18.5 AC6/AC7: a guest's name and dietary requirements follow the attendee's own limits, in
+# words about the guest, and a group is at most ten guests. Mirrored by
+# frontend/src/registrations/ - keep them in step; the event_registration_guests constraints hold
+# the database to them too.
+MAX_GUESTS = 10
+TOO_MANY_GUESTS_MESSAGE = "You can bring at most 10 guests."
+GUEST_FULL_NAME_REQUIRED_MESSAGE = "Enter your guest's name."
+GUEST_FULL_NAME_TOO_LONG_MESSAGE = "Your guest's name must be 200 characters or fewer."
+GUEST_DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE = (
+    "Your guest's dietary requirements must be 500 characters or fewer."
+)
+
+
+def _trimmed_or_none(value: object) -> object:
+    """A typed value without the spaces around it; blank or spaces only is no value."""
+    if not isinstance(value, str):
+        return value
+    return value.strip() or None
 
 
 class AttendeeDetailsIn(BaseModel):
@@ -59,9 +82,7 @@ class AttendeeDetailsIn(BaseModel):
     @field_validator("full_name", "phone", "dietary_requirements", mode="before")
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
-        if not isinstance(value, str):
-            return value
-        return value.strip() or None
+        return _trimmed_or_none(value)
 
     @field_validator("full_name")
     @classmethod
@@ -115,13 +136,93 @@ class ProfileOut(BaseModel):
         )
 
 
+class GuestIn(BaseModel):
+    """Story 18.5 AC7: one guest as the attendee sends them - a name, required and at most 200
+    characters, and dietary requirements, optional and at most 500, each counted once trimmed.
+    Blank or spaces only is no value. ``extra="forbid"``: nothing else - no phone number, email or
+    account - can be sent about a guest. A name left out is refused with the same sentence as a
+    blank one (``validate_default``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, validate_default=True)
+    dietary_requirements: str | None = None
+
+    @field_validator("full_name", "dietary_requirements", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        return _trimmed_or_none(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def _check_full_name(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError(GUEST_FULL_NAME_REQUIRED_MESSAGE)
+        if len(value) > FULL_NAME_MAX_LENGTH:
+            raise ValueError(GUEST_FULL_NAME_TOO_LONG_MESSAGE)
+        return value
+
+    @field_validator("dietary_requirements")
+    @classmethod
+    def _check_dietary_requirements(cls, value: str | None) -> str | None:
+        if value is not None and len(value) > DIETARY_REQUIREMENTS_MAX_LENGTH:
+            raise ValueError(GUEST_DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE)
+        return value
+
+
+def _at_most_ten(guests: list[GuestIn]) -> list[GuestIn]:
+    """Story 18.5 AC6: a group of at most eleven - the attendee and ten guests."""
+    if len(guests) > MAX_GUESTS:
+        raise ValueError(TOO_MANY_GUESTS_MESSAGE)
+    return guests
+
+
 class RegistrationCreate(BaseModel):
     """AC1: the event to register for. The attendee is the signed-in user, never a value sent
     with the request. Story 18.4 AC2/AC3: the attendee's details, needed with their first
-    registration and saved to their profile with any."""
+    registration and saved to their profile with any. Story 18.5 AC1/AC6: the guests registered
+    with them, in order - none unless sent, as in 18.1."""
 
     event_id: uuid.UUID
     details: AttendeeDetailsIn | None = None
+    guests: list[GuestIn] = Field(default_factory=list)
+
+    @field_validator("guests")
+    @classmethod
+    def _check_guests(cls, guests: list[GuestIn]) -> list[GuestIn]:
+        return _at_most_ten(guests)
+
+
+class GuestsUpdate(BaseModel):
+    """Story 18.5 AC3: the attendee's guests as they are to be now, in order, replacing those
+    registered before. Required: an empty list removes every guest, and sending nothing is not
+    taken as that. AC6: at most ten."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    guests: list[GuestIn]
+
+    @field_validator("guests")
+    @classmethod
+    def _check_guests(cls, guests: list[GuestIn]) -> list[GuestIn]:
+        return _at_most_ten(guests)
+
+
+class GuestOut(BaseModel):
+    """Story 18.5 AC4/AC5: one guest, as the attendee and the event's organiser and coordinator see
+    them. No defaults (response schema)."""
+
+    full_name: str
+    dietary_requirements: str | None
+
+    @classmethod
+    def from_guest(cls, guest: RegistrationGuest, *, shows_details: bool = True) -> GuestOut:
+        """``shows_details`` false: the dietary requirements are left out, as 18.4 AC9 leaves out
+        the attendee's own on a row no longer Registered."""
+        return cls(
+            full_name=guest.full_name,
+            dietary_requirements=guest.dietary_requirements if shows_details else None,
+        )
 
 
 class RegistrationVenueOut(BaseModel):
@@ -194,20 +295,25 @@ class RegistrationEventList(BaseModel):
 
 class RegistrationOut(BaseModel):
     """AC1: the registration just made, with the moment it was made, for the confirmation. AC5:
-    nothing but the registration itself. No defaults (response schema)."""
+    nothing but the registration itself. Story 18.5 AC1: and the guests registered with it, in
+    order. No defaults (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
     status: str
     registered_at: datetime
+    guests: list[GuestOut]
 
     @classmethod
-    def from_registration(cls, registration: EventRegistration) -> RegistrationOut:
+    def from_registration(
+        cls, registration: EventRegistration, *, guests: list[RegistrationGuest]
+    ) -> RegistrationOut:
         return cls(
             id=registration.id,
             event_id=registration.event_id,
             status=registration.status,
             registered_at=registration.registered_at,
+            guests=[GuestOut.from_guest(guest) for guest in guests],
         )
 
 
@@ -215,7 +321,8 @@ class MyRegistrationOut(BaseModel):
     """Story 18.2 AC1: one of the attendee's own registrations - its event's name and dates, where
     they stand, when they registered and withdrew, and whether it can be withdrawn now (AC3), so
     the page never decides that on the browser's clock. AC5: nothing internal to the event's
-    planning. No defaults (response schema)."""
+    planning. Story 18.5 AC4: the guests registered with it, in order; AC9: whether they can still
+    be changed, by the server's clock too. No defaults (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -227,10 +334,19 @@ class MyRegistrationOut(BaseModel):
     registered_at: datetime
     withdrawn_at: datetime | None
     can_withdraw: bool
+    guests: list[GuestOut]
+    can_change_guests: bool
 
     @classmethod
     def from_registration(
-        cls, registration: EventRegistration, *, event: Event, status: str, can_withdraw: bool
+        cls,
+        registration: EventRegistration,
+        *,
+        event: Event,
+        status: str,
+        can_withdraw: bool,
+        guests: list[RegistrationGuest],
+        can_change_guests: bool,
     ) -> MyRegistrationOut:
         # Registrations are only taken for Confirmed events, and
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
@@ -247,6 +363,8 @@ class MyRegistrationOut(BaseModel):
             registered_at=registration.registered_at,
             withdrawn_at=registration.withdrawn_at,
             can_withdraw=can_withdraw,
+            guests=[GuestOut.from_guest(guest) for guest in guests],
+            can_change_guests=can_change_guests,
         )
 
 
@@ -255,7 +373,9 @@ class EventRegistrationOut(BaseModel):
     18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. Story 18.4
     AC5: the attendee's phone number and dietary requirements, read from their profile, so a
     change shows at once (AC4); null when they gave none (shown as "None", AC6) and on every row
-    no longer Registered (AC9). No defaults (response schema)."""
+    no longer Registered (AC9). Story 18.5 AC5: the guests registered with them, in order - on a
+    row no longer Registered by name only, as 18.4 AC9 does for the attendee. No defaults
+    (response schema)."""
 
     id: uuid.UUID
     attendee_name: str
@@ -265,10 +385,17 @@ class EventRegistrationOut(BaseModel):
     registered_at: datetime
     status: str  # REGISTERED, WITHDRAWN or EVENT_CANCELLED (service.RegistrationStanding)
     withdrawn_at: datetime | None
+    guests: list[GuestOut]
 
     @classmethod
     def from_registration(
-        cls, registration: EventRegistration, *, attendee: User, status: str, shows_details: bool
+        cls,
+        registration: EventRegistration,
+        *,
+        attendee: User,
+        status: str,
+        shows_details: bool,
+        guests: list[RegistrationGuest],
     ) -> EventRegistrationOut:
         return cls(
             id=registration.id,
@@ -279,12 +406,14 @@ class EventRegistrationOut(BaseModel):
             registered_at=registration.registered_at,
             status=status,
             withdrawn_at=registration.withdrawn_at,
+            guests=[GuestOut.from_guest(guest, shows_details=shows_details) for guest in guests],
         )
 
 
 class EventRegistrationListOut(BaseModel):
     """18.3 AC1-AC3/AC7: one page of the list, how many registrations there are in all, and how
-    many are active against the capacity. No defaults (response schema)."""
+    many are active against the capacity - story 18.5 AC5: how many places they take, guests
+    included. No defaults (response schema)."""
 
     items: list[EventRegistrationOut]
     total: int
