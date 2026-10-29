@@ -804,9 +804,11 @@ def test_an_equipment_notice_whose_item_was_removed_sends_technical_support_to_t
 
 
 @pytest.mark.story("20.2", ac=1)
-def test_an_equipment_notice_for_an_event_since_rejected_sends_technical_support_to_the_event(
+def test_an_equipment_notice_for_an_event_since_rejected_sends_technical_support_to_the_queue(
     login_as, db: Session
 ):
+    """Fix f4.5.1 keeps a rejected event's sent item in the queue, under Cancelled, so the notice
+    still opens it, as one for a cancelled event does."""
     starts_at = future_datetime(days=60)
     event = make_event(
         db,
@@ -825,7 +827,7 @@ def test_an_equipment_notice_for_an_event_since_rejected_sends_technical_support
     notice = _newest_of(login_as(Users.TECH_SUPPORT), "EQUIPMENT_SUBMITTED")
 
     assert notice["event_id"] == str(event.id)
-    assert notice["target"] == {"kind": "event", "id": str(event.id)}
+    assert notice["target"] == {"kind": "equipment_requests", "id": None}
 
 
 @pytest.mark.story("20.2", ac=1)
