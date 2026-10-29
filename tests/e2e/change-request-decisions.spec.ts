@@ -108,7 +108,7 @@ test('19.2 AC2: the coordinator approves an attendance change and the event take
   await expect(queueEntry(page, name, 'Approved')).toContainText('Approved by Chloe Coordinator')
 
   await page.goto(`/events/${eventId}`)
-  await expect(page.getByText('150', { exact: true })).toBeVisible()
+  await expect(page.getByRole('paragraph').filter({ hasText: /^150$/ })).toBeVisible()
   const decided = changeRequests(page).getByRole('listitem')
   await expect(decided).toContainText('Approved')
   await expect(decided).toContainText('Chloe Coordinator')

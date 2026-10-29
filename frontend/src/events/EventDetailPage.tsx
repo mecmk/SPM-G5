@@ -7,6 +7,7 @@ import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/chang
 import {
   approveEvent,
   CLARIFICATION_MESSAGE_MAX_LENGTH,
+  fetchEventReferenceData,
   getEvent,
   listClarifications,
   rejectEvent,
@@ -90,6 +91,7 @@ import {
   requirementName,
   venueSearchFor,
 } from '../shared/venueRequest'
+import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { BOOKING_OUTCOME, formatMinutesDuration } from './bookingOutcome'
@@ -217,6 +219,11 @@ export function EventDetailPage() {
   // Story 21.2: the safety review, loaded here so the sections it flags can say so (AC4).
   const loadSafety = useCallback(() => getEventSafety(eventId), [eventId])
   const { data: safety, error: safetyError, setData: setSafety } = useLoaded(loadSafety)
+  // The pick-lists that name codes, read once for the change requests and the change history.
+  const { data: references, error: referencesError } = useLoaded(fetchEventReferenceData)
+  /** Story 7.4: bumped by every `reloadEvent`, so the change history is read again even when the
+   *  reload leaves `updated_at` as it was (an approved equipment change writes no event row). */
+  const [reloadCount, setReloadCount] = useState(0)
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
   const [clarificationsError, setClarificationsError] = useState<string | null>(null)
@@ -288,9 +295,9 @@ export function EventDetailPage() {
 
   useEffect(() => {
     if (event === null) return undefined
-    const canViewClarifications =
+    const isRelatedParty =
       user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
-    if (!canViewClarifications) return undefined
+    if (!isRelatedParty) return undefined
     let cancelled = false
     listClarifications(eventId)
       .then((data) => {
@@ -378,6 +385,7 @@ export function EventDetailPage() {
    *  safety review's blockers as they now stand. A failed reload keeps the page as it was rather
    *  than replacing it with an error. */
   async function reloadEvent(): Promise<void> {
+    setReloadCount((count) => count + 1)
     await Promise.all([
       getEvent(eventId).then(setEvent, () => {}),
       getEventSafety(eventId).then(setSafety, () => {}),
@@ -657,9 +665,10 @@ export function EventDetailPage() {
     event.venue_none_required &&
     event.status !== 'DRAFT' &&
     !AWAITING_DECISION_STATUSES.includes(event.status)
-  /** Story 4.6 AC2: only the organiser and the assigned coordinator may see the clarification
-   *  history, mirroring the backend's `_can_view_clarifications`. */
-  const canViewClarifications =
+  /** Story 4.6 AC2, story 7.4 AC5: only the event's related parties - its organiser and its
+   *  assigned coordinator - may see the clarification history and the change history, mirroring
+   *  the backend's `_is_related_party`. */
+  const isRelatedParty =
     user !== null && (event.organiser_id === user.id || event.assigned_coordinator_id === user.id)
   const isOrganiser = user !== null && event.organiser_id === user.id
   /** Story 19.1 AC1/AC5/AC7/AC11/AC12: only the owning organiser, holding
@@ -1280,10 +1289,12 @@ export function EventDetailPage() {
             canWithdraw={isOrganiser}
             canDecide={canDecideChangeRequests}
             onDecided={reloadEvent}
+            references={references}
+            referencesError={referencesError}
           />
         )}
 
-        {canViewClarifications && (
+        {isRelatedParty && (
           <ClarificationHistory
             status={event.status}
             decidedByName={event.decided_by_name}
@@ -1292,6 +1303,15 @@ export function EventDetailPage() {
             entries={clarificationEntries}
             error={clarificationsError}
             currentUserId={user?.id ?? null}
+          />
+        )}
+
+        {/* Story 7.4 AC5: the change history, for the same two people as the clarifications. */}
+        {isRelatedParty && (
+          <ChangeHistorySection
+            eventId={event.id}
+            version={`${event.updated_at}#${reloadCount}`}
+            references={references}
           />
         )}
 
