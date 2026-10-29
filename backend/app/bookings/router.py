@@ -1,8 +1,8 @@
 """HTTP endpoints for venue bookings: raising a request (story 12.1), the venue staff queue
-(story 13.1), approval and rejection (stories 13.2, 13.2.1), the read endpoints 13.2 AC3 /
-13.2.1 AC4 need to make the outcome visible to the requesting coordinator, withdrawing a
-request (story 12.2), an approved booking's hold expiry (story 12.7), and a replacement for an
-approved booking whose venue became unavailable (story 12.6).
+(story 13.1), searched and ordered (story 13.3), approval and rejection (stories 13.2, 13.2.1),
+the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
+coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
+and a replacement for an approved booking whose venue became unavailable (story 12.6).
 
 Story 12.7 AC3: every endpoint here expires the holds that have lapsed before it answers
 (``ReleaseLapsedHolds``), so none of them shows or acts on a lapsed one as approved.
@@ -28,6 +28,7 @@ from app.bookings.schemas import (
     BookingOutcome,
     BookingQueue,
     BookingQueueEntry,
+    BookingQueueOrder,
     BookingQueueStatus,
     BookingReferenceData,
     BookingRejection,
@@ -36,6 +37,7 @@ from app.bookings.schemas import (
     BookingStatusCounts,
     BookingSwitchIn,
 )
+from app.common.search import QUEUE_SEARCH_MAX_LENGTH
 from app.db import get_db
 
 router = APIRouter(prefix="/bookings", tags=["bookings"], dependencies=[ReleaseLapsedHolds])
@@ -118,6 +120,8 @@ def create_booking_request(
 def list_bookings(
     db: DbSession,
     booking_status: Annotated[BookingQueueStatus | None, Query(alias="status")] = None,
+    search: Annotated[str | None, Query(max_length=QUEUE_SEARCH_MAX_LENGTH)] = None,
+    order: BookingQueueOrder = BookingQueueOrder.DATE,
     limit: Annotated[
         int, Query(ge=1, le=service.BOOKING_QUEUE_MAX_LIMIT)
     ] = service.BOOKING_QUEUE_MAX_LIMIT,
@@ -126,8 +130,14 @@ def list_bookings(
     """Story 13.1 AC1-AC3: ``?status=PENDING`` is the pending queue Venue Staff decide from.
     Story 13.1.2 AC1: any other status is its tab, and no status is All; ``counts`` labels every
     tab. AC4: a page of the tab and its total. ``booking_status`` is aliased so it does not
-    shadow FastAPI's ``status`` module, used for the status codes below."""
-    listing = service.list_booking_requests(db, status=booking_status, limit=limit, offset=offset)
+    shadow FastAPI's ``status`` module, used for the status codes below.
+
+    Story 13.3 AC1-AC4: ``?search=`` and ``?order=`` search and order the tab before it is paged,
+    and the counts and total are the matching requests'. AC5: a search longer than 100 characters,
+    or an order the queue does not offer, is a 422. AC8: Venue Staff only, as the queue is."""
+    listing = service.list_booking_requests(
+        db, status=booking_status, search=search, order=order, limit=limit, offset=offset
+    )
     return BookingQueue(
         items=[BookingQueueEntry.from_booking(b) for b in listing.bookings],
         total=listing.total,

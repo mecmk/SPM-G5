@@ -33,7 +33,8 @@ Support's to set (story 16.1), and an item in either is locked (AC7).
 
 Story 15.2 - "As a Technical Support Staff member I want to see the equipment requests waiting for
 me, with what is available for each, so that I can work through them in a sensible order." The
-queue (``list_equipment_requests``) only reads: deciding a request is story 16.1.
+queue (``list_equipment_requests``) only reads: deciding a request is story 16.1. Story 13.3 lets
+Technical Support search it, by event name, equipment type and who requested it, and order it.
 
 Story 16.1 - "As a Technical Support Staff member I want to accept an equipment request, reserving
 the equipment, or decline it with a reason, so that the coordinator knows whether the equipment is
@@ -52,18 +53,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.common.audit import record_audit
+from app.common.search import by_name, matches_any, search_term
 from app.equipment.schemas import (
     EquipmentDecisionIn,
     EquipmentDecisionOutcome,
     EquipmentItemIn,
     EquipmentItemUpdate,
+    EquipmentQueueOrder,
     EquipmentQueueStatus,
     EventEquipmentAvailabilityOut,
 )
@@ -141,6 +144,17 @@ _LIVE_TAB_STATUSES = (
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
+# Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
+# date order, soonest first, then in the order they were recorded. AC6: a request with no recorded
+# time - sent before migration 014 - comes last whichever way requests are ordered by it.
+_QUEUE_ORDERS = {
+    EquipmentQueueOrder.DATE: Event.starts_at,
+    EquipmentQueueOrder.DATE_DESC: Event.starts_at.desc(),
+    EquipmentQueueOrder.REQUESTED: EventEquipmentRequest.submitted_at.asc().nulls_last(),
+    EquipmentQueueOrder.REQUESTED_DESC: EventEquipmentRequest.submitted_at.desc().nulls_last(),
+    EquipmentQueueOrder.EVENT_NAME: by_name(Event.name),
+    EquipmentQueueOrder.EQUIPMENT_TYPE: by_name(EquipmentType.name),
+}
 # Why each hold was placed, in ``equipment_reservations.notes``.
 _RECORDED_HOLD_NOTE = "Held for the coordinator's equipment request."
 _MOVED_HOLD_NOTE = "Held again for the event's new dates."
@@ -370,8 +384,29 @@ class EquipmentQueueListing:
     counts_by_status: dict[str, int]
 
 
+def _queue_rows(statement: Select, search: str | None) -> Select:
+    """Story 15.2 AC3/AC5: ``statement`` kept to the items Technical Support's queue lists. Story
+    13.3 AC2: joined to each item's event, type and sender, and kept to the items whose event
+    name, type name or sender's name contains ``search`` - every item, when there is no search
+    (AC5). The sender is joined outer, since an item sent before migration 014 has none."""
+    statement = (
+        statement.join(Event, Event.id == EventEquipmentRequest.event_id)
+        .join(EquipmentType, EquipmentType.id == EventEquipmentRequest.equipment_type_id)
+        .outerjoin(User, User.id == EventEquipmentRequest.submitted_by_id)
+        .where(in_technical_support_queue())
+    )
+    term = search_term(search)
+    if term is None:
+        return statement
+    return statement.where(matches_any(term, Event.name, EquipmentType.name, User.full_name))
+
+
 def list_equipment_requests(
-    db: Session, *, status: EquipmentQueueStatus | None = None
+    db: Session,
+    *,
+    status: EquipmentQueueStatus | None = None,
+    search: str | None = None,
+    order: EquipmentQueueOrder = EquipmentQueueOrder.DATE,
 ) -> EquipmentQueueListing:
     """Story 15.2 AC1/AC3: the requests in one tab, or in every tab when ``status`` is ``None``
     (the All tab), soonest event first; ties fall back to the order the items were recorded in,
@@ -386,22 +421,25 @@ def list_equipment_requests(
     afresh on every call, once per event in the tab. Story 6.2 AC15: not for a cancelled item,
     which holds nothing: its ``available`` is ``None``, so an event whose kept items are all
     cancelled adds no work. A declined item on a cancelled event still has its figures worked
-    out."""
-    tab = (
-        select(EventEquipmentRequest, Event)
-        .join(Event, Event.id == EventEquipmentRequest.event_id)
-        .where(in_technical_support_queue())
-        .order_by(Event.starts_at, EventEquipmentRequest.created_at, EventEquipmentRequest.id)
+    out.
+
+    Story 13.3 AC1/AC2: ``search`` narrows every tab, and so every count, to the matching
+    requests. AC3: ``order`` sorts them, ties falling back to soonest event first. AC4: both run
+    here, in SQL, across every request in the tab; the queue has no pages."""
+    tab = _queue_rows(select(EventEquipmentRequest, Event), search).order_by(
+        _QUEUE_ORDERS[order],
+        Event.starts_at,
+        EventEquipmentRequest.created_at,
+        EventEquipmentRequest.id,
     )
     if status is not None:
         tab = tab.where(EventEquipmentRequest.status == status)
     found = db.execute(tab).all()
     counts_by_status = dict(
         db.execute(
-            select(EventEquipmentRequest.status, func.count())
-            .join(Event, Event.id == EventEquipmentRequest.event_id)
-            .where(in_technical_support_queue())
-            .group_by(EventEquipmentRequest.status)
+            _queue_rows(select(EventEquipmentRequest.status, func.count()), search).group_by(
+                EventEquipmentRequest.status
+            )
         ).all()
     )
 

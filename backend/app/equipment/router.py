@@ -1,6 +1,6 @@
 """HTTP endpoints for an event's equipment items (story 15.1): the availability figures the form
 shows, and the assigned coordinator recording, editing, removing and submitting items. And
-Technical Support's queue of the items sent to it (story 15.2).
+Technical Support's queue of the items sent to it (story 15.2), searched and ordered (story 13.3).
 
 The items are a sub-resource of the event, so the paths sit under ``/events/{event_id}``; an item
 is returned as ``EquipmentLineOut``, the shape the event page already reads. Submitting creates an
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import CurrentUser, require_permission
 from app.auth.permissions import Permission
+from app.common.search import QUEUE_SEARCH_MAX_LENGTH
 from app.db import get_db
 from app.equipment import service
 from app.equipment.schemas import (
@@ -29,6 +30,7 @@ from app.equipment.schemas import (
     EquipmentQueue,
     EquipmentQueueCounts,
     EquipmentQueueEntry,
+    EquipmentQueueOrder,
     EquipmentQueueStatus,
     EventEquipmentAvailabilityOut,
 )
@@ -158,12 +160,18 @@ def submit_equipment(
 def list_equipment_requests(
     db: DbSession,
     request_status: Annotated[EquipmentQueueStatus | None, Query(alias="status")] = None,
+    search: Annotated[str | None, Query(max_length=QUEUE_SEARCH_MAX_LENGTH)] = None,
+    order: EquipmentQueueOrder = EquipmentQueueOrder.DATE,
 ) -> EquipmentQueue:
     """Story 15.2 AC1-AC3: ``?status=`` picks the Pending, Accepted or Declined tab, and no status
     is the All tab; soonest event first, each request with its figures. ``counts`` labels every
     tab. AC6: Technical Support only. ``request_status`` is aliased so it does not shadow
-    FastAPI's ``status`` module."""
-    listing = service.list_equipment_requests(db, status=request_status)
+    FastAPI's ``status`` module.
+
+    Story 13.3 AC1-AC4: ``?search=`` and ``?order=`` search and order the tab, and the counts are
+    the matching requests'. AC5: a search longer than 100 characters, or an order the queue does
+    not offer, is a 422. AC8: Technical Support only, as the queue is."""
+    listing = service.list_equipment_requests(db, status=request_status, search=search, order=order)
     return EquipmentQueue(
         items=[
             EquipmentQueueEntry.from_item(row.item, row.event, available=row.available)
