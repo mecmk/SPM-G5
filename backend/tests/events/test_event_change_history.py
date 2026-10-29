@@ -16,13 +16,13 @@ AC7 Saves made in quick succession are recorded in the order they happened, and 
 Excluded, with reason:
 * AC3's "No changes yet" and the shortened long values are wording and layout on the page,
   covered in tests/e2e/event-change-history.spec.ts; here AC3 is the empty list behind them.
-* Draft edits before submission are not part of the history (CL-174), nor are the Equipment
+* Draft edits before submission are not part of the history (CL-179), nor are the Equipment
   section's own saves (15.1); the history covers the event's details and approved change requests.
 """
 
 from __future__ import annotations
 
-import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.routing import APIRoute, iter_route_contexts
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session, object_session
 
 from app.auth.models import User
@@ -46,8 +46,10 @@ from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
     create_event_request,
     future_datetime,
+    make_equipment_item,
     make_equipment_type,
     make_event,
+    make_venue_requirement,
 )
 from tests.support.seed import Events, Users
 
@@ -97,8 +99,8 @@ def _upload_correction_picture(client, event_id):
     return response.json()["cover_image_url"]
 
 
-def _planning_event(db: Session, **overrides) -> Event:
-    start = overrides.pop("starts_at", future_datetime(days=60))
+def _planning_event(db: Session) -> Event:
+    start = future_datetime(days=60)
     return make_event(
         db,
         status=EventStatus.PLANNING,
@@ -106,8 +108,15 @@ def _planning_event(db: Session, **overrides) -> Event:
         ends_at=start + timedelta(hours=8),
         expected_attendance=100,
         assigned_coordinator_id=Users.COORDINATOR.id,
-        **overrides,
     )
+
+
+def _without_ids(value):
+    """A list value as the history records it: without its items' ids, as 19.2's approval
+    leaves them out."""
+    if not isinstance(value, list):
+        return value
+    return [{key: item[key] for key in item if key != "id"} for item in value]
 
 
 def _raise_and_approve(login_as, db: Session, event: Event, field: str, proposed) -> dict:
@@ -250,6 +259,9 @@ def test_an_approved_change_request_records_its_reference(login_as, db: Session)
 def test_an_approved_change_records_the_value_it_replaced(login_as, db: Session, field):
     event = _planning_event(db)
     start = event.starts_at
+    # One item on each list, so the old value compared below is not empty.
+    make_venue_requirement(db, event.id, starts_at=start, ends_at=start + timedelta(hours=8))
+    make_equipment_item(db, event=event, equipment_type=make_equipment_type(db), quantity=1)
     proposed = {
         "expected_attendance": 140,
         "venue_requirements": [
@@ -273,7 +285,8 @@ def test_an_approved_change_records_the_value_it_replaced(login_as, db: Session,
 
     [entry] = _history(login_as(Users.COORDINATOR), event.id)
     assert entry["field"] == field
-    assert entry["old_value"] == raised["current_value"]
+    assert entry["old_value"] == _without_ids(raised["current_value"])
+    assert entry["old_value"] not in ([], None)
     assert entry["new_value"] != entry["old_value"]
 
 
@@ -320,12 +333,25 @@ def test_a_correction_that_removes_the_cover_picture_is_recorded(coordinator_cli
 
 @pytest.mark.story("7.4", ac=1)
 def test_the_organisers_draft_picture_is_not_recorded(organiser_client, upload_dir):
-    """Draft edits before submission are out of the history (CL-174)."""
+    """Draft edits before submission are out of the history (CL-179)."""
     created = create_event_request(organiser_client)
     uploaded = organiser_client.put(
         f"/events/{created['id']}/cover-image", files={"file": ("cover.png", _PNG, "image/png")}
     )
     assert uploaded.status_code == 200, uploaded.text
+
+    assert _history(organiser_client, created["id"]) == []
+
+
+@pytest.mark.story("7.4", ac=1)
+def test_removing_the_organisers_draft_picture_is_not_recorded(organiser_client, upload_dir):
+    """Draft edits before submission are out of the history (CL-179)."""
+    created = create_event_request(organiser_client)
+    route = f"/events/{created['id']}/cover-image"
+    uploaded = organiser_client.put(route, files={"file": ("cover.png", _PNG, "image/png")})
+    assert uploaded.status_code == 200, uploaded.text
+    removed = organiser_client.delete(route)
+    assert removed.status_code == 200, removed.text
 
     assert _history(organiser_client, created["id"]) == []
 
@@ -404,7 +430,7 @@ def test_quick_saves_are_all_recorded_in_order(coordinator_client):
 @contextmanager
 def _committed_event(engine) -> Iterator[uuid.UUID]:
     """An event under review assigned to Chloe, committed so other connections see it, then
-    removed with everything the race wrote."""
+    removed with everything the saves wrote."""
     with Session(engine) as session:
         event_id = make_event(session, assigned_coordinator_id=Users.COORDINATOR.id).id
         session.commit()
@@ -416,21 +442,6 @@ def _committed_event(engine) -> Iterator[uuid.UUID]:
             session.execute(delete(AuditLog).where(AuditLog.entity_id == event_id))
             session.execute(delete(Event).where(Event.id == event_id))
             session.commit()
-
-
-def _race(engine, attempts: list[Callable[[Session], None]]) -> None:
-    """Run each attempt in its own thread and session, released together at a barrier, as
-    tests/equipment/test_decide_equipment_requests.py does."""
-    start = threading.Barrier(len(attempts))
-
-    def run(attempt: Callable[[Session], None]) -> None:
-        with Session(engine) as session:
-            start.wait()
-            attempt(session)
-
-    with ThreadPoolExecutor(max_workers=len(attempts)) as pool:
-        for future in [pool.submit(run, attempt) for attempt in attempts]:
-            future.result(timeout=30)
 
 
 def _notes_saver(event_id: uuid.UUID, notes: str) -> Callable[[Session], None]:
@@ -445,22 +456,43 @@ def _notes_saver(event_id: uuid.UUID, notes: str) -> Callable[[Session], None]:
     return attempt
 
 
+def _in_own_session(engine, attempt: Callable[[Session], None]) -> None:
+    with Session(engine) as session:
+        attempt(session)
+
+
+def _wait_until_blocked(engine) -> None:
+    """Until another connection waits on a row lock: the save has started, and stopped there."""
+    deadline = time.monotonic() + 10
+    with engine.connect() as watcher:
+        while time.monotonic() < deadline:
+            waiting = watcher.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            ).scalar_one()
+            if waiting:
+                return
+            time.sleep(0.05)
+    raise AssertionError("the save never waited on the event's row")
+
+
 @pytest.mark.story("7.4", ac=7)
-def test_two_notes_saves_at_once_are_recorded_in_order(engine):
-    """AC7 with the saves truly at once, each in its own session: the one that takes the event's
-    row lock second records the first one's notes as its old value, so neither is lost."""
+def test_a_save_made_while_another_holds_the_event_records_the_value_it_left(engine):
+    """AC7: a notes save that starts while another save holds the event waits for it, then
+    records that save's notes as its old value - so neither is lost and the order holds."""
     with _committed_event(engine) as event_id:
-        _race(engine, [_notes_saver(event_id, "A"), _notes_saver(event_id, "B")])
+        with Session(engine) as holder:
+            holder.execute(update(Event).where(Event.id == event_id).values(internal_notes="A"))
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                saving = pool.submit(_in_own_session, engine, _notes_saver(event_id, "B"))
+                _wait_until_blocked(engine)
+                holder.commit()
+                saving.result(timeout=30)
 
         with Session(engine) as session:
             rows = session.scalars(
-                select(EventChange)
-                .where(EventChange.event_id == event_id)
-                .order_by(EventChange.seq)
+                select(EventChange).where(EventChange.event_id == event_id)
             ).all()
-            notes = session.get(Event, event_id).internal_notes
-        assert [(row.old_value, row.new_value) for row in rows] in (
-            [(None, "A"), ("A", "B")],
-            [(None, "B"), ("B", "A")],
-        )
-        assert rows[-1].new_value == notes
+        assert [(row.old_value, row.new_value) for row in rows] == [("A", "B")]

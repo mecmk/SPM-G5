@@ -4,10 +4,13 @@ import { EmptyState } from '../components/EmptyState'
 import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, NONE, shortReference } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { describeChanges, FIELD_LABELS } from './changeRequestValues'
+import { describeChanges, FIELD_LABELS, NOT_THERE_REQUESTED } from './changeRequestValues'
 
 /** Story 7.4 AC3: a value longer than this is cut short, with a way to show all of it. */
 const SHORT_VALUE_LENGTH = 120
+
+/** Story 7.4 AC1: what a list's entry says when its parts differ in a way no line names. */
+const CHANGED = 'Changed'
 
 /** Story 7.4 AC1: how each recorded field is named. */
 const CHANGE_FIELD_LABELS: Record<string, string> = {
@@ -36,7 +39,7 @@ const CHANGE_FIELD_LABELS: Record<string, string> = {
 
 /** One difference a history entry shows: what changed, and its value before and after - or, for
  *  the cover picture, only what happened to it. */
-interface ChangeLine {
+interface HistoryLine {
   what: string
   before: string
   after: string | null
@@ -73,22 +76,29 @@ function describeValue(
   return typeof value === 'object' ? JSON.stringify(value) : String(value)
 }
 
-/** The cover picture's address means nothing to a reader, so say what happened to it. */
+/** Story 7.4 AC1: the cover picture's address means nothing to a reader, so say what happened
+ *  to it. */
 function describePictureChange(change: EventChange): string {
   if (change.old_value === null) return 'Added'
-  return change.new_value === null ? 'Removed' : 'Replaced'
+  return change.new_value === null ? NOT_THERE_REQUESTED : 'Replaced'
 }
 
 /** Story 7.4 AC1: an entry's differences. Venue requirements and equipment are lists, so they are
  *  compared part by part, with names from the reference lists, as a change request is (19.1):
  *  "Main venue · layout: Classroom → Banquet" rather than two whole lists. */
-function describeEntry(change: EventChange, references: EventReferenceData | null): ChangeLine[] {
-  if (change.field === 'venue_requirements' || change.field === 'equipment') {
-    return describeChanges(change.field, change.old_value, change.new_value ?? [], references).map(
-      (line) => ({ what: line.what, before: line.now, after: line.requested }),
-    )
-  }
+function describeEntry(change: EventChange, references: EventReferenceData | null): HistoryLine[] {
   const what = CHANGE_FIELD_LABELS[change.field] ?? change.field
+  if (change.field === 'venue_requirements' || change.field === 'equipment') {
+    const lines = describeChanges(
+      change.field,
+      change.old_value,
+      change.new_value ?? [],
+      references,
+    )
+    // A difference the part-by-part comparison does not name still shows, so no entry vanishes.
+    if (lines.length === 0) return [{ what, before: CHANGED, after: null }]
+    return lines.map((line) => ({ what: line.what, before: line.now, after: line.requested }))
+  }
   if (change.field === 'cover_image_url') {
     return [{ what, before: describePictureChange(change), after: null }]
   }
@@ -157,6 +167,7 @@ export interface ChangeHistorySectionProps {
  */
 export function ChangeHistorySection({ eventId, version, references }: ChangeHistorySectionProps) {
   // `version` is not sent: it only marks when the history must be read again.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `version` triggers the re-read
   const load = useCallback(() => listEventChanges(eventId), [eventId, version])
   const { data: changes, error, isLoading } = useLoaded(load)
 
