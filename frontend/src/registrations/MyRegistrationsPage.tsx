@@ -12,7 +12,7 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   MY_REGISTRATIONS_TITLE,
   STANDING_BADGES,
-  describeRegistrationHistory,
+  describeActiveRegistration,
 } from './registrationLabels'
 
 /** Story 18.2 AC9 (fix f18.2.1): an event's page opened from here links back here. */
@@ -23,16 +23,16 @@ const BACK_TO_MY_REGISTRATIONS: EventCardBackState = {
 
 /**
  * Story 18.2 AC1/AC8: one registration's card - its event's name, picture, date and time, where
- * the attendee stands, and when they registered and withdrew. AC9 (fix f18.2.1): a click anywhere
- * on it opens the event's page (story 18.1 AC9), where the attendee withdraws; the card itself
- * offers no Withdraw.
+ * the attendee stands, and when they registered, while they still are. AC9 (fix f18.2.1): a click
+ * anywhere on it opens the event's page (story 18.1 AC9), where the attendee withdraws; the card
+ * itself offers no Withdraw.
  */
 function MyRegistrationCard({ registration }: { registration: MyRegistration }) {
   const badge = STANDING_BADGES[registration.status]
   const details = [
     <StatusBadge key="status" status={badge.status} label={badge.label} />,
     formatSchedule(registration.starts_at, registration.ends_at),
-    ...describeRegistrationHistory(registration),
+    ...describeActiveRegistration(registration),
   ]
   return (
     <EventCard
@@ -48,8 +48,8 @@ function MyRegistrationCard({ registration }: { registration: MyRegistration }) 
 /**
  * Story 18.2 - view and withdraw my registrations.
  * AC1: the attendee's registrations, one per event, with its name, picture, date and time, status
- *      and when they registered or withdrew; with none, the page says so and points to Upcoming
- *      events. Withdrawing is on the event's page (AttendeeEventPage).
+ *      and, while they are registered, when they registered; with none, the page says so and
+ *      points to Upcoming events. Withdrawing is on the event's page (AttendeeEventPage).
  * AC5: attendees only - App.tsx guards the route, and the backend sends only their own.
  * AC9 (fix f18.2.1): each card opens its event's page.
  */

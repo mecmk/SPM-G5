@@ -10,8 +10,9 @@ import { ACCOUNTS, confirmRegistration, corsHeaders, signIn } from './support'
  * - are proven in backend/tests/registrations/ (unit and integration), not repeated here.
  *
  * AC1 The attendee sees their registrations, each card with its event's name, picture, date and
- *     status, and when they registered and withdrew. An active registration is withdrawn from its
- *     event's page (AC9) after confirmation, and the place returns to capacity.
+ *     status, and when they registered while they still are - no history of when they withdrew.
+ *     An active registration is withdrawn from its event's page (AC9) after confirmation, and the
+ *     place returns to capacity.
  * AC3 Once the event has started, its page offers no Withdraw and says why; a withdrawal refused
  *     because the event started meanwhile says so.
  * AC4 After withdrawing, the attendee can register again from the event's page, and the event is
@@ -23,9 +24,10 @@ import { ACCOUNTS, confirmRegistration, corsHeaders, signIn } from './support'
  * AC7 A double-click withdraws once.
  * AC8 A registration for a cancelled event shows as Event cancelled, with no Withdraw.
  * AC9 (fix f18.2.1) Clicking anywhere on a registration's card opens its event's page (18.1
- *     AC9), which also shows where the attendee stands and when they registered and withdrew.
- *     Withdraw is only on this page; once withdrawn, it offers Register again while the event is
- *     open. A back link returns to My registrations.
+ *     AC9), which also shows where the attendee stands - one badge - and when they registered,
+ *     while they still are. Withdraw is only on this page, and red; once withdrawn, the page shows
+ *     where registration stands, as for an attendee who never registered - Open, say - and offers
+ *     Register again. A back link returns to My registrations.
  * AC10 (fix f18.2.1) The page of an event the attendee registered for opens even once it is no
  *     longer listed - here, started or cancelled - with no places left or Register. Which events
  *     those are is a backend case.
@@ -126,27 +128,6 @@ function trackWithdrawals(page: Page): string[] {
   return sent
 }
 
-/** Today's date as the app writes it, on Singapore's clock. */
-function todayInSingapore(): string {
-  return new Date().toLocaleDateString('en-SG', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'Asia/Singapore',
-  })
-}
-
-function escapeForRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** "You withdrew on <today>, HH:MM", allowing for midnight passing while the test runs. */
-function withdrewToday(before: string, after: string): RegExp {
-  const days = [...new Set([before, after])].map(escapeForRegExp).join('|')
-  return new RegExp(`You withdrew on (${days}), \\d{2}:\\d{2}`)
-}
-
 async function expectNoSidewaysScroll(page: Page) {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -245,7 +226,9 @@ test('18.2 AC1: an attendee opens My registrations from the sidebar and sees eac
   await expect(trail.getByText('Withdrawn', { exact: true })).toBeVisible()
   await expect(trail.getByText('Withdrawn', { exact: true })).toHaveClass(/\bbadge-withdrawn\b/)
   await expect(trail).toContainText('Sat, 3 Apr 2027 · 09:00–12:00')
-  await expect(trail).toContainText('You withdrew on Thu, 8 Oct 2026, 20:45')
+  // Where the attendee stands now, not a history: no longer registered, so no time is given.
+  await expect(trail).not.toContainText('You withdrew on')
+  await expect(trail).not.toContainText('You registered on')
   await expect(trail.getByRole('button')).toHaveCount(0)
 
   // With registrations to show, neither the loading state nor the empty one is left on the page.
@@ -320,6 +303,8 @@ test("18.2 AC9: clicking anywhere on a registration's card opens its event's pag
   await expect(box.getByText('Registered', { exact: true })).toHaveClass(/\bbadge-registered\b/)
   await expect(box).toContainText('You registered on Sun, 11 Oct 2026, 10:15')
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
+  // Withdraw is red, as giving up a place is - its confirmation's button too.
+  await expect(withdrawButton(page, SUNSET_YOGA)).toHaveClass(/\bdanger\b/)
 
   await page.getByRole('link', { name: BACK_TO_LIST }).click()
 
@@ -330,7 +315,7 @@ test("18.2 AC9: clicking anywhere on a registration's card opens its event's pag
 test.describe('withdraws its seeded registration once', () => {
   test.describe.configure({ retries: 0 })
 
-  test("18.2 AC1/AC9: withdrawing on the event's page after confirming marks it Withdrawn, offers Register again, and Upcoming events has the place back", async ({
+  test("18.2 AC1/AC9: withdrawing on the event's page after confirming shows it open again with Register, the card Withdrawn, and Upcoming events has the place back", async ({
     page,
   }) => {
     await openRegisteredEvent(page, POETRY_NIGHT)
@@ -340,28 +325,38 @@ test.describe('withdraws its seeded registration once', () => {
     await withdrawButton(page, POETRY_NIGHT).click()
     const dialog = withdrawDialog(page, POETRY_NIGHT)
     await expect(dialog).toContainText('you may not be able to register again')
-    const before = todayInSingapore()
     await dialog.getByRole('button', { name: 'Withdraw', exact: true }).click()
-    const after = todayInSingapore()
 
     await expect(dialog).toHaveCount(0)
     await expect(
       page.getByRole('status').filter({ hasText: `You have withdrawn from ${POETRY_NIGHT}.` }),
     ).toContainText('Withdrawn')
-    await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
-    await expect(box).toContainText(withdrewToday(before, after))
+    // The page shows where registration stands, as for an attendee who never registered: one
+    // badge, Open, and when registration closes - not Withdrawn, nor when they registered and
+    // withdrew.
+    await expect(box.getByText('Open', { exact: true })).toBeVisible()
+    await expect(box.getByText('Withdrawn', { exact: true })).toHaveCount(0)
+    await expect(box).toContainText('Registration closes')
+    await expect(box).not.toContainText('You registered on')
+    await expect(box).not.toContainText('You withdrew on')
     await expect(withdrawButton(page, POETRY_NIGHT)).toHaveCount(0)
     // AC4: its one place is free again, so it can be registered for again here.
     await expect(box).toContainText('1 place left')
-    await expect(box.getByRole('button', { name: `Register for ${POETRY_NIGHT}` })).toBeEnabled()
+    const register = box.getByRole('button', { name: `Register for ${POETRY_NIGHT}` })
+    await expect(register).toBeEnabled()
+    // Register is the brand colour, apart from the page's other buttons (18.1, fix f18.1.2).
+    await expect(register).toHaveClass(/\bbrand\b/)
 
     await page.reload()
-    await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(box.getByText('Open', { exact: true })).toBeVisible()
+    await expect(box.getByText('Withdrawn', { exact: true })).toHaveCount(0)
 
+    // My registrations is the attendee's registrations, so there the card says Withdrawn.
     await page.getByRole('link', { name: BACK_TO_LIST }).click()
     const card = eventCard(page, POETRY_NIGHT)
     await expect(card.getByText('Withdrawn', { exact: true })).toBeVisible()
-    await expect(card).toContainText(withdrewToday(before, after))
+    await expect(card).not.toContainText('You withdrew on')
+    await expect(card).not.toContainText('You registered on')
 
     await page.goto(UPCOMING_EVENTS_PATH)
     const upcoming = eventCard(page, POETRY_NIGHT)
@@ -600,7 +595,7 @@ test.describe('withdraws its seeded registration once', () => {
     await expect(
       page.getByRole('status').filter({ hasText: `You have withdrawn from ${LANTERN_PAINTING}.` }),
     ).toContainText('Withdrawn')
-    await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(box.getByText('Open', { exact: true })).toBeVisible()
     // The page loaded after the withdrawal that went through clears the earlier failure.
     await expect(page.getByRole('alert')).toHaveCount(0)
 
@@ -617,7 +612,7 @@ test.describe('withdraws its seeded registration once', () => {
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     )
-    await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(box.getByText('Open', { exact: true })).toBeVisible()
     await expect(withdrawButton(page, LANTERN_PAINTING)).toHaveCount(0)
     await expect(page.getByRole('alert')).toHaveCount(0)
     expect(withdrawals).toBe(3)
@@ -634,7 +629,7 @@ test.describe('withdraws its seeded registration once', () => {
     await openRegisteredEvent(page, SKETCHING_WALK)
     await confirmWithdrawal(page, SKETCHING_WALK)
     const box = registration(page)
-    await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(box.getByText('Open', { exact: true })).toBeVisible()
 
     await box.getByRole('button', { name: `Register for ${SKETCHING_WALK}` }).click()
     await confirmRegistration(page)
@@ -704,7 +699,7 @@ test.describe('withdraws its seeded registration once', () => {
       .getByRole('button', { name: 'Withdraw', exact: true })
       .dblclick()
 
-    await expect(registration(page).getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(registration(page).getByText('Open', { exact: true })).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
     expect(sent).toHaveLength(1)
   })

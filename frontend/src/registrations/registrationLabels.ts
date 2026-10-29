@@ -117,14 +117,13 @@ export function describeRegisteredAt(registeredAt: string): string {
   return `You registered on ${formatDateTime(registeredAt)}`
 }
 
-/** Story 18.2 AC1/AC9: when the attendee registered, and when they withdrew, if they did - on
- *  their card on My registrations and on the event's page. */
-export function describeRegistrationHistory(registration: MyRegistration): string[] {
-  const lines = [describeRegisteredAt(registration.registered_at)]
-  if (registration.withdrawn_at !== null) {
-    lines.push(`You withdrew on ${formatDateTime(registration.withdrawn_at)}`)
-  }
-  return lines
+/** Story 18.2 AC1/AC9: when the attendee registered, while they still are - on their card on My
+ *  registrations and on the event's page. Where they stand now, not a history: a registration
+ *  withdrawn or cancelled gives no time. */
+export function describeActiveRegistration(registration: MyRegistration): string[] {
+  return registration.status === 'REGISTERED'
+    ? [describeRegisteredAt(registration.registered_at)]
+    : []
 }
 
 /** Story 18.4 AC6: an attendee's dietary requirements as every page shows them - "None" when they

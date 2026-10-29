@@ -28,8 +28,8 @@ import {
   STARTED_NOTE,
   STATE_BADGES,
   UPCOMING_EVENTS_TITLE,
+  describeActiveRegistration,
   describePlacesLeft,
-  describeRegistrationHistory,
   describeRegistrationTimes,
   describeVenue,
   describeVenues,
@@ -135,8 +135,9 @@ function isFinalRefusal(err: unknown): boolean {
  * AC5: attendees only - App.tsx guards the route, and the backend refuses everyone else.
  *
  * Story 18.2:
- * AC1/AC9: the attendee withdraws here, after confirming; the page then shows them Withdrawn, with
- *      when, and offers Register again while the event is open (AC4).
+ * AC1/AC9: the attendee withdraws here, after confirming; the page then shows where registration
+ *      stands, as for an attendee who never registered - Open, say - and offers Register again
+ *      while the event is open (AC4). One badge at a time, and no history of when they withdrew.
  * AC3: once the event has started there is no Withdraw, and the page says why.
  * AC10: an event they registered for opens even once it is no longer listed, with no places left
  *      or Register, and only the venues it still has booked.
@@ -423,33 +424,25 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
   )
 }
 
-/** Story 18.2 AC9: where the attendee stands, if they registered; and, while the event is listed
- *  and they are not registered, where registration stands (18.1 AC1) - say Withdrawn, and Open. */
-function panelBadges(event: AttendeeEvent): RegistrationBadge[] {
-  const { listing, registration } = event
-  const badges = registration === null ? [] : [STANDING_BADGES[registration.status]]
-  if (listing !== null && (registration === null || listing.state !== 'REGISTERED')) {
-    badges.push(STATE_BADGES[listing.state])
-  }
-  return badges
+/** Story 18.2 AC9: the one badge the page shows. While the event is listed, where registration
+ *  stands for the attendee (18.1 AC1) - Registered, or, never registered or withdrawn, Open, Full
+ *  and so on, as for anyone else. Once it is not, where they stand (AC10) - Registered, Withdrawn
+ *  or Event cancelled. The page of an unlisted event is only ever one they registered for. */
+function panelBadge({ listing, registration }: AttendeeEvent): RegistrationBadge | null {
+  if (listing !== null) return STATE_BADGES[listing.state]
+  return registration === null ? null : STANDING_BADGES[registration.status]
 }
 
-/** Story 18.2 AC1/AC3/AC9: when the attendee registered and withdrew, and why there is no
- *  Withdraw once the event has started; and, story 18.1 AC9, while the event is listed and they
- *  are not registered, when registration opens and closes. */
-function panelTimes(event: AttendeeEvent): string[] {
-  const { listing, registration } = event
-  if (registration === null) {
-    return listing === null ? [] : describeRegistrationTimes(listing)
+/** Story 18.2 AC3/AC9: when the attendee registered, while they still are, and why there is no
+ *  Withdraw once the event has started; otherwise, story 18.1 AC9, while the event is listed,
+ *  when registration opens and closes. No history of when they withdrew. */
+function panelTimes({ listing, registration }: AttendeeEvent): string[] {
+  if (registration?.status === 'REGISTERED') {
+    const lines = describeActiveRegistration(registration)
+    if (!registration.can_withdraw) lines.push(STARTED_NOTE)
+    return lines
   }
-  const lines = describeRegistrationHistory(registration)
-  if (registration.status === 'REGISTERED' && !registration.can_withdraw) {
-    lines.push(STARTED_NOTE)
-  }
-  if (listing !== null && listing.registered_at === null) {
-    lines.push(...describeRegistrationTimes(listing))
-  }
-  return lines
+  return listing === null ? [] : describeRegistrationTimes(listing)
 }
 
 interface RegistrationPanelProps {
@@ -468,7 +461,8 @@ interface RegistrationPanelProps {
  * to register was refused, and the one thing the attendee can do: Register - enabled only while
  * the event is open, offered only while it is listed and they are not registered - or Withdraw,
  * offered only while the server says their registration can be withdrawn. Register is the brand
- * colour, as the dialog's Confirm and register is, so it stands apart from the page's other buttons.
+ * colour, as the dialog's Confirm and register is, so it stands apart from the page's other
+ * buttons; Withdraw is red, as giving up a place is, like its confirmation's button.
  */
 function RegistrationPanel({
   event,
@@ -478,6 +472,7 @@ function RegistrationPanel({
   onWithdraw,
 }: RegistrationPanelProps) {
   const { listing, registration } = event
+  const badge = panelBadge(event)
   return (
     <section
       className="card stack attendee-event-registration"
@@ -486,11 +481,11 @@ function RegistrationPanel({
       <p className="eyebrow" id="attendee-event-registration-heading">
         Registration
       </p>
-      <div className="cluster">
-        {panelBadges(event).map((badge) => (
-          <StatusBadge key={badge.label} status={badge.status} label={badge.label} />
-        ))}
-      </div>
+      {badge !== null && (
+        <div className="cluster">
+          <StatusBadge status={badge.status} label={badge.label} />
+        </div>
+      )}
       {listing !== null && <p>{describePlacesLeft(listing.places_left)}</p>}
       {panelTimes(event).map((line) => (
         <p key={line} className="muted small">
@@ -516,7 +511,7 @@ function RegistrationPanel({
       {registration?.can_withdraw && (
         <button
           type="button"
-          className="button-block secondary"
+          className="button-block danger"
           aria-label={`Withdraw from ${event.name}`}
           onClick={onWithdraw}
         >
