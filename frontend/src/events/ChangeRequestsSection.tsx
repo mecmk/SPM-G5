@@ -10,20 +10,19 @@ import {
   type ChangeRequestWindow,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
-import {
-  fetchEventReferenceData,
-  type EquipmentInput,
-  type EventDetail,
-  type EventReferenceData,
-  type VenueRequirement,
-  type VenueRequirementInput,
+import type {
+  EquipmentInput,
+  EventDetail,
+  EventReferenceData,
+  VenueRequirement,
+  VenueRequirementInput,
 } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
-import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
+import { formatDateTime, inputToInstant, instantToInput, shortReference } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
@@ -160,6 +159,11 @@ export interface ChangeRequestsSectionProps {
   /** Story 19.2 AC2/AC7: an approval changed the event, or a refusal found it changed meanwhile,
    *  so the page loads it again. */
   onDecided: () => void
+  /** The pick-lists that name layouts, facilities and equipment, loaded once by the page and
+   *  shared with the change history (story 7.4); null while they load. */
+  references: EventReferenceData | null
+  /** Reading the pick-lists failed; null otherwise. */
+  referencesError: string | null
 }
 
 /** The decision dialog open on the event page: which request, and approving or rejecting it. */
@@ -205,6 +209,8 @@ export function ChangeRequestsSection({
   canWithdraw,
   canDecide,
   onDecided,
+  references,
+  referencesError,
 }: ChangeRequestsSectionProps) {
   const ids = useId()
   const reasonInput = useRef<HTMLTextAreaElement>(null)
@@ -213,8 +219,6 @@ export function ChangeRequestsSection({
   const [requests, setRequests] = useState<ChangeRequest[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const [listVersion, setListVersion] = useState(0)
-  const [references, setReferences] = useState<EventReferenceData | null>(null)
-  const [referencesError, setReferencesError] = useState<string | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [field, setField] = useState<ChangeRequestField | ''>('')
   const [startsAt, setStartsAt] = useState('')
@@ -247,20 +251,6 @@ export function ChangeRequestsSection({
       cancelled = true
     }
   }, [event.id, event.status, listVersion])
-
-  useEffect(() => {
-    let cancelled = false
-    fetchEventReferenceData()
-      .then((data) => {
-        if (!cancelled) setReferences(data)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setReferencesError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const pendingFields = new Set(
     (requests ?? []).filter((request) => request.status === 'PENDING').map((r) => r.field),
@@ -544,7 +534,8 @@ export function ChangeRequestsSection({
                   <div>
                     <h3 className="change-request-title">{changeTitle(request.field)}</h3>
                     <p className="small muted">
-                      Requested on {formatDateTime(request.created_at)} by{' '}
+                      <span className="mono">{shortReference(request.id)}</span> · Requested on{' '}
+                      {formatDateTime(request.created_at)} by{' '}
                       {isOwnRequest ? 'you' : request.requested_by_name}
                     </p>
                   </div>

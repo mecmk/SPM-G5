@@ -256,7 +256,9 @@ function describeFacilities(facilities: FacilityValue[], names: Names): string {
   return facilities
     .map((facility) => {
       const name = names.facilities.get(facility.code) ?? facility.code
-      return facility.quantity === null ? name : `${name} ×${facility.quantity}`
+      const counted = facility.quantity === null ? name : `${name} ×${facility.quantity}`
+      // Story 7.4 AC1: a correction can change only a facility's notes, so they are named too.
+      return facility.notes === null ? counted : `${counted} (${facility.notes})`
     })
     .join(', ')
 }

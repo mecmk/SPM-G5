@@ -17,12 +17,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, and_, text
-from sqlalchemy.dialects.postgresql import CITEXT, UUID
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Integer,
+    Text,
+    and_,
+    text,
+)
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.auth.models import User
+from app.auth.models import Role, User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.venues.models import AccessibilityFeature, Facility, RoomLayout
 
@@ -255,6 +266,37 @@ class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     reason: Mapped[str | None] = mapped_column(Text)
+
+
+class EventChange(UUIDPrimaryKeyMixin, Base):
+    """One field a save changed on a submitted event, with who changed it and when (story 7.4).
+    Append-only: written by the save itself, never updated or deleted (AC2, AC5). Read in
+    ``seq`` order, which follows the event's row lock (AC7)."""
+
+    __tablename__ = "event_change_history"
+
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), nullable=False)
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    field_name: Mapped[str] = mapped_column(Text, nullable=False)
+    old_value: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    new_value: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    changed_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    changed_by_role_code: Mapped[str] = mapped_column(
+        Text, ForeignKey("roles.code"), nullable=False
+    )
+    change_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event_change_requests.id")
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    changed_by: Mapped[User] = relationship(lazy="joined")
+    changed_by_role: Mapped[Role] = relationship(lazy="joined")
 
 
 class ClarificationKind:

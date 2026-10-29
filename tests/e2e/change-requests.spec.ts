@@ -95,10 +95,12 @@ test('19.1 AC2: an organiser updates the point of contact on a planning event', 
   await page.getByLabel('Contact phone number').fill('+65 6999 0000')
   await page.getByRole('button', { name: 'Save contact details' }).click()
 
-  await expect(page.getByText(email)).toBeVisible()
-  await expect(page.getByText('+65 6999 0000')).toBeVisible()
+  // The change history (story 7.4) repeats the new values, so read them from the event's card.
+  const info = page.getByRole('region', { name: 'Event information' })
+  await expect(info.getByText(email)).toBeVisible()
+  await expect(info.getByText('+65 6999 0000')).toBeVisible()
   await page.reload()
-  await expect(page.getByText(email)).toBeVisible()
+  await expect(info.getByText(email)).toBeVisible()
 })
 
 test('19.1 AC4: the change form will not submit without a reason', async ({ page }) => {
