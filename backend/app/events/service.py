@@ -1,9 +1,10 @@
 """Business logic for event requests (story 2.1), the organiser's own list of them (story 2.6),
 event review (story 4.1), requesting clarification from the organiser (story 4.2) and the
-organiser's response (story 4.3), the approve/reject decision (stories 4.4, 4.5), the decision /
-clarification history an organiser sees (story 4.6), routine information edits and corrections
-to a request until it is confirmed (story 7.2, fix f7.2.4), the coordinator's assigned events in
-any status (story 6.1), and the notifications a submission and a decision send (story 20.1).
+organiser's response (story 4.3), the approve/reject decision and the equipment a rejection
+releases (stories 4.4, 4.5, fix f4.5.1), the decision / clarification history an organiser sees
+(story 4.6), routine information edits and corrections to a request until it is confirmed (story
+7.2, fix f7.2.4), the coordinator's assigned events in any status (story 6.1), and the
+notifications a submission and a decision send (story 20.1).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -1892,6 +1893,7 @@ def _decide(
     allowed_statuses: tuple[str, ...],
     verb: str,
     extra_check: Callable[[Event], None] | None = None,
+    on_decided: Callable[[datetime], dict[str, Any]] | None = None,
 ) -> None:
     """Shared machinery for 4.4's approve and 4.5's reject: only the assigned coordinator may
     decide, and only while the request is in one of ``allowed_statuses`` - both callers pass
@@ -1906,7 +1908,9 @@ def _decide(
     that is refused or fails sends none (AC4), and the losing one of two at once sends none (AC6).
     ``extra_check`` is one decision's own refusal (approval's, fix f2.7.4 story 2.7 AC17), raised
     after the coordinator and status refusals and before anything is written, so those two always
-    come first and approve and reject give them alike.
+    come first and approve and reject give them alike. ``on_decided`` is one decision's own
+    consequence (rejection's, fix f4.5.1), run at the decision's time once the update holds the
+    event's row, in the same transaction; what it returns is added to the audit details.
     """
     _assert_assigned_coordinator(event, actor, verb="decide")
     _assert_awaiting_decision(event, allowed_statuses, verb=verb)
@@ -1926,6 +1930,7 @@ def _decide(
         db.rollback()
         db.refresh(event)
         raise EventNotAwaitingDecision(event, verb=verb)
+    consequences = {} if on_decided is None else on_decided(decided_at)
     record_transition(
         db,
         event,
@@ -1936,7 +1941,8 @@ def _decide(
         reason=reason,
     )
     _notify_organiser_of_decision(db, event, actor=actor, to_status=to_status, reason=reason)
-    details: dict[str, Any] = {"from_status": from_status}
+    # The decision's own fields go in last, so a consequence can never overwrite them.
+    details: dict[str, Any] = {**consequences, "from_status": from_status}
     if reason is not None:
         details["reason"] = reason
     record_audit(
@@ -1984,9 +1990,24 @@ def approve_event(db: Session, event: Event, *, actor: User) -> None:
 def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None:
     """4.5 AC1-AC3: reject ``event`` with ``reason``, recording the deciding coordinator and
     time. Rejecting is allowed from the same statuses as approving: a request sent back for
-    clarification may be rejected outright, the same as approving it."""
+    clarification may be rejected outright, the same as approving it.
+
+    Fix f4.5.1: the event will not go ahead, so its equipment is released in the same transaction,
+    as 6.2's cancellation releases it. Nothing else is held before approval: no venue booking or
+    registration can exist yet."""
     if not reason.strip():
         raise MissingDecisionReason()
+
+    def release_equipment(decided_at: datetime) -> dict[str, Any]:
+        # The equipment service imports this module, so it is imported once a rejection needs it.
+        from app.equipment import service as equipment_service
+
+        # Read the items as they stand now the update holds the event's row: a Technical Support
+        # decision or a coordinator's edit that took it first has committed.
+        db.expire_all()
+        closed = equipment_service.release_for_rejected_event(db, event, actor=actor, at=decided_at)
+        return {"cancelled_equipment_ids": [str(item.id) for item in closed]}
+
     _decide(
         db,
         event,
@@ -1996,6 +2017,7 @@ def reject_event(db: Session, event: Event, *, actor: User, reason: str) -> None
         verb="rejected",
         reason=reason,
         action="EVENT_REJECTED",
+        on_decided=release_equipment,
     )
 
 
