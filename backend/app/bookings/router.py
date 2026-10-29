@@ -2,7 +2,8 @@
 (story 13.1), searched and ordered (story 13.3), approval and rejection (stories 13.2, 13.2.1),
 the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
 coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
-and a replacement for an approved booking whose venue became unavailable (story 12.6).
+a replacement for an approved booking whose venue became unavailable (story 12.6), and an
+organiser's read-only view of their own event's bookings (fix f7.1.2).
 
 Story 12.7 AC3: every endpoint here expires the holds that have lapsed before it answers
 (``ReleaseLapsedHolds``), so none of them shows or acts on a lapsed one as approved.
@@ -36,6 +37,7 @@ from app.bookings.schemas import (
     BookingRequestIn,
     BookingStatusCounts,
     BookingSwitchIn,
+    OrganiserBooking,
 )
 from app.common.search import QUEUE_SEARCH_MAX_LENGTH
 from app.db import get_db
@@ -43,6 +45,7 @@ from app.db import get_db
 router = APIRouter(prefix="/bookings", tags=["bookings"], dependencies=[ReleaseLapsedHolds])
 
 CanRead = Depends(require_permission(Permission.BOOKINGS_READ))
+CanReadOwn = Depends(require_permission(Permission.BOOKINGS_READ_OWN))
 CanRequest = Depends(require_permission(Permission.BOOKINGS_REQUEST))
 CanDecide = Depends(require_permission(Permission.BOOKINGS_DECIDE))
 DbSession = Annotated[Session, Depends(get_db)]
@@ -152,6 +155,20 @@ def list_bookings_for_event(event_id: uuid.UUID, db: DbSession) -> list[BookingO
     id up front. Declared above ``/{booking_id}`` so the literal path is not read as a booking
     id, same as ``/reference-data`` above."""
     return [BookingOutcome.from_booking(b) for b in service.list_bookings_for_event(db, event_id)]
+
+
+@router.get("/for-my-event/{event_id}", response_model=list[OrganiserBooking])
+def list_bookings_for_own_event(
+    event_id: uuid.UUID, db: DbSession, actor: Annotated[CurrentUser, CanReadOwn]
+) -> list[OrganiserBooking]:
+    """Fix f7.1.2 (story 7.1): AC1 the organiser reads their own event's approved and pending
+    bookings, without the internal detail ``/for-event`` returns; AC2 another organiser's event
+    is not found. Declared above ``/{booking_id}``, as ``/for-event`` is."""
+    try:
+        bookings = service.list_bookings_for_own_event(db, event_id, viewer=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    return [OrganiserBooking.from_booking(b) for b in bookings]
 
 
 @router.get("/{booking_id}", response_model=BookingOut, dependencies=[CanRead])
