@@ -93,6 +93,7 @@ import {
   isReplaceable,
   replacementSearchFor,
   requirementName,
+  unnamedRequirementLabel,
   venueSearchFor,
 } from '../shared/venueRequest'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
@@ -1028,7 +1029,7 @@ export function EventDetailPage() {
                   <li key={requirement.id} className="stack">
                     <div>
                       <p>
-                        <strong>{requirement.name ?? `Venue requirement ${index + 1}`}</strong>
+                        <strong>{requirement.name ?? unnamedRequirementLabel(index + 1)}</strong>
                       </p>
                       <p className="small muted">{describeVenueRequirementFacts(requirement)}</p>
                     </div>
