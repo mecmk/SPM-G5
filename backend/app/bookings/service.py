@@ -103,6 +103,12 @@ the next tick. Changing an expiry checks the row it locks as well, on its own cl
 lapsed since that sweep is expired there and then (AC7). Rows are taken ``FOR UPDATE SKIP LOCKED``,
 so two sweeps never expire or warn about one booking twice, and the event's confirmation and the
 expiry of one hold are serialized by the row lock (AC10).
+
+Story 13.3 - "As a Venue Staff or Technical Support Staff member I want to search and sort the
+requests in my queue so that I can find a particular request quickly and work through them in the
+order I need": ``list_booking_requests`` searches the event name, the venue name and who submitted
+the request, and orders by the offered ``BookingQueueOrder``, in the one statement that cuts the
+page, so every page follows one order across the whole tab (AC4).
 """
 
 from __future__ import annotations
@@ -114,13 +120,19 @@ from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingReplacementIn, BookingRequestIn, BookingSwitchIn
+from app.bookings.schemas import (
+    BookingQueueOrder,
+    BookingReplacementIn,
+    BookingRequestIn,
+    BookingSwitchIn,
+)
 from app.common.audit import record_audit
+from app.common.search import by_name, matches_any, search_term
 from app.config import settings
 from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement, VenueRequirementFacility
@@ -279,6 +291,17 @@ _BOOKABLE_EVENT_STATUSES = frozenset({EventStatus.PLANNING, EventStatus.CONFIRME
 # the Events inbox (``app.events.service.MY_EVENTS_MAX_LIMIT`` / ``MY_EVENTS_MAX_OFFSET``).
 BOOKING_QUEUE_MAX_LIMIT = 100
 BOOKING_QUEUE_MAX_OFFSET = 2_147_483_647
+
+# Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
+# date order, soonest first, and by id, so the pages cut from any order are stable (AC4).
+_QUEUE_ORDERS = {
+    BookingQueueOrder.DATE: VenueBooking.starts_at,
+    BookingQueueOrder.DATE_DESC: VenueBooking.starts_at.desc(),
+    BookingQueueOrder.REQUESTED: VenueBooking.created_at,
+    BookingQueueOrder.REQUESTED_DESC: VenueBooking.created_at.desc(),
+    BookingQueueOrder.EVENT_NAME: by_name(Event.name),
+    BookingQueueOrder.VENUE_NAME: by_name(Venue.name),
+}
 
 
 class BookingNotFound(LookupError):
@@ -492,10 +515,25 @@ class BookingQueueListing:
     counts_by_status: dict[str, int]
 
 
+def _queue_rows(statement: Select, search: str | None) -> Select:
+    """Story 13.3 AC2: ``statement`` joined to each request's event, venue and requester, and kept
+    to the requests whose event name, venue name or requester's name contains ``search`` - every
+    request, when there is no search (AC5)."""
+    statement = (
+        statement.join(VenueBooking.event).join(VenueBooking.venue).join(VenueBooking.requested_by)
+    )
+    term = search_term(search)
+    if term is None:
+        return statement
+    return statement.where(matches_any(term, Event.name, Venue.name, User.full_name))
+
+
 def list_booking_requests(
     db: Session,
     *,
     status: str | None = None,
+    search: str | None = None,
+    order: BookingQueueOrder = BookingQueueOrder.DATE,
     limit: int = BOOKING_QUEUE_MAX_LIMIT,
     offset: int = 0,
 ) -> BookingQueueListing:
@@ -507,23 +545,32 @@ def list_booking_requests(
     Story 13.1.2 AC1: ``status`` narrows the queue to one tab; ``None`` is the All tab.
     ``counts_by_status`` ignores both the tab and the page, so every tab label stays right.
     AC4: soonest first, ties broken by id so the pages cut from it are stable. The tab's total
-    comes from the same per-status count, so it costs no query of its own."""
+    comes from the same per-status count, so it costs no query of its own.
+
+    Story 13.3 AC1/AC2: ``search`` narrows every tab, and so every count, to the matching
+    requests. AC3: ``order`` sorts them, ties falling back to soonest first. AC4: both are part of
+    the statement the page is cut from, so a match on any page is found and the total counts only
+    the matches."""
     page = (
-        select(VenueBooking)
+        _queue_rows(select(VenueBooking), search)
         .options(
-            joinedload(VenueBooking.event),
-            joinedload(VenueBooking.venue),
-            joinedload(VenueBooking.requested_by),
+            contains_eager(VenueBooking.event),
+            contains_eager(VenueBooking.venue),
+            contains_eager(VenueBooking.requested_by),
             joinedload(VenueBooking.required_layout),
         )
-        .order_by(VenueBooking.starts_at, VenueBooking.id)
+        .order_by(_QUEUE_ORDERS[order], VenueBooking.starts_at, VenueBooking.id)
         .limit(limit)
         .offset(offset)
     )
     if status is not None:
         page = page.where(VenueBooking.status == status)
     counts_by_status = dict(
-        db.execute(select(VenueBooking.status, func.count()).group_by(VenueBooking.status)).all()
+        db.execute(
+            _queue_rows(select(VenueBooking.status, func.count()), search).group_by(
+                VenueBooking.status
+            )
+        ).all()
     )
     total = sum(counts_by_status.values()) if status is None else counts_by_status.get(status, 0)
     return BookingQueueListing(

@@ -268,18 +268,34 @@ export interface BookingQueue {
   counts: BookingStatusCounts
 }
 
+/** Story 13.3 AC3: the orders the booking queue offers. Mirrors `BookingQueueOrder`. */
+export type BookingQueueOrder =
+  'date' | 'date_desc' | 'requested' | 'requested_desc' | 'event_name' | 'venue_name'
+
+/** One page of the booking queue to ask for. */
+export interface BookingQueueQuery {
+  status: BookingStatus | null
+  /** Story 13.3 AC2: blank for no search. */
+  search: string
+  order: BookingQueueOrder
+  offset: number
+  limit: number
+}
+
 /**
  * Story 13.1 AC1-AC3: `'PENDING'` is the pending queue Venue Staff decide from. Story 13.1.2 AC1:
  * any other status is its own tab, and `null` is All. AC4: `limit` requests from the `offset`th
- * on - one numbered page.
+ * on - one numbered page. Story 13.3 AC1-AC4: the tab searched and ordered before it is paged; a
+ * blank search is left out, as the spaces around one are (AC5).
  */
-export function listBookingRequests(
-  status: BookingStatus | null,
-  offset: number,
-  limit: number,
-): Promise<BookingQueue> {
-  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
-  if (status !== null) params.set('status', status)
+export function listBookingRequests(query: BookingQueueQuery): Promise<BookingQueue> {
+  const params = new URLSearchParams({
+    order: query.order,
+    offset: String(query.offset),
+    limit: String(query.limit),
+  })
+  if (query.status !== null) params.set('status', query.status)
+  if (query.search.trim() !== '') params.set('search', query.search.trim())
   return api<BookingQueue>(`/bookings?${params}`)
 }
 

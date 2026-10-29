@@ -37,6 +37,9 @@ export function shortReference(id: string): string {
   return `#${id.slice(-SHORT_ID_LENGTH).toUpperCase()}`
 }
 
+/** Story 13.3 AC6: the link a search nothing matches offers, to list the whole tab again. */
+export const CLEAR_SEARCH = 'Clear search'
+
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {
     weekday: 'short',
