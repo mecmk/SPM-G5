@@ -151,13 +151,26 @@ export interface EquipmentQueue {
   counts: EquipmentQueueCounts
 }
 
-/** Story 15.2 AC1-AC3: one tab of Technical Support's queue, soonest event first; `null` is the
- * All tab. */
-export function listEquipmentRequests(
-  status: EquipmentQueueStatus | null,
-): Promise<EquipmentQueue> {
-  if (status === null) return api<EquipmentQueue>('/equipment-requests')
-  return api<EquipmentQueue>(`/equipment-requests?${new URLSearchParams({ status })}`)
+/** Story 13.3 AC3: the orders the equipment queue offers. Mirrors `EquipmentQueueOrder`. */
+export type EquipmentQueueOrder =
+  'date' | 'date_desc' | 'requested' | 'requested_desc' | 'event_name' | 'equipment_type'
+
+/** One tab of the equipment queue to ask for. */
+export interface EquipmentQueueQuery {
+  status: EquipmentQueueStatus | null
+  /** Story 13.3 AC2: blank for no search. */
+  search: string
+  order: EquipmentQueueOrder
+}
+
+/** Story 15.2 AC1-AC3: one tab of Technical Support's queue; `null` is the All tab. Story 13.3
+ * AC1-AC4: searched and ordered, soonest event first unless asked otherwise; a blank search is
+ * left out, as the spaces around one are (AC5). */
+export function listEquipmentRequests(query: EquipmentQueueQuery): Promise<EquipmentQueue> {
+  const params = new URLSearchParams({ order: query.order })
+  if (query.status !== null) params.set('status', query.status)
+  if (query.search.trim() !== '') params.set('search', query.search.trim())
+  return api<EquipmentQueue>(`/equipment-requests?${params}`)
 }
 
 /** Story 16.1: what Technical Support may decide. Mirrors `EquipmentDecisionOutcome`. */
