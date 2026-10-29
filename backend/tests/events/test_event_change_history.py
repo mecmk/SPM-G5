@@ -16,7 +16,7 @@ AC7 Saves made in quick succession are recorded in the order they happened, and 
 Excluded, with reason:
 * AC3's "No changes yet" and the shortened long values are wording and layout on the page,
   covered in tests/e2e/event-change-history.spec.ts; here AC3 is the empty list behind them.
-* Draft edits before submission are not part of the history (CL-179), nor are the Equipment
+* Draft edits before submission are not part of the history (CL-182), nor are the Equipment
   section's own saves (15.1); the history covers the event's details and approved change requests.
 """
 
@@ -333,7 +333,7 @@ def test_a_correction_that_removes_the_cover_picture_is_recorded(coordinator_cli
 
 @pytest.mark.story("7.4", ac=1)
 def test_the_organisers_draft_picture_is_not_recorded(organiser_client, upload_dir):
-    """Draft edits before submission are out of the history (CL-179)."""
+    """Draft edits before submission are out of the history (CL-182)."""
     created = create_event_request(organiser_client)
     uploaded = organiser_client.put(
         f"/events/{created['id']}/cover-image", files={"file": ("cover.png", _PNG, "image/png")}
@@ -345,7 +345,7 @@ def test_the_organisers_draft_picture_is_not_recorded(organiser_client, upload_d
 
 @pytest.mark.story("7.4", ac=1)
 def test_removing_the_organisers_draft_picture_is_not_recorded(organiser_client, upload_dir):
-    """Draft edits before submission are out of the history (CL-179)."""
+    """Draft edits before submission are out of the history (CL-182)."""
     created = create_event_request(organiser_client)
     route = f"/events/{created['id']}/cover-image"
     uploaded = organiser_client.put(route, files={"file": ("cover.png", _PNG, "image/png")})
@@ -462,7 +462,9 @@ def _in_own_session(engine, attempt: Callable[[Session], None]) -> None:
 
 
 def _wait_until_blocked(engine) -> None:
-    """Until another connection waits on a row lock: the save has started, and stopped there."""
+    """Until another connection waits on a row lock: the save has started, and stopped there.
+    Each look ends its transaction, since Postgres shows a transaction the same pg_stat_activity
+    from its first look to its end."""
     deadline = time.monotonic() + 10
     with engine.connect() as watcher:
         while time.monotonic() < deadline:
@@ -472,6 +474,7 @@ def _wait_until_blocked(engine) -> None:
                     "WHERE datname = current_database() AND wait_event_type = 'Lock'"
                 )
             ).scalar_one()
+            watcher.rollback()
             if waiting:
                 return
             time.sleep(0.05)
@@ -487,8 +490,10 @@ def test_a_save_made_while_another_holds_the_event_records_the_value_it_left(eng
             holder.execute(update(Event).where(Event.id == event_id).values(internal_notes="A"))
             with ThreadPoolExecutor(max_workers=1) as pool:
                 saving = pool.submit(_in_own_session, engine, _notes_saver(event_id, "B"))
-                _wait_until_blocked(engine)
-                holder.commit()
+                try:
+                    _wait_until_blocked(engine)
+                finally:
+                    holder.commit()  # even when the wait fails, so the save is never left waiting
                 saving.result(timeout=30)
 
         with Session(engine) as session:

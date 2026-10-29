@@ -1743,7 +1743,7 @@ def _replace_cover_image(
 ) -> None:
     """Store ``content`` as ``event``'s cover picture and commit, auditing the old and new
     address, and - for a correction (``record_history``) - adding it to the change history (story
-    7.4; the organiser's own draft picture is not part of it, CL-179). The file is written first
+    7.4; the organiser's own draft picture is not part of it, CL-182). The file is written first
     and the old one deleted only once the new address is stored, so a failure never leaves the
     request pointing at a file that is gone."""
     filename = f"{uuid.uuid4()}{extension}"
