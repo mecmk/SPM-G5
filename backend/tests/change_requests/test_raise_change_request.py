@@ -70,7 +70,7 @@ AC15 An attendance below a venue requirement's number of people is taken when th
 AC16 Otherwise it is refused, naming the requirement needing the most people (the first on the
      form when two tie), the exact minimum, and that the venue requirements change comes first.
 AC17 A pending attendance change the venue requirements do not allow yet says what it waits for,
-     to the organiser and to the coordinator (e2e). (CL-179, Proposed until the PO agrees.)
+     to the organiser and to the coordinator (e2e). (CL-179.)
 
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
@@ -136,6 +136,18 @@ _CLOSED_BEFORE_SETUP_REFUSAL = (
 _ATTENDANCE_BELOW_REFUSAL = (
     "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
     " {minimum} people. Ask for a venue requirements change that lowers it first."
+)
+# The same while the organiser's own venue requirements change waits, which is withdrawn first:
+# judged on that change when it lowers the minimum, and on the event when it would raise it.
+_ATTENDANCE_BELOW_WAITING_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people with your venue requirements change. Withdraw that change and ask for one"
+    " that lowers it first."
+)
+_ATTENDANCE_NEEDS_WITHDRAWAL_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. Withdraw your venue requirements change and ask for one that lowers it"
+    " first."
 )
 _CURRENT_EMAIL = "olivia.events@acme.example"
 _CURRENT_PHONE = "+65 6111 2233"
@@ -746,7 +758,7 @@ def test_attendance_is_taken_beside_a_requirements_change_that_makes_room(
         }
         assert all(row.status == "PENDING" for row in _change_requests(db, event.id))
     else:
-        assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        assert response.json()["detail"] == _ATTENDANCE_BELOW_WAITING_REFUSAL.format(
             minimum=121, requirement="Hall"
         )
 
@@ -770,9 +782,38 @@ def test_a_requirements_change_lowering_only_some_requirements_is_not_enough(
     response = _raise(organiser_client, event.id, "expected_attendance", 100)
 
     assert response.status_code == 422, response.text
-    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_WAITING_REFUSAL.format(
         minimum=150, requirement="Breakout"
     )
+
+
+@pytest.mark.story("19.1", ac=16)
+@pytest.mark.parametrize("adds_a_room", [False, True], ids=["hall-raised", "room-added"])
+def test_a_waiting_change_raising_the_minimum_leaves_the_events_own(
+    organiser_client, db: Session, adds_a_room
+):
+    """The waiting change takes the hall to 180, or adds a breakout room for 170 (both allowed:
+    the event is for 200), so the lowest taken is still the hall's 150 - the refusal says so, and
+    150 itself is taken."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    if adds_a_room:
+        asked = [
+            _requirement_body(hall_id, name="Hall", capacity=150, event=event),
+            {**_requirement_body(hall_id, name="Breakout", capacity=170, event=event), "id": None},
+        ]
+    else:
+        asked = [_requirement_body(hall_id, name="Hall", capacity=180, event=event)]
+    _ask_for_requirements(organiser_client, event, *asked)
+
+    refused = _raise(organiser_client, event.id, "expected_attendance", 100)
+    taken = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == _ATTENDANCE_NEEDS_WITHDRAWAL_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+    assert taken.status_code == 201, taken.text
 
 
 @pytest.mark.story("19.1", ac=15)
@@ -810,6 +851,47 @@ def test_a_requirements_change_no_longer_waiting_does_not_count(
         {"s": status, "e": event.id},
     )
     db.expire_all()
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+
+
+@pytest.mark.story("19.1", ac=15)
+@pytest.mark.parametrize("pending", ["date-change", "another-events", "unreadable"])
+def test_only_this_events_readable_requirements_change_counts(
+    organiser_client, db: Session, pending
+):
+    """What waits is a date change rather than a venue requirements change, another event's venue
+    requirements change, or this event's whose stored proposal no longer reads. None of them
+    counts, so the attendance is judged on the requirements as they stand."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    if pending == "date-change":
+        moved = _raise(organiser_client, event.id, "schedule", _moved_a_day(event))
+        assert moved.status_code == 201, moved.text
+    elif pending == "another-events":
+        other = _planning_event(db, expected_attendance=200, starts_at=event.starts_at)
+        other_hall_id = make_venue_requirement(db, other.id, name="Hall", capacity=150)
+        _ask_for_requirements(
+            organiser_client,
+            other,
+            _requirement_body(other_hall_id, name="Hall", capacity=100, event=other),
+        )
+    else:
+        _ask_for_requirements(
+            organiser_client,
+            event,
+            _requirement_body(hall_id, name="Hall", capacity=100, event=event),
+        )
+        db.execute(
+            text("UPDATE event_change_requests SET proposed_value = :v WHERE event_id = :e"),
+            {"v": json.dumps([{"name": "Hall", "capacity": "many"}]), "e": event.id},
+        )
+        db.expire_all()
 
     response = _raise(organiser_client, event.id, "expected_attendance", 100)
 

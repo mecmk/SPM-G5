@@ -141,6 +141,19 @@ ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE = (
     "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
     "{minimum} people. Ask for a venue requirements change that lowers it first."
 )
+# Fix f19.1.2: the same while the organiser's own venue requirements change waits. Only one may
+# wait (AC5), so it is withdrawn before another is asked for. The first is judged on the waiting
+# change, which sets the minimum; the second on the event, when that change would raise it.
+ATTENDANCE_BELOW_WAITING_CHANGE_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people with your venue requirements change. Withdraw that change and ask for one "
+    "that lowers it first."
+)
+ATTENDANCE_NEEDS_WAITING_CHANGE_WITHDRAWN_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. Withdraw your venue requirements change and ask for one that lowers it "
+    "first."
+)
 
 _REQUESTED_TITLE = "Change requested for {event}"
 _REQUESTED_MESSAGE = '{organiser} asked to change the {label}: "{reason}"'
@@ -199,12 +212,34 @@ class UnchangedValue(InvalidEventRequest):
 
 
 class AttendanceNeedsRequirementsChange(InvalidEventRequest):
-    """AC4, fix f19.1.2: a new attendance below what a venue requirement needs room for (2.7
+    """AC16, fix f19.1.2: a new attendance below what a venue requirement needs room for (2.7
     AC6), naming the requirement that sets the minimum and the minimum, for the organiser."""
 
     def __init__(self, requirement: str, minimum: int) -> None:
         super().__init__(
             ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE.format(
+                requirement=requirement, minimum=minimum
+            )
+        )
+
+
+class AttendanceBelowWaitingChange(InvalidEventRequest):
+    """AC16, fix f19.1.2: the organiser's waiting venue requirements change lowers the minimum,
+    but not to the new attendance - named by that change's requirement and number."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_BELOW_WAITING_CHANGE_MESSAGE.format(requirement=requirement, minimum=minimum)
+        )
+
+
+class AttendanceNeedsWaitingChangeWithdrawn(InvalidEventRequest):
+    """AC16, fix f19.1.2: the organiser's waiting venue requirements change would raise the
+    minimum, so the event's own requirement sets it."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_NEEDS_WAITING_CHANGE_WITHDRAWN_MESSAGE.format(
                 requirement=requirement, minimum=minimum
             )
         )
@@ -323,7 +358,7 @@ def _without_ids(field: str, value: Any) -> Any:
 
 
 def _pending_requirements(db: Session, event: Event) -> list[VenueRequirementIn] | None:
-    """Fix f19.1.2 (Q80): the venue requirements a pending change to them asks for - None when
+    """AC15, fix f19.1.2 (Q80): the venue requirements a pending change to them asks for - None when
     none waits, when it is out of date (19.2 AC7), or when its stored proposal no longer reads."""
     request = db.scalar(
         select(EventChangeRequest).where(
@@ -341,11 +376,11 @@ def _pending_requirements(db: Session, event: Event) -> list[VenueRequirementIn]
 
 
 def _check_attendance_request(db: Session, event: Event, attendance: int) -> None:
-    """AC4: a new attendance leaves room for every venue requirement (2.7 AC6), as 19.2 checks it
-    on approval. Fix f19.1.2 (Q80, CL-172): or for every one a pending venue requirements change
-    asks for, so the two can wait together - 19.2 still approves the requirements first. A refusal
-    tells the organiser the minimum and what to change first, judged on the pending change when
-    one counts, since that is what the organiser would change next."""
+    """AC15, fix f19.1.2 (Q80, CL-172): a new attendance leaves room for every venue requirement
+    (2.7 AC6), as 19.2 checks it on approval, or for every one a pending venue requirements change
+    asks for, so the two can wait together - 19.2 still approves the requirements first. AC16: a
+    refusal tells the organiser the lowest attendance taken, which is the lower of the two
+    minimums, and what to change first."""
     try:
         events_service.check_proposed_attendance(event, attendance)
     except events_service.AttendanceBelowRequirement as exc:
@@ -355,7 +390,11 @@ def _check_attendance_request(db: Session, event: Event, attendance: int) -> Non
         try:
             events_service.check_attendance_leaves_room(pending, attendance)
         except events_service.AttendanceBelowRequirement as still:
-            raise AttendanceNeedsRequirementsChange(still.requirement, still.minimum) from still
+            # AC15: the lowest taken is the lower of the two minimums - on a tie, the waiting
+            # change's, whose requirement is the one left to lower.
+            if still.minimum <= exc.minimum:
+                raise AttendanceBelowWaitingChange(still.requirement, still.minimum) from still
+            raise AttendanceNeedsWaitingChangeWithdrawn(exc.requirement, exc.minimum) from exc
 
 
 def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> tuple[Any, Any]:
