@@ -2,6 +2,7 @@ import type { ChangeRequest, ChangeRequestField, ChangeRequestStatus } from '../
 import type { EventReferenceData } from '../api/events'
 import type { IconName } from '../components/Icon'
 import { ANY_LAYOUT, formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
+import { unnamedRequirementLabel } from '../shared/venueRequest'
 
 /**
  * Story 19.1 AC1: how each requestable field is named, in the order the form offers them.
@@ -103,30 +104,37 @@ function findAttendanceMinimum(requirements: SizedRequirement[]): AttendanceMini
     if (found === null || requirement.capacity > found.minimum) {
       found = {
         minimum: requirement.capacity,
-        requirement: requirement.name || `Venue requirement ${index + 1}`,
+        requirement: requirement.name ?? unnamedRequirementLabel(index + 1),
       }
     }
   }
   return found
 }
 
-/** Fix f19.1.2 (Q80): the venue requirements change waiting for a decision that can still be
- *  approved - not out of date (19.2 AC7) - if there is one. */
-function findWaitingRequirementsChange(requests: ChangeRequest[]): ChangeRequest | undefined {
-  return requests.find(
+/**
+ * Fix f19.1.2 (19.1 AC15): the lowest attendance the venue requirements change waiting for a
+ * decision allows, when it can still be approved - not out of date (19.2 AC7). Undefined when no
+ * such change waits; null when one does but gives no number of people.
+ */
+function findWaitingMinimum(requests: ChangeRequest[]): AttendanceMinimum | null | undefined {
+  const waiting = requests.find(
     (request) =>
       request.field === 'venue_requirements' &&
       request.status === 'PENDING' &&
       !request.is_out_of_date,
   )
+  return waiting === undefined
+    ? undefined
+    : findAttendanceMinimum(waiting.proposed_value as RequirementValue[])
 }
 
 /** Fix f19.1.2 (CL-179): what holds a pending attendance change back - the venue requirement
- *  needing more people than it asks for, as "Main venue needs room for 60 people" - and whether a
- *  waiting venue requirements change would make room for it. */
+ *  needing more people than it asks for, as "Main venue needs room for 60 people" - whether a
+ *  waiting venue requirements change would make room for it, and whether one waits at all. */
 interface AttendanceWait {
   needs: string
   isRoomWaiting: boolean
+  isChangeWaiting: boolean
 }
 
 /**
@@ -143,18 +151,15 @@ function findAttendanceWait(
   const asked = request.proposed_value as number
   const current = findAttendanceMinimum(requirements)
   if (current === null || asked >= current.minimum) return null
-  const waiting = findWaitingRequirementsChange(requests)
-  const proposed =
-    waiting === undefined
-      ? null
-      : findAttendanceMinimum(waiting.proposed_value as RequirementValue[])
+  const proposed = findWaitingMinimum(requests)
   return {
     needs: `${current.requirement} needs room for ${current.minimum} people`,
-    isRoomWaiting: waiting !== undefined && (proposed === null || proposed.minimum <= asked),
+    isRoomWaiting: proposed !== undefined && (proposed === null || proposed.minimum <= asked),
+    isChangeWaiting: proposed !== undefined,
   }
 }
 
-/** Fix f19.1.2 (19.2 AC2, CL-179): what the coordinator is told on an attendance change they
+/** Fix f19.1.2 (19.1 AC17, CL-179): what the coordinator is told on an attendance change they
  *  cannot approve yet, and what to do. Null when nothing stands in its way. */
 export function describeAttendanceWait(
   request: ChangeRequest,
@@ -168,7 +173,7 @@ export function describeAttendanceWait(
     : `${wait.needs}, so this cannot be approved until a venue requirements change lowers it.`
 }
 
-/** Fix f19.1.2 (19.1 AC4, CL-179): what the organiser is told on their own attendance change
+/** Fix f19.1.2 (19.1 AC17, CL-179): what the organiser is told on their own attendance change
  *  that cannot be approved yet, and what they can do. Null when nothing stands in its way. */
 export function describeOwnAttendanceWait(
   request: ChangeRequest,
@@ -177,13 +182,16 @@ export function describeOwnAttendanceWait(
 ): string | null {
   const wait = findAttendanceWait(request, requirements, requests)
   if (wait === null) return null
-  return wait.isRoomWaiting
-    ? `This waits for your venue requirements change to be approved first, since ${wait.needs} until then.`
+  if (wait.isRoomWaiting) {
+    return `This waits for your venue requirements change to be approved first, since ${wait.needs} until then.`
+  }
+  return wait.isChangeWaiting
+    ? `${wait.needs}, so this cannot be approved yet. Your venue requirements change does not lower it enough: withdraw it and ask for one that does, or withdraw this request.`
     : `${wait.needs}, so this cannot be approved yet. Ask for a venue requirements change that lowers it, or withdraw this request.`
 }
 
 /**
- * Fix f19.1.2 (19.1 AC4, CL-172 (4), CL-179): what the change form says beneath the new
+ * Fix f19.1.2 (19.1 AC14, CL-172 (4), CL-179): what the change form says beneath the new
  * attendance - the lowest the server takes, by its own rule. That is the lowest the event's venue
  * requirements allow, or, when a venue requirements change waiting for a decision (and not out of
  * date, 19.2 AC7) allows lower, the lowest that change allows, saying it is approved first. Null
@@ -195,15 +203,11 @@ export function describeAttendanceMinimum(
 ): string | null {
   const current = findAttendanceMinimum(requirements)
   if (current === null) return null
-  const pending = findWaitingRequirementsChange(requests)
-  const proposed =
-    pending === undefined
-      ? null
-      : findAttendanceMinimum(pending.proposed_value as RequirementValue[])
-  if (proposed === null || proposed.minimum >= current.minimum) {
+  const proposed = findWaitingMinimum(requests)
+  if (proposed === undefined || proposed === null || proposed.minimum >= current.minimum) {
     return `At least ${current.minimum}: ${current.requirement} needs room for ${current.minimum} people.`
   }
-  return `At least ${proposed.minimum}: your venue requirements change brings ${proposed.requirement} to ${proposed.minimum} people, and is approved before this one.`
+  return `At least ${proposed.minimum}: with your venue requirements change, ${proposed.requirement} needs room for ${proposed.minimum} people. That change is approved before this one.`
 }
 
 interface EquipmentValue {
