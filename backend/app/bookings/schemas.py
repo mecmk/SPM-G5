@@ -262,6 +262,19 @@ BookingQueueStatus = StrEnum(
 )
 
 
+class BookingQueueOrder(StrEnum):
+    """Story 13.3 AC3: the orders the booking queue offers - its date, soonest (the default) or
+    latest first; when it was requested, oldest or newest first; its event's name and its venue's
+    name, A to Z. AC5: any other is a 422."""
+
+    DATE = "date"
+    DATE_DESC = "date_desc"
+    REQUESTED = "requested"
+    REQUESTED_DESC = "requested_desc"
+    EVENT_NAME = "event_name"
+    VENUE_NAME = "venue_name"
+
+
 class BookingQueueEntry(BaseModel):
     """Story 13.1 AC2: event name, requested venue, period, expected attendance and stated
     requirements. Story 13.1.2 AC2: when the request was raised. 13.1.2 AC3: ``decision_reason``
