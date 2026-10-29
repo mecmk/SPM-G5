@@ -467,7 +467,8 @@ interface RegistrationPanelProps {
  * the places left while the event is listed, the times that go with them, why the latest attempt
  * to register was refused, and the one thing the attendee can do: Register - enabled only while
  * the event is open, offered only while it is listed and they are not registered - or Withdraw,
- * offered only while the server says their registration can be withdrawn.
+ * offered only while the server says their registration can be withdrawn. Register is the brand
+ * colour, as the dialog's Confirm and register is, so it stands apart from the page's other buttons.
  */
 function RegistrationPanel({
   event,
@@ -504,7 +505,7 @@ function RegistrationPanel({
       {listing !== null && listing.state !== 'REGISTERED' && (
         <button
           type="button"
-          className="button-block"
+          className="button-block brand"
           aria-label={`Register for ${event.name}`}
           disabled={listing.state !== 'OPEN' || isRegisterBusy}
           onClick={onRegister}
