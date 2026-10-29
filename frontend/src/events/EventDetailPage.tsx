@@ -93,6 +93,7 @@ import {
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
 import { BOOKING_OUTCOME, formatMinutesDuration } from './bookingOutcome'
+import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
 import { SafetyReviewSection } from './SafetyReviewSection'
@@ -229,6 +230,12 @@ export function EventDetailPage() {
   } | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
+  /** Fix f7.1.2: the organiser reads their own event's bookings through `bookings:read_own`. */
+  const canReadOwnBookings =
+    event !== null &&
+    user !== null &&
+    event.organiser_id === user.id &&
+    can(PERMISSIONS.BOOKINGS_READ_OWN)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -1243,6 +1250,8 @@ export function EventDetailPage() {
             <Link to={VENUE_CATALOGUE_PATH}>Browse the venue catalogue</Link> to request one.
           </EmptyState>
         )}
+
+        {canReadOwnBookings && <OrganiserBookingsSection eventId={event.id} />}
 
         <EquipmentRequestsSection
           eventId={event.id}
