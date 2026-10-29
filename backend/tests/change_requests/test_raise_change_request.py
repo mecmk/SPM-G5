@@ -860,6 +860,47 @@ def test_a_requirements_change_no_longer_waiting_does_not_count(
     )
 
 
+@pytest.mark.story("19.1", ac=15)
+@pytest.mark.parametrize("pending", ["date-change", "another-events", "unreadable"])
+def test_only_this_events_readable_requirements_change_counts(
+    organiser_client, db: Session, pending
+):
+    """What waits is a date change rather than a venue requirements change, another event's venue
+    requirements change, or this event's whose stored proposal no longer reads. None of them
+    counts, so the attendance is judged on the requirements as they stand."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    if pending == "date-change":
+        moved = _raise(organiser_client, event.id, "schedule", _moved_a_day(event))
+        assert moved.status_code == 201, moved.text
+    elif pending == "another-events":
+        other = _planning_event(db, expected_attendance=200, starts_at=event.starts_at)
+        other_hall_id = make_venue_requirement(db, other.id, name="Hall", capacity=150)
+        _ask_for_requirements(
+            organiser_client,
+            other,
+            _requirement_body(other_hall_id, name="Hall", capacity=100, event=other),
+        )
+    else:
+        _ask_for_requirements(
+            organiser_client,
+            event,
+            _requirement_body(hall_id, name="Hall", capacity=100, event=event),
+        )
+        db.execute(
+            text("UPDATE event_change_requests SET proposed_value = :v WHERE event_id = :e"),
+            {"v": json.dumps([{"name": "Hall", "capacity": "many"}]), "e": event.id},
+        )
+        db.expire_all()
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+
+
 def _over_attendance(event: Event) -> list:
     return [{"name": "Hall", "capacity": 101}]
 
