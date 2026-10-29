@@ -136,6 +136,8 @@ export type ErrorCode =
   | 'ATTENDEE_PHONE_INVALID'
   | 'ATTENDEE_PHONE_REQUIRED'
   | 'ATTENDEE_NAME_REQUIRED'
+  | 'GUEST_NAME_REQUIRED'
+  | 'GUEST_PHONE_REQUIRED'
 
 export interface ErrorEntry {
   title: string
@@ -845,6 +847,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   ATTENDEE_NAME_REQUIRED: {
     title: 'Check your name',
     message: 'Enter your name.',
+  },
+  /** AC12 (fix f18.4.1): worded as the backend's GUEST_FULL_NAME_REQUIRED_MESSAGE. A wrong guest
+   *  phone number is ATTENDEE_PHONE_INVALID's, the one rule for both. */
+  GUEST_NAME_REQUIRED: {
+    title: "Check your guest's name",
+    message: "Enter your guest's name.",
+  },
+  /** AC12 (fix f18.4.1): worded as the backend's GUEST_PHONE_REQUIRED_MESSAGE. */
+  GUEST_PHONE_REQUIRED: {
+    title: "Check your guest's phone number",
+    message: "Enter your guest's phone number.",
   },
 }
 

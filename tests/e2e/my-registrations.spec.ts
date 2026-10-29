@@ -432,6 +432,7 @@ test.describe('on an iPhone 12 Pro', () => {
           registered_at: '2026-10-11T02:00:00Z',
           withdrawn_at: null,
           can_withdraw: true,
+          guest_name: null,
         },
       ],
     })
@@ -464,7 +465,7 @@ test.describe('on an iPhone 12 Pro', () => {
 })
 
 // --- AC3 / AC10 / AC11: until the event starts -------------------------------------------------
-test("18.2 AC3/AC10: a registration for an event that has started opens its page, which offers no Withdraw and says why", async ({
+test('18.2 AC3/AC10: a registration for an event that has started opens its page, which offers no Withdraw and says why', async ({
   page,
 }) => {
   await openMyRegistrations(page)

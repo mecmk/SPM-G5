@@ -1,6 +1,10 @@
-import { useCallback, useState } from 'react'
+import { Fragment, useCallback, useState } from 'react'
 import { formatApiError } from '../api/client'
-import { listEventRegistrations } from '../api/registrations'
+import {
+  listEventRegistrations,
+  type EventRegistration,
+  type RegistrationGuest,
+} from '../api/registrations'
 import { EmptyState } from '../components/EmptyState'
 import { RegistrationCount } from '../components/RegistrationCount'
 import { StatusBadge } from '../components/StatusBadge'
@@ -8,6 +12,36 @@ import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { STANDING_BADGES, describeDietaryRequirements, describePhone } from './registrationLabels'
+
+/**
+ * Story 18.4 AC15 (fix f18.4.1): the guest `registration` brought, on a row of their own under the
+ * attendee's - in its standing, named as that attendee's guest by their email, and with the
+ * guest's phone number and dietary requirements while the registration is Registered (AC9).
+ */
+function GuestRow({
+  registration,
+  guest,
+}: {
+  registration: EventRegistration
+  guest: RegistrationGuest
+}) {
+  const badge = STANDING_BADGES[registration.status]
+  const isRegistered = registration.status === 'REGISTERED'
+  return (
+    <tr className="registration-guest-row">
+      <td className="registration-name">{guest.full_name}</td>
+      <td data-label="Status">
+        <StatusBadge status={badge.status} label={badge.label} />
+      </td>
+      <td data-label="Email">Guest of {registration.attendee_email}</td>
+      <td data-label="Phone">{isRegistered ? describePhone(guest.phone) : ''}</td>
+      <td data-label="Dietary requirements" className="registration-dietary">
+        {isRegistered ? describeDietaryRequirements(guest.dietary_requirements) : ''}
+      </td>
+      <td data-label="Registered">{formatDateTime(registration.registered_at)}</td>
+    </tr>
+  )
+}
 
 /**
  * Story 18.3 - who has registered for the event, for its organiser and assigned coordinator, on
@@ -21,6 +55,9 @@ import { STANDING_BADGES, describeDietaryRequirements, describePhone } from './r
  * and contact - "None" when none were given (AC6). A row no longer Registered leaves both empty
  * (AC9): the server sends neither. On a desktop the list is a table; on a phone each attendee is a
  * card of labelled lines (App.css `.registration-table`), and long dietary requirements wrap.
+ *
+ * Story 18.4 AC15 (fix f18.4.1): a guest has a row of their own, straight after the attendee who
+ * brought them, marked as their guest by the attendee's email; the count counts them (AC13).
  */
 export function RegistrationListSection({ eventId }: { eventId: string }) {
   const load = useCallback(() => listEventRegistrations(eventId), [eventId])
@@ -83,26 +120,31 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
                     const badge = STANDING_BADGES[registration.status]
                     const isRegistered = registration.status === 'REGISTERED'
                     return (
-                      <tr key={registration.id}>
-                        <td className="registration-name">{registration.attendee_name}</td>
-                        <td data-label="Status">
-                          <StatusBadge status={badge.status} label={badge.label} />
-                          {registration.withdrawn_at !== null &&
-                            ` ${formatDateTime(registration.withdrawn_at)}`}
-                        </td>
-                        <td data-label="Email">{registration.attendee_email}</td>
-                        <td data-label="Phone">
-                          {isRegistered ? describePhone(registration.attendee_phone) : ''}
-                        </td>
-                        <td data-label="Dietary requirements" className="registration-dietary">
-                          {isRegistered
-                            ? describeDietaryRequirements(registration.dietary_requirements)
-                            : ''}
-                        </td>
-                        <td data-label="Registered">
-                          {formatDateTime(registration.registered_at)}
-                        </td>
-                      </tr>
+                      <Fragment key={registration.id}>
+                        <tr>
+                          <td className="registration-name">{registration.attendee_name}</td>
+                          <td data-label="Status">
+                            <StatusBadge status={badge.status} label={badge.label} />
+                            {registration.withdrawn_at !== null &&
+                              ` ${formatDateTime(registration.withdrawn_at)}`}
+                          </td>
+                          <td data-label="Email">{registration.attendee_email}</td>
+                          <td data-label="Phone">
+                            {isRegistered ? describePhone(registration.attendee_phone) : ''}
+                          </td>
+                          <td data-label="Dietary requirements" className="registration-dietary">
+                            {isRegistered
+                              ? describeDietaryRequirements(registration.dietary_requirements)
+                              : ''}
+                          </td>
+                          <td data-label="Registered">
+                            {formatDateTime(registration.registered_at)}
+                          </td>
+                        </tr>
+                        {registration.guest !== null && (
+                          <GuestRow registration={registration} guest={registration.guest} />
+                        )}
+                      </Fragment>
                     )
                   })}
                 </tbody>

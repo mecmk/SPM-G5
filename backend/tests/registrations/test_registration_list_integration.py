@@ -43,6 +43,7 @@ ROW_KEYS = {
     "registered_at",
     "status",
     "withdrawn_at",
+    "guest",  # story 18.4 AC15 (fix f18.4.1)
 }
 
 
@@ -139,6 +140,39 @@ def test_the_list_is_in_registration_order_and_holds_only_this_events_rows(
 
     assert [row["id"] for row in body["items"]] == [str(earlier.id), str(later.id)]
     assert body["active_count"] == 2
+
+
+@pytest.mark.story("18.3", ac=2)
+@pytest.mark.story("18.3", ac=7)
+def test_registrations_made_at_the_same_moment_keep_one_order_across_pages(
+    organiser_client, db: Session
+):
+    """Read a page at a time, the list never shows one twice nor skips one: registrations made
+    at the same moment come in the order of their ids. They are written in the reverse of that
+    order, so the order cannot come from the order they were written in."""
+    event = _my_event(db)
+    ids = sorted((uuid.uuid4() for _ in range(4)), reverse=True)
+    for registration_id in ids:
+        attendee = make_user(db, role="ATTENDEE")
+        db.add(
+            EventRegistration(
+                id=registration_id,
+                event_id=event.id,
+                attendee_id=attendee.id,
+                registered_at=REGISTERED_AT,
+            )
+        )
+    db.flush()
+
+    paged = [
+        row["id"]
+        for offset in range(len(ids))
+        for row in organiser_client.get(
+            _path(event.id), params={"limit": 1, "offset": offset}
+        ).json()["items"]
+    ]
+
+    assert paged == sorted(str(registration_id) for registration_id in ids)
 
 
 # --- AC3: empty and full ----------------------------------------------------------------------

@@ -5015,7 +5015,7 @@
       "x": 3240,
       "y": 672,
       "width": 400,
-      "height": 140
+      "height": 187
     },
     {
       "angle": 0,
@@ -5044,9 +5044,9 @@
       "x": 3248,
       "y": 680,
       "width": 384,
-      "height": 124,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  attendee_id                    uuid\n    status                         text\n    registered_at                  timestamptz\n    withdrawn_at?                  timestamptz\n    attended?                      bool\n    notes?                         text",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  attendee_id                    uuid\n    status                         text\n    registered_at                  timestamptz\n    withdrawn_at?                  timestamptz\n    attended?                      bool\n    notes?                         text",
+      "height": 171,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  attendee_id                    uuid\n    status                         text\n    registered_at                  timestamptz\n    withdrawn_at?                  timestamptz\n    attended?                      bool\n    notes?                         text\n    guest_full_name?               text\n    guest_phone?                   text\n    guest_dietary_requirements?    text",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  attendee_id                    uuid\n    status                         text\n    registered_at                  timestamptz\n    withdrawn_at?                  timestamptz\n    attended?                      bool\n    notes?                         text\n    guest_full_name?               text\n    guest_phone?                   text\n    guest_dietary_requirements?    text",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -5078,7 +5078,7 @@
       "id": "text-ce490dcf5807",
       "type": "text",
       "x": 3240,
-      "y": 892,
+      "y": 939,
       "width": 400,
       "height": 28,
       "text": "NOTIFICATIONS & AUDIT",
@@ -5121,7 +5121,7 @@
       "id": "hdr-9ae329b4d13d",
       "type": "rectangle",
       "x": 3240,
-      "y": 932,
+      "y": 979,
       "width": 400,
       "height": 34
     },
@@ -5150,7 +5150,7 @@
       "id": "text-cf2705e52745",
       "type": "text",
       "x": 3248,
-      "y": 938,
+      "y": 985,
       "width": 384,
       "height": 22,
       "text": "notifications",
@@ -5201,7 +5201,7 @@
       "id": "body-252f9b6b372e",
       "type": "rectangle",
       "x": 3240,
-      "y": 966,
+      "y": 1013,
       "width": 400,
       "height": 172
     },
@@ -5230,7 +5230,7 @@
       "id": "text-8d85f89f76e7",
       "type": "text",
       "x": 3248,
-      "y": 974,
+      "y": 1021,
       "width": 384,
       "height": 156,
       "text": "PK  id                             uuid\nFK  recipient_id                   uuid\nFK  event_id?                      uuid\n    notification_type              text\n    title                          text\n    message                        text\n    related_entity_type?           text\n    related_entity_id?             uuid\n    created_at                     timestamptz\n    read_at?                       timestamptz",
@@ -5273,7 +5273,7 @@
       "id": "hdr-af9a1bc411d6",
       "type": "rectangle",
       "x": 3240,
-      "y": 1198,
+      "y": 1245,
       "width": 400,
       "height": 34
     },
@@ -5302,7 +5302,7 @@
       "id": "text-1c885cb7568a",
       "type": "text",
       "x": 3248,
-      "y": 1204,
+      "y": 1251,
       "width": 384,
       "height": 22,
       "text": "audit_log",
@@ -5349,7 +5349,7 @@
       "id": "body-9c20a10a480e",
       "type": "rectangle",
       "x": 3240,
-      "y": 1232,
+      "y": 1279,
       "width": 400,
       "height": 125
     },
@@ -5378,7 +5378,7 @@
       "id": "text-62bf267eea67",
       "type": "text",
       "x": 3248,
-      "y": 1240,
+      "y": 1287,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  actor_id?                      uuid\n    action                         text\n    entity_type                    text\n    entity_id?                     uuid\n    details?                       jsonb\n    occurred_at                    timestamptz",
@@ -5414,7 +5414,7 @@
       "id": "text-7b8bfed142a2",
       "type": "text",
       "x": 3240,
-      "y": 1437,
+      "y": 1484,
       "width": 400,
       "height": 28,
       "text": "INFRASTRUCTURE",
@@ -5457,7 +5457,7 @@
       "id": "hdr-549a6cf9484b",
       "type": "rectangle",
       "x": 3240,
-      "y": 1477,
+      "y": 1524,
       "width": 400,
       "height": 34
     },
@@ -5486,7 +5486,7 @@
       "id": "text-af10ff55062a",
       "type": "text",
       "x": 3248,
-      "y": 1483,
+      "y": 1530,
       "width": 384,
       "height": 22,
       "text": "schema_migrations",
@@ -5529,7 +5529,7 @@
       "id": "body-9a2cfb727a00",
       "type": "rectangle",
       "x": 3240,
-      "y": 1511,
+      "y": 1558,
       "width": 400,
       "height": 78
     },
@@ -5558,7 +5558,7 @@
       "id": "text-407d7c146323",
       "type": "text",
       "x": 3248,
-      "y": 1519,
+      "y": 1566,
       "width": 384,
       "height": 62,
       "text": "PK  version                        text\n    name                           text\n    checksum                       text\n    applied_at                     timestamptz",
@@ -5937,9 +5937,9 @@
       "id": "arrow-8e72521c94b5",
       "type": "arrow",
       "x": 3240,
-      "y": 1258,
+      "y": 1305,
       "width": 2840,
-      "height": 1026,
+      "height": 1073,
       "points": [
         [
           0,
@@ -5947,7 +5947,7 @@
         ],
         [
           -2840,
-          -1026
+          -1073
         ]
       ],
       "lastCommittedPoint": null,
@@ -5990,7 +5990,7 @@
       "id": "text-f515b62d1b96",
       "type": "text",
       "x": 1760.0,
-      "y": 737.0,
+      "y": 760.5,
       "width": 120,
       "height": 16,
       "text": "actor_id",
@@ -9297,9 +9297,9 @@
       "id": "arrow-511228b2ce6f",
       "type": "arrow",
       "x": 3240,
-      "y": 992,
+      "y": 1039,
       "width": 1220,
-      "height": 932,
+      "height": 979,
       "points": [
         [
           0,
@@ -9307,7 +9307,7 @@
         ],
         [
           -1220,
-          -932
+          -979
         ]
       ],
       "lastCommittedPoint": null,
@@ -9350,7 +9350,7 @@
       "id": "text-1cd06ca33cd6",
       "type": "text",
       "x": 2570.0,
-      "y": 518.0,
+      "y": 541.5,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -9393,9 +9393,9 @@
       "id": "arrow-f17dd88b44f8",
       "type": "arrow",
       "x": 3240,
-      "y": 992,
+      "y": 1039,
       "width": 2840,
-      "height": 760,
+      "height": 807,
       "points": [
         [
           0,
@@ -9403,7 +9403,7 @@
         ],
         [
           -2840,
-          -760
+          -807
         ]
       ],
       "lastCommittedPoint": null,
@@ -9446,7 +9446,7 @@
       "id": "text-364649657b3f",
       "type": "text",
       "x": 1760.0,
-      "y": 604.0,
+      "y": 627.5,
       "width": 120,
       "height": 16,
       "text": "recipient_id",

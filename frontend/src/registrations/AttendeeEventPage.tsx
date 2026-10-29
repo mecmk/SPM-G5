@@ -8,6 +8,7 @@ import {
   withdrawRegistration,
   type AttendeeDetails,
   type AttendeeEvent,
+  type GuestDetails,
   type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
@@ -28,7 +29,9 @@ import {
   STARTED_NOTE,
   STATE_BADGES,
   UPCOMING_EVENTS_TITLE,
+  PLACES_WITH_GUEST,
   describeActiveRegistration,
+  describePartyByName,
   describePlacesLeft,
   describeRegistrationTimes,
   describeVenue,
@@ -73,9 +76,10 @@ function eventLoader(eventId: string): () => Promise<LoadedEvent> {
 }
 
 /** Story 18.1 AC1: the event as the server now has it for this attendee, until it is loaded
- *  again: Registered, a place fewer, and the registration just made - which, the event being
- *  listed and so not started, can be withdrawn (18.2 AC3). */
+ *  again: Registered, a place fewer - two with a guest (18.4 AC13) - and the registration just
+ *  made - which, the event being listed and so not started, can be withdrawn (18.2 AC3). */
 function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent {
+  const placesTaken = made.guest_name === null ? 1 : PLACES_WITH_GUEST
   const listing: RegistrationEvent | null =
     event.listing === null
       ? null
@@ -83,7 +87,7 @@ function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent
           ...event.listing,
           state: 'REGISTERED',
           registered_at: made.registered_at,
-          places_left: event.listing.places_left - 1,
+          places_left: event.listing.places_left - placesTaken,
         }
   return {
     ...event,
@@ -99,6 +103,7 @@ function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent
       registered_at: made.registered_at,
       withdrawn_at: null,
       can_withdraw: true,
+      guest_name: made.guest_name,
     },
   }
 }
@@ -150,7 +155,9 @@ function isFinalRefusal(err: unknown): boolean {
  * profile (once it has loaded, so the dialog never opens half filled); confirming registers and
  * saves them. A refusal about the event closes the dialog and shows here; one about the details
  * stays in the dialog, so nothing typed is lost. If the profile cannot be loaded, the dialog opens
- * empty and the details are typed in.
+ * empty and the details are typed in. AC12-AC14 (fix f18.4.1): the attendee may bring a guest,
+ * who takes a place too; once registered, the page names them, and withdrawing gives up both
+ * places.
  *
  * Keyed by the event in the address, so moving to another event's page starts afresh.
  */
@@ -204,16 +211,17 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
     setLoadEvent(() => eventLoader(eventId))
   }
 
-  /** Register for `registering` with the details the attendee confirmed (18.4 AC2/AC3). Answers
-   *  why it was refused, or null when it was taken. */
+  /** Register for `registering` with the details the attendee confirmed (18.4 AC2/AC3), and the
+   *  guest they bring, if any (AC12). Answers why it was refused, or null when it was taken. */
   async function sendRegistration(
     registering: AttendeeEvent,
     details: AttendeeDetails,
+    guest: GuestDetails | null,
   ): Promise<RegistrationProblem | null> {
     setIsRegistering(true)
     setRefusal(null)
     try {
-      const made = await registerForEvent(registering, details)
+      const made = await registerForEvent(registering, details, guest)
       // 18.1 AC1: Registered at once, not only when the reload lands, so Register cannot be
       // pressed again in between.
       updateEvent((current) => markRegistered(current, made))
@@ -243,10 +251,10 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
   /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
    *  refusal about the event shows on the page (18.1 AC11); one about the details stays in the
    *  dialog, so nothing typed is lost. */
-  async function handleConfirmDetails(details: AttendeeDetails) {
+  async function handleConfirmDetails(details: AttendeeDetails, guest: GuestDetails | null) {
     if (event === null) return
     setDetailsError(null)
-    const problem = await sendRegistration(event, details)
+    const problem = await sendRegistration(event, details, guest)
     if (problem !== null && !problem.isAboutTheEvent) {
       setDetailsError(problem.message)
       return
@@ -395,6 +403,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={event.name}
+          placesLeft={event.listing?.places_left ?? 0}
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={isRegistering}
           error={detailsError}
@@ -415,8 +424,10 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           onCancel={handleCancelWithdrawal}
         >
           <p>
-            Your place will be given up for someone else. If registration has closed or the event
-            fills up, you may not be able to register again.
+            {registration.guest_name === null
+              ? 'Your place will be given up for someone else.'
+              : `Your place and ${registration.guest_name}'s will be given up for someone else.`}{' '}
+            If registration has closed or the event fills up, you may not be able to register again.
           </p>
         </ConfirmDialog>
       )}
@@ -487,6 +498,8 @@ function RegistrationPanel({
         </div>
       )}
       {listing !== null && <p>{describePlacesLeft(listing.places_left)}</p>}
+      {registration !== null &&
+        describePartyByName(registration).map((line) => <p key={line}>{line}</p>)}
       {panelTimes(event).map((line) => (
         <p key={line} className="muted small">
           {line}

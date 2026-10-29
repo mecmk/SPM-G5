@@ -1,6 +1,6 @@
 import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AttendeeDetails } from '../api/registrations'
-import { findAttendeeNameProblem, findAttendeePhoneProblem } from './attendeeDetails'
+import { ATTENDEE_CHECKS, type DetailsChecks } from './attendeeDetails'
 
 /** What a form of the attendee's details holds, for My profile and the details dialog alike. */
 export interface AttendeeDetailsForm {
@@ -19,8 +19,12 @@ export interface AttendeeDetailsForm {
   reset: (details: AttendeeDetails) => void
 }
 
-/** Story 18.4: the state of a form of the attendee's details. */
-export function useAttendeeDetailsForm(initial: AttendeeDetails): AttendeeDetailsForm {
+/** Story 18.4: the state of a form of the attendee's details - or, AC12 (fix f18.4.1), with
+ *  `GUEST_CHECKS`, of their guest's, which have the same three fields and rules. */
+export function useAttendeeDetailsForm(
+  initial: AttendeeDetails,
+  checks: DetailsChecks = ATTENDEE_CHECKS,
+): AttendeeDetailsForm {
   const nameInput = useRef<HTMLInputElement>(null)
   const phoneInput = useRef<HTMLInputElement>(null)
   const [details, setDetails] = useState(initial)
@@ -28,11 +32,11 @@ export function useAttendeeDetailsForm(initial: AttendeeDetails): AttendeeDetail
 
   function canSend(): boolean {
     setIsChecked(true)
-    if (findAttendeeNameProblem(details.full_name) !== null) {
+    if (checks.findNameProblem(details.full_name) !== null) {
       nameInput.current?.focus()
       return false
     }
-    if (findAttendeePhoneProblem(details.phone) !== null) {
+    if (checks.findPhoneProblem(details.phone) !== null) {
       phoneInput.current?.focus()
       return false
     }
@@ -48,8 +52,8 @@ export function useAttendeeDetailsForm(initial: AttendeeDetails): AttendeeDetail
     details,
     setDetails,
     // Worked out from what is typed now, so they follow every keystroke once a save was tried.
-    nameProblem: isChecked ? findAttendeeNameProblem(details.full_name) : null,
-    phoneProblem: isChecked ? findAttendeePhoneProblem(details.phone) : null,
+    nameProblem: isChecked ? checks.findNameProblem(details.full_name) : null,
+    phoneProblem: isChecked ? checks.findPhoneProblem(details.phone) : null,
     nameInput,
     phoneInput,
     canSend,

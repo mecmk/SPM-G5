@@ -1624,10 +1624,10 @@ def _equipment_impacts(
 def _registration_impact(
     db: Session, event: Event, request: EventChangeRequest, proposed: _ProposedEvent
 ) -> RegistrationImpactOut | None:
-    """AC1: the registrations taking a place (18.1), counted - affected when new dates move
-    them, or when a lowered attendance leaves more registered than it allows. Nothing is
-    written to any registration."""
-    count = registrations_service.count_active_registrations(db, event.id)
+    """AC1: the places registrations take (18.1), guests included (18.4 AC13), counted -
+    affected when new dates move them, or when a lowered attendance leaves more registered than
+    it allows. Nothing is written to any registration."""
+    count = registrations_service.count_places_taken(db, event.id)
     is_attendance = request.field_name == ChangeRequestField.EXPECTED_ATTENDANCE
     over_by = max(0, count - proposed.attendance) if is_attendance else 0
     if count == 0 or (over_by == 0 and not proposed.is_rescheduled):

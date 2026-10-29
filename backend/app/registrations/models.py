@@ -25,7 +25,10 @@ class RegistrationStatus:
 
 class EventRegistration(UUIDPrimaryKeyMixin, Base):
     """One attendee's registration for one event (story 18.1 AC1). ``registered_at`` is the moment
-    the registration was made, the same moment its closing time was checked against (AC7)."""
+    the registration was made, the same moment its closing time was checked against (AC7).
+
+    Story 18.4 AC12 (fix f18.4.1): the one guest the attendee brings, if any - their name and
+    phone number together, and their dietary requirements (030). A guest takes a place too."""
 
     __tablename__ = "event_registrations"
 
@@ -42,3 +45,6 @@ class EventRegistration(UUIDPrimaryKeyMixin, Base):
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attended: Mapped[bool | None] = mapped_column(Boolean)
     notes: Mapped[str | None] = mapped_column(Text)
+    guest_full_name: Mapped[str | None] = mapped_column(Text)
+    guest_phone: Mapped[str | None] = mapped_column(Text)
+    guest_dietary_requirements: Mapped[str | None] = mapped_column(Text)

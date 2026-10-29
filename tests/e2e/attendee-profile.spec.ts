@@ -44,10 +44,23 @@ import {
  * AC9 Withdrawn registrations, and the registrations of a cancelled event, do not show the
  *     attendee's details on the registration list.
  *
+ * Guests (fix f18.4.1):
+ * AC12 Below their own details, the dialog lets the attendee bring one guest, typed in by them:
+ *     the guest's name and phone number, both required, and their dietary requirements. (The
+ *     rules' limits are backend cases; the checks in the browser, which send nothing, are here.)
+ * AC13 A guest takes a place too. With one place left, Add a guest is unavailable and the dialog
+ *     says why; a registration with a guest refused for want of a second place says so in the
+ *     dialog, with what was typed kept. (How places are counted is a backend case.)
+ * AC14 The event's page and My registrations show the guest; withdrawing would give up both
+ *     places.
+ * AC15 The organiser sees the guest on a row of their own under the attendee who brought them,
+ *     with the guest's phone number and dietary requirements, counted against the capacity.
+ *
  * Each flow that changes an attendee's details has a seeded attendee of its own (Cara, Dion,
  * Esme, Finn: backend/db/seed/020_sample_data.sql, story 18.4's block), since specs run in
  * parallel and a first registration happens once. Aiden's profile and the food tasting walk's
- * list are only read; the tests that register as Aiden stub the call, so nothing is written.
+ * list are only read; the tests that register as Aiden stub the call, so nothing is written -
+ * all but one: Aiden brings a guest to the charity quiz, which no other spec registers for.
  */
 
 const PROFILE_PATH = '/profile'
@@ -519,6 +532,7 @@ test('18.4 AC3: a detail changed while confirming shows in the sidebar, even whe
             event_id: sent.event_id,
             status: 'REGISTERED',
             registered_at: '2026-10-27T02:00:00Z',
+            guest_name: null,
           }),
         })
       }
@@ -601,6 +615,7 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
             event_id: sent.event_id,
             status: 'REGISTERED',
             registered_at: '2026-10-27T02:00:00Z',
+            guest_name: null,
           }),
         })
       }
@@ -636,4 +651,233 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
   await expect(confirmDetailsDialog(page).getByLabel('Dietary requirements')).toHaveValue(
     'Halal (as stored)',
   )
+})
+
+// --- Guests (fix f18.4.1) ----------------------------------------------------------------------
+const CHARITY_QUIZ = 'Neighbourhood Charity Quiz' // Aiden brings a guest, once
+const GUEST = { name: 'Alex Tan', phone: '+65 9000 1111', dietary: 'No pork, please' }
+const GUEST_NAME_REQUIRED_MESSAGE = "Enter your guest's name."
+const GUEST_PHONE_REQUIRED_MESSAGE = "Enter your guest's phone number."
+const NO_ROOM_FOR_GUEST_MESSAGE = 'Only 1 place is left, so there is no room for a guest.'
+const EVENT_PAGE_API_PATH = /^\/registrations\/events\/[^/]+$/
+
+/** AC12: the guest's fields, once Add a guest has been pressed. */
+function guestFields(page: Page) {
+  return confirmDetailsDialog(page).getByRole('group', { name: 'Your guest' })
+}
+
+function addGuestButton(page: Page) {
+  return confirmDetailsDialog(page).getByRole('button', { name: 'Add a guest' })
+}
+
+/** Every registration the page sends from now on. */
+function trackRegistrations(page: Page): string[] {
+  const sent: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/registrations') {
+      sent.push(request.url())
+    }
+  })
+  return sent
+}
+
+async function fillGuest(page: Page) {
+  const guest = guestFields(page)
+  await guest.getByLabel("Guest's name").fill(GUEST.name)
+  await guest.getByLabel("Guest's phone number").fill(GUEST.phone)
+  await guest.getByLabel("Guest's dietary requirements").fill(GUEST.dietary)
+}
+
+test.describe('registers for a seeded event once', () => {
+  test.describe.configure({ retries: 0 })
+
+  test("18.4 AC12/AC14/AC15: an attendee brings a guest they type in; the event's page and My registrations show them, and the organiser sees the guest under the attendee", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP)
+    await signIn(page, ACCOUNTS.attendee)
+    await openEventPage(page, CHARITY_QUIZ)
+    const box = registration(page)
+    await expect(box).toContainText('59 places left')
+
+    await registerButton(page, CHARITY_QUIZ).click()
+    const dialog = confirmDetailsDialog(page)
+    // The attendee's own details are filled in from their profile (AC3); a guest's never are.
+    await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(AIDEN.name)
+    await addGuestButton(page).click()
+    const guest = guestFields(page)
+    await expect(guest.getByLabel("Guest's name")).toBeFocused()
+    for (const label of ["Guest's name", "Guest's phone number", "Guest's dietary requirements"]) {
+      await expect(guest.getByLabel(label)).toHaveValue('')
+    }
+    await expectPhoneKeypad(guest.getByLabel("Guest's phone number"))
+    await fillGuest(page)
+    await confirmRegistration(page)
+
+    await expect(dialog).toHaveCount(0)
+    await expect(registeredBadge(page)).toBeVisible()
+    // AC13/AC14: the attendee and their guest take two places, and the page names the guest.
+    await expect(box).toContainText('57 places left')
+    await expect(box).toContainText(`You + 1 guest: ${GUEST.name}`)
+    // Withdrawing would give up the guest's place with the attendee's.
+    await registration(page)
+      .getByRole('button', { name: `Withdraw from ${CHARITY_QUIZ}` })
+      .click()
+    const withdraw = page.getByRole('dialog', { name: `Withdraw from ${CHARITY_QUIZ}?` })
+    await expect(withdraw).toContainText(`Your place and ${GUEST.name}'s will be given up`)
+    await withdraw.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.goto('/registrations')
+    await expect(eventCard(page, CHARITY_QUIZ)).toContainText('You + 1 guest')
+
+    // AC15: the organiser sees the guest on a row of their own, under the attendee who brought
+    // them, and counts them against the capacity.
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, ACCOUNTS.organiser2)
+    await page.goto(reportPath(EVENTS.charityQuiz))
+    const list = registrations(page)
+    const guestRow = list.getByRole('row').filter({ hasText: GUEST.name })
+    await expect(guestRow).toContainText(`Guest of ${ACCOUNTS.attendee}`)
+    await expect(guestRow).toContainText('Registered')
+    await expect(guestRow).toContainText(GUEST.phone)
+    await expect(guestRow).toContainText(GUEST.dietary)
+    const rows = await list.getByRole('row').allTextContents()
+    const aidenAt = rows.findIndex((row) => row.includes(AIDEN.name))
+    expect(rows[aidenAt + 1]).toContain(GUEST.name)
+    await expect(list).toContainText('3 / 60')
+  })
+})
+
+test("18.4 AC12: a guest's name and phone number are required and checked before anything is sent, and Remove guest takes the guest off", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+  const sent = trackRegistrations(page)
+  await openEventPage(page, JAZZ_EVENING)
+  await registerButton(page, JAZZ_EVENING).click()
+  const dialog = confirmDetailsDialog(page)
+  const confirm = dialog.getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
+
+  await addGuestButton(page).click()
+  const guest = guestFields(page)
+  const name = guest.getByLabel("Guest's name")
+  const phone = guest.getByLabel("Guest's phone number")
+  await expect(name).toHaveAttribute('aria-required', 'true')
+  await expect(phone).toHaveAttribute('aria-required', 'true')
+  await confirm.click()
+
+  await expect(
+    guest.getByRole('alert').filter({ hasText: GUEST_NAME_REQUIRED_MESSAGE }),
+  ).toBeVisible()
+  await expect(
+    guest.getByRole('alert').filter({ hasText: GUEST_PHONE_REQUIRED_MESSAGE }),
+  ).toBeVisible()
+  await expect(name).toHaveAttribute('aria-invalid', 'true')
+  await expect(name).toBeFocused()
+  await name.fill(GUEST.name)
+  await phone.fill('9000 111')
+  await expect(guest.getByRole('alert')).toHaveText(PHONE_INVALID_MESSAGE)
+  await confirm.click()
+  await expect(phone).toBeFocused()
+  expect(sent).toHaveLength(0)
+
+  await guest.getByRole('button', { name: 'Remove guest' }).click()
+  await expect(guest).toHaveCount(0)
+  await expect(addGuestButton(page)).toBeFocused()
+  // Added again, the guest starts blank: nothing typed for the one removed is kept.
+  await addGuestButton(page).click()
+  await expect(guestFields(page).getByLabel("Guest's name")).toHaveValue('')
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(sent).toHaveLength(0)
+})
+
+test('18.4 AC13: with one place left, Add a guest is unavailable and the dialog says why', async ({
+  page,
+}) => {
+  // The seed has no open event with one place that no other spec takes, so the page's answer is
+  // stubbed down to one place.
+  await page.route(
+    (url) => EVENT_PAGE_API_PATH.test(url.pathname),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
+        return route.fallback()
+      }
+      const response = await route.fetch()
+      const body = await response.json()
+      return route.fulfill({
+        response,
+        json: { ...body, listing: { ...body.listing, places_left: 1 } },
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+  await expect(registration(page)).toContainText('1 place left')
+
+  await registerButton(page, JAZZ_EVENING).click()
+
+  await expect(addGuestButton(page)).toBeDisabled()
+  await expect(addGuestButton(page)).toHaveAccessibleDescription(NO_ROOM_FOR_GUEST_MESSAGE)
+  await expect(confirmDetailsDialog(page)).toContainText(NO_ROOM_FOR_GUEST_MESSAGE)
+})
+
+test('18.4 AC13: a registration with a guest refused for want of a second place says so in the dialog, keeping what was typed, and the guest can be removed', async ({
+  page,
+}) => {
+  // Stubbed: another attendee took a place since the page was opened, so the server finds one.
+  await page.route(
+    (url) => url.pathname === '/registrations',
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch' || request.method() !== 'POST') {
+        return route.fallback()
+      }
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        headers: corsHeaders(request),
+        body: JSON.stringify({ detail: NO_ROOM_FOR_GUEST_MESSAGE }),
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+  await registerButton(page, JAZZ_EVENING).click()
+  await addGuestButton(page).click()
+  await fillGuest(page)
+
+  await confirmRegistration(page)
+
+  const dialog = confirmDetailsDialog(page)
+  await expect(dialog.getByRole('alert')).toHaveText(NO_ROOM_FOR_GUEST_MESSAGE)
+  await expect(guestFields(page).getByLabel("Guest's name")).toHaveValue(GUEST.name)
+  await expect(registeredBadge(page)).toHaveCount(0)
+  await guestFields(page).getByRole('button', { name: 'Remove guest' }).click()
+  await expect(guestFields(page)).toHaveCount(0)
+  await expect(
+    dialog.getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true }),
+  ).toBeEnabled()
+})
+
+test('18.4 AC12: on a phone, the dialog with a guest fits the screen, its fields full width and its buttons big enough for a thumb', async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE)
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+  await registerButton(page, JAZZ_EVENING).click()
+
+  await expectThumbSized(addGuestButton(page))
+  await addGuestButton(page).click()
+
+  const guest = guestFields(page)
+  for (const label of ["Guest's name", "Guest's phone number", "Guest's dietary requirements"]) {
+    await expectFullWidth(page, guest.getByLabel(label))
+  }
+  const remove = guest.getByRole('button', { name: 'Remove guest' })
+  await remove.scrollIntoViewIfNeeded()
+  await expectThumbSized(remove)
+  await expectInsideScreen(page, remove)
+  expect(await hasNoSidewaysScroll(page)).toBe(true)
 })

@@ -20,6 +20,16 @@ export const MY_REGISTRATIONS_TITLE = 'My registrations'
 /** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
 export const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 
+/** Story 18.4 AC13 (fix f18.4.1): how many places a registration with a guest takes. */
+export const PLACES_WITH_GUEST = 2
+
+/** Story 18.4 AC13 (fix f18.4.1): why Add a guest is unavailable - worded as the backend's
+ *  NO_ROOM_FOR_GUEST_MESSAGE, its refusal when the place went meanwhile. */
+export const NO_ROOM_FOR_GUEST_NOTE = 'Only 1 place is left, so there is no room for a guest.'
+
+/** Story 18.4 AC14 (fix f18.4.1): an attendee registered with their guest. */
+const WITH_GUEST = 'You + 1 guest'
+
 /** A registration badge: the status that picks its colour (App.css's `badge-<status>`) and its
  *  label. */
 export interface RegistrationBadge {
@@ -123,6 +133,22 @@ export function describeRegisteredAt(registeredAt: string): string {
 export function describeActiveRegistration(registration: MyRegistration): string[] {
   return registration.status === 'REGISTERED'
     ? [describeRegisteredAt(registration.registered_at)]
+    : []
+}
+
+/** Story 18.4 AC14 (fix f18.4.1): that the attendee brought a guest, on their card on My
+ *  registrations - while they are registered. */
+export function describeParty(registration: MyRegistration): string[] {
+  return registration.status === 'REGISTERED' && registration.guest_name !== null
+    ? [WITH_GUEST]
+    : []
+}
+
+/** Story 18.4 AC14 (fix f18.4.1): who the attendee brought, by name, on the event's page - while
+ *  they are registered. */
+export function describePartyByName(registration: MyRegistration): string[] {
+  return registration.status === 'REGISTERED' && registration.guest_name !== null
+    ? [`${WITH_GUEST}: ${registration.guest_name}`]
     : []
 }
 

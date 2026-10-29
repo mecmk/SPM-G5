@@ -39,15 +39,40 @@ AC10 An attendee can see and change only their own profile. An event's registran
     ``test_registration_list_integration.py``.)
 AC11 If the attendee saves their profile in two tabs, the later save wins, and reloading shows
     what was saved.
+
+Guests (fix f18.4.1):
+AC12 Below their own details, "Confirm your details" lets the attendee bring one guest: the
+    guest's name and phone number, both required, and their dietary requirements, optional, by
+    the same rules as the attendee's own (AC1, AC6, AC7). A guest's details are typed in each
+    time - never filled in, never saved to the profile - and nothing else can be sent about them.
+AC13 A guest takes a place too: a registration with a guest needs two. With one place left it is
+    refused, saying so, and nothing is written; with none, the event is full (18.1 AC2). The
+    places left, Full, the registration list's count (18.3) and the count a change request is
+    assessed against (19.3) all count guests, and registrations made at once never take more
+    places than there are (18.1 AC7).
+AC14 The attendee's registrations and the event's page name their guest. Withdrawing withdraws
+    the attendee and their guest together and frees both places; cancelling the event cancels
+    both (6.2). Registering again asks for a guest afresh.
+AC15 The event's organiser and assigned coordinator see each guest on the registration list,
+    under the attendee who brought them, with the guest's phone number and dietary requirements
+    while the registration is Registered (AC9); a withdrawn or cancelled one shows the guest's
+    name only.
+
+The race at the end of the AC13 section runs real concurrent transactions, which commit, so it
+cleans up after itself.
 """
 
 from __future__ import annotations
 
 import json
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -145,12 +170,17 @@ def _add_registration(
     return registration
 
 
-def _register(client, db: Session, event: Event, *, details: dict | None = None):
-    """``POST /registrations`` as the signed-in attendee, the test's rows saved first."""
+def _register(
+    client, db: Session, event: Event, *, details: dict | None = None, guest: dict | None = None
+):
+    """``POST /registrations`` as the signed-in attendee, the test's rows saved first. AC12 (fix
+    f18.4.1): with ``guest``, the attendee brings one."""
     db.commit()
     body: dict = {"event_id": str(event.id)}
     if details is not None:
         body["details"] = details
+    if guest is not None:
+        body["guest"] = guest
     return client.post(REGISTER_PATH, json=body)
 
 
@@ -257,6 +287,31 @@ def test_a_first_registration_with_details_saves_them_and_registers(client, db: 
     }
     [audit] = _details_audits(db, attendee)
     assert audit.actor_id == attendee.id
+
+
+@pytest.mark.story("18.4", ac=2)
+@pytest.mark.story("18.4", ac=6)
+def test_a_first_registration_with_only_a_name_and_phone_number_registers(client, db: Session):
+    """Dietary requirements are optional (AC6), so a first registration needs only the two."""
+    attendee = _first_time_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(
+        client, db, event, details={"full_name": attendee.full_name, "phone": "+65 9876 5432"}
+    )
+
+    assert response.status_code == 201
+    profile = client.get(PROFILE_PATH).json()
+    assert (
+        profile["phone"],
+        profile["dietary_requirements"],
+        profile["has_confirmed_details"],
+    ) == (
+        "+65 9876 5432",
+        None,
+        True,
+    )
 
 
 @pytest.mark.story("18.4", ac=2)
@@ -825,3 +880,507 @@ def test_the_later_of_two_saves_wins_and_a_reload_shows_it(client, db: Session):
 
     reloaded = client.get(PROFILE_PATH).json()
     assert (reloaded["phone"], reloaded["dietary_requirements"]) == ("+65 8222 2222", "Halal")
+
+
+# =============================================================================================
+# AC12-AC15 - bringing a guest (fix f18.4.1)
+# =============================================================================================
+GUEST = {"full_name": "Alex Tan", "phone": "+65 9000 1111", "dietary_requirements": "No pork"}
+REGISTERED = "registered"
+
+
+def _add_guest(
+    db: Session, registration: EventRegistration, *, dietary: str | None = "No pork"
+) -> EventRegistration:
+    """``registration`` brought Alex Tan, as ``GUEST`` describes them."""
+    registration.guest_full_name = "Alex Tan"
+    registration.guest_phone = "+65 9000 1111"
+    registration.guest_dietary_requirements = dietary
+    db.flush()
+    return registration
+
+
+def _page_of(client, event: Event) -> dict:
+    """The event's page as the signed-in attendee opens it (18.1 AC9, 18.2 AC9)."""
+    return client.get(f"/registrations/events/{event.id}").json()
+
+
+def _places_left(client, event: Event) -> int:
+    return _page_of(client, event)["listing"]["places_left"]
+
+
+# --- AC12: the guest's details ----------------------------------------------------------------
+@pytest.mark.story("18.4", ac=12)
+def test_a_registration_with_a_guest_records_the_guest_and_answers_with_their_name(
+    client, db: Session
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(
+        client,
+        db,
+        event,
+        guest={
+            "full_name": "  Alex Tan ",
+            "phone": " +65 9000 1111\n",
+            "dietary_requirements": " No pork ",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["guest_name"] == "Alex Tan"
+    registration = db.get(EventRegistration, uuid.UUID(body["id"]))
+    assert (
+        registration.guest_full_name,
+        registration.guest_phone,
+        registration.guest_dietary_requirements,
+    ) == ("Alex Tan", "+65 9000 1111", "No pork")
+
+
+@pytest.mark.story("18.4", ac=12)
+def test_a_guests_details_stay_off_the_attendees_profile_and_out_of_the_audit_log(
+    client, db: Session
+):
+    attendee = _returning_attendee(db, phone="+65 9123 4567", dietary="Vegetarian")
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, guest=GUEST)
+
+    assert response.status_code == 201
+    profile = client.get(PROFILE_PATH).json()
+    assert (profile["full_name"], profile["phone"], profile["dietary_requirements"]) == (
+        attendee.full_name,
+        "+65 9123 4567",
+        "Vegetarian",
+    )
+    assert _details_audits(db, attendee) == []
+    audit = db.scalar(
+        select(AuditLog).where(
+            AuditLog.action == service.REGISTRATION_CREATED_ACTION,
+            AuditLog.entity_id == uuid.UUID(response.json()["id"]),
+        )
+    )
+    # That a guest came, never who they are: names, phone numbers and dietary needs stay out of
+    # the append-only log, as the attendee's own do.
+    assert audit.details == {"event_id": str(event.id), "with_guest": True}
+
+
+@pytest.mark.story("18.4", ac=12)
+@pytest.mark.parametrize("sent", [{}, {"guest": None}], ids=["left-out", "null"])
+def test_a_registration_without_a_guest_records_none(client, db: Session, sent: dict):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+    db.commit()
+
+    response = client.post(REGISTER_PATH, json={"event_id": str(event.id), **sent})
+
+    assert response.status_code == 201
+    assert response.json()["guest_name"] is None
+    registration = db.get(EventRegistration, uuid.UUID(response.json()["id"]))
+    assert (
+        registration.guest_full_name,
+        registration.guest_phone,
+        registration.guest_dietary_requirements,
+    ) == (None, None, None)
+
+
+@pytest.mark.story("18.4", ac=12)
+@pytest.mark.parametrize(
+    ("change", "field", "message"),
+    [
+        ({"full_name": "   "}, "full_name", schemas.GUEST_FULL_NAME_REQUIRED_MESSAGE),
+        ({"full_name": "n" * 201}, "full_name", schemas.GUEST_FULL_NAME_TOO_LONG_MESSAGE),
+        ({"phone": ""}, "phone", schemas.GUEST_PHONE_REQUIRED_MESSAGE),
+        ({"phone": "12345"}, "phone", PHONE_INVALID_MESSAGE),
+        (
+            {"dietary_requirements": "v" * 501},
+            "dietary_requirements",
+            schemas.DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE,
+        ),
+    ],
+    ids=["name-blank", "name-long", "phone-blank", "phone-invalid", "dietary-long"],
+)
+def test_a_guest_outside_the_rules_is_refused_with_its_message_and_nothing_is_written(
+    client, db: Session, change: dict, field: str, message: str
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(
+        client, db, event, details={"phone": "+65 8999 0000"}, guest={**GUEST, **change}
+    )
+
+    assert response.status_code == 422
+    issue = _validation_issue(response, field)
+    assert issue["loc"][:2] == ["body", "guest"]
+    assert message in issue["msg"]
+    assert _registration_count(db, event) == 0
+    assert client.get(PROFILE_PATH).json()["phone"] == "+65 9123 4567"
+
+
+@pytest.mark.story("18.4", ac=12)
+@pytest.mark.parametrize("field", ["email", "attendee_id"])
+def test_nothing_but_a_guests_name_phone_and_dietary_requirements_can_be_sent(
+    client, db: Session, field: str
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, guest={**GUEST, field: "x"})
+
+    assert response.status_code == 422
+    assert _validation_issue(response, field)["type"] == "extra_forbidden"
+    assert _registration_count(db, event) == 0
+
+
+@pytest.mark.story("18.4", ac=12)
+@pytest.mark.parametrize(
+    ("name", "phone", "dietary"),
+    [
+        ("Alex Tan", None, None),
+        (None, "+65 9000 1111", None),
+        (None, None, "No pork"),
+        ("   ", "+65 9000 1111", None),
+        ("Alex Tan", "  ", None),
+        ("Alex Tan", "+65 9000 1111", "  "),
+        ("n" * 201, "+65 9000 1111", None),
+        ("Alex Tan", "+65 9000 1111", "v" * 501),
+    ],
+    ids=[
+        "no-phone",
+        "no-name",
+        "dietary-alone",
+        "blank-name",
+        "blank-phone",
+        "blank-dietary",
+        "name-over-200",
+        "dietary-over-500",
+    ],
+)
+def test_the_database_keeps_a_guest_whole_and_within_the_rules(
+    db: Session, name: str | None, phone: str | None, dietary: str | None
+):
+    """The database holds the guest's rules too, whatever writes the row."""
+    registration = _add_registration(db, _open_event(db), _returning_attendee(db))
+    registration.guest_full_name = name
+    registration.guest_phone = phone
+    registration.guest_dietary_requirements = dietary
+
+    with pytest.raises(IntegrityError, match="ck_event_registrations_guest"):
+        db.flush()
+
+
+# --- AC13: a guest takes a place --------------------------------------------------------------
+@pytest.mark.story("18.4", ac=13)
+def test_a_registration_with_a_guest_takes_two_places_on_the_page_and_the_list(client, db: Session):
+    attendee = _returning_attendee(db)
+    event = _open_event(db, capacity=3)
+    client.login(attendee.email)
+
+    assert _register(client, db, event, guest=GUEST).status_code == 201
+
+    assert _places_left(client, event) == 1
+    items = client.get("/registrations/events", params={"limit": 100}).json()["items"]
+    [listed] = [item for item in items if item["id"] == str(event.id)]
+    assert listed["places_left"] == 1
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_an_attendee_and_their_guest_can_take_the_last_two_places(client, db: Session):
+    attendee = _returning_attendee(db)
+    other = _returning_attendee(db)
+    event = _open_event(db, capacity=2)
+    client.login(attendee.email)
+
+    assert _register(client, db, event, guest=GUEST).status_code == 201
+
+    client.login(other.email)
+    listing = _page_of(client, event)["listing"]
+    assert (listing["state"], listing["places_left"]) == ("FULL", 0)
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_with_one_place_left_a_registration_with_a_guest_is_refused_saying_so_and_writes_nothing(
+    client, db: Session
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db, capacity=2)
+    _add_registration(db, event, _returning_attendee(db))
+    client.login(attendee.email)
+
+    response = _register(client, db, event, details={"phone": "+65 8999 0000"}, guest=GUEST)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == service.NO_ROOM_FOR_GUEST_MESSAGE
+    assert _registration_count(db, event) == 1
+    assert client.get(PROFILE_PATH).json()["phone"] == "+65 9123 4567"
+    assert _details_audits(db, attendee) == []
+    # Alone, the attendee takes that last place.
+    assert _register(client, db, event).status_code == 201
+    assert _registration_count(db, event) == 2
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_with_no_place_left_a_registration_with_a_guest_is_told_the_event_is_full(
+    client, db: Session
+):
+    attendee = _returning_attendee(db)
+    event = _open_event(db, capacity=1)
+    _add_registration(db, event, _returning_attendee(db))
+    client.login(attendee.email)
+
+    response = _register(client, db, event, guest=GUEST)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.EVENT_FULL_MESSAGE
+    assert _registration_count(db, event) == 1
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_a_guest_already_registered_takes_a_place_from_the_next_registration(client, db: Session):
+    event = _open_event(db, capacity=2)
+    _add_guest(db, _add_registration(db, event, _returning_attendee(db)))
+    attendee = _returning_attendee(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.EVENT_FULL_MESSAGE
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_the_registration_list_counts_each_guest_against_the_capacity(client, db: Session):
+    event = _my_event(db)
+    event.expected_attendance = 3
+    _add_guest(db, _add_registration(db, event, _returning_attendee(db)))
+    _add_registration(db, event, _returning_attendee(db), minutes=1)
+    withdrawn = _add_registration(
+        db, event, _returning_attendee(db), status=RegistrationStatus.WITHDRAWN, minutes=2
+    )
+    _add_guest(db, withdrawn)
+    client.login(Users.ORGANISER.email)
+
+    page = client.get(f"/events/{event.id}/registrations").json()
+    past_the_end = client.get(f"/events/{event.id}/registrations", params={"offset": 10}).json()
+
+    # A page past the end has no row to carry the counts, so they are counted alone (18.3 AC7).
+    for body in (page, past_the_end):
+        assert (body["total"], body["active_count"], body["capacity"], body["is_full"]) == (
+            3,
+            3,
+            3,
+            True,
+        )
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_the_places_a_change_request_is_assessed_against_count_guests(db: Session):
+    """Story 19.3 reports this count beside a change request lowering the attendance."""
+    event = _my_event(db)
+    _add_guest(db, _add_registration(db, event, _returning_attendee(db)))
+    _add_registration(db, event, _returning_attendee(db), minutes=1)
+    withdrawn = _add_registration(
+        db, event, _returning_attendee(db), status=RegistrationStatus.WITHDRAWN, minutes=2
+    )
+    _add_guest(db, withdrawn)
+
+    assert service.count_places_taken(db, event.id) == 3
+
+
+def _register_in_own_session(
+    engine: Engine,
+    event_id: uuid.UUID,
+    attendee_id: uuid.UUID,
+    guest: dict | None,
+    start: threading.Barrier,
+) -> str:
+    """One registration in a session of its own, as one request would make it."""
+    with Session(engine) as session:
+        attendee = session.get(User, attendee_id)
+        data = schemas.RegistrationCreate(
+            event_id=event_id, guest=None if guest is None else schemas.GuestIn(**guest)
+        )
+        start.wait()
+        try:
+            service.register(session, data, attendee=attendee, now=datetime.now(UTC))
+        except (service.RegistrationRefused, service.NoRoomForGuest) as refusal:
+            return str(refusal)
+        return REGISTERED
+
+
+@pytest.mark.story("18.4", ac=13)
+def test_two_registrations_racing_for_the_last_two_places_one_with_a_guest_never_overfill(
+    engine: Engine,
+):
+    """Real concurrent transactions, which commit, so the test cleans up after itself. Whichever
+    lands first, the other cannot fit: alone first leaves one place, too few for an attendee and
+    their guest; the guest's first leaves none."""
+    with Session(engine) as session:
+        event = _open_event(session, capacity=2)
+        alone = _returning_attendee(session)
+        bringing = _returning_attendee(session)
+        session.commit()
+        event_id, people = event.id, [alone.id, bringing.id]
+    start = threading.Barrier(2, timeout=10)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [
+                pool.submit(_register_in_own_session, engine, event_id, people[0], None, start),
+                pool.submit(_register_in_own_session, engine, event_id, people[1], GUEST, start),
+            ]
+            outcomes = sorted(attempt.result(timeout=30) for attempt in attempts)
+
+        assert outcomes in (
+            sorted([REGISTERED, service.NO_ROOM_FOR_GUEST_MESSAGE]),
+            sorted([REGISTERED, service.EVENT_FULL_MESSAGE]),
+        )
+        with Session(engine) as session:
+            assert _registration_count(session, session.get(Event, event_id)) == 1
+            assert service.count_places_taken(session, event_id) <= 2
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(AuditLog).where(AuditLog.actor_id.in_(people)))
+            session.execute(delete(EventRegistration).where(EventRegistration.event_id == event_id))
+            session.execute(delete(Event).where(Event.id == event_id))
+            session.execute(delete(User).where(User.id.in_(people)))
+            session.commit()
+
+
+# --- AC14: the attendee's own view, withdrawing and cancelling --------------------------------
+@pytest.mark.story("18.4", ac=14)
+def test_my_registrations_and_the_events_page_name_the_guest(client, db: Session):
+    attendee = _returning_attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    assert _register(client, db, event, guest=GUEST).status_code == 201
+
+    [mine] = [
+        item for item in client.get(REGISTER_PATH).json() if item["event_id"] == str(event.id)
+    ]
+    assert mine["guest_name"] == "Alex Tan"
+    assert _page_of(client, event)["registration"]["guest_name"] == "Alex Tan"
+
+
+@pytest.mark.story("18.4", ac=14)
+def test_withdrawing_frees_the_attendees_place_and_their_guests(client, db: Session):
+    attendee = _returning_attendee(db)
+    event = _open_event(db, capacity=3)
+    client.login(attendee.email)
+    made = _register(client, db, event, guest=GUEST).json()
+    assert _places_left(client, event) == 1
+
+    response = client.post(f"{REGISTER_PATH}/{made['id']}/withdraw")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "WITHDRAWN"
+    assert _places_left(client, event) == 3
+
+
+@pytest.mark.story("18.4", ac=14)
+def test_registering_again_after_withdrawing_asks_for_the_guest_afresh(client, db: Session):
+    attendee = _returning_attendee(db)
+    event = _open_event(db, capacity=3)
+    client.login(attendee.email)
+    made = _register(client, db, event, guest=GUEST).json()
+    assert client.post(f"{REGISTER_PATH}/{made['id']}/withdraw").status_code == 200
+
+    again = _register(client, db, event)
+
+    assert again.status_code == 201
+    assert again.json()["guest_name"] is None
+    assert _page_of(client, event)["registration"]["guest_name"] is None
+    assert _places_left(client, event) == 2
+
+
+@pytest.mark.story("18.4", ac=14)
+@pytest.mark.story("18.4", ac=15)
+def test_cancelling_the_event_cancels_the_guest_with_the_attendee(client, db: Session):
+    event = _my_event(db)
+    _add_guest(db, _add_registration(db, event, _returning_attendee(db)))
+
+    service.cancel_for_event(db, event.id)
+    event.status = EventStatus.CANCELLED
+    db.flush()
+
+    assert service.count_places_taken(db, event.id) == 0
+    client.login(Users.ORGANISER.email)
+    body = client.get(f"/events/{event.id}/registrations").json()
+    [row] = body["items"]
+    assert row["status"] == "EVENT_CANCELLED"
+    assert row["guest"] == {"full_name": "Alex Tan", "phone": None, "dietary_requirements": None}
+    assert body["active_count"] == 0
+
+
+# --- AC15: the registration list --------------------------------------------------------------
+@pytest.mark.story("18.4", ac=15)
+def test_the_organiser_sees_each_guest_with_their_phone_and_dietary_requirements(
+    client, db: Session
+):
+    event = _my_event(db)
+    attendee = _returning_attendee(db)
+    _add_guest(db, _add_registration(db, event, attendee))
+    client.login(Users.ORGANISER.email)
+
+    row = _list_row(client, event, attendee)
+
+    assert row["guest"] == {
+        "full_name": "Alex Tan",
+        "phone": "+65 9000 1111",
+        "dietary_requirements": "No pork",
+    }
+
+
+@pytest.mark.story("18.4", ac=15)
+def test_the_assigned_coordinator_sees_each_guest_too(coordinator_client, db: Session):
+    event = _my_event(db)
+    attendee = _returning_attendee(db)
+    _add_guest(db, _add_registration(db, event, attendee))
+
+    row = _list_row(coordinator_client, event, attendee)
+
+    assert row["guest"]["phone"] == "+65 9000 1111"
+
+
+@pytest.mark.story("18.4", ac=15)
+def test_a_guest_with_no_dietary_requirements_is_listed_with_them_as_null(client, db: Session):
+    event = _my_event(db)
+    attendee = _returning_attendee(db)
+    _add_guest(db, _add_registration(db, event, attendee), dietary=None)
+    client.login(Users.ORGANISER.email)
+
+    assert _list_row(client, event, attendee)["guest"]["dietary_requirements"] is None
+
+
+@pytest.mark.story("18.4", ac=9)
+@pytest.mark.story("18.4", ac=15)
+def test_a_withdrawn_registrations_guest_is_listed_by_name_without_their_details(
+    client, db: Session
+):
+    event = _my_event(db)
+    attendee = _returning_attendee(db)
+    withdrawn = _add_registration(db, event, attendee, status=RegistrationStatus.WITHDRAWN)
+    _add_guest(db, withdrawn)
+    client.login(Users.ORGANISER.email)
+
+    row = _list_row(client, event, attendee)
+
+    assert row["guest"] == {"full_name": "Alex Tan", "phone": None, "dietary_requirements": None}
+
+
+@pytest.mark.story("18.4", ac=15)
+def test_a_registration_without_a_guest_is_listed_with_none(client, db: Session):
+    event = _my_event(db)
+    attendee = _returning_attendee(db)
+    _add_registration(db, event, attendee)
+    client.login(Users.ORGANISER.email)
+
+    assert _list_row(client, event, attendee)["guest"] is None

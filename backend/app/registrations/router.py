@@ -134,10 +134,10 @@ def register(
     """AC1: register the signed-in attendee, stamped with this moment. AC3/AC4: an event not
     open for registration is a 404. AC2/AC6: not yet open, closed, full or already registered is
     a 409 naming which. AC5: registrations:self only. 18.4 AC7: details that would leave no phone
-    number on file are a 422."""
+    number on file are a 422, as is a guest with only one place left (18.4 AC13, fix f18.4.1)."""
     try:
         registration = service.register(db, data, attendee=attendee, now=datetime.now(UTC))
-    except service.PhoneNumberRequired as exc:
+    except (service.PhoneNumberRequired, service.NoRoomForGuest) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.RegistrationEventNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None

@@ -13,6 +13,7 @@ import {
   MY_REGISTRATIONS_TITLE,
   STANDING_BADGES,
   describeActiveRegistration,
+  describeParty,
 } from './registrationLabels'
 
 /** Story 18.2 AC9 (fix f18.2.1): an event's page opened from here links back here. */
@@ -23,7 +24,8 @@ const BACK_TO_MY_REGISTRATIONS: EventCardBackState = {
 
 /**
  * Story 18.2 AC1/AC8: one registration's card - its event's name, picture, date and time, where
- * the attendee stands, and when they registered, while they still are. AC9 (fix f18.2.1): a click
+ * the attendee stands, and when they registered, while they still are - and, story 18.4 AC14
+ * (fix f18.4.1), that they brought a guest. AC9 (fix f18.2.1): a click
  * anywhere on it opens the event's page (story 18.1 AC9), where the attendee withdraws; the card
  * itself offers no Withdraw.
  */
@@ -32,6 +34,7 @@ function MyRegistrationCard({ registration }: { registration: MyRegistration }) 
   const details = [
     <StatusBadge key="status" status={badge.status} label={badge.label} />,
     formatSchedule(registration.starts_at, registration.ends_at),
+    ...describeParty(registration),
     ...describeActiveRegistration(registration),
   ]
   return (

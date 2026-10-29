@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-26 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-29 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -787,6 +787,9 @@ An attendee's registration for an event. An attendee holds at most one active (R
 | `withdrawn_at` | `timestamp with time zone` | yes | - | - | When the attendee withdrew (story 18.2). |
 | `attended` | `boolean` | yes | - | - | Recorded after the event; NULL = not recorded (attendance recording is outside the first release). |
 | `notes` | `text` | yes | - | - | Free text (dietary needs etc.). |
+| `guest_full_name` | `text` | yes | - | - | Story 18.4 AC12: the name of the one guest the attendee brings, at most 200 characters, typed in when they register and never saved to their profile. NULL: no guest. A guest takes a place too (AC13). Never blank (ck_event_registrations_guest_full_name). |
+| `guest_phone` | `text` | yes | - | - | Story 18.4 AC12: the guest's phone number, by the attendee's own rule (AC7, app/common/phone.py). Set exactly when guest_full_name is (ck_event_registrations_guest_complete); never blank. |
+| `guest_dietary_requirements` | `text` | yes | - | - | Story 18.4 AC12: the guest's dietary requirements, at most 500 characters (AC6). NULL when none were given, and always when there is no guest (ck_event_registrations_guest_complete); never blank. |
 
 Allowed values:
 
@@ -794,6 +797,10 @@ Allowed values:
 
 Rules and indexes:
 
+- check `ck_event_registrations_guest_complete`: `CHECK ((((guest_full_name IS NULL) = (guest_phone IS NULL)) AND ((guest_dietary_requirements IS NULL) OR (guest_full_name IS NOT NULL))))`
+- check `ck_event_registrations_guest_dietary_requirements`: `CHECK (((btrim(guest_dietary_requirements) <> ''::text) AND (char_length(guest_dietary_requirements) <= 500)))`
+- check `ck_event_registrations_guest_full_name`: `CHECK (((btrim(guest_full_name) <> ''::text) AND (char_length(guest_full_name) <= 200)))`
+- check `ck_event_registrations_guest_phone`: `CHECK (((btrim(guest_phone) <> ''::text) AND (char_length(guest_phone) <= 50)))`
 - unique index `uq_event_registrations_active`: `btree (event_id, attendee_id) WHERE (status = 'REGISTERED'::text)`
 - index `ix_event_registrations_attendee`: `btree (attendee_id)`
 

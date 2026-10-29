@@ -4443,6 +4443,29 @@ button.requirement-choice.requirement-covered:hover,
   white-space: normal;
 }
 
+/* AC15 (fix f18.4.1): a guest's row sits under the attendee who brought them, set in. */
+.registration-table .registration-guest-row .registration-name {
+  padding-left: 1.75rem;
+}
+
+/* AC12 (fix f18.4.1): the guest's fields, under a rule apart from the attendee's own, as wide and
+   as spaced as theirs. */
+.guest-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.guest-fields legend {
+  padding: 0 0.5rem 0 0;
+}
+
+.guest-fields-actions {
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 640px) {
   /* AC5: on a phone each attendee is a card of labelled lines - no columns to scroll sideways.
      A row no longer Registered has no details, so those lines are left out. */
@@ -4499,9 +4522,23 @@ button.requirement-choice.requirement-covered:hover,
     max-width: none;
   }
 
+  /* A guest's card hangs under the attendee's, set in by the width of its left rule. */
+  .registration-table tr.registration-guest-row {
+    margin-top: 0.25rem;
+    margin-left: 1rem;
+    width: calc(100% - 1rem);
+    border-left: 3px solid var(--border);
+  }
+
+  .registration-table .registration-guest-row .registration-name {
+    padding-left: 0;
+  }
+
   /* Everything an attendee taps is at least 44px tall, to be pressed with a thumb. */
   .profile-page button[type='submit'],
-  .attendee-details-dialog .dialog-actions button {
+  .attendee-details-dialog .dialog-actions button,
+  .attendee-details-dialog .add-guest button,
+  .attendee-details-dialog .guest-fields button {
     min-height: 44px;
   }
 }

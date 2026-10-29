@@ -109,6 +109,7 @@ MY_REGISTRATION_KEYS = {
     "registered_at",
     "withdrawn_at",
     "can_withdraw",
+    "guest_name",  # story 18.4 AC14 (fix f18.4.1)
 }
 
 # AC9 (fix f18.2.1): everything an event's page carries - the event, what its card on Upcoming

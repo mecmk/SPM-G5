@@ -116,6 +116,7 @@ function listedRegistration(n: number) {
     registered_at: '2026-10-01T01:00:00Z',
     status: 'REGISTERED',
     withdrawn_at: null,
+    guest: null,
   }
 }
 

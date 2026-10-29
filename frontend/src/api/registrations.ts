@@ -44,6 +44,8 @@ export interface Registration {
   event_id: string
   status: string
   registered_at: string
+  /** Story 18.4 AC14 (fix f18.4.1): the guest registered with it, null with none. */
+  guest_name: string | null
 }
 
 /** Story 18.4 AC6: the most characters of dietary requirements, as the backend's
@@ -56,6 +58,15 @@ export const FULL_NAME_MAX_LENGTH = 200
  *  registration. The name (AC1) and phone number (AC7) are required; blank dietary requirements
  *  are no value, which the backend makes null. */
 export interface AttendeeDetails {
+  full_name: string
+  phone: string
+  dietary_requirements: string
+}
+
+/** Mirrors `GuestIn`: story 18.4 AC12 (fix f18.4.1), the one guest an attendee brings, typed in
+ *  with the registration and never saved to their profile. The name and phone number are
+ *  required, by the attendee's own rules; blank dietary requirements are no value. */
+export interface GuestDetails {
   full_name: string
   phone: string
   dietary_requirements: string
@@ -130,14 +141,17 @@ export function fetchAttendeeEvent(eventId: string): Promise<AttendeeEvent> {
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal
  *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details` are the
- *  ones the attendee confirmed, saved to their profile with the registration. */
+ *  ones the attendee confirmed, saved to their profile with the registration. AC12 (fix f18.4.1):
+ *  `guest`, the one they bring, if any; AC13: one place left for the two is a 422, as details the
+ *  server refuses are, since the attendee fixes it in the same dialog. */
 export function registerForEvent(
   event: Pick<RegistrationEvent, 'id' | 'name'>,
   details: AttendeeDetails,
+  guest: GuestDetails | null,
 ): Promise<Registration> {
   return api<Registration>('/registrations', {
     method: 'POST',
-    body: { event_id: event.id, details },
+    body: { event_id: event.id, details, guest },
     errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN', 409: 'REGISTRATION_REFUSED' },
     notify: { title: 'Registered', message: `You are registered for ${event.name}.` },
   })
@@ -164,6 +178,8 @@ export interface MyRegistration {
   registered_at: string
   withdrawn_at: string | null
   can_withdraw: boolean
+  /** Story 18.4 AC14 (fix f18.4.1): the guest they brought, null with none. */
+  guest_name: string | null
 }
 
 /** Story 18.2 AC1: the signed-in attendee's registrations, one per event, events not yet started
@@ -185,6 +201,17 @@ export function withdrawRegistration(registration: MyRegistration): Promise<MyRe
   })
 }
 
+/** Mirrors `RegistrationGuestOut`: story 18.4 AC15 (fix f18.4.1), the guest a registration brought,
+ *  as the event's organiser and coordinator see them. */
+export interface RegistrationGuest {
+  full_name: string
+  /** Null on a registration no longer Registered (AC9), as the attendee's own. */
+  phone: string | null
+  /** Null when none were given - shown as "None" (AC6) - and on a registration no longer
+   *  Registered (AC9). */
+  dietary_requirements: string | null
+}
+
 /** Mirrors `EventRegistrationOut`: story 18.3 AC1/AC4, one registration in an event's list, with
  *  where the attendee stands as 18.2 tells them. `withdrawn_at` is set only when `status` is
  *  WITHDRAWN. */
@@ -200,11 +227,13 @@ export interface EventRegistration {
   registered_at: string
   status: RegistrationStanding
   withdrawn_at: string | null
+  /** Story 18.4 AC15 (fix f18.4.1): the guest they brought, null with none. */
+  guest: RegistrationGuest | null
 }
 
 /** Mirrors `EventRegistrationListOut`: story 18.3 AC1-AC3/AC7, one page of the list, how many
- *  registrations there are in all, and how many are active against capacity, all worked out on
- *  the server. */
+ *  registrations there are in all, and how many places the active ones take against capacity -
+ *  guests included (18.4 AC13) - all worked out on the server. */
 export interface EventRegistrationList {
   items: EventRegistration[]
   total: number
