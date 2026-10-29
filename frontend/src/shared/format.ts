@@ -28,6 +28,9 @@ export const ADDITIONAL_VENUE = 'Additional venue'
 /** What a page shows for an event that has no coordinator yet (stories 5.4 AC6, 5.5 AC1). */
 export const NOT_YET_ASSIGNED = 'Not yet assigned'
 
+/** Story 13.3 AC6: the link a search nothing matches offers, to list the whole tab again. */
+export const CLEAR_SEARCH = 'Clear search'
+
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {
     weekday: 'short',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import {
   approveBooking,
   changeHoldExpiry,
@@ -39,6 +39,7 @@ import {
   instantToInput,
   nowAsInput,
 } from '../shared/format'
+import { queueBackPath } from '../shared/queueView'
 import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
@@ -119,9 +120,13 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  *
  * f12.1.2 (story 12.1 AC17): a request whose setup or teardown runs outside the venue's opening
  * hours says so under its title, with the booked period, so Venue Staff weigh it as they decide.
+ *
+ * Story 13.3 AC7: the back link returns to the queue as it was left - tab, search, order and page -
+ * when the queue opened this page.
  */
 export function BookingRequestDetailPage() {
   const { bookingId = '' } = useParams()
+  const location = useLocation()
   const [booking, setBooking] = useState<Booking | null>(null)
   const [venue, setVenue] = useState<Venue | null>(null)
   const [event, setEvent] = useState<EventDetail | null>(null)
@@ -308,7 +313,7 @@ export function BookingRequestDetailPage() {
 
   return (
     <div className="page page-wide">
-      <Link to={BOOKING_REQUESTS_PATH} className="back-link">
+      <Link to={queueBackPath(location.state, BOOKING_REQUESTS_PATH)} className="back-link">
         ← Back to Booking Requests
       </Link>
 

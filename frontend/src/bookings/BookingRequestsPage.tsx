@@ -7,19 +7,22 @@ import {
   type Booking,
   type BookingQueue,
   type BookingQueueEntry,
+  type BookingQueueOrder,
 } from '../api/bookings'
 import { formatApiError } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
+import type { EventCardBackState } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { Pagination } from '../components/Pagination'
+import { QueueSearchBar } from '../components/QueueSearchBar'
 import { ReplacementNote } from '../components/ReplacementNote'
 import { Chip } from '../components/Chip'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
-import { bookingRequestPath } from '../routes'
+import { BOOKING_REQUESTS_PATH, bookingRequestPath } from '../routes'
 import {
   bookingOutcomeLabels,
   bookingTabCount,
@@ -41,6 +44,7 @@ import {
 } from '../shared/bookingStatus'
 import {
   CANCELLED_AT_LABEL,
+  CLEAR_SEARCH,
   formatDate,
   formatDateTime,
   formatTime,
@@ -48,6 +52,15 @@ import {
   instantToInput,
   nowAsInput,
 } from '../shared/format'
+import {
+  COMMON_QUEUE_ORDERS,
+  DEFAULT_QUEUE_ORDER,
+  queuePath,
+  useQueueView,
+  type QueueOrderOption,
+  type QueueView,
+  type QueueViewOptions,
+} from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
@@ -55,6 +68,23 @@ import { venueStaffOutsideHoursNotice } from './turnaround'
 const SHORT_ID_LENGTH = 8
 /** Story 13.1.2 AC4: requests per numbered page. */
 const QUEUE_PAGE_SIZE = 10
+const PAGE_TITLE = 'Booking Requests'
+
+/** Story 13.3 AC3: the booking queue's orders, as its Order by list offers them. */
+const BOOKING_QUEUE_ORDERS: QueueOrderOption<BookingQueueOrder>[] = [
+  ...COMMON_QUEUE_ORDERS,
+  { key: 'venue_name', label: 'Venue: A to Z' },
+]
+
+type BookingQueueView = QueueView<BookingStatusTabKey, BookingQueueOrder>
+
+/** Story 13.3 AC7: what the queue's address may name. With none, it opens on Pending (13.1.2
+ * AC1), soonest first, on page 1. */
+const BOOKING_QUEUE_VIEW: QueueViewOptions<BookingStatusTabKey, BookingQueueOrder> = {
+  tabs: BOOKING_STATUS_TABS.map((item) => item.key),
+  orders: BOOKING_QUEUE_ORDERS.map((option) => option.key),
+  defaults: { tab: 'PENDING', search: '', order: DEFAULT_QUEUE_ORDER, page: 1 },
+}
 
 function requirementsText(notes: string | null): string {
   return notes && notes.trim() !== '' ? notes : 'No requirements stated.'
@@ -65,17 +95,24 @@ interface QueuePage extends BookingQueue {
   page: number
 }
 
-function fetchQueuePage(tab: BookingStatusTabKey, page: number): Promise<BookingQueue> {
-  return listBookingRequests(bookingTabStatus(tab), (page - 1) * QUEUE_PAGE_SIZE, QUEUE_PAGE_SIZE)
+function fetchQueuePage(view: BookingQueueView, page: number): Promise<BookingQueue> {
+  return listBookingRequests({
+    status: bookingTabStatus(view.tab),
+    search: view.search,
+    order: view.order,
+    offset: (page - 1) * QUEUE_PAGE_SIZE,
+    limit: QUEUE_PAGE_SIZE,
+  })
 }
 
-/** Load the `page`th page of a tab - or, when decisions made since have left that page past the
- * end, the last page that has any requests, so the page never settles on an empty one. */
-async function loadQueuePage(tab: BookingStatusTabKey, page: number): Promise<QueuePage> {
-  const queue = await fetchQueuePage(tab, page)
+/** Load the view's page - or, when decisions made since have left that page past the end, the
+ * last page that has any requests, so the page never settles on an empty one (story 13.3 AC9, under
+ * a search too). */
+async function loadQueuePage(view: BookingQueueView): Promise<QueuePage> {
+  const queue = await fetchQueuePage(view, view.page)
   const lastPage = Math.max(1, Math.ceil(queue.total / QUEUE_PAGE_SIZE))
-  if (page <= lastPage) return { ...queue, page }
-  return { ...(await fetchQueuePage(tab, lastPage)), page: lastPage }
+  if (view.page <= lastPage) return { ...queue, page: view.page }
+  return { ...(await fetchQueuePage(view, lastPage)), page: lastPage }
 }
 
 /** Story 12.7 AC1: when an approved booking's open hold expires, as one of its card's facts;
@@ -159,18 +196,23 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  *
  * Story 6.2 AC14: a Cancelled tab lists, read-only, the bookings released when their event was
  * cancelled. AC16: such a card says when it was approved, if it was, and when it was cancelled.
+ *
+ * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
+ * event name, venue name and Submitted by, orders the tab and counts each tab's matches. AC4: a new
+ * search or order starts again at page 1. AC6: a search nothing matches says so, with Clear
+ * search. AC7: the tab, search, order and page live in the page address, and the request's page
+ * (View details or its name) leads back to the same list.
  */
 export function BookingRequestsPage() {
-  // One object, so every `setView` is a new `loadPage` and so a fresh load through `useLoaded`,
-  // even when the tab and page stay the same - which is how a decision refetches the page. The
-  // `cancelled` flag in `useLoaded` then drops an older load's answer if the tab changes first,
-  // and `isStale` hides the old tab or page's requests until the new answer arrives.
-  const [view, setView] = useState<{ tab: BookingStatusTabKey; page: number }>({
-    tab: 'PENDING',
-    page: 1,
-  })
+  const { view, query, changeView } = useQueueView(BOOKING_QUEUE_VIEW)
   const { tab } = view
-  const loadPage = useCallback(() => loadQueuePage(view.tab, view.page), [view])
+  // One request object per view and per decision made on this page, so a decision is a new
+  // `loadPage` and so a fresh load of the same view through `useLoaded`. Its `cancelled` flag drops
+  // an older load's answer if the view changes first, and `isStale` hides the old view's requests
+  // until the new answer arrives.
+  const [decisionCount, setDecisionCount] = useState(0)
+  const request = useMemo(() => ({ view, decisionCount }), [view, decisionCount])
+  const loadPage = useCallback(() => loadQueuePage(request.view), [request])
   const { data: queue, error, isLoading, isStale, setData: setQueue } = useLoaded(loadPage)
   const [pendingApprove, setPendingApprove] = useState<BookingQueueEntry | null>(null)
   const [approveExpiry, setApproveExpiry] = useState('')
@@ -192,13 +234,29 @@ export function BookingRequestsPage() {
 
   const pageCount = queue ? Math.ceil(queue.total / QUEUE_PAGE_SIZE) : 0
   const firstShown = queue ? (queue.page - 1) * QUEUE_PAGE_SIZE + 1 : 0
+  // Story 13.3 AC7: a request's page leads back to this list as it stands.
+  const backToQueue: EventCardBackState = {
+    from: queuePath(BOOKING_REQUESTS_PATH, query),
+    fromLabel: PAGE_TITLE,
+  }
+  const isSearched = view.search.trim() !== ''
 
   function changeTab(next: BookingStatusTabKey) {
-    setView({ tab: next, page: 1 })
+    changeView({ tab: next })
   }
 
   function changePage(next: number) {
-    setView({ tab, page: next })
+    changeView({ page: next })
+  }
+
+  const changeSearch = useCallback((search: string) => changeView({ search }), [changeView])
+
+  function changeOrder(order: BookingQueueOrder) {
+    changeView({ order })
+  }
+
+  function clearSearch() {
+    changeView({ search: '' })
   }
 
   /** Under All the decided entry stays, showing its outcome. Under a status tab it no longer
@@ -213,7 +271,7 @@ export function BookingRequestsPage() {
       setQueue((current) => current && withDecisionInPlace(current, decided))
       return
     }
-    setView({ tab, page: queue?.page ?? 1 })
+    setDecisionCount((count) => count + 1)
   }
 
   function askToApprove(entry: BookingQueueEntry) {
@@ -286,7 +344,7 @@ export function BookingRequestsPage() {
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Booking Requests"
+        title={PAGE_TITLE}
         subtitle="Venue booking requests to decide, and the decisions already made."
       />
 
@@ -295,15 +353,34 @@ export function BookingRequestsPage() {
           {error}
         </p>
       )}
-      {(isLoading || (isStale && error === null)) && (
-        <LoadingState label="Loading booking requests…" />
-      )}
+      {isLoading && <LoadingState label="Loading booking requests…" />}
 
       {queue !== null && (
         <div className="stack">
           <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
 
-          {!isStale && queue.items.length === 0 && (
+          <QueueSearchBar
+            search={view.search}
+            placeholder="Event, venue or who submitted it"
+            onSearch={changeSearch}
+            order={view.order}
+            orders={BOOKING_QUEUE_ORDERS}
+            onOrder={changeOrder}
+          />
+
+          {/* Below the search box, so the box stays where it is while the list loads. */}
+          {isStale && error === null && <LoadingState label="Loading booking requests…" />}
+
+          {!isStale && queue.items.length === 0 && isSearched && (
+            <EmptyState>
+              No requests match your search.{' '}
+              <button type="button" className="link" onClick={clearSearch}>
+                {CLEAR_SEARCH}
+              </button>
+            </EmptyState>
+          )}
+
+          {!isStale && queue.items.length === 0 && !isSearched && (
             <EmptyState>
               {tab === PENDING_BOOKING_STATUS
                 ? 'No requests waiting. You are up to date.'
@@ -336,7 +413,9 @@ export function BookingRequestsPage() {
 
                   <div>
                     <h3 className="queue-card-title">
-                      <Link to={bookingRequestPath(entry.id)}>{entry.event_name}</Link>
+                      <Link to={bookingRequestPath(entry.id)} state={backToQueue}>
+                        {entry.event_name}
+                      </Link>
                     </h3>
                     <p className="muted">
                       {entry.venue_name} · {entry.venue_location}
@@ -444,7 +523,7 @@ export function BookingRequestsPage() {
                         </button>
                       </div>
                     )}
-                    <Link to={bookingRequestPath(entry.id)} className="link">
+                    <Link to={bookingRequestPath(entry.id)} state={backToQueue} className="link">
                       View details →
                     </Link>
                   </div>
