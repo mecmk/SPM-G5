@@ -281,7 +281,9 @@ interface RegistrationPanelProps {
 
 /** Story 18.1 AC1/AC3/AC9/AC11: where registration stands, the places left, when it opens and
  *  closes (or when the attendee registered), why the latest attempt was refused, and Register -
- *  enabled only while the event is open, and not offered once the attendee is registered. */
+ *  enabled only while the event is open, and not offered once the attendee is registered.
+ *  Register is the brand colour, as the dialog's Confirm and register is, so it stands apart
+ *  from the page's other buttons. */
 function RegistrationPanel({ event, refusal, isBusy, onRegister }: RegistrationPanelProps) {
   const badge = STATE_BADGES[event.state]
   return (
@@ -309,7 +311,7 @@ function RegistrationPanel({ event, refusal, isBusy, onRegister }: RegistrationP
       {event.state !== 'REGISTERED' && (
         <button
           type="button"
-          className="button-block"
+          className="button-block brand"
           aria-label={`Register for ${event.name}`}
           disabled={event.state !== 'OPEN' || isBusy}
           onClick={onRegister}
