@@ -28,6 +28,15 @@ export const ADDITIONAL_VENUE = 'Additional venue'
 /** What a page shows for an event that has no coordinator yet (stories 5.4 AC6, 5.5 AC1). */
 export const NOT_YET_ASSIGNED = 'Not yet assigned'
 
+/** How much of a request's id names it on screen. */
+const SHORT_ID_LENGTH = 8
+
+/** A request's short reference, "#14629C18": the end of its id, as every request card shows it
+ *  (bookings, equipment, change requests) and the change history names it (story 7.4 AC4). */
+export function shortReference(id: string): string {
+  return `#${id.slice(-SHORT_ID_LENGTH).toUpperCase()}`
+}
+
 /** Story 13.3 AC6: the link a search nothing matches offers, to list the whole tab again. */
 export const CLEAR_SEARCH = 'Clear search'
 

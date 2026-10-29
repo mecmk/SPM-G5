@@ -42,7 +42,8 @@ test('7.2 AC1/AC2: the assigned coordinator edits internal notes and they are st
   await expect(
     page.getByRole('heading', { name: 'Data Literacy Workshop', level: 1 }),
   ).toBeVisible()
-  await expect(page.getByText(internalNotes)).toBeVisible()
+  // The change history (story 7.4) repeats the new notes, so read them from the notes' own line.
+  await expect(page.getByRole('paragraph').filter({ hasText: internalNotes })).toBeVisible()
 })
 
 test('7.2 AC3: a rejected event offers no edit entry point, even to its assigned coordinator', async ({

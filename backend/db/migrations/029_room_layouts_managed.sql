@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 028 - story 8.6: Venue Staff manage the room layouts venues can offer.
+-- Migration 029 - story 8.6: Venue Staff manage the room layouts venues can offer.
 --
 -- Until now room_layouts was reference data that only the seed changed. From story 8.6 Venue
 -- Staff add, rename and delete layouts in the app, so the table holds its own rules:

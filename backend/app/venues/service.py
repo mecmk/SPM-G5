@@ -1043,7 +1043,7 @@ ROOM_LAYOUT_CREATED = "ROOM_LAYOUT_CREATED"
 ROOM_LAYOUT_UPDATED = "ROOM_LAYOUT_UPDATED"
 ROOM_LAYOUT_DELETED = "ROOM_LAYOUT_DELETED"
 
-# Names PostgreSQL gives the keys a layout's save or deletion can run into (migration 028).
+# Names PostgreSQL gives the keys a layout's save or deletion can run into (migration 029).
 _ROOM_LAYOUTS_PRIMARY_KEY = "room_layouts_pkey"
 _ROOM_LAYOUTS_NAME_INDEX = "uq_room_layouts_name"
 _VENUE_LAYOUTS_LAYOUT_FOREIGN_KEY = "venue_layouts_layout_code_fkey"

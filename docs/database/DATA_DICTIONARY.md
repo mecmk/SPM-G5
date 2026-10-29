@@ -45,6 +45,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
+| Event details & history | [`event_change_history`](#event_change_history) | 7.4 | Append-only record of each field changed on an event after submission: old and new value, who changed it with their role, and when |
 | Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1, 21.2 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
@@ -628,6 +629,29 @@ Rules and indexes:
 
 - unique index `uq_event_change_requests_pending_field`: `btree (event_id, field_name) WHERE (status = 'PENDING'::text)`
 - index `ix_event_change_requests_event`: `btree (event_id, status)`
+
+### event_change_history
+
+**Stories:** 7.4
+
+Append-only record of each field changed on an event after submission: old and new value, who changed it with their role, and when. Rows are never updated or deleted (story 7.4 AC5).
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `seq` | `bigint` | no | - | - | Insertion order. The history is read newest first by this, not by changed_at, which one save's fields share (story 7.4 AC1, AC7). |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
+| `field_name` | `text` | no | - | - | The event field that changed, e.g. expected_attendance, internal_notes, venue_requirements. internal_notes rows are shown only to coordinators (story 7.4 AC5, AC6). |
+| `old_value` | `jsonb` | yes | - | - | The value before the save, as JSON (a list for venue requirements, accessibility needs and equipment). NULL when the field was empty. |
+| `new_value` | `jsonb` | yes | - | - | The value after the save, as JSON. NULL when the field was cleared. |
+| `changed_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Who saved the change. |
+| `changed_by_role_code` | `text` | no | - | FK → `roles.code` | FK -> roles.code. Their role when they saved it (story 7.4 AC1). |
+| `change_request_id` | `uuid` | yes | - | FK → `event_change_requests.id` | FK -> event_change_requests.id. The change request whose approval made the change (story 7.4 AC4); NULL for a direct edit. |
+| `changed_at` | `timestamp with time zone` | no | `now()` | - | When the save was made; the same for every field of one save (story 7.4 AC4). |
+
+Rules and indexes:
+
+- index `ix_event_change_history_event`: `btree (event_id, seq)`
 
 ### event_safety_reviews
 
