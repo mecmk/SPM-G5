@@ -177,11 +177,7 @@ test('21.3 AC8: Venue Staff find the released booking under Cancelled and All, r
   await expect(released.getByRole('button')).toHaveCount(0)
 
   await page.getByRole('tab', { name: /^All/ }).click()
-  await page
-    .getByRole('navigation', { name: 'Pages' })
-    .getByRole('button', { name: /^\d+$/ })
-    .last()
-    .click()
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(EVENT_NAME)
   await expect(released.getByText(RELEASED_LINE, { exact: true })).toBeVisible()
   await expect(released.getByRole('button')).toHaveCount(0)
 
