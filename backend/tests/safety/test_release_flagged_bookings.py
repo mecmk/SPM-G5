@@ -1165,6 +1165,52 @@ def test_resubmitting_with_the_same_venue_still_warns(login_as, db: Session, two
     assert sent.status_code == 200, sent.text
 
 
+@pytest.mark.story("21.3", ac=8)
+@pytest.mark.parametrize("side", ["same-side", "other-side"])
+def test_resubmitting_with_the_same_venue_warns_beside_a_booking_at_the_same_time(
+    login_as, db: Session, side: str
+):
+    """The additional venue starts when the released booking does, as in the seed, so only booking
+    ids order the venues the review saw. The rebooking's new id sorts on the released booking's
+    side of the additional venue's, or on the other side; neither may hide the warning or show the
+    officer a change that is not one."""
+    scene = _scene(db, with_extra=False)
+    other = _approved(
+        db,
+        scene.event,
+        venue=db.get(Venue, Venues.EXHIBITION_FOYER),
+        starts_at=scene.first.starts_at,
+        ends_at=scene.first.ends_at,
+    )
+    _release(login_as, scene, scene.first)
+    released_first = scene.first.id < other.id
+    rebooked_first = released_first if side == "same-side" else not released_first
+    make_booking(
+        db,
+        id=uuid.UUID(int=1) if rebooked_first else uuid.UUID(int=(1 << 128) - 1),
+        event_id=scene.event.id,
+        venue_id=scene.first.venue_id,
+        starts_at=scene.first.starts_at,
+        ends_at=scene.first.ends_at,
+        status=BookingStatus.APPROVED,
+        venue_requirement_id=scene.requirement_id,
+        expected_attendance=60,
+        hold_expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    coordinator = login_as(Users.COORDINATOR)
+
+    warned = coordinator.post(f"/safety-checks/{scene.event.id}/request", json={})
+
+    assert warned.status_code == 409, warned.text
+    assert warned.json()["detail"]["unchanged_arrangements"] == ["VENUE_BOOKINGS"]
+    sent = coordinator.post(
+        f"/safety-checks/{scene.event.id}/request", json={"acknowledge_unchanged": True}
+    )
+    assert sent.status_code == 200, sent.text
+    check = login_as(Users.SAFETY_OFFICER).get(f"/safety-checks/{scene.event.id}").json()
+    assert check["changes_since_last_review"] == []
+
+
 # --- AC9: each round shows what it released; once per decision --------------------------------
 @pytest.mark.story("21.3", ac=9)
 def test_each_round_lists_its_released_bookings_to_officer_coordinator_and_organiser(
