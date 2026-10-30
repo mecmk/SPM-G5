@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-26 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-30 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -47,7 +47,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1, 21.2 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7) |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
-| Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
+| Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.2 | Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2) |
 | Registration | [`event_registrations`](#event_registrations) | 18.1 (browse and register), 18.2 (view and withdraw), 18.3 (the organiser's list) | An attendee's registration for an event |
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
 | Notifications & audit | [`audit_log`](#audit_log) | 7.4 and the auditability requirement (who changed what, when) | Generic append-only record of significant actions |
@@ -742,20 +742,20 @@ Rules and indexes:
 
 ### equipment_unavailability_periods
 
-**Stories:** 16.1, 16.3
+**Stories:** 16.2
 
-Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability.
+Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2). Records that overlap in time add up and never exceed the stock, checked in the service layer under the equipment type's row lock, because SQL constraints cannot sum across rows (AC3, AC7).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
-| `quantity` | `integer` | no | - | - | Units out of service. Positive. |
-| `reason` | `text` | no | - | - | DAMAGED, MAINTENANCE, LOST or OTHER. |
-| `starts_at` | `timestamp with time zone` | no | - | - | Start of the out-of-service period. |
-| `ends_at` | `timestamp with time zone` | yes | - | - | End (exclusive). NULL = open-ended until Technical Support Staff end it (story 16.3 AC3). |
-| `notes` | `text` | yes | - | - | Free text. |
-| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. |
+| `quantity` | `integer` | no | - | - | Units out of service. At least 1, and at most the stock less the units other records have out at any moment of the period (story 16.2 AC3). |
+| `reason` | `text` | no | - | - | DAMAGED, MAINTENANCE (shown as Under maintenance), LOST or OTHER (story 16.2 AC1). |
+| `starts_at` | `timestamp with time zone` | no | - | - | Start of the out-of-service period. Not in the past when recorded; kept once the record is in force (story 16.2 AC3). |
+| `ends_at` | `timestamp with time zone` | yes | - | - | End (exclusive), after the start. NULL = out of service until Technical Support end the record, which sets it to the moment they do (story 16.2 AC1, AC2). |
+| `notes` | `text` | yes | - | - | Optional note, at most 1,000 characters (story 16.2 AC1). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who recorded it (story 16.2 AC1). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 

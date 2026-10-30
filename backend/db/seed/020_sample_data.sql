@@ -2010,3 +2010,46 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- ---------------------------------------------------------------------
+-- Story 16.2: tests/e2e/equipment-out-of-service.spec.ts. Technical Support takes a mobile LED
+-- screen out of service over this event's evening, which leaves its accepted hold of all three
+-- short by one, and its coordinator (coordinator 1) sees that on the event. February 2030, so no
+-- other spec or backend test shares its period, nor holds any LED screen then.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, venue_none_required, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000016201', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Riverside Light Showcase', 'Community event', 'Projection art along the river, on three LED screens.', '2030-02-20 18:00+08', '2030-02-20 21:00+08', 80, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-11 09:00+08', '2026-10-11 12:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    venue_none_required = EXCLUDED.venue_none_required,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
+    ('66666666-0000-0000-0000-000000016201', '33333333-0000-0000-0000-000000016201', '77777777-0000-0000-0000-000000000007', 3, 'One at each viewing point', 'ACCEPTED', NULL,
+     '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', '2026-10-11 13:00+08', '11111111-0000-0000-0000-000000000006', '2026-10-12 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
+    created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
+    submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL;
+
+INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
+    ('eeeeeeee-0000-0000-0000-000000016201', '33333333-0000-0000-0000-000000016201', '66666666-0000-0000-0000-000000016201', '77777777-0000-0000-0000-000000000007', 3,
+     '2030-02-20 18:00+08', '2030-02-20 21:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000003', '2026-10-11 13:00+08', 'Held for the coordinator''s equipment request.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, status = EXCLUDED.status, reserved_by_id = EXCLUDED.reserved_by_id,
+    reserved_at = EXCLUDED.reserved_at, notes = EXCLUDED.notes, released_quantity = 0, released_at = NULL;

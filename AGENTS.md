@@ -147,7 +147,7 @@ backend/
     cancellations/      # the organiser cancelling their own event, releasing everything it holds
     change_requests/    # an organiser's requested changes to an approved event, withdrawals, and the coordinator's decisions
     coordination/       # assigning and reassigning an event's coordinator
-    equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions
+    equipment/          # an event's equipment requests: recording, holding, submitting, Technical Support's queue and decisions; the equipment catalogue and units out of service
     events/             # event requests, review and decisions, event details, routine edits
     notifications/      # who is told of each action, and each user's own notifications
     registrations/      # the events attendees can register for, registering, their own registrations and withdrawing, their profile details, and an event's registration list for its organiser and coordinator

@@ -6,8 +6,10 @@ import { RequireAuth, RequirePermission } from './auth/RequireAuth'
 import { BookingRequestDetailPage } from './bookings/BookingRequestDetailPage'
 import { BookingRequestFormPage } from './bookings/BookingRequestFormPage'
 import { BookingRequestsPage } from './bookings/BookingRequestsPage'
+import { EquipmentCataloguePage } from './equipment/EquipmentCataloguePage'
 import { EquipmentRequestDetailPage } from './equipment/EquipmentRequestDetailPage'
 import { EquipmentRequestsPage } from './equipment/EquipmentRequestsPage'
+import { EquipmentTypePage } from './equipment/EquipmentTypePage'
 import { ChangeRequestQueuePage } from './events/ChangeRequestQueuePage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
@@ -35,6 +37,8 @@ import {
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EQUIPMENT_REQUEST_PATH,
+  EQUIPMENT_TYPE_PATH,
+  EQUIPMENT_CATALOGUE_PATH,
   EQUIPMENT_REQUESTS_PATH,
   EVENT_EDIT_PATH,
   EVENT_COORDINATOR_EDIT_PATH,
@@ -156,10 +160,13 @@ function App() {
               </Route>
 
               {/* Story 15.2: Technical Support's equipment request queue. Story 16.1: a request's
-                  own page, where it is accepted or declined. */}
+                  own page, where it is accepted or declined. Story 16.2: the equipment catalogue,
+                  and each type's page, where its units are taken out of service. */}
               <Route element={<RequirePermission permission={PERMISSIONS.EQUIPMENT_MANAGE} />}>
                 <Route path={EQUIPMENT_REQUESTS_PATH} element={<EquipmentRequestsPage />} />
                 <Route path={EQUIPMENT_REQUEST_PATH} element={<EquipmentRequestDetailPage />} />
+                <Route path={EQUIPMENT_CATALOGUE_PATH} element={<EquipmentCataloguePage />} />
+                <Route path={EQUIPMENT_TYPE_PATH} element={<EquipmentTypePage />} />
               </Route>
 
               {/* Story 21.1: the Safety Officer's queue and each awaiting event's safety details. */}
