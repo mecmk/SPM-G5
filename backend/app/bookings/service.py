@@ -730,7 +730,10 @@ def release_booking(
     Story 12.6 AC3: ``replacement`` is the booking whose approval releases it - the original is
     closed "Replaced by <venue>" and linked to it (``replaced_by_booking_id``, which is how an
     original's ``released_at`` is read), audited ``BOOKING_REPLACED``, Venue Staff told which
-    venue replaced it. Either ``replacement`` or ``because`` and ``at`` are given."""
+    venue replaced it.
+
+    What a path gives: a replacement, for REPLACED and only for it; ``reason`` and ``at``, for a
+    safety release (21.3 AC2); ``because`` and ``at``, for any other cause."""
     if (cause == ReleaseCause.REPLACED) != (replacement is not None):
         raise ValueError("release_booking takes a replacement for REPLACED, and only for it.")
     if replacement is None and at is None:

@@ -1,6 +1,8 @@
 """ORM models for the Safety Officer's reviews of an event: story 21.1 reads them, story 21.2
-writes them with their findings. Mirrors ``event_safety_reviews``, ``safety_review_factors`` and
-``event_safety_review_findings`` in backend/db/migrations (019, 024).
+writes them with their findings, and story 21.3 (AC1, AC2, AC9) links each finding to the venue
+bookings its decision released. Mirrors ``event_safety_reviews``, ``safety_review_factors``,
+``event_safety_review_findings`` and ``event_safety_finding_bookings`` in backend/db/migrations
+(019, 024, 029).
 """
 
 from __future__ import annotations

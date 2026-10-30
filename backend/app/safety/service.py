@@ -1,11 +1,19 @@
-"""Business rules for story 21.1 (the Safety Officer's queue of events awaiting the safety check)
-and story 21.2 (the coordinator requests a review, the officer decides, the coordinator confirms).
+"""Business rules for story 21.1 (the Safety Officer's queue of events awaiting the safety check),
+story 21.2 (the coordinator requests a review, the officer decides, the coordinator confirms) and
+story 21.3 (the decision releases the venue bookings a finding names).
 
 Story 21.2's flow::
 
     PLANNING --request (everything secured)--> AWAITING_SAFETY_CHECK
     AWAITING --approve--> PLANNING --confirm (the approval still matches)--> CONFIRMED
     AWAITING --request changes, with findings--> PLANNING --rebook, request again--> AWAITING
+
+Story 21.3: the decision that requests changes releases each booking a venue-bookings finding names,
+in its own transaction and all or none (AC2, AC3, AC6). A booking that could never be named is a 422
+and one that is no longer approved a 409 (AC7); the event is locked first, then the bookings in id
+order, so an expiry or a cancellation racing it wins or loses cleanly (AC11). The coordinator and
+Venue Staff are told (AC4), the requirement needs a venue again (AC5), the rebooking can be sent
+with 21.2 AC12's warning (AC8), and each round lists what it released (AC9).
 """
 
 from __future__ import annotations

@@ -1,5 +1,6 @@
 """Request and response models for story 21.1 (the Safety Officer's safety check queue and
-detail) and story 21.2 (requesting a review, the officer's decision, confirming)."""
+detail), story 21.2 (requesting a review, the officer's decision, confirming) and story 21.3 (the
+bookings to choose from, named on a finding, and listed as released: AC1, AC7, AC9)."""
 
 from __future__ import annotations
 
