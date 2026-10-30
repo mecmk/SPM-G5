@@ -371,7 +371,8 @@ def test_registering_answers_201_with_the_registration_and_records_it(attendee_c
     audit = db.scalar(select(AuditLog).where(AuditLog.entity_id == registration.id))
     assert audit.action == service.REGISTRATION_CREATED_ACTION
     assert audit.actor_id == Users.ATTENDEE.id
-    assert audit.details == {"event_id": str(event.id)}
+    # Story 18.5 AC1: and how many guests came with the registration - none here.
+    assert audit.details == {"event_id": str(event.id), "guest_count": 0}
     # The list now shows the event as Registered, with the moment the confirmation gave.
     listed = _api_item(attendee_client, event.id)
     assert (listed["state"], listed["registered_at"]) == ("REGISTERED", body["registered_at"])

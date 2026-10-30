@@ -13,28 +13,23 @@ committing keeps that to the request's own work (the commit only releases a save
 transaction still rolls back). The race tests at the end commit real concurrent transactions on a
 fixed clock, and clean up after themselves.
 
-AC1 When registering, the attendee can add guests, each with a name and optional dietary
-    requirements. The attendee and their guests are registered together as one group.
-AC2 Each guest takes a place: an attendee with N guests takes N+1 places against the event's
-    capacity.
-AC3 After registering, the attendee can add, change or remove guests.
-AC4 The attendee sees their guests on My registrations and on the event's page.
-AC5 The organiser and assigned coordinator see each attendee's guests (name and dietary
-    requirements) in the registration list (18.3), and its active count includes guests.
-AC6 An attendee can bring at most 10 guests (a group of at most 11). With no guests, registering
-    works as in 18.1.
-AC7 A guest's name is required, at most 200 characters; dietary requirements are optional, at most
-    500 characters. Guests are not asked for a phone number or email.
-AC8 Withdrawing a registration withdraws the whole group and frees all its places. Removing one
-    guest is a change to the guests (AC3), not a withdrawal.
-AC9 Guests can be changed only while registration is open, and not once the registration is
-    withdrawn or the event is cancelled. Cancelling an event (6.2) cancels the guests with the
-    registration.
-AC10 The change-impact count in 19.3 includes guests (each attendee plus their guests).
-AC11 Only the attendee who made the registration can add or change its guests; anyone else gets
-    "not found". Guests do not get accounts and cannot sign in.
-AC12 If a group, or added guests, would not fit in the places left, the whole request is refused
-    and nothing is saved. Two requests for the last places cannot both succeed.
+The ACs are the Product Backlog's (row 57, CL-173, CL-185), summarised:
+
+AC1 When registering, the attendee can add guests, each with a name, optional dietary requirements
+    (as 18.4 AC6) and no phone number; they are registered together as one group.
+AC2 Each guest takes a place against the event's capacity; a group that does not fit is refused.
+AC3 After registering, the attendee can add, change or remove guests, and sees them on My
+    registrations - until registration closes, and not once withdrawn or cancelled (CL-185).
+    Added guests that do not fit are refused.
+AC4 The organiser and assigned coordinator see each guest under their attendee in the
+    registration list (18.3), with their name and dietary requirements.
+AC5 The change-impact count in 19.3 includes guests.
+AC6 An attendee can bring 0 to 10 guests. Each guest's name is required.
+AC7 Withdrawing a registration withdraws the whole group and frees all its places.
+AC8 Cancelling the event (6.2) frees every place, guests included; only the attendee is notified.
+AC9 A withdrawn group's guests are listed by name only, without their dietary requirements.
+AC10 Only the attendee who made the registration can change its guests.
+AC11 Two requests for the last places cannot both succeed.
 """
 
 from __future__ import annotations
@@ -54,8 +49,10 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import NOT_PERMITTED_MESSAGE
 from app.auth.models import User
+from app.cancellations import service as cancellations_service
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus
+from app.notifications.models import Notification
 from app.registrations import schemas, service
 from app.registrations.models import EventRegistration, RegistrationStatus
 from tests.support.factories import future_datetime, make_event, make_user
@@ -260,7 +257,6 @@ def test_a_first_registration_saves_the_details_and_the_guests_together(client, 
 
 
 @pytest.mark.story("18.5", ac=1)
-@pytest.mark.story("18.5", ac=12)
 def test_a_first_registration_without_details_saves_none_of_its_guests(client, db: Session):
     attendee = make_user(db, role="ATTENDEE", attendee_details_confirmed_at=None)
     event = _open_event(db)
@@ -317,8 +313,8 @@ def test_guests_can_be_added_after_registering(client, db: Session):
     assert _listed(client, event)["places_left"] == 7
 
 
+@pytest.mark.story("18.5", ac=2)
 @pytest.mark.story("18.5", ac=3)
-@pytest.mark.story("18.5", ac=8)
 def test_guests_can_be_renamed_and_one_removed_and_the_place_is_freed(client, db: Session):
     attendee = _attendee(db)
     event = _open_event(db, capacity=10)
@@ -365,8 +361,28 @@ def test_a_change_to_the_guests_is_audited_with_their_number_not_their_names(cli
     assert "Ravi" not in json.dumps(audit.details)
 
 
-# --- AC4: the attendee sees their guests ------------------------------------------------------
-@pytest.mark.story("18.5", ac=4)
+@pytest.mark.story("18.5", ac=1)
+def test_registering_with_guests_is_audited_with_their_number_not_their_names(client, db: Session):
+    """As a later change to them is: the group's size is in the log from the start."""
+    attendee = _attendee(db)
+    event = _open_event(db)
+    client.login(attendee.email)
+
+    _register(client, db, event, guests=[RAVI, MEI])
+
+    [registration] = _registrations_of(db, event)
+    audit = db.scalar(
+        select(AuditLog).where(
+            AuditLog.action == service.REGISTRATION_CREATED_ACTION,
+            AuditLog.entity_id == registration.id,
+        )
+    )
+    assert audit.details == {"event_id": str(event.id), "guest_count": 2}
+    assert "Ravi" not in json.dumps(audit.details)
+
+
+# --- AC3: the attendee sees their guests ------------------------------------------------------
+@pytest.mark.story("18.5", ac=3)
 def test_my_registrations_show_each_registrations_guests_in_order(client, db: Session):
     attendee = _attendee(db)
     with_guests = _open_event(db)
@@ -379,8 +395,7 @@ def test_my_registrations_show_each_registrations_guests_in_order(client, db: Se
     assert _mine(client, alone)["guests"] == []
 
 
-@pytest.mark.story("18.5", ac=4)
-@pytest.mark.story("18.5", ac=9)
+@pytest.mark.story("18.5", ac=3)
 def test_my_registrations_say_whether_the_guests_can_still_be_changed(client, db: Session):
     attendee = _attendee(db)
     open_event = _open_event(db)
@@ -393,8 +408,8 @@ def test_my_registrations_say_whether_the_guests_can_still_be_changed(client, db
     assert _mine(client, closed_event)["can_change_guests"] is False
 
 
-# --- AC5: the registration list ---------------------------------------------------------------
-@pytest.mark.story("18.5", ac=5)
+# --- AC4: the registration list ---------------------------------------------------------------
+@pytest.mark.story("18.5", ac=4)
 def test_the_organiser_sees_each_attendees_guests_with_their_dietary_requirements(
     organiser_client, db: Session
 ):
@@ -407,7 +422,7 @@ def test_the_organiser_sees_each_attendees_guests_with_their_dietary_requirement
     assert row["guests"] == [RAVI, MEI]
 
 
-@pytest.mark.story("18.5", ac=5)
+@pytest.mark.story("18.5", ac=4)
 def test_the_assigned_coordinator_sees_the_same_guests(coordinator_client, db: Session):
     event = _open_event(db)
     attendee = _attendee(db)
@@ -416,7 +431,7 @@ def test_the_assigned_coordinator_sees_the_same_guests(coordinator_client, db: S
     assert _list_row(coordinator_client, event, attendee)["guests"] == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=5)
+@pytest.mark.story("18.5", ac=4)
 def test_the_lists_count_includes_guests_and_says_full_when_they_fill_it(
     organiser_client, db: Session
 ):
@@ -430,8 +445,8 @@ def test_the_lists_count_includes_guests_and_says_full_when_they_fill_it(
     assert listing["is_full"] is True
 
 
-@pytest.mark.story("18.5", ac=5)
-@pytest.mark.story("18.5", ac=8)
+@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=9)
 def test_a_withdrawn_group_is_listed_by_name_without_dietary_requirements_or_places(
     organiser_client, db: Session
 ):
@@ -502,8 +517,9 @@ def test_a_registration_without_guests_answers_with_none(client, db: Session):
     assert response.json()["guests"] == []
 
 
-# --- AC7: a guest's details -------------------------------------------------------------------
-@pytest.mark.story("18.5", ac=7)
+# --- AC1/AC6: a guest's details ---------------------------------------------------------------
+@pytest.mark.story("18.5", ac=1)
+@pytest.mark.story("18.5", ac=6)
 @pytest.mark.parametrize(
     "guest",
     [
@@ -528,7 +544,7 @@ def test_a_guest_outside_the_rules_is_refused_and_nothing_is_written(
     assert _guest_count(db, event) == 0
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=1)
 def test_a_guests_blank_dietary_requirements_are_stored_as_none(client, db: Session):
     attendee = _attendee(db)
     event = _open_event(db)
@@ -544,8 +560,8 @@ def test_a_guests_blank_dietary_requirements_are_stored_as_none(client, db: Sess
     ]
 
 
+@pytest.mark.story("18.5", ac=1)
 @pytest.mark.story("18.5", ac=6)
-@pytest.mark.story("18.5", ac=7)
 @pytest.mark.parametrize(
     ("position", "full_name", "dietary"),
     [(11, "Guest 11", None), (0, "Guest 0", None), (1, "   ", None), (1, "Ravi", " ")],
@@ -583,8 +599,8 @@ def test_the_database_refuses_two_guests_in_one_place_of_a_group(db: Session):
     assert "uq_event_registration_guests_position" in str(caught.value.orig)
 
 
-# --- AC8: withdrawing withdraws the group -----------------------------------------------------
-@pytest.mark.story("18.5", ac=8)
+# --- AC7: withdrawing withdraws the group -----------------------------------------------------
+@pytest.mark.story("18.5", ac=7)
 def test_withdrawing_withdraws_the_whole_group_and_frees_every_place(client, db: Session):
     attendee = _attendee(db)
     event = _open_event(db, capacity=3)
@@ -603,8 +619,8 @@ def test_withdrawing_withdraws_the_whole_group_and_frees_every_place(client, db:
     assert _listed(client, event)["places_left"] == 3
 
 
-# --- AC9: when the guests can no longer change ------------------------------------------------
-@pytest.mark.story("18.5", ac=9)
+# --- AC3 (CL-185): when the guests can no longer change ---------------------------------------
+@pytest.mark.story("18.5", ac=3)
 def test_guests_cannot_be_changed_once_registration_has_closed(client, db: Session):
     attendee = _attendee(db)
     registration = _add_registration(db, _closed_event(db), attendee, guests=(RAVI,))
@@ -617,7 +633,51 @@ def test_guests_cannot_be_changed_once_registration_has_closed(client, db: Sessi
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=9)
+@pytest.mark.story("18.5", ac=3)
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"status": EventStatus.PLANNING},
+        {"is_public": False},
+        {"registration_required": False},
+    ],
+    ids=["sent-back-to-planning", "made-private", "no-longer-taking-registrations"],
+)
+def test_guests_cannot_be_changed_once_the_event_stops_taking_registrations(
+    client, db: Session, change: dict
+):
+    """The event still before its closing time, but no longer open to attendees (18.1 AC4)."""
+    attendee = _attendee(db)
+    event = _open_event(db)
+    registration = _add_registration(db, event, attendee, guests=(RAVI,))
+    for field, value in change.items():
+        setattr(event, field, value)
+    client.login(attendee.email)
+
+    response = _change_guests(client, db, registration.id, [])
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.GUESTS_REGISTRATION_CLOSED_MESSAGE
+    assert _guests_of(db, registration.id) == [RAVI]
+
+
+@pytest.mark.story("18.5", ac=3)
+def test_guests_can_be_changed_until_the_closing_moment_and_not_at_it(db: Session):
+    """The closing moment itself is closed, as 18.1 refuses a registration at it."""
+    event = _open_event(db)
+    closes_at = event.registration_closes_at
+    registered = service.RegistrationStanding.REGISTERED
+
+    just_before = service.guests_change_refusal(
+        standing=registered, event=event, now=closes_at - timedelta(microseconds=1)
+    )
+    at_closing = service.guests_change_refusal(standing=registered, event=event, now=closes_at)
+
+    assert just_before is None
+    assert isinstance(at_closing, service.GuestsRegistrationClosed)
+
+
+@pytest.mark.story("18.5", ac=3)
 def test_guests_cannot_be_changed_after_withdrawing(client, db: Session):
     attendee = _attendee(db)
     registration = _add_registration(
@@ -632,7 +692,7 @@ def test_guests_cannot_be_changed_after_withdrawing(client, db: Session):
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=9)
+@pytest.mark.story("18.5", ac=3)
 def test_guests_cannot_be_changed_once_the_event_is_cancelled(client, db: Session):
     attendee = _attendee(db)
     event = _open_event(db, status=EventStatus.CANCELLED)
@@ -648,30 +708,54 @@ def test_guests_cannot_be_changed_once_the_event_is_cancelled(client, db: Sessio
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=9)
+# --- AC8: cancelling the event ----------------------------------------------------------------
+@pytest.mark.story("18.5", ac=8)
 def test_cancelling_the_event_releases_every_guests_place(db: Session):
     event = _open_event(db)
     _add_registration(db, event, _attendee(db), guests=(RAVI, MEI))
 
     service.cancel_for_event(db, event.id)
 
-    assert service.count_active_registrations(db, event.id) == 0
+    assert service.count_places_taken(db, event.id) == 0
 
 
-# --- AC10: 19.3's change-impact count ---------------------------------------------------------
-@pytest.mark.story("18.5", ac=10)
+@pytest.mark.story("18.5", ac=8)
+def test_cancelling_the_event_notifies_the_attendee_and_not_their_guests(db: Session):
+    """Guests have no account (AC1), so the one attendee of a group of three is told, once."""
+    event = _open_event(db)
+    attendee = _attendee(db)
+    _add_registration(db, event, attendee, guests=(RAVI, MEI))
+
+    cancellations_service.cancel_event(
+        db, event.id, actor=db.get(User, Users.ORGANISER.id), reason="The venue flooded."
+    )
+
+    told = db.scalars(
+        select(Notification.recipient_id).where(
+            Notification.event_id == event.id,
+            Notification.notification_type == "REGISTRATION_CANCELLED",
+        )
+    ).all()
+    assert told == [attendee.id]
+
+
+# --- AC5: 19.3's change-impact count ----------------------------------------------------------
+@pytest.mark.story("18.5", ac=5)
 def test_the_count_19_3_reports_includes_every_registered_attendees_guests(db: Session):
-    """19.3 reports ``count_active_registrations`` beside a change request (its AC1)."""
+    """19.3 reports ``count_places_taken`` beside a change request (its AC1)."""
     event = _open_event(db)
     _add_registration(db, event, _attendee(db), guests=(RAVI, MEI))
     _add_registration(db, event, _attendee(db))
     _add_registration(db, event, _attendee(db), guests=(RAVI,), status=RegistrationStatus.WITHDRAWN)
 
-    assert service.count_active_registrations(db, event.id) == 4
+    count = service.count_places_taken(db, event.id)
+
+    assert count == 4
+    assert type(count) is int  # PostgreSQL sums a count as numeric, which reads as a Decimal
 
 
-# --- AC11: only the attendee's own registration -----------------------------------------------
-@pytest.mark.story("18.5", ac=11)
+# --- AC10: only the attendee's own registration -----------------------------------------------
+@pytest.mark.story("18.5", ac=10)
 def test_another_attendees_guests_are_not_found_and_stay_as_they_were(client, db: Session):
     owner = _attendee(db)
     registration = _add_registration(db, _open_event(db), owner, guests=(RAVI,))
@@ -684,7 +768,7 @@ def test_another_attendees_guests_are_not_found_and_stay_as_they_were(client, db
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=11)
+@pytest.mark.story("18.5", ac=10)
 def test_an_unknown_registration_is_not_found(client, db: Session):
     client.login(_attendee(db).email)
 
@@ -694,7 +778,7 @@ def test_an_unknown_registration_is_not_found(client, db: Session):
     assert response.json()["detail"] == service.REGISTRATION_NOT_FOUND_MESSAGE
 
 
-@pytest.mark.story("18.5", ac=11)
+@pytest.mark.story("18.5", ac=10)
 @pytest.mark.parametrize("user", STAFF)
 def test_staff_cannot_change_an_attendees_guests(login_as, db: Session, user):
     registration = _add_registration(db, _open_event(db), _attendee(db), guests=(RAVI,))
@@ -707,7 +791,7 @@ def test_staff_cannot_change_an_attendees_guests(login_as, db: Session, user):
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=11)
+@pytest.mark.story("18.5", ac=10)
 def test_signed_out_users_cannot_change_guests(client, db: Session):
     registration = _add_registration(db, _open_event(db), _attendee(db), guests=(RAVI,))
 
@@ -717,7 +801,7 @@ def test_signed_out_users_cannot_change_guests(client, db: Session):
     assert _guests_of(db, registration.id) == [RAVI]
 
 
-@pytest.mark.story("18.5", ac=11)
+@pytest.mark.story("18.5", ac=10)
 def test_a_guest_is_not_made_a_user(client, db: Session):
     attendee = _attendee(db)
     event = _open_event(db)
@@ -728,8 +812,8 @@ def test_a_guest_is_not_made_a_user(client, db: Session):
     assert db.scalar(select(User).where(User.full_name == RAVI["full_name"])) is None
 
 
-# --- AC12: a group that does not fit ----------------------------------------------------------
-@pytest.mark.story("18.5", ac=12)
+# --- AC2/AC3: a group, or added guests, that do not fit ---------------------------------------
+@pytest.mark.story("18.5", ac=2)
 def test_a_group_larger_than_the_places_left_is_refused_whole(client, db: Session):
     event = _open_event(db, capacity=3)
     _add_registration(db, event, _attendee(db))
@@ -744,7 +828,7 @@ def test_a_group_larger_than_the_places_left_is_refused_whole(client, db: Sessio
     assert _guest_count(db, event) == 0
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=2)
 def test_a_group_filling_exactly_the_places_left_is_registered(client, db: Session):
     event = _open_event(db, capacity=3)
     attendee = _attendee(db)
@@ -753,10 +837,14 @@ def test_a_group_filling_exactly_the_places_left_is_registered(client, db: Sessi
     response = _register(client, db, event, guests=[RAVI, MEI])
 
     assert response.status_code == 201
+    [registration] = _registrations_of(db, event)
+    assert _guests_of(db, registration.id) == [RAVI, MEI]
+    client.login(_attendee(db).email)
+    assert _listed(client, event)["state"] == "FULL"
 
 
+@pytest.mark.story("18.5", ac=2)
 @pytest.mark.story("18.5", ac=6)
-@pytest.mark.story("18.5", ac=12)
 def test_an_attendee_alone_still_hears_that_the_event_is_full(client, db: Session):
     """No guests: 18.1's refusal, word for word."""
     event = _open_event(db, capacity=1)
@@ -769,7 +857,7 @@ def test_an_attendee_alone_still_hears_that_the_event_is_full(client, db: Sessio
     assert response.json()["detail"] == service.EVENT_FULL_MESSAGE
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=3)
 def test_guests_beyond_the_places_left_are_refused_and_the_guests_stay_as_they_were(
     client, db: Session
 ):
@@ -786,7 +874,7 @@ def test_guests_beyond_the_places_left_are_refused_and_the_guests_stay_as_they_w
     assert _guest_audits(db, registration.id) == []
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=3)
 def test_guests_filling_exactly_the_places_left_are_accepted(client, db: Session):
     event = _open_event(db, capacity=3)
     attendee = _attendee(db)
@@ -798,7 +886,7 @@ def test_guests_filling_exactly_the_places_left_are_accepted(client, db: Session
     assert response.status_code == 200
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=3)
 def test_guests_can_still_be_removed_from_an_event_already_over_its_capacity(client, db: Session):
     """The capacity was lowered below the places taken (a 19.2 change): a smaller group must not
     be refused for a shortage it does not add to."""
@@ -813,6 +901,21 @@ def test_guests_can_still_be_removed_from_an_event_already_over_its_capacity(cli
     assert _guests_of(db, registration.id) == [RAVI]
 
 
+@pytest.mark.story("18.5", ac=3)
+def test_guests_can_be_renamed_on_an_event_already_over_its_capacity(client, db: Session):
+    """As many guests as before take no more places, so only a larger group is counted."""
+    event = _open_event(db, capacity=1)
+    attendee = _attendee(db)
+    registration = _add_registration(db, event, attendee, guests=(RAVI, MEI))
+    client.login(attendee.email)
+    renamed = {"full_name": "Ravi Kumar Jr", "dietary_requirements": "Vegan"}
+
+    response = _change_guests(client, db, registration.id, [renamed, MEI])
+
+    assert response.status_code == 200
+    assert _guests_of(db, registration.id) == [renamed, MEI]
+
+
 def _take_places(db: Session, event: Event, places: int) -> None:
     """``places`` places taken at ``event`` by other attendees: groups of eleven (an attendee and
     ten guests), then attendees alone for the rest."""
@@ -824,15 +927,15 @@ def _take_places(db: Session, event: Event, places: int) -> None:
         _add_registration(db, event, _attendee(db))
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=2)
 def test_with_48_of_50_places_taken_a_sign_up_brings_one_guest_and_fills_the_event(
     client, db: Session
 ):
-    """The PO's example (30 Oct 2026): 48 of 50 places taken, guests included. A sign-up may
+    """AC2 worked through: 48 of 50 places taken, guests included. A sign-up may
     bring one guest, which fills the event, and no one can register after it."""
     event = _open_event(db, capacity=50)
     _take_places(db, event, 48)
-    assert service.count_active_registrations(db, event.id) == 48
+    assert service.count_places_taken(db, event.id) == 48
     attendee = _attendee(db)
     late = _attendee(db)
     client.login(attendee.email)
@@ -840,7 +943,7 @@ def test_with_48_of_50_places_taken_a_sign_up_brings_one_guest_and_fills_the_eve
     response = _register(client, db, event, guests=[RAVI])
 
     assert response.status_code == 201
-    assert service.count_active_registrations(db, event.id) == 50
+    assert service.count_places_taken(db, event.id) == 50
     client.login(late.email)
     assert _listed(client, event)["state"] == "FULL"
     refused = _register(client, db, event)
@@ -848,7 +951,7 @@ def test_with_48_of_50_places_taken_a_sign_up_brings_one_guest_and_fills_the_eve
     assert refused.json()["detail"] == service.EVENT_FULL_MESSAGE
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=2)
 def test_with_48_of_50_places_taken_a_sign_up_with_two_guests_is_refused_whole(client, db: Session):
     """The PO's example: two guests would make 51 of 50, so nothing is registered."""
     event = _open_event(db, capacity=50)
@@ -861,11 +964,11 @@ def test_with_48_of_50_places_taken_a_sign_up_with_two_guests_is_refused_whole(c
     assert response.status_code == 409
     assert response.json()["detail"] == service.NOT_ENOUGH_PLACES_MESSAGE
     assert attendee.id not in [r.attendee_id for r in _registrations_of(db, event)]
-    assert service.count_active_registrations(db, event.id) == 48
+    assert service.count_places_taken(db, event.id) == 48
 
 
-# --- AC12: how many guests My registrations allows (30 Oct 2026) --------------------------------
-@pytest.mark.story("18.5", ac=12)
+# --- AC3: how many guests My registrations allows ---------------------------------------------
+@pytest.mark.story("18.5", ac=3)
 def test_my_registrations_allow_the_guests_there_are_places_for(client, db: Session):
     """5 places: the attendee and one guest hold 2, another attendee 1, so 2 are left. Their guests
     may grow by those 2, from one guest to three."""
@@ -879,8 +982,8 @@ def test_my_registrations_allow_the_guests_there_are_places_for(client, db: Sess
     assert _mine(client, event)["max_guests"] == 3
 
 
+@pytest.mark.story("18.5", ac=3)
 @pytest.mark.story("18.5", ac=6)
-@pytest.mark.story("18.5", ac=12)
 def test_my_registrations_allow_no_more_than_ten_guests_however_many_places_are_left(
     client, db: Session
 ):
@@ -893,7 +996,7 @@ def test_my_registrations_allow_no_more_than_ten_guests_however_many_places_are_
     assert _mine(client, event)["max_guests"] == schemas.MAX_GUESTS
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=3)
 def test_my_registrations_never_ask_for_fewer_guests_than_an_overfull_event_already_has(
     client, db: Session
 ):
@@ -908,7 +1011,7 @@ def test_my_registrations_never_ask_for_fewer_guests_than_an_overfull_event_alre
     assert _mine(client, event)["max_guests"] == 2
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=3)
 def test_a_change_to_the_guests_answers_with_the_new_limit(client, db: Session):
     """Adding guests uses up places: the answer's limit is worked out after the change."""
     event = _open_event(db, capacity=5)
@@ -923,7 +1026,7 @@ def test_a_change_to_the_guests_answers_with_the_new_limit(client, db: Session):
 
 
 # =============================================================================================
-# AC12 - real concurrent transactions. These commit, so each cleans up after itself.
+# AC11 - real concurrent transactions. These commit, so each cleans up after itself.
 # =============================================================================================
 # After every seeded event has started, as in test_browse_and_register_integration.py.
 NOW = datetime(2030, 1, 15, 9, 0, tzinfo=UTC)
@@ -1014,7 +1117,7 @@ def _register_at_once(engine: Engine, race: _Race, start: threading.Barrier) -> 
         return REGISTERED
 
 
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=11)
 def test_guests_added_while_another_attendee_takes_the_last_place_leave_one_of_them(
     engine: Engine,
 ):
@@ -1032,13 +1135,13 @@ def test_guests_added_while_another_attendee_takes_the_last_place_leave_one_of_t
             {service.GUESTS_NOT_ENOUGH_PLACES_MESSAGE, REGISTERED},
         )
         with Session(engine) as session:
-            assert service.count_active_registrations(session, race.event_id) <= 3
+            assert service.count_places_taken(session, race.event_id) <= 3
     finally:
         _clean_up(engine, race)
 
 
 @pytest.mark.story("18.5", ac=3)
-@pytest.mark.story("18.5", ac=12)
+@pytest.mark.story("18.5", ac=11)
 def test_two_changes_to_the_guests_at_once_leave_one_list_whole(engine: Engine):
     """The same page open in two tabs: the guests end as one tab sent them, never a mix."""
     race = _race(engine, capacity=20)

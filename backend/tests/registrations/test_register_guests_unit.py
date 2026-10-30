@@ -7,10 +7,12 @@ with no database, no HTTP and no fixture. The integration tests beside this file
 they produce; ``tests/e2e/register-guests.spec.ts`` proves the flows an attendee and an organiser
 click through.
 
-AC6 An attendee can bring at most 10 guests (a group of at most 11). With no guests, registering
-    works as in 18.1.
-AC7 A guest's name is required, at most 200 characters; dietary requirements are optional, at most
-    500 characters. Guests are not asked for a phone number or email.
+The ACs are the Product Backlog's (row 57, CL-173), summarised:
+
+AC1 When registering, the attendee can add guests, each with optional dietary requirements (as
+    18.4 AC6: at most 500 characters, blank shown as "None") and no phone number.
+AC3 After registering, the attendee can add, change or remove guests.
+AC6 An attendee can bring 0 to 10 guests. Each guest's name is required, at most 200 characters.
 """
 
 from __future__ import annotations
@@ -77,39 +79,49 @@ def test_a_change_must_say_what_the_guests_are_now():
         schemas.GuestsUpdate()
 
 
-# --- AC7: a guest's name ----------------------------------------------------------------------
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=3)
+def test_a_change_sends_nothing_but_the_guests():
+    """Nothing else - not the event, nor another registration - rides along with a change."""
+    with pytest.raises(ValidationError) as caught:
+        schemas.GuestsUpdate(guests=[], event_id=EVENT_ID)
+
+    [error] = caught.value.errors()
+    assert error["type"] == "extra_forbidden"
+
+
+# --- AC6: a guest's name ----------------------------------------------------------------------
+@pytest.mark.story("18.5", ac=6)
 def test_a_guest_name_of_200_characters_is_kept():
     name = "n" * schemas.FULL_NAME_MAX_LENGTH
 
     assert schemas.GuestIn(full_name=name).full_name == name
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=6)
 def test_a_guest_name_of_201_characters_is_refused():
     name = "n" * (schemas.FULL_NAME_MAX_LENGTH + 1)
 
     assert schemas.GUEST_FULL_NAME_TOO_LONG_MESSAGE in _guest_refusal(full_name=name)
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=6)
 @pytest.mark.parametrize("value", ["", "   ", None], ids=["empty", "spaces", "null"])
 def test_a_blank_or_spaces_only_guest_name_is_refused(value: str | None):
     assert schemas.GUEST_FULL_NAME_REQUIRED_MESSAGE in _guest_refusal(full_name=value)
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=6)
 def test_a_guest_without_a_name_is_refused():
     assert schemas.GUEST_FULL_NAME_REQUIRED_MESSAGE in _guest_refusal()
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=6)
 def test_a_guest_name_is_trimmed():
     assert schemas.GuestIn(full_name="  Ravi Kumar \n").full_name == "Ravi Kumar"
 
 
-# --- AC7: a guest's dietary requirements ------------------------------------------------------
-@pytest.mark.story("18.5", ac=7)
+# --- AC1: a guest's dietary requirements ------------------------------------------------------
+@pytest.mark.story("18.5", ac=1)
 def test_guest_dietary_requirements_of_500_characters_are_kept():
     text = "v" * schemas.DIETARY_REQUIREMENTS_MAX_LENGTH
 
@@ -118,7 +130,7 @@ def test_guest_dietary_requirements_of_500_characters_are_kept():
     assert guest.dietary_requirements == text
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=1)
 def test_guest_dietary_requirements_of_501_characters_are_refused():
     text = "v" * (schemas.DIETARY_REQUIREMENTS_MAX_LENGTH + 1)
 
@@ -127,7 +139,7 @@ def test_guest_dietary_requirements_of_501_characters_are_refused():
     assert schemas.GUEST_DIETARY_REQUIREMENTS_TOO_LONG_MESSAGE in refusal
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=1)
 @pytest.mark.parametrize(
     "value", ["", "   ", "\t\n ", None], ids=["empty", "spaces", "tab", "null"]
 )
@@ -137,13 +149,13 @@ def test_blank_guest_dietary_requirements_are_recorded_as_none(value: str | None
     assert guest.dietary_requirements is None
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=1)
 def test_guest_dietary_requirements_are_optional():
     assert schemas.GuestIn(full_name="Ravi Kumar").dietary_requirements is None
 
 
-# --- AC7: nothing else is asked of a guest ----------------------------------------------------
-@pytest.mark.story("18.5", ac=7)
+# --- AC1: nothing else is asked of a guest ----------------------------------------------------
+@pytest.mark.story("18.5", ac=1)
 @pytest.mark.parametrize("field", ["phone", "email", "attendee_id"])
 def test_nothing_but_a_name_and_dietary_requirements_can_be_sent_for_a_guest(field: str):
     with pytest.raises(ValidationError) as caught:
@@ -153,7 +165,7 @@ def test_nothing_but_a_name_and_dietary_requirements_can_be_sent_for_a_guest(fie
     assert error["type"] == "extra_forbidden"
 
 
-@pytest.mark.story("18.5", ac=7)
+@pytest.mark.story("18.5", ac=6)
 def test_each_guest_message_is_its_own_sentence():
     """No two refusals share a sentence (backend/STYLE.md), the attendee's own included."""
     messages = [

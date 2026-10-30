@@ -43,7 +43,7 @@ ROW_KEYS = {
     "registered_at",
     "status",
     "withdrawn_at",
-    "guests",  # story 18.5 AC5
+    "guests",  # story 18.5 AC4
 }
 
 
