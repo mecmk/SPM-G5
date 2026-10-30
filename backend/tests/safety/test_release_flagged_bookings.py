@@ -378,6 +378,7 @@ def test_each_named_booking_becomes_cancelled_and_records_why(
         assert row.get("release_cause") == "SAFETY_REVIEW"
         assert row.get("release_reason") == CHANGE
         assert datetime.fromisoformat(row["cancelled_at"]) == reviewed_at
+        assert _fresh(db, booking).released_by_id == Users.SAFETY_OFFICER.id
     assert datetime.fromisoformat(outcomes[str(scene.first.id)]["decided_at"]) == approved_at
     assert _fresh(db, scene.event).status == EventStatus.PLANNING
 
@@ -1212,6 +1213,19 @@ def test_resubmitting_with_the_same_venue_warns_beside_a_booking_at_the_same_tim
 
 
 # --- AC9: each round shows what it released; once per decision --------------------------------
+@pytest.mark.story("21.3", ac=9)
+def test_a_booking_named_twice_on_one_finding_is_named_once(
+    login_as, db: Session, two_booked: Scene
+):
+    scene = two_booked
+
+    body = _release(login_as, scene, scene.first, scene.first)
+
+    [finding] = body["previous_reviews"][0]["findings"]
+    assert [item["booking_id"] for item in finding["released_bookings"]] == _ids(scene.first)
+    assert len(_audit(db, "BOOKING_RELEASED", scene.first.id)) == 1
+
+
 @pytest.mark.story("21.3", ac=9)
 def test_each_round_lists_its_released_bookings_to_officer_coordinator_and_organiser(
     login_as, db: Session, two_booked: Scene
