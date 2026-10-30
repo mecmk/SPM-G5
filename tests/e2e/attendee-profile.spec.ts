@@ -503,6 +503,7 @@ test('18.4 AC3: a detail changed while confirming fills the next dialog and the 
             event_id: sent.event_id,
             status: 'REGISTERED',
             registered_at: '2026-10-27T02:00:00Z',
+            guests: [],
           }),
         })
       }
@@ -588,6 +589,7 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
             event_id: sent.event_id,
             status: 'REGISTERED',
             registered_at: '2026-10-27T02:00:00Z',
+            guests: [],
           }),
         })
       }
