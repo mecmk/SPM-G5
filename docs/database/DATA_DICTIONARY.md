@@ -26,7 +26,8 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Identity & access | [`login_attempts`](#login_attempts) | 1.1 (AC6) | Failed sign-in counter per e-mail address, used to lock sign-in for a while after repeated failures |
 | Identity & access | [`client_organisations`](#client_organisations) | 2.x, 7.1 (organiser context) | External client organisations that Event Organisers belong to |
 | Reference lists | [`facilities`](#facilities) | 8.2, 8.3, 10.3, 11.1 | Facilities a venue can offer and an event can require (projector, sound system, video conferencing, ...) |
-| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
+| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 8.6, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
+| Reference lists | [`deleted_room_layouts`](#deleted_room_layouts) | 8.6 | The room layouts Venue Staff deleted (AC4), one row each, written in the same transaction as the delete |
 | Reference lists | [`accessibility_features`](#accessibility_features) | 2.1, 8.2, 8.3, 11.1 | Accessibility features a venue provides and an event may need (wheelchair access, hearing loop, ...) |
 | Reference lists | [`equipment_types`](#equipment_types) | 2.1, 15.x, 16.x, 17.x | The equipment catalogue, modelled as pooled stock per type (e.g |
 | Venues | [`venues`](#venues) | 8.1, 8.2, 8.3, 8.4, 9.x, 10.x, 11.x | The venue catalogue: rooms and spaces ConnectSphere owns |
@@ -178,16 +179,33 @@ Facilities a venue can offer and an event can require (projector, sound system, 
 
 ### room_layouts
 
-**Stories:** 2.1, 8.2, 8.3, 12.1
+**Stories:** 2.1, 8.2, 8.3, 8.6, 12.1
 
-Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require.
+Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require. Venue Staff add, rename and delete them in the app (story 8.6); the seed only adds the standard ones that are missing and were never deleted. A layout a venue, venue requirement or booking request uses cannot be deleted (AC8).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
-| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. |
-| `name` | `text` | no | - | - | Display name. |
-| `description` | `text` | yes | - | - | Optional longer description. |
-| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending). |
+| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with a number added when that code is taken or was a deleted layout's (THEATRE_2, THEATRE_3, ...), and never changed by a rename, so every reference to the layout keeps working. |
+| `name` | `text` | no | - | - | Display name, shown wherever the layout appears (story 8.6 AC3). Required, without spaces around it, at most 100 characters (AC5, ck_room_layouts_name), and unique ignoring capitals (AC6, uq_room_layouts_name). |
+| `description` | `text` | no | - | - | Longer description, shown with the name on the Room layouts page. Required, without spaces around it, at most 500 characters (story 8.6 AC7, ck_room_layouts_description); never blank. |
+| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending): the standard layouts carry 10 to 70, and a layout added in the app the default 100, so it follows them from A to Z (story 8.6 AC1). |
+
+Rules and indexes:
+
+- check `ck_room_layouts_description`: `CHECK (((description = btrim(description)) AND (description <> ''::text) AND (char_length(description) <= 500)))`
+- check `ck_room_layouts_name`: `CHECK (((name = btrim(name)) AND (name <> ''::text) AND (char_length(name) <= 100)))`
+- unique index `uq_room_layouts_name`: `btree (lower(name))`
+
+### deleted_room_layouts
+
+**Stories:** 8.6
+
+The room layouts Venue Staff deleted (AC4), one row each, written in the same transaction as the delete. A deleted layout's code is never given to another layout, by the app (AC2) or the seed, so a pending change request, a saved catalogue link or an audit entry that kept the code is never taken for a different layout; and a venue saved with a deleted layout is told it no longer exists, by name (AC11), while a code no layout ever had is refused as unknown.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `code` | `text` | no | - | PK | The deleted layout's code, as it was in room_layouts.code. Primary key: a code is deleted at most once, as it never comes back. |
+| `name` | `text` | no | - | - | The name the layout had when it was deleted, so a refusal can name it (story 8.6 AC11). |
 
 ### accessibility_features
 

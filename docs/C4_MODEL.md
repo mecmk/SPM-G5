@@ -104,8 +104,8 @@ C4Component
         Component(authService, "Authentication service", "app/auth/service.py", "Checks credentials, creates and revokes server-side sessions, turns a cookie into a user")
         Component(passwords, "Password hashing", "app/auth/passwords.py", "scrypt hashing and constant-time verification; no plain text is ever stored")
         Component(access, "Access control", "app/auth/permissions.py and deps.py", "The permission list per role, plus the dependencies that answer 401 and 403")
-        Component(venueRouter, "Venue endpoints", "app/venues/router.py", "Listing, searching, reading, creating, updating and deleting venues, each venue's availability calendar, and the pick-list reference data")
-        Component(venueService, "Venue service", "app/venues/service.py", "Venue rules: required fields, unique name, known reference codes, valid operating hours, and refusing to delete a venue that bookings still refer to")
+        Component(venueRouter, "Venue endpoints", "app/venues/router.py", "Listing, searching, reading, creating, updating and deleting venues, each venue's availability calendar, the pick-list reference data, and the room layouts Venue Staff add, rename and delete")
+        Component(venueService, "Venue service", "app/venues/service.py", "Venue rules: required fields, unique name, known reference codes, valid operating hours, and refusing to delete a venue that bookings still refer to. Room layouts: a unique name, and refusing to delete one that venues, venue requirements or booking requests still use")
         Component(audit, "Audit log writer", "app/common/audit.py", "Appends who changed what and when, inside the caller's transaction")
         Component(session, "Database session provider", "app/db.py", "Engine, session factory and the per-request session")
     }
@@ -314,7 +314,7 @@ numbers match the product backlog story IDs, so feature 8 is story 8.x.
 | 5 | Coordinator assignment | Review and assignment service | `event_coordinator_assignments`, `events.assigned_coordinator_id` | `app/coordination` |
 | 6 | Event status management | Event request service, Cancellation service | `events.status`, `event_status_history`, the `events.cancelled_*` columns | `app/events`; `app/cancellations` for the organiser cancelling an event and releasing what it holds |
 | 7 | Event information management | Event request service, Audit log writer | `events`, `event_change_history`, `audit_log` | `app/events`; `app/change_requests` records an approved change in the history |
-| 8 | Venue catalogue | Venue endpoints, Venue service | `venues`, `venue_facilities`, `venue_layouts`, `venue_accessibility_features` | `app/venues` |
+| 8 | Venue catalogue | Venue endpoints, Venue service | `venues`, `venue_facilities`, `venue_layouts`, `venue_accessibility_features`, `room_layouts`, `deleted_room_layouts` | `app/venues` |
 | 9 | Venue availability calendar | Venue availability service | `venue_unavailability_periods`, `venue_bookings` | `app/venues` |
 | 10 | Venue search and filtering | Venue availability service | `venues` and its join tables, `venue_bookings` | `app/venues` |
 | 11 | Venue suitability checking | Venue availability service | `venues.capacity`, venue join tables against event requirements | `app/venues`, as search filters |

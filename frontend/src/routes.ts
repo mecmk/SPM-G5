@@ -136,6 +136,9 @@ export function venueEditPath(venueId: string): string {
   return VENUE_EDIT_PATH.replace(':venueId', encodeURIComponent(venueId))
 }
 
+// Story 8.6: the room layouts venues can offer, listed for every role that reads venues.
+export const ROOM_LAYOUTS_PATH = '/venues/layouts'
+
 // Story 4.1: the coordinator review queue.
 export const EVENTS_INBOX_PATH = '/events/inbox'
 
