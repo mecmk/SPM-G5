@@ -21,6 +21,12 @@ ALTER TABLE venue_bookings
 -- backfill start
 -- A booking cancelled before this migration gets the cause its release has always had: the
 -- replacement whose approval released it, else its event's cancellation, else an approved change.
+-- An event's cancellation released a booking when both were cancelled at the same moment, which is
+-- how cancel_event (story 6.2) records them, so the cancellation is blamed only then. A booking an
+-- approved change released earlier, or before bookings had a cancelled_at (migration 026), has a
+-- different time, or none, against the event's. The one case nothing on the row can settle: a
+-- booking released before 026 on an event cancelled before 026 has no time and neither has the
+-- event, so it keeps EVENT_CANCELLED, as it would have without this check.
 -- Only a replacement's approver and an event's canceller are on record, so the releaser of any
 -- other booking stays NULL. Safe to run again: it touches only a CANCELLED booking with no cause.
 UPDATE venue_bookings AS original
@@ -36,7 +42,8 @@ FROM events AS ev
 WHERE booking.event_id = ev.id
   AND booking.status = 'CANCELLED'
   AND booking.release_cause IS NULL
-  AND ev.status = 'CANCELLED';
+  AND ev.status = 'CANCELLED'
+  AND booking.cancelled_at IS NOT DISTINCT FROM ev.cancelled_at;
 
 UPDATE venue_bookings
 SET release_cause = 'CHANGE_APPROVED'
