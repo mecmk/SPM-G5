@@ -48,6 +48,7 @@ import {
   inputToInstant,
   instantToInput,
   nowAsInput,
+  shortReference,
 } from '../shared/format'
 import {
   COMMON_QUEUE_ORDERS,
@@ -62,7 +63,6 @@ import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
 
-const SHORT_ID_LENGTH = 8
 /** Story 13.1.2 AC4: requests per numbered page. */
 const QUEUE_PAGE_SIZE = 10
 const PAGE_TITLE = 'Booking Requests'
@@ -392,9 +392,7 @@ export function BookingRequestsPage() {
                   <div className="item-card-header">
                     <div className="cluster">
                       <StatusBadge status={entry.status} />
-                      <span className="small muted mono">
-                        #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
-                      </span>
+                      <span className="small muted mono">{shortReference(entry.id)}</span>
                       {/* Story 9.4 AC3: its venue is unavailable for part of the request. */}
                       {entry.venue_unavailable_marked_at !== null && (
                         <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />

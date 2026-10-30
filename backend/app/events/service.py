@@ -42,6 +42,7 @@ from app.events.models import (
     EquipmentUnavailabilityPeriod,
     Event,
     EventAccessibilityNeed,
+    EventChange,
     EventClarification,
     EventEquipmentRequest,
     EventStatus,
@@ -64,6 +65,7 @@ from app.events.schemas import (
     ReferenceItemOut,
     ReviewQueueSort,
     VenueRequirementIn,
+    can_see_internal_notes,
 )
 from app.notifications.service import NotificationType, active_members, notify
 from app.venues import service as venue_service
@@ -101,8 +103,10 @@ REQUIREMENT_OVER_ATTENDANCE_MESSAGE = (
     "{requirement} cannot need room for more people than the expected attendance."
 )
 # Story 19.2: the same rule, said of a change to the attendance rather than of the form's field.
+# Fix f19.1.2: it names the requirement that sets the minimum, the minimum, and what comes first.
 ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
-    "{requirement} needs room for more people than the new expected attendance."
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. A venue requirements change that lowers it must be approved first."
 )
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.
@@ -169,6 +173,10 @@ _SORT_COLUMNS = {
 # Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
 # never widen this to accept arbitrary Event fields (important fields go through story 7.3).
 _ROUTINE_FIELDS = ("internal_notes",)
+# Story 7.2 AC4: the audit action of a coordinator's correction.
+_CORRECTION_ACTION = "EVENT_DETAILS_CORRECTED"
+# Story 7.4 AC5/AC6: the one field whose history only coordinators see.
+_INTERNAL_NOTES_FIELD = "internal_notes"
 
 # Story 7.2 AC3: routine editing is refused once the event has reached one of these statuses.
 _ROUTINE_EDIT_CLOSED_STATUSES = (EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.REJECTED)
@@ -365,10 +373,15 @@ class MissingVenueRequirement(InvalidEventRequest):
 
 class AttendanceBelowRequirement(InvalidEventRequest):
     """Story 19.2 AC2: a proposed attendance smaller than a venue requirement needs room for
-    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance."""
+    (2.7 AC6). A plain 422, not located on a requirement: the form changing is the attendance.
+    Fix f19.1.2: ``requirement`` is the one needing the most people, and ``minimum`` how many."""
 
-    def __init__(self, requirement: str) -> None:
-        super().__init__(ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement))
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_BELOW_REQUIREMENT_MESSAGE.format(requirement=requirement, minimum=minimum)
+        )
+        self.requirement = requirement
+        self.minimum = minimum
 
 
 class InvalidVenueRequirement(InvalidEventRequest):
@@ -638,18 +651,21 @@ def get_event(db: Session, event_id: uuid.UUID, *, viewer: User) -> Event:
 NOT_RELATED_PARTY_MESSAGE = (
     "Only the organiser and the coordinator assigned to this request may view its clarifications."
 )
+CHANGE_HISTORY_NOT_RELATED_MESSAGE = (
+    "Only the organiser and the coordinator assigned to this event may view its change history."
+)
 
 
 class NotRelatedParty(PermissionError):
-    """Only the organiser and the event's assigned coordinator may read the clarification
-    conversation - narrower than ``get_event``'s visibility, which any internal role with
-    ``events:read_all`` satisfies."""
+    """Only the event's related parties - its organiser and its assigned coordinator - may read
+    the clarification conversation (4.6 AC2) and the change history (7.4 AC5) - narrower than
+    ``get_event``'s visibility, which any internal role with ``events:read_all`` satisfies."""
 
-    def __init__(self) -> None:
-        super().__init__(NOT_RELATED_PARTY_MESSAGE)
+    def __init__(self, message: str = NOT_RELATED_PARTY_MESSAGE) -> None:
+        super().__init__(message)
 
 
-def _can_view_clarifications(viewer: User, event: Event) -> bool:
+def _is_related_party(viewer: User, event: Event) -> bool:
     return event.organiser_id == viewer.id or event.assigned_coordinator_id == viewer.id
 
 
@@ -662,7 +678,7 @@ def list_clarifications(
     the event at all gets ``EventNotFound``, same as ``get_event``; one who can see the event but
     is not organiser or assigned coordinator gets ``NotRelatedParty`` instead."""
     event = get_event(db, event_id, viewer=viewer)
-    if not _can_view_clarifications(viewer, event):
+    if not _is_related_party(viewer, event):
         raise NotRelatedParty()
     return list(
         db.scalars(
@@ -670,6 +686,45 @@ def list_clarifications(
             .where(EventClarification.event_id == event_id)
             .order_by(EventClarification.created_at, EventClarification.id)
         ).all()
+    )
+
+
+def list_event_changes(db: Session, event_id: uuid.UUID, *, viewer: User) -> list[EventChange]:
+    """Story 7.4 AC1/AC5/AC6: the event's change history, newest first, for its organiser and its
+    assigned coordinator only, as with the clarifications. Internal-notes changes are left out
+    for a viewer who may not see the notes themselves (``EventDetailOut.from_event``'s gate)."""
+    event = get_event(db, event_id, viewer=viewer)
+    if not _is_related_party(viewer, event):
+        raise NotRelatedParty(CHANGE_HISTORY_NOT_RELATED_MESSAGE)
+    query = select(EventChange).where(EventChange.event_id == event_id)
+    if not can_see_internal_notes(viewer):
+        query = query.where(EventChange.field_name != _INTERNAL_NOTES_FIELD)
+    return list(db.scalars(query.order_by(EventChange.seq.desc())).all())
+
+
+def record_changes(
+    db: Session,
+    event: Event,
+    changes: dict[str, dict[str, Any]],
+    *,
+    actor: User,
+    change_request_id: uuid.UUID | None = None,
+) -> None:
+    """Story 7.4 AC1/AC2/AC4: one history row per field in ``changes`` (``{field: {"from", "to"}}``,
+    the shape the audit entries hold), added to the caller's transaction, uncommitted, so it lands
+    or rolls back with the save. The caller holds the event's row lock, so the rows' ``seq``
+    follows the order the saves happened (AC7)."""
+    db.add_all(
+        EventChange(
+            event_id=event.id,
+            field_name=field,
+            old_value=change["from"],
+            new_value=change["to"],
+            changed_by_id=actor.id,
+            changed_by_role_code=actor.role_code,
+            change_request_id=change_request_id,
+        )
+        for field, change in changes.items()
     )
 
 
@@ -1685,17 +1740,27 @@ def _cover_image_extension_or_refuse(content: bytes) -> str:
 
 
 def _replace_cover_image(
-    db: Session, event: Event, content: bytes, extension: str, *, actor: User, action: str
+    db: Session,
+    event: Event,
+    content: bytes,
+    extension: str,
+    *,
+    actor: User,
+    action: str,
+    record_history: bool,
 ) -> None:
-    """Store ``content`` as ``event``'s cover picture and commit, recording the old and new
-    address (story 7.4). The file is written first and the old one deleted only once the new
-    address is stored, so a failure never leaves the request pointing at a file that is gone."""
+    """Store ``content`` as ``event``'s cover picture and commit, auditing the old and new
+    address, and - for a correction (``record_history``) - adding it to the change history (story
+    7.4; the organiser's own draft picture is not part of it, CL-182). The file is written first
+    and the old one deleted only once the new address is stored, so a failure never leaves the
+    request pointing at a file that is gone."""
     filename = f"{uuid.uuid4()}{extension}"
     path = cover_image_path(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     previous_url = event.cover_image_url
     new_url = f"{COVER_IMAGE_URL_PREFIX}{filename}"
+    changes = {"cover_image_url": {"from": previous_url, "to": new_url}}
     try:
         event.cover_image_url = new_url
         event.updated_at = datetime.now(UTC)
@@ -1705,9 +1770,11 @@ def _replace_cover_image(
             action=action,
             entity_type="event",
             entity_id=event.id,
-            details={"cover_image_url": {"from": previous_url, "to": new_url}},
+            details=changes,
             commit=False,
         )
+        if record_history:
+            record_changes(db, event, changes, actor=actor)
         db.commit()
     except Exception:
         path.unlink(missing_ok=True)
@@ -1716,10 +1783,14 @@ def _replace_cover_image(
     db.refresh(event)
 
 
-def _clear_cover_image(db: Session, event: Event, *, actor: User, action: str) -> None:
-    """Take ``event``'s cover picture off and commit, recording the old address (story 7.4), then
-    delete its file."""
+def _clear_cover_image(
+    db: Session, event: Event, *, actor: User, action: str, record_history: bool
+) -> None:
+    """Take ``event``'s cover picture off and commit, auditing the old address and - for a
+    correction (``record_history``) - adding it to the change history (story 7.4), then delete
+    its file."""
     previous_url = event.cover_image_url
+    changes = {"cover_image_url": {"from": previous_url, "to": None}}
     event.cover_image_url = None
     event.updated_at = datetime.now(UTC)
     record_audit(
@@ -1728,9 +1799,11 @@ def _clear_cover_image(db: Session, event: Event, *, actor: User, action: str) -
         action=action,
         entity_type="event",
         entity_id=event.id,
-        details={"cover_image_url": {"from": previous_url, "to": None}},
+        details=changes,
         commit=False,
     )
+    if record_history:
+        record_changes(db, event, changes, actor=actor)
     db.commit()
     _delete_cover_image_file(previous_url)
     db.refresh(event)
@@ -1742,7 +1815,15 @@ def set_cover_image(db: Session, event_id: uuid.UUID, content: bytes, *, actor: 
     if event.status != EventStatus.DRAFT:
         raise EventNotEditable()
     extension = _cover_image_extension_or_refuse(content)
-    _replace_cover_image(db, event, content, extension, actor=actor, action="EVENT_COVER_IMAGE_SET")
+    _replace_cover_image(
+        db,
+        event,
+        content,
+        extension,
+        actor=actor,
+        action="EVENT_COVER_IMAGE_SET",
+        record_history=False,
+    )
     return event
 
 
@@ -1753,7 +1834,9 @@ def remove_cover_image(db: Session, event_id: uuid.UUID, *, actor: User) -> Even
         raise EventNotEditable()
     if event.cover_image_url is None:
         return event
-    _clear_cover_image(db, event, actor=actor, action="EVENT_COVER_IMAGE_REMOVED")
+    _clear_cover_image(
+        db, event, actor=actor, action="EVENT_COVER_IMAGE_REMOVED", record_history=False
+    )
     return event
 
 
@@ -2198,10 +2281,19 @@ def update_routine_information(
         raise RoutineEditClosed(event.status)
     _assert_assigned_coordinator(event, actor, verb="edit")
 
+    # Story 7.4 AC7: the old value is read under the row lock, so a save racing this one is
+    # recorded after it, from the value it left.
+    event = lock_event(db, event.id)
     sent = data.model_fields_set
-    changed = {field: getattr(data, field) for field in _ROUTINE_FIELDS if field in sent}
-    if not changed:
+    changes = {
+        field: {"from": getattr(event, field), "to": getattr(data, field)}
+        for field in _ROUTINE_FIELDS
+        if field in sent and getattr(data, field) != getattr(event, field)
+    }
+    if not changes:
+        db.rollback()  # gives back the lock
         return
+    changed = {field: change["to"] for field, change in changes.items()}
     updated = db.execute(
         update(Event)
         .where(Event.id == event.id, Event.status.notin_(_ROUTINE_EDIT_CLOSED_STATUSES))
@@ -2220,6 +2312,7 @@ def update_routine_information(
         details={"fields": sorted(changed)},
         commit=False,
     )
+    record_changes(db, event, changes, actor=actor)
     db.commit()
     db.refresh(event)
 
@@ -2639,7 +2732,8 @@ def correct_event_under_review(
     the message. Any refusal after the claim rolls the whole correction back, so the event, its
     equipment lines and its holds are left exactly as they were (AC7). Each saved correction
     writes one ``EVENT_DETAILS_CORRECTED`` audit row holding every changed field's old and new
-    value, for story 7.4 to read; one that changes nothing writes nothing.
+    value, and one change-history entry per field (story 7.4); one that changes nothing writes
+    nothing.
 
     AC9's organiser-vs-coordinator case needs story 4.3, which will let an organiser edit a
     submitted request; that edit must claim the row the same way."""
@@ -2660,12 +2754,13 @@ def correct_event_under_review(
     record_audit(
         db,
         actor=actor,
-        action="EVENT_DETAILS_CORRECTED",
+        action=_CORRECTION_ACTION,
         entity_type="event",
         entity_id=event.id,
         details=changes,
         commit=False,
     )
+    record_changes(db, event, changes, actor=actor)
     db.commit()
     db.refresh(event)
 
@@ -2683,7 +2778,7 @@ def set_cover_image_under_review(
     extension = _cover_image_extension_or_refuse(content)
     _claim_for_correction(db, event, expected_updated_at=expected_updated_at)
     _replace_cover_image(
-        db, event, content, extension, actor=actor, action="EVENT_DETAILS_CORRECTED"
+        db, event, content, extension, actor=actor, action=_CORRECTION_ACTION, record_history=True
     )
 
 
@@ -2699,7 +2794,7 @@ def remove_cover_image_under_review(
     if event.cover_image_url is None:
         db.rollback()  # gives back the claim, which only stamped updated_at
         return
-    _clear_cover_image(db, event, actor=actor, action="EVENT_DETAILS_CORRECTED")
+    _clear_cover_image(db, event, actor=actor, action=_CORRECTION_ACTION, record_history=True)
 
 
 # --- stories 19.1/19.2: what a change request may propose, and the point of contact ----------
@@ -2782,11 +2877,28 @@ def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> E
 def check_proposed_attendance(event: Event, attendance: int) -> None:
     """Story 19.2 AC2: an approved attendance change keeps 2.7 AC6 - no venue requirement needs
     room for more people than the event's expected attendance - judged with the proposed
-    figure against the requirements as they stand. Also checked when the request is raised."""
+    figure against the requirements as they stand. Also checked when the request is raised.
+    Fix f19.1.2: the requirement needing the most people sets the minimum, the first of them
+    on the form when two need the same."""
     ordered = sorted(event.venue_requirements, key=lambda item: item.position)
-    for index, requirement in enumerate(ordered):
-        if requirement.capacity is not None and requirement.capacity > attendance:
-            raise AttendanceBelowRequirement(_describe_requirement(requirement.name, index))
+    check_attendance_leaves_room(ordered, attendance)
+
+
+def check_attendance_leaves_room(
+    requirements: Sequence[VenueRequirement | VenueRequirementIn], attendance: int
+) -> None:
+    """Fix f19.1.2: 2.7 AC6 for ``attendance`` against ``requirements`` in their order on the
+    form - the event's own, or those a pending change asks for - refused with the requirement
+    needing the most people (``AttendanceBelowRequirement``)."""
+    sized = [(index, item) for index, item in enumerate(requirements) if item.capacity is not None]
+    if not sized:
+        return
+    # max() keeps the first of equal values, so a tie names the one higher on the form.
+    index, limiting = max(sized, key=lambda pair: pair[1].capacity)
+    if limiting.capacity > attendance:
+        raise AttendanceBelowRequirement(
+            _describe_requirement(limiting.name, index), limiting.capacity
+        )
 
 
 def live_bookings(db: Session, event: Event) -> list[_LiveBooking]:
@@ -2944,8 +3056,8 @@ def update_point_of_contact(
 ) -> Event:
     """Story 19.1 AC2: the organiser updates their approved event's point of contact directly,
     with no change request. Only the fields sent and actually different change; each change is
-    logged with its old and new value for the change history (7.4 is not built yet, so the
-    audit log holds it). Sending the current values is a no-op: no write, no audit entry."""
+    audited and added to the change history (story 7.4) with its old and new value. Sending the
+    current values is a no-op: no write, no audit entry, no history."""
     event = get_own_event_for_update(db, event_id, actor=actor)
     if event.status not in _CONTACT_EDITABLE_STATUSES:
         raise PointOfContactClosed(event.status)
@@ -2969,6 +3081,7 @@ def update_point_of_contact(
         details=changes,
         commit=False,
     )
+    record_changes(db, event, changes, actor=actor)
     db.commit()
     db.refresh(event)
     return event
