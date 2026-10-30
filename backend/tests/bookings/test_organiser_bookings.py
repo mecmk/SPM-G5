@@ -5,11 +5,10 @@ requirement, and when. Organisers do not hold ``bookings:read`` - ``/bookings/fo
 no ownership and returns Venue Staff's reasons and the hold's history - so this is its own
 endpoint, behind ``bookings:read_own``, that answers only for the caller's own event.
 
-AC1 The organiser sees each approved or pending booking of their event (decided with the
-    customer, 29 Oct 2026: a pending one shows a venue is being sought), with its venue name,
-    location, requirement, start and end, and its setup and teardown. Closed bookings -
-    rejected, withdrawn, cancelled, expired - hold nothing, so they are left out. Only those
-    fields are returned.
+AC1 The organiser sees each approved or pending booking of their event (Q91, CL-183 (3): a
+    pending one shows a venue is being sought), with its venue name, location, requirement,
+    start and end, and its setup and teardown. Closed bookings - rejected, withdrawn,
+    cancelled, expired - hold nothing, so they are left out. Only those fields are returned.
 AC2 Another organiser's event, or one that does not exist, is not found; every other role is
     refused, and an organiser is still refused ``/bookings/for-event``.
 AC7 (CL-184, Q94-Q96) An open hold carries its expiry, so the page does not show it as confirmed,
