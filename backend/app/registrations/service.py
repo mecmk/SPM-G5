@@ -58,6 +58,7 @@ from app.common.audit import record_audit
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationGuest, RegistrationStatus
 from app.registrations.schemas import (
+    MAX_GUESTS,
     PHONE_NUMBER_REQUIRED_MESSAGE,
     AttendeeDetailsIn,
     GuestIn,
@@ -616,7 +617,7 @@ class EventStarted(WithdrawalRefused):
 class MyRegistrationItem:
     """18.2 AC1: one of the attendee's registrations, with its event, where they stand, and
     whether it can be withdrawn now (AC3). Story 18.5 AC4/AC9: its guests, and whether they can
-    still be changed."""
+    still be changed; AC12: how many guests it may have, for the places left."""
 
     registration: EventRegistration
     event: Event
@@ -624,6 +625,7 @@ class MyRegistrationItem:
     can_withdraw: bool
     guests: list[RegistrationGuest]
     can_change_guests: bool
+    max_guests: int
 
 
 def registration_standing(*, registration_status: str, event_status: str) -> RegistrationStanding:
@@ -654,16 +656,25 @@ def withdrawal_refusal(*, standing: RegistrationStanding) -> WithdrawalRefused:
     return EventStarted()
 
 
+def guest_limit(*, capacity: int, places_taken: int, guests: int) -> int:
+    """Story 18.5 AC6/AC12 (PO, 30 Oct 2026): how many guests a registration holding ``guests``
+    may have - those, and one more for each place left - but never more than ten. On an event
+    already over its capacity (19.2) no place is left, so the limit is the guests it has."""
+    return min(MAX_GUESTS, guests + places_left(capacity=capacity, registered=places_taken))
+
+
 def _my_registration_item(
     registration: EventRegistration,
     event: Event,
     *,
     now: datetime,
     guests: list[RegistrationGuest],
+    places_taken: int,
 ) -> MyRegistrationItem:
     # Registrations are only taken for Confirmed events, and ck_events_submitted_fields_complete
-    # keeps a start on every event past Draft.
+    # keeps a start and an expected attendance on every event past Draft.
     assert event.starts_at is not None
+    assert event.expected_attendance is not None
     standing = registration_standing(
         registration_status=registration.status, event_status=event.status
     )
@@ -674,6 +685,9 @@ def _my_registration_item(
         can_withdraw=can_withdraw(standing=standing, now=now, starts_at=event.starts_at),
         guests=guests,
         can_change_guests=guests_change_refusal(standing=standing, event=event, now=now) is None,
+        max_guests=guest_limit(
+            capacity=event.expected_attendance, places_taken=places_taken, guests=len(guests)
+        ),
     )
 
 
@@ -705,7 +719,11 @@ def list_my_registrations(
     # after them all, and then go latest first.
     upcoming_start = case((Event.starts_at <= now, null()), else_=Event.starts_at)
     rows = db.execute(
-        select(EventRegistration, Event)
+        select(
+            EventRegistration,
+            Event,
+            _places_taken(Event.id).correlate(Event).scalar_subquery(),
+        )
         .join(Event, Event.id == EventRegistration.event_id)
         .where(EventRegistration.id.in_(_latest_per_event(attendee)))
         .order_by(
@@ -715,10 +733,16 @@ def list_my_registrations(
             Event.id,
         )
     ).all()
-    guests = _guests_by_registration(db, [registration.id for registration, _ in rows])
+    guests = _guests_by_registration(db, [registration.id for registration, _, _ in rows])
     return [
-        _my_registration_item(registration, event, now=now, guests=guests.get(registration.id, []))
-        for registration, event in rows
+        _my_registration_item(
+            registration,
+            event,
+            now=now,
+            guests=guests.get(registration.id, []),
+            places_taken=places_taken,
+        )
+        for registration, event, places_taken in rows
     ]
 
 
@@ -772,7 +796,13 @@ def withdraw_registration(
         raise RegistrationNotFound()
     registration, event = found
     guests = list_guests(db, registration.id)
-    item = _my_registration_item(registration, event, now=now, guests=guests)
+    item = _my_registration_item(
+        registration,
+        event,
+        now=now,
+        guests=guests,
+        places_taken=count_active_registrations(db, event.id),
+    )
     if withdrawn.rowcount == 0:
         raise withdrawal_refusal(standing=item.standing)
 
@@ -1045,4 +1075,10 @@ def update_guests(
         commit=False,
     )
     db.commit()
-    return _my_registration_item(registration, event, now=now, guests=guests)
+    return _my_registration_item(
+        registration,
+        event,
+        now=now,
+        guests=guests,
+        places_taken=count_active_registrations(db, event.id),
+    )

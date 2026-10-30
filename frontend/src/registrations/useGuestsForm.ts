@@ -18,8 +18,10 @@ export function findGuestNameProblem(name: string): string | null {
 /** What a form of the attendee's guests holds, for the details dialog and Change guests alike. */
 export interface GuestsForm {
   guests: GuestInput[]
-  /** Story 18.5 AC6: false once ten guests are in the form. */
+  /** Story 18.5 AC6/AC12: false once the form holds as many guests as are allowed. */
   canAdd: boolean
+  /** Story 18.5 AC12: the places left, not the 10-guest limit, are what stop more guests. */
+  isLimitedByPlaces: boolean
   add: () => void
   remove: (index: number) => void
   change: (index: number, guest: GuestInput) => void
@@ -32,15 +34,16 @@ export interface GuestsForm {
   canSend: () => boolean
 }
 
-/** Story 18.5: the state of a form of the attendee's guests. */
-export function useGuestsForm(initial: GuestInput[]): GuestsForm {
+/** Story 18.5: the state of a form of the attendee's guests, holding at most `maxGuests` of them -
+ *  MAX_GUESTS (AC6), or fewer when there are not the places for them (AC12, PO 30 Oct 2026). */
+export function useGuestsForm(initial: GuestInput[], maxGuests: number): GuestsForm {
   const nameInputs = useRef<(HTMLInputElement | null)[]>([])
   const [guests, setGuests] = useState(initial)
   const [isChecked, setIsChecked] = useState(false)
 
   function add() {
     setGuests((current) =>
-      current.length >= MAX_GUESTS
+      current.length >= maxGuests
         ? current
         : [...current, { full_name: '', dietary_requirements: '' }],
     )
@@ -64,7 +67,8 @@ export function useGuestsForm(initial: GuestInput[]): GuestsForm {
 
   return {
     guests,
-    canAdd: guests.length < MAX_GUESTS,
+    canAdd: guests.length < maxGuests,
+    isLimitedByPlaces: maxGuests < MAX_GUESTS,
     add,
     remove,
     change,

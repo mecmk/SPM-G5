@@ -11,6 +11,9 @@ interface AttendeeDetailsDialogProps {
   initial: AttendeeDetails
   /** The event being registered for. */
   eventName: string
+  /** Story 18.5 AC6/AC12: the most guests the attendee may add - ten, or fewer when the event has
+   *  not the places for them. */
+  maxGuests: number
   /** The attendee has never given their details, so they are asked for, not confirmed (AC2). */
   isFirstTime: boolean
   isBusy: boolean
@@ -35,6 +38,7 @@ interface AttendeeDetailsDialogProps {
 export function AttendeeDetailsDialog({
   initial,
   eventName,
+  maxGuests,
   isFirstTime,
   isBusy,
   error,
@@ -42,7 +46,7 @@ export function AttendeeDetailsDialog({
   onCancel,
 }: AttendeeDetailsDialogProps) {
   const form = useAttendeeDetailsForm(initial)
-  const guestsForm = useGuestsForm([])
+  const guestsForm = useGuestsForm([], maxGuests)
 
   function handleConfirm() {
     // The attendee's own details first, so focus goes to the first problem in the dialog.

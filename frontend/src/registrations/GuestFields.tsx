@@ -13,12 +13,13 @@ interface GuestFieldsProps {
  * Story 18.5 - the guests an attendee brings, in the registration dialog and in Change guests
  * alike: a "Guests" group holding one "Guest n" group per guest, each with its name and dietary
  * requirements and nothing else (AC7), and a button to remove them. AC6: "Add a guest" is
- * disabled once there are ten, and the form says why. AC7: a guest's name is required, marked *
+ * disabled once there are ten, and the form says why - AC12, sooner, once the guests fill the
+ * places left (PO, 30 Oct 2026), saying that instead. AC7: a guest's name is required, marked *
  * and announced when missing, tied to its field as the attendee's own are (18.4); their dietary
  * requirements stop at 500 characters, and left blank are recorded as "None".
  */
 export function GuestFields({ form }: GuestFieldsProps) {
-  const { guests, canAdd, add, remove, change, nameProblems, nameInputs } = form
+  const { guests, canAdd, isLimitedByPlaces, add, remove, change, nameProblems, nameInputs } = form
   const ids = useId()
   return (
     <fieldset className="guest-fields stack">
@@ -77,7 +78,13 @@ export function GuestFields({ form }: GuestFieldsProps) {
           </fieldset>
         )
       })}
-      {!canAdd && <p className="small muted">{ERROR_REGISTRY.GUESTS_TOO_MANY.message}</p>}
+      {!canAdd && (
+        <p className="small muted">
+          {isLimitedByPlaces
+            ? ERROR_REGISTRY.GUESTS_NO_PLACES.message
+            : ERROR_REGISTRY.GUESTS_TOO_MANY.message}
+        </p>
+      )}
       <button type="button" className="button-sm secondary" disabled={!canAdd} onClick={add}>
         Add a guest
       </button>

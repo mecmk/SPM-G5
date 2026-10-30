@@ -128,6 +128,7 @@ def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
         can_withdraw=item.can_withdraw,
         guests=item.guests,
         can_change_guests=item.can_change_guests,
+        max_guests=item.max_guests,
     )
 
 

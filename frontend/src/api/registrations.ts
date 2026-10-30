@@ -164,6 +164,9 @@ export interface MyRegistration {
   guests: Guest[]
   /** Story 18.5 AC9: whether the guests can still be changed, decided by the server on its clock. */
   can_change_guests: boolean
+  /** Story 18.5 AC12: how many guests it may have - those it has and one per place left, at most
+   *  MAX_GUESTS - worked out by the server. */
+  max_guests: number
 }
 
 /** Story 18.2 AC1: the signed-in attendee's registrations, one per event, events not yet started

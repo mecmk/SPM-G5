@@ -336,6 +336,7 @@ class MyRegistrationOut(BaseModel):
     can_withdraw: bool
     guests: list[GuestOut]
     can_change_guests: bool
+    max_guests: int  # 18.5 AC12: how many guests it may have, for the places left (at most 10)
 
     @classmethod
     def from_registration(
@@ -347,6 +348,7 @@ class MyRegistrationOut(BaseModel):
         can_withdraw: bool,
         guests: list[RegistrationGuest],
         can_change_guests: bool,
+        max_guests: int,
     ) -> MyRegistrationOut:
         # Registrations are only taken for Confirmed events, and
         # ck_events_submitted_fields_complete guarantees these for every non-DRAFT status.
@@ -365,6 +367,7 @@ class MyRegistrationOut(BaseModel):
             can_withdraw=can_withdraw,
             guests=[GuestOut.from_guest(guest) for guest in guests],
             can_change_guests=can_change_guests,
+            max_guests=max_guests,
         )
 
 

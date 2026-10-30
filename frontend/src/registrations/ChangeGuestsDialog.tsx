@@ -17,6 +17,7 @@ interface ChangeGuestsDialogProps {
  * Story 18.5 AC3 - "Change your guests", opened from a registration on My registrations: the
  * guests registered with it, filled in, to add to, rename or remove. Saving replaces them all;
  * nothing changes until then. AC7: a guest with no name stops the save before anything is sent.
+ * AC12: no more guests than there are places for, as the server works it out (`max_guests`).
  * Save guests is disabled while the save is on its way, so a double-click sends one.
  */
 export function ChangeGuestsDialog({
@@ -26,7 +27,7 @@ export function ChangeGuestsDialog({
   onSave,
   onCancel,
 }: ChangeGuestsDialogProps) {
-  const form = useGuestsForm(guestInputsFrom(registration.guests))
+  const form = useGuestsForm(guestInputsFrom(registration.guests), registration.max_guests)
 
   function handleSave() {
     if (form.canSend()) onSave(form.guests)

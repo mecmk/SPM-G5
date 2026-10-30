@@ -138,6 +138,7 @@ export type ErrorCode =
   | 'ATTENDEE_NAME_REQUIRED'
   | 'GUEST_NAME_REQUIRED'
   | 'GUESTS_TOO_MANY'
+  | 'GUESTS_NO_PLACES'
   | 'GUESTS_CHANGE_REFUSED'
 
 export interface ErrorEntry {
@@ -860,6 +861,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   GUESTS_TOO_MANY: {
     title: 'Too many guests',
     message: 'You can bring at most 10 guests.',
+  },
+  /** AC12 (PO, 30 Oct 2026): shown once the guests fill the places left, before the 10-guest
+   *  limit, so no more can be added; the backend refuses more with NOT_ENOUGH_PLACES_MESSAGE. */
+  GUESTS_NO_PLACES: {
+    title: 'No places left',
+    message: 'There are not enough places left for more guests.',
   },
   /** AC9/AC12: registration closed, the attendee withdrew, the event was cancelled, or not enough
    *  places are left for the guests. The backend's own sentence (always sent) says which. */

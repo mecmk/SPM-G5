@@ -3,6 +3,7 @@ import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   fetchProfile,
   listRegistrationEvents,
+  MAX_GUESTS,
   registerForEvent,
   REGISTRATION_EVENTS_MAX_LIMIT,
   REGISTRATION_EVENTS_PAGE_SIZE,
@@ -83,6 +84,12 @@ function withoutRepeats(
 ): RegistrationEvent[] {
   const shownIds = new Set(shown.map((event) => event.id))
   return [...shown, ...more.filter((event) => !shownIds.has(event.id))]
+}
+
+/** Story 18.5 AC6/AC12 (PO, 30 Oct 2026): how many guests a new registration may bring - one
+ *  per place left after the attendee's own, but never more than MAX_GUESTS. */
+function guestLimit(event: RegistrationEvent): number {
+  return Math.min(MAX_GUESTS, Math.max(event.places_left - 1, 0))
 }
 
 /** AC1: the event as the server now has it for this attendee, until the list is loaded again.
@@ -407,6 +414,7 @@ export function UpcomingEventsPage() {
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={confirmingFor.name}
+          maxGuests={guestLimit(confirmingFor)}
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={registeringId !== null}
           error={detailsError}
