@@ -322,8 +322,8 @@ def test_limit_caps_the_page_and_total_counts_every_request_i_own(organiser_clie
 def test_pages_follow_on_from_each_other_without_overlap(organiser_client):
     everything = _ids(organiser_client)
 
-    first = _ids(organiser_client, "?limit=9&offset=0")
-    second = _ids(organiser_client, "?limit=9&offset=9")
+    first = _ids(organiser_client, "?limit=10&offset=0")
+    second = _ids(organiser_client, "?limit=10&offset=10")
 
     assert first + second == everything
 
