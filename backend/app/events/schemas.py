@@ -606,6 +606,9 @@ class EquipmentLineOut(BaseModel):
     # nothing, its event's. Both None for a draft's item before the event has dates.
     period_starts_at: datetime | None
     period_ends_at: datetime | None
+    # Story 17.2 AC3: when the coordinator withdrew it, and who; both None unless it is withdrawn.
+    withdrawn_at: datetime | None
+    withdrawn_by_name: str | None
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
@@ -627,6 +630,10 @@ class EquipmentLineOut(BaseModel):
             decided_by_name=line.decided_by.full_name if line.decided_by is not None else None,
             period_starts_at=held_for.starts_at,
             period_ends_at=held_for.ends_at,
+            withdrawn_at=line.withdrawn_at,
+            withdrawn_by_name=line.withdrawn_by.full_name
+            if line.withdrawn_by is not None
+            else None,
         )
 
 

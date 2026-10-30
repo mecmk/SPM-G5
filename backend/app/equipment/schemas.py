@@ -1,5 +1,6 @@
 """Request and response models for an event's equipment items (story 15.1), Technical Support's
-queue of them (story 15.2) and Technical Support's decision on each (story 16.1).
+queue of them (story 15.2), Technical Support's decision on each (story 16.1) and the coordinator
+withdrawing one (story 17.2).
 
 An item in a 15.1 response is ``EquipmentLineOut`` from ``app/events/schemas.py``, the shape the
 event page already reads, so an item looks the same whichever of those endpoints returns it.
@@ -86,13 +87,15 @@ class EventEquipmentAvailabilityOut(BaseModel):
 
 class EquipmentQueueStatus(StrEnum):
     """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Story 6.2 AC15:
-    Cancelled, read-only, for the items once sent to them. Any other item status is not a tab, so
-    asking for one is a 422 rather than an empty list."""
+    Cancelled, read-only, for the items once sent to them. Story 17.2 AC4: Withdrawn, read-only,
+    for the items their coordinator withdrew. Any other item status is not a tab, so asking for
+    one is a 422 rather than an empty list."""
 
     PENDING = EquipmentRequestStatus.PENDING
     ACCEPTED = EquipmentRequestStatus.ACCEPTED
     DECLINED = EquipmentRequestStatus.DECLINED
     CANCELLED = EquipmentRequestStatus.CANCELLED
+    WITHDRAWN = EquipmentRequestStatus.WITHDRAWN
 
 
 class EquipmentQueueOrder(StrEnum):
@@ -139,6 +142,24 @@ class EquipmentDecisionIn(BaseModel):
         return self
 
 
+class WithdrawableStatus(StrEnum):
+    """Story 17.2 AC6: the statuses an item can be withdrawn from - sent to Technical Support and
+    still holding its units. Anything else is a 422."""
+
+    PENDING = EquipmentRequestStatus.PENDING
+    ACCEPTED = EquipmentRequestStatus.ACCEPTED
+
+
+class EquipmentWithdrawalIn(BaseModel):
+    """Story 17.2: the coordinator withdraws an item. AC11: ``expected_status`` is the status they
+    saw when they confirmed, so a decision Technical Support saved meanwhile is not withdrawn over
+    unseen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: WithdrawableStatus
+
+
 class EquipmentQueueEntry(BaseModel):
     """Story 15.2 AC1: the event's name and dates, the item's type, quantity and technical notes,
     and who sent it and when - ``None`` when that was never recorded (an item sent before
@@ -146,7 +167,8 @@ class EquipmentQueueEntry(BaseModel):
     AC2: ``available`` for the event's period, not counting the event's own hold, and
     ``shortfall``, how many more were requested than that. Story 16.1 AC2/AC3: who decided it and
     when, and the reason for declining - each ``None`` until decided, and for items decided
-    before migration 016. No defaults (response schema)."""
+    before migration 016. Story 17.2 AC4: who withdrew it and when - each ``None`` unless it is
+    withdrawn. No defaults (response schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -169,6 +191,8 @@ class EquipmentQueueEntry(BaseModel):
     # Story 6.2 AC16: when a cancelled item was cancelled; None otherwise, and for one cancelled
     # before migration 026.
     cancelled_at: datetime | None
+    withdrawn_at: datetime | None
+    withdrawn_by_name: str | None
 
     @classmethod
     def from_item(
@@ -193,6 +217,8 @@ class EquipmentQueueEntry(BaseModel):
             decided_at=item.decided_at,
             decision_reason=item.status_notes,
             cancelled_at=item.cancelled_at,
+            withdrawn_at=item.withdrawn_at,
+            withdrawn_by_name=None if item.withdrawn_by is None else item.withdrawn_by.full_name,
         )
 
 
@@ -207,6 +233,8 @@ class EquipmentQueueCounts(BaseModel):
     declined: int
     # Story 6.2 AC15.
     cancelled: int
+    # Story 17.2 AC4.
+    withdrawn: int
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> EquipmentQueueCounts:

@@ -53,7 +53,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, delete, event, func, select
+from sqlalchemy import Engine, delete, event, func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -794,6 +794,12 @@ def test_an_equipment_notice_whose_item_was_removed_sends_technical_support_to_t
     )
     coordinator = login_as(Users.COORDINATOR)
     item_id = _send_one_item(coordinator, db, event)
+    # New dates flagged it (15.1 AC8), so it holds nothing and is no longer Technical Support's;
+    # a sent item still Pending is withdrawn instead, and stays in their queue (17.2 AC2, AC4).
+    db.execute(
+        text("UPDATE event_equipment_requests SET status = 'UNAVAILABLE' WHERE id = :id"),
+        {"id": item_id},
+    )
     removed = coordinator.delete(f"/events/{event.id}/equipment/{item_id}")
     assert removed.status_code == 204, removed.text
 
