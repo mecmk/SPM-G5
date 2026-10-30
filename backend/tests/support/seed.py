@@ -47,6 +47,9 @@ class Users:
     ATTENDEE_4 = SeedUser(_u(18402), "attendee4@example.com", "ATTENDEE", "Dion Attendee")
     ATTENDEE_5 = SeedUser(_u(18403), "attendee5@example.com", "ATTENDEE", "Esme Attendee")
     ATTENDEE_6 = SeedUser(_u(18412), "attendee6@example.com", "ATTENDEE", "Finn Attendee")
+    # Story 18.5: one attendee per e2e flow with guests (register-guests.spec.ts).
+    ATTENDEE_7 = SeedUser(_u(18501), "attendee7@example.com", "ATTENDEE", "Gina Attendee")
+    ATTENDEE_8 = SeedUser(_u(18502), "attendee8@example.com", "ATTENDEE", "Hana Attendee")
     # Story 20.2: owns the notification bell's e2e spec, with nine notifications of her own. Left
     # out of ALL_ACTIVE and ONE_PER_ROLE, which tests take to have none.
     NOTICE = SeedUser(_u(20201), "nadia@notice.example", "EVENT_ORGANISER", "Nadia Notice")
@@ -66,6 +69,8 @@ class Users:
         ATTENDEE_4,
         ATTENDEE_5,
         ATTENDEE_6,
+        ATTENDEE_7,
+        ATTENDEE_8,
     )
     ONE_PER_ROLE = (
         ORGANISER,
@@ -218,6 +223,9 @@ class Events:
     BOOK_CLUB = _e(18406)  # open; Users.ATTENDEE_4 registers after changing their details
     CHARITY_QUIZ = _e(18407)  # open; Users.ATTENDEE_5 registered for it before
     FOOD_TASTING_WALK = _e(18408)  # registration closed 1 Oct 2026; Aiden and Bella registered
+    # Story 18.5's, CONFIRMED and Public: organiser 2, coordinator 2, January 2029.
+    BATIK_WORKSHOP = _e(18503)  # open; Users.ATTENDEE_7 registers with two guests
+    KITE_AFTERNOON = _e(18504)  # open; Users.ATTENDEE_8 registered on her own, adds a guest
 
 
 class Bookings:
@@ -286,7 +294,8 @@ class Registrations:
     """Story 18.1: Users.ATTENDEE_2's place at Events.PORTFOLIO_REVIEW, its only one. Story 18.2:
     Users.ATTENDEE's, one for each of 18.2's events, named after it. Story 18.4: Users.ATTENDEE_5's
     at Events.CHARITY_QUIZ, and Users.ATTENDEE's and Users.ATTENDEE_2's at
-    Events.FOOD_TASTING_WALK."""
+    Events.FOOD_TASTING_WALK. Story 18.5: Users.ATTENDEE_8's at Events.KITE_AFTERNOON, without
+    guests."""
 
     PORTFOLIO_REVIEW = uuid.UUID("18181818-0000-0000-0000-000000000001")
     POETRY_NIGHT = uuid.UUID("18181818-0000-0000-0000-000000000002")
@@ -300,6 +309,7 @@ class Registrations:
     CHARITY_QUIZ_ESME = uuid.UUID("18181818-0000-0000-0000-000000018409")
     FOOD_TASTING_WALK_AIDEN = uuid.UUID("18181818-0000-0000-0000-000000018410")
     FOOD_TASTING_WALK_BELLA = uuid.UUID("18181818-0000-0000-0000-000000018411")
+    KITE_AFTERNOON_HANA = uuid.UUID("18181818-0000-0000-0000-000000018505")
 
 
 class Unavailability:

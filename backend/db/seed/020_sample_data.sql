@@ -2054,3 +2054,68 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- ---------------------------------------------------------------------
+-- Story 18.5: registering with guests, and tests/e2e/register-guests.spec.ts. Each flow has an
+-- attendee of its own, since specs run in parallel: Gina (01) registers for the batik workshop
+-- (03) with two guests; Hana (02) is registered for the kite afternoon (04) on her own (05) and
+-- adds a guest to it. Both gave their details before, so neither is asked for them. Every id is
+-- in the story's 0185NN block. The events are Confirmed, Public, organiser 2 and coordinator 2,
+-- self-assigned as 18.4's are, in January 2029, after every other event attendees can register
+-- for, so 18.1's list keeps its order and one page.
+-- ---------------------------------------------------------------------
+INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department,
+                   dietary_requirements, attendee_details_confirmed_at) VALUES
+    ('11111111-0000-0000-0000-000000018501', 'attendee7@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Gina Attendee', 'ATTENDEE', NULL, '+65 9185 0101', NULL,
+     NULL, '2026-10-01 09:00+08'),
+    ('11111111-0000-0000-0000-000000018502', 'attendee8@example.com', 'scrypt$16384$8$1$00112233445566778899aabbccddeeff$c911d27275ec36c9f4b0608f60483cab696b762b352b511362f66e809e89f6fe', 'Hana Attendee', 'ATTENDEE', NULL, '+65 9185 0202', NULL,
+     NULL, '2026-10-01 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
+    role_code = EXCLUDED.role_code, organisation_id = EXCLUDED.organisation_id,
+    phone = EXCLUDED.phone, department = EXCLUDED.department,
+    dietary_requirements = EXCLUDED.dietary_requirements,
+    attendee_details_confirmed_at = EXCLUDED.attendee_details_confirmed_at;
+
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, accessibility_none_required, is_public,
+                    registration_required, registration_opens_at, registration_closes_at,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at) VALUES
+    ('33333333-0000-0000-0000-000000018503', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Batik Printing Workshop', 'Community event', 'Wax, dye and a cotton square to take home.', '2029-01-06 10:00+08', '2029-01-06 13:00+08', 30, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2029-01-05 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08'),
+    ('33333333-0000-0000-0000-000000018504', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Kite Flying Afternoon', 'Community event', 'Bring a kite, or make one on the day.', '2029-01-13 15:00+08', '2029-01-13 18:00+08', 30, 'CONFIRMED',
+     '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2029-01-12 18:00+08',
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, is_public = EXCLUDED.is_public,
+    registration_required = EXCLUDED.registration_required,
+    registration_opens_at = EXCLUDED.registration_opens_at, registration_closes_at = EXCLUDED.registration_closes_at,
+    contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
+    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
+
+INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000018503', '33333333-0000-0000-0000-000000018503', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
+    ('aaaaaaaa-0000-0000-0000-000000018504', '33333333-0000-0000-0000-000000018504', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08')
+ON CONFLICT (id) DO NOTHING;
+
+-- Hana's place at the kite afternoon, on her own. As with 18.4's rows above, a row whose attendee
+-- has registered for its event again since is left as it is.
+INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_at, withdrawn_at) VALUES
+    ('18181818-0000-0000-0000-000000018505', '33333333-0000-0000-0000-000000018504', '11111111-0000-0000-0000-000000018502',
+     'REGISTERED', '2026-10-20 09:00+08', NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, attendee_id = EXCLUDED.attendee_id, status = EXCLUDED.status,
+    registered_at = EXCLUDED.registered_at, withdrawn_at = EXCLUDED.withdrawn_at
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_registrations AS newer
+    WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
+      AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);

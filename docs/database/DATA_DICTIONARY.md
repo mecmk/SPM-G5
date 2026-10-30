@@ -50,6 +50,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.2 | Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2) |
 | Registration | [`event_registrations`](#event_registrations) | 18.1 (browse and register), 18.2 (view and withdraw), 18.3 (the organiser's list) | An attendee's registration for an event |
+| Registration | [`event_registration_guests`](#event_registration_guests) | 18.5 | The guests an attendee brings, registered with them as one group |
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
 | Notifications & audit | [`audit_log`](#audit_log) | 7.4 and the auditability requirement (who changed what, when) | Generic append-only record of significant actions |
 | Infrastructure | [`schema_migrations`](#schema_migrations) | - | Infrastructure |
@@ -820,6 +821,27 @@ Rules and indexes:
 
 - unique index `uq_event_registrations_active`: `btree (event_id, attendee_id) WHERE (status = 'REGISTERED'::text)`
 - index `ix_event_registrations_attendee`: `btree (attendee_id)`
+
+### event_registration_guests
+
+**Stories:** 18.5
+
+The guests an attendee brings, registered with them as one group. Each takes a place at the event while the registration is Registered (AC2); written with the registration and replaced whole when the attendee changes them (AC1, AC3).
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `registration_id` | `uuid` | no | - | FK → `event_registrations.id` | FK -> event_registrations.id. The registration the guest came with; its status is the guest's (AC7, AC8). |
+| `position` | `smallint` | no | - | - | The guest's place in the attendee's list, from 1. At most 10, so a group is at most 11 (AC6); unique within a registration (uq_event_registration_guests_position). |
+| `full_name` | `text` | no | - | - | The guest's name, at most 200 characters; never blank (AC6). Guests have no phone number, email or account (AC1, AC10). |
+| `dietary_requirements` | `text` | yes | - | - | The guest's dietary requirements, at most 500 characters (AC1). NULL when none were given, shown as "None"; never blank. |
+
+Rules and indexes:
+
+- unique `uq_event_registration_guests_position`: `UNIQUE (registration_id, "position")`
+- check `ck_event_registration_guests_dietary_requirements`: `CHECK (((btrim(dietary_requirements) <> ''::text) AND (char_length(dietary_requirements) <= 500)))`
+- check `ck_event_registration_guests_full_name`: `CHECK (((btrim(full_name) <> ''::text) AND (char_length(full_name) <= 200)))`
+- check `ck_event_registration_guests_position`: `CHECK ((("position" >= 1) AND ("position" <= 10)))`
 
 ## Notifications & audit
 
