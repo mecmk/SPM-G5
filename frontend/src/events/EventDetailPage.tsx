@@ -15,6 +15,7 @@ import {
   respondToClarification,
   type Clarification,
   type EventDetail,
+  type EventStatus,
   type RequiredFacility,
   type VenueRequirement,
 } from '../api/events'
@@ -94,7 +95,12 @@ import {
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
-import { BOOKING_OUTCOME, formatMinutesDuration } from './bookingOutcome'
+import {
+  BOOKING_OUTCOME,
+  formatMinutesDuration,
+  OPEN_HOLD_MESSAGE,
+  VENUE_UNAVAILABLE_NOTE,
+} from './bookingOutcome'
 import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
@@ -102,6 +108,8 @@ import { SafetyReviewSection } from './SafetyReviewSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
+/** Fix f7.1.2 AC8 (CL-184): an event that holds no bookings for its organiser to see. */
+const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCELLED']
 
 /** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
@@ -116,12 +124,6 @@ function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
   }
   return BOOKING_OUTCOME[booking.status].message
 }
-
-/** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
- * open is held for the event only until the event is confirmed or the hold expires, so it does
- * not read as confirmed for good. */
-const OPEN_HOLD_MESSAGE =
-  'Venue Staff approved this booking. The venue is held for the event until it is confirmed, or until the hold expires.'
 
 /** One required facility, as its quantity and notes make it distinct. */
 function describeFacility(facility: RequiredFacility): string {
@@ -237,12 +239,14 @@ export function EventDetailPage() {
   } | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
-  /** Fix f7.1.2: the organiser reads their own event's bookings through `bookings:read_own`. */
+  /** Fix f7.1.2: the organiser reads their own event's bookings through `bookings:read_own`; AC8
+   *  (CL-184) not on a Rejected or Cancelled event, and gone as soon as they cancel it. */
   const canReadOwnBookings =
     event !== null &&
     user !== null &&
     event.organiser_id === user.id &&
-    can(PERMISSIONS.BOOKINGS_READ_OWN)
+    can(PERMISSIONS.BOOKINGS_READ_OWN) &&
+    !NO_BOOKINGS_SECTION_STATUSES.includes(event.status)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -1139,10 +1143,7 @@ export function EventDetailPage() {
                         <p>
                           <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
                           <br />
-                          <span className="small muted">
-                            Venue Staff marked this venue unavailable for part of the booked period.
-                            The booking is kept for reference.
-                          </span>
+                          <span className="small muted">{VENUE_UNAVAILABLE_NOTE}</span>
                         </p>
                       )}
                       {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
@@ -1260,7 +1261,9 @@ export function EventDetailPage() {
           </EmptyState>
         )}
 
-        {canReadOwnBookings && <OrganiserBookingsSection eventId={event.id} />}
+        {canReadOwnBookings && (
+          <OrganiserBookingsSection eventId={event.id} isFlagged={isVenueFlagged} />
+        )}
 
         <EquipmentRequestsSection
           eventId={event.id}

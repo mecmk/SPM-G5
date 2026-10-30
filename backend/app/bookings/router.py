@@ -163,7 +163,8 @@ def list_bookings_for_own_event(
 ) -> list[OrganiserBooking]:
     """Fix f7.1.2 (story 7.1): AC1 the organiser reads their own event's approved and pending
     bookings, without the internal detail ``/for-event`` returns; AC2 another organiser's event
-    is not found. Declared above ``/{booking_id}``, as ``/for-event`` is."""
+    is not found; AC7 each one's hold and 9.4 mark, but not who changed the hold. Declared above
+    ``/{booking_id}``, as ``/for-event`` is."""
     try:
         bookings = service.list_bookings_for_own_event(db, event_id, viewer=actor)
     except service.EventNotFound:

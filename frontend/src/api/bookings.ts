@@ -411,6 +411,11 @@ export interface OrganiserBooking {
   setup_minutes: number
   teardown_minutes: number
   status: BookingStatus
+  /** AC7 (CL-184): the hold, so an open one does not read as confirmed. */
+  hold_expires_at: string | null
+  hold_completed_at: string | null
+  /** AC7: when the booking was marked under story 9.4; null when unmarked. */
+  venue_unavailable_marked_at: string | null
 }
 
 /** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most

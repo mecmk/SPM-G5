@@ -401,7 +401,9 @@ class OrganiserBooking(BaseModel):
     """Fix f7.1.2 (story 7.1 AC1): one venue booking as the event's organiser reads it - which
     venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
     Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
-    out."""
+    out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
+    confirmed, and when the booking was marked under story 9.4 - but not who changed the expiry,
+    or why."""
 
     id: uuid.UUID
     venue_name: str
@@ -413,6 +415,10 @@ class OrganiserBooking(BaseModel):
     setup_minutes: int
     teardown_minutes: int
     status: str
+    hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
+    # None when unmarked, and once the booking is closed (``venue_unavailable_mark``).
+    venue_unavailable_marked_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
@@ -428,6 +434,9 @@ class OrganiserBooking(BaseModel):
             setup_minutes=booking.setup_minutes,
             teardown_minutes=booking.teardown_minutes,
             status=booking.status,
+            hold_expires_at=booking.hold_expires_at,
+            hold_completed_at=booking.hold_completed_at,
+            venue_unavailable_marked_at=booking.venue_unavailable_mark,
         )
 
 

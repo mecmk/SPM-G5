@@ -12,6 +12,11 @@ AC1 The organiser sees each approved or pending booking of their event (decided 
     fields are returned.
 AC2 Another organiser's event, or one that does not exist, is not found; every other role is
     refused, and an organiser is still refused ``/bookings/for-event``.
+AC7 (CL-184, Q94-Q96) An open hold carries its expiry, so the page does not show it as confirmed,
+    and a hold its event's confirmation completed says when; who changed the expiry, and why, is
+    not returned. A booking marked under story 9.4 says when it was marked.
+
+AC4, AC8 and AC9 are how the page shows these bookings: tests/e2e/events.spec.ts.
 
 Conflict cases do not apply: the endpoint only reads.
 
@@ -49,6 +54,9 @@ _SAFE_FIELDS = {
     "setup_minutes",
     "teardown_minutes",
     "status",
+    "hold_expires_at",
+    "hold_completed_at",
+    "venue_unavailable_marked_at",
 }
 
 
@@ -196,6 +204,57 @@ def test_only_the_organisers_fields_are_returned(organiser_client, db: Session):
     [entry] = organiser_client.get(_path(event.id)).json()
 
     assert set(entry) == _SAFE_FIELDS
+
+
+# --- AC7: the hold, and a venue marked unavailable --------------------------------------------
+@pytest.mark.story("7.1", ac=7)
+def test_an_open_hold_carries_its_expiry(organiser_client, db: Session):
+    event = _event(db)
+    expires_at = datetime.now(UTC) + timedelta(days=3)
+    _booking(db, event, hold_expires_at=expires_at)
+
+    [entry] = organiser_client.get(_path(event.id)).json()
+
+    assert datetime.fromisoformat(entry["hold_expires_at"]) == expires_at
+    assert entry["hold_completed_at"] is None
+
+
+@pytest.mark.story("7.1", ac=7)
+def test_a_hold_its_events_confirmation_completed_says_when(organiser_client, db: Session):
+    event = _event(db)
+    completed_at = datetime.now(UTC) - timedelta(hours=2)
+    _booking(db, event, hold_completed_at=completed_at)
+
+    [entry] = organiser_client.get(_path(event.id)).json()
+
+    assert datetime.fromisoformat(entry["hold_completed_at"]) == completed_at
+
+
+@pytest.mark.story("7.1", ac=7)
+def test_who_changed_a_holds_expiry_and_why_are_not_returned(organiser_client, db: Session):
+    event = _event(db)
+    _booking(
+        db,
+        event,
+        hold_expiry_change_reason="The coordinator asked for two more days.",
+        hold_expiry_changed_by_id=Users.VENUE_STAFF.id,
+        hold_expiry_changed_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+
+    [entry] = organiser_client.get(_path(event.id)).json()
+
+    assert set(entry) == _SAFE_FIELDS
+
+
+@pytest.mark.story("7.1", ac=7)
+def test_a_booking_marked_unavailable_says_when(login_as):
+    """Events.LANTERN_SHOWCASE is Omar's, its approved Exhibition Foyer booking marked "Venue
+    unavailable - alternative needed" by the foyer's closure that day (story 9.4)."""
+    client = login_as(Users.ORGANISER_2)
+
+    by_id = {entry["id"]: entry for entry in client.get(_path(Events.LANTERN_SHOWCASE)).json()}
+
+    assert by_id[str(Bookings.LANTERN_SHOWCASE_FOYER)]["venue_unavailable_marked_at"] is not None
 
 
 # --- AC2: only the event's own organiser -----------------------------------------------------

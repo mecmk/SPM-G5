@@ -61,3 +61,14 @@ export function formatMinutesDuration(minutes: number): string {
   if (remainder > 0) parts.push(`${remainder} min`)
   return parts.join(' ')
 }
+
+/** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
+ * open is held for the event only until the event is confirmed or the hold expires, so it does
+ * not read as confirmed for good. */
+export const OPEN_HOLD_MESSAGE =
+  'Venue Staff approved this booking. The venue is held for the event until it is confirmed, or until the hold expires.'
+
+/** Story 9.4 AC3: under the "Venue unavailable - alternative needed" chip, on the coordinator's
+ * and (fix f7.1.2 AC7) the organiser's booking card. */
+export const VENUE_UNAVAILABLE_NOTE =
+  'Venue Staff marked this venue unavailable for part of the booked period. The booking is kept for reference.'
