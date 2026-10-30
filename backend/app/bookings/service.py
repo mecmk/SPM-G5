@@ -641,7 +641,13 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
 
 
 def _notify_venue_staff_of_release(
-    db: Session, booking: VenueBooking, *, actor: User, cause: str, because: str, reason: str
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor: User,
+    cause: str,
+    because: str | None,
+    reason: str | None,
 ) -> None:
     """Story 19.2 AC5, story 6.2 AC5: every active Venue Staff member is told a booking was
     released, and ``because`` says why, as they are of a withdrawal (12.2 AC2), since their
@@ -789,7 +795,7 @@ def release_booking(
         commit=False,
     )
     _notify_venue_staff_of_release(
-        db, booking, actor=actor, cause=cause, because=str(because), reason=str(reason)
+        db, booking, actor=actor, cause=cause, because=because, reason=reason
     )
     return True
 
