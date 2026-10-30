@@ -1,5 +1,6 @@
 import type { BookingStatus } from '../api/bookings'
 import type { IconName } from '../components/Icon'
+import { NONE } from '../shared/format'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
@@ -53,7 +54,7 @@ export const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> 
 
 /** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
 export function formatMinutesDuration(minutes: number): string {
-  if (minutes === 0) return 'None'
+  if (minutes === 0) return NONE
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
   const parts: string[] = []
