@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import {
-  listBookingsForEvent,
-  withdrawBooking,
-  type BookingOutcome,
-  type BookingStatus,
-} from '../api/bookings'
+import { listBookingsForEvent, withdrawBooking, type BookingOutcome } from '../api/bookings'
 import { cancelEvent } from '../api/cancellations'
 import { formatApiError, mediaUrl } from '../api/client'
 import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/changeRequests'
@@ -20,6 +15,7 @@ import {
   respondToClarification,
   type Clarification,
   type EventDetail,
+  type EventStatus,
   type RequiredFacility,
   type VenueRequirement,
 } from '../api/events'
@@ -33,7 +29,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
-import { Icon, type IconName } from '../components/Icon'
+import { Icon } from '../components/Icon'
 import { RegistrationCount } from '../components/RegistrationCount'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
@@ -105,62 +101,21 @@ import {
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
+import {
+  BOOKING_OUTCOME,
+  formatMinutesDuration,
+  OPEN_HOLD_MESSAGE,
+  VENUE_UNAVAILABLE_NOTE,
+} from './bookingOutcome'
+import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
 import { SafetyReviewSection } from './SafetyReviewSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
-
-/** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
- * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
-interface BookingOutcomePresentation {
-  label: string
-  tone: 'success' | 'warning' | 'danger' | 'neutral'
-  icon: IconName
-  message: string
-}
-
-const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> = {
-  APPROVED: {
-    label: 'Approved',
-    tone: 'success',
-    icon: 'check-circle',
-    message: 'This venue booking has been approved and the venue is confirmed for this event.',
-  },
-  PENDING: {
-    label: 'Pending',
-    tone: 'warning',
-    icon: 'clock',
-    message: 'Awaiting review by Venue Staff.',
-  },
-  REJECTED: {
-    label: 'Rejected',
-    tone: 'danger',
-    icon: 'x-circle',
-    message: 'This booking request was rejected.',
-  },
-  WITHDRAWN: {
-    label: 'Withdrawn',
-    tone: 'neutral',
-    icon: 'x-circle',
-    message: 'This booking request was withdrawn.',
-  },
-  CANCELLED: {
-    label: 'Cancelled',
-    tone: 'neutral',
-    icon: 'x-circle',
-    message: 'This booking was cancelled.',
-  },
-  // Story 12.7 AC8: kept as history once its hold lapsed.
-  EXPIRED: {
-    label: 'Expired',
-    tone: 'neutral',
-    icon: 'clock',
-    message:
-      "This booking's hold expired before the event was confirmed, so the venue was released.",
-  },
-}
+/** Fix f7.1.2 AC8 (CL-184): an event that holds no bookings for its organiser to see. */
+const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCELLED']
 
 /** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
@@ -176,12 +131,6 @@ function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
   }
   return BOOKING_OUTCOME[booking.status].message
 }
-
-/** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still
- * open is held for the event only until the event is confirmed or the hold expires, so it does
- * not read as confirmed for good. */
-const OPEN_HOLD_MESSAGE =
-  'Venue Staff approved this booking. The venue is held for the event until it is confirmed, or until the hold expires.'
 
 /** One required facility, as its quantity and notes make it distinct. */
 function describeFacility(facility: RequiredFacility): string {
@@ -297,6 +246,14 @@ export function EventDetailPage() {
   } | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
   const canReadBooking = can(PERMISSIONS.BOOKINGS_READ)
+  /** Fix f7.1.2: the organiser reads their own event's bookings through `bookings:read_own`; AC8
+   *  (CL-184) not on a Rejected or Cancelled event, and gone as soon as they cancel it. */
+  const canReadOwnBookings =
+    event !== null &&
+    user !== null &&
+    event.organiser_id === user.id &&
+    can(PERMISSIONS.BOOKINGS_READ_OWN) &&
+    !NO_BOOKINGS_SECTION_STATUSES.includes(event.status)
   const [isConfirmingApprove, setIsConfirmingApprove] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approveError, setApproveError] = useState<string | null>(null)
@@ -1195,10 +1152,7 @@ export function EventDetailPage() {
                         <p>
                           <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
                           <br />
-                          <span className="small muted">
-                            Venue Staff marked this venue unavailable for part of the booked period.
-                            The booking is kept for reference.
-                          </span>
+                          <span className="small muted">{VENUE_UNAVAILABLE_NOTE}</span>
                         </p>
                       )}
                       {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
@@ -1314,6 +1268,10 @@ export function EventDetailPage() {
             No venue booking requests yet.{' '}
             <Link to={VENUE_CATALOGUE_PATH}>Browse the venue catalogue</Link> to request one.
           </EmptyState>
+        )}
+
+        {canReadOwnBookings && (
+          <OrganiserBookingsSection eventId={event.id} isFlagged={isVenueFlagged} />
         )}
 
         <EquipmentRequestsSection

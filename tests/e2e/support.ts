@@ -53,6 +53,8 @@ export const EVENTS = {
   // booking of Sunrise Studio, a Harbour Pavilion booking an earlier change cancelled, and four
   // wireless microphones sent to Technical Support. The 6.2 spec cancels it.
   charityRun: '33333333-0000-0000-0000-000000000062',
+  // Fix f7.1.2, organiser: a two-day booking of Sunrise Studio; events.spec.ts cancels it.
+  leadershipRetreat: '33333333-0000-0000-0000-000000007012',
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
   // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides

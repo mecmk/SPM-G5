@@ -405,6 +405,49 @@ class BookingQueue(BaseModel):
     counts: BookingStatusCounts
 
 
+class OrganiserBooking(BaseModel):
+    """Fix f7.1.2 (story 7.1 AC1): one venue booking as the event's organiser reads it - which
+    venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
+    Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
+    out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
+    confirmed, and when the booking was marked under story 9.4 - but not who changed the expiry,
+    or why."""
+
+    id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    # None for an additional venue (story 12.5 AC5).
+    venue_requirement_name: str | None
+    starts_at: datetime
+    ends_at: datetime
+    setup_minutes: int
+    teardown_minutes: int
+    status: str
+    hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
+    # None when unmarked, and once the booking is closed (``venue_unavailable_mark``).
+    venue_unavailable_marked_at: datetime | None
+
+    @classmethod
+    def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
+        return cls(
+            id=booking.id,
+            venue_name=booking.venue.name,
+            venue_location=booking.venue.location,
+            venue_requirement_name=(
+                None if booking.venue_requirement is None else booking.venue_requirement.name
+            ),
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            status=booking.status,
+            hold_expires_at=booking.hold_expires_at,
+            hold_completed_at=booking.hold_completed_at,
+            venue_unavailable_marked_at=booking.venue_unavailable_mark,
+        )
+
+
 class BookingOutcome(BaseModel):
     """13.2.1 AC4: one venue booking's outcome as the event page shows it - venue name/location
     rather than a raw id, since this is a read-only summary for that page, not the full record

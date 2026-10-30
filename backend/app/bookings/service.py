@@ -640,6 +640,26 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
     )
 
 
+def list_bookings_for_own_event(
+    db: Session, event_id: uuid.UUID, *, viewer: User
+) -> list[VenueBooking]:
+    """Fix f7.1.2 (story 7.1 AC1): the bookings of the viewer's own event that hold a venue -
+    approved, or pending while Venue Staff decide - most recent first, as
+    ``list_bookings_for_event`` orders them. AC2: an event that is not the viewer's is not
+    found, as ``events_service.get_event`` answers it."""
+    event = db.get(Event, event_id)
+    if event is None or event.organiser_id != viewer.id:
+        raise EventNotFound(event_id)
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES))
+            .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.venue_requirement))
+            .order_by(VenueBooking.created_at.desc(), VenueBooking.id.desc())
+        ).all()
+    )
+
+
 def _notify_venue_staff_of_release(
     db: Session,
     booking: VenueBooking,
