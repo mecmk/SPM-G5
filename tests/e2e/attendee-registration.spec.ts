@@ -350,6 +350,7 @@ test('18.1 AC1: a failed next page is no longer reported once the list is loaded
           event_id: first.id,
           status: 'REGISTERED',
           registered_at: '2026-10-15T02:00:00Z',
+          guests: [],
         }),
       })
     },
@@ -539,6 +540,7 @@ test('18.1 AC6: while one registration is being sent, no other Register can be p
           event_id: sending.id,
           status: 'REGISTERED',
           registered_at: '2026-10-15T02:00:00Z',
+          guests: [],
         }),
       })
     },

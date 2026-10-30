@@ -16,10 +16,15 @@ export function isBooked(booking: BookingOutcome): boolean {
   return booking.status === APPROVED
 }
 
+/** Story 2.7 AC8: what an unnamed requirement is called - its place on the form, from 1. */
+export function unnamedRequirementLabel(position: number): string {
+  return `Venue requirement ${position}`
+}
+
 /** Story 2.7 AC8: a requirement's name, or its place when a draft left it unnamed. */
 export function requirementName(event: EventDetail, requirement: VenueRequirement): string {
   return (
-    requirement.name ?? `Venue requirement ${event.venue_requirements.indexOf(requirement) + 1}`
+    requirement.name ?? unnamedRequirementLabel(event.venue_requirements.indexOf(requirement) + 1)
   )
 }
 

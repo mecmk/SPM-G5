@@ -29,6 +29,9 @@ Decisions agreed 16 Oct 2026, beyond the ACs' wording:
   lets the event be confirmed (21.2's Confirm), whatever status the change was approved in.
 * A pending request whose recorded current value no longer matches the event - another request's
   approval moved it - is marked out of date, and can only be rejected.
+* Fix f19.1.2 (Q81, CL-172): approving an attendance change below a venue requirement's number
+  of people is refused with the minimum and the requirement setting it, and the request stays
+  pending until a venue requirements change lowering it is approved.
 
 Fix f19.2.1 (CL-176, replacing CL-141 (2)):
 * The event's attendance outgrowing what a booking was made for - an additional venue, or a
@@ -88,6 +91,12 @@ _CHANGE_REQUEST_NOT_FOUND = "Change request not found."
 _MAX_REASON = 2000
 # Story 19.3 AC7: sent with an approval whose impact could not be read, so its own refusal answers.
 _ANY_FINGERPRINT = "not-assessed"
+# Fix f19.1.2: an approval that would leave a venue requirement needing more people than the new
+# attendance names the requirement that sets the minimum, the minimum itself, and what comes first.
+_ATTENDANCE_BELOW_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. A venue requirements change that lowers it must be approved first."
+)
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -606,8 +615,8 @@ def test_approval_refused_by_a_creation_rule_changes_nothing(coordinator_client,
     response = _approve(coordinator_client, request)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Main hall needs room for more people than the new expected attendance."
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Main hall"
     )
     assert _attendance(db, event.id) == 200
     _assert_undecided(db, request)
@@ -625,9 +634,95 @@ def test_an_unnamed_requirement_is_named_by_its_position(coordinator_client, db:
     response = _approve(coordinator_client, request)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Venue requirement 2 needs room for more people than the new expected attendance."
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Venue requirement 2"
     )
+
+
+# Fix f19.1.2 (Q81, CL-172): an attendance change raised beside the venue requirements change
+# that makes room for it waits for that change to be approved first. The two are not linked.
+
+
+def _hall_and_both_changes(login_as, db: Session):
+    """An event for 200 with a 150-person hall, and Olivia asking both to bring the hall to 100
+    and the attendance to 100. Returns the event, the hall, the requirements change, then the
+    attendance change."""
+    event = _planning_event(db, expected_attendance=200)
+    hall = make_venue_requirement(
+        db, event.id, name="Hall", capacity=150, starts_at=event.starts_at, ends_at=event.ends_at
+    )
+    requirements = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                hall, name="Hall", capacity=100, starts_at=event.starts_at, ends_at=event.ends_at
+            )
+        ],
+    )
+    attendance = _raise(login_as, db, event, "expected_attendance", 100)
+    return event, hall, requirements, attendance
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_the_attendance_change_waits_for_the_requirements_change(login_as, db: Session):
+    event, _, requirements, attendance = _hall_and_both_changes(login_as, db)
+
+    response = _approve(login_as(Users.COORDINATOR), attendance)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+    assert _attendance(db, event.id) == 200
+    _assert_undecided(db, attendance)
+    _assert_undecided(db, requirements)
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_approving_the_requirements_change_first_lets_the_attendance_change_through(
+    login_as, db: Session
+):
+    event, _, requirements, attendance = _hall_and_both_changes(login_as, db)
+    coordinator = login_as(Users.COORDINATOR)
+
+    assert _approve(coordinator, requirements).status_code == 200
+    response = _approve(coordinator, attendance)
+
+    assert response.status_code == 200, response.text
+    assert _attendance(db, event.id) == 100
+    assert _requirements(db, event.id)["Hall"][1] == 100
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_a_rejected_requirements_change_leaves_the_attendance_change_waiting(login_as, db: Session):
+    """Not linked: rejecting the requirements change does not touch the attendance change, which
+    can be approved once another change lowering the hall is approved."""
+    event, hall, requirements, attendance = _hall_and_both_changes(login_as, db)
+
+    assert _reject(login_as(Users.COORDINATOR), requirements).status_code == 200
+    assert _approve(login_as(Users.COORDINATOR), attendance).status_code == 422
+    assert _row(db, attendance.id).status == "PENDING"
+
+    again = _raise(
+        login_as,
+        db,
+        event,
+        "venue_requirements",
+        [
+            _requirement_body(
+                hall, name="Hall", capacity=90, starts_at=event.starts_at, ends_at=event.ends_at
+            )
+        ],
+    )
+    coordinator = login_as(Users.COORDINATOR)
+    assert _approve(coordinator, again).status_code == 200
+    response = _approve(coordinator, attendance)
+
+    assert response.status_code == 200, response.text
+    assert _attendance(db, event.id) == 100
 
 
 @pytest.mark.story("19.2", ac=2)

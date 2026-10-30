@@ -171,6 +171,8 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.BOOK_CLUB),
         str(Events.CHARITY_QUIZ),
         str(Events.FOOD_TASTING_WALK),
+        str(Events.BATIK_WORKSHOP),
+        str(Events.KITE_AFTERNOON),
     }
 
 
