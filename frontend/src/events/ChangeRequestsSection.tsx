@@ -287,11 +287,12 @@ export function ChangeRequestsSection({
         ? event.venue_requirements.map(requirementDraftFrom)
         : [newRequirementDraft()],
     )
-    // An item kept, Cancelled, after an approved change removed it is no longer the event's
-    // (story 19.2 AC5), as the backend's current value leaves it out.
+    // An item kept, Cancelled, after an approved change removed it (story 19.2 AC5), or Withdrawn
+    // by the coordinator (story 17.2 AC3), is no longer the event's, as the backend's current
+    // value leaves it out.
     setEquipment(
       event.equipment
-        .filter((line) => line.status !== 'CANCELLED')
+        .filter((line) => line.status !== 'CANCELLED' && line.status !== 'WITHDRAWN')
         .map((line) => ({
           key: newDraftKey(),
           sourceId: line.id,

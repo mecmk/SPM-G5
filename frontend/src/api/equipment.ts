@@ -1,5 +1,5 @@
 import { api, ApiError } from './client'
-import type { EquipmentLine } from './events'
+import type { EquipmentItemStatus, EquipmentLine } from './events'
 
 /** Story 15.1 AC5: the longest technical note. Keep in step with the backend's
  * `TECHNICAL_NOTES_MAX_LENGTH` in app/equipment/schemas.py. */
@@ -89,6 +89,27 @@ export function removeEquipmentItem(
   })
 }
 
+/** Story 17.2 AC6: the statuses an item can be withdrawn from. Mirrors `WithdrawableStatus`. */
+export const WITHDRAWABLE_STATUSES: readonly EquipmentItemStatus[] = ['PENDING', 'ACCEPTED']
+
+/** Story 17.2 AC1/AC2: withdraw an item sent to Technical Support, releasing its units; returns it,
+ * Withdrawn. AC11: it names the status the coordinator saw, so a decision Technical Support saved
+ * meanwhile is refused (409) with the item's status now, rather than withdrawn over unseen. */
+export function withdrawEquipmentItem(
+  eventId: string,
+  item: EquipmentLine,
+): Promise<EquipmentLine> {
+  return api<EquipmentLine>(`/events/${eventId}/equipment/${item.id}/withdrawal`, {
+    method: 'POST',
+    body: { expected_status: item.status },
+    errorCodes: EQUIPMENT_ERRORS,
+    notify: {
+      title: 'Equipment withdrawn',
+      message: `${item.equipment_type_name} ×${item.quantity} was withdrawn and Technical Support told.`,
+    },
+  })
+}
+
 /** Story 15.1 AC1: send every item not yet sent to Technical Support; returns the items sent. */
 export function submitEquipment(eventId: string): Promise<EquipmentLine[]> {
   return api<EquipmentLine[]>(`/events/${eventId}/equipment-submissions`, {
@@ -102,8 +123,9 @@ export function submitEquipment(eventId: string): Promise<EquipmentLine[]> {
 }
 
 /** Story 15.2 AC3: the statuses Technical Support's queue has a tab for; story 6.2 AC15:
- * Cancelled, read-only, for requests once sent to them. Mirrors `EquipmentQueueStatus`. */
-export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED'
+ * Cancelled, read-only, for requests once sent to them; story 17.2 AC4: Withdrawn, read-only, for
+ * requests their coordinator withdrew. Mirrors `EquipmentQueueStatus`. */
+export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED' | 'WITHDRAWN'
 
 /**
  * Mirrors `EquipmentQueueEntry`: story 15.2 AC1, a request with its event's name and dates, the
@@ -125,7 +147,7 @@ export interface EquipmentQueueEntry {
   requested_by_name: string | null
   submitted_at: string | null
   status: EquipmentQueueStatus
-  /** Story 6.2 AC15: null for a cancelled request, which holds nothing. */
+  /** Story 6.2 AC15, 17.2 AC4: null for a cancelled or withdrawn request, which holds nothing. */
   available: number | null
   shortfall: number | null
   decided_by_name: string | null
@@ -134,6 +156,9 @@ export interface EquipmentQueueEntry {
   /** Story 6.2 AC16: when a cancelled request was cancelled; null otherwise, and for one
    * cancelled before that was recorded. */
   cancelled_at: string | null
+  /** Story 17.2 AC4: when the coordinator withdrew it, and who; null unless it is withdrawn. */
+  withdrawn_at: string | null
+  withdrawn_by_name: string | null
 }
 
 /** Mirrors `EquipmentQueueCounts`: story 15.2 AC3, how many requests each tab holds. */
@@ -143,6 +168,8 @@ export interface EquipmentQueueCounts {
   declined: number
   /** Story 6.2 AC15. */
   cancelled: number
+  /** Story 17.2 AC4. */
+  withdrawn: number
 }
 
 /** Mirrors `EquipmentQueue`: story 15.2 AC1-AC3, one tab of the queue and every tab's count. */
