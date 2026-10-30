@@ -10,7 +10,7 @@ import re
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import (
     AfterValidator,
@@ -27,7 +27,13 @@ from pydantic_core import PydanticCustomError
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
 from app.common.phone import PHONE_NUMBER_INVALID_MESSAGE, is_phone_number
-from app.events.models import Event, EventClarification, EventEquipmentRequest, VenueRequirement
+from app.events.models import (
+    Event,
+    EventChange,
+    EventClarification,
+    EventEquipmentRequest,
+    VenueRequirement,
+)
 
 # "Positive whole numbers only" (story 2.1 AC3): StrictInt rejects 1.5, "20" and true; gt=0
 # rejects 0 and below; the ceiling is the largest value the INTEGER columns can hold.
@@ -624,6 +630,12 @@ class EquipmentLineOut(BaseModel):
         )
 
 
+def can_see_internal_notes(viewer: User) -> bool:
+    """Story 7.2 AC2: who may read an event's internal notes. Story 7.4 AC5/AC6: the same people
+    see the notes' change history, so both read this one rule."""
+    return role_has(viewer.role_code, Permission.EVENTS_REVIEW)
+
+
 class EventDetailOut(BaseModel):
     """AC1/AC4-AC6/AC8: everything recorded on a request, as the organiser and the reviewing
     coordinator both see it. No defaults (response schema).
@@ -688,7 +700,7 @@ class EventDetailOut(BaseModel):
     @classmethod
     def from_event(cls, event: Event, *, viewer: User) -> EventDetailOut:
         coordinator = event.assigned_coordinator
-        can_see_internal_notes = role_has(viewer.role_code, Permission.EVENTS_REVIEW)
+        is_notes_visible = can_see_internal_notes(viewer)
         return cls(
             id=event.id,
             name=event.name,
@@ -698,7 +710,7 @@ class EventDetailOut(BaseModel):
             contact_name=event.contact_name,
             contact_email=event.contact_email,
             contact_phone=event.contact_phone,
-            internal_notes=event.internal_notes if can_see_internal_notes else None,
+            internal_notes=event.internal_notes if is_notes_visible else None,
             starts_at=event.starts_at,
             ends_at=event.ends_at,
             expected_attendance=event.expected_attendance,
@@ -825,4 +837,34 @@ class ClarificationOut(BaseModel):
             author_name=row.author.full_name,
             message=row.message,
             created_at=row.created_at,
+        )
+
+
+# --- change history (story 7.4) -------------------------------------------------------------
+
+
+class EventChangeOut(BaseModel):
+    """AC1/AC4: one field a save changed - its old and new value, who saved it with their role
+    then, when, and the change request it came from, if any. No defaults (response schema)."""
+
+    id: uuid.UUID
+    field: str
+    old_value: Any
+    new_value: Any
+    changed_by_name: str
+    changed_by_role_name: str
+    changed_at: datetime
+    change_request_id: uuid.UUID | None
+
+    @classmethod
+    def from_change(cls, row: EventChange) -> EventChangeOut:
+        return cls(
+            id=row.id,
+            field=row.field_name,
+            old_value=row.old_value,
+            new_value=row.new_value,
+            changed_by_name=row.changed_by.full_name,
+            changed_by_role_name=row.changed_by_role.name,
+            changed_at=row.changed_at,
+            change_request_id=row.change_request_id,
         )

@@ -10,25 +10,32 @@ import {
   type ChangeRequestWindow,
 } from '../api/changeRequests'
 import { ApiError, formatApiError } from '../api/client'
-import {
-  fetchEventReferenceData,
-  type EquipmentInput,
-  type EventDetail,
-  type EventReferenceData,
-  type VenueRequirement,
-  type VenueRequirementInput,
+import type {
+  EquipmentInput,
+  EventDetail,
+  EventReferenceData,
+  VenueRequirement,
+  VenueRequirementInput,
 } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
-import { formatDateTime, inputToInstant, instantToInput } from '../shared/format'
+import { formatDateTime, inputToInstant, instantToInput, shortReference } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
-import { changeTitle, FIELD_LABELS, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
+import {
+  changeTitle,
+  describeAttendanceMinimum,
+  describeAttendanceWait,
+  describeOwnAttendanceWait,
+  FIELD_LABELS,
+  OUT_OF_DATE_NOTE,
+  STATUS_LABELS,
+} from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
 /** AC12 (team decision on the review of #125): why an approved event offers no change request any
@@ -152,6 +159,11 @@ export interface ChangeRequestsSectionProps {
   /** Story 19.2 AC2/AC7: an approval changed the event, or a refusal found it changed meanwhile,
    *  so the page loads it again. */
   onDecided: () => void
+  /** The pick-lists that name layouts, facilities and equipment, loaded once by the page and
+   *  shared with the change history (story 7.4); null while they load. */
+  references: EventReferenceData | null
+  /** Reading the pick-lists failed; null otherwise. */
+  referencesError: string | null
 }
 
 /** The decision dialog open on the event page: which request, and approving or rejecting it. */
@@ -173,10 +185,18 @@ interface OpenDecision {
  * Story 2.7 AC18 (fix f2.7.4): a change cannot leave the event without a venue requirement, so the
  * venue requirements editor keeps at least one row - the last one's Remove is disabled, with a hint
  * saying why - and an event with none starts it with one blank row to fill in.
+ * Fix f19.1.2 (CL-172, CL-179): beneath the new attendance, the form says the lowest the server
+ * takes and which venue requirement sets it - a waiting venue requirements change's, when it allows
+ * lower.
+ * The form does not block a lower figure: the server judges it.
  *
  * Story 19.2: the assigned coordinator approves or rejects each pending request here too, through
  * the dialog the queue shares (AC2, AC3). A decided request shows who decided and when, and a
  * rejection its reason, to the organiser as well.
+ *
+ * Fix f19.1.2 (CL-179): a pending attendance change that a venue requirement still holds back says
+ * so - to the coordinator, to approve the waiting venue requirements change first; to the
+ * organiser, that it waits for that change, or what they can do when none would make room.
  *
  * Story 19.3 AC1/AC6: the assigned coordinator alone can show, on each pending request, what
  * approving it would affect.
@@ -189,6 +209,8 @@ export function ChangeRequestsSection({
   canWithdraw,
   canDecide,
   onDecided,
+  references,
+  referencesError,
 }: ChangeRequestsSectionProps) {
   const ids = useId()
   const reasonInput = useRef<HTMLTextAreaElement>(null)
@@ -197,8 +219,6 @@ export function ChangeRequestsSection({
   const [requests, setRequests] = useState<ChangeRequest[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const [listVersion, setListVersion] = useState(0)
-  const [references, setReferences] = useState<EventReferenceData | null>(null)
-  const [referencesError, setReferencesError] = useState<string | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [field, setField] = useState<ChangeRequestField | ''>('')
   const [startsAt, setStartsAt] = useState('')
@@ -231,20 +251,6 @@ export function ChangeRequestsSection({
       cancelled = true
     }
   }, [event.id, event.status, listVersion])
-
-  useEffect(() => {
-    let cancelled = false
-    fetchEventReferenceData()
-      .then((data) => {
-        if (!cancelled) setReferences(data)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setReferencesError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const pendingFields = new Set(
     (requests ?? []).filter((request) => request.status === 'PENDING').map((r) => r.field),
@@ -476,6 +482,13 @@ export function ChangeRequestsSection({
   // Story 2.7 AC18 (fix f2.7.4): the only row left cannot be removed, and a hint says why.
   const isOnlyRequirement = requirements.length === 1
   const lastRequirementHintId = `${ids}-last-requirement`
+  // Fix f19.1.2: the lowest attendance the venue requirements allow, said beneath the field.
+  const attendanceHint = describeAttendanceMinimum(event.venue_requirements, requests ?? [])
+  const attendanceHintId = `${ids}-attendance-minimum`
+  const attendanceDescription =
+    [attendanceHint === null ? null : attendanceHintId, describedBy('value')]
+      .filter((id) => id !== null && id !== undefined)
+      .join(' ') || undefined
 
   return (
     <section className="card stack change-requests-section" aria-labelledby={`${ids}-heading`}>
@@ -507,13 +520,22 @@ export function ChangeRequestsSection({
             const isPending = request.status === 'PENDING'
             const canDecideThis = canDecide && isPending
             const isOwnRequest = canWithdraw && request.requested_by_id === event.organiser_id
+            // Fix f19.1.2: an attendance change the venue requirements still hold back says so,
+            // to the coordinator deciding it and to the organiser who asked for it.
+            let waitNote: string | null = null
+            if (canDecideThis && !request.is_out_of_date) {
+              waitNote = describeAttendanceWait(request, event.venue_requirements, requests)
+            } else if (isOwnRequest && isPending && !request.is_out_of_date) {
+              waitNote = describeOwnAttendanceWait(request, event.venue_requirements, requests)
+            }
             return (
               <li key={request.id} className="card card-tight stack">
                 <div className="item-card-header">
                   <div>
                     <h3 className="change-request-title">{changeTitle(request.field)}</h3>
                     <p className="small muted">
-                      Requested on {formatDateTime(request.created_at)} by{' '}
+                      <span className="mono">{shortReference(request.id)}</span> · Requested on{' '}
+                      {formatDateTime(request.created_at)} by{' '}
                       {isOwnRequest ? 'you' : request.requested_by_name}
                     </p>
                   </div>
@@ -575,6 +597,8 @@ export function ChangeRequestsSection({
                 {canDecideThis && request.is_out_of_date && (
                   <p className="warning">{OUT_OF_DATE_NOTE}</p>
                 )}
+
+                {waitNote !== null && <p className="warning">{waitNote}</p>}
 
                 {canDecideThis && !request.is_out_of_date && (
                   <ChangeRequestImpactToggle request={request} />
@@ -662,19 +686,26 @@ export function ChangeRequestsSection({
           )}
 
           {field === 'expected_attendance' && (
-            <label>
-              New expected attendance
-              <input
-                ref={valueInput}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={attendance}
-                aria-invalid={isInvalid('value')}
-                aria-describedby={describedBy('value')}
-                onChange={(e) => setAttendance(e.target.value)}
-              />
-            </label>
+            <>
+              <label>
+                New expected attendance
+                <input
+                  ref={valueInput}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={attendance}
+                  aria-invalid={isInvalid('value')}
+                  aria-describedby={attendanceDescription}
+                  onChange={(e) => setAttendance(e.target.value)}
+                />
+              </label>
+              {attendanceHint !== null && (
+                <p id={attendanceHintId} className="form-hint">
+                  {attendanceHint}
+                </p>
+              )}
+            </>
           )}
 
           {field === 'venue_requirements' && (

@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-28 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-27 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -44,8 +44,8 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
+| Event details & history | [`event_change_history`](#event_change_history) | 7.4 | Append-only record of each field changed on an event after submission: old and new value, who changed it with their role, and when |
 | Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1, 21.2 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7) |
-| Event details & history | [`event_safety_finding_bookings`](#event_safety_finding_bookings) | - | Story 21.3 AC1, AC9 |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
@@ -612,6 +612,29 @@ Rules and indexes:
 - unique index `uq_event_change_requests_pending_field`: `btree (event_id, field_name) WHERE (status = 'PENDING'::text)`
 - index `ix_event_change_requests_event`: `btree (event_id, status)`
 
+### event_change_history
+
+**Stories:** 7.4
+
+Append-only record of each field changed on an event after submission: old and new value, who changed it with their role, and when. Rows are never updated or deleted (story 7.4 AC5).
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
+| `seq` | `bigint` | no | - | - | Insertion order. The history is read newest first by this, not by changed_at, which one save's fields share (story 7.4 AC1, AC7). |
+| `event_id` | `uuid` | no | - | FK → `events.id` | FK -> events.id. |
+| `field_name` | `text` | no | - | - | The event field that changed, e.g. expected_attendance, internal_notes, venue_requirements. internal_notes rows are shown only to coordinators (story 7.4 AC5, AC6). |
+| `old_value` | `jsonb` | yes | - | - | The value before the save, as JSON (a list for venue requirements, accessibility needs and equipment). NULL when the field was empty. |
+| `new_value` | `jsonb` | yes | - | - | The value after the save, as JSON. NULL when the field was cleared. |
+| `changed_by_id` | `uuid` | no | - | FK → `users.id` | FK -> users.id. Who saved the change. |
+| `changed_by_role_code` | `text` | no | - | FK → `roles.code` | FK -> roles.code. Their role when they saved it (story 7.4 AC1). |
+| `change_request_id` | `uuid` | yes | - | FK → `event_change_requests.id` | FK -> event_change_requests.id. The change request whose approval made the change (story 7.4 AC4); NULL for a direct edit. |
+| `changed_at` | `timestamp with time zone` | no | `now()` | - | When the save was made; the same for every field of one save (story 7.4 AC4). |
+
+Rules and indexes:
+
+- index `ix_event_change_history_event`: `btree (event_id, seq)`
+
 ### event_safety_reviews
 
 **Stories:** 21.1, 21.2
@@ -634,19 +657,6 @@ Allowed values:
 Rules and indexes:
 
 - index `ix_event_safety_reviews_event`: `btree (event_id, reviewed_at)`
-
-### event_safety_finding_bookings
-
-Story 21.3 AC1, AC9. The venue bookings a safety finding named, which the decision released in the same step. Written only by the Safety Officer's decision and append-only with its finding; a booking may be named by two findings of one decision and is released once. The service, not the database, checks that the booking belongs to the finding's event.
-
-| Column | Type | Null | Default | Key | Description |
-| --- | --- | --- | --- | --- | --- |
-| `finding_id` | `uuid` | no | - | PK FK → `event_safety_review_findings.id` | FK -> event_safety_review_findings.id (cascade). The finding that named the booking. |
-| `booking_id` | `uuid` | no | - | PK FK → `venue_bookings.id` | FK -> venue_bookings.id (cascade). The booking the finding named; an APPROVED booking of the reviewed event when named. |
-
-Rules and indexes:
-
-- index `ix_event_safety_finding_bookings_booking`: `btree (booking_id)`
 
 ## Venue bookings
 
@@ -691,9 +701,6 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `replaced_by_booking_id` | `uuid` | yes | - | FK → `venue_bookings.id` | FK -> venue_bookings.id. On an original released by its replacement: the replacement whose approval released it (story 12.6 AC3), set in that same transaction and only on a CANCELLED booking (ck_venue_bookings_replaced_by_cancelled). The event page shows "Replaced by <venue>" only when this is set, so a replacement that was never approved is never shown as having replaced it (AC8). NULL otherwise; a booking replaces at most one original (uq_venue_bookings_replaced_by). |
 | `replaces_live_original` | `boolean` | no | `false` | - | TRUE on a replacement (replaces_booking_id) from the moment it is requested, while its original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE on a PENDING replacement when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement's request. The index reads it only for a PENDING booking: on a decided replacement it keeps what it had and means nothing. FALSE for every other booking. |
 | `cancelled_at` | `timestamp with time zone` | yes | - | - | When the booking was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change no longer fit it (19.2). Only on a CANCELLED booking; decided_by_id and decided_at keep its earlier decision. |
-| `release_cause` | `text` | yes | - | - | Why a CANCELLED booking was released: EVENT_CANCELLED (its event was cancelled, story 6.2), CHANGE_APPROVED (an approved change no longer fits it, story 19.2), REPLACED (its replacement was approved, story 12.6) or SAFETY_REVIEW (the Safety Officer named it in a finding, story 21.3). Set in the release, only on a CANCELLED booking (ck_venue_bookings_release_fields). NULL for a booking never released, and for a CANCELLED row written without one; migration 029 gave every booking cancelled before it a cause. |
-| `release_reason` | `text` | yes | - | - | Why the release happened, in the words of whoever caused it: for SAFETY_REVIEW, the required change of each finding that named the booking, in finding order, joined with " \| " (story 21.3 AC2, AC9); required then (ck_venue_bookings_safety_release_reason). NULL for every other cause. |
-| `released_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who released the booking: the Safety Officer for SAFETY_REVIEW, the organiser who cancelled the event for EVENT_CANCELLED, the coordinator whose decision applied the change for CHANGE_APPROVED, the Venue Staff member who approved the replacement for REPLACED (story 21.3). NULL when not released, and for a booking whose releaser migration 029 could not know. |
 
 Allowed values:
 
@@ -712,10 +719,7 @@ Rules and indexes:
 - check `ck_venue_bookings_live_original_is_a_replacement`: `CHECK (((NOT replaces_live_original) OR (replaces_booking_id IS NOT NULL)))`
 - check `ck_venue_bookings_not_self_replacement`: `CHECK ((replaces_booking_id IS DISTINCT FROM id))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
-- check `ck_venue_bookings_release_cause`: `CHECK (((release_cause IS NULL) OR (release_cause = ANY (ARRAY['EVENT_CANCELLED'::text, 'CHANGE_APPROVED'::text, 'REPLACED'::text, 'SAFETY_REVIEW'::text]))))`
-- check `ck_venue_bookings_release_fields`: `CHECK ((((release_cause IS NULL) AND (release_reason IS NULL) AND (released_by_id IS NULL)) OR ((release_cause IS NOT NULL) AND (status = 'CANCELLED'::text))))`
 - check `ck_venue_bookings_replaced_by_cancelled`: `CHECK (((replaced_by_booking_id IS NULL) OR (status = 'CANCELLED'::text)))`
-- check `ck_venue_bookings_safety_release_reason`: `CHECK (((release_cause IS DISTINCT FROM 'SAFETY_REVIEW'::text) OR (release_reason IS NOT NULL)))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
 - unique index `uq_venue_bookings_one_pending_replacement`: `btree (replaces_booking_id) WHERE ((status = 'PENDING'::text) AND (replaces_booking_id IS NOT NULL))`
 - unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])) AND (NOT ((status = 'PENDING'::text) AND replaces_live_original)))`

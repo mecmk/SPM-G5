@@ -17,7 +17,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { CHANGE_REQUEST_QUEUE_PATH, eventPath } from '../routes'
-import { formatDateTime, formatSchedule } from '../shared/format'
+import { formatDateTime, formatSchedule, shortReference } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
@@ -199,7 +199,10 @@ export function ChangeRequestQueuePage() {
                     </h3>
                     <EventStatusBadge status={entry.event_status} />
                   </div>
-                  <p className="muted">{changeTitle(entry.field)}</p>
+                  <p className="muted">
+                    {changeTitle(entry.field)}{' '}
+                    <span className="small mono">{shortReference(entry.id)}</span>
+                  </p>
                 </div>
 
                 <div className="fact-grid">
