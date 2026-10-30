@@ -229,17 +229,32 @@ def _accepted_equipment(db: Session, event_id: uuid.UUID) -> list[EventEquipment
 _DISPLAY_NAME_KEYS = frozenset({"name", "layout_name", "feature_name", "equipment_type_name"})
 
 
+def _in_any_order(items: list[Any]) -> list[Any]:
+    """A list fact compared as a set: the same venues, needs or equipment in another order are the
+    same facts. Their order follows booking and request ids, which rebooking changes (21.3 AC8)."""
+    return sorted(items, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def _same_fact(before: Any, after: Any) -> bool:
+    """AC5's change list: whether one fact is as the latest review saw it, in any order."""
+    if isinstance(before, list) and isinstance(after, list):
+        return _in_any_order(before) == _in_any_order(after)
+    return before == after
+
+
 def comparable_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """``facts`` without the display names: the ids, codes and figures a review judged, so a
     renamed venue, layout, feature or equipment type compares equal (21.2 AC14)."""
     return {
         key: (
-            [
-                {k: v for k, v in item.items() if k not in _DISPLAY_NAME_KEYS}
-                if isinstance(item, dict)
-                else item
-                for item in value
-            ]
+            _in_any_order(
+                [
+                    {k: v for k, v in item.items() if k not in _DISPLAY_NAME_KEYS}
+                    if isinstance(item, dict)
+                    else item
+                    for item in value
+                ]
+            )
             if isinstance(value, list)
             else value
         )
@@ -299,7 +314,7 @@ def get_safety_check(db: Session, event_id: uuid.UUID) -> SafetyCheck:
         [
             FactChangeOut(fact=key, before=reviews[0].facts.get(key), after=value)
             for key, value in facts.items()
-            if reviews[0].facts.get(key) != value
+            if not _same_fact(reviews[0].facts.get(key), value)
         ]
         if reviews
         else []
