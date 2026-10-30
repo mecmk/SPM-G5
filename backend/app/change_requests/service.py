@@ -136,6 +136,24 @@ NOT_RELATED_PARTY_MESSAGE = (
     "Only the organiser and the coordinator assigned to this event may view its change requests."
 )
 NOT_PENDING_MESSAGE = "This change request is {status}, so it can no longer be withdrawn."
+# Fix f19.1.2: 2.7 AC6 refusing a new attendance as it is asked for, told to the organiser.
+ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. Ask for a venue requirements change that lowers it first."
+)
+# Fix f19.1.2: the same while the organiser's own venue requirements change waits. Only one may
+# wait (AC5), so it is withdrawn before another is asked for. The first is judged on the waiting
+# change, which sets the minimum; the second on the event, when that change would raise it.
+ATTENDANCE_BELOW_WAITING_CHANGE_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people with your venue requirements change. Withdraw that change and ask for one "
+    "that lowers it first."
+)
+ATTENDANCE_NEEDS_WAITING_CHANGE_WITHDRAWN_MESSAGE = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for "
+    "{minimum} people. Withdraw your venue requirements change and ask for one that lowers it "
+    "first."
+)
 
 _REQUESTED_TITLE = "Change requested for {event}"
 _REQUESTED_MESSAGE = '{organiser} asked to change the {label}: "{reason}"'
@@ -191,6 +209,40 @@ class UnchangedValue(InvalidEventRequest):
 
     def __init__(self, field: str) -> None:
         super().__init__(UNCHANGED_VALUE_MESSAGE.format(label=FIELD_LABELS[field]))
+
+
+class AttendanceNeedsRequirementsChange(InvalidEventRequest):
+    """AC16, fix f19.1.2: a new attendance below what a venue requirement needs room for (2.7
+    AC6), naming the requirement that sets the minimum and the minimum, for the organiser."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_NEEDS_REQUIREMENTS_CHANGE_MESSAGE.format(
+                requirement=requirement, minimum=minimum
+            )
+        )
+
+
+class AttendanceBelowWaitingChange(InvalidEventRequest):
+    """AC16, fix f19.1.2: the organiser's waiting venue requirements change lowers the minimum,
+    but not to the new attendance - named by that change's requirement and number."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_BELOW_WAITING_CHANGE_MESSAGE.format(requirement=requirement, minimum=minimum)
+        )
+
+
+class AttendanceNeedsWaitingChangeWithdrawn(InvalidEventRequest):
+    """AC16, fix f19.1.2: the organiser's waiting venue requirements change would raise the
+    minimum, so the event's own requirement sets it."""
+
+    def __init__(self, requirement: str, minimum: int) -> None:
+        super().__init__(
+            ATTENDANCE_NEEDS_WAITING_CHANGE_WITHDRAWN_MESSAGE.format(
+                requirement=requirement, minimum=minimum
+            )
+        )
 
 
 class NotRelatedParty(PermissionError):
@@ -305,6 +357,46 @@ def _without_ids(field: str, value: Any) -> Any:
     return [{key: item[key] for key in item if key != "id"} for item in value]
 
 
+def _pending_requirements(db: Session, event: Event) -> list[VenueRequirementIn] | None:
+    """AC15, fix f19.1.2 (Q80): the venue requirements a pending change to them asks for - None when
+    none waits, when it is out of date (19.2 AC7), or when its stored proposal no longer reads."""
+    request = db.scalar(
+        select(EventChangeRequest).where(
+            EventChangeRequest.event_id == event.id,
+            EventChangeRequest.field_name == ChangeRequestField.VENUE_REQUIREMENTS,
+            EventChangeRequest.status == ChangeRequestStatus.PENDING,
+        )
+    )
+    if request is None or is_out_of_date(request):
+        return None
+    try:
+        return _proposed_requirements(event, json.loads(request.proposed_value))
+    except ValidationError:
+        return None
+
+
+def _check_attendance_request(db: Session, event: Event, attendance: int) -> None:
+    """AC15, fix f19.1.2 (Q80, CL-172): a new attendance leaves room for every venue requirement
+    (2.7 AC6), as 19.2 checks it on approval, or for every one a pending venue requirements change
+    asks for, so the two can wait together - 19.2 still approves the requirements first. AC16: a
+    refusal tells the organiser the lowest attendance taken, which is the lower of the two
+    minimums, and what to change first."""
+    try:
+        events_service.check_proposed_attendance(event, attendance)
+    except events_service.AttendanceBelowRequirement as exc:
+        pending = _pending_requirements(db, event)
+        if pending is None:
+            raise AttendanceNeedsRequirementsChange(exc.requirement, exc.minimum) from exc
+        try:
+            events_service.check_attendance_leaves_room(pending, attendance)
+        except events_service.AttendanceBelowRequirement as still:
+            # AC15: the lowest taken is the lower of the two minimums - on a tie, the waiting
+            # change's, whose requirement is the one left to lower.
+            if still.minimum <= exc.minimum:
+                raise AttendanceBelowWaitingChange(still.requirement, still.minimum) from still
+            raise AttendanceNeedsWaitingChangeWithdrawn(exc.requirement, exc.minimum) from exc
+
+
 def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> tuple[Any, Any]:
     """AC3/AC4: check the proposed value by the creation rules for its field, then return the
     field's current value and the proposed one, both canonical."""
@@ -314,7 +406,7 @@ def _current_and_proposed(db: Session, event: Event, data: ChangeRequestIn) -> t
         events_service.check_proposed_schedule(proposed.starts_at, proposed.ends_at)
         return current, _schedule_value(proposed.starts_at, proposed.ends_at)
     if isinstance(data, AttendanceChangeIn):
-        events_service.check_proposed_attendance(event, data.proposed)
+        _check_attendance_request(db, event, data.proposed)
         return current, data.proposed
     if isinstance(data, VenueRequirementsChangeIn):
         events_service.check_proposed_venue_requirements(db, event, data.proposed)
@@ -946,6 +1038,18 @@ def _notify_organiser(
     )
 
 
+def _history_changes(field: str, change: _AppliedChange) -> dict[str, dict[str, Any]]:
+    """Story 7.4 AC4: an approved change as the event's history records it. A schedule change is
+    its start and its end, each only if it moved, as a correction records them."""
+    if field != ChangeRequestField.SCHEDULE:
+        return {field: {"from": change.before, "to": change.after}}
+    return {
+        part: {"from": change.before[part], "to": change.after[part]}
+        for part in ("starts_at", "ends_at")
+        if change.before[part] != change.after[part]
+    }
+
+
 def approve_change_request(
     db: Session,
     event_id: uuid.UUID,
@@ -1016,6 +1120,13 @@ def approve_change_request(
         entity_id=request.id,
         details=details,
         commit=False,
+    )
+    events_service.record_changes(
+        db,
+        event,
+        _history_changes(field, change),
+        actor=actor,
+        change_request_id=request.id,
     )
     record_audit(
         db,

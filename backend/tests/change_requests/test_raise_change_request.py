@@ -61,6 +61,17 @@ Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
   that is earlier or it has none. That covers an event already under way or over, which nothing
   marks Completed yet (Q57). (Team decision on the review of #125.)
 
+Minimum attendance (fix f19.1.2; Q80 to Q82, CL-172, replacing CL-143's refusal on raising; CL-179)
+AC14 The change form shows, beneath the new attendance, the lowest allowed and the venue
+     requirement setting it - a pending venue requirements change's when lower (e2e).
+AC15 An attendance below a venue requirement's number of people is taken when the event's pending
+     venue requirements change would bring every requirement to or below it. One that is out of
+     date (19.2 AC7) does not count. (AC3's exception.)
+AC16 Otherwise it is refused, naming the requirement needing the most people (the first on the
+     form when two tie), the exact minimum, and that the venue requirements change comes first.
+AC17 A pending attendance change the venue requirements do not allow yet says what it waits for,
+     to the organiser and to the coordinator (e2e). (CL-179.)
+
 Excluded, with reason:
 * What the form offers (AC11/AC12: offered on a Confirmed event, with what approval means; not
   offered before approval, while awaiting the safety check, once completed or cancelled, or
@@ -119,6 +130,24 @@ _AWAITING_SAFETY_CHECK_REFUSAL = (
 )
 _CLOSED_BEFORE_SETUP_REFUSAL = (
     "Change requests for this event closed 24 hours before its set-up time."
+)
+# Fix f19.1.2: an attendance below a venue requirement's number of people names the requirement
+# that sets the minimum, the minimum itself, and what to change first.
+_ATTENDANCE_BELOW_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. Ask for a venue requirements change that lowers it first."
+)
+# The same while the organiser's own venue requirements change waits, which is withdrawn first:
+# judged on that change when it lowers the minimum, and on the event when it would raise it.
+_ATTENDANCE_BELOW_WAITING_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people with your venue requirements change. Withdraw that change and ask for one"
+    " that lowers it first."
+)
+_ATTENDANCE_NEEDS_WITHDRAWAL_REFUSAL = (
+    "The expected attendance cannot be lower than {minimum} while {requirement} needs room for"
+    " {minimum} people. Withdraw your venue requirements change and ask for one that lowers it"
+    " first."
 )
 _CURRENT_EMAIL = "olivia.events@acme.example"
 _CURRENT_PHONE = "+65 6111 2233"
@@ -619,6 +648,7 @@ def test_proposed_attendance_must_be_a_positive_whole_number(organiser_client, d
 
 
 @pytest.mark.story("19.1", ac=4)
+@pytest.mark.story("19.1", ac=16)
 @pytest.mark.parametrize(("proposed", "expected_status"), [(79, 422), (80, 201)])
 def test_proposed_attendance_leaves_room_for_every_venue_requirement(
     organiser_client, db: Session, proposed, expected_status
@@ -633,9 +663,242 @@ def test_proposed_attendance_leaves_room_for_every_venue_requirement(
     assert response.status_code == expected_status, response.text
     assert len(_change_requests(db, event.id)) == (1 if expected_status == 201 else 0)
     if expected_status == 422:
-        assert response.json()["detail"] == (
-            "Main hall needs room for more people than the new expected attendance."
+        assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+            minimum=80, requirement="Main hall"
         )
+
+
+@pytest.mark.story("19.1", ac=16)
+def test_the_refusal_names_the_requirement_needing_the_most_people(organiser_client, db: Session):
+    """Fix f19.1.2: the minimum is the most people any requirement needs, not the first one found
+    over the new attendance - Hall comes first but Breakout sets the minimum."""
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=100)
+    make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=150)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 90)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Breakout"
+    )
+
+
+@pytest.mark.story("19.1", ac=16)
+def test_two_requirements_needing_the_most_people_name_the_first(organiser_client, db: Session):
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=150)
+    make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=150)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 90)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+
+
+@pytest.mark.story("19.1", ac=16)
+def test_an_unnamed_limiting_requirement_is_named_by_its_position(organiser_client, db: Session):
+    """2.7's own rule names a requirement without a name by where it sits on the form."""
+    event = _planning_event(db, expected_attendance=200)
+    make_venue_requirement(db, event.id, position=0, name="Hall", capacity=50)
+    make_venue_requirement(db, event.id, position=1, name=None, capacity=151)
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=151, requirement="Venue requirement 2"
+    )
+
+
+# --- AC15 (fix f19.1.2, CL-172, CL-179): raised beside a venue requirements change that makes room
+
+
+def _requirement_body(requirement_id: uuid.UUID, *, name: str, capacity: int, event: Event):
+    """One venue requirement over the whole event, as the change form sends it."""
+    return {
+        "id": str(requirement_id),
+        "name": name,
+        "capacity": capacity,
+        "starts_at": event.starts_at.isoformat(),
+        "ends_at": event.ends_at.isoformat(),
+        "layout_code": None,
+        "facilities": [],
+        "notes": None,
+    }
+
+
+def _ask_for_requirements(client, event: Event, *requirements: dict) -> None:
+    response = _raise(client, event.id, "venue_requirements", list(requirements))
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.story("19.1", ac=15)
+@pytest.mark.parametrize(("hall", "expected_status"), [(100, 201), (120, 201), (121, 422)])
+def test_attendance_is_taken_beside_a_requirements_change_that_makes_room(
+    organiser_client, db: Session, hall, expected_status
+):
+    """The pending venue requirements change brings the hall to or below the new attendance, so
+    both wait together; one person over and it is refused, naming the hall as it would be."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    _ask_for_requirements(
+        organiser_client, event, _requirement_body(hall_id, name="Hall", capacity=hall, event=event)
+    )
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 120)
+
+    assert response.status_code == expected_status, response.text
+    if expected_status == 201:
+        assert {row.field_name for row in _change_requests(db, event.id)} == {
+            "venue_requirements",
+            "expected_attendance",
+        }
+        assert all(row.status == "PENDING" for row in _change_requests(db, event.id))
+    else:
+        assert response.json()["detail"] == _ATTENDANCE_BELOW_WAITING_REFUSAL.format(
+            minimum=121, requirement="Hall"
+        )
+
+
+@pytest.mark.story("19.1", ac=15)
+def test_a_requirements_change_lowering_only_some_requirements_is_not_enough(
+    organiser_client, db: Session
+):
+    """The change lowers the hall but keeps the breakout room at 150, so 100 is still refused,
+    and the breakout room is named."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, position=0, name="Hall", capacity=150)
+    breakout_id = make_venue_requirement(db, event.id, position=1, name="Breakout", capacity=150)
+    _ask_for_requirements(
+        organiser_client,
+        event,
+        _requirement_body(hall_id, name="Hall", capacity=80, event=event),
+        _requirement_body(breakout_id, name="Breakout", capacity=150, event=event),
+    )
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_WAITING_REFUSAL.format(
+        minimum=150, requirement="Breakout"
+    )
+
+
+@pytest.mark.story("19.1", ac=16)
+@pytest.mark.parametrize("adds_a_room", [False, True], ids=["hall-raised", "room-added"])
+def test_a_waiting_change_raising_the_minimum_leaves_the_events_own(
+    organiser_client, db: Session, adds_a_room
+):
+    """The waiting change takes the hall to 180, or adds a breakout room for 170 (both allowed:
+    the event is for 200), so the lowest taken is still the hall's 150 - the refusal says so, and
+    150 itself is taken."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    if adds_a_room:
+        asked = [
+            _requirement_body(hall_id, name="Hall", capacity=150, event=event),
+            {**_requirement_body(hall_id, name="Breakout", capacity=170, event=event), "id": None},
+        ]
+    else:
+        asked = [_requirement_body(hall_id, name="Hall", capacity=180, event=event)]
+    _ask_for_requirements(organiser_client, event, *asked)
+
+    refused = _raise(organiser_client, event.id, "expected_attendance", 100)
+    taken = _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == _ATTENDANCE_NEEDS_WITHDRAWAL_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+    assert taken.status_code == 201, taken.text
+
+
+@pytest.mark.story("19.1", ac=15)
+def test_an_out_of_date_requirements_change_does_not_count(organiser_client, db: Session):
+    """19.2 AC7: the requirements changed after the change to them was raised, so it can only be
+    rejected, and the attendance is judged on the requirements as they stand."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    _ask_for_requirements(
+        organiser_client, event, _requirement_body(hall_id, name="Hall", capacity=100, event=event)
+    )
+    db.execute(text("UPDATE venue_requirements SET capacity = 160 WHERE id = :r"), {"r": hall_id})
+    db.expire_all()
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=160, requirement="Hall"
+    )
+
+
+@pytest.mark.story("19.1", ac=15)
+@pytest.mark.parametrize("status", ["WITHDRAWN", "REJECTED"])
+def test_a_requirements_change_no_longer_waiting_does_not_count(
+    organiser_client, db: Session, status
+):
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    _ask_for_requirements(
+        organiser_client, event, _requirement_body(hall_id, name="Hall", capacity=100, event=event)
+    )
+    db.execute(
+        text("UPDATE event_change_requests SET status = :s WHERE event_id = :e"),
+        {"s": status, "e": event.id},
+    )
+    db.expire_all()
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
+
+
+@pytest.mark.story("19.1", ac=15)
+@pytest.mark.parametrize("pending", ["date-change", "another-events", "unreadable"])
+def test_only_this_events_readable_requirements_change_counts(
+    organiser_client, db: Session, pending
+):
+    """What waits is a date change rather than a venue requirements change, another event's venue
+    requirements change, or this event's whose stored proposal no longer reads. None of them
+    counts, so the attendance is judged on the requirements as they stand."""
+    event = _planning_event(db, expected_attendance=200)
+    hall_id = make_venue_requirement(db, event.id, name="Hall", capacity=150)
+    if pending == "date-change":
+        moved = _raise(organiser_client, event.id, "schedule", _moved_a_day(event))
+        assert moved.status_code == 201, moved.text
+    elif pending == "another-events":
+        other = _planning_event(db, expected_attendance=200, starts_at=event.starts_at)
+        other_hall_id = make_venue_requirement(db, other.id, name="Hall", capacity=150)
+        _ask_for_requirements(
+            organiser_client,
+            other,
+            _requirement_body(other_hall_id, name="Hall", capacity=100, event=other),
+        )
+    else:
+        _ask_for_requirements(
+            organiser_client,
+            event,
+            _requirement_body(hall_id, name="Hall", capacity=100, event=event),
+        )
+        db.execute(
+            text("UPDATE event_change_requests SET proposed_value = :v WHERE event_id = :e"),
+            {"v": json.dumps([{"name": "Hall", "capacity": "many"}]), "e": event.id},
+        )
+        db.expire_all()
+
+    response = _raise(organiser_client, event.id, "expected_attendance", 100)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == _ATTENDANCE_BELOW_REFUSAL.format(
+        minimum=150, requirement="Hall"
+    )
 
 
 def _over_attendance(event: Event) -> list:
