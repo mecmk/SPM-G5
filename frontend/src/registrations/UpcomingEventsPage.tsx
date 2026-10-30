@@ -3,10 +3,13 @@ import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   fetchProfile,
   listRegistrationEvents,
+  MAX_GUESTS,
   registerForEvent,
   REGISTRATION_EVENTS_MAX_LIMIT,
   REGISTRATION_EVENTS_PAGE_SIZE,
   type AttendeeDetails,
+  type GuestInput,
+  type Registration,
   type RegistrationEvent,
   type RegistrationState,
 } from '../api/registrations'
@@ -83,13 +86,20 @@ function withoutRepeats(
   return [...shown, ...more.filter((event) => !shownIds.has(event.id))]
 }
 
-/** AC1: the event as the server now has it for this attendee, until the list is loaded again. */
-function markRegistered(event: RegistrationEvent, registeredAt: string): RegistrationEvent {
+/** Story 18.5 AC2/AC6: how many guests a new registration may bring - one per place left after
+ *  the attendee's own, but never more than MAX_GUESTS. */
+function guestLimit(event: RegistrationEvent): number {
+  return Math.min(MAX_GUESTS, Math.max(event.places_left - 1, 0))
+}
+
+/** AC1: the event as the server now has it for this attendee, until the list is loaded again.
+ *  Story 18.5 AC2: the attendee and each of their guests took a place. */
+function markRegistered(event: RegistrationEvent, registration: Registration): RegistrationEvent {
   return {
     ...event,
     state: 'REGISTERED',
-    registered_at: registeredAt,
-    places_left: event.places_left - 1,
+    registered_at: registration.registered_at,
+    places_left: event.places_left - 1 - registration.guests.length,
   }
 }
 
@@ -165,6 +175,9 @@ const EVENT_REFUSAL_CODES: ErrorCode[] = ['REGISTRATION_EVENT_NOT_OPEN', 'REGIST
 interface RegistrationProblem {
   message: string
   isAboutTheEvent: boolean
+  /** A 409: the event is open, but this registration was not taken - not yet open, closed, full,
+   *  already registered, or (18.5 AC2) a group that does not fit. */
+  isRefused: boolean
 }
 
 /** The size of the list to load again after a registration: what is shown, so a refreshed list
@@ -252,13 +265,14 @@ export function UpcomingEventsPage() {
     async (
       event: RegistrationEvent,
       details: AttendeeDetails,
+      guests: GuestInput[],
     ): Promise<RegistrationProblem | null> => {
       setRegisteringId(event.id)
       setRefusal(null)
       // The list is loaded again below, so an earlier page's failure no longer applies.
       setLoadMoreError(null)
       try {
-        const registration = await registerForEvent(event, details)
+        const registration = await registerForEvent(event, details, guests)
         // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
         // again in between.
         setList((current) =>
@@ -267,7 +281,7 @@ export function UpcomingEventsPage() {
             : {
                 ...current,
                 items: current.items.map((item) =>
-                  item.id === event.id ? markRegistered(item, registration.registered_at) : item,
+                  item.id === event.id ? markRegistered(item, registration) : item,
                 ),
               },
         )
@@ -276,6 +290,7 @@ export function UpcomingEventsPage() {
         return {
           message: formatApiError(err),
           isAboutTheEvent: err instanceof ApiError && EVENT_REFUSAL_CODES.includes(err.code),
+          isRefused: err instanceof ApiError && err.code === 'REGISTRATION_REFUSED',
         }
       } finally {
         setRegisteringId(null)
@@ -295,15 +310,21 @@ export function UpcomingEventsPage() {
     setConfirmingFor(null)
   }
 
-  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
-   *  refusal about the event shows where 18.1 shows it (AC4/AC6); one about the details stays in
-   *  the dialog, so nothing typed is lost. */
-  async function handleConfirmDetails(details: AttendeeDetails) {
+  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile - and,
+   *  18.5 AC1, with the guests added in the dialog. A refusal about the event shows where 18.1
+   *  shows it (AC4/AC6); one about the details stays in the dialog, so nothing typed is lost.
+   *  18.5 AC2: so does a 409 for a registration with guests - a group that no longer fits among
+   *  them - since the way out, fewer guests or none, is in the dialog. An event no longer open
+   *  (404) still closes it. The list is read again either way, so the guest limit catches up. */
+  async function handleConfirmDetails(details: AttendeeDetails, guests: GuestInput[]) {
     if (confirmingFor === null) return
     const event = confirmingFor
     setDetailsError(null)
-    const problem = await sendRegistration(event, details)
-    if (problem !== null && !problem.isAboutTheEvent) {
+    const problem = await sendRegistration(event, details, guests)
+    if (
+      problem !== null &&
+      (!problem.isAboutTheEvent || (problem.isRefused && guests.length > 0))
+    ) {
       setDetailsError(problem.message)
       return
     }
@@ -402,6 +423,9 @@ export function UpcomingEventsPage() {
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={confirmingFor.name}
+          maxGuests={guestLimit(
+            list?.items.find((item) => item.id === confirmingFor.id) ?? confirmingFor,
+          )}
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={registeringId !== null}
           error={detailsError}

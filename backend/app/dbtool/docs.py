@@ -71,7 +71,7 @@ GROUPS: list[tuple[str, str, list[str]]] = [
     ),
     ("Venue bookings", "#ffc9c9", ["venue_bookings"]),
     ("Equipment", "#d0bfff", ["equipment_reservations", "equipment_unavailability_periods"]),
-    ("Registration", "#ffd8a8", ["event_registrations"]),
+    ("Registration", "#ffd8a8", ["event_registrations", "event_registration_guests"]),
     ("Notifications & audit", "#eebefa", ["notifications", "audit_log"]),
     ("Infrastructure", "#dee2e6", ["schema_migrations"]),
 ]

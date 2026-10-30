@@ -26,6 +26,10 @@ export const ACCOUNTS = {
   attendee4: 'attendee4@example.com',
   attendee5: 'attendee5@example.com',
   attendee6: 'attendee6@example.com',
+  // Story 18.5: one attendee for each flow with guests (register-guests.spec.ts). Gina registers
+  // with guests; Hana, registered on her own, adds one afterwards.
+  attendee7: 'attendee7@example.com',
+  attendee8: 'attendee8@example.com',
   // Story 20.2: an organiser with nine notifications of her own, which only
   // notifications.spec.ts reads (backend/tests/support/seed.py::Users.NOTICE).
   notice: 'nadia@notice.example',
@@ -158,6 +162,10 @@ export const EVENTS = {
   // 2026 with Aiden and Bella registered, so its list never changes and is only read.
   charityQuiz: '33333333-0000-0000-0000-000000018407',
   foodTastingWalk: '33333333-0000-0000-0000-000000018408',
+  // Story 18.5, both Confirmed and open, organiser: organiser2, January 2029. Gina registers for the
+  // batik workshop with two guests; Hana, registered alone for the kite afternoon, adds one.
+  batikWorkshop: '33333333-0000-0000-0000-000000018503',
+  kiteAfternoon: '33333333-0000-0000-0000-000000018504',
   // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
   // sends it for its safety review and releases its Seminar Room 2.1 booking for good.
   safetyRelease: '33333333-0000-0000-0000-000000021301',

@@ -1739,7 +1739,7 @@ def _registration_impact(
     """AC1: the registrations taking a place (18.1), counted - affected when new dates move
     them, or when a lowered attendance leaves more registered than it allows. Nothing is
     written to any registration."""
-    count = registrations_service.count_active_registrations(db, event.id)
+    count = registrations_service.count_places_taken(db, event.id)
     is_attendance = request.field_name == ChangeRequestField.EXPECTED_ATTENDANCE
     over_by = max(0, count - proposed.attendance) if is_attendance else 0
     if count == 0 or (over_by == 0 and not proposed.is_rescheduled):
