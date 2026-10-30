@@ -1,4 +1,5 @@
 import type {
+  Guest,
   RegistrationEvent,
   RegistrationStanding,
   RegistrationState,
@@ -114,4 +115,23 @@ export function describeDietaryRequirements(dietaryRequirements: string | null):
  *  but an attendee who registered before 18.4 and has not been asked since has none yet. */
 export function describePhone(phone: string | null): string {
   return phone ?? NOT_RECORDED
+}
+
+/** Story 18.5 AC3: one guest as the attendee sees them on My registrations - their name, and
+ *  their dietary requirements beside it when there are any to show. */
+export function describeGuest(guest: Guest): string {
+  return guest.dietary_requirements === null
+    ? guest.full_name
+    : `${guest.full_name} (${guest.dietary_requirements})`
+}
+
+/** Story 18.5 AC3: the guests registered with the attendee, in order, as My registrations
+ *  names them. */
+export function describeGuests(guests: Guest[]): string {
+  return guests.map(describeGuest).join(', ')
+}
+
+/** Story 18.5 AC4: whose guest a row of the registration list is. */
+export function describeGuestOf(attendeeName: string): string {
+  return `Guest of ${attendeeName}`
 }

@@ -4,8 +4,11 @@ import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   fetchProfile,
   fetchRegistrationEvent,
+  MAX_GUESTS,
   registerForEvent,
   type AttendeeDetails,
+  type GuestInput,
+  type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
 import type { ErrorCode } from '../errors/registry'
@@ -36,6 +39,9 @@ const EVENT_REFUSAL_CODES: ErrorCode[] = ['REGISTRATION_EVENT_NOT_OPEN', 'REGIST
 interface RegistrationProblem {
   message: string
   isAboutTheEvent: boolean
+  /** A 409: the event is open, but this registration was not taken - not yet open, closed, full,
+   *  already registered, or (18.5 AC2) a group that does not fit. */
+  isRefused: boolean
 }
 
 /** Story 18.1 AC1: a loader for the event that is not the one before it, so the page loads the
@@ -44,14 +50,20 @@ function eventLoader(eventId: string): () => Promise<RegistrationEvent> {
   return () => fetchRegistrationEvent(eventId)
 }
 
+/** Story 18.5 AC2/AC6: how many guests a new registration may bring - one per place left after
+ *  the attendee's own, but never more than MAX_GUESTS. */
+function guestLimit(event: RegistrationEvent): number {
+  return Math.min(MAX_GUESTS, Math.max(event.places_left - 1, 0))
+}
+
 /** Story 18.1 AC1: the event as the server now has it for this attendee, until it is loaded
- *  again. */
-function markRegistered(event: RegistrationEvent, registeredAt: string): RegistrationEvent {
+ *  again. Story 18.5 AC2: the attendee and each of their guests took a place. */
+function markRegistered(event: RegistrationEvent, registration: Registration): RegistrationEvent {
   return {
     ...event,
     state: 'REGISTERED',
-    registered_at: registeredAt,
-    places_left: event.places_left - 1,
+    registered_at: registration.registered_at,
+    places_left: event.places_left - 1 - registration.guests.length,
   }
 }
 
@@ -77,7 +89,9 @@ function markRegistered(event: RegistrationEvent, registeredAt: string): Registr
  * profile (once it has loaded, so the dialog never opens half filled); confirming registers and
  * saves them. A refusal about the event closes the dialog and shows here; one about the details
  * stays in the dialog, so nothing typed is lost. If the profile cannot be loaded, the dialog opens
- * empty and the details are typed in.
+ * empty and the details are typed in. Story 18.5 AC1/AC2: the dialog also takes the attendee's
+ * guests, up to one per place left after their own; a group that no longer fits is refused in
+ * the dialog, where fewer guests can be sent.
  *
  * Keyed by the event in the address, so moving to another event's page starts afresh.
  */
@@ -114,21 +128,21 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
   async function sendRegistration(
     registering: RegistrationEvent,
     details: AttendeeDetails,
+    guests: GuestInput[],
   ): Promise<RegistrationProblem | null> {
     setIsRegistering(true)
     setRefusal(null)
     try {
-      const registration = await registerForEvent(registering, details)
+      const registration = await registerForEvent(registering, details, guests)
       // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
       // again in between.
-      setEvent((current) =>
-        current === null ? current : markRegistered(current, registration.registered_at),
-      )
+      setEvent((current) => (current === null ? current : markRegistered(current, registration)))
       return null
     } catch (err) {
       return {
         message: formatApiError(err),
         isAboutTheEvent: err instanceof ApiError && EVENT_REFUSAL_CODES.includes(err.code),
+        isRefused: err instanceof ApiError && err.code === 'REGISTRATION_REFUSED',
       }
     } finally {
       setIsRegistering(false)
@@ -147,14 +161,20 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
     setIsConfirming(false)
   }
 
-  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
-   *  refusal about the event shows on the page (18.1 AC11); one about the details stays in the
-   *  dialog, so nothing typed is lost. */
-  async function handleConfirmDetails(details: AttendeeDetails) {
+  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile - and,
+   *  18.5 AC1, with the guests added in the dialog. A refusal about the event shows on the page
+   *  (18.1 AC11); one about the details stays in the dialog, so nothing typed is lost. 18.5 AC2:
+   *  so does a 409 for a registration with guests - a group that no longer fits among them -
+   *  since the way out, fewer guests or none, is in the dialog. An event no longer open (404)
+   *  still closes it. The event is read again either way, so the guest limit catches up. */
+  async function handleConfirmDetails(details: AttendeeDetails, guests: GuestInput[]) {
     if (event === null) return
     setDetailsError(null)
-    const problem = await sendRegistration(event, details)
-    if (problem !== null && !problem.isAboutTheEvent) {
+    const problem = await sendRegistration(event, details, guests)
+    if (
+      problem !== null &&
+      (!problem.isAboutTheEvent || (problem.isRefused && guests.length > 0))
+    ) {
       setDetailsError(problem.message)
       return
     }
@@ -259,6 +279,7 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={event.name}
+          maxGuests={guestLimit(event)}
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={isRegistering}
           error={detailsError}

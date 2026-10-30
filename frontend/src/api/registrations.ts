@@ -38,12 +38,31 @@ export interface RegistrationEventList {
   total: number
 }
 
-/** Mirrors `RegistrationOut`: story 18.1 AC1, the registration just made. */
+/** Story 18.5 AC6: the most guests an attendee may bring, as the backend's MAX_GUESTS. */
+export const MAX_GUESTS = 10
+
+/** Mirrors `GuestOut`: story 18.5 AC3/AC4, one guest registered with an attendee. Their dietary
+ *  requirements are null when none were given, and on a list row no longer Registered. */
+export interface Guest {
+  full_name: string
+  dietary_requirements: string | null
+}
+
+/** Mirrors `GuestIn`: story 18.5 AC1/AC6, one guest as the attendee sends them - a name, required,
+ *  and dietary requirements, which the backend makes null when blank. Nothing else is asked. */
+export interface GuestInput {
+  full_name: string
+  dietary_requirements: string
+}
+
+/** Mirrors `RegistrationOut`: story 18.1 AC1, the registration just made. Story 18.5 AC1: and the
+ *  guests registered with it, in order. */
 export interface Registration {
   id: string
   event_id: string
   status: string
   registered_at: string
+  guests: Guest[]
 }
 
 /** Story 18.4 AC6: the most characters of dietary requirements, as the backend's
@@ -110,14 +129,17 @@ export function fetchRegistrationEvent(eventId: string): Promise<RegistrationEve
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal
  *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details` are the
- *  ones the attendee confirmed, saved to their profile with the registration. */
+ *  ones the attendee confirmed, saved to their profile with the registration. Story 18.5 AC1:
+ *  `guests` are registered with them, as one group; a group that does not fit is refused whole
+ *  (AC2). */
 export function registerForEvent(
   event: RegistrationEvent,
   details: AttendeeDetails,
+  guests: GuestInput[],
 ): Promise<Registration> {
   return api<Registration>('/registrations', {
     method: 'POST',
-    body: { event_id: event.id, details },
+    body: { event_id: event.id, details, guests },
     errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN', 409: 'REGISTRATION_REFUSED' },
     notify: { title: 'Registered', message: `You are registered for ${event.name}.` },
   })
@@ -144,6 +166,13 @@ export interface MyRegistration {
   registered_at: string
   withdrawn_at: string | null
   can_withdraw: boolean
+  /** Story 18.5 AC3: the guests registered with it, in order. */
+  guests: Guest[]
+  /** Story 18.5 AC3: whether the guests can still be changed, decided by the server on its clock. */
+  can_change_guests: boolean
+  /** Story 18.5 AC3: how many guests it may have - those it has and one per place left, at most
+   *  MAX_GUESTS - worked out by the server. */
+  max_guests: number
 }
 
 /** Story 18.2 AC1: the signed-in attendee's registrations, one per event, events not yet started
@@ -165,6 +194,24 @@ export function withdrawRegistration(registration: MyRegistration): Promise<MyRe
   })
 }
 
+/** Story 18.5 AC3: replace the guests of one of the signed-in attendee's registrations, answered
+ *  with the registration as saved. A refusal (AC3) carries the backend's sentence saying
+ *  why. */
+export function updateGuests(
+  registration: MyRegistration,
+  guests: GuestInput[],
+): Promise<MyRegistration> {
+  return api<MyRegistration>(`/registrations/${encodeURIComponent(registration.id)}/guests`, {
+    method: 'PUT',
+    body: { guests },
+    errorCodes: { 404: 'REGISTRATION_NOT_FOUND', 409: 'GUESTS_CHANGE_REFUSED' },
+    notify: {
+      title: 'Guests saved',
+      message: `Your guests for ${registration.event_name} were saved.`,
+    },
+  })
+}
+
 /** Mirrors `EventRegistrationOut`: story 18.3 AC1/AC4, one registration in an event's list, with
  *  where the attendee stands as 18.2 tells them. `withdrawn_at` is set only when `status` is
  *  WITHDRAWN. */
@@ -180,11 +227,14 @@ export interface EventRegistration {
   registered_at: string
   status: RegistrationStanding
   withdrawn_at: string | null
+  /** Story 18.5 AC4: the guests registered with them, in order; AC9: on a row no longer Registered,
+   *  by name only. */
+  guests: Guest[]
 }
 
 /** Mirrors `EventRegistrationListOut`: story 18.3 AC1-AC3/AC7, one page of the list, how many
- *  registrations there are in all, and how many are active against capacity, all worked out on
- *  the server. */
+ *  registrations there are in all, and how many places the active ones take against capacity -
+ *  their guests included (story 18.5 AC4) - all worked out on the server. */
 export interface EventRegistrationList {
   items: EventRegistration[]
   total: number

@@ -394,12 +394,14 @@ function equipmentSummary(items: EquipmentImpact[]): CategorySummary {
   }
 }
 
-/** AC1: counted, never named. */
+/** AC1: counted, never named. Story 18.5 AC5: the count is of people - each attendee and the
+ *  guests they registered with - not of attendees. */
 function registrationSummary(registrations: RegistrationImpact | null): CategorySummary {
   if (registrations === null) {
     return { tone: 'success', pill: NO_IMPACT_PILL, summary: 'No registrations are affected.' }
   }
-  const registered = counted(registrations.active_count, 'attendee')
+  const registered =
+    registrations.active_count === 1 ? '1 person' : `${registrations.active_count} people`
   const summary =
     registrations.over_by > 0
       ? `${registered} registered, ${registrations.over_by} more than the proposed attendance of ${registrations.proposed_attendance}.`
