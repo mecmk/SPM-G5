@@ -53,6 +53,9 @@ export const EVENTS = {
   // booking of Sunrise Studio, a Harbour Pavilion booking an earlier change cancelled, and four
   // wireless microphones sent to Technical Support. The 6.2 spec cancels it.
   charityRun: '33333333-0000-0000-0000-000000000062',
+  // Story 16.2: Planning, organiser2, coordinator2, 20 Feb 2030, holding all three mobile LED
+  // screens.
+  lightShowcase: '33333333-0000-0000-0000-000000016201',
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
   // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides

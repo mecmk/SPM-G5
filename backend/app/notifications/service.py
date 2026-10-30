@@ -75,6 +75,8 @@ class NotificationType(StrEnum):
     BOOKING_HOLD_EXPIRY_CHANGED = "BOOKING_HOLD_EXPIRY_CHANGED"  # 12.7: the coordinator
     EQUIPMENT_SUBMITTED = "EQUIPMENT_SUBMITTED"  # 15.1: Technical Support
     EQUIPMENT_WITHDRAWN = "EQUIPMENT_WITHDRAWN"  # 19.2: Technical Support, items changed or removed
+    # 16.2: the event's coordinator - units it holds went out of service, so its item is short
+    EQUIPMENT_SHORT = "EQUIPMENT_SHORT"
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
     EVENT_CHANGE_APPROVED = "EVENT_CHANGE_APPROVED"  # 19.2: the organiser

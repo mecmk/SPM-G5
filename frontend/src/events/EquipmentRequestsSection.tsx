@@ -3,18 +3,20 @@ import { formatApiError } from '../api/client'
 import {
   addEquipmentItem,
   fetchEquipmentAvailability,
+  listEventShortages,
   removeEquipmentItem,
   submitEquipment,
   TECHNICAL_NOTES_MAX_LENGTH,
   updateEquipmentItem,
   type EquipmentAvailability,
   type EquipmentItemChange,
+  type EquipmentShortage,
 } from '../api/equipment'
 import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
+import { EQUIPMENT_STATUS_LABELS, describeItemShort } from '../shared/equipmentStatus'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
@@ -80,6 +82,9 @@ export interface EquipmentRequestsSectionProps {
   canChange: boolean
   /** Story 21.2 AC4: the latest safety review says the equipment must change. */
   isFlagged: boolean
+  /** Story 16.2 AC4: the viewer reads equipment (an internal role), so the items units out of
+   *  service leave short are marked. */
+  canSeeShortages: boolean
   /** Reloads the event after a change, so every item shows its new status. */
   onChanged: () => Promise<void>
 }
@@ -97,6 +102,9 @@ export interface EquipmentRequestsSectionProps {
  * knows whether to plan for something else. AC3: a decided item says which way, when, and by whom.
  * Story 21.2 AC4: while the latest safety review asks for the equipment to change, the section is
  * highlighted and says so.
+ * Story 16.2 AC4: an item that Technical Support's units out of service leave short says by how
+ * many, for whoever reads equipment - its coordinator first - worked out by the server each time
+ * the event is loaded, so the mark goes once enough units are back.
  * Story 17.1 AC1: each item names the period it is for - what its hold covers, or its event's
  * while it holds nothing (the server decides). AC4: a released item says it holds nothing if it
  * was held until then, and keeps a decline's reason. AC6: the list is the event as loaded, so a
@@ -107,6 +115,7 @@ export function EquipmentRequestsSection({
   equipment,
   canChange,
   isFlagged,
+  canSeeShortages,
   onChanged,
 }: EquipmentRequestsSectionProps) {
   const ids = useId()
@@ -129,6 +138,8 @@ export function EquipmentRequestsSection({
   const [removeError, setRemoveError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [shortages, setShortages] = useState<EquipmentShortage[]>([])
+  const [shortagesError, setShortagesError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!canChange) return undefined
@@ -146,6 +157,28 @@ export function EquipmentRequestsSection({
       cancelled = true
     }
   }, [eventId, canChange, availabilityVersion])
+
+  // Story 16.2 AC4: read again whenever the event's items are, since a change may cover them. An
+  // event with no items has none short, so it is not asked - most events a page opens.
+  const hasItems = equipment.length > 0
+  useEffect(() => {
+    if (!canSeeShortages || !hasItems) return undefined
+    let cancelled = false
+    listEventShortages(eventId)
+      .then((data) => {
+        if (cancelled) return
+        setShortages(data)
+        setShortagesError(null)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setShortagesError(formatApiError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, canSeeShortages, hasItems, equipment])
+
+  const shortByItem = new Map(shortages.map((each) => [each.item_id, each.units_short]))
 
   const availableByCode = new Map(
     (availability ?? []).map((row) => [row.equipment_type_code, row.available]),
@@ -275,6 +308,11 @@ export function EquipmentRequestsSection({
     >
       <h2 id="equipment-heading">Equipment requirements</h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
+      {hasItems && shortagesError && (
+        <p role="alert" className="error">
+          {shortagesError}
+        </p>
+      )}
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (
@@ -377,6 +415,14 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="small">{UNAVAILABLE_SENTENCE}</span>
+                    </>
+                  )}
+                  {shortByItem.has(item.id) && (
+                    <>
+                      <br />
+                      <span className="small item-short">
+                        {describeItemShort(shortByItem.get(item.id)!, item.quantity)}
+                      </span>
                     </>
                   )}
                   {wasHeldUntilReleased(item) && (

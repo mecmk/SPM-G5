@@ -4538,3 +4538,29 @@ button.requirement-choice.requirement-covered:hover,
     min-height: 44px;
   }
 }
+
+/* ---------- equipment out of service (story 16.2) ---------- */
+
+/* AC4: an item that units out of service leave short, in the warning colour a flag takes. */
+.item-short {
+  color: var(--warning-deep);
+  font-weight: 600;
+}
+
+/* AC2: a type's stock, the units out now and where it is kept, on one wrapping line. */
+.equipment-type-facts {
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.out-of-service-form h2 {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  /* AC2: on a phone the form's buttons and each record's are big enough for a thumb. */
+  .out-of-service-form button,
+  .out-of-service-records button {
+    min-height: 44px;
+  }
+}

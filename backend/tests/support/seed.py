@@ -182,6 +182,9 @@ class Events:
     # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
     # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
+    # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
+    # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
+    LIGHT_SHOWCASE = _e(16201)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
     # one of its own; the cases that only read share them, the yoga's most of all.
@@ -388,6 +391,8 @@ class EquipmentItems:
 
     # Story 6.2: Events.CHARITY_RUN's four wireless microphones, sent to Technical Support, held.
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
+    # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
 
 
 class EquipmentHolds:
@@ -407,6 +412,8 @@ class EquipmentHolds:
     DEMO_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000027")
     # Story 6.2: the hold of Events.CHARITY_RUN's four wireless microphones (item 6666..62).
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
+    # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
 
 
 class EquipmentOutOfService:

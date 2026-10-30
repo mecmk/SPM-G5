@@ -227,3 +227,176 @@ export function getEquipmentRequest(itemId: string): Promise<EquipmentQueueEntry
     errorCodes: { 404: 'NOT_FOUND' },
   })
 }
+
+// =============================================================================================
+// Story 16.2: units of an equipment type out of service
+// =============================================================================================
+
+/** Values of `OutOfServiceReason` (backend/app/equipment/schemas.py): story 16.2 AC1. */
+export type OutOfServiceReason = 'DAMAGED' | 'MAINTENANCE' | 'LOST' | 'OTHER'
+
+/** Story 16.2 AC1: the most characters of a note, as the backend's
+ *  OUT_OF_SERVICE_NOTES_MAX_LENGTH. */
+export const OUT_OF_SERVICE_NOTES_MAX_LENGTH = 1000
+
+/** Mirrors `EquipmentCatalogueEntryOut`: story 16.2 AC2, one type in the catalogue. */
+export interface EquipmentCatalogueEntry {
+  id: string
+  code: string
+  name: string
+  total_quantity: number
+  out_of_service_now: number
+}
+
+/** Mirrors `OutOfServiceOut`: story 16.2 AC2, one record. `ends_at` null: out until ended. */
+export interface OutOfServiceRecord {
+  id: string
+  quantity: number
+  reason: OutOfServiceReason
+  notes: string | null
+  starts_at: string
+  ends_at: string | null
+}
+
+/** Mirrors `EquipmentTypePageOut`: story 16.2 AC2, one type's page and its current records,
+ *  soonest first. */
+export interface EquipmentTypePage extends EquipmentCatalogueEntry {
+  description: string | null
+  storage_location: string | null
+  records: OutOfServiceRecord[]
+}
+
+/** Mirrors `OutOfServiceIn`: story 16.2 AC1, a record as Technical Support sends it. */
+export interface OutOfServiceInput {
+  quantity: number
+  reason: OutOfServiceReason
+  notes: string | null
+  starts_at: string
+  ends_at: string | null
+}
+
+/** Mirrors `ShortHoldOut`: story 16.2 AC4/AC5, a hold a record leaves short. */
+export interface ShortHold {
+  event_id: string
+  event_name: string
+  coordinator_name: string | null
+  units_held: number
+  units_short: number
+  starts_at: string
+  ends_at: string
+}
+
+/** Mirrors `EquipmentShortageOut`: story 16.2 AC4, an event's item left short. */
+export interface EquipmentShortage {
+  item_id: string
+  units_short: number
+}
+
+const OUT_OF_SERVICE_ERRORS = {
+  404: 'OUT_OF_SERVICE_NOT_FOUND',
+  409: 'OUT_OF_SERVICE_REFUSED',
+} as const
+
+function outOfServicePath(typeId: string): string {
+  return `/equipment-types/${encodeURIComponent(typeId)}/out-of-service`
+}
+
+/** Story 16.2 AC2: every active type, with its stock and the units out of service now. */
+export function listEquipmentCatalogue(): Promise<EquipmentCatalogueEntry[]> {
+  return api<EquipmentCatalogueEntry[]>('/equipment-types')
+}
+
+/** Story 16.2 AC2: one type's page. */
+export function fetchEquipmentType(typeId: string): Promise<EquipmentTypePage> {
+  return api<EquipmentTypePage>(`/equipment-types/${encodeURIComponent(typeId)}`, {
+    errorCodes: { 404: 'EQUIPMENT_TYPE_NOT_FOUND' },
+  })
+}
+
+/** Story 16.2 AC5: the holds `input` would leave short - with `recordId`, as an edit of that
+ *  record - refused as saving it would be (AC3). A read, so it lands in no notice. */
+export function checkOutOfService(
+  typeId: string,
+  input: Pick<OutOfServiceInput, 'quantity' | 'starts_at' | 'ends_at'>,
+  recordId: string | null,
+): Promise<ShortHold[]> {
+  const params = new URLSearchParams({
+    quantity: String(input.quantity),
+    starts_at: input.starts_at,
+  })
+  if (input.ends_at !== null) params.set('ends_at', input.ends_at)
+  if (recordId !== null) params.set('record_id', recordId)
+  return api<{ short_holds: ShortHold[] }>(`${outOfServicePath(typeId)}/check?${params}`, {
+    errorCodes: OUT_OF_SERVICE_ERRORS,
+  }).then((check) => check.short_holds)
+}
+
+/** Story 16.2 AC1: record units of `typeName` out of service. */
+export function addOutOfService(
+  typeId: string,
+  typeName: string,
+  input: OutOfServiceInput,
+): Promise<OutOfServiceRecord> {
+  return api<OutOfServiceRecord>(outOfServicePath(typeId), {
+    method: 'POST',
+    body: input,
+    errorCodes: OUT_OF_SERVICE_ERRORS,
+    notify: {
+      title: 'Out of service',
+      message: `${input.quantity} × ${typeName} recorded out of service.`,
+    },
+  })
+}
+
+/** Story 16.2 AC2: change a record - only the fields in `change` are sent. */
+export function editOutOfService(
+  typeId: string,
+  typeName: string,
+  recordId: string,
+  change: Partial<OutOfServiceInput>,
+): Promise<OutOfServiceRecord> {
+  return api<OutOfServiceRecord>(`${outOfServicePath(typeId)}/${encodeURIComponent(recordId)}`, {
+    method: 'PATCH',
+    body: change,
+    errorCodes: OUT_OF_SERVICE_ERRORS,
+    notify: {
+      title: 'Record changed',
+      message: `A ${typeName} out-of-service record was changed.`,
+    },
+  })
+}
+
+/** Story 16.2 AC2: end a record in force now. */
+export function endOutOfServiceNow(
+  typeId: string,
+  typeName: string,
+  recordId: string,
+): Promise<OutOfServiceRecord> {
+  return api<OutOfServiceRecord>(`${outOfServicePath(typeId)}/${encodeURIComponent(recordId)}`, {
+    method: 'PATCH',
+    body: { end_now: true },
+    errorCodes: OUT_OF_SERVICE_ERRORS,
+    notify: { title: 'Record ended', message: `${typeName} units are back in service from now.` },
+  })
+}
+
+/** Story 16.2 AC2: remove a record not yet started. */
+export function removeOutOfService(
+  typeId: string,
+  typeName: string,
+  recordId: string,
+): Promise<void> {
+  return api<void>(`${outOfServicePath(typeId)}/${encodeURIComponent(recordId)}`, {
+    method: 'DELETE',
+    errorCodes: OUT_OF_SERVICE_ERRORS,
+    notify: {
+      title: 'Record removed',
+      message: `A ${typeName} out-of-service record was removed.`,
+    },
+  })
+}
+
+/** Story 16.2 AC4: the event's items that units out of service leave short. */
+export function listEventShortages(eventId: string): Promise<EquipmentShortage[]> {
+  return api<EquipmentShortage[]>(`/events/${encodeURIComponent(eventId)}/equipment-shortages`)
+}
