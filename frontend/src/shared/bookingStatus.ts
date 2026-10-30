@@ -1,5 +1,5 @@
 import type { Booking, BookingStatus, BookingStatusCounts } from '../api/bookings'
-import { formatTime } from './format'
+import { formatTime, NONE } from './format'
 
 export type BookingStatusTabKey =
   'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED'
@@ -70,7 +70,7 @@ export function closingReason(
 
 /** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
 function formatMinutesDuration(minutes: number): string {
-  if (minutes === 0) return 'None'
+  if (minutes === 0) return NONE
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
   const parts: string[] = []
