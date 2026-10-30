@@ -2010,3 +2010,55 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- ---------------------------------------------------------------------
+-- Fix f7.1.2 (story 7.1 AC4, AC8): tests/e2e/events.spec.ts. The leadership retreat (3333..7012)
+-- is read by its organiser, then cancelled by them on its page. Organiser 1, coordinator 1,
+-- Planning, May 2029 so nothing else shares its period: one requirement with an approved, held
+-- booking of Sunrise Studio that runs over two days, so the page names both dates.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000007012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Lakeside Leadership Retreat', 'Training', 'Two days of leadership workshops for team leads.', '2029-05-09 09:00+08', '2029-05-10 17:00+08', 40, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower C', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-05 09:00+08', '2026-10-06 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-7012-000000000001', '33333333-0000-0000-0000-000000007012', 0, 'Workshop studio', 40,
+     '2029-05-09 09:00+08', '2029-05-10 17:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at) VALUES
+    ('44444444-0000-0000-0000-000000007012', '33333333-0000-0000-0000-000000007012', '22222222-0000-0000-0000-000000000008',
+     '11111111-0000-0000-0000-000000000003', '2029-05-09 09:00+08', '2029-05-10 17:00+08', 0, 0,
+     40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-06 15:00+08', NULL, '2026-10-06 12:00+08',
+     'cccccccc-0000-0000-7012-000000000001', '2029-04-30 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-7012-000000000001', '33333333-0000-0000-0000-000000007012', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
