@@ -177,8 +177,8 @@ class Events:
     # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
     # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
-    # Story 16.2: Planning, coordinator 1, 20 Feb 2030, all three mobile LED screens held and
-    # accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
+    # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
+    # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
     LIGHT_SHOWCASE = _e(16201)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has

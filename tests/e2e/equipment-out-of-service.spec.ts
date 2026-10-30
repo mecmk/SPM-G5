@@ -259,7 +259,7 @@ test.describe('takes a seeded hold short once', () => {
     const dialog = page.getByRole('dialog', { name: 'Some holds will be short' })
     const hold = dialog.getByRole('listitem').filter({ hasText: LIGHT_SHOWCASE })
     await expect(hold).toContainText('1 of 3 short')
-    await expect(hold).toContainText('Chloe Coordinator')
+    await expect(hold).toContainText('Carl Coordinator')
     await expect(records(page)).toContainText('No units are out of service.')
     await dialog.getByRole('button', { name: 'Save anyway' }).click()
     await expect(dialog).toHaveCount(0)
@@ -267,7 +267,7 @@ test.describe('takes a seeded hold short once', () => {
 
     // AC4: the event's coordinator sees the item short.
     await page.getByRole('button', { name: 'Sign out' }).click()
-    await signIn(page, ACCOUNTS.coordinator)
+    await signIn(page, ACCOUNTS.coordinator2)
     await page.goto(`/events/${EVENTS.lightShowcase}`)
     const item = page.getByRole('listitem').filter({ hasText: LED_SCREEN })
     await expect(item).toContainText('Short: 1 of 3 out of service')
