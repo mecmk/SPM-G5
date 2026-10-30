@@ -787,6 +787,62 @@ def test_two_venue_staff_adding_one_name_at_once_create_one_layout(engine, secon
         _clean_up(engine, codes=codes)
 
 
+@pytest.mark.story("8.6", ac=10)
+@pytest.mark.parametrize("spelling", ["the same name", "other capitals"])
+def test_two_venue_staff_renaming_to_one_name_at_once_save_one(engine, monkeypatch, spelling):
+    """One rename has saved the name but not yet finished when another layout is renamed to it.
+    The second waits on uq_room_layouts_name, then is told the name is in use and keeps its own."""
+    tag = uuid.uuid4().hex[:8].upper()
+    name = f"Race name {tag}"
+    codes = [f"RACE_{tag}_1", f"RACE_{tag}_2"]
+    with Session(engine) as session:
+        session.add_all(
+            RoomLayout(code=code, name=f"Race layout {code}", description=_DESCRIPTION)
+            for code in codes
+        )
+        session.commit()
+    renaming = threading.Event()
+    proceed = threading.Event()
+    audit = service.record_audit
+
+    def audit_then_wait(db: Session, **kwargs: object) -> AuditLog:
+        if kwargs["action"] == "ROOM_LAYOUT_UPDATED":
+            renaming.set()
+            assert proceed.wait(timeout=10)
+        return audit(db, **kwargs)
+
+    monkeypatch.setattr(service, "record_audit", audit_then_wait)
+
+    def rename_layout(code: str, attempted: str) -> str:
+        with Session(engine) as session:
+            actor = session.get(User, Users.VENUE_STAFF.id)
+            change = venue_schemas.RoomLayoutUpdate(name=attempted)
+            try:
+                service.update_room_layout(session, code, change, actor=actor)
+            except service.RoomLayoutNameTaken as refusal:
+                return str(refusal)
+            return "renamed"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(rename_layout, codes[0], name)
+            try:
+                assert renaming.wait(timeout=10)
+                attempted = name if spelling == "the same name" else name.upper()
+                second = pool.submit(rename_layout, codes[1], attempted)
+                _wait_until_a_session_waits_on_a_lock(engine)
+            finally:
+                proceed.set()
+            outcomes = [first.result(timeout=30), second.result(timeout=30)]
+
+        assert outcomes == ["renamed", f'A room layout named "{name}" already exists.']
+        with Session(engine) as session:
+            assert session.get(RoomLayout, codes[0]).name == name
+            assert session.get(RoomLayout, codes[1]).name == f"Race layout {codes[1]}"
+    finally:
+        _clean_up(engine, codes=codes)
+
+
 @pytest.mark.story("8.6", ac=11)
 @pytest.mark.parametrize("save", ["create", "update"])
 def test_saving_a_venue_with_a_deleted_layout_is_refused_naming_it(venue_staff_client, db, save):

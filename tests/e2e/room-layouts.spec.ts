@@ -148,6 +148,7 @@ test('8.6 AC1: a late answer to an older read of the list never replaces a newer
       const response = await route.fetch()
       await heldReadReleased
       await route.fulfill({ response })
+      await (await request.response())?.finished()
       markHeldReadDelivered()
     },
   )
@@ -159,8 +160,9 @@ test('8.6 AC1: a late answer to an older read of the list never replaces a newer
 
   releaseHeldRead()
   await heldReadDelivered
-  // An answer that is rightly ignored changes nothing on the page, so give it time to land.
-  await page.waitForTimeout(500)
+  // Two frames: whatever the late answer would set has rendered by then.
+  await page.evaluate(() => new Promise(requestAnimationFrame))
+  await page.evaluate(() => new Promise(requestAnimationFrame))
   await expect(layoutEntry(page, second)).toBeVisible()
   await expect(layoutEntry(page, first)).toBeVisible()
 })
