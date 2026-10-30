@@ -158,9 +158,11 @@ export function EquipmentRequestsSection({
     }
   }, [eventId, canChange, availabilityVersion])
 
-  // Story 16.2 AC4: read again whenever the event's items are, since a change may cover them.
+  // Story 16.2 AC4: read again whenever the event's items are, since a change may cover them. An
+  // event with no items has none short, so it is not asked - most events a page opens.
+  const hasItems = equipment.length > 0
   useEffect(() => {
-    if (!canSeeShortages) return undefined
+    if (!canSeeShortages || !hasItems) return undefined
     let cancelled = false
     listEventShortages(eventId)
       .then((data) => {
@@ -174,7 +176,7 @@ export function EquipmentRequestsSection({
     return () => {
       cancelled = true
     }
-  }, [eventId, canSeeShortages, equipment])
+  }, [eventId, canSeeShortages, hasItems, equipment])
 
   const shortByItem = new Map(shortages.map((each) => [each.item_id, each.units_short]))
 
@@ -306,7 +308,7 @@ export function EquipmentRequestsSection({
     >
       <h2 id="equipment-heading">Equipment requirements</h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
-      {shortagesError && (
+      {hasItems && shortagesError && (
         <p role="alert" className="error">
           {shortagesError}
         </p>
