@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration 029 - story 21.3: release the venue bookings a safety finding names.
+-- Migration 030 - story 21.3: release the venue bookings a safety finding names.
 --
 -- When the Safety Officer requests changes, a finding about venue bookings may name some of the
 -- event's approved bookings. Recording the decision releases each one: it becomes CANCELLED, as a
@@ -64,11 +64,11 @@ CREATE TABLE event_safety_finding_bookings (
 CREATE INDEX ix_event_safety_finding_bookings_booking ON event_safety_finding_bookings (booking_id);
 
 COMMENT ON COLUMN venue_bookings.release_cause IS
-    'Why a CANCELLED booking was released: EVENT_CANCELLED (its event was cancelled, story 6.2), CHANGE_APPROVED (an approved change no longer fits it, story 19.2), REPLACED (its replacement was approved, story 12.6) or SAFETY_REVIEW (the Safety Officer named it in a finding, story 21.3). Set in the release, only on a CANCELLED booking (ck_venue_bookings_release_fields). NULL for a booking never released, and for a CANCELLED row written without one; migration 029 gave every booking cancelled before it a cause.';
+    'Why a CANCELLED booking was released: EVENT_CANCELLED (its event was cancelled, story 6.2), CHANGE_APPROVED (an approved change no longer fits it, story 19.2), REPLACED (its replacement was approved, story 12.6) or SAFETY_REVIEW (the Safety Officer named it in a finding, story 21.3). Set in the release, only on a CANCELLED booking (ck_venue_bookings_release_fields). NULL for a booking never released, and for a CANCELLED row written without one; migration 030 gave every booking cancelled before it a cause.';
 COMMENT ON COLUMN venue_bookings.release_reason IS
     'Why the release happened, in the words of whoever caused it: for SAFETY_REVIEW, the required change of each finding that named the booking, in finding order, joined with " | " (story 21.3 AC2, AC9); required then (ck_venue_bookings_safety_release_reason). NULL for every other cause.';
 COMMENT ON COLUMN venue_bookings.released_by_id IS
-    'FK -> users.id. Who released the booking: the Safety Officer for SAFETY_REVIEW, the organiser who cancelled the event for EVENT_CANCELLED, the coordinator whose decision applied the change for CHANGE_APPROVED, the Venue Staff member who approved the replacement for REPLACED (story 21.3). NULL when not released, and for a booking whose releaser migration 029 could not know.';
+    'FK -> users.id. Who released the booking: the Safety Officer for SAFETY_REVIEW, the organiser who cancelled the event for EVENT_CANCELLED, the coordinator whose decision applied the change for CHANGE_APPROVED, the Venue Staff member who approved the replacement for REPLACED (story 21.3). NULL when not released, and for a booking whose releaser migration 030 could not know.';
 COMMENT ON CONSTRAINT ck_venue_bookings_release_cause ON venue_bookings IS
     'Story 21.3: release_cause is one of the four causes a booking can be released for.';
 COMMENT ON CONSTRAINT ck_venue_bookings_release_fields ON venue_bookings IS

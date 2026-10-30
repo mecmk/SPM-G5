@@ -2,7 +2,7 @@
 writes them with their findings, and story 21.3 (AC1, AC2, AC9) links each finding to the venue
 bookings its decision released. Mirrors ``event_safety_reviews``, ``safety_review_factors``,
 ``event_safety_review_findings`` and ``event_safety_finding_bookings`` in backend/db/migrations
-(019, 024, 029).
+(019, 024, 030).
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ class SafetyReviewFactor(Base):
 
 
 # Story 21.3 AC1, AC9: the bookings a finding named, which the decision released. Mirrors
-# ``event_safety_finding_bookings`` (migration 029); written through ``released_bookings``.
+# ``event_safety_finding_bookings`` (migration 030); written through ``released_bookings``.
 finding_bookings = Table(
     "event_safety_finding_bookings",
     Base.metadata,
