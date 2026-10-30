@@ -34,6 +34,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.router import EVENT_NOT_FOUND_MESSAGE
 from app.events.models import Event, EventStatus
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
 from tests.support.seed import Bookings, Events, Users
@@ -264,6 +265,7 @@ def test_another_organisers_event_is_not_found(organiser_client, db: Session):
     response = organiser_client.get(_path(Events.APPROVED))
 
     assert response.status_code == 404
+    assert response.json() == {"detail": EVENT_NOT_FOUND_MESSAGE}
 
 
 @pytest.mark.story("7.1", ac=2)
@@ -280,6 +282,7 @@ def test_an_unknown_event_is_not_found(organiser_client):
     response = organiser_client.get(_path(uuid.uuid4()))
 
     assert response.status_code == 404
+    assert response.json() == {"detail": EVENT_NOT_FOUND_MESSAGE}
 
 
 @pytest.mark.story("7.1", ac=2)
