@@ -51,6 +51,7 @@ import {
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
   REGISTRATIONS_REPORT_PATH,
+  ROOM_LAYOUTS_PATH,
   UPCOMING_EVENTS_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
@@ -59,6 +60,7 @@ import {
   VENUE_REQUEST_PATH,
   VENUES_MANAGE_PATH,
 } from './routes'
+import { RoomLayoutsPage } from './venues/RoomLayoutsPage'
 import { VenueCataloguePage } from './venues/VenueCataloguePage'
 import { VenueDetailPage } from './venues/VenueDetailPage'
 import { VenueFormPage } from './venues/VenueFormPage'
@@ -93,10 +95,14 @@ function App() {
             >
               <Route index element={<HomePage />} />
 
-              {/* Story 8.1: venue catalogue, any internal role that can read venues. */}
+              {/*
+                Story 8.1: venue catalogue, any internal role that can read venues. Story 8.6: so
+                are the room layouts, which only Venue Staff change.
+              */}
               <Route element={<RequirePermission permission={PERMISSIONS.VENUES_READ} />}>
                 <Route path={VENUE_CATALOGUE_PATH} element={<VenueCataloguePage />} />
                 <Route path={VENUE_PATH} element={<VenueDetailPage />} />
+                <Route path={ROOM_LAYOUTS_PATH} element={<RoomLayoutsPage />} />
               </Route>
 
               {/*
