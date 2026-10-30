@@ -191,7 +191,10 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Regional Sales Summit', 'Sales enablement', 'Two-day summit for the regional sales teams.', NULL, '2026-12-15 09:00+08', '2026-12-16 17:00+08', 220, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..13: confirmed - venue and equipment arranged, event still in the future
+    -- 3333..13: confirmed, event still in the future, but its one venue requirement (Banquet,
+    -- below) is left unbooked and it has no equipment: tests/e2e/booking-requests.spec.ts sends
+    -- and withdraws a request for that requirement (12.2) and opens its request step (12.1 AC17),
+    -- and tests/e2e/equipment-display.spec.ts reads its empty equipment (17.1 AC3).
     ('33333333-0000-0000-0000-000000000013', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Partner Appreciation Dinner', 'Partner relations', 'A formal dinner thanking key channel partners.', NULL, '2027-02-10 18:30+08', '2027-02-10 22:00+08', 90, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
@@ -308,7 +311,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..37 and 3333..38: reviewed by the Safety Officer and no longer awaiting the check, for
     -- story 21.1's Accepted and Declined tabs. The 37 was approved and is now Confirmed; the 38
-    -- was sent back to Planning and not sent again. Neither has a venue booked.
+    -- was sent back to Planning and not sent again. The 37's Main venue is booked at Grand Hall
+    -- (below); the 38 has no venue booked.
     ('33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Marina Food Festival', 'Community event', 'Food stalls along the waterfront promenade.', NULL, '2028-09-02 11:00+08', '2028-09-02 21:00+08', 200, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
@@ -440,7 +444,8 @@ ON CONFLICT (id) DO UPDATE SET
 -- Aiden withdrew from the heritage trail (74); the fun run (75) was cancelled with his
 -- registration still active, as an event sent back to Planning after confirmation and then
 -- cancelled can be (18.1 AC4, 6.2); the book swap (76) started on 3 Oct 2026. Organiser 2,
--- coordinator 2, no venue booked, as 18.1's.
+-- coordinator 2. Only the yoga has its venue booked (below), so the others show "Venue to be
+-- confirmed", as most of 18.1's do.
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
@@ -544,7 +549,11 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM'),
     -- Story 18.1's jazz evening (3333..39), the one of its events with venues booked.
     ('cccccccc-0000-0000-0000-000000000039', '33333333-0000-0000-0000-000000000039', 'STANDING'),
-    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM');
+    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM'),
+    -- Confirmed events with their venue booked (c8), as 18.4's pottery taster is further down:
+    -- story 21.1's food festival (3333..37) and 18.2's yoga (73). Specs only read either one.
+    ('cccccccc-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000037', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000073', '33333333-0000-0000-0000-000000000073', 'STANDING');
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
@@ -1115,7 +1124,18 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000039', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2028-10-07 20:00+08', '2028-10-07 22:00+08', 0, 0,
      120, 'EXHIBITION', 'Food stalls.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
-     NULL, '2028-10-07 20:00+08', '2026-10-10 09:00+08')
+     NULL, '2028-10-07 20:00+08', '2026-10-10 09:00+08'),
+    -- c8: two more Confirmed events with their Main venue booked, each hold completed when the
+    -- event was confirmed: story 21.1's food festival (3333..37) at Grand Hall, approved before it
+    -- was sent for its safety check, and 18.2's yoga (73) at the Exhibition Foyer.
+    ('44444444-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000037', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000004', '2028-09-02 11:00+08', '2028-09-02 21:00+08', 0, 0,
+     200, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-30 15:00+08', NULL, '2026-09-30 11:00+08',
+     'cccccccc-0000-0000-0000-000000000037', '2028-09-02 11:00+08', '2026-10-09 10:00+08'),
+    ('44444444-0000-0000-0000-000000000073', '33333333-0000-0000-0000-000000000073', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-03-27 18:00+08', '2027-03-27 19:00+08', 0, 0,
+     40, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     'cccccccc-0000-0000-0000-000000000073', '2027-03-27 18:00+08', '2026-10-10 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -1917,7 +1937,8 @@ ON CONFLICT (id) DO UPDATE SET
 -- 09-11 the registrations. Cara registers for the pottery taster (04), then the watercolour
 -- class (05); Dion for the book club (06). The food tasting walk (08) closed on 1 Oct 2026 with
 -- Aiden and Bella registered, so its registration list never changes: the organiser reads their
--- details there.
+-- details there. Only the pottery taster has its venue booked (below); the others show "Venue to
+-- be confirmed".
 -- ---------------------------------------------------------------------
 INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department,
                    dietary_requirements, attendee_details_confirmed_at) VALUES
@@ -2010,6 +2031,33 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- c8: the pottery taster's Main venue, Seminar Room 2.1, approved by Vera and its hold completed
+-- when the event was confirmed, so 18.4's December events show one booked venue beside the rest.
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000018404', '33333333-0000-0000-0000-000000018404', 0, 'Main venue', 30,
+     '2028-12-02 10:00+08', '2028-12-02 12:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0000-000000018404', '33333333-0000-0000-0000-000000018404', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000004', '2028-12-02 10:00+08', '2028-12-02 12:00+08', 0, 0,
+     30, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     'cccccccc-0000-0000-0000-000000018404', '2028-12-02 10:00+08', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
 
 -- ---------------------------------------------------------------------
 -- Story 18.5: registering with guests, and tests/e2e/register-guests.spec.ts. Each flow has an

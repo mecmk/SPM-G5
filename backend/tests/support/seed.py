@@ -152,7 +152,8 @@ class Events:
     # Story 21.1's, both organiser 2, coordinator 2 and AWAITING_SAFETY_CHECK, August 2028.
     HARBOUR_CONCERT = _e(35)  # 300 expected at the 250-seat Exhibition Foyer; first in the queue
     BOOK_FAIR = _e(36)  # within capacity; sent back once (SafetyReviews.BOOK_FAIR_CHANGES)
-    # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
+    # Story 21.1's reviewed events, organiser 2, coordinator 2. Only the food festival has a venue
+    # booked, Grand Hall (Bookings.APPROVED_FOOD_FESTIVAL_GRAND_HALL).
     FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
     # Story 18.1's, all CONFIRMED, Public and taking registrations: organiser 2, coordinator 2.
@@ -188,7 +189,7 @@ class Events:
     POETRY_NIGHT = _e(70)  # CONFIRMED, 1 place, his: Full; the spec withdraws and it comes back
     SKETCHING_WALK = _e(71)  # CONFIRMED; the spec withdraws and registers again
     BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
-    SUNSET_YOGA = _e(73)  # CONFIRMED; only read
+    SUNSET_YOGA = _e(73)  # CONFIRMED, Exhibition Foyer booked; only read
     HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
     CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
     BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
@@ -214,7 +215,8 @@ class Events:
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
     # Story 20.2: Nadia Notice's, in planning with Carl, the event nine notifications are about.
     NOTICE_GALA = _e(20202)
-    # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028.
+    # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028. Only the
+    # pottery taster has its venue booked (Bookings.APPROVED_POTTERY_SEMINAR_ROOM).
     POTTERY_TASTER = _e(18404)  # open; Users.ATTENDEE_3's first registration
     WATERCOLOUR_CLASS = _e(18405)  # open; Users.ATTENDEE_3's second, in one click
     BOOK_CLUB = _e(18406)  # open; Users.ATTENDEE_4 registers after changing their details
@@ -248,6 +250,10 @@ class Bookings:
     # Story 18.1: Events.JAZZ_EVENING's two venues, approved, each hold completed.
     APPROVED_JAZZ_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000013")
     APPROVED_JAZZ_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000014")  # extra venue
+    # c8: Confirmed events' Main venues, approved, each hold completed.
+    APPROVED_FOOD_FESTIVAL_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000037")
+    APPROVED_YOGA_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000073")
+    APPROVED_POTTERY_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000018404")
     # Story 21.2's, each at Seminar Room 2.1.
     APPROVED_BOOTCAMP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000015")
     APPROVED_CYBER_CLINIC_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000016")
