@@ -23,10 +23,10 @@ registration, and the first registration needs them (AC2).
 
 Story 18.5: an attendee registers with up to ten guests, as one group (AC1). Each guest takes a
 place (AC2), so every count of places here - 18.1's places left, 18.3's active count and 19.3's
-count of those affected (AC10) - is the Registered registrations plus their guests. Guests are
+count of those affected (AC5) - is the Registered registrations plus their guests. Guests are
 written with the registration and checked against the places as 18.1's place is: inserted first,
-counted after, the event's row held (AC12). Changed afterwards with ``update_guests`` (AC3), their
-own section at the end.
+counted after, the event's row held (AC2, AC11). Changed afterwards with ``update_guests``
+(AC3), their own section at the end.
 """
 
 from __future__ import annotations
@@ -39,9 +39,11 @@ from enum import StrEnum
 
 from sqlalchemy import (
     ColumnElement,
+    Integer,
     Select,
     and_,
     case,
+    cast,
     delete,
     func,
     null,
@@ -84,7 +86,7 @@ REGISTRATION_EVENT_NOT_FOUND_MESSAGE = "This event is not open for registration.
 REGISTRATION_NOT_YET_OPEN_MESSAGE = "Registration for this event has not opened yet."
 REGISTRATION_CLOSED_MESSAGE = "Registration for this event has closed."
 EVENT_FULL_MESSAGE = "This event is full."
-# Story 18.5 AC12: a group that does not fit. An attendee alone is still told EVENT_FULL_MESSAGE.
+# Story 18.5 AC2: a group that does not fit. An attendee alone is still told EVENT_FULL_MESSAGE.
 NOT_ENOUGH_PLACES_MESSAGE = "There are not enough places left for you and your guests."
 ALREADY_REGISTERED_MESSAGE = "You are already registered for this event."
 REGISTRATION_LIST_NOT_FOUND_MESSAGE = "This event was not found."
@@ -144,7 +146,7 @@ class AlreadyRegistered(RegistrationRefused):
 
 
 class NotEnoughPlaces(RegistrationRefused):
-    """Story 18.5 AC12: the attendee and their guests together need more places than are left."""
+    """Story 18.5 AC2: the attendee and their guests together need more places than are left."""
 
     def __init__(self) -> None:
         super().__init__(NOT_ENOUGH_PLACES_MESSAGE)
@@ -204,14 +206,14 @@ class AttendeeRegistration:
     attendee: User
     standing: RegistrationStanding
     shows_details: bool
-    guests: list[RegistrationGuest]  # story 18.5 AC5, in the attendee's order
+    guests: list[RegistrationGuest]  # story 18.5 AC4, in the attendee's order
 
 
 @dataclass(frozen=True)
 class EventRegistrationList:
     """18.3 AC1-AC3/AC7: one page of an event's registrations, oldest first; how many there are
     in all; how many places the active ones take against its capacity, guests included (18.5
-    AC5); and whether that count has reached it."""
+    AC4); and whether that count has reached it."""
 
     items: list[AttendeeRegistration]
     total: int
@@ -299,8 +301,9 @@ def _places_held() -> ColumnElement[int]:
 
 
 def _places() -> ColumnElement[int]:
-    """AC2: the places the counted registrations take, 0 for none."""
-    return func.coalesce(func.sum(_places_held()), 0)
+    """AC2: the places the counted registrations take, 0 for none. Cast, as PostgreSQL sums a
+    count as ``numeric``."""
+    return func.coalesce(cast(func.sum(_places_held()), Integer), 0)
 
 
 def _places_taken(event_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Select[tuple[int]]:
@@ -308,10 +311,10 @@ def _places_taken(event_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Select[tupl
     return select(_places()).where(EventRegistration.event_id == event_id)
 
 
-def count_active_registrations(db: Session, event_id: uuid.UUID) -> int:
+def count_places_taken(db: Session, event_id: uuid.UUID) -> int:
     """AC2: how many places ``event_id``'s registrations take, guests included (18.5 AC2). Story
     19.3 reports it beside a change request, so a coordinator sees who an approval would affect -
-    each attendee and their guests (18.5 AC10)."""
+    each attendee and their guests (18.5 AC5)."""
     return db.scalar(_places_taken(event_id))
 
 
@@ -479,12 +482,12 @@ def register(
     (``PhoneNumberRequired``, 18.4 AC7), before anything is read or written.
 
     Story 18.5 AC1/AC2: the guests sent with it are written with it, and counted with it: a group
-    that does not fit is refused whole (``NotEnoughPlaces``, AC12) - an attendee alone, as before,
+    that does not fit is refused whole (``NotEnoughPlaces``, AC2) - an attendee alone, as before,
     with ``EventFull``.
 
     Raises ``RegistrationEventNotFound`` (AC3/AC4) unless the event is open to attendees, then
     ``RegistrationClosed`` or ``RegistrationNotYetOpen`` (AC2), ``AlreadyRegistered`` (AC6),
-    ``EventFull`` or ``NotEnoughPlaces`` (AC2/AC6, 18.5 AC12) and ``AttendeeDetailsRequired``
+    ``EventFull`` or ``NotEnoughPlaces`` (AC2/AC6, 18.5 AC2) and ``AttendeeDetailsRequired``
     (18.4 AC2), in that order. A refused registration leaves nothing written - details and guests
     sent with it included."""
     if data.details is not None:
@@ -539,7 +542,8 @@ def register(
         action=REGISTRATION_CREATED_ACTION,
         entity_type=_REGISTRATION_ENTITY,
         entity_id=registration.id,
-        details={"event_id": str(event.id)},
+        # Story 18.5 AC1: how many guests came with it, as update_guests records - never names.
+        details={"event_id": str(event.id), "guest_count": len(guests)},
         commit=False,
     )
     db.commit()
@@ -616,8 +620,8 @@ class EventStarted(WithdrawalRefused):
 @dataclass(frozen=True)
 class MyRegistrationItem:
     """18.2 AC1: one of the attendee's registrations, with its event, where they stand, and
-    whether it can be withdrawn now (AC3). Story 18.5 AC4/AC9: its guests, and whether they can
-    still be changed; AC12: how many guests it may have, for the places left."""
+    whether it can be withdrawn now (AC3). Story 18.5 AC3: its guests, whether they can still be
+    changed, and how many guests it may have, for the places left."""
 
     registration: EventRegistration
     event: Event
@@ -657,7 +661,7 @@ def withdrawal_refusal(*, standing: RegistrationStanding) -> WithdrawalRefused:
 
 
 def guest_limit(*, capacity: int, places_taken: int, guests: int) -> int:
-    """Story 18.5 AC6/AC12 (PO, 30 Oct 2026): how many guests a registration holding ``guests``
+    """Story 18.5 AC2/AC3/AC6: how many guests a registration holding ``guests``
     may have - those, and one more for each place left - but never more than ten. On an event
     already over its capacity (19.2) no place is left, so the limit is the guests it has."""
     return min(MAX_GUESTS, guests + places_left(capacity=capacity, registered=places_taken))
@@ -772,7 +776,7 @@ def withdraw_registration(
     the update, for the answer, and when nothing was written to say why: ``RegistrationNotFound``
     when it is not ``attendee``'s (AC6), else ``withdrawal_refusal`` (AC3/AC7/AC8).
 
-    Story 18.5 AC8: the guests go with it. Their places are counted only while the registration
+    Story 18.5 AC7: the guests go with it. Their places are counted only while the registration
     is Registered, so they are freed with it, and they stay on it for the record."""
     withdrawn = db.execute(
         update(EventRegistration)
@@ -801,7 +805,7 @@ def withdraw_registration(
         event,
         now=now,
         guests=guests,
-        places_taken=count_active_registrations(db, event.id),
+        places_taken=count_places_taken(db, event.id),
     )
     if withdrawn.rowcount == 0:
         raise withdrawal_refusal(standing=item.standing)
@@ -851,8 +855,8 @@ def _attendee_registration(
 ) -> AttendeeRegistration:
     """18.3 AC4: one row, with 18.2's standing. 18.4 AC9: only a registration still Registered
     shows the attendee's details - not one withdrawn, nor any on a cancelled event (CL-163) -
-    since only those attendees are being catered for and may need contacting. Story 18.5 AC5: the
-    guests registered with them, whose dietary requirements follow the same rule."""
+    since only those attendees are being catered for and may need contacting. Story 18.5 AC4: the
+    guests registered with them, whose dietary requirements follow the same rule (AC9)."""
     standing = registration_standing(
         registration_status=registration.status, event_status=event_status
     )
@@ -876,7 +880,7 @@ def list_event_registrations(
     statement that reads the page, so a registration made meanwhile can never leave the count
     and the list apart. A page past the end has no row to carry them, so they are counted
     alone. A cancelled event's registrations, still active or not, count for none (18.2). Story
-    18.5 AC5: the active count is of places, so each active registration's guests count too."""
+    18.5 AC4: the active count is of places, so each active registration's guests count too."""
     event = db.scalar(
         select(Event).where(Event.id == event_id, _registration_list_viewable_by(viewer))
     )
@@ -886,7 +890,12 @@ def list_event_registrations(
     assert event.expected_attendance is not None
     is_this_event = EventRegistration.event_id == event.id
     rows = db.execute(
-        select(EventRegistration, User, func.count().over(), func.sum(_places_held()).over())
+        select(
+            EventRegistration,
+            User,
+            func.count().over(),
+            cast(func.sum(_places_held()).over(), Integer),
+        )
         .join(User, User.id == EventRegistration.attendee_id)
         .where(is_this_event)
         .order_by(EventRegistration.registered_at, EventRegistration.id)
@@ -964,7 +973,7 @@ GUESTS_NOT_ENOUGH_PLACES_MESSAGE = "There are not enough places left for these g
 
 
 class GuestsChangeRefused(Exception):
-    """AC9/AC12: the registration is the attendee's, but its guests cannot be changed so."""
+    """AC3: the registration is the attendee's, but its guests cannot be changed so."""
 
 
 class GuestsRegistrationClosed(GuestsChangeRefused):
@@ -990,10 +999,10 @@ class GuestsNotEnoughPlaces(GuestsChangeRefused):
 def guests_change_refusal(
     *, standing: RegistrationStanding, event: Event, now: datetime
 ) -> GuestsChangeRefused | None:
-    """AC9: why the guests of a registration standing so can no longer be changed, or None while
-    they can - withdrawn; its event cancelled; or its registration no longer open: closed by time
-    (18.1 AC2), or the event no longer taking registrations (sent back to Planning, 9.4). The one
-    rule behind both My registrations' ``can_change_guests`` and ``update_guests``."""
+    """AC3 (CL-185): why the guests of a registration standing so can no longer be changed, or
+    None while they can - withdrawn; its event cancelled; or its registration no longer open:
+    closed by time (18.1 AC2), or the event no longer taking registrations (sent back to Planning,
+    9.4). The one rule behind both My registrations' ``can_change_guests`` and ``update_guests``."""
     if standing is RegistrationStanding.WITHDRAWN:
         return GuestsAfterWithdrawal()
     if standing is RegistrationStanding.EVENT_CANCELLED:
@@ -1016,13 +1025,13 @@ def update_guests(
     db: Session, registration_id: uuid.UUID, data: GuestsUpdate, *, attendee: User, now: datetime
 ) -> MyRegistrationItem:
     """AC3: replace the guests of ``attendee``'s registration with ``data``'s, in order, and audit
-    how many there now are - never their names. AC11: another attendee's registration, like an
+    how many there now are - never their names. AC10: another attendee's registration, like an
     unknown one, is ``RegistrationNotFound``.
 
-    AC12: the event's row is held first, as ``register`` holds it, then the registration's, so
+    AC11: the event's row is held first, as ``register`` holds it, then the registration's, so
     every change to an event's places takes turns and a withdrawal (18.2) waits for this one. The
     standing is read under those locks, so nothing changes between ``guests_change_refusal``
-    (AC9) and the write. The new guests are written first and the places counted after, as in
+    and the write. The new guests are written first and the places counted after, as in
     ``register``: more guests than the places left is rolled back (``GuestsNotEnoughPlaces``).
     Fewer guests are never refused, even on an event already over its capacity (19.2)."""
     found = db.execute(
@@ -1080,5 +1089,5 @@ def update_guests(
         event,
         now=now,
         guests=guests,
-        places_taken=count_active_registrations(db, event.id),
+        places_taken=count_places_taken(db, event.id),
     )

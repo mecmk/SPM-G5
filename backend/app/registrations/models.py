@@ -48,7 +48,7 @@ class EventRegistration(UUIDPrimaryKeyMixin, Base):
 class RegistrationGuest(UUIDPrimaryKeyMixin, Base):
     """Story 18.5: one guest registered with an attendee, as one group (AC1). ``position`` keeps
     the attendee's order and caps a group at ten guests (AC6); the registration's status is the
-    guest's (AC8, AC9)."""
+    guest's (AC7, AC8)."""
 
     __tablename__ = "event_registration_guests"
 

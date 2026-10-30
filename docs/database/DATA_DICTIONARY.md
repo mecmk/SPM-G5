@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-29 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-30 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -831,10 +831,10 @@ The guests an attendee brings, registered with them as one group. Each takes a p
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
-| `registration_id` | `uuid` | no | - | FK → `event_registrations.id` | FK -> event_registrations.id. The registration the guest came with; its status is the guest's (AC8, AC9). |
+| `registration_id` | `uuid` | no | - | FK → `event_registrations.id` | FK -> event_registrations.id. The registration the guest came with; its status is the guest's (AC7, AC8). |
 | `position` | `smallint` | no | - | - | The guest's place in the attendee's list, from 1. At most 10, so a group is at most 11 (AC6); unique within a registration (uq_event_registration_guests_position). |
-| `full_name` | `text` | no | - | - | The guest's name, at most 200 characters; never blank (AC7). Guests have no phone number, email or account (AC7, AC11). |
-| `dietary_requirements` | `text` | yes | - | - | The guest's dietary requirements, at most 500 characters (AC7). NULL when none were given, shown as "None"; never blank. |
+| `full_name` | `text` | no | - | - | The guest's name, at most 200 characters; never blank (AC6). Guests have no phone number, email or account (AC1, AC10). |
+| `dietary_requirements` | `text` | yes | - | - | The guest's dietary requirements, at most 500 characters (AC1). NULL when none were given, shown as "None"; never blank. |
 
 Rules and indexes:
 

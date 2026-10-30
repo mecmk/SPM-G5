@@ -851,7 +851,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
 
   // Story 18.5: the guests an attendee registers with them.
-  /** AC7: worded as the backend's GUEST_FULL_NAME_REQUIRED_MESSAGE. */
+  /** AC6: worded as the backend's GUEST_FULL_NAME_REQUIRED_MESSAGE. */
   GUEST_NAME_REQUIRED: {
     title: "Check your guest's name",
     message: "Enter your guest's name.",
@@ -862,13 +862,13 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Too many guests',
     message: 'You can bring at most 10 guests.',
   },
-  /** AC12 (PO, 30 Oct 2026): shown once the guests fill the places left, before the 10-guest
+  /** AC2/AC3: shown once the guests fill the places left, before the 10-guest
    *  limit, so no more can be added; the backend refuses more with NOT_ENOUGH_PLACES_MESSAGE. */
   GUESTS_NO_PLACES: {
     title: 'No places left',
     message: 'There are not enough places left for more guests.',
   },
-  /** AC9/AC12: registration closed, the attendee withdrew, the event was cancelled, or not enough
+  /** AC3: registration closed, the attendee withdrew, the event was cancelled, or not enough
    *  places are left for the guests. The backend's own sentence (always sent) says which. */
   GUESTS_CHANGE_REFUSED: {
     title: 'Guests not saved',

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { Fragment, useCallback, useState } from 'react'
 import { formatApiError } from '../api/client'
 import { listEventRegistrations } from '../api/registrations'
 import { EmptyState } from '../components/EmptyState'
@@ -10,7 +10,7 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   STANDING_BADGES,
   describeDietaryRequirements,
-  describeGuests,
+  describeGuestOf,
   describePhone,
 } from './registrationLabels'
 
@@ -27,8 +27,11 @@ import {
  * (AC9): the server sends neither. On a desktop the list is a table; on a phone each attendee is a
  * card of labelled lines (App.css `.registration-table`), and long dietary requirements wrap.
  *
- * Story 18.5 AC5: the guests each attendee brings, with their dietary requirements beside them -
- * on a row no longer Registered, by name only - and a count that includes them.
+ * Story 18.5 AC4: each guest an attendee brings on a row of their own, under the attendee's and in
+ * their order, marked as their guest, with their dietary requirements in the same column as the
+ * attendee's - "None" when blank - and a count that includes them. AC9: a row no longer Registered
+ * shows its guests by name only, as it does the attendee. On a phone each guest is a card of their
+ * own, set in under the attendee's (App.css `.registration-guest`).
  */
 export function RegistrationListSection({ eventId }: { eventId: string }) {
   const load = useCallback(() => listEventRegistrations(eventId), [eventId])
@@ -83,7 +86,6 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
                     <th>Email</th>
                     <th>Phone</th>
                     <th>Dietary requirements</th>
-                    <th>Guests</th>
                     <th>Registered</th>
                   </tr>
                 </thead>
@@ -92,29 +94,47 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
                     const badge = STANDING_BADGES[registration.status]
                     const isRegistered = registration.status === 'REGISTERED'
                     return (
-                      <tr key={registration.id}>
-                        <td className="registration-name">{registration.attendee_name}</td>
-                        <td data-label="Status">
-                          <StatusBadge status={badge.status} label={badge.label} />
-                          {registration.withdrawn_at !== null &&
-                            ` ${formatDateTime(registration.withdrawn_at)}`}
-                        </td>
-                        <td data-label="Email">{registration.attendee_email}</td>
-                        <td data-label="Phone">
-                          {isRegistered ? describePhone(registration.attendee_phone) : ''}
-                        </td>
-                        <td data-label="Dietary requirements" className="registration-dietary">
-                          {isRegistered
-                            ? describeDietaryRequirements(registration.dietary_requirements)
-                            : ''}
-                        </td>
-                        <td data-label="Guests" className="registration-dietary">
-                          {describeGuests(registration.guests)}
-                        </td>
-                        <td data-label="Registered">
-                          {formatDateTime(registration.registered_at)}
-                        </td>
-                      </tr>
+                      <Fragment key={registration.id}>
+                        <tr>
+                          <td className="registration-name">{registration.attendee_name}</td>
+                          <td data-label="Status">
+                            <StatusBadge status={badge.status} label={badge.label} />
+                            {registration.withdrawn_at !== null &&
+                              ` ${formatDateTime(registration.withdrawn_at)}`}
+                          </td>
+                          <td data-label="Email">{registration.attendee_email}</td>
+                          <td data-label="Phone">
+                            {isRegistered ? describePhone(registration.attendee_phone) : ''}
+                          </td>
+                          <td data-label="Dietary requirements" className="registration-dietary">
+                            {isRegistered
+                              ? describeDietaryRequirements(registration.dietary_requirements)
+                              : ''}
+                          </td>
+                          <td data-label="Registered">
+                            {formatDateTime(registration.registered_at)}
+                          </td>
+                        </tr>
+                        {registration.guests.map((guest, index) => (
+                          <tr key={index} className="registration-guest">
+                            <td className="registration-name">
+                              {guest.full_name}
+                              <span className="registration-guest-of">
+                                {describeGuestOf(registration.attendee_name)}
+                              </span>
+                            </td>
+                            <td />
+                            <td />
+                            <td />
+                            <td data-label="Dietary requirements" className="registration-dietary">
+                              {isRegistered
+                                ? describeDietaryRequirements(guest.dietary_requirements)
+                                : ''}
+                            </td>
+                            <td />
+                          </tr>
+                        ))}
+                      </Fragment>
                     )
                   })}
                 </tbody>

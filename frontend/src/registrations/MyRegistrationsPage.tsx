@@ -24,7 +24,7 @@ import { STANDING_BADGES, describeGuests, describeRegisteredAt } from './registr
 const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 
 /** Story 18.2 AC1/AC3: when the attendee registered, when they withdrew if they did, and why an
- *  active registration can no longer be withdrawn. Story 18.5 AC4: the guests registered with
+ *  active registration can no longer be withdrawn. Story 18.5 AC3: the guests registered with
  *  it, when there are any. */
 function describeRegistration(registration: MyRegistration): string[] {
   const lines = [describeRegisteredAt(registration.registered_at)]
@@ -65,7 +65,7 @@ interface MyRegistrationCardProps {
  * Story 18.2 AC1/AC3/AC8: one registration, with its event's name, date and time and where the
  * attendee stands. Withdraw is the card's own control (story 5.4's card action), offered only
  * while the server says it can be withdrawn: an active registration whose event has not started.
- * Story 18.5 AC3/AC9: Change guests beside it, offered only while the server says the guests can
+ * Story 18.5 AC3: Change guests beside it, offered only while the server says the guests can
  * still be changed.
  */
 function MyRegistrationCard({ registration, onWithdraw, onChangeGuests }: MyRegistrationCardProps) {
@@ -134,7 +134,7 @@ function MyRegistrationCard({ registration, onWithdraw, onChangeGuests }: MyRegi
  * AC5: attendees only - App.tsx guards the route, and the backend sends only their own.
  * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
  *      one.
- * Story 18.5 AC4: each registration names its guests. AC3: Change guests opens them to add to,
+ * Story 18.5 AC3: each registration names its guests, and Change guests opens them to add to,
  *      rename or remove; saving shows the registration as saved. A refusal (closed, withdrawn,
  *      cancelled, not enough places) stays in the dialog, and the list is loaded again so the card
  *      shows where it now stands. AC8: Withdraw withdraws the whole group.
@@ -245,7 +245,11 @@ export function MyRegistrationsPage() {
 
       {changingGuestsOf !== null && (
         <ChangeGuestsDialog
-          registration={changingGuestsOf}
+          // Story 18.5 AC3: the registration as last read, so a refusal's reload brings the guest
+          // limit up to date; what was typed stays, as the form only starts from it.
+          registration={
+            registrations?.find((r) => r.id === changingGuestsOf.id) ?? changingGuestsOf
+          }
           isBusy={isSavingGuests}
           error={guestsError}
           onSave={saveGuests}

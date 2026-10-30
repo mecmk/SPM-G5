@@ -17,9 +17,9 @@ Story 18.4: the attendee's details - their name, phone number and dietary requir
 send them, on My profile or with their first registration, and as My profile shows them.
 
 Story 18.5: the guests an attendee registers with them - each a name and optional dietary
-requirements, and nothing else (AC7), at most ten (AC6) - as sent with a registration or as a
-change afterwards (AC3), and as the attendee (AC4) and the event's organiser and coordinator
-(AC5) are shown them.
+requirements, and nothing else (AC1), at most ten (AC6) - as sent with a registration or as a
+change afterwards (AC3), and as the attendee (AC3) and the event's organiser and coordinator
+(AC4) are shown them.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ PHONE_NUMBER_REQUIRED_MESSAGE = "Enter your phone number."
 FULL_NAME_MAX_LENGTH = 200
 FULL_NAME_REQUIRED_MESSAGE = "Enter your name."
 FULL_NAME_TOO_LONG_MESSAGE = "Your name must be 200 characters or fewer."
-# Story 18.5 AC6/AC7: a guest's name and dietary requirements follow the attendee's own limits, in
+# Story 18.5 AC1/AC6: a guest's name and dietary requirements follow the attendee's own limits, in
 # words about the guest, and a group is at most ten guests. Mirrored by
 # frontend/src/registrations/ - keep them in step; the event_registration_guests constraints hold
 # the database to them too.
@@ -137,7 +137,7 @@ class ProfileOut(BaseModel):
 
 
 class GuestIn(BaseModel):
-    """Story 18.5 AC7: one guest as the attendee sends them - a name, required and at most 200
+    """Story 18.5 AC1/AC6: one guest as the attendee sends them - a name, required and at most 200
     characters, and dietary requirements, optional and at most 500, each counted once trimmed.
     Blank or spaces only is no value. ``extra="forbid"``: nothing else - no phone number, email or
     account - can be sent about a guest. A name left out is refused with the same sentence as a
@@ -209,7 +209,7 @@ class GuestsUpdate(BaseModel):
 
 
 class GuestOut(BaseModel):
-    """Story 18.5 AC4/AC5: one guest, as the attendee and the event's organiser and coordinator see
+    """Story 18.5 AC3/AC4: one guest, as the attendee and the event's organiser and coordinator see
     them. No defaults (response schema)."""
 
     full_name: str
@@ -321,7 +321,7 @@ class MyRegistrationOut(BaseModel):
     """Story 18.2 AC1: one of the attendee's own registrations - its event's name and dates, where
     they stand, when they registered and withdrew, and whether it can be withdrawn now (AC3), so
     the page never decides that on the browser's clock. AC5: nothing internal to the event's
-    planning. Story 18.5 AC4: the guests registered with it, in order; AC9: whether they can still
+    planning. Story 18.5 AC3: the guests registered with it, in order, and whether they can still
     be changed, by the server's clock too. No defaults (response schema)."""
 
     id: uuid.UUID
@@ -336,7 +336,7 @@ class MyRegistrationOut(BaseModel):
     can_withdraw: bool
     guests: list[GuestOut]
     can_change_guests: bool
-    max_guests: int  # 18.5 AC12: how many guests it may have, for the places left (at most 10)
+    max_guests: int  # 18.5 AC3: how many guests it may have, for the places left (at most 10)
 
     @classmethod
     def from_registration(
@@ -376,8 +376,8 @@ class EventRegistrationOut(BaseModel):
     18.2 tells the attendee: withdrawn ones, with when, and cancelled ones included. Story 18.4
     AC5: the attendee's phone number and dietary requirements, read from their profile, so a
     change shows at once (AC4); null when they gave none (shown as "None", AC6) and on every row
-    no longer Registered (AC9). Story 18.5 AC5: the guests registered with them, in order - on a
-    row no longer Registered by name only, as 18.4 AC9 does for the attendee. No defaults
+    no longer Registered (AC9). Story 18.5 AC4: the guests registered with them, in order - AC9:
+    on a row no longer Registered by name only, as 18.4 AC9 does for the attendee. No defaults
     (response schema)."""
 
     id: uuid.UUID
@@ -415,7 +415,7 @@ class EventRegistrationOut(BaseModel):
 
 class EventRegistrationListOut(BaseModel):
     """18.3 AC1-AC3/AC7: one page of the list, how many registrations there are in all, and how
-    many are active against the capacity - story 18.5 AC5: how many places they take, guests
+    many are active against the capacity - story 18.5 AC4: how many places they take, guests
     included. No defaults (response schema)."""
 
     items: list[EventRegistrationOut]

@@ -106,7 +106,7 @@ def register(
     open for registration is a 404. AC2/AC6: not yet open, closed, full or already registered is
     a 409 naming which. AC5: registrations:self only. 18.4 AC7: details that would leave no phone
     number on file are a 422. 18.5 AC1: the guests sent with it are registered with it, and named
-    back; AC6/AC7: guests outside the rules are a 422, and AC12: a group that does not fit a 409."""
+    back; AC1/AC6: guests outside the rules are a 422, and AC2: a group that does not fit a 409."""
     try:
         registration = service.register(db, data, attendee=attendee, now=datetime.now(UTC))
     except service.PhoneNumberRequired as exc:
@@ -173,8 +173,8 @@ def update_guests(
     attendee: Annotated[CurrentUser, CanRegister],
 ) -> MyRegistrationOut:
     """18.5 AC3: replace the guests of the signed-in attendee's registration, and answer with it
-    as My registrations shows it. AC6/AC7: guests outside the rules are a 422. AC9/AC12: closed,
-    withdrawn, cancelled or more guests than the places left is a 409 naming which. AC11: another
+    as My registrations shows it. AC1/AC6: guests outside the rules are a 422. AC3: closed,
+    withdrawn, cancelled or more guests than the places left is a 409 naming which. AC10: another
     attendee's registration is a 404, as an unknown one is; registrations:self only - other roles
     get 403 and signed-out users 401 from the dependency."""
     try:
@@ -200,7 +200,7 @@ def list_event_registrations(
 ) -> EventRegistrationListOut:
     """18.3 AC1-AC4/AC7: one page of the event's registrations, how many there are, and its
     active count against capacity. 18.4 AC5/AC9: each Registered row with the attendee's phone
-    number and dietary requirements. 18.5 AC5: each row with its guests, counted as places.
+    number and dietary requirements. 18.5 AC4/AC9: each row with its guests, counted as places.
     AC5/AC6: any signed-in user may ask, but only the organiser and the assigned coordinator of an
     event past draft get an answer - anyone else, like an unknown id, a 404. Signed out is a
     401."""

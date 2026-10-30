@@ -12,11 +12,11 @@ interface GuestFieldsProps {
 /**
  * Story 18.5 - the guests an attendee brings, in the registration dialog and in Change guests
  * alike: a "Guests" group holding one "Guest n" group per guest, each with its name and dietary
- * requirements and nothing else (AC7), and a button to remove them. AC6: "Add a guest" is
- * disabled once there are ten, and the form says why - AC12, sooner, once the guests fill the
- * places left (PO, 30 Oct 2026), saying that instead. AC7: a guest's name is required, marked *
- * and announced when missing, tied to its field as the attendee's own are (18.4); their dietary
- * requirements stop at 500 characters, and left blank are recorded as "None".
+ * requirements and nothing else (AC1), and a button to remove them. AC6: "Add a guest" is
+ * disabled once there are ten, and the form says why - AC2/AC3, sooner, once the guests fill the
+ * places left, saying that instead. AC6: a guest's name is required, marked * and announced when
+ * missing, tied to its field as the attendee's own are (18.4). AC1: their dietary requirements
+ * stop at 500 characters, and left blank are recorded as "None".
  */
 export function GuestFields({ form }: GuestFieldsProps) {
   const { guests, canAdd, isLimitedByPlaces, add, remove, change, nameProblems, nameInputs } = form

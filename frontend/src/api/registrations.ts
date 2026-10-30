@@ -41,14 +41,14 @@ export interface RegistrationEventList {
 /** Story 18.5 AC6: the most guests an attendee may bring, as the backend's MAX_GUESTS. */
 export const MAX_GUESTS = 10
 
-/** Mirrors `GuestOut`: story 18.5 AC4/AC5, one guest registered with an attendee. Their dietary
+/** Mirrors `GuestOut`: story 18.5 AC3/AC4, one guest registered with an attendee. Their dietary
  *  requirements are null when none were given, and on a list row no longer Registered. */
 export interface Guest {
   full_name: string
   dietary_requirements: string | null
 }
 
-/** Mirrors `GuestIn`: story 18.5 AC7, one guest as the attendee sends them - a name, required,
+/** Mirrors `GuestIn`: story 18.5 AC1/AC6, one guest as the attendee sends them - a name, required,
  *  and dietary requirements, which the backend makes null when blank. Nothing else is asked. */
 export interface GuestInput {
   full_name: string
@@ -125,7 +125,7 @@ export function listRegistrationEvents(
  *  (AC2-AC4, AC6) carries the backend's sentence saying why. Story 18.4 AC2/AC3: `details` are the
  *  ones the attendee confirmed, saved to their profile with the registration. Story 18.5 AC1:
  *  `guests` are registered with them, as one group; a group that does not fit is refused whole
- *  (AC12). */
+ *  (AC2). */
 export function registerForEvent(
   event: RegistrationEvent,
   details: AttendeeDetails,
@@ -160,11 +160,11 @@ export interface MyRegistration {
   registered_at: string
   withdrawn_at: string | null
   can_withdraw: boolean
-  /** Story 18.5 AC4: the guests registered with it, in order. */
+  /** Story 18.5 AC3: the guests registered with it, in order. */
   guests: Guest[]
-  /** Story 18.5 AC9: whether the guests can still be changed, decided by the server on its clock. */
+  /** Story 18.5 AC3: whether the guests can still be changed, decided by the server on its clock. */
   can_change_guests: boolean
-  /** Story 18.5 AC12: how many guests it may have - those it has and one per place left, at most
+  /** Story 18.5 AC3: how many guests it may have - those it has and one per place left, at most
    *  MAX_GUESTS - worked out by the server. */
   max_guests: number
 }
@@ -189,7 +189,7 @@ export function withdrawRegistration(registration: MyRegistration): Promise<MyRe
 }
 
 /** Story 18.5 AC3: replace the guests of one of the signed-in attendee's registrations, answered
- *  with the registration as saved. A refusal (AC9, AC12) carries the backend's sentence saying
+ *  with the registration as saved. A refusal (AC3) carries the backend's sentence saying
  *  why. */
 export function updateGuests(
   registration: MyRegistration,
@@ -221,14 +221,14 @@ export interface EventRegistration {
   registered_at: string
   status: RegistrationStanding
   withdrawn_at: string | null
-  /** Story 18.5 AC5: the guests registered with them, in order; on a row no longer Registered,
+  /** Story 18.5 AC4: the guests registered with them, in order; AC9: on a row no longer Registered,
    *  by name only. */
   guests: Guest[]
 }
 
 /** Mirrors `EventRegistrationListOut`: story 18.3 AC1-AC3/AC7, one page of the list, how many
  *  registrations there are in all, and how many places the active ones take against capacity -
- *  their guests included (story 18.5 AC5) - all worked out on the server. */
+ *  their guests included (story 18.5 AC4) - all worked out on the server. */
 export interface EventRegistrationList {
   items: EventRegistration[]
   total: number

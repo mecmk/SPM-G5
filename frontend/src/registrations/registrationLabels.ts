@@ -40,7 +40,7 @@ export function describePhone(phone: string | null): string {
   return phone ?? NOT_RECORDED
 }
 
-/** Story 18.5 AC4/AC5: one guest as the attendee and the organiser see them - their name, and
+/** Story 18.5 AC3: one guest as the attendee sees them on My registrations - their name, and
  *  their dietary requirements beside it when there are any to show. */
 export function describeGuest(guest: Guest): string {
   return guest.dietary_requirements === null
@@ -48,9 +48,13 @@ export function describeGuest(guest: Guest): string {
     : `${guest.full_name} (${guest.dietary_requirements})`
 }
 
-/** Story 18.5 AC4/AC5: the guests registered with an attendee, in order - nothing for none, so
- *  an attendee alone shows no guests rather than a second "None" beside their own dietary
- *  requirements. */
+/** Story 18.5 AC3: the guests registered with the attendee, in order, as My registrations
+ *  names them. */
 export function describeGuests(guests: Guest[]): string {
   return guests.map(describeGuest).join(', ')
+}
+
+/** Story 18.5 AC4: whose guest a row of the registration list is. */
+export function describeGuestOf(attendeeName: string): string {
+  return `Guest of ${attendeeName}`
 }

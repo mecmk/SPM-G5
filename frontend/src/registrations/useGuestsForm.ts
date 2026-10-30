@@ -10,7 +10,7 @@ export function guestInputsFrom(guests: Guest[]): GuestInput[] {
   }))
 }
 
-/** Story 18.5 AC7: what is wrong with a guest's typed name, as a registry message, or null. */
+/** Story 18.5 AC6: what is wrong with a guest's typed name, as a registry message, or null. */
 export function findGuestNameProblem(name: string): string | null {
   return name.trim() === '' ? ERROR_REGISTRY.GUEST_NAME_REQUIRED.message : null
 }
@@ -18,9 +18,9 @@ export function findGuestNameProblem(name: string): string | null {
 /** What a form of the attendee's guests holds, for the details dialog and Change guests alike. */
 export interface GuestsForm {
   guests: GuestInput[]
-  /** Story 18.5 AC6/AC12: false once the form holds as many guests as are allowed. */
+  /** Story 18.5 AC2/AC3/AC6: false once the form holds as many guests as are allowed. */
   canAdd: boolean
-  /** Story 18.5 AC12: the places left, not the 10-guest limit, are what stop more guests. */
+  /** Story 18.5 AC2/AC3: the places left, not the 10-guest limit, are what stop more guests. */
   isLimitedByPlaces: boolean
   add: () => void
   remove: (index: number) => void
@@ -29,13 +29,13 @@ export interface GuestsForm {
   nameProblems: (string | null)[]
   /** Each guest's name field, in order, so the first with a problem can be focused. */
   nameInputs: RefObject<(HTMLInputElement | null)[]>
-  /** Story 18.5 AC7: whether the guests may be sent. When they may not, every problem is shown and
+  /** Story 18.5 AC6: whether the guests may be sent. When they may not, every problem is shown and
    *  the first name with one is focused, before anything is sent. */
   canSend: () => boolean
 }
 
 /** Story 18.5: the state of a form of the attendee's guests, holding at most `maxGuests` of them -
- *  MAX_GUESTS (AC6), or fewer when there are not the places for them (AC12, PO 30 Oct 2026). */
+ *  MAX_GUESTS (AC6), or fewer when there are not the places for them (AC2/AC3). */
 export function useGuestsForm(initial: GuestInput[], maxGuests: number): GuestsForm {
   const nameInputs = useRef<(HTMLInputElement | null)[]>([])
   const [guests, setGuests] = useState(initial)
