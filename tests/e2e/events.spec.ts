@@ -94,28 +94,15 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await expect(page.getByRole('checkbox')).toHaveCount(0)
 })
 
-test("7.1 AC1: the organiser sees their event's approved and pending venue bookings, read-only", async ({
-  page,
-}) => {
+test("7.1 AC1: the organiser's venue bookings render as read-only cards", async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser2)
   await page.goto(`/events/${EVENTS.approved}`)
 
-  // f7.1.2: the seeded Grand Hall booking is approved; Seminar Room 2.1's is pending, unless
-  // bookings.spec.ts approves it first - either way it is still the organiser's to see.
+  // Which bookings, and their fields, are proven in test_organiser_bookings.py; this checks only
+  // that the page renders a card for each, with none of the coordinator's booking actions.
   const bookings = page.getByRole('region', { name: 'Venue bookings' })
-  const grandHall = bookings.getByRole('listitem').filter({ hasText: 'Grand Hall' })
-  await expect(grandHall).toContainText('Tower A, Level 1')
-  await expect(grandHall).toContainText('Main venue')
-  await expect(grandHall).toContainText('25 Nov 2026')
-  await expect(grandHall).toContainText('09:00–18:00')
-  await expect(grandHall).toContainText('Approved')
-  const seminarRoom = bookings.getByRole('listitem').filter({ hasText: 'Seminar Room 2.1' })
-  await expect(seminarRoom).toContainText('Tower A, Level 2')
-  await expect(seminarRoom).toContainText('Breakout room')
-  await expect(seminarRoom).toContainText('25 Nov 2026')
-  await expect(seminarRoom).toContainText('13:00–18:00')
-
-  // Read-only: none of the coordinator's booking actions.
+  await expect(bookings.getByRole('listitem').filter({ hasText: 'Grand Hall' })).toBeVisible()
+  await expect(bookings.getByRole('listitem').filter({ hasText: 'Seminar Room 2.1' })).toBeVisible()
   await expect(bookings.getByRole('button')).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Venue booking', exact: true })).toHaveCount(0)
 })
