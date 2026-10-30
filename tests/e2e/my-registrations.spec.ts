@@ -337,6 +337,7 @@ test.describe('on an iPhone 12 Pro', () => {
           can_withdraw: true,
           guests: [],
           can_change_guests: false,
+          max_guests: 0,
         },
       ],
     })

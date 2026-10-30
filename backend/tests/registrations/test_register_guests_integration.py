@@ -813,6 +813,115 @@ def test_guests_can_still_be_removed_from_an_event_already_over_its_capacity(cli
     assert _guests_of(db, registration.id) == [RAVI]
 
 
+def _take_places(db: Session, event: Event, places: int) -> None:
+    """``places`` places taken at ``event`` by other attendees: groups of eleven (an attendee and
+    ten guests), then attendees alone for the rest."""
+    full_groups, alone = divmod(places, 1 + schemas.MAX_GUESTS)
+    ten_guests = tuple({"full_name": f"Guest {n}"} for n in range(1, schemas.MAX_GUESTS + 1))
+    for _ in range(full_groups):
+        _add_registration(db, event, _attendee(db), guests=ten_guests)
+    for _ in range(alone):
+        _add_registration(db, event, _attendee(db))
+
+
+@pytest.mark.story("18.5", ac=12)
+def test_with_48_of_50_places_taken_a_sign_up_brings_one_guest_and_fills_the_event(
+    client, db: Session
+):
+    """The PO's example (30 Oct 2026): 48 of 50 places taken, guests included. A sign-up may
+    bring one guest, which fills the event, and no one can register after it."""
+    event = _open_event(db, capacity=50)
+    _take_places(db, event, 48)
+    assert service.count_active_registrations(db, event.id) == 48
+    attendee = _attendee(db)
+    late = _attendee(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, guests=[RAVI])
+
+    assert response.status_code == 201
+    assert service.count_active_registrations(db, event.id) == 50
+    client.login(late.email)
+    assert _listed(client, event)["state"] == "FULL"
+    refused = _register(client, db, event)
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == service.EVENT_FULL_MESSAGE
+
+
+@pytest.mark.story("18.5", ac=12)
+def test_with_48_of_50_places_taken_a_sign_up_with_two_guests_is_refused_whole(client, db: Session):
+    """The PO's example: two guests would make 51 of 50, so nothing is registered."""
+    event = _open_event(db, capacity=50)
+    _take_places(db, event, 48)
+    attendee = _attendee(db)
+    client.login(attendee.email)
+
+    response = _register(client, db, event, guests=[RAVI, MEI])
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.NOT_ENOUGH_PLACES_MESSAGE
+    assert attendee.id not in [r.attendee_id for r in _registrations_of(db, event)]
+    assert service.count_active_registrations(db, event.id) == 48
+
+
+# --- AC12: how many guests My registrations allows (30 Oct 2026) --------------------------------
+@pytest.mark.story("18.5", ac=12)
+def test_my_registrations_allow_the_guests_there_are_places_for(client, db: Session):
+    """5 places: the attendee and one guest hold 2, another attendee 1, so 2 are left. Their guests
+    may grow by those 2, from one guest to three."""
+    event = _open_event(db, capacity=5)
+    attendee = _attendee(db)
+    _add_registration(db, event, attendee, guests=(RAVI,))
+    _add_registration(db, event, _attendee(db))
+    client.login(attendee.email)
+    db.commit()
+
+    assert _mine(client, event)["max_guests"] == 3
+
+
+@pytest.mark.story("18.5", ac=6)
+@pytest.mark.story("18.5", ac=12)
+def test_my_registrations_allow_no_more_than_ten_guests_however_many_places_are_left(
+    client, db: Session
+):
+    event = _open_event(db, capacity=50)
+    attendee = _attendee(db)
+    _add_registration(db, event, attendee, guests=(RAVI,))
+    client.login(attendee.email)
+    db.commit()
+
+    assert _mine(client, event)["max_guests"] == schemas.MAX_GUESTS
+
+
+@pytest.mark.story("18.5", ac=12)
+def test_my_registrations_never_ask_for_fewer_guests_than_an_overfull_event_already_has(
+    client, db: Session
+):
+    """Capacity lowered below the places taken (19.2): no places are left, but the guests
+    already registered are kept, so the limit is never below them."""
+    event = _open_event(db, capacity=1)
+    attendee = _attendee(db)
+    _add_registration(db, event, attendee, guests=(RAVI, MEI))
+    client.login(attendee.email)
+    db.commit()
+
+    assert _mine(client, event)["max_guests"] == 2
+
+
+@pytest.mark.story("18.5", ac=12)
+def test_a_change_to_the_guests_answers_with_the_new_limit(client, db: Session):
+    """Adding guests uses up places: the answer's limit is worked out after the change."""
+    event = _open_event(db, capacity=5)
+    attendee = _attendee(db)
+    registration = _add_registration(db, event, attendee)
+    client.login(attendee.email)
+
+    response = _change_guests(client, db, registration.id, [RAVI, MEI])
+
+    assert response.status_code == 200
+    assert response.json()["max_guests"] == 4
+
+
 # =============================================================================================
 # AC12 - real concurrent transactions. These commit, so each cleans up after itself.
 # =============================================================================================
