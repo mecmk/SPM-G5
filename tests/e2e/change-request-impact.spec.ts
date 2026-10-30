@@ -8,6 +8,8 @@
  *     who acts on it. No new flag or notification is added.
  * AC7 If the assessment changes after the request is opened, approving shows the new result
  *     before anything is applied.
+ * AC8 (fix f19.3.1, CL-171) A booking the approval keeps is flagged when the change leaves its venue
+ *     below half full, as a warning only.
  * Definition of Done: the assessment reads at 1280 x 720 and at 390 x 844, the dialog's buttons
  *     stay on screen, and the page never scrolls sideways.
  *
@@ -273,4 +275,40 @@ test('19.3 AC7: an impact that changed after the dialog opened is shown again be
   await dialog.getByRole('button', { name: 'Approve' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(changeRequests(page).getByRole('listitem')).toContainText('Approved')
+})
+
+test('19.3 AC8: a venue the change leaves below half full is flagged, and kept', async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  const days = farDay()
+  const { eventId, name, coordinator } = await approvedEvent(page, 'Impact oversized', days)
+  // The fresh event's Main venue needs room for 60: Olivia asks for 50.
+  const section = changeRequests(page)
+  await section.getByRole('button', { name: 'Request a change' }).click()
+  await section.getByLabel('What to change').selectOption({ label: 'Venue requirements' })
+  await section.getByLabel('Requirement 1 number of people').fill('50')
+  await section.getByLabel('Reason for the change').fill(CHANGE_REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(section.getByRole('listitem')).toContainText('Pending')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await bookGrandHall(page, eventId, name)
+
+  // Grand Hall, booked for Main venue, holds 400: 50 is below half of it.
+  await section.getByRole('button', { name: 'Show impact' }).click()
+  const venueRow = section.getByRole('button', { name: /^Venue bookings/ })
+  await expect(venueRow).toContainText('below half full for the people now needed')
+  await expect(venueRow).not.toContainText('will be cancelled')
+  await venueRow.click()
+  const hall = section
+    .getByRole('region', { name: 'Venue bookings affected' })
+    .getByRole('listitem')
+    .filter({ hasText: 'After approval' })
+  await expect(hall).toContainText(GRAND_HALL)
+  await expect(hall).toContainText('Kept')
+  await expect(hall).toContainText('Larger than needed')
+  await expect(hall).toContainText(
+    `Needs room for 50; ${GRAND_HALL} holds 400, more than twice that.`,
+  )
 })

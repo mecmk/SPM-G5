@@ -43,6 +43,13 @@ Fix f19.2.1 (CL-176, replacing CL-141 (2)):
   requirement with no number of its own - cancels nothing, so that booking is kept and counts
   towards what the venues hold. A requirement's own number still does.
 
+AC8 (fix f19.3.1, CL-171): a booking the approval keeps is flagged as oversized when the people it
+    must hold afterwards are below half its capacity in its booked layout; exactly half is not. It
+    is flagged only when the change lowers that number - a requirement's own number, or the
+    attendance for a venue judged on it - and is a warning only: nothing is marked and nobody is
+    told. A requirement with no number of its own is judged on the attendance, as an additional
+    venue is.
+
 Excluded, with reason:
 * How the assessment is shown, and the approval dialog showing an updated assessment before the
   coordinator approves again, are UI behaviour, proven in tests/e2e/change-request-impact.spec.ts.
@@ -1508,3 +1515,173 @@ def test_rejecting_needs_no_assessment(login_as, db: Session):
     )
 
     assert response.status_code == 200, response.text
+
+
+# --- AC8: oversized venues (fix f19.3.1) ---------------------------------------------------------
+
+
+def _lower(login_as, db: Session, event: Event, requirement_id, capacity: int, **body):
+    """Olivia asks for the Main hall requirement to need room for fewer people, ``capacity``."""
+    requirement = {
+        **_requirement_body(requirement_id, name="Main hall", capacity=capacity, event=event),
+        **body,
+    }
+    return _raise(login_as, db, event, "venue_requirements", [requirement])
+
+
+@pytest.mark.story("19.3", ac=8)
+@pytest.mark.parametrize(("people", "is_flagged"), [(99, True), (100, False)])
+def test_a_venue_below_half_full_is_flagged_and_exactly_half_is_not(
+    login_as, db: Session, people, is_flagged
+):
+    """CL-171's own example: a 200-person hall booked for 120 is flagged at 99, not at 100. The
+    warning is the only thing the change does, so the booking is listed for it alone."""
+    event = _planning_event(db, expected_attendance=120)
+    requirement = _requirement(db, event, capacity=120)
+    hall = _book(db, event, people=120, requirement_id=requirement, capacity=200)
+    request = _lower(login_as, db, event, requirement, people)
+
+    impact = _impact(login_as, request)
+
+    if not is_flagged:
+        assert impact["venue_bookings"] == []
+        assert impact["has_impact"] is False
+        return
+    row = _bookings_by_id(impact)[str(hall.id)]
+    assert row["oversize_warning"] == {
+        "people_needed": 99,
+        "venue_capacity": 200,
+        "layout_name": None,
+    }
+    assert row["will_be_cancelled"] is False
+    assert row["capacity_warning"] is None
+    assert row["after_approval"] == _KEPT_WITH_WARNING
+    assert impact["has_impact"] is True
+
+
+@pytest.mark.story("19.3", ac=8)
+@pytest.mark.parametrize(("people", "is_flagged"), [(74, True), (100, False)])
+def test_a_venue_is_judged_by_its_capacity_in_the_booked_layout(
+    login_as, db: Session, people, is_flagged
+):
+    """The hall holds 300 at most but 150 in Theatre, as it was booked: 100 is below half of 300
+    but not of 150, so only 74 is flagged."""
+    event = _planning_event(db, expected_attendance=120)
+    venue = make_venue(db, capacity=300, layouts={"THEATRE": 150})
+    requirement = _requirement(db, event, capacity=120, layout_code="THEATRE")
+    hall = _book(
+        db,
+        event,
+        people=120,
+        requirement_id=requirement,
+        venue=venue,
+        required_layout_code="THEATRE",
+    )
+    request = _lower(login_as, db, event, requirement, people, layout_code="THEATRE")
+
+    rows = _bookings_by_id(_impact(login_as, request))
+
+    if not is_flagged:
+        assert rows == {}
+        return
+    assert rows[str(hall.id)]["oversize_warning"] == {
+        "people_needed": 74,
+        "venue_capacity": 150,
+        "layout_name": "Theatre",
+    }
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_an_additional_venue_is_flagged_on_a_lower_attendance(login_as, db: Session):
+    """An additional venue holds the event's attendance (12.5), so 120 lowered to 99 leaves the
+    200-person foyer below half full."""
+    event = _planning_event(db, expected_attendance=120)
+    foyer = _book(db, event, people=120, capacity=200)
+    request = _raise(login_as, db, event, "expected_attendance", 99)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(foyer.id)]
+
+    assert row["requirement_name"] is None
+    assert row["oversize_warning"] == {
+        "people_needed": 99,
+        "venue_capacity": 200,
+        "layout_name": None,
+    }
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_a_requirement_without_a_number_is_flagged_on_a_lower_attendance(login_as, db: Session):
+    """The side room requirement has no number of its own, so it holds the event's attendance as
+    an additional venue does: 120 lowered to 99 leaves its 200-person room below half full."""
+    event = _planning_event(db, expected_attendance=120)
+    requirement = _requirement(db, event, capacity=None, name="Side room")
+    room = _book(db, event, people=120, requirement_id=requirement, capacity=200)
+    request = _raise(login_as, db, event, "expected_attendance", 99)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(room.id)]
+
+    assert row["oversize_warning"]["people_needed"] == 99
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_a_lower_attendance_never_flags_a_requirement_with_its_own_number(login_as, db: Session):
+    """The hall's requirement asks for 100, so it holds 100 whatever the attendance: 150 lowered
+    to 120 is below half of the 300-person hall, but the hall's own number did not change."""
+    event = _planning_event(db, expected_attendance=150)
+    _book(db, event, people=100, requirement_id=_requirement(db, event, capacity=100), capacity=300)
+    request = _raise(login_as, db, event, "expected_attendance", 120)
+
+    assert _impact(login_as, request)["venue_bookings"] == []
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_a_change_that_does_not_lower_the_number_flags_nothing(login_as, db: Session):
+    """The 300-person hall is already below half full at 100, and the change raises the number to
+    110, still within the 120 it was booked for: kept, and not flagged, since nothing was
+    lowered."""
+    event = _planning_event(db, expected_attendance=150)
+    requirement = _requirement(db, event, capacity=100)
+    _book(db, event, people=120, requirement_id=requirement, capacity=300)
+    request = _lower(login_as, db, event, requirement, 110)
+
+    assert _impact(login_as, request)["venue_bookings"] == []
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_lowering_an_already_oversized_venue_flags_it(login_as, db: Session):
+    """The 300-person hall is already below half full at 120; lowering it to 110 flags it."""
+    event = _planning_event(db, expected_attendance=120)
+    requirement = _requirement(db, event, capacity=120)
+    hall = _book(db, event, people=120, requirement_id=requirement, capacity=300)
+    request = _lower(login_as, db, event, requirement, 110)
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["oversize_warning"]["people_needed"] == 110
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Session):
+    """A warning only: the hall stays approved and unmarked, and no notice is written about it."""
+    event = _planning_event(db, expected_attendance=120)
+    requirement = _requirement(db, event, capacity=120)
+    hall = _book(db, event, people=120, requirement_id=requirement, capacity=200)
+    request = _lower(login_as, db, event, requirement, 80)
+    impact = _impact(login_as, request)
+
+    response = _approve(login_as, request, impact["fingerprint"])
+
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    row = db.execute(
+        text("SELECT status, venue_unavailable_marked_at FROM venue_bookings WHERE id = :b"),
+        {"b": hall.id},
+    ).one()
+    assert (row.status, row.venue_unavailable_marked_at) == ("APPROVED", None)
+    assert (
+        db.execute(
+            text("SELECT count(*) FROM notifications WHERE related_entity_id = :b"),
+            {"b": hall.id},
+        ).scalar_one()
+        == 0
+    )
