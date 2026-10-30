@@ -3,8 +3,9 @@
 (the organiser's response), stories 4.4/4.5 (approve / reject an event request), story 4.6 (the
 decision /clarification history an organiser sees), story 7.2 (routine information edits and
 correcting a request until it is confirmed, fix f7.2.4), story 6.1 (the coordinator's
-assigned events in any status), story 2.1 AC14 (the cover picture), and story 19.1 AC2 (the
-organiser's point of contact on an approved event)."""
+assigned events in any status), story 2.1 AC14 (the cover picture), story 19.1 AC2 (the
+organiser's point of contact on an approved event), and story 7.4 (the event's change
+history)."""
 
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from app.events.schemas import (
     ClarificationOut,
     ClarificationRequest,
     EquipmentAvailabilityOut,
+    EventChangeOut,
     EventCreate,
     EventDetailOut,
     EventReferenceData,
@@ -223,6 +225,23 @@ def list_clarifications(
     except service.NotRelatedParty as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     return [ClarificationOut.from_clarification(row) for row in rows]
+
+
+@router.get("/{event_id}/changes", response_model=list[EventChangeOut], dependencies=[CanRead])
+def list_event_changes(
+    event_id: uuid.UUID,
+    db: DbSession,
+    viewer: CurrentUser,
+) -> list[EventChangeOut]:
+    """Story 7.4 AC1/AC5/AC6: the event's change history, newest first, internal-notes changes
+    for coordinators only. Read-only - no route edits or removes an entry."""
+    try:
+        rows = service.list_event_changes(db, event_id, viewer=viewer)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.NotRelatedParty as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    return [EventChangeOut.from_change(row) for row in rows]
 
 
 @router.post(

@@ -12,6 +12,12 @@
  *     it is completed or cancelled, or within 24 hours of its set-up time - the page says when
  *     they close, or that they have.
  * AC9 the organiser withdraws a pending request after confirming, and it reads as Withdrawn.
+ * AC14 (f19.1.2) the attendance field says the lowest it can go and which venue requirement sets
+ *     it - a waiting venue requirements change's, when lower.
+ * AC16 (f19.1.2) a lower attendance shows the server's refusal, saying what to change first.
+ * AC17 (f19.1.2) an attendance change the venue requirements do not allow yet says what it waits
+ *     for, to the organiser and the coordinator: the waiting venue requirements change, or, when
+ *     none would make room, what can be done.
  *
  * Validation rules, refusals (401/403/404/409/422), the one-pending-per-field rule, the conflict
  * cases (AC8, AC10, AC13) and the notifications are backend cases:
@@ -89,10 +95,12 @@ test('19.1 AC2: an organiser updates the point of contact on a planning event', 
   await page.getByLabel('Contact phone number').fill('+65 6999 0000')
   await page.getByRole('button', { name: 'Save contact details' }).click()
 
-  await expect(page.getByText(email)).toBeVisible()
-  await expect(page.getByText('+65 6999 0000')).toBeVisible()
+  // The change history (story 7.4) repeats the new values, so read them from the event's card.
+  const info = page.getByRole('region', { name: 'Event information' })
+  await expect(info.getByText(email)).toBeVisible()
+  await expect(info.getByText('+65 6999 0000')).toBeVisible()
   await page.reload()
-  await expect(page.getByText(email)).toBeVisible()
+  await expect(info.getByText(email)).toBeVisible()
 })
 
 test('19.1 AC4: the change form will not submit without a reason', async ({ page }) => {
@@ -244,6 +252,92 @@ test('19.1 AC4: the reason message clears once a reason is typed', async ({ page
   await reason.fill(REASON)
   await expect(changeRequests(page).getByText('Enter a reason for the change.')).toHaveCount(0)
   await expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+})
+
+test('19.1 AC14/AC16: the attendance field says the lowest it can go, and why lower is refused', async ({
+  page,
+}) => {
+  // Nothing is saved: the server refuses the request, so Olivia's Regional Sales Summit, for 220
+  // with its Main venue for 220, is unchanged.
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.planning}`)
+  await openChangeForm(page, 'Expected attendance')
+  const attendance = changeRequests(page).getByLabel('New expected attendance')
+  await expect(attendance).toHaveAccessibleDescription(
+    'At least 220: Main venue needs room for 220 people.',
+  )
+
+  await attendance.fill('150')
+  await changeRequests(page).getByLabel('Reason for the change').fill(REASON)
+  await changeRequests(page).getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    changeRequests(page).getByText(
+      'The expected attendance cannot be lower than 220 while Main venue needs room for 220 people. Ask for a venue requirements change that lowers it first.',
+    ),
+  ).toBeVisible()
+  await expect(
+    changeRequests(page).getByRole('listitem').filter({ hasText: 'Expected attendance' }),
+  ).toHaveCount(0)
+})
+
+test('19.1 AC14/AC17: with a venue requirements change waiting, the attendance field says its minimum and the request what it waits for', async ({
+  page,
+}) => {
+  // Four sign-ins: three in approvedEvent, then the coordinator. The fresh event is for 60, its
+  // Main venue for 60.
+  test.setTimeout(120_000)
+  const { eventId, coordinator } = await approvedEvent(page, 'Minimum with change')
+  const section = changeRequests(page)
+  await openChangeForm(page, 'Venue requirements')
+  await section.getByLabel('Requirement 1 number of people').fill('40')
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(
+    section.getByRole('listitem').filter({ hasText: 'Changes to venue requirements' }),
+  ).toContainText('Pending')
+
+  // CL-172 (4): the minimum is the one the server takes now - the waiting change's.
+  await openChangeForm(page, 'Expected attendance')
+  const attendance = section.getByLabel('New expected attendance')
+  await expect(attendance).toHaveAccessibleDescription(
+    'At least 40: with your venue requirements change, Main venue needs room for 40 people. That change is approved before this one.',
+  )
+  await attendance.fill('40')
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  const raised = section.getByRole('listitem').filter({ hasText: 'Changes to expected attendance' })
+  await expect(raised).toContainText('Pending')
+  await expect(raised).toContainText(
+    'This waits for your venue requirements change to be approved first, since Main venue needs room for 60 people until then.',
+  )
+
+  // AC17's other half: with no venue requirements change waiting, nothing makes room.
+  await section
+    .getByRole('listitem')
+    .filter({ hasText: 'Changes to venue requirements' })
+    .getByRole('button', { name: 'Withdraw request' })
+    .click()
+  await page
+    .getByRole('dialog', { name: 'Withdraw this change request?' })
+    .getByRole('button', { name: 'Withdraw' })
+    .click()
+  await expect(raised).toContainText(
+    'Main venue needs room for 60 people, so this cannot be approved yet. Ask for a venue requirements change that lowers it, or withdraw this request.',
+  )
+  // Fix f19.1.2: a venue requirements change that waits but does not lower it enough.
+  await openChangeForm(page, 'Venue requirements')
+  await section.getByLabel('Requirement 1 number of people').fill('50')
+  await section.getByLabel('Reason for the change').fill(REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(raised).toContainText(
+    'Main venue needs room for 60 people, so this cannot be approved yet. Your venue requirements change does not lower it enough: withdraw it and ask for one that does, or withdraw this request.',
+  )
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await page.goto(`/events/${eventId}`)
+  await expect(raised).toContainText(
+    'Main venue needs room for 60 people, so this cannot be approved until a venue requirements change lowers it.',
+  )
 })
 
 test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not sent', async ({

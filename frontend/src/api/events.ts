@@ -323,6 +323,26 @@ export function listClarifications(eventId: string): Promise<Clarification[]> {
   })
 }
 
+/** Mirrors `EventChangeOut`: one field a save changed on the event (story 7.4 AC1/AC4). The
+ *  values are the stored JSON: text, a number, a boolean, an ISO instant, a list for venue
+ *  requirements, accessibility needs and equipment, or null when empty. */
+export interface EventChange {
+  id: string
+  field: string
+  old_value: unknown
+  new_value: unknown
+  changed_by_name: string
+  changed_by_role_name: string
+  changed_at: string
+  change_request_id: string | null
+}
+
+/** Story 7.4 AC1/AC5/AC6: the event's change history, newest first. An organiser never receives
+ *  internal-notes changes. */
+export function listEventChanges(eventId: string): Promise<EventChange[]> {
+  return api<EventChange[]>(`/events/${eventId}/changes`, { errorCodes: EVENT_ERROR_CODES })
+}
+
 const EVENT_CLARIFICATION_ERROR_CODES = {
   404: 'EVENT_NOT_FOUND',
   409: 'EVENT_NOT_AWAITING_CLARIFICATION',

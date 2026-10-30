@@ -6,21 +6,38 @@ import {
   type EquipmentQueue,
   type EquipmentQueueCounts,
   type EquipmentQueueEntry,
+  type EquipmentQueueOrder,
   type EquipmentQueueStatus,
   type EquipmentShortfall,
 } from '../api/equipment'
 import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
+import { QueueSearchBar } from '../components/QueueSearchBar'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import {
+  CANCELLED_AT_LABEL,
+  CLEAR_SEARCH,
+  NOT_RECORDED,
+  formatDateTime,
+  formatSchedule,
+  shortReference,
+} from '../shared/format'
+import {
+  COMMON_QUEUE_ORDERS,
+  DEFAULT_QUEUE_ORDER,
+  queuePath,
+  useQueueView,
+  type QueueOrderOption,
+  type QueueViewOptions,
+} from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
-const SHORT_ID_LENGTH = 8
+const PAGE_TITLE = 'Equipment Requests'
 
 type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
@@ -35,10 +52,18 @@ const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
   { key: 'CANCELLED', label: 'Cancelled' },
 ]
 
-/** The event page's back link returns here (story 7.1's back state). */
-const BACK_TO_QUEUE: EventCardBackState = {
-  from: EQUIPMENT_REQUESTS_PATH,
-  fromLabel: 'Equipment Requests',
+/** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
+const EQUIPMENT_QUEUE_ORDERS: QueueOrderOption<EquipmentQueueOrder>[] = [
+  ...COMMON_QUEUE_ORDERS,
+  { key: 'equipment_type', label: 'Equipment type: A to Z' },
+]
+
+/** Story 13.3 AC7: what the queue's address may name. With none, it opens on Pending, soonest
+ * event first. The queue has no pages, so its page stays 1. */
+const EQUIPMENT_QUEUE_VIEW: QueueViewOptions<EquipmentQueueTabKey, EquipmentQueueOrder> = {
+  tabs: EQUIPMENT_QUEUE_TABS.map((item) => item.key),
+  orders: EQUIPMENT_QUEUE_ORDERS.map((option) => option.key),
+  defaults: { tab: 'PENDING', search: '', order: DEFAULT_QUEUE_ORDER, page: 1 },
 }
 
 /** How many requests a tab holds, from the backend's per-status counts. */
@@ -119,12 +144,33 @@ interface OpenDecision {
  * Story 6.2 AC15: a Cancelled tab lists, read-only, the requests closed when their event was
  * cancelled; their cards leave out what is available, since nothing is held for them any more.
  * AC16: such a card says when it was cancelled.
+ *
+ * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
+ * event name, equipment type and Requested by, orders the tab and counts each tab's matches. AC6:
+ * a search nothing matches says so, with Clear search. AC7: the tab, search and order live in the
+ * page address, and the request's page and its event's page lead back to the same list; a
+ * decision updates the list in place, so the search and order stay.
  */
 export function EquipmentRequestsPage() {
-  const [tab, setTab] = useState<EquipmentQueueTabKey>('PENDING')
-  const loadTab = useCallback(() => listEquipmentRequests(tab === 'ALL' ? null : tab), [tab])
+  const { view, query, changeView } = useQueueView(EQUIPMENT_QUEUE_VIEW)
+  const { tab } = view
+  const loadTab = useCallback(
+    () =>
+      listEquipmentRequests({
+        status: view.tab === 'ALL' ? null : view.tab,
+        search: view.search,
+        order: view.order,
+      }),
+    [view],
+  )
   const { data: queue, error, isLoading, isStale, setData: setQueue } = useLoaded(loadTab)
   const [openDecision, setOpenDecision] = useState<OpenDecision | null>(null)
+  // Story 13.3 AC7: the request's page and its event's page lead back to this list as it stands.
+  const backToQueue: EventCardBackState = {
+    from: queuePath(EQUIPMENT_REQUESTS_PATH, query),
+    fromLabel: PAGE_TITLE,
+  }
+  const isSearched = view.search.trim() !== ''
 
   const tabs = useMemo(
     () =>
@@ -134,6 +180,20 @@ export function EquipmentRequestsPage() {
       })),
     [queue],
   )
+
+  function changeTab(next: EquipmentQueueTabKey) {
+    changeView({ tab: next })
+  }
+
+  const changeSearch = useCallback((search: string) => changeView({ search }), [changeView])
+
+  function changeOrder(order: EquipmentQueueOrder) {
+    changeView({ order })
+  }
+
+  function clearSearch() {
+    changeView({ search: '' })
+  }
 
   function closeDecision() {
     setOpenDecision(null)
@@ -163,7 +223,7 @@ export function EquipmentRequestsPage() {
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Equipment Requests"
+        title={PAGE_TITLE}
         subtitle="Equipment requests sent to Technical Support, with what is available for each."
       />
 
@@ -172,15 +232,34 @@ export function EquipmentRequestsPage() {
           {error}
         </p>
       )}
-      {(isLoading || (isStale && error === null)) && (
-        <LoadingState label="Loading equipment requests…" />
-      )}
+      {isLoading && <LoadingState label="Loading equipment requests…" />}
 
       {queue !== null && (
         <div className="stack">
-          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+          <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
 
-          {!isStale && queue.items.length === 0 && (
+          <QueueSearchBar
+            search={view.search}
+            placeholder="Event, equipment or who requested it"
+            onSearch={changeSearch}
+            order={view.order}
+            orders={EQUIPMENT_QUEUE_ORDERS}
+            onOrder={changeOrder}
+          />
+
+          {/* Below the search box, so the box stays where it is while the list loads. */}
+          {isStale && error === null && <LoadingState label="Loading equipment requests…" />}
+
+          {!isStale && queue.items.length === 0 && isSearched && (
+            <EmptyState>
+              No equipment requests match your search.{' '}
+              <button type="button" className="link" onClick={clearSearch}>
+                {CLEAR_SEARCH}
+              </button>
+            </EmptyState>
+          )}
+
+          {!isStale && queue.items.length === 0 && !isSearched && (
             <EmptyState>
               {tab === 'PENDING'
                 ? 'No equipment requests waiting. You are up to date.'
@@ -195,9 +274,7 @@ export function EquipmentRequestsPage() {
                   <div className="item-card-header">
                     <div className="cluster">
                       <StatusBadge status={entry.status} />
-                      <span className="small muted mono">
-                        #{entry.id.slice(-SHORT_ID_LENGTH).toUpperCase()}
-                      </span>
+                      <span className="small muted mono">{shortReference(entry.id)}</span>
                     </div>
                     <div className="item-card-capacity item-card-period">
                       <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>
@@ -206,7 +283,7 @@ export function EquipmentRequestsPage() {
 
                   <div>
                     <h3 className="queue-card-title">
-                      <Link to={eventPath(entry.event_id)} state={BACK_TO_QUEUE}>
+                      <Link to={eventPath(entry.event_id)} state={backToQueue}>
                         {entry.event_name}
                       </Link>
                     </h3>
@@ -310,7 +387,7 @@ export function EquipmentRequestsPage() {
                         </button>
                       </div>
                     )}
-                    <Link to={equipmentRequestPath(entry.id)} className="link">
+                    <Link to={equipmentRequestPath(entry.id)} state={backToQueue} className="link">
                       View details →
                     </Link>
                   </div>

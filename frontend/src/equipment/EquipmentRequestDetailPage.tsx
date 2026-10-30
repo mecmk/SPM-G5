@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import {
   getEquipmentRequest,
   type EquipmentDecisionOutcome,
@@ -12,6 +12,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
 import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { queueBackPath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
@@ -36,9 +37,13 @@ function backToRequest(itemId: string): EventCardBackState {
  *
  * Story 6.2 AC15/AC16: a request cancelled with its event is read-only; it says when it was
  * cancelled and leaves out what is available, since nothing is held for it any more.
+ *
+ * Story 13.3 AC7: the back link returns to the queue as it was left - tab, search and order - when
+ * the queue opened this page.
  */
 export function EquipmentRequestDetailPage() {
   const { itemId = '' } = useParams()
+  const location = useLocation()
   const loadRequest = useCallback(() => getEquipmentRequest(itemId), [itemId])
   const { data: entry, error, isLoading, setData: setEntry } = useLoaded(loadRequest)
   const [openOutcome, setOpenOutcome] = useState<EquipmentDecisionOutcome | null>(null)
@@ -76,7 +81,7 @@ export function EquipmentRequestDetailPage() {
 
   return (
     <div className="page page-wide equipment-request-page">
-      <Link to={EQUIPMENT_REQUESTS_PATH} className="back-link">
+      <Link to={queueBackPath(location.state, EQUIPMENT_REQUESTS_PATH)} className="back-link">
         ← Equipment Requests
       </Link>
 
