@@ -110,7 +110,7 @@ LISTED_EVENT_KEYS = {
     "state",
     "registered_at",
 }
-REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at"}
+REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at", "guests"}  # guests: 18.5 AC1
 # AC9: everything an event's page carries - the event, what its card shows while it is listed, and
 # (18.2's fix f18.2.1) the attendee's own registration.
 PAGE_KEYS = {
@@ -409,7 +409,8 @@ def test_registering_answers_201_with_the_registration_and_records_it(attendee_c
     audit = db.scalar(select(AuditLog).where(AuditLog.entity_id == registration.id))
     assert audit.action == service.REGISTRATION_CREATED_ACTION
     assert audit.actor_id == Users.ATTENDEE.id
-    assert audit.details == {"event_id": str(event.id)}
+    # Story 18.5 AC1: and how many guests came with the registration - none here.
+    assert audit.details == {"event_id": str(event.id), "guest_count": 0}
     # The list now shows the event as Registered, with the moment the confirmation gave.
     listed = _api_item(attendee_client, event.id)
     assert (listed["state"], listed["registered_at"]) == ("REGISTERED", body["registered_at"])

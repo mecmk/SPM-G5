@@ -4,10 +4,13 @@ import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
   fetchAttendeeEvent,
   fetchProfile,
+  MAX_GUESTS,
   registerForEvent,
+  updateGuests,
   withdrawRegistration,
   type AttendeeDetails,
   type AttendeeEvent,
+  type GuestInput,
   type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
@@ -22,6 +25,7 @@ import { UPCOMING_EVENTS_PATH } from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
+import { ChangeGuestsDialog } from './ChangeGuestsDialog'
 import { detailsFrom, withConfirmedDetails } from './attendeeDetails'
 import {
   STANDING_BADGES,
@@ -46,6 +50,9 @@ const EVENT_REFUSAL_CODES: ErrorCode[] = ['REGISTRATION_EVENT_NOT_OPEN', 'REGIST
 interface RegistrationProblem {
   message: string
   isAboutTheEvent: boolean
+  /** A 409: the event is open, but this registration was not taken - not yet open, closed, full,
+   *  already registered, or (18.5 AC2) a group that does not fit. */
+  isRefused: boolean
 }
 
 /** What loading the page found: the event, or - story 18.1 AC10 - why there is none for this
@@ -72,9 +79,17 @@ function eventLoader(eventId: string): () => Promise<LoadedEvent> {
   }
 }
 
+/** Story 18.5 AC2/AC6: how many guests a new registration may bring - one per place left after
+ *  the attendee's own, but never more than MAX_GUESTS. */
+function guestLimit(listing: RegistrationEvent): number {
+  return Math.min(MAX_GUESTS, Math.max(listing.places_left - 1, 0))
+}
+
 /** Story 18.1 AC1: the event as the server now has it for this attendee, until it is loaded
- *  again: Registered, a place fewer, and the registration just made - which, the event being
- *  listed and so not started, can be withdrawn (18.2 AC3). */
+ *  again: Registered, a place fewer - story 18.5 AC2, and one for each guest - and the
+ *  registration just made, which, the event being listed and so not started, can be withdrawn
+ *  (18.2 AC3). Its guests cannot be changed, nor more added, until the server says so: the
+ *  reload that follows brings that. */
 function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent {
   const listing: RegistrationEvent | null =
     event.listing === null
@@ -83,7 +98,7 @@ function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent
           ...event.listing,
           state: 'REGISTERED',
           registered_at: made.registered_at,
-          places_left: event.listing.places_left - 1,
+          places_left: event.listing.places_left - 1 - made.guests.length,
         }
   return {
     ...event,
@@ -99,6 +114,9 @@ function markRegistered(event: AttendeeEvent, made: Registration): AttendeeEvent
       registered_at: made.registered_at,
       withdrawn_at: null,
       can_withdraw: true,
+      guests: made.guests,
+      can_change_guests: false,
+      max_guests: made.guests.length,
     },
   }
 }
@@ -146,6 +164,15 @@ function isFinalRefusal(err: unknown): boolean {
  * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
  *      one.
  *
+ * Story 18.5:
+ * AC1/AC2: "Confirm your details" also takes the attendee's guests, up to one per place left after
+ *      their own; a group that no longer fits is refused in the dialog, where fewer can be sent.
+ * AC3: while registered, the page names the guests, and Change guests - beside Withdraw, offered
+ *      only while the server says the guests can still be changed - opens them to add to, rename
+ *      or remove. A refusal stays in the dialog, and the event is loaded again, so the guest limit
+ *      and where the registration stands catch up.
+ * AC7: the withdraw dialog says the guests are withdrawn too.
+ *
  * Story 18.4 AC2/AC3: Register opens "Confirm your details", filled in from the attendee's
  * profile (once it has loaded, so the dialog never opens half filled); confirming registers and
  * saves them. A refusal about the event closes the dialog and shows here; one about the details
@@ -177,6 +204,9 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
     message: string
     isFinal: boolean
   } | null>(null)
+  const [isChangingGuests, setIsChangingGuests] = useState(false)
+  const [isSavingGuests, setIsSavingGuests] = useState(false)
+  const [guestsError, setGuestsError] = useState<string | null>(null)
 
   // Story 18.4: the profile the dialog fills in from. Read again after a registration, which
   // saves the details confirmed with it, so the frame's own name (AC1) - and the next dialog, once
@@ -209,11 +239,12 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
   async function sendRegistration(
     registering: AttendeeEvent,
     details: AttendeeDetails,
+    guests: GuestInput[],
   ): Promise<RegistrationProblem | null> {
     setIsRegistering(true)
     setRefusal(null)
     try {
-      const made = await registerForEvent(registering, details)
+      const made = await registerForEvent(registering, details, guests)
       // 18.1 AC1: Registered at once, not only when the reload lands, so Register cannot be
       // pressed again in between.
       updateEvent((current) => markRegistered(current, made))
@@ -222,6 +253,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
       return {
         message: formatApiError(err),
         isAboutTheEvent: err instanceof ApiError && EVENT_REFUSAL_CODES.includes(err.code),
+        isRefused: err instanceof ApiError && err.code === 'REGISTRATION_REFUSED',
       }
     } finally {
       setIsRegistering(false)
@@ -240,14 +272,20 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
     setIsConfirmingDetails(false)
   }
 
-  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile. A
-   *  refusal about the event shows on the page (18.1 AC11); one about the details stays in the
-   *  dialog, so nothing typed is lost. */
-  async function handleConfirmDetails(details: AttendeeDetails) {
+  /** 18.4 AC2/AC3: register with the confirmed details, which saves them to the profile - and,
+   *  18.5 AC1, with the guests added in the dialog. A refusal about the event shows on the page
+   *  (18.1 AC11); one about the details stays in the dialog, so nothing typed is lost. 18.5 AC2:
+   *  so does a 409 for a registration with guests - a group that no longer fits among them -
+   *  since the way out, fewer guests or none, is in the dialog. An event no longer open (404)
+   *  still closes it. The event is read again either way, so the guest limit catches up. */
+  async function handleConfirmDetails(details: AttendeeDetails, guests: GuestInput[]) {
     if (event === null) return
     setDetailsError(null)
-    const problem = await sendRegistration(event, details)
-    if (problem !== null && !problem.isAboutTheEvent) {
+    const problem = await sendRegistration(event, details, guests)
+    if (
+      problem !== null &&
+      (!problem.isAboutTheEvent || (problem.isRefused && guests.length > 0))
+    ) {
       setDetailsError(problem.message)
       return
     }
@@ -273,6 +311,36 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
       setProfileRefreshError(null)
     } catch (err) {
       setProfileRefreshError(formatApiError(err))
+    }
+  }
+
+  /** 18.5 AC3: Change guests opens them, filled in. */
+  function handleChangeGuests() {
+    setGuestsError(null)
+    setIsChangingGuests(true)
+  }
+
+  function handleCancelGuests() {
+    setIsChangingGuests(false)
+  }
+
+  /** 18.5 AC3: save the guests as the dialog has them, all at once. A refusal - registration
+   *  closed, the registration withdrawn or cancelled, not enough places - stays in the dialog, so
+   *  nothing typed is lost, and the event is loaded again, so the page and the guest limit show
+   *  where the registration now stands. */
+  async function handleSaveGuests(guests: GuestInput[]) {
+    if (registration === null) return
+    setIsSavingGuests(true)
+    setGuestsError(null)
+    try {
+      const saved = await updateGuests(registration, guests)
+      updateEvent((current) => ({ ...current, registration: saved }))
+      setIsChangingGuests(false)
+    } catch (err) {
+      setGuestsError(formatApiError(err))
+      loadEventAgain()
+    } finally {
+      setIsSavingGuests(false)
     }
   }
 
@@ -385,6 +453,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
               refusal={refusal}
               isRegisterBusy={isRegistering || isProfileLoading}
               onRegister={handleRegister}
+              onChangeGuests={handleChangeGuests}
               onWithdraw={handleWithdraw}
             />
           </div>
@@ -395,11 +464,24 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
         <AttendeeDetailsDialog
           initial={detailsFrom(profile)}
           eventName={event.name}
+          maxGuests={event.listing === null ? 0 : guestLimit(event.listing)}
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={isRegistering}
           error={detailsError}
           onConfirm={handleConfirmDetails}
           onCancel={handleCancelDetails}
+        />
+      )}
+
+      {isChangingGuests && registration !== null && (
+        <ChangeGuestsDialog
+          // 18.5 AC3: the registration as last read, so a refusal's reload brings the guest limit
+          // up to date; what was typed stays, as the form only starts from it.
+          registration={registration}
+          isBusy={isSavingGuests}
+          error={guestsError}
+          onSave={handleSaveGuests}
+          onCancel={handleCancelGuests}
         />
       )}
 
@@ -415,6 +497,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           onCancel={handleCancelWithdrawal}
         >
           <p>
+            {registration.guests.length > 0 && 'Your guests are withdrawn with you. '}
             Your place will be given up for someone else. If registration has closed or the event
             fills up, you may not be able to register again.
           </p>
@@ -452,23 +535,26 @@ interface RegistrationPanelProps {
   /** A registration is being sent - or, story 18.4, the details it confirms are still loading. */
   isRegisterBusy: boolean
   onRegister: () => void
+  onChangeGuests: () => void
   onWithdraw: () => void
 }
 
 /**
  * Story 18.1 AC1/AC3/AC9/AC11 and 18.2 AC3/AC9/AC10: where the attendee and registration stand,
  * the places left while the event is listed, the times that go with them, why the latest attempt
- * to register was refused, and the one thing the attendee can do: Register - enabled only while
- * the event is open, offered only while it is listed and they are not registered - or Withdraw,
- * offered only while the server says their registration can be withdrawn. Register is the brand
- * colour, as the dialog's Confirm and register is, so it stands apart from the page's other
- * buttons; Withdraw is red, as giving up a place is, like its confirmation's button.
+ * to register was refused, and what the attendee can do: Register - enabled only while the event
+ * is open, offered only while it is listed and they are not registered - or, once they are,
+ * story 18.5 AC3's Change guests and Withdraw, each offered only while the server says so.
+ * Register is the brand colour, as the dialog's Confirm and register is, so it stands apart from
+ * the page's other buttons; Withdraw is red, as giving up a place is, like its confirmation's
+ * button.
  */
 function RegistrationPanel({
   event,
   refusal,
   isRegisterBusy,
   onRegister,
+  onChangeGuests,
   onWithdraw,
 }: RegistrationPanelProps) {
   const { listing, registration } = event
@@ -506,6 +592,16 @@ function RegistrationPanel({
           onClick={onRegister}
         >
           Register
+        </button>
+      )}
+      {registration?.can_change_guests && (
+        <button
+          type="button"
+          className="button-block secondary"
+          aria-label={`Change guests for ${event.name}`}
+          onClick={onChangeGuests}
+        >
+          Change guests
         </button>
       )}
       {registration?.can_withdraw && (

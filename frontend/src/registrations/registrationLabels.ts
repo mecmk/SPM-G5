@@ -1,4 +1,5 @@
 import type {
+  Guest,
   MyRegistration,
   RegistrationEvent,
   RegistrationStanding,
@@ -118,12 +119,16 @@ export function describeRegisteredAt(registeredAt: string): string {
 }
 
 /** Story 18.2 AC1/AC9: when the attendee registered, while they still are - on their card on My
- *  registrations and on the event's page. Where they stand now, not a history: a registration
- *  withdrawn or cancelled gives no time. */
+ *  registrations and on the event's page - and, story 18.5 AC3, the guests registered with them,
+ *  when there are any. Where they stand now, not a history: a registration withdrawn or cancelled
+ *  gives no time, and its guests went with it (18.5 AC7). */
 export function describeActiveRegistration(registration: MyRegistration): string[] {
-  return registration.status === 'REGISTERED'
-    ? [describeRegisteredAt(registration.registered_at)]
-    : []
+  if (registration.status !== 'REGISTERED') return []
+  const lines = [describeRegisteredAt(registration.registered_at)]
+  if (registration.guests.length > 0) {
+    lines.push(`Your guests: ${describeGuests(registration.guests)}`)
+  }
+  return lines
 }
 
 /** Story 18.4 AC6: an attendee's dietary requirements as every page shows them - "None" when they
@@ -136,4 +141,23 @@ export function describeDietaryRequirements(dietaryRequirements: string | null):
  *  but an attendee who registered before 18.4 and has not been asked since has none yet. */
 export function describePhone(phone: string | null): string {
   return phone ?? NOT_RECORDED
+}
+
+/** Story 18.5 AC3: one guest as the attendee sees them on My registrations - their name, and
+ *  their dietary requirements beside it when there are any to show. */
+export function describeGuest(guest: Guest): string {
+  return guest.dietary_requirements === null
+    ? guest.full_name
+    : `${guest.full_name} (${guest.dietary_requirements})`
+}
+
+/** Story 18.5 AC3: the guests registered with the attendee, in order, as My registrations
+ *  names them. */
+export function describeGuests(guests: Guest[]): string {
+  return guests.map(describeGuest).join(', ')
+}
+
+/** Story 18.5 AC4: whose guest a row of the registration list is. */
+export function describeGuestOf(attendeeName: string): string {
+  return `Guest of ${attendeeName}`
 }

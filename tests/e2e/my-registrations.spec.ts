@@ -166,7 +166,7 @@ async function stubCall(
 /** An event's page as the API sends it: here only what the stubs below change. */
 interface EventPageBody {
   listing: unknown
-  registration: { status: string; can_withdraw: boolean }
+  registration: { status: string; can_withdraw: boolean; can_change_guests: boolean }
 }
 
 /**
@@ -432,6 +432,9 @@ test.describe('on an iPhone 12 Pro', () => {
           registered_at: '2026-10-11T02:00:00Z',
           withdrawn_at: null,
           can_withdraw: true,
+          guests: [],
+          can_change_guests: false,
+          max_guests: 0,
         },
       ],
     })
@@ -488,7 +491,8 @@ test('18.2 AC3/AC11: a withdrawal refused because the event started meanwhile sa
   await stubChangedMeanwhile(page, EVENT_STARTED_MESSAGE, (body) => ({
     ...body,
     listing: null,
-    registration: { ...body.registration, can_withdraw: false },
+    // Story 18.5 AC3: a started event's registration has closed, so its guests are fixed too.
+    registration: { ...body.registration, can_withdraw: false, can_change_guests: false },
   }))
   await openRegisteredEvent(page, SUNSET_YOGA)
 
@@ -517,7 +521,12 @@ test('18.2 AC8/AC11: a withdrawal refused because the event was cancelled meanwh
   await stubChangedMeanwhile(page, EVENT_CANCELLED_MESSAGE, (body) => ({
     ...body,
     listing: null,
-    registration: { ...body.registration, status: 'EVENT_CANCELLED', can_withdraw: false },
+    registration: {
+      ...body.registration,
+      status: 'EVENT_CANCELLED',
+      can_withdraw: false,
+      can_change_guests: false,
+    },
   }))
   await openRegisteredEvent(page, SUNSET_YOGA)
 
