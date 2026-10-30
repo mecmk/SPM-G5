@@ -5,7 +5,9 @@
 -- Idempotent: every statement is an UPSERT, so `npm run db:ready` can run
 -- it on every start. Editing a name here and re-running updates the row;
 -- rows you delete here are NOT removed from the database (add a DELETE
--- if you really need that).
+-- if you really need that). Room layouts are the exception: Venue Staff
+-- manage them in the app (story 8.6), so their rows are only added where
+-- missing - see the room_layouts statement.
 -- =====================================================================
 
 INSERT INTO roles (code, name, is_internal, description) VALUES
@@ -36,7 +38,14 @@ ON CONFLICT (code) DO UPDATE SET
 -- are UPSERT-only and never remove a row, so the delete is explicit.
 DELETE FROM facilities WHERE code = 'RECORDING';
 
-INSERT INTO room_layouts (code, name, description, sort_order) VALUES
+-- Story 8.6: Venue Staff add, rename and delete room layouts in the app, so these are only the
+-- standard ones a new database starts with. A row is added only where it is missing - no
+-- conflict target, so a layout whose code or name is now taken is skipped too - and a rename or
+-- a new description made in the app is never undone. A standard layout deleted in the app stays
+-- deleted: its code is in deleted_room_layouts, and no layout takes it again.
+INSERT INTO room_layouts (code, name, description, sort_order)
+SELECT standard.code, standard.name, standard.description, standard.sort_order
+FROM (VALUES
     ('THEATRE',    'Theatre',    'Rows of chairs facing the front; highest capacity.', 10),
     ('CLASSROOM',  'Classroom',  'Rows of tables and chairs facing the front.', 20),
     ('BOARDROOM',  'Boardroom',  'Single large table.', 30),
@@ -44,8 +53,9 @@ INSERT INTO room_layouts (code, name, description, sort_order) VALUES
     ('BANQUET',    'Banquet',    'Round tables for dining.', 50),
     ('EXHIBITION', 'Exhibition', 'Open floor for booths and stands.', 60),
     ('STANDING',   'Standing / reception', 'No seating; networking style.', 70)
-ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name, description = EXCLUDED.description, sort_order = EXCLUDED.sort_order;
+) AS standard (code, name, description, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM deleted_room_layouts deleted WHERE deleted.code = standard.code)
+ON CONFLICT DO NOTHING;
 
 INSERT INTO accessibility_features (code, name, description, sort_order) VALUES
     ('WHEELCHAIR_ACCESS',   'Wheelchair access',            'Step-free entry and circulation inside the venue.', 10),

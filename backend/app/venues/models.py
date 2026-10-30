@@ -28,8 +28,18 @@ class RoomLayout(Base):
 
     code: Mapped[str] = mapped_column(Text, primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("100"))
+
+
+class DeletedRoomLayout(Base):
+    """Story 8.6 AC4: a room layout Venue Staff deleted, kept so its code is never given to
+    another layout (AC2) and a venue saved with it is told which layout went (AC11)."""
+
+    __tablename__ = "deleted_room_layouts"
+
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class AccessibilityFeature(Base):
