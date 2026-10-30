@@ -725,7 +725,9 @@ def test_the_migration_backfills_the_cause_of_bookings_cancelled_before_it(
         text("UPDATE venue_bookings SET replaced_by_booking_id = :r WHERE id = :o"),
         {"r": replacement.id, "o": original.id},
     )
-    with_event = _cancelled_without_cause(db, cancelled_event)
+    with_event = _cancelled_without_cause(
+        db, cancelled_event, cancelled_at=datetime(2026, 10, 2, tzinfo=UTC)
+    )
     plain = _cancelled_without_cause(db, planning)
     approved, withdrawn = (
         two_booked.first,
@@ -749,6 +751,80 @@ def test_the_migration_backfills_the_cause_of_bookings_cancelled_before_it(
     assert read(plain) == ("CHANGE_APPROVED", None)
     assert read(approved) == (None, None)
     assert read(withdrawn) == (None, None)
+
+
+_EVENT_CANCELLED_AT = datetime(2026, 10, 2, tzinfo=UTC)
+_EARLIER = datetime(2026, 10, 1, tzinfo=UTC)
+
+
+@pytest.mark.story("21.3", ac=2)
+@pytest.mark.parametrize(
+    ("booking_cancelled_at", "event_cancelled_at", "cause", "releaser"),
+    [
+        pytest.param(
+            _EVENT_CANCELLED_AT,
+            _EVENT_CANCELLED_AT,
+            "EVENT_CANCELLED",
+            Users.ORGANISER.id,
+            id="same-time-the-event's-cancellation-released-it",
+        ),
+        pytest.param(
+            _EARLIER,
+            _EVENT_CANCELLED_AT,
+            "CHANGE_APPROVED",
+            None,
+            id="released-by-a-change-before-the-event-was-cancelled",
+        ),
+        pytest.param(
+            None,
+            _EVENT_CANCELLED_AT,
+            "CHANGE_APPROVED",
+            None,
+            id="released-before-bookings-had-a-time-event-cancelled-after",
+        ),
+        pytest.param(
+            _EARLIER,
+            None,
+            "CHANGE_APPROVED",
+            None,
+            id="has-a-time-but-the-cancelled-event-has-none",
+        ),
+        pytest.param(
+            None,
+            None,
+            "EVENT_CANCELLED",
+            None,
+            id="neither-has-a-time-nothing-tells-the-causes-apart",
+        ),
+    ],
+)
+def test_the_backfill_blames_an_events_cancellation_only_for_bookings_it_released(
+    db: Session,
+    booking_cancelled_at: datetime | None,
+    event_cancelled_at: datetime | None,
+    cause: str,
+    releaser: uuid.UUID | None,
+):
+    cancellation = (
+        {
+            "cancelled_at": event_cancelled_at,
+            "cancelled_by_id": Users.ORGANISER.id,
+            "cancellation_reason": "Our sponsor withdrew.",
+        }
+        if event_cancelled_at is not None
+        else {}
+    )
+    event = make_event(db, status=EventStatus.CANCELLED, **cancellation)
+    booking = _cancelled_without_cause(db, event, cancelled_at=booking_cancelled_at)
+    db.flush()
+
+    db.connection().exec_driver_sql(_backfill())
+
+    row = db.execute(
+        text("SELECT release_cause, released_by_id FROM venue_bookings WHERE id = :id"),
+        {"id": booking.id},
+    ).one()
+    assert tuple(row) == (cause, releaser)
 
 
 @pytest.mark.story("21.3", ac=2)
