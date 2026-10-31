@@ -49,7 +49,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings import service as bookings_service
-from app.bookings.models import VenueBooking
+from app.bookings.models import ReleaseCause, VenueBooking
 from app.change_requests.models import ChangeRequestField, ChangeRequestStatus, EventChangeRequest
 from app.change_requests.schemas import (
     AttendanceChangeIn,
@@ -969,6 +969,7 @@ def _apply_approved_change(
             db,
             booking,
             actor=actor,
+            cause=ReleaseCause.CHANGE_APPROVED,
             because=_RELEASED_BECAUSE.format(label=label),
             details={"change": label},
             at=datetime.now(UTC),

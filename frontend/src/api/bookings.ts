@@ -1,5 +1,9 @@
 import { api } from './client'
 
+/** Values of `ReleaseCause` (backend/app/bookings/models.py): why a cancelled booking was
+ * released (story 21.3). */
+export type ReleaseCause = 'EVENT_CANCELLED' | 'CHANGE_APPROVED' | 'REPLACED' | 'SAFETY_REVIEW'
+
 /** Story 12.7 AC3: EXPIRED is an approved booking whose hold lapsed before its event was
  * confirmed. */
 export type BookingStatus =
@@ -59,6 +63,9 @@ export interface Booking {
   alternative_suggestion: string | null
   /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
   cancelled_at: string | null
+  /** Story 21.3 AC2: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   created_at: string
   updated_at: string
 }
@@ -221,6 +228,9 @@ export interface BookingQueueEntry {
   /** Story 6.2 AC16: when a cancelled booking was cancelled, shown beside its approval; null
    * otherwise, and for one cancelled before that was recorded. */
   cancelled_at: string | null
+  /** Story 21.3 AC8: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   /** Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
    * the event's confirmation completed it. R14: the booked start, which the Approve dialog's
    * expiry may not pass (AC5). */
@@ -445,6 +455,9 @@ export interface BookingOutcome {
   decision_reason: string | null
   /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
   cancelled_at: string | null
+  /** Story 21.3 AC2: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   /** Story 11.1 AC6: why a venue that did not suit was requested; null when it suited. */
   suitability_override_reason: string | null
   /** Story 12.7 AC1/AC8: when an approved booking's hold expires, and when it expired once
