@@ -102,9 +102,6 @@ PENDING_FIELD_INDEX = "uq_event_change_requests_pending_field"
 # 19.2 AC8). Before approval, changes go through clarification (stories 4.2/4.3); a completed,
 # cancelled or rejected event takes none. Awaiting the safety check waits on Q20, so none yet.
 _REQUESTABLE_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
-# AC12 (team decision on the review of #125): change requests close this long before the event's
-# set-up time - which also covers an event under way or over, that nothing marks Completed (Q57).
-CHANGE_REQUEST_CUTOFF = timedelta(hours=24)
 _BEFORE_APPROVAL_STATUSES = (
     EventStatus.DRAFT,
     EventStatus.UNDER_REVIEW,
@@ -451,17 +448,9 @@ class ChangeRequestWindow:
     is_open: bool
 
 
-def change_requests_close_at(db: Session, event: Event) -> datetime | None:
-    """AC12: 24 hours before the event's set-up time - when set-up begins at its first venue
-    (``bookings_service.earliest_setup_start``), or the event's own start if that is earlier or
-    no venue is held. None for an event with no date yet."""
-    setup_starts = bookings_service.earliest_setup_start(db, event.id)
-    starts = [moment for moment in (setup_starts, event.starts_at) if moment is not None]
-    return min(starts) - CHANGE_REQUEST_CUTOFF if starts else None
-
-
 def _window(db: Session, event: Event) -> ChangeRequestWindow:
-    closes_at = change_requests_close_at(db, event)
+    # AC12: the cut-off story 12.8 shares, so it lives with the bookings it is read from.
+    closes_at = bookings_service.changes_close_at(db, event)
     return ChangeRequestWindow(
         closes_at=closes_at, is_open=closes_at is not None and datetime.now(UTC) < closes_at
     )

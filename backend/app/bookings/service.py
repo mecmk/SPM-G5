@@ -207,6 +207,11 @@ REPLACED_BY_REASON = "Replaced by {venue}"
 ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
 # Story 21.3 AC4: what Venue Staff are told when the Safety Officer's finding released a booking:
 # the booked period (setup and teardown included, 12.1 AC1) and the finding's required change.
+# Story 19.1 AC12 (team decision on the review of #125), story 12.8 AC4: an event's plans stop
+# changing this long before its set-up time - which also covers an event under way or over, that
+# nothing marks Completed (Q57). Kept here because the set-up time is read from the bookings.
+CHANGES_CUTOFF = timedelta(hours=24)
+
 SAFETY_RELEASE_NOTICE = (
     'The booking of {venue} for "{event}" {period} was released by the safety review. '
     "Required change: {reason}"
@@ -1322,11 +1327,21 @@ def _describe_day(moment: datetime) -> str:
     return f"{moment:%a} {moment.day} {moment:%b %Y}"
 
 
+def changes_close_at(db: Session, event: Event) -> datetime | None:
+    """Story 19.1 AC12, story 12.8 AC4: when the event stops taking changes to its plans - change
+    requests (19.1) and cancelling a booking (12.8) - ``CHANGES_CUTOFF`` before its set-up time:
+    when set-up begins at its first venue (``earliest_setup_start``), or the event's own start if
+    that is earlier or no venue is held. None for an event with no date yet."""
+    setup_starts = earliest_setup_start(db, event.id)
+    starts = [moment for moment in (setup_starts, event.starts_at) if moment is not None]
+    return min(starts) - CHANGES_CUTOFF if starts else None
+
+
 def earliest_setup_start(db: Session, event_id: uuid.UUID) -> datetime | None:
     """When set-up begins at the first of ``event_id``'s venues: the earliest ``held_from`` - the
     booking's start less its set-up minutes (12.1 AC1) - among its bookings that hold a venue,
     pending or approved (12.1 AC3). None when no venue is held. Story 19.1 AC12 closes change
-    requests 24 hours before it (fix f19.1.1)."""
+    requests 24 hours before it (fix f19.1.1), and story 12.8 AC4 cancelling a booking."""
     return db.scalar(
         select(func.min(VenueBooking.held_from)).where(
             VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES)
