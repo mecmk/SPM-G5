@@ -1689,3 +1689,26 @@ def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Ses
         ).scalar_one()
         == 0
     )
+
+
+@pytest.mark.story("19.3", ac=8)
+def test_a_booking_the_change_cancels_is_not_flagged(login_as, db: Session):
+    """One change lowers the hall's number and changes its layout. The approval cancels the
+    booking for the layout, so only a booking it keeps can be larger than needed."""
+    event = _planning_event(db, expected_attendance=120)
+    venue = make_venue(db, capacity=300, layouts={"THEATRE": 300, "BANQUET": 300})
+    requirement = _requirement(db, event, capacity=120, layout_code="THEATRE")
+    hall = _book(
+        db,
+        event,
+        people=120,
+        requirement_id=requirement,
+        venue=venue,
+        required_layout_code="THEATRE",
+    )
+    request = _lower(login_as, db, event, requirement, 50, layout_code="BANQUET")
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["will_be_cancelled"] is True
+    assert row["oversize_warning"] is None
