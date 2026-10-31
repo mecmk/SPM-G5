@@ -44,6 +44,7 @@ class ReleaseCause:
     CHANGE_APPROVED = "CHANGE_APPROVED"  # story 19.2: an approved change no longer fits it
     REPLACED = "REPLACED"  # story 12.6: its replacement was approved
     SAFETY_REVIEW = "SAFETY_REVIEW"  # story 21.3: the Safety Officer named it in a finding
+    COORDINATOR_CANCELLED = "COORDINATOR_CANCELLED"  # story 12.8: its coordinator cancelled it
 
 
 def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
