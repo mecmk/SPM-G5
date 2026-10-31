@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
+  turnaroundLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -17,12 +18,7 @@ import {
 } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
-import {
-  BOOKING_OUTCOME,
-  formatMinutesDuration,
-  OPEN_HOLD_MESSAGE,
-  VENUE_UNAVAILABLE_NOTE,
-} from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
@@ -113,11 +109,7 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                         </>
                       )}
                     </div>
-                    <p className="small muted">
-                      Setup: {formatMinutesDuration(booking.setup_minutes)} · Event:{' '}
-                      {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)} · Teardown:{' '}
-                      {formatMinutesDuration(booking.teardown_minutes)}
-                    </p>
+                    <p className="small muted">{turnaroundLine(booking)}</p>
                   </div>
                 </div>
 

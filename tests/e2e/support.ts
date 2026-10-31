@@ -168,6 +168,9 @@ export const EVENTS = {
   // batik workshop with two guests; Hana, registered alone for the kite afternoon, adds one.
   batikWorkshop: '33333333-0000-0000-0000-000000018503',
   kiteAfternoon: '33333333-0000-0000-0000-000000018504',
+  // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
+  // sends it for its safety review and releases its Seminar Room 2.1 booking for good.
+  safetyRelease: '33333333-0000-0000-0000-000000021301',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in

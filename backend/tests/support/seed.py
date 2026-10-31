@@ -226,6 +226,9 @@ class Events:
     # Story 18.5's, CONFIRMED and Public: organiser 2, coordinator 2, January 2029.
     BATIK_WORKSHOP = _e(18503)  # open; Users.ATTENDEE_7 registers with two guests
     KITE_AFTERNOON = _e(18504)  # open; Users.ATTENDEE_8 registered on her own, adds a guest
+    # Story 21.3: PLANNING, secured, never reviewed; coordinator 1, organiser 1, 10 April 2029. The
+    # spec sends it for its safety review and the officer releases its Seminar Room 2.1 booking.
+    SAFETY_RELEASE = _e(21301)
 
 
 class Bookings:
@@ -265,6 +268,10 @@ class Bookings:
     CANCELLED_CHARITY_RUN_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
     # Fix f7.1.2: Events.LEADERSHIP_RETREAT's two-day booking of Sunrise Studio, held.
     APPROVED_LEADERSHIP_RETREAT_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000007012")
+    # Story 21.3: Events.SAFETY_RELEASE's requirement "Main hall" at Seminar Room 2.1, with 30
+    # minutes of setup, and its additional venue at Exhibition Foyer; both approved by Vera.
+    SAFETY_RELEASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021303")
+    SAFETY_RELEASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021304")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
