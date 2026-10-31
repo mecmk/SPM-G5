@@ -25,7 +25,9 @@ Assessing (story 19.3). The impact of a pending request is worked out from the r
 stand, by 19.2's own rules - ``booking_misfits``, ``check_proposed_schedule_change`` and the
 equipment plan and statuses in ``app.equipment`` - so it says what the approval will do, and
 writes nothing (AC3). Approving re-assesses under the event's lock and refuses, applying nothing,
-when the result no longer matches the fingerprint the coordinator approved on (AC7).
+when the result no longer matches the fingerprint the coordinator approved on (AC7). Fix f19.3.1
+(AC8, CL-171): a kept booking whose people the change lowers to below half its venue's capacity
+is flagged as oversized, a warning only.
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ from app.change_requests.schemas import (
     EquipmentChangeIn,
     EquipmentImpactOut,
     HoldingBookingOut,
+    OversizeWarningOut,
     ProposedSchedule,
     RegistrationImpactOut,
     ScheduleChangeIn,
@@ -1221,6 +1224,11 @@ _BOOKING_KEPT = (
     "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the "
     "change. Check with them that the venue still suits it, or reject the change."
 )
+# AC8: a venue larger than needed is the coordinator's own call, so there is no one to check with.
+_BOOKING_KEPT_LARGER_THAN_NEEDED = (
+    "Stays as it is: a warning never cancels a booking, and nobody is told of it. You decide "
+    "whether to keep this venue or replace it."
+)
 
 # AC2: what the approval does to each equipment item, as 19.2 does it.
 _ITEM_CANCELLED = "Removed: its hold is released, and it is kept as Cancelled for the record."
@@ -1378,6 +1386,23 @@ def _capacity_warning(booking: VenueBooking, people: int) -> CapacityWarningOut 
     )
 
 
+# AC8 (CL-171): a venue holding fewer than one person in this many is oversized - below half full.
+_OVERSIZE_FACTOR = 2
+
+
+def _oversize_warning(booking: VenueBooking, people: int) -> OversizeWarningOut | None:
+    """AC8: the booked venue, in its booked layout as 11.1 counts it, holds more than twice
+    ``people``. Exactly half full is not flagged."""
+    capacity = venue_service.venue_capacity(booking.venue, layout=booking.required_layout)
+    if people * _OVERSIZE_FACTOR >= capacity:
+        return None
+    return OversizeWarningOut(
+        people_needed=people,
+        venue_capacity=capacity,
+        layout_name=_counted_layout_name(booking),
+    )
+
+
 @dataclass(frozen=True)
 class _VenueImpact:
     """The bookings the change affects, and every live booking the approval keeps - the venues
@@ -1394,7 +1419,8 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
     replacement would need - another booking holding it (12.1's ``find_holding_booking``, in SQL,
     half-open), a closure (9.4) and opening hours (12.1 AC16), setup and teardown widening the
     period as 12.1 widens it. Separately, a booking whose people change gets 11.1's capacity
-    check. Bookings neither cancelled nor warned about are left out."""
+    check, and AC8, a kept one whose people the change lowers is checked for being below half
+    full. Bookings neither cancelled nor warned about are left out."""
     booked = events_service.live_bookings(db, event)
     current = {
         requirement.id: events_service.RequirementTerms.of(requirement)
@@ -1439,7 +1465,15 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
         )
         is_people_changed = after is not None and (before is None or after.people != before.people)
         warning = _capacity_warning(booking, after.people) if is_people_changed else None
-        if not misfits and warning is None:
+        # AC8: only a booking the approval keeps, and only when the change lowers its people.
+        is_people_lowered = (
+            not misfits
+            and after is not None
+            and before is not None
+            and after.people < before.people
+        )
+        oversize = _oversize_warning(booking, after.people) if is_people_lowered else None
+        if not misfits and warning is None and oversize is None:
             continue
 
         holding = closure = None
@@ -1458,6 +1492,12 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                 booking.venue, starts_at=needed.starts_at, ends_at=needed.ends_at
             )
         people = None if after is None else after.people
+        if misfits:
+            after_approval = _BOOKING_CANCELLED
+        elif oversize is not None:
+            after_approval = _BOOKING_KEPT_LARGER_THAN_NEEDED
+        else:
+            after_approval = _BOOKING_KEPT
         impacts.append(
             BookingImpactOut(
                 booking_id=booking.id,
@@ -1470,6 +1510,7 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                 will_be_cancelled=bool(misfits),
                 reasons=[_misfit_reason(misfit, booking, people) for misfit in misfits],
                 capacity_warning=warning,
+                oversize_warning=oversize,
                 needed_starts_at=None if needed is None else needed.starts_at,
                 needed_ends_at=None if needed is None else needed.ends_at,
                 held_by=None
@@ -1488,7 +1529,7 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                     ends_at=closure.ends_at,
                 ),
                 is_outside_opening_hours=is_closed,
-                after_approval=_BOOKING_CANCELLED if misfits else _BOOKING_KEPT,
+                after_approval=after_approval,
             )
         )
     return _VenueImpact(affected=impacts, kept=kept)

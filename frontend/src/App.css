@@ -1758,6 +1758,13 @@ button.brand:hover {
   border-color: var(--brand-hover);
 }
 
+/* A disabled brand button keeps its colour on hover, as `button:disabled:hover` keeps the
+   accent's - the event page's Register while an event is full (story 18.1 AC3). */
+button.brand:disabled:hover {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
 .button.danger,
 button.danger {
   background: transparent;
@@ -1903,7 +1910,6 @@ td.num {
 .badge-approved,
 .badge-accepted,
 .badge-reserved,
-.badge-registered,
 .badge-completed,
 .badge-success {
   color: var(--success);
@@ -1962,7 +1968,10 @@ td.num {
   border-color: var(--neutral-border);
 }
 
+/* Story 18.1 AC1 (fix f18.1.2): Registered is violet, apart from Open's green, so an attendee
+   tells an event they hold a place at from one they can still register for. */
 .badge-confirmed,
+.badge-registered,
 .badge-highlight {
   color: var(--highlight);
   background: var(--highlight-bg);
@@ -4334,10 +4343,15 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* Story 18.1: on a phone each event's Register button - the card's action, full width below its
-   details (story 5.4) - is at least 44px tall, to be pressed with a thumb. */
+/* Story 18.1 AC9 (fix f18.1.2): an event's page, as an attendee sees it. The description keeps the
+   organiser's line breaks. On a phone Register - full width, as everywhere - is at least 44px
+   tall, to be pressed with a thumb. */
+.attendee-event-description {
+  white-space: pre-line;
+}
+
 @media (max-width: 640px) {
-  .upcoming-events .event-card-action button {
+  .attendee-event-registration button {
     min-height: 44px;
   }
 }
@@ -4411,7 +4425,7 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* ---------- attendee details: My profile, Upcoming events, the registration list (story 18.4) ---------- */
+/* ---------- attendee details: My profile, an event's page, the registration list (story 18.4) ---------- */
 
 /* AC1: the email on My profile - a label over its value. Labels look like the form's. */
 .attendee-details-list {

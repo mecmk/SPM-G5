@@ -20,7 +20,7 @@ export const ACCOUNTS = {
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
   // Story 18.4: one attendee for each flow that changes their details (attendee-profile.spec.ts).
-  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile;
+  // Cara has never been asked for them; Dion changes them on an event's page; Esme on My profile;
   // Finn changes their name.
   attendee3: 'attendee3@example.com',
   attendee4: 'attendee4@example.com',
@@ -183,6 +183,27 @@ export const VENUES = {
   // One pending request, the art market's, at 21 October 2028: a closure marks it.
   sunriseStudio: 'Sunrise Studio',
 } as const
+
+/** Story 18.1 AC9 (fix f18.1.2): from Upcoming events, open an event's page by its card's link,
+ *  its title. */
+export async function openEventPage(page: Page, name: string) {
+  await page.goto('/browse')
+  await page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { level: 3, name }) })
+    .getByRole('link', { name })
+    .click()
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+}
+
+/** Story 18.1 AC9: where an event's page says where registration stands, and offers Register. */
+export function registrationSection(page: Page) {
+  return page.getByRole('region', { name: 'Registration', exact: true })
+}
+
+export function registerButton(page: Page, name: string) {
+  return registrationSection(page).getByRole('button', { name: `Register for ${name}` })
+}
 
 /** Story 18.4: the dialog every registration opens, showing the attendee's details to confirm -
  *  filled in from their profile, or asked for the first time. */
