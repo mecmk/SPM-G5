@@ -221,6 +221,17 @@ class CapacityWarningOut(BaseModel):
     layout_name: str | None
 
 
+class OversizeWarningOut(BaseModel):
+    """AC8 (fix f19.3.1, CL-171): the change lowers the people the booked venue must hold to below
+    half its capacity - in the booked layout's capacity where the venue records one
+    (``layout_name``), else its maximum. A warning only: the booking is kept, nothing is marked and
+    nobody is told; the coordinator decides whether to replace the venue."""
+
+    people_needed: int
+    venue_capacity: int
+    layout_name: str | None
+
+
 class HoldingBookingOut(BaseModel):
     """AC4/AC5: another booking holding the venue over part of the period a replacement would
     need, setup and teardown included."""
@@ -273,7 +284,8 @@ class CapacityShortfallOut(BaseModel):
 
 class BookingImpactOut(BaseModel):
     """AC1/AC2: one venue booking the change affects - one 19.2 would cancel (``reasons`` say
-    why), or one it keeps whose venue cannot hold the people now needed (``capacity_warning``). A
+    why), one it keeps whose venue cannot hold the people now needed (``capacity_warning``), or,
+    AC8, one it keeps whose venue the change leaves below half full (``oversize_warning``). A
     warning never means the booking is cancelled: only ``will_be_cancelled`` says that.
     ``requirement_name`` is None for an additional venue (12.5). For a cancelled booking whose
     requirement remains, ``needed_starts_at``..``needed_ends_at`` is the period a replacement
@@ -290,6 +302,7 @@ class BookingImpactOut(BaseModel):
     will_be_cancelled: bool
     reasons: list[str]
     capacity_warning: CapacityWarningOut | None
+    oversize_warning: OversizeWarningOut | None
     needed_starts_at: datetime | None
     needed_ends_at: datetime | None
     held_by: HoldingBookingOut | None
