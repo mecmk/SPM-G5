@@ -15,10 +15,13 @@ export const RELEASE_BOOKINGS_HINT =
   'Recording the decision cancels each booking you tick and frees its venue.'
 
 /** Story 21.3 AC1: a booking the officer may release, as its checkbox names it - its venue, the
- * requirement it is for or "Additional venue", and its date. */
+ * requirement it is for or "Additional venue", and its date, or both dates when it spans days. */
 export function bookingChoiceLabel(booking: SafetyVenue): string {
   const requirement = booking.requirement_name ?? ADDITIONAL_VENUE
-  return `${booking.venue.name} · ${requirement} · ${formatCalendarDate(booking.starts_at)}`
+  const first = formatCalendarDate(booking.starts_at)
+  const last = formatCalendarDate(booking.ends_at)
+  const dates = first === last ? first : `${first} – ${last}`
+  return `${booking.venue.name} · ${requirement} · ${dates}`
 }
 
 /** Story 21.3 AC9: a booking a review round released, as the finding lists it. */
