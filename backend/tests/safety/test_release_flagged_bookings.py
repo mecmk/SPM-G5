@@ -31,8 +31,10 @@ Edge
     and All tabs as history. It cannot be approved again; the coordinator raises a new request,
     which may be for the same venue. Resubmitting with the same venue in its place still shows
     21.2 AC12's warning.
-9. Each review round shows the Safety Officer and the coordinator which bookings it released. A
-    booking named in two findings of one decision is released once.
+9. Each review round shows the Safety Officer which bookings it released. The coordinator sees
+    this for the latest round on the event page; a booking an earlier round released stays in the
+    event's booking list, marked released by the safety review with its reason (AC2, AC8). A
+    booking named in two findings of one decision is released once. (CL-190)
 
 Permission
 10. Only a Safety Officer's Request changes decision releases bookings this way. The

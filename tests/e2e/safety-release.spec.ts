@@ -9,7 +9,8 @@
  * AC5 the requirement that lost its booking needs a venue again, so the review cannot be sent.
  * AC8 Venue Staff find the released booking under Cancelled and All, read-only, with the same line
  *     and reason.
- * AC9 the officer's Previous reviews and the event page name what the round released.
+ * AC9 the officer's Previous reviews name what each round released, and the coordinator's event
+ *     page names it for the latest round.
  * Every other AC (AC3, AC4, AC6, AC7, AC10, AC11) is a backend case:
  * backend/tests/safety/test_release_flagged_bookings.py.
  *
