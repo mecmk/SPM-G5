@@ -143,7 +143,7 @@ those. A new feature area gets its line here in the same PR (see
 backend/
   app/                  # one package per feature area: router.py, service.py, schemas.py, models.py
     auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
-    bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
+    bookings/           # venue booking requests, Venue Staff's decisions, withdrawals, the coordinator cancelling an approved booking
     cancellations/      # the organiser cancelling their own event, releasing everything it holds
     change_requests/    # an organiser's requested changes to an approved event, withdrawals, and the coordinator's decisions
     coordination/       # assigning and reassigning an event's coordinator
