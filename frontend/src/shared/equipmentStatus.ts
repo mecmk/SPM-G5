@@ -13,3 +13,8 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   CANCELLED: 'Released',
   WITHDRAWN: 'Withdrawn',
 }
+
+/** Story 19.2 AC5, 17.2 AC3: an item kept only for Technical Support's record - cancelled after it
+ *  was sent, or withdrawn by the coordinator - and no longer the event's. Mirrors the backend's
+ *  `KEPT_FOR_RECORD` (backend/app/equipment/service.py). */
+export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']

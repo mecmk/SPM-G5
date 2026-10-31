@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, instantToInput, shortReference } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
@@ -292,7 +293,7 @@ export function ChangeRequestsSection({
     // value leaves it out.
     setEquipment(
       event.equipment
-        .filter((line) => line.status !== 'CANCELLED' && line.status !== 'WITHDRAWN')
+        .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
         .map((line) => ({
           key: newDraftKey(),
           sourceId: line.id,
