@@ -26,6 +26,9 @@ export type ErrorCode =
   | 'VENUE_NOT_FOUND'
   | 'VENUE_NAME_TAKEN'
   | 'VENUE_IN_USE'
+  | 'ROOM_LAYOUT_NOT_FOUND'
+  | 'ROOM_LAYOUT_NAME_TAKEN'
+  | 'ROOM_LAYOUT_IN_USE'
   | 'UNAVAILABILITY_NOT_FOUND'
   | 'UNAVAILABILITY_CANNOT_BE_ENDED'
   | 'UNAVAILABILITY_CANNOT_BE_REMOVED'
@@ -205,6 +208,23 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_IN_USE: {
     title: 'Venue has bookings',
     message: 'You cannot delete a venue that has bookings. Withdraw it from service instead.',
+  },
+
+  // Story 8.6: the room layouts venues can offer. These usually arrive with the backend's own
+  // sentence, which says which layout and why.
+  ROOM_LAYOUT_NOT_FOUND: {
+    title: 'Room layout not found',
+    message: 'This room layout no longer exists.',
+  },
+  ROOM_LAYOUT_NAME_TAKEN: {
+    title: 'Layout name already used',
+    message: 'Another room layout already has this name. Choose a different one.',
+  },
+  ROOM_LAYOUT_IN_USE: {
+    title: 'Room layout in use',
+    message:
+      'You cannot delete a room layout that venues, venue requirements or booking requests use. ' +
+      'You can still rename it.',
   },
 
   // Story 9.4: a venue marked unavailable. These usually arrive with the backend's own sentence.
