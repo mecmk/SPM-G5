@@ -2059,7 +2059,8 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-7012-000000000001', '33333333-0000-0000-0000-000000007012', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08', NULL)
