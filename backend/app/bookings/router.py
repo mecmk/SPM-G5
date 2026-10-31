@@ -3,7 +3,8 @@
 the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
 coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
 a replacement for an approved booking whose venue became unavailable (story 12.6), and an
-organiser's read-only view of their own event's bookings (fix f7.1.2).
+organiser's read-only view of their own event's bookings (fix f7.1.2), and the coordinator
+cancelling an approved booking (story 12.8).
 
 Story 12.7 AC3: every endpoint here expires the holds that have lapsed before it answers
 (``ReleaseLapsedHolds``), so none of them shows or acts on a lapsed one as approved.
@@ -24,6 +25,7 @@ from app.bookings.deps import ReleaseLapsedHolds
 from app.bookings.schemas import (
     BookableEvent,
     BookingApproval,
+    BookingCancellation,
     BookingHoldUpdate,
     BookingOut,
     BookingOutcome,
@@ -299,6 +301,34 @@ def withdraw_booking(
     except service.NotAssignedCoordinator as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.BookingNotPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return BookingOut.model_validate(booking)
+
+
+@router.post("/{booking_id}/cancel", response_model=BookingOut)
+def cancel_booking(
+    booking_id: uuid.UUID,
+    payload: BookingCancellation,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanRequest],
+) -> BookingOut:
+    """Story 12.8 AC1-AC9: the assigned coordinator cancels an approved booking with a reason - the
+    release, Venue Staff's notice and any return to Planning together. Refused (422) without a
+    reason, (403) for anyone but the event's assigned coordinator (AC8), (409) for a booking that
+    is not approved (AC8), one with a replacement pending (AC7) and once the event is within 24
+    hours of its set-up time (AC4), and (404) for an unknown booking.
+    """
+    try:
+        booking = service.cancel_booking(db, booking_id, payload, actor=actor)
+    except service.BookingNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.BookingNotApproved as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.ReplacementPending as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.CancellingClosed as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)
 

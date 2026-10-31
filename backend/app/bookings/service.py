@@ -124,8 +124,14 @@ from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
-from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
+from app.bookings.models import (
+    BookingStatus,
+    ReleaseCause,
+    VenueBooking,
+    pending_replacement_conditions,
+)
 from app.bookings.schemas import (
+    BookingCancellation,
     BookingQueueOrder,
     BookingReplacementIn,
     BookingRequestIn,
@@ -171,6 +177,23 @@ WITHDRAW_NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can withdraw its booking requests."
 )
 
+# Story 12.8 AC8: only the event's assigned coordinator cancels its approved bookings.
+CANCEL_NOT_ASSIGNED_COORDINATOR_MESSAGE = (
+    "Only the coordinator assigned to this event can cancel its venue bookings."
+)
+# Story 12.8 AC8: a booking that holds no approval has nothing to cancel; a pending request is
+# withdrawn instead (12.2).
+BOOKING_NOT_APPROVED_MESSAGE = "Only an approved booking can be cancelled. This one is {status}."
+# Story 12.8 AC7: the replacement asked for (12.6) is decided or withdrawn first.
+CANCEL_REPLACEMENT_PENDING_MESSAGE = (
+    "A replacement at {venue} is waiting for Venue Staff. Withdraw it before cancelling this "
+    "booking."
+)
+# Story 12.8 AC4: the cut-off change requests share (``CHANGES_CUTOFF``).
+CANCELLING_CLOSED_MESSAGE = (
+    "Cancelling this event's venue bookings closed 24 hours before its set-up time."
+)
+
 # Story 12.6 AC9: only the event's assigned coordinator asks for a replacement.
 REPLACEMENT_NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can request a replacement for its booking."
@@ -211,6 +234,20 @@ ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
 # changing this long before its set-up time - which also covers an event under way or over, that
 # nothing marks Completed (Q57). Kept here because the set-up time is read from the bookings.
 CHANGES_CUTOFF = timedelta(hours=24)
+
+# Story 12.8 AC3: Venue Staff's notice of a booking its coordinator cancelled.
+COORDINATOR_CANCEL_NOTICE = (
+    'The booking of {venue} for "{event}" {period} was cancelled by its coordinator. '
+    "Reason: {reason}"
+)
+# Story 12.8 AC5: an event past Planning goes back to it, and the organiser and every active
+# Safety Officer are told (21.2 AC8's "every status change notifies").
+_RETURNED_TO_PLANNING_REASON = "The booking of {venue} was cancelled by its coordinator."
+_RETURNED_TITLE = '"{event}" is back in Planning'
+_RETURNED_MESSAGE = (
+    '{coordinator} cancelled the booking of {venue} for "{event}" while it was {status}, so it is '
+    "back in Planning and needs a new safety check before it is confirmed again."
+)
 
 SAFETY_RELEASE_NOTICE = (
     'The booking of {venue} for "{event}" {period} was released by the safety review. '
@@ -353,6 +390,29 @@ class NotAssignedCoordinator(PermissionError):
 
     def __init__(self, *, message: str = NOT_ASSIGNED_COORDINATOR_MESSAGE) -> None:
         super().__init__(message)
+
+
+class BookingNotApproved(ValueError):
+    """Story 12.8 AC8: only an APPROVED booking can be cancelled - a pending one is withdrawn
+    (12.2), and a closed one has nothing left to release. Names the status it has now."""
+
+    def __init__(self, booking: VenueBooking) -> None:
+        super().__init__(BOOKING_NOT_APPROVED_MESSAGE.format(status=booking.status.lower()))
+
+
+class ReplacementPending(ValueError):
+    """Story 12.8 AC7: the booking has a replacement waiting for Venue Staff (12.6), whose
+    approval would release it; it is withdrawn first. Names the replacement's venue."""
+
+    def __init__(self, replacement: VenueBooking) -> None:
+        super().__init__(CANCEL_REPLACEMENT_PENDING_MESSAGE.format(venue=replacement.venue.name))
+
+
+class CancellingClosed(ValueError):
+    """Story 12.8 AC4: the event is within 24 hours of its set-up time, or past it."""
+
+    def __init__(self) -> None:
+        super().__init__(CANCELLING_CLOSED_MESSAGE)
 
 
 class VenueHeld(ValueError):
@@ -677,9 +737,17 @@ def _notify_venue_staff_of_release(
     """Story 19.2 AC5, story 6.2 AC5: every active Venue Staff member is told a booking was
     released, and ``because`` says why, as they are of a withdrawal (12.2 AC2), since their
     schedule changes with it. Story 21.3 AC4: a booking the safety review released is told with its
-    booked period and the finding's required change, ``reason``."""
+    booked period and the finding's required change, ``reason``. Story 12.8 AC3: one its
+    coordinator cancelled, with its booked period and the coordinator's ``reason``."""
     if cause == ReleaseCause.SAFETY_REVIEW:
         message = SAFETY_RELEASE_NOTICE.format(
+            venue=booking.venue.name,
+            event=booking.event.name,
+            period=_describe_held_period(booking.held_from, booking.held_until),
+            reason=reason,
+        )
+    elif cause == ReleaseCause.COORDINATOR_CANCELLED:
+        message = COORDINATOR_CANCEL_NOTICE.format(
             venue=booking.venue.name,
             event=booking.event.name,
             period=_describe_held_period(booking.held_from, booking.held_until),
@@ -729,6 +797,11 @@ def _notify_venue_staff_of_replacement(
         )
 
 
+# Story 21.3 AC2, story 12.8 AC1: the causes that record why, in the words of whoever released it,
+# and release an approved booking only.
+_RELEASES_WITH_REASON = frozenset({ReleaseCause.SAFETY_REVIEW, ReleaseCause.COORDINATOR_CANCELLED})
+
+
 def release_booking(
     db: Session,
     booking: VenueBooking,
@@ -751,7 +824,8 @@ def release_booking(
     ``reason`` it is recorded on the booking beside the status. Every path names its own, with no
     default: 6.2 EVENT_CANCELLED, 19.2 CHANGE_APPROVED, 12.6 REPLACED, 21.3 SAFETY_REVIEW, which
     takes ``reason`` (the finding's required change) for its notice and its record instead of
-    ``because``.
+    ``because``, and 12.8 COORDINATOR_CANCELLED, which takes the coordinator's ``reason`` the same
+    way (AC9).
 
     Story 19.2 AC5: an approved change to its event no longer fits ``booking``; story 6.2 AC2: its
     event was cancelled. Either way Venue Staff are told ``because``, the clause that ends their
@@ -764,14 +838,15 @@ def release_booking(
     venue replaced it.
 
     What a path gives: a replacement, for REPLACED and only for it; ``reason`` and ``at``, for a
-    safety release (21.3 AC2); ``because`` and ``at``, for any other cause."""
+    safety release (21.3 AC2) or a coordinator's cancellation (12.8 AC1); ``because`` and ``at``,
+    for any other cause."""
     if (cause == ReleaseCause.REPLACED) != (replacement is not None):
         raise ValueError("release_booking takes a replacement for REPLACED, and only for it.")
     if replacement is None and at is None:
         raise ValueError("release_booking needs the time of a release that has no replacement.")
-    if cause == ReleaseCause.SAFETY_REVIEW:
+    if cause in _RELEASES_WITH_REASON:
         if reason is None:
-            raise ValueError("release_booking needs the required change of a safety release.")
+            raise ValueError("release_booking needs the reason for a release of this cause.")
     elif cause != ReleaseCause.REPLACED and because is None:
         raise ValueError("release_booking needs the clause its notice ends with.")
     values: dict[str, object] = {
@@ -785,10 +860,9 @@ def release_booking(
         values["replaced_by_booking_id"] = replacement.id
     else:
         values["cancelled_at"] = at
-    # Story 21.3 AC7: the safety review releases an approved booking only, never a pending one.
-    releasable = (
-        (BookingStatus.APPROVED,) if cause == ReleaseCause.SAFETY_REVIEW else _HOLDING_STATUSES
-    )
+    # Story 21.3 AC7, story 12.8 AC8: the safety review and the coordinator's cancel release an
+    # approved booking only, never a pending one.
+    releasable = (BookingStatus.APPROVED,) if cause in _RELEASES_WITH_REASON else _HOLDING_STATUSES
     released = db.execute(
         update(VenueBooking)
         .where(VenueBooking.id == booking.id, VenueBooking.status.in_(releasable))
@@ -1208,6 +1282,109 @@ def _mark_withdrawn(db: Session, booking: VenueBooking, *, actor: User) -> None:
         commit=False,
     )
     _notify_venue_staff_of_withdrawal(db, booking, actor=actor)
+
+
+# --- 12.8: the coordinator cancels an approved booking ------------------------------------------
+def _notify_of_return_to_planning(
+    db: Session, event: Event, booking: VenueBooking, *, actor: User, from_status: str
+) -> None:
+    """Story 12.8 AC5: the event left the Safety Officers' check, or lost the confirmation their
+    approval allowed, so the organiser and every active Safety Officer are told."""
+    message = _RETURNED_MESSAGE.format(
+        coordinator=actor.full_name,
+        venue=booking.venue.name,
+        event=event.name,
+        status=from_status.lower().replace("_", " "),
+    )
+    for recipient in (event.organiser, *active_members(db, role_code=RoleCode.SAFETY_OFFICER)):
+        notify(
+            db,
+            recipient=recipient,
+            actor=actor,
+            notification_type=NotificationType.EVENT_RETURNED_TO_PLANNING,
+            event_id=event.id,
+            title=_RETURNED_TITLE.format(event=event.name),
+            message=message,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
+def cancel_booking(
+    db: Session, booking_id: uuid.UUID, data: BookingCancellation, *, actor: User
+) -> VenueBooking:
+    """Story 12.8: ``actor`` cancels an approved booking of their event with ``data.reason``,
+    without cancelling the event (AC1).
+
+    Locks are taken in the order every other write takes them - the event (``lock_event``, as
+    story 6.2's cancellation and 21.3's safety decision do), then the booking - so an event
+    cancellation, a hold expiring or a replacement being asked for meanwhile is waited for and
+    then seen. Refusals come in this order, each changing nothing: not the event's assigned
+    coordinator (``NotAssignedCoordinator``, AC8); a booking that is not APPROVED
+    (``BookingNotApproved``, AC8); a replacement still pending (``ReplacementPending``, AC7); the
+    24-hour cut-off before set-up passed (``CancellingClosed``, AC4). A booking marked "Venue
+    unavailable" (9.4) is cancelled like any other (AC7).
+
+    Then, in one commit: the booking is released through ``release_booking`` with its own cause,
+    COORDINATOR_CANCELLED, recording who and why (AC9) - its hold goes at once, it stays on the
+    event's list as Cancelled, its requirement needs a venue again (AC2) and Venue Staff are told,
+    with nothing to approve (AC3). An event Awaiting Safety Check or Confirmed goes back to Planning
+    and the organiser and Safety Officers are told (AC5). One in Planning stays there; its safety
+    approval no longer matches the venues booked, so ``safety_service.confirm_blockers`` stops
+    the confirmation (AC6)."""
+    found = db.get(VenueBooking, booking_id)
+    if found is None:
+        raise BookingNotFound(booking_id)
+    event = events_service.lock_event(db, found.event_id)
+    booking = db.scalar(
+        select(VenueBooking)
+        .where(VenueBooking.id == booking_id)
+        .with_for_update(of=VenueBooking)
+        .execution_options(populate_existing=True)
+    )
+    if event is None or booking is None:
+        raise BookingNotFound(booking_id)
+    if event.assigned_coordinator_id != actor.id:
+        raise NotAssignedCoordinator(message=CANCEL_NOT_ASSIGNED_COORDINATOR_MESSAGE)
+    if booking.status != BookingStatus.APPROVED:
+        raise BookingNotApproved(booking)
+    replacement = db.scalar(
+        select(VenueBooking)
+        .options(joinedload(VenueBooking.venue))
+        .where(VenueBooking.replaces_booking_id == booking.id, *pending_replacement_conditions())
+    )
+    if replacement is not None:
+        raise ReplacementPending(replacement)
+    now = datetime.now(UTC)
+    closes_at = changes_close_at(db, event)
+    if closes_at is None or now >= closes_at:
+        raise CancellingClosed()
+
+    # Held under its row lock and approved, so the release always lands.
+    release_booking(
+        db,
+        booking,
+        actor=actor,
+        cause=ReleaseCause.COORDINATOR_CANCELLED,
+        reason=data.reason,
+        details={"cause": ReleaseCause.COORDINATOR_CANCELLED},
+        at=now,
+    )
+    from_status = event.status
+    is_returned = events_service.return_event_to_planning(
+        db,
+        event,
+        actor=actor,
+        at=now,
+        reason=_RETURNED_TO_PLANNING_REASON.format(venue=booking.venue.name),
+        details={"booking_id": str(booking.id)},
+    )
+    if is_returned:
+        _notify_of_return_to_planning(db, event, booking, actor=actor, from_status=from_status)
+    db.commit()
+    db.refresh(booking)
+    return booking
 
 
 # --- 12.1: raising a request ----------------------------------------------------------------

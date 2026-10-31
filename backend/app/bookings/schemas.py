@@ -159,6 +159,20 @@ class BookingRejection(BaseModel):
         return _strip(value)
 
 
+class BookingCancellation(BaseModel):
+    """Story 12.8 AC1/AC8: the coordinator's reason for cancelling an approved booking is
+    mandatory - blank or whitespace-only does not count, as for a rejection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value):
+        return _strip(value)
+
+
 class BookingApproval(BaseModel):
     """Story 13.2 AC1, with story 12.7 AC1 (the customer's hold, 12 Oct 2026): approving a request
     starts its tentative hold, and Venue Staff set when it expires - there is no default, so it is
