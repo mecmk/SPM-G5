@@ -289,7 +289,11 @@ export function EquipmentRequestsSection({
     } catch (err) {
       setWithdrawError(formatApiError(err))
       // AC11: the item changed, or is gone, since it was shown - load it again behind the dialog.
-      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) {
+      // AC10: so is a coordinator no longer assigned, who has nothing left to withdraw.
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.status === 404 || err.status === 403)
+      ) {
         setCanConfirmWithdrawal(false)
         await onChanged()
       }
