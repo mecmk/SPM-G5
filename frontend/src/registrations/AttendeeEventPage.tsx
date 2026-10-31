@@ -11,7 +11,7 @@ import {
   type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
-import type { ErrorCode } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { useAuth } from '../auth/authContext'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -44,10 +44,27 @@ interface RegistrationProblem {
   isRefused: boolean
 }
 
+/** What loading the page found: the event, or - AC10/AC11 - why there is none. */
+interface LoadedEvent {
+  event: RegistrationEvent | null
+  reason: string | null
+}
+
 /** Story 18.1 AC1: a loader for the event that is not the one before it, so the page loads the
- *  event again after a registration. */
-function eventLoader(eventId: string): () => Promise<RegistrationEvent> {
-  return () => fetchRegistrationEvent(eventId)
+ *  event again after a registration. A 404, or an address that is no event's id (a 422), is the
+ *  answer that there is no page (AC10/AC11), not a failure to load. Any other failure is one, and
+ *  the page keeps showing the event as it last had it. */
+function eventLoader(eventId: string): () => Promise<LoadedEvent> {
+  return async () => {
+    try {
+      return { event: await fetchRegistrationEvent(eventId), reason: null }
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 422)) {
+        return { event: null, reason: ERROR_REGISTRY.REGISTRATION_EVENT_NOT_OPEN.message }
+      }
+      throw err
+    }
+  }
 }
 
 /** Story 18.5 AC2/AC6: how many guests a new registration may bring - one per place left after
@@ -80,9 +97,11 @@ function markRegistered(event: RegistrationEvent, registration: Registration): R
  * AC6: Register and the dialog's Confirm and register are disabled while a registration is sent,
  *      so a double-click sends one.
  * AC10: an event that is not listed has no page: the server's 404 says it is not open for
- *      registration, as for an unknown event.
+ *      registration, as for an unknown event, and so does an address that is no event's id.
  * AC11: a refused registration says why here, and the event is loaded again, so the page shows
- *      where it now stands - or, once it is no longer listed, that it is not open (AC10).
+ *      where it now stands - or, once it is no longer listed, that it is not open (AC10). A load
+ *      that fails keeps the event as the page last had it - a registration just taken (AC1) or
+ *      why one was refused - beside the failure.
  * AC5: attendees only - App.tsx guards the route, and the backend refuses everyone else.
  *
  * Story 18.4 AC2/AC3: Register opens "Confirm your details", filled in from the attendee's
@@ -104,7 +123,8 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
   // Replaced by a fresh loader after every registration, so useLoaded loads the event again; it
   // keeps showing the event until the new answer arrives.
   const [loadEvent, setLoadEvent] = useState(() => eventLoader(eventId))
-  const { data: event, error, isLoading, setData: setEvent } = useLoaded(loadEvent)
+  const { data: loaded, error, isLoading, setData: setLoaded } = useLoaded(loadEvent)
+  const event = loaded?.event ?? null
   const [hasImageFailed, setHasImageFailed] = useState(false)
   const [isRegistering, setIsRegistering] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -136,7 +156,11 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
       const registration = await registerForEvent(registering, details, guests)
       // AC1: Registered at once, not only when the reload lands, so Register cannot be pressed
       // again in between.
-      setEvent((current) => (current === null ? current : markRegistered(current, registration)))
+      setLoaded((current) =>
+        current?.event
+          ? { ...current, event: markRegistered(current.event, registration) }
+          : current,
+      )
       return null
     } catch (err) {
       return {
@@ -214,6 +238,11 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
           {error}
         </p>
       )}
+      {loaded?.reason && (
+        <p role="alert" className="error">
+          {loaded.reason}
+        </p>
+      )}
       {isLoading && <LoadingState label="Loading the event…" />}
       {(profileError ?? profileRefreshError) && (
         <p role="alert" className="error">
@@ -221,8 +250,8 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
         </p>
       )}
 
-      {/* AC10/AC11: once the event cannot be loaded - it is no longer listed - only why is shown. */}
-      {event !== null && error === null && (
+      {/* AC10/AC11: once there is no page, only why is shown. A failed load keeps the event. */}
+      {event !== null && (
         <>
           <div className="venue-hero">
             {event.cover_image_url !== null && !hasImageFailed ? (
@@ -250,7 +279,7 @@ function AttendeeEvent({ eventId }: { eventId: string }) {
                   <p className="eyebrow" id="attendee-event-about-heading">
                     About this event
                   </p>
-                  <p className="attendee-event-description">{event.description}</p>
+                  <p className="attendee-event-description wrap-anywhere">{event.description}</p>
                 </section>
               )}
               <section className="card stack" aria-labelledby="attendee-event-venues-heading">

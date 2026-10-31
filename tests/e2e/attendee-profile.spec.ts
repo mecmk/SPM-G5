@@ -6,6 +6,9 @@ import {
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
+  openEventPage,
+  registerButton,
+  registrationSection,
   signIn,
 } from './support'
 
@@ -51,7 +54,6 @@ import {
  */
 
 const PROFILE_PATH = '/profile'
-const UPCOMING_EVENTS_PATH = '/browse'
 const PHONE = { width: 375, height: 667 }
 const DESKTOP = { width: 1280, height: 800 }
 /** The smallest height a control on a phone may have, to be pressed with a thumb. */
@@ -83,30 +85,9 @@ const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, confirme
 const BOOK_CLUB = 'Community Book Club' // Dion's, changing a detail while confirming
 const JAZZ_EVENING = 'Harbourfront Jazz Evening' // 18.1's, only read: its registration is stubbed
 
-/** An event's card on Upcoming events, found by its name (as in attendee-registration.spec.ts). */
-function eventCard(page: Page, name: string) {
-  return page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3, name }) })
-}
-
-/** Story 18.1 AC9 (fix f18.1.2): an attendee registers from the event's page, opened from its card
- *  on Upcoming events. */
-async function openEventPage(page: Page, name: string) {
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, name).getByRole('link', { name }).click()
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-}
-
-/** Where the event's page says where registration stands, and offers Register (18.1 AC9). */
-function registration(page: Page) {
-  return page.getByRole('region', { name: 'Registration', exact: true })
-}
-
-function registerButton(page: Page, name: string) {
-  return registration(page).getByRole('button', { name: `Register for ${name}` })
-}
-
+/** Story 18.1 AC9 (fix f18.1.2): the event's page saying the attendee is registered. */
 function registeredBadge(page: Page) {
-  return registration(page).getByText('Registered', { exact: true })
+  return registrationSection(page).getByText('Registered', { exact: true })
 }
 
 function registrations(page: Page) {
@@ -499,7 +480,8 @@ test('18.4 AC3: a detail changed while confirming shows in the sidebar, even whe
   // The registration is stubbed as taken, and reading the profile again after it fails, so
   // nothing is written: Aiden's profile is only read. Since story 18.1's fix f18.1.2 the next
   // registration is on another event's page, which reads the profile when it opens, so what its
-  // dialog shows is the server's copy (the next test).
+  // dialog shows is the server's copy ("the profile read again after a registration corrects
+  // what the page shows").
   let hasRegistered = false
   await page.route(
     (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,

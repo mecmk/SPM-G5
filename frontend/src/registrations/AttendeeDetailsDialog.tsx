@@ -24,7 +24,7 @@ interface AttendeeDetailsDialogProps {
 }
 
 /**
- * Story 18.4 - "Confirm your details", opened by every Register on Upcoming events; confirming
+ * Story 18.4 - "Confirm your details", opened by Register on an event's page; confirming
  * registers, and nothing is registered until then. AC2: the first time, the details are asked for.
  * AC3: after that they are filled in from the attendee's profile, to check before registering
  * (CL-167); a change made here is saved to My profile with the registration.

@@ -6,7 +6,8 @@ An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19
 event is not listed) and needs registration (2.1 AC17). It is listed until it starts (AC3), and
 its capacity is its expected attendance (2.1 AC17, AC2). Only a REGISTERED row takes a place. A
 listed event has a page (AC9, fix f18.1.2) showing what its entry in the list does; any other has
-none (AC10).
+none here (AC10). That an event the attendee registered for keeps its page (AC10, 18.2 AC10) comes
+with fix f18.2.1.
 
 AC7: ``register`` holds the event's row (``FOR NO KEY UPDATE``) while it checks the event and
 counts the places, so two registrations for one event take turns, and an event cancelled or sent
@@ -414,10 +415,10 @@ def list_registration_events(
 def get_registration_event(
     db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
 ) -> RegistrationEventItem:
-    """AC9 (fix f18.1.2): one listed event as its page shows it to ``attendee`` - everything its
-    card shows (AC1), its description among them. AC10: an event that is not listed - unknown,
-    not open to attendees (AC3/AC4) or started - is not found, one answer for all, so a Private
-    event's existence is not given away."""
+    """AC9 (fix f18.1.2): one listed event as its page shows it to ``attendee`` - its entry in the
+    list (AC1), whose description the page shows and the card does not. AC10: an event that is
+    not listed - unknown, not open to attendees (AC3/AC4) or started - is not found, one answer
+    for all, so a Private event's existence is not given away."""
     row = db.execute(
         _listed_events(attendee=attendee, now=now).where(Event.id == event_id)
     ).one_or_none()

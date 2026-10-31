@@ -4424,7 +4424,7 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* ---------- attendee details: My profile, Upcoming events, the registration list (story 18.4) ---------- */
+/* ---------- attendee details: My profile, an event's page, the registration list (story 18.4) ---------- */
 
 /* AC1: the email on My profile - a label over its value. Labels look like the form's. */
 .attendee-details-list {
