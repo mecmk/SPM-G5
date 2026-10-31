@@ -112,6 +112,8 @@ export type ErrorCode =
   | 'BOOKING_REASON_REQUIRED'
   | 'BOOKING_JUSTIFICATION_REQUIRED'
   | 'BOOKING_WITHDRAW_REFUSED'
+  | 'BOOKING_CANCEL_REFUSED'
+  | 'BOOKING_CANCELLATION_REASON_REQUIRED'
   | 'BOOKING_HOLD_EXPIRY_REFUSED'
   | 'BOOKING_HOLD_EXPIRY_REQUIRED'
   | 'BOOKING_HOLD_EXPIRY_IN_PAST'
@@ -699,6 +701,17 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   BOOKING_WITHDRAW_REFUSED: {
     title: 'Cannot withdraw this request',
     message: 'This request cannot be withdrawn in its current state.',
+  },
+  /** Story 12.8 AC4/AC7/AC8: the booking is no longer approved, has a replacement pending, or
+   *  the event is within 24 hours of its set-up time; the backend's own sentence says which. */
+  BOOKING_CANCEL_REFUSED: {
+    title: 'Cannot cancel this booking',
+    message: 'This booking cannot be cancelled now.',
+  },
+  /** Story 12.8 AC1: shown by the cancel dialog before it sends a blank reason. */
+  BOOKING_CANCELLATION_REASON_REQUIRED: {
+    title: 'Reason needed',
+    message: 'Enter a reason for cancelling this booking.',
   },
 
   // Story 12.7: Venue Staff setting when a hold expires, as they approve or later. The server

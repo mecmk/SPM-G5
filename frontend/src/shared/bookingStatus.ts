@@ -60,12 +60,32 @@ export function isReleasedBySafetyReview(booking: Pick<Booking, 'release_cause'>
   return booking.release_cause === 'SAFETY_REVIEW'
 }
 
-/** Story 21.3 AC2: why a closed booking was closed, as its page words it - the finding's required
- * change for a booking the safety review released, otherwise the decision's own reason. */
+/** Story 12.8 AC2: how the event page and Venue Staff's pages say a booking its coordinator
+ * cancelled was released, and what the event page adds to that. */
+export const CANCELLED_BY_COORDINATOR_LABEL = 'Cancelled by the coordinator'
+export const CANCELLED_BY_COORDINATOR_MESSAGE =
+  'The coordinator cancelled this booking, so the venue is free for other events.'
+
+/** Story 12.8 AC2: whether the event's coordinator cancelled this booking. */
+export function isCancelledByCoordinator(booking: Pick<Booking, 'release_cause'>): boolean {
+  return booking.release_cause === 'COORDINATOR_CANCELLED'
+}
+
+/** Story 21.3 AC2, story 12.8 AC2: the line naming who released a closed booking, for the two
+ * releases that record why in their own words; null for any other booking. */
+export function releasedByLabel(booking: Pick<Booking, 'release_cause'>): string | null {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_LABEL
+  if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_LABEL
+  return null
+}
+
+/** Story 21.3 AC2, story 12.8 AC2: why a closed booking was closed, as its page words it - the
+ * finding's required change for a booking the safety review released, the coordinator's reason
+ * for one they cancelled, otherwise the decision's own reason. */
 export function closingReason(
   booking: Pick<Booking, 'decision_reason' | 'release_cause' | 'release_reason'>,
 ): string | null {
-  return isReleasedBySafetyReview(booking) ? booking.release_reason : booking.decision_reason
+  return releasedByLabel(booking) !== null ? booking.release_reason : booking.decision_reason
 }
 
 /** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
