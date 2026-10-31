@@ -4,9 +4,9 @@ import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import {
-  formatMinutesDuration,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
+  turnaroundLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -109,11 +109,7 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                         </>
                       )}
                     </div>
-                    <p className="small muted">
-                      Setup: {formatMinutesDuration(booking.setup_minutes)} · Event:{' '}
-                      {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)} · Teardown:{' '}
-                      {formatMinutesDuration(booking.teardown_minutes)}
-                    </p>
+                    <p className="small muted">{turnaroundLine(booking)}</p>
                   </div>
                 </div>
 

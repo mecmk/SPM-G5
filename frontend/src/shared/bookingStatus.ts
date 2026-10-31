@@ -69,7 +69,7 @@ export function closingReason(
 }
 
 /** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
-export function formatMinutesDuration(minutes: number): string {
+function formatMinutesDuration(minutes: number): string {
   if (minutes === 0) return NONE
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
