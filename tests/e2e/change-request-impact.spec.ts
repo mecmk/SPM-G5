@@ -11,7 +11,8 @@
  * AC8 (fix f19.3.1, CL-171) A booking the approval keeps is flagged when the change leaves its
  *     venue below half full, as a warning only.
  * Definition of Done: the assessment reads at 1280 x 720 and at 390 x 844, the dialog's buttons
- *     stay on screen, and the page never scrolls sideways.
+ *     stay on screen, and the page never scrolls sideways. Fix f19.3.2: a category with nothing
+ *     affected stays inside its card.
  *
  * Decisions agreed 19 Oct 2026 (CL-152 to CL-154), as these tests show them: the assessment is on
  * the request, in the coordinator's queue and in the approval dialog, one row each for venue
@@ -169,6 +170,12 @@ test('19.3 AC1/AC2: each booked venue the change cancels is listed with why and 
   ).toHaveCount(2)
   await expect(dialog.getByRole('button', { name: 'Approve' })).toBeInViewport()
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport()
+  // A category with nothing affected cannot open, but stays inside its card as one that can does.
+  const venueBox = (await dialog.getByRole('button', { name: /^Venue bookings/ }).boundingBox())!
+  for (const summary of ['No equipment is affected.', 'No registrations are affected.']) {
+    const box = (await dialog.getByText(summary).boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(venueBox.x + venueBox.width)
+  }
   expect(await hasNoSidewaysScroll(page)).toBe(true)
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   // The request's own card - the assessment shown under it has list items of its own.
