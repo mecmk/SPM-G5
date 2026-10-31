@@ -20,7 +20,7 @@ export const ACCOUNTS = {
   // Story 18.1: holds the one place at the portfolio review, and races for the mentoring slot.
   attendee2: 'attendee2@example.com',
   // Story 18.4: one attendee for each flow that changes their details (attendee-profile.spec.ts).
-  // Cara has never been asked for them; Dion changes them on Upcoming events; Esme on My profile;
+  // Cara has never been asked for them; Dion changes them on an event's page; Esme on My profile;
   // Finn changes their name.
   attendee3: 'attendee3@example.com',
   attendee4: 'attendee4@example.com',
@@ -53,6 +53,8 @@ export const EVENTS = {
   // booking of Sunrise Studio, a Harbour Pavilion booking an earlier change cancelled, and four
   // wireless microphones sent to Technical Support. The 6.2 spec cancels it.
   charityRun: '33333333-0000-0000-0000-000000000062',
+  // Fix f7.1.2, organiser: a two-day booking of Sunrise Studio; events.spec.ts cancels it.
+  leadershipRetreat: '33333333-0000-0000-0000-000000007012',
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
   // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides
@@ -169,6 +171,9 @@ export const EVENTS = {
   // batik workshop with two guests; Hana, registered alone for the kite afternoon, adds one.
   batikWorkshop: '33333333-0000-0000-0000-000000018503',
   kiteAfternoon: '33333333-0000-0000-0000-000000018504',
+  // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
+  // sends it for its safety review and releases its Seminar Room 2.1 booking for good.
+  safetyRelease: '33333333-0000-0000-0000-000000021301',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
@@ -181,6 +186,27 @@ export const VENUES = {
   // One pending request, the art market's, at 21 October 2028: a closure marks it.
   sunriseStudio: 'Sunrise Studio',
 } as const
+
+/** Story 18.1 AC9 (fix f18.1.2): from Upcoming events, open an event's page by its card's link,
+ *  its title. */
+export async function openEventPage(page: Page, name: string) {
+  await page.goto('/browse')
+  await page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { level: 3, name }) })
+    .getByRole('link', { name })
+    .click()
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+}
+
+/** Story 18.1 AC9: where an event's page says where registration stands, and offers Register. */
+export function registrationSection(page: Page) {
+  return page.getByRole('region', { name: 'Registration', exact: true })
+}
+
+export function registerButton(page: Page, name: string) {
+  return registrationSection(page).getByRole('button', { name: `Register for ${name}` })
+}
 
 /** Story 18.4: the dialog every registration opens, showing the attendee's details to confirm -
  *  filled in from their profile, or asked for the first time. */

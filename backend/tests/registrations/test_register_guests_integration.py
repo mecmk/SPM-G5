@@ -283,6 +283,19 @@ def test_a_group_takes_a_place_for_each_member(client, db: Session):
 
 
 @pytest.mark.story("18.5", ac=2)
+def test_the_events_page_takes_a_place_for_each_member_too(client, db: Session):
+    """18.1 AC9 (fix f18.1.2): where the attendee registers, the event's own page, counts the
+    group as its list entry does."""
+    attendee = _attendee(db)
+    event = _open_event(db, capacity=10)
+    client.login(attendee.email)
+
+    _register(client, db, event, guests=[RAVI, MEI])
+
+    assert client.get(f"{EVENTS_PATH}/{event.id}").json()["places_left"] == 7
+
+
+@pytest.mark.story("18.5", ac=2)
 def test_a_group_filling_the_last_places_leaves_the_event_full_for_others(client, db: Session):
     attendee = _attendee(db)
     other = _attendee(db)

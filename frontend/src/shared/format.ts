@@ -54,6 +54,16 @@ export function formatDate(stamp: string): string {
   })
 }
 
+/** "10 Apr 2029": a day on its own, without its weekday. */
+export function formatCalendarDate(stamp: string): string {
+  return new Date(stamp).toLocaleDateString(LOCALE, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: TIME_ZONE,
+  })
+}
+
 export function formatTime(stamp: string): string {
   return new Date(stamp).toLocaleTimeString(LOCALE, {
     hour: '2-digit',

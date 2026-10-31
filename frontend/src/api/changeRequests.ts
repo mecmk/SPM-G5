@@ -200,6 +200,15 @@ export interface CapacityWarning {
   layout_name: string | null
 }
 
+/** Mirrors `OversizeWarningOut`: story 19.3 AC8 (fix f19.3.1), the change leaves the booked venue
+ *  below half full - in the booked layout (`layout_name`) where the venue records its capacity,
+ *  else its maximum. A warning only: the booking is kept. */
+export interface OversizeWarning {
+  people_needed: number
+  venue_capacity: number
+  layout_name: string | null
+}
+
 /** Mirrors `HoldingBookingOut`: another booking holding the venue over the period needed. */
 export interface HoldingBooking {
   event_name: string
@@ -253,6 +262,7 @@ export interface BookingImpact {
   will_be_cancelled: boolean
   reasons: string[]
   capacity_warning: CapacityWarning | null
+  oversize_warning: OversizeWarning | null
   /** The period a replacement would need, for a cancelled booking whose requirement remains. */
   needed_starts_at: string | null
   needed_ends_at: string | null

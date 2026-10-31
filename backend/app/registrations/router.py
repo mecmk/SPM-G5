@@ -1,5 +1,6 @@
-"""HTTP endpoints for story 18.1: the events an attendee can browse and register for, and
-registering for one; and for story 18.2: the attendee's own registrations, and withdrawing one.
+"""HTTP endpoints for story 18.1: the events an attendee can browse and register for, each one's
+page (fix f18.1.2), and registering for one; and for story 18.2: the attendee's own
+registrations, and withdrawing one.
 
 18.2's withdrawal is ``POST .../withdraw``, an action URL like 12.2's booking and 19.1's change
 request withdrawals: a state transition with its own rules and audit record.
@@ -50,6 +51,17 @@ CanViewRegistrations = Depends(require_permission(Permission.REGISTRATIONS_VIEW)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+def _registration_event_out(item: service.RegistrationEventItem) -> RegistrationEventOut:
+    return RegistrationEventOut.from_event(
+        item.event,
+        venues=item.venues,
+        closes_at=item.closes_at,
+        places_left=item.places_left,
+        state=item.state,
+        registered_at=item.registered_at,
+    )
+
+
 @router.get("/events", response_model=RegistrationEventList)
 def list_registration_events(
     db: DbSession,
@@ -67,19 +79,27 @@ def list_registration_events(
         db, attendee=attendee, now=datetime.now(UTC), limit=limit, offset=offset
     )
     return RegistrationEventList(
-        items=[
-            RegistrationEventOut.from_event(
-                item.event,
-                venues=item.venues,
-                closes_at=item.closes_at,
-                places_left=item.places_left,
-                state=item.state,
-                registered_at=item.registered_at,
-            )
-            for item in listing.items
-        ],
-        total=listing.total,
+        items=[_registration_event_out(item) for item in listing.items], total=listing.total
     )
+
+
+@router.get("/events/{event_id}", response_model=RegistrationEventOut)
+def get_registration_event(
+    event_id: uuid.UUID,
+    db: DbSession,
+    attendee: Annotated[CurrentUser, CanRegister],
+) -> RegistrationEventOut:
+    """AC9 (fix f18.1.2): one listed event, as its page shows it to the signed-in attendee - what
+    its list entry carries, and nothing internal (AC5). AC10: an event that is not listed is a
+    404, the same as an unknown one. AC5: registrations:self only - other roles get 403 and
+    signed-out users 401 from the dependency."""
+    try:
+        item = service.get_registration_event(
+            db, event_id, attendee=attendee, now=datetime.now(UTC)
+        )
+    except service.RegistrationEventNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    return _registration_event_out(item)
 
 
 @router.get("/managed", response_model=list[ManagedRegistrationEventOut])

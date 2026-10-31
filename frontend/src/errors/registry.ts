@@ -817,7 +817,8 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
 
   // Story 18.1: an attendee registering for an event.
   /** AC3/AC4: the event is no longer open to attendees - cancelled, sent back to Planning, or
-   *  never listed. Worded as the backend's REGISTRATION_EVENT_NOT_FOUND_MESSAGE. */
+   *  never listed. AC10 (fix f18.1.2): also an event's page asked for when it is not listed.
+   *  Worded as the backend's REGISTRATION_EVENT_NOT_FOUND_MESSAGE. */
   REGISTRATION_EVENT_NOT_OPEN: {
     title: 'Cannot register',
     message: 'This event is not open for registration.',

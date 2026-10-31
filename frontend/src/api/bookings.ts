@@ -1,5 +1,9 @@
 import { api } from './client'
 
+/** Values of `ReleaseCause` (backend/app/bookings/models.py): why a cancelled booking was
+ * released (story 21.3). */
+export type ReleaseCause = 'EVENT_CANCELLED' | 'CHANGE_APPROVED' | 'REPLACED' | 'SAFETY_REVIEW'
+
 /** Story 12.7 AC3: EXPIRED is an approved booking whose hold lapsed before its event was
  * confirmed. */
 export type BookingStatus =
@@ -59,6 +63,9 @@ export interface Booking {
   alternative_suggestion: string | null
   /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
   cancelled_at: string | null
+  /** Story 21.3 AC2: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   created_at: string
   updated_at: string
 }
@@ -221,6 +228,9 @@ export interface BookingQueueEntry {
   /** Story 6.2 AC16: when a cancelled booking was cancelled, shown beside its approval; null
    * otherwise, and for one cancelled before that was recorded. */
   cancelled_at: string | null
+  /** Story 21.3 AC8: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   /** Story 12.7 AC1: when an approved booking's hold expires, or an expired one's did, and when
    * the event's confirmation completed it. R14: the booked start, which the Approve dialog's
    * expiry may not pass (AC5). */
@@ -398,6 +408,32 @@ export function rejectBooking(
   })
 }
 
+/** Mirrors `OrganiserBooking` (fix f7.1.2): one venue booking as the event's organiser reads it -
+ * which venue, where, for which requirement and when, without Venue Staff's internal detail. */
+export interface OrganiserBooking {
+  id: string
+  venue_name: string
+  venue_location: string
+  /** Null for an additional venue (story 12.5 AC5). */
+  venue_requirement_name: string | null
+  starts_at: string
+  ends_at: string
+  setup_minutes: number
+  teardown_minutes: number
+  status: BookingStatus
+  /** AC7 (CL-184): the hold, so an open one does not read as confirmed. */
+  hold_expires_at: string | null
+  hold_completed_at: string | null
+  /** AC7: when the booking was marked under story 9.4; null when unmarked. */
+  venue_unavailable_marked_at: string | null
+}
+
+/** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most
+ * recent first. Another organiser's event answers 404 (AC2). */
+export function listBookingsForOwnEvent(eventId: string): Promise<OrganiserBooking[]> {
+  return api<OrganiserBooking[]>(`/bookings/for-my-event/${eventId}`)
+}
+
 /** Mirrors `BookingOutcome`: one booking's outcome as the event page shows it - venue name and
  * location rather than a raw id, since this is a read-only summary, not the full record. */
 export interface BookingOutcome {
@@ -419,6 +455,9 @@ export interface BookingOutcome {
   decision_reason: string | null
   /** Story 6.2 AC16: when a cancelled booking was cancelled; null otherwise. */
   cancelled_at: string | null
+  /** Story 21.3 AC2: how a cancelled booking was released and why; null otherwise. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
   /** Story 11.1 AC6: why a venue that did not suit was requested; null when it suited. */
   suitability_override_reason: string | null
   /** Story 12.7 AC1/AC8: when an approved booking's hold expires, and when it expired once

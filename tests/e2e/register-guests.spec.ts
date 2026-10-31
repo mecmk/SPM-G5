@@ -7,6 +7,9 @@ import {
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
+  openEventPage,
+  registerButton,
+  registrationSection,
   signIn,
 } from './support'
 
@@ -37,6 +40,9 @@ import {
  * AC6 An attendee can bring 0 to 10 guests. Each guest's name is required.
  * AC7 Withdrawing a registration withdraws the whole group. (Here: the withdraw dialog says so.)
  *
+ * An attendee registers from an event's page (18.1 AC9, fix f18.1.2), opened from its card on
+ * Upcoming events.
+ *
  * Each flow has a seeded attendee of its own (backend/db/seed/020_sample_data.sql, story 18.5's
  * block), since specs run in parallel and a registration happens once: Gina registers for the
  * batik workshop with two guests; Hana, registered alone for the kite afternoon, adds a guest and
@@ -45,7 +51,7 @@ import {
  * Oct 2026 (story 18.4's seed), and his registration with guests is stubbed, so nothing is written.
  */
 
-const UPCOMING_EVENTS_PATH = '/browse'
+const KITE_AFTERNOON_API_PATH = `/registrations/events/${EVENTS.kiteAfternoon}`
 const MY_REGISTRATIONS_PATH = '/registrations'
 const CHANGE_GUESTS_DIALOG = 'Change your guests'
 const MAX_GUESTS = 10
@@ -92,9 +98,15 @@ async function addGuest(page: Page, n: number, guest: { name: string; dietary?: 
   }
 }
 
-/** The places left an event's card shows, as a number. */
-async function placesLeft(page: Page, name: string): Promise<number> {
-  const text = await eventCard(page, name)
+/** 18.1 AC9: open an event's page and press Register, which opens "Confirm your details". */
+async function startRegistering(page: Page, name: string) {
+  await openEventPage(page, name)
+  await registerButton(page, name).click()
+}
+
+/** The places left an event's page shows, as a number. */
+async function placesLeft(page: Page): Promise<number> {
+  const text = await registrationSection(page)
     .getByText(/\d+ places? left/)
     .innerText()
   return Number(text.match(/\d+/)![0])
@@ -108,10 +120,7 @@ test('18.5 AC1/AC2/AC3/AC4: an attendee registers with two guests, who take plac
   page,
 }) => {
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, BATIK_WORKSHOP)
-    .getByRole('button', { name: `Register for ${BATIK_WORKSHOP}` })
-    .click()
+  await startRegistering(page, BATIK_WORKSHOP)
 
   const dialog = confirmDetailsDialog(page)
   await expect(dialog.getByRole('group', { name: 'Guests' })).toBeVisible()
@@ -123,9 +132,8 @@ test('18.5 AC1/AC2/AC3/AC4: an attendee registers with two guests, who take plac
   await expect(dialog).toHaveCount(0)
 
   // AC2: the group took three of the thirty places.
-  const card = eventCard(page, BATIK_WORKSHOP)
-  await expect(card.getByText('Registered', { exact: true })).toBeVisible()
-  await expect(card).toContainText('27 places left')
+  await expect(registrationSection(page).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(registrationSection(page)).toContainText('27 places left')
 
   // AC3: My registrations names the guests.
   await page.goto(MY_REGISTRATIONS_PATH)
@@ -212,11 +220,9 @@ test('18.5 AC6: after ten guests the dialog offers no more, and says why, before
     if (request.method() === 'POST') sent.push(request.url())
   })
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   for (let n = 1; n <= MAX_GUESTS; n++) {
@@ -237,11 +243,9 @@ test("18.5 AC1/AC6: a guest left without a name, or with only spaces, is refused
     if (request.method() === 'POST') sent.push(request.url())
   })
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   await addGuestButton(page).click()
@@ -273,18 +277,18 @@ test('18.5 AC3: a registration whose registration has closed offers Withdraw but
   ).toHaveCount(0)
 })
 
-test('18.5 AC2: the card counts the whole group at once, before the list is read again', async ({
+test("18.5 AC2: the event's page counts the whole group at once, before the event is read again", async ({
   page,
 }) => {
-  // The registration is stubbed as taken with two guests, and the list read again after it is
-  // held back, so the card can only show what the page worked out itself. Nothing is written.
+  // The registration is stubbed as taken with two guests, and the event read again after it is
+  // held back, so the page can only show what it worked out itself. Nothing is written.
   let hasRegistered = false
-  let releaseList: () => void = () => {}
-  const listHeld = new Promise<void>((resolve) => {
-    releaseList = resolve
+  let releaseEvent: () => void = () => {}
+  const eventHeld = new Promise<void>((resolve) => {
+    releaseEvent = resolve
   })
   await page.route(
-    (url) => url.pathname === '/registrations' || url.pathname === '/registrations/events',
+    (url) => url.pathname === '/registrations' || url.pathname === KITE_AFTERNOON_API_PATH,
     async (route) => {
       const request = route.request()
       if (request.resourceType() !== 'fetch') return route.fallback()
@@ -308,42 +312,37 @@ test('18.5 AC2: the card counts the whole group at once, before the list is read
           }),
         })
       }
-      if (path === '/registrations/events' && hasRegistered) await listHeld
+      if (path === KITE_AFTERNOON_API_PATH && hasRegistered) await eventHeld
       return route.fallback()
     },
   )
   await signIn(page, ACCOUNTS.attendee)
-  await page.goto(UPCOMING_EVENTS_PATH)
-  const before = await placesLeft(page, KITE_AFTERNOON)
+  await openEventPage(page, KITE_AFTERNOON)
+  const before = await placesLeft(page)
 
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
   await addGuest(page, 1, RAVI)
   await addGuest(page, 2, MEI)
   await confirmRegistration(page)
 
-  const card = eventCard(page, KITE_AFTERNOON)
-  await expect(card.getByText('Registered', { exact: true })).toBeVisible()
-  await expect(card).toContainText(`${before - 3} places left`)
-  releaseList()
+  await expect(registrationSection(page).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(registrationSection(page)).toContainText(`${before - 3} places left`)
+  releaseEvent()
 })
 
 test('18.5 AC2: with 2 places left the dialog allows one guest, and says why, before sending anything', async ({
   page,
 }) => {
-  // The list is the server's own, with the kite afternoon's places cut to 2: a state the seed
+  // The event is the server's own, with the kite afternoon's places cut to 2: a state the seed
   // cannot reach without filling the event. Nothing is sent.
   await page.route(
-    (url) => url.pathname === '/registrations/events',
+    (url) => url.pathname === KITE_AFTERNOON_API_PATH,
     async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.fallback()
       const response = await route.fetch()
-      const list = (await response.json()) as { items: { name: string; places_left: number }[] }
-      for (const item of list.items) {
-        if (item.name === KITE_AFTERNOON) item.places_left = 2
-      }
-      return route.fulfill({ response, json: list })
+      const event = (await response.json()) as { places_left: number }
+      event.places_left = 2
+      return route.fulfill({ response, json: event })
     },
   )
   const sent: string[] = []
@@ -351,11 +350,9 @@ test('18.5 AC2: with 2 places left the dialog allows one guest, and says why, be
     if (request.method() === 'POST') sent.push(request.url())
   })
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   await addGuest(page, 1, { name: 'Guest 1' })
@@ -408,10 +405,7 @@ test('18.5 AC1: removing a guest takes away that guest, and the others keep thei
   page,
 }) => {
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await startRegistering(page, KITE_AFTERNOON)
 
   const dialog = confirmDetailsDialog(page)
   await addGuest(page, 1, RAVI)
@@ -431,22 +425,20 @@ test('18.5 AC2: a group the server refuses for want of places keeps the dialog o
   page,
 }) => {
   // The registration is refused as the server refuses a group that no longer fits - another
-  // attendee took a place meanwhile, a state the seed cannot reach - and the list read after it
+  // attendee took a place meanwhile, a state the seed cannot reach - and the event read after it
   // has 2 places left. Nothing is written.
   let isRefused = false
   await page.route(
-    (url) => url.pathname === '/registrations' || url.pathname === '/registrations/events',
+    (url) => url.pathname === '/registrations' || url.pathname === KITE_AFTERNOON_API_PATH,
     async (route) => {
       const request = route.request()
       if (request.resourceType() !== 'fetch') return route.fallback()
-      if (new URL(request.url()).pathname === '/registrations/events') {
+      if (new URL(request.url()).pathname === KITE_AFTERNOON_API_PATH) {
         if (!isRefused) return route.fallback()
         const response = await route.fetch()
-        const list = (await response.json()) as { items: { name: string; places_left: number }[] }
-        for (const item of list.items) {
-          if (item.name === KITE_AFTERNOON) item.places_left = 2
-        }
-        return route.fulfill({ response, json: list })
+        const event = (await response.json()) as { places_left: number }
+        event.places_left = 2
+        return route.fulfill({ response, json: event })
       }
       if (request.method() !== 'POST') return route.fallback()
       isRefused = true
@@ -459,10 +451,7 @@ test('18.5 AC2: a group the server refuses for want of places keeps the dialog o
     },
   )
   await signIn(page, ACCOUNTS.attendee7)
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await startRegistering(page, KITE_AFTERNOON)
   const dialog = confirmDetailsDialog(page)
   await addGuest(page, 1, RAVI)
   await addGuest(page, 2, MEI)
@@ -475,7 +464,7 @@ test('18.5 AC2: a group the server refuses for want of places keeps the dialog o
     RAVI.dietary,
   )
   await expect(guestGroup(page, 2).getByLabel("Guest's name")).toHaveValue(MEI.name)
-  // The list is read again, so the guest limit catches up: 2 places left is one guest, and two
+  // The event is read again, so the guest limit catches up: 2 places left is one guest, and two
   // are typed, so no more can be added and the dialog says why.
   await expect(addGuestButton(page)).toBeDisabled()
   await expect(dialog).toContainText(NO_PLACES_FOR_MORE_GUESTS_MESSAGE)
