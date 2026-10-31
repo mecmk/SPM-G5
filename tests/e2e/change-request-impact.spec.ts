@@ -8,8 +8,8 @@
  *     who acts on it. No new flag or notification is added.
  * AC7 If the assessment changes after the request is opened, approving shows the new result
  *     before anything is applied.
- * AC8 (fix f19.3.1, CL-171) A booking the approval keeps is flagged when the change leaves its venue
- *     below half full, as a warning only.
+ * AC8 (fix f19.3.1, CL-171) A booking the approval keeps is flagged when the change leaves its
+ *     venue below half full, as a warning only.
  * Definition of Done: the assessment reads at 1280 x 720 and at 390 x 844, the dialog's buttons
  *     stay on screen, and the page never scrolls sideways.
  *
