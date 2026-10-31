@@ -298,7 +298,7 @@ test('19.3 AC8: a venue the change leaves below half full is flagged, and kept',
   // Grand Hall, booked for Main venue, holds 400: 50 is below half of it.
   await section.getByRole('button', { name: 'Show impact' }).click()
   const venueRow = section.getByRole('button', { name: /^Venue bookings/ })
-  await expect(venueRow).toContainText('below half full for the people now needed')
+  await expect(venueRow).toContainText('1 venue below half full for the people now needed.')
   await expect(venueRow).not.toContainText('will be cancelled')
   await venueRow.click()
   const hall = section
