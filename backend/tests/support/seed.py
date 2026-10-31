@@ -182,6 +182,9 @@ class Events:
     # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
     # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
+    # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
+    # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
+    LEADERSHIP_RETREAT = _e(7012)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
     # one of its own; the cases that only read share them, the yoga's most of all.
@@ -260,6 +263,8 @@ class Bookings:
     # 6 Oct 2026 by an earlier change, not with the event, before the studio was requested.
     APPROVED_CHARITY_RUN_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000000062")
     CANCELLED_CHARITY_RUN_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
+    # Fix f7.1.2: Events.LEADERSHIP_RETREAT's two-day booking of Sunrise Studio, held.
+    APPROVED_LEADERSHIP_RETREAT_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000007012")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
@@ -355,6 +360,8 @@ class VenueRequirements:
     CRAFT_FAIR_HALL = uuid.UUID("cccccccc-0000-0000-0034-000000000001")  # EXHIBITION, WIFI, 120
     # Story 6.2: Events.CHARITY_RUN's one requirement.
     CHARITY_RUN_START_VILLAGE = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # CLASSROOM, 60
+    # Fix f7.1.2: Events.LEADERSHIP_RETREAT's one requirement, over two days.
+    LEADERSHIP_RETREAT_STUDIO = uuid.UUID("cccccccc-0000-0000-7012-000000000001")  # CLASSROOM, 40
 
 
 class EquipmentItems:

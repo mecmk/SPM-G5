@@ -398,6 +398,32 @@ export function rejectBooking(
   })
 }
 
+/** Mirrors `OrganiserBooking` (fix f7.1.2): one venue booking as the event's organiser reads it -
+ * which venue, where, for which requirement and when, without Venue Staff's internal detail. */
+export interface OrganiserBooking {
+  id: string
+  venue_name: string
+  venue_location: string
+  /** Null for an additional venue (story 12.5 AC5). */
+  venue_requirement_name: string | null
+  starts_at: string
+  ends_at: string
+  setup_minutes: number
+  teardown_minutes: number
+  status: BookingStatus
+  /** AC7 (CL-184): the hold, so an open one does not read as confirmed. */
+  hold_expires_at: string | null
+  hold_completed_at: string | null
+  /** AC7: when the booking was marked under story 9.4; null when unmarked. */
+  venue_unavailable_marked_at: string | null
+}
+
+/** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most
+ * recent first. Another organiser's event answers 404 (AC2). */
+export function listBookingsForOwnEvent(eventId: string): Promise<OrganiserBooking[]> {
+  return api<OrganiserBooking[]>(`/bookings/for-my-event/${eventId}`)
+}
+
 /** Mirrors `BookingOutcome`: one booking's outcome as the event page shows it - venue name and
  * location rather than a raw id, since this is a read-only summary, not the full record. */
 export interface BookingOutcome {
