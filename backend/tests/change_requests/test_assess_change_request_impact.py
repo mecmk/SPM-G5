@@ -1524,8 +1524,8 @@ def test_rejecting_needs_no_assessment(login_as, db: Session):
 # --- AC8: oversized venues (fix f19.3.1) ---------------------------------------------------------
 
 
-def _lower(login_as, db: Session, event: Event, requirement_id, capacity: int, **body):
-    """Olivia asks for the Main hall requirement to need room for fewer people, ``capacity``."""
+def _set_number(login_as, db: Session, event: Event, requirement_id, capacity: int, **body):
+    """Olivia asks for the Main hall requirement to need room for ``capacity`` people."""
     requirement = {
         **_requirement_body(requirement_id, name="Main hall", capacity=capacity, event=event),
         **body,
@@ -1543,7 +1543,7 @@ def test_a_venue_below_half_full_is_flagged_and_exactly_half_is_not(
     event = _planning_event(db, expected_attendance=120)
     requirement = _requirement(db, event, capacity=120)
     hall = _book(db, event, people=120, requirement_id=requirement, capacity=200)
-    request = _lower(login_as, db, event, requirement, people)
+    request = _set_number(login_as, db, event, requirement, people)
 
     impact = _impact(login_as, request)
 
@@ -1581,7 +1581,7 @@ def test_a_venue_is_judged_by_its_capacity_in_the_booked_layout(
         venue=venue,
         required_layout_code="THEATRE",
     )
-    request = _lower(login_as, db, event, requirement, people, layout_code="THEATRE")
+    request = _set_number(login_as, db, event, requirement, people, layout_code="THEATRE")
 
     rows = _bookings_by_id(_impact(login_as, request))
 
@@ -1646,7 +1646,7 @@ def test_a_change_that_does_not_lower_the_number_flags_nothing(login_as, db: Ses
     event = _planning_event(db, expected_attendance=150)
     requirement = _requirement(db, event, capacity=100)
     _book(db, event, people=120, requirement_id=requirement, capacity=300)
-    request = _lower(login_as, db, event, requirement, 110)
+    request = _set_number(login_as, db, event, requirement, 110)
 
     assert _impact(login_as, request)["venue_bookings"] == []
 
@@ -1657,7 +1657,7 @@ def test_lowering_an_already_oversized_venue_flags_it(login_as, db: Session):
     event = _planning_event(db, expected_attendance=120)
     requirement = _requirement(db, event, capacity=120)
     hall = _book(db, event, people=120, requirement_id=requirement, capacity=300)
-    request = _lower(login_as, db, event, requirement, 110)
+    request = _set_number(login_as, db, event, requirement, 110)
 
     row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
@@ -1670,7 +1670,7 @@ def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Ses
     event = _planning_event(db, expected_attendance=120)
     requirement = _requirement(db, event, capacity=120)
     hall = _book(db, event, people=120, requirement_id=requirement, capacity=200)
-    request = _lower(login_as, db, event, requirement, 80)
+    request = _set_number(login_as, db, event, requirement, 80)
     impact = _impact(login_as, request)
 
     response = _approve(login_as, request, impact["fingerprint"])
@@ -1704,7 +1704,7 @@ def test_a_booking_the_change_cancels_is_not_flagged(login_as, db: Session):
         venue=venue,
         required_layout_code="THEATRE",
     )
-    request = _lower(login_as, db, event, requirement, 50, layout_code="BANQUET")
+    request = _set_number(login_as, db, event, requirement, 50, layout_code="BANQUET")
 
     row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
 
