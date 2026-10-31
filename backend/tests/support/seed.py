@@ -229,6 +229,9 @@ class Events:
     # Story 21.3: PLANNING, secured, never reviewed; coordinator 1, organiser 1, 10 April 2029. The
     # spec sends it for its safety review and the officer releases its Seminar Room 2.1 booking.
     SAFETY_RELEASE = _e(21301)
+    # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
+    # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
+    PRODUCT_BRIEFING = _e(12801)
 
 
 class Bookings:
@@ -272,6 +275,8 @@ class Bookings:
     # minutes of setup, and its additional venue at Exhibition Foyer; both approved by Vera.
     SAFETY_RELEASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021303")
     SAFETY_RELEASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021304")
+    # Story 12.8: Events.PRODUCT_BRIEFING's requirement "Main hall" at Seminar Room 2.1, approved.
+    PRODUCT_BRIEFING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012803")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
