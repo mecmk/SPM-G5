@@ -283,6 +283,19 @@ def test_a_group_takes_a_place_for_each_member(client, db: Session):
 
 
 @pytest.mark.story("18.5", ac=2)
+def test_the_events_page_takes_a_place_for_each_member_too(client, db: Session):
+    """18.1 AC9 (fix f18.1.2): where the attendee registers, the event's own page, counts the
+    group as its list entry does."""
+    attendee = _attendee(db)
+    event = _open_event(db, capacity=10)
+    client.login(attendee.email)
+
+    _register(client, db, event, guests=[RAVI, MEI])
+
+    assert client.get(f"{EVENTS_PATH}/{event.id}").json()["listing"]["places_left"] == 7
+
+
+@pytest.mark.story("18.5", ac=2)
 def test_a_group_filling_the_last_places_leaves_the_event_full_for_others(client, db: Session):
     attendee = _attendee(db)
     other = _attendee(db)
@@ -406,6 +419,23 @@ def test_my_registrations_say_whether_the_guests_can_still_be_changed(client, db
 
     assert _mine(client, open_event)["can_change_guests"] is True
     assert _mine(client, closed_event)["can_change_guests"] is False
+
+
+@pytest.mark.story("18.5", ac=3)
+def test_the_events_page_carries_the_guests_as_my_registrations_does(client, db: Session):
+    """18.2 AC9 (fix f18.2.1): Change guests is on the event's page, so its registration has the
+    guests, whether they can still be changed and how many there may be - My registrations' own."""
+    attendee = _attendee(db)
+    event = _open_event(db, capacity=5)
+    _add_registration(db, event, attendee, guests=(RAVI, MEI))
+    client.login(attendee.email)
+
+    registration = client.get(f"{EVENTS_PATH}/{event.id}").json()["registration"]
+
+    assert registration == _mine(client, event)
+    assert registration["guests"] == [RAVI, MEI]
+    assert registration["can_change_guests"] is True
+    assert registration["max_guests"] == 4  # the two it has and the two places left
 
 
 # --- AC4: the registration list ---------------------------------------------------------------

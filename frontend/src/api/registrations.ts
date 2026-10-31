@@ -108,17 +108,43 @@ export function updateProfile(details: AttendeeDetails): Promise<Profile> {
   })
 }
 
-/** Story 18.1 AC1: how many events a page asks for - the backend's REGISTRATION_EVENTS_PAGE_SIZE.
- *  A refreshed list asks for at most REGISTRATION_EVENTS_MAX_LIMIT at once. */
+/** Story 18.1 AC1: how many events a page asks for - the backend's REGISTRATION_EVENTS_PAGE_SIZE. */
 export const REGISTRATION_EVENTS_PAGE_SIZE = 20
-export const REGISTRATION_EVENTS_MAX_LIMIT = 100
 
 /** Story 18.1 AC1: a page of the events open to attendees, from `offset`. */
-export function listRegistrationEvents(
-  offset: number,
-  limit: number = REGISTRATION_EVENTS_PAGE_SIZE,
-): Promise<RegistrationEventList> {
-  return api<RegistrationEventList>(`/registrations/events?offset=${offset}&limit=${limit}`)
+export function listRegistrationEvents(offset: number): Promise<RegistrationEventList> {
+  return api<RegistrationEventList>(
+    `/registrations/events?offset=${offset}&limit=${REGISTRATION_EVENTS_PAGE_SIZE}`,
+  )
+}
+
+/**
+ * Mirrors `AttendeeEventOut`: story 18.1 AC9 / 18.2 AC9-AC10 (fixes f18.1.2, f18.2.1), one event's
+ * page for the signed-in attendee. `listing` is what its card on Upcoming events shows, null once
+ * it is not listed (18.2 AC10: started, cancelled, sent back to Planning or made Private), and
+ * `venues` then are only those it still has booked. `registration` is the attendee's own latest
+ * registration for it, null if they never registered. 18.1 AC5: nothing internal is sent.
+ */
+export interface AttendeeEvent {
+  id: string
+  name: string
+  description: string | null
+  /** Story 18.1 AC8: the event's cover picture, if it has one. */
+  cover_image_url: string | null
+  starts_at: string
+  ends_at: string
+  venues: RegistrationVenue[]
+  listing: RegistrationEvent | null
+  registration: MyRegistration | null
+}
+
+/** Story 18.1 AC9 / 18.2 AC9: one event's page. 18.1 AC10: one that is neither listed nor
+ *  registered for by the attendee is a 404, saying it is not open for registration, as for an
+ *  unknown event. */
+export function fetchAttendeeEvent(eventId: string): Promise<AttendeeEvent> {
+  return api<AttendeeEvent>(`/registrations/events/${encodeURIComponent(eventId)}`, {
+    errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN' },
+  })
 }
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal
@@ -127,7 +153,7 @@ export function listRegistrationEvents(
  *  `guests` are registered with them, as one group; a group that does not fit is refused whole
  *  (AC2). */
 export function registerForEvent(
-  event: RegistrationEvent,
+  event: Pick<RegistrationEvent, 'id' | 'name'>,
   details: AttendeeDetails,
   guests: GuestInput[],
 ): Promise<Registration> {

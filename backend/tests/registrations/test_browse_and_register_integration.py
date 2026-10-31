@@ -15,26 +15,28 @@ at NOW holds only the events the test made, and a boundary can be hit to the mic
 tests run on the real clock, so they make events relative to today and find them by id.
 
 AC1 Confirmed, Public events with registration enabled that have not started are listed soonest
-    first, a page at a time, with name, description, date, time, each booked venue's name and
-    location, the places left and the registration state (Open, Not yet open, Full, Closed,
-    Registered). Registering creates a registration stamped with the moment it was made and shows
-    a confirmation with that time; the event then shows as Registered.
+    first, a page at a time. Each card shows the event's cover picture, name, date and time, each
+    booked venue's name and location, the places left and where registration stands (Open, Not
+    yet open, Full, Closed, Registered), and when registration closes - or opens, while it has
+    not, or when the attendee registered. The attendee registers from the event's page (AC9).
+    Registering creates a registration stamped with the moment it was made and shows a
+    confirmation with that time; the event then shows as Registered on its page and its card.
 AC2 Capacity is the event's expected attendance (2.1 AC17). The registration that takes the last
     place is accepted; the next is refused. A registration before the closing time is accepted;
     one at or after it is refused. When an opening time is set, a registration before it is
     refused and one at it is accepted. An event with no closing time recorded closes when it
     starts.
-AC3 Full, closed and not-yet-open events stay listed until they start, with Register disabled.
-    Cancelled events are not listed and refuse registration; notifying their registrants is part
-    of cancelling (6.2 AC1).
+AC3 Full, closed and not-yet-open events stay listed until they start, and their page shows
+    Register disabled. Cancelled events are not listed and refuse registration; notifying their
+    registrants is part of cancelling (6.2 AC1).
 AC4 Events that are not Confirmed, including one sent back to Planning after confirmation, and
     Private events are not listed and refuse registration. Registrations already made are kept.
-AC5 Only signed-in Attendees can list events or register: other roles get 403 and signed-out
-    users 401, through the API too. No internal planning information is sent: no organiser,
-    coordinator, contact, purpose, expected attendance, equipment, accessibility needs or
-    internal notes. (No field carries the expected attendance, but it shows through the places
-    left until someone registers: capacity is the expected attendance, 2.1 AC17, and the places
-    left are shown, decision 1.)
+AC5 Only signed-in Attendees can list events, open an event's page or register: other roles get
+    403 and signed-out users 401, through the API too. No internal planning information is sent:
+    no organiser, coordinator, contact, purpose, expected attendance, equipment, accessibility
+    needs or internal notes. (No field carries the expected attendance, but it shows through the
+    places left until someone registers: capacity is the expected attendance, 2.1 AC17, and the
+    places left are shown, decision 1.)
 AC6 A second registration by the same attendee is refused, also when both arrive at once. Of two
     attendees competing for the last place, one succeeds and the other is told the event is full.
 AC7 The server checks the event's status, the opening and closing times and capacity at the
@@ -42,9 +44,21 @@ AC7 The server checks the event's status, the opening and closing times and capa
     active registration per attendee per event, so simultaneous requests cannot exceed capacity or
     create duplicates.
 
-Cover pictures (fix f18.1.1), proposed as AC8, waiting on the backlog's Change Log:
-AC8 Each event shows its cover picture (2.1 AC14), or the placeholder when it has none or its
-    picture can't be loaded.
+Cover pictures (fix f18.1.1):
+AC8 Each event shows its cover picture (2.1 AC14), on its card and its page, or the placeholder
+    when it has none or its picture can't be loaded.
+
+Event page (fix f18.1.2, CL-186):
+AC9 Clicking anywhere on an event's card opens its page: its cover picture, name, description,
+    date and time, each booked venue's name and location, the places left, where registration
+    stands, and when registration opens and closes. Register is only on this page. A back link
+    returns to Upcoming events.
+AC10 An event that is not listed (AC3, AC4) and that the attendee has never registered for has no
+    page: opening one says it is not open for registration, the same as for an unknown event
+    (404). An event the attendee registered for keeps its page (18.2 AC10): fix f18.2.1 adds
+    that, and test_view_and_withdraw_integration.py proves it.
+AC11 A registration refused because the event filled up, closed or stopped being listed while its
+    page was open says why, and the page then shows where the event now stands.
 """
 
 from __future__ import annotations
@@ -98,6 +112,19 @@ LISTED_EVENT_KEYS = {
     "registered_at",
 }
 REGISTRATION_KEYS = {"id", "event_id", "status", "registered_at", "guests"}  # guests: 18.5 AC1
+# AC9: everything an event's page carries - the event, what its card shows while it is listed, and
+# (18.2's fix f18.2.1) the attendee's own registration.
+PAGE_KEYS = {
+    "id",
+    "name",
+    "description",
+    "cover_image_url",
+    "starts_at",
+    "ends_at",
+    "venues",
+    "listing",
+    "registration",
+}
 
 REGISTERED = "registered"
 NOT_FOUND = "not found"
@@ -184,6 +211,18 @@ def _add_registration(
     db.add(row)
     db.flush()
     return row
+
+
+def _event_path(event_id: uuid.UUID) -> str:
+    """AC9 (fix f18.1.2): the address of one event's page."""
+    return f"{EVENTS_PATH}/{event_id}"
+
+
+def _page(
+    db: Session, attendee: User, event: Event, *, now: datetime = NOW
+) -> service.RegistrationEventItem:
+    """AC9 (fix f18.1.2): the event as its page shows it to ``attendee``."""
+    return service.get_registration_event(db, event.id, attendee=attendee, now=now)
 
 
 def _api_item(client, event_id: uuid.UUID) -> dict:
@@ -818,6 +857,226 @@ def test_an_integrity_error_other_than_a_duplicate_is_not_reported_as_one(db: Se
     with pytest.raises(IntegrityError):
         _register(db, event, ghost)
     assert _active_count(db, event.id) == 0
+
+
+# =============================================================================================
+# AC9-AC11 - an event's page (fix f18.1.2)
+# =============================================================================================
+@pytest.mark.story("18.1", ac=9)
+def test_an_open_events_page_carries_what_its_list_entry_does(attendee_client, db: Session):
+    starts_at = future_datetime(days=40)
+    event = _open_event(
+        db,
+        starts_at=starts_at,
+        name="Harbour Jazz Page 18.1",
+        description="Jazz on the waterfront, with food stalls in the foyer.",
+        cover_image_url="/uploads/events/harbour-jazz-page.png",
+        registration_opens_at=future_datetime(days=-1),
+    )
+    hall = make_venue(db, name="Jazz Page Hall 18.1", location="Pier 1, Level 2")
+    make_booking(
+        db,
+        event_id=event.id,
+        venue_id=hall.id,
+        status=BookingStatus.APPROVED,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=3),
+    )
+
+    response = attendee_client.get(_event_path(event.id))
+
+    assert response.status_code == 200
+    page = response.json()
+    # What its card shows, while it is listed (18.2's fix f18.2.1 adds the attendee's own
+    # registration beside it: none here).
+    assert page["listing"] == _api_item(attendee_client, event.id)
+    assert page["registration"] is None
+    assert page["name"] == "Harbour Jazz Page 18.1"
+    assert page["description"] == "Jazz on the waterfront, with food stalls in the foyer."
+    assert page["cover_image_url"] == "/uploads/events/harbour-jazz-page.png"
+    assert page["venues"] == [{"name": "Jazz Page Hall 18.1", "location": "Pier 1, Level 2"}]
+    assert (page["listing"]["state"], page["listing"]["places_left"]) == ("OPEN", 50)
+
+
+@pytest.mark.story("18.1", ac=1)
+@pytest.mark.story("18.1", ac=9)
+def test_an_events_page_shows_it_registered_for_that_attendee_only(db: Session):
+    event = _open_event(db, expected_attendance=50)
+    registered, other = _attendee(db), _attendee(db)
+    _register(db, event, registered)
+
+    mine = _page(db, registered, event)
+    theirs = _page(db, other, event)
+
+    assert (mine.state, mine.registered_at, mine.places_left) == (
+        RegistrationState.REGISTERED,
+        NOW,
+        49,
+    )
+    assert (theirs.state, theirs.registered_at, theirs.places_left) == (
+        RegistrationState.OPEN,
+        None,
+        49,
+    )
+
+
+@pytest.mark.story("18.1", ac=3)
+@pytest.mark.story("18.1", ac=9)
+def test_full_closed_and_not_yet_open_events_open_their_page_in_their_state(db: Session):
+    full = _open_event(db, expected_attendance=1)
+    _add_registration(db, full)
+    closed = _open_event(db, registration_closes_at=NOW)
+    not_yet_open = _open_event(db, registration_opens_at=NOW + timedelta(days=1))
+    attendee = _attendee(db)
+
+    states = [_page(db, attendee, event).state for event in (full, closed, not_yet_open)]
+
+    assert states == [
+        RegistrationState.FULL,
+        RegistrationState.CLOSED,
+        RegistrationState.NOT_YET_OPEN,
+    ]
+
+
+@pytest.mark.story("18.1", ac=10)
+def test_an_events_page_is_there_until_the_event_starts(db: Session):
+    starting_soon = _open_event(db, starts_at=NOW + TICK, registration_closes_at=None)
+    starting_now = _open_event(db, starts_at=NOW, registration_closes_at=None)
+    attendee = _attendee(db)
+
+    assert _page(db, attendee, starting_soon).event.id == starting_soon.id
+    with pytest.raises(service.RegistrationEventNotFound):
+        _page(db, attendee, starting_now)
+
+
+@pytest.mark.story("18.1", ac=10)
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": EventStatus.CANCELLED},
+        {"status": EventStatus.DRAFT},
+        {"status": EventStatus.UNDER_REVIEW},
+        {"status": EventStatus.CLARIFICATION_REQUESTED},
+        {"status": EventStatus.PLANNING},
+        {"status": EventStatus.AWAITING_SAFETY_CHECK},
+        {"status": EventStatus.COMPLETED},
+        {"status": EventStatus.REJECTED},
+        {"is_public": False},
+        {"registration_required": False, "registration_closes_at": None},
+    ],
+    ids=lambda overrides: "-".join(f"{key}={value}" for key, value in overrides.items()),
+)
+def test_an_event_that_is_not_listed_has_no_page(db: Session, overrides):
+    event = _open_event(db, **overrides)
+
+    with pytest.raises(service.RegistrationEventNotFound) as refusal:
+        _page(db, _attendee(db), event)
+
+    assert str(refusal.value) == service.REGISTRATION_EVENT_NOT_FOUND_MESSAGE
+
+
+@pytest.mark.story("18.1", ac=10)
+def test_an_event_sent_back_to_planning_has_no_page_for_an_attendee_who_never_registered(
+    db: Session,
+):
+    """The event keeps another attendee's registration (AC4), but gives no one else its page."""
+    event = _open_event(db)
+    _register(db, event, _attendee(db))
+    db.execute(update(Event).where(Event.id == event.id).values(status=EventStatus.PLANNING))
+
+    with pytest.raises(service.RegistrationEventNotFound):
+        _page(db, _attendee(db), event)
+
+
+@pytest.mark.story("18.1", ac=10)
+def test_an_unlisted_events_page_answers_as_an_unknown_one_does(attendee_client, db: Session):
+    """One answer for both, so a Private event's existence is not given away."""
+    private = _open_event(db, starts_at=future_datetime(days=40), is_public=False)
+
+    unknown = attendee_client.get(_event_path(uuid.uuid4()))
+    hidden = attendee_client.get(_event_path(private.id))
+
+    assert (unknown.status_code, hidden.status_code) == (404, 404)
+    assert (
+        hidden.json() == unknown.json() == {"detail": service.REGISTRATION_EVENT_NOT_FOUND_MESSAGE}
+    )
+
+
+@pytest.mark.story("18.1", ac=10)
+def test_an_events_page_asked_for_by_an_id_that_is_not_a_uuid_is_refused(attendee_client):
+    assert attendee_client.get(f"{EVENTS_PATH}/not-a-uuid").status_code == 422
+
+
+@pytest.mark.story("18.1", ac=5)
+def test_signed_out_users_cannot_open_an_events_page(client, db: Session):
+    event = _open_event(db, starts_at=future_datetime(days=40))
+
+    assert client.get(_event_path(event.id)).status_code == 401
+
+
+@pytest.mark.story("18.1", ac=5)
+@pytest.mark.parametrize(
+    "user",
+    [
+        Users.ORGANISER,
+        Users.COORDINATOR,
+        Users.VENUE_STAFF,
+        Users.TECH_SUPPORT,
+        Users.SAFETY_OFFICER,
+        Users.LEAD,
+    ],
+    ids=lambda user: user.role,
+)
+def test_other_roles_cannot_open_an_events_page(login_as, db: Session, user):
+    """Its own organiser among them: the page is the attendees' view of an event."""
+    event = _open_event(db, starts_at=future_datetime(days=40), organiser_id=Users.ORGANISER.id)
+
+    assert login_as(user).get(_event_path(event.id)).status_code == 403
+
+
+@pytest.mark.story("18.1", ac=5)
+def test_an_events_page_carries_no_internal_planning_information(attendee_client, db: Session):
+    event = _open_event(
+        db,
+        starts_at=future_datetime(days=40),
+        purpose="Purpose-page-18.1-internal",
+        internal_notes="Internal-notes-page-18.1",
+        contact_name="Contact-page-18.1",
+        contact_email="contact-page-18-1@example.com",
+        contact_phone="+65 6000 1811",
+        accessibility_notes="Accessibility-page-18.1",
+    )
+
+    response = attendee_client.get(_event_path(event.id))
+
+    assert set(response.json()) == PAGE_KEYS
+    assert set(response.json()["listing"]) == LISTED_EVENT_KEYS
+    for internal in (
+        "Purpose-page-18.1-internal",
+        "Internal-notes-page-18.1",
+        "Contact-page-18.1",
+        "contact-page-18-1@example.com",
+        "+65 6000 1811",
+        "Accessibility-page-18.1",
+        Users.ORGANISER_2.full_name,
+        Users.COORDINATOR.full_name,
+    ):
+        assert internal not in response.text
+
+
+@pytest.mark.story("18.1", ac=11)
+def test_an_events_page_shows_a_place_taken_since_it_was_last_opened(db: Session):
+    """What the page shows once it is loaded again after a refused registration: here, the last
+    place taken by another attendee while it was open."""
+    event = _open_event(db, expected_attendance=1)
+    attendee = _attendee(db)
+    before = _page(db, attendee, event)
+
+    _register(db, event, _attendee(db))
+    after = _page(db, attendee, event)
+
+    assert (before.state, before.places_left) == (RegistrationState.OPEN, 1)
+    assert (after.state, after.places_left) == (RegistrationState.FULL, 0)
 
 
 # =============================================================================================

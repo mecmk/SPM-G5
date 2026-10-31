@@ -1,9 +1,12 @@
-"""Business rules for story 18.1: the events an attendee can register for, and registering; and
-for story 18.2: the attendee's own registrations, and withdrawing one (its section at the end).
+"""Business rules for story 18.1: the events an attendee can register for, each one's page, and
+registering; and for story 18.2: the attendee's own registrations, each one's event page, and
+withdrawing one (its section at the end).
 
 An event is open to attendees when it is Confirmed (AC4, 21.2), Public (2.1 AC19: a Private
 event is not listed) and needs registration (2.1 AC17). It is listed until it starts (AC3), and
-its capacity is its expected attendance (2.1 AC17, AC2). Only a REGISTERED row takes a place.
+its capacity is its expected attendance (2.1 AC17, AC2). Only a REGISTERED row takes a place. A
+listed event has a page (AC9, fix f18.1.2) showing what its entry in the list does, and so does
+one the attendee registered for (18.2 AC10, fix f18.2.1); any other has none (AC10).
 
 AC7: ``register`` holds the event's row (``FOR NO KEY UPDATE``) while it checks the event and
 counts the places, so two registrations for one event take turns, and an event cancelled or sent
@@ -33,6 +36,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -40,6 +44,7 @@ from enum import StrEnum
 from sqlalchemy import (
     ColumnElement,
     Integer,
+    Row,
     Select,
     and_,
     case,
@@ -334,14 +339,14 @@ def _booked_venues(db: Session, event_ids: list[uuid.UUID]) -> dict[uuid.UUID, l
     return venues
 
 
-def list_registration_events(
-    db: Session, *, attendee: User, now: datetime, limit: int, offset: int
-) -> RegistrationEventListing:
-    """AC1: one page of the events open to attendees that have not started, soonest first (then
-    by name, then id, so pages never overlap), each with its venues, places left and its state
-    for ``attendee``. AC3: full, closed and not-yet-open events stay listed until they start.
-    Filtered, ordered, paged and counted in SQL."""
-    is_listed = and_(_is_open_to_attendees(), Event.starts_at > now)
+def _is_listed(now: datetime) -> ColumnElement[bool]:
+    """AC1/AC3: open to attendees and not yet started."""
+    return and_(_is_open_to_attendees(), Event.starts_at > now)
+
+
+def _listed_events(*, attendee: User, now: datetime) -> Select[tuple[Event, int, datetime | None]]:
+    """AC1: the listed events, each with how many places its registrations take, guests included
+    (18.5 AC2), and when ``attendee`` registered for it, if they have."""
     registered = _places_taken(Event.id).correlate(Event).scalar_subquery()
     mine = (
         select(EventRegistration.registered_at)
@@ -353,14 +358,13 @@ def list_registration_events(
         .correlate(Event)
         .scalar_subquery()
     )
-    rows = db.execute(
-        select(Event, registered, mine)
-        .where(is_listed)
-        .order_by(Event.starts_at, Event.name, Event.id)
-        .limit(limit)
-        .offset(offset)
-    ).all()
-    total = db.scalar(select(func.count()).select_from(Event).where(is_listed))
+    return select(Event, registered, mine).where(_is_listed(now))
+
+
+def _registration_event_items(
+    db: Session, rows: Sequence[Row[tuple[Event, int, datetime | None]]], *, now: datetime
+) -> list[RegistrationEventItem]:
+    """AC1-AC3: each listed event with its venues, places left and its state for the attendee."""
     venues = _booked_venues(db, [event.id for event, _, _ in rows])
     items = []
     for event, taken, registered_at in rows:
@@ -385,7 +389,42 @@ def list_registration_events(
                 registered_at=registered_at,
             )
         )
-    return RegistrationEventListing(items=items, total=total or 0)
+    return items
+
+
+def list_registration_events(
+    db: Session, *, attendee: User, now: datetime, limit: int, offset: int
+) -> RegistrationEventListing:
+    """AC1: one page of the events open to attendees that have not started, soonest first (then
+    by name, then id, so pages never overlap), each with its venues, places left and its state
+    for ``attendee``. AC3: full, closed and not-yet-open events stay listed until they start.
+    Filtered, ordered, paged and counted in SQL."""
+    rows = db.execute(
+        _listed_events(attendee=attendee, now=now)
+        .order_by(Event.starts_at, Event.name, Event.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(Event).where(_is_listed(now)))
+    return RegistrationEventListing(
+        items=_registration_event_items(db, rows, now=now), total=total or 0
+    )
+
+
+def get_registration_event(
+    db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
+) -> RegistrationEventItem:
+    """AC9 (fix f18.1.2): one listed event as its page shows it to ``attendee`` - its entry in the
+    list (AC1), whose description the page shows and the card does not. AC10: an event that is
+    not listed - unknown, not open to attendees (AC3/AC4) or started - is not found, one answer
+    for all, so a Private event's existence is not given away."""
+    row = db.execute(
+        _listed_events(attendee=attendee, now=now).where(Event.id == event_id)
+    ).one_or_none()
+    if row is None:
+        raise RegistrationEventNotFound()
+    (item,) = _registration_event_items(db, [row], now=now)
+    return item
 
 
 def _require_phone(details: AttendeeDetailsIn, *, attendee: User) -> None:
@@ -748,6 +787,75 @@ def list_my_registrations(
         )
         for registration, event, places_taken in rows
     ]
+
+
+@dataclass(frozen=True)
+class AttendeeEvent:
+    """18.1 AC9 / 18.2 AC9 (fixes f18.1.2, f18.2.1): one event's page for an attendee - the event
+    and the venues it has booked; what its card on Upcoming events shows, while it is listed, None
+    once it is not (AC10); and the attendee's own latest registration for it (AC1/AC4), None if
+    they never registered."""
+
+    event: Event
+    venues: list[Venue]
+    listing: RegistrationEventItem | None
+    registration: MyRegistrationItem | None
+
+
+def _my_registration_for(
+    db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
+) -> MyRegistrationItem | None:
+    """AC9: ``attendee``'s latest registration for the event - the one My registrations lists
+    (AC1/AC4) - with where they stand, or None if they never registered for it. Story 18.5 AC3:
+    with its guests and how many it may have, as My registrations has them."""
+    row = db.execute(
+        select(
+            EventRegistration,
+            Event,
+            _places_taken(Event.id).correlate(Event).scalar_subquery(),
+        )
+        .join(Event, Event.id == EventRegistration.event_id)
+        .where(
+            EventRegistration.id.in_(_latest_per_event(attendee)),
+            EventRegistration.event_id == event_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    registration, event, places_taken = row
+    return _my_registration_item(
+        registration,
+        event,
+        now=now,
+        guests=list_guests(db, registration.id),
+        places_taken=places_taken,
+    )
+
+
+def get_attendee_event(
+    db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
+) -> AttendeeEvent:
+    """AC9 (fix f18.2.1): one event's page for ``attendee`` - 18.1's page of a listed event, with
+    their own registration beside it. AC10: an event they registered for opens even once it is no
+    longer listed - started, cancelled, sent back to Planning or made Private - with no listing and
+    only the venues it still has booked. 18.1 AC10 / AC6: an event that is neither listed nor
+    registered for by them is not found, as an unknown one is."""
+    registration = _my_registration_for(db, event_id, attendee=attendee, now=now)
+    try:
+        listing = get_registration_event(db, event_id, attendee=attendee, now=now)
+    except RegistrationEventNotFound:
+        if registration is None:
+            raise
+        event = registration.event
+        return AttendeeEvent(
+            event=event,
+            venues=_booked_venues(db, [event.id])[event.id],
+            listing=None,
+            registration=registration,
+        )
+    return AttendeeEvent(
+        event=listing.event, venues=listing.venues, listing=listing, registration=registration
+    )
 
 
 def _is_withdrawable(now: datetime) -> ColumnElement[bool]:

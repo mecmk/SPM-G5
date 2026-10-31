@@ -1,5 +1,6 @@
-"""HTTP endpoints for story 18.1: the events an attendee can browse and register for, and
-registering for one; and for story 18.2: the attendee's own registrations, and withdrawing one.
+"""HTTP endpoints for story 18.1: the events an attendee can browse and register for, each one's
+page (fix f18.1.2), and registering for one; and for story 18.2: the attendee's own
+registrations, each one's event page (fix f18.2.1), and withdrawing one.
 
 18.2's withdrawal is ``POST .../withdraw``, an action URL like 12.2's booking and 19.1's change
 request withdrawals: a state transition with its own rules and audit record.
@@ -29,6 +30,7 @@ from app.db import get_db
 from app.registrations import service
 from app.registrations.schemas import (
     AttendeeDetailsIn,
+    AttendeeEventOut,
     EventRegistrationListOut,
     EventRegistrationOut,
     GuestsUpdate,
@@ -50,6 +52,29 @@ CanViewRegistrations = Depends(require_permission(Permission.REGISTRATIONS_VIEW)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+def _registration_event_out(item: service.RegistrationEventItem) -> RegistrationEventOut:
+    return RegistrationEventOut.from_event(
+        item.event,
+        venues=item.venues,
+        closes_at=item.closes_at,
+        places_left=item.places_left,
+        state=item.state,
+        registered_at=item.registered_at,
+    )
+
+
+def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
+    return MyRegistrationOut.from_registration(
+        item.registration,
+        event=item.event,
+        status=item.standing,
+        can_withdraw=item.can_withdraw,
+        guests=item.guests,
+        can_change_guests=item.can_change_guests,
+        max_guests=item.max_guests,
+    )
+
+
 @router.get("/events", response_model=RegistrationEventList)
 def list_registration_events(
     db: DbSession,
@@ -67,18 +92,32 @@ def list_registration_events(
         db, attendee=attendee, now=datetime.now(UTC), limit=limit, offset=offset
     )
     return RegistrationEventList(
-        items=[
-            RegistrationEventOut.from_event(
-                item.event,
-                venues=item.venues,
-                closes_at=item.closes_at,
-                places_left=item.places_left,
-                state=item.state,
-                registered_at=item.registered_at,
-            )
-            for item in listing.items
-        ],
-        total=listing.total,
+        items=[_registration_event_out(item) for item in listing.items], total=listing.total
+    )
+
+
+@router.get("/events/{event_id}", response_model=AttendeeEventOut)
+def get_attendee_event(
+    event_id: uuid.UUID,
+    db: DbSession,
+    attendee: Annotated[CurrentUser, CanRegister],
+) -> AttendeeEventOut:
+    """18.1 AC9 (fix f18.1.2): one event's page for the signed-in attendee - while it is listed,
+    what its list entry carries, and nothing internal (AC5). 18.2 AC9 (fix f18.2.1): with their
+    own latest registration for it; AC10: an event they registered for opens even once it is no
+    longer listed. 18.1 AC10 / 18.2 AC6: any other is a 404, the same as an unknown one. 18.1 AC5:
+    registrations:self only - other roles get 403 and signed-out users 401 from the dependency."""
+    try:
+        page = service.get_attendee_event(db, event_id, attendee=attendee, now=datetime.now(UTC))
+    except service.RegistrationEventNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    return AttendeeEventOut.from_event(
+        page.event,
+        venues=page.venues,
+        listing=None if page.listing is None else _registration_event_out(page.listing),
+        registration=(
+            None if page.registration is None else _my_registration_out(page.registration)
+        ),
     )
 
 
@@ -117,18 +156,6 @@ def register(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return RegistrationOut.from_registration(
         registration, guests=service.list_guests(db, registration.id)
-    )
-
-
-def _my_registration_out(item: service.MyRegistrationItem) -> MyRegistrationOut:
-    return MyRegistrationOut.from_registration(
-        item.registration,
-        event=item.event,
-        status=item.standing,
-        can_withdraw=item.can_withdraw,
-        guests=item.guests,
-        can_change_guests=item.can_change_guests,
-        max_guests=item.max_guests,
     )
 
 

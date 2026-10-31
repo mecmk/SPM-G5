@@ -1,218 +1,67 @@
-import { useState } from 'react'
 import { Link } from 'react-router'
-import { ApiError, formatApiError, mediaUrl } from '../api/client'
-import {
-  listMyRegistrations,
-  updateGuests,
-  withdrawRegistration,
-  type GuestInput,
-  type MyRegistration,
-} from '../api/registrations'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { mediaUrl } from '../api/client'
+import { listMyRegistrations, type MyRegistration } from '../api/registrations'
 import { EmptyState } from '../components/EmptyState'
-import { EventCard, EventCardGrid } from '../components/EventCard'
+import { EventCard, EventCardGrid, type EventCardBackState } from '../components/EventCard'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
-import { UPCOMING_EVENTS_PATH } from '../routes'
-import { formatDateTime, formatSchedule } from '../shared/format'
+import { MY_REGISTRATIONS_PATH, UPCOMING_EVENTS_PATH, upcomingEventPath } from '../routes'
+import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
-import { ChangeGuestsDialog } from './ChangeGuestsDialog'
-import { STANDING_BADGES, describeGuests, describeRegisteredAt } from './registrationLabels'
+import {
+  MY_REGISTRATIONS_TITLE,
+  STANDING_BADGES,
+  describeActiveRegistration,
+} from './registrationLabels'
 
-/** Story 18.2 AC3: why an active registration offers no Withdraw - its event has started. */
-const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
-
-/** Story 18.2 AC1/AC3: when the attendee registered, when they withdrew if they did, and why an
- *  active registration can no longer be withdrawn. Story 18.5 AC3: the guests registered with
- *  it, when there are any. */
-function describeRegistration(registration: MyRegistration): string[] {
-  const lines = [describeRegisteredAt(registration.registered_at)]
-  if (registration.guests.length > 0) {
-    lines.push(`Your guests: ${describeGuests(registration.guests)}`)
-  }
-  if (registration.withdrawn_at !== null) {
-    lines.push(`You withdrew on ${formatDateTime(registration.withdrawn_at)}`)
-  }
-  if (registration.status === 'REGISTERED' && !registration.can_withdraw) {
-    lines.push(STARTED_NOTE)
-  }
-  return lines
-}
-
-/** Story 18.2 AC3/AC6-AC8: whether a refusal is the server's final word on this registration -
- *  its event started or was cancelled, it was already withdrawn, or it is gone - so trying
- *  again cannot succeed. A server that could not be reached may answer next time. */
-function isFinalRefusal(err: unknown): boolean {
-  return (
-    err instanceof ApiError &&
-    (err.code === 'WITHDRAWAL_REFUSED' || err.code === 'REGISTRATION_NOT_FOUND')
-  )
-}
-
-/** Story 18.2 AC3: a loader that is not the one before it, so the list is loaded again. */
-function freshListLoader(): () => Promise<MyRegistration[]> {
-  return () => listMyRegistrations()
-}
-
-interface MyRegistrationCardProps {
-  registration: MyRegistration
-  onWithdraw: (registration: MyRegistration) => void
-  onChangeGuests: (registration: MyRegistration) => void
+/** Story 18.2 AC9 (fix f18.2.1): an event's page opened from here links back here. */
+const BACK_TO_MY_REGISTRATIONS: EventCardBackState = {
+  from: MY_REGISTRATIONS_PATH,
+  fromLabel: MY_REGISTRATIONS_TITLE,
 }
 
 /**
- * Story 18.2 AC1/AC3/AC8: one registration, with its event's name, date and time and where the
- * attendee stands. Withdraw is the card's own control (story 5.4's card action), offered only
- * while the server says it can be withdrawn: an active registration whose event has not started.
- * Story 18.5 AC3: Change guests beside it, offered only while the server says the guests can
- * still be changed.
+ * Story 18.2 AC1/AC8: one registration's card - its event's name, picture, date and time, where
+ * the attendee stands, and when they registered, while they still are. Story 18.5 AC3: the guests
+ * registered with them. AC9 (fix f18.2.1): a click anywhere on it opens the event's page (story
+ * 18.1 AC9), where the attendee withdraws or changes their guests; the card itself offers neither.
  */
-function MyRegistrationCard({ registration, onWithdraw, onChangeGuests }: MyRegistrationCardProps) {
-  function handleWithdraw() {
-    onWithdraw(registration)
-  }
-
-  function handleChangeGuests() {
-    onChangeGuests(registration)
-  }
-
+function MyRegistrationCard({ registration }: { registration: MyRegistration }) {
   const badge = STANDING_BADGES[registration.status]
   const details = [
     <StatusBadge key="status" status={badge.status} label={badge.label} />,
     formatSchedule(registration.starts_at, registration.ends_at),
-    ...describeRegistration(registration),
+    ...describeActiveRegistration(registration),
   ]
-  const changeGuests = registration.can_change_guests ? (
-    <button
-      type="button"
-      className="button-sm secondary"
-      aria-label={`Change guests for ${registration.event_name}`}
-      onClick={handleChangeGuests}
-    >
-      Change guests
-    </button>
-  ) : null
-  const withdraw = registration.can_withdraw ? (
-    <button
-      type="button"
-      className="button-sm secondary"
-      aria-label={`Withdraw from ${registration.event_name}`}
-      onClick={handleWithdraw}
-    >
-      Withdraw
-    </button>
-  ) : null
-  const actions =
-    changeGuests === null && withdraw === null ? undefined : (
-      <div className="cluster">
-        {changeGuests}
-        {withdraw}
-      </div>
-    )
   return (
     <EventCard
       title={registration.event_name}
       imageUrl={mediaUrl(registration.cover_image_url)}
       details={details}
-      action={actions}
+      to={upcomingEventPath(registration.event_id)}
+      state={BACK_TO_MY_REGISTRATIONS}
     />
   )
 }
 
 /**
  * Story 18.2 - view and withdraw my registrations.
- * AC1: the attendee's registrations, one per event, with its name, date and time, status and when
- *      they registered or withdrew. Withdraw asks first; confirming marks it Withdrawn, with the
- *      notification centre's "Withdrawn" as the confirmation, and its place is free again.
- * AC1/AC3: after every withdrawal, whether it went through, was refused or never reached the
- *      server, the list is loaded again, so every card shows where it now stands and an earlier
- *      failed load's message goes once the new list lands. A refused withdrawal (the event
- *      started meanwhile, or it was already withdrawn or cancelled) shows the backend's reason in
- *      the dialog, which then offers only Close. A registration whose event has started says why
- *      it offers no Withdraw.
+ * AC1: the attendee's registrations, one per event, with its name, picture, date and time, status
+ *      and, while they are registered, when they registered; with none, the page says so and
+ *      points to Upcoming events. Withdrawing is on the event's page (AttendeeEventPage), and
+ *      so, story 18.5 AC3, is changing the guests each registration names.
  * AC5: attendees only - App.tsx guards the route, and the backend sends only their own.
- * AC7: the dialog's Withdraw is disabled while its request is in flight, so a double-click sends
- *      one.
- * Story 18.5 AC3: each registration names its guests, and Change guests opens them to add to,
- *      rename or remove; saving shows the registration as saved. A refusal (closed, withdrawn,
- *      cancelled, not enough places) stays in the dialog, and the list is loaded again so the card
- *      shows where it now stands. AC8: Withdraw withdraws the whole group.
+ * AC9 (fix f18.2.1): each card opens its event's page.
  */
 export function MyRegistrationsPage() {
-  // Replaced by a fresh loader after every withdrawal, so useLoaded loads the list again; it keeps
-  // showing the cards until the new list arrives, and drops the answer of a load still in flight.
-  const [loadRegistrations, setLoadRegistrations] = useState(() => listMyRegistrations)
-  const { data: registrations, error, isLoading, setData } = useLoaded(loadRegistrations)
-  const [pending, setPending] = useState<MyRegistration | null>(null)
-  const [isWithdrawing, setIsWithdrawing] = useState(false)
-  const [refusal, setRefusal] = useState<{ message: string; isFinal: boolean } | null>(null)
-  const [changingGuestsOf, setChangingGuestsOf] = useState<MyRegistration | null>(null)
-  const [isSavingGuests, setIsSavingGuests] = useState(false)
-  const [guestsError, setGuestsError] = useState<string | null>(null)
-
-  function askToChangeGuests(registration: MyRegistration) {
-    setGuestsError(null)
-    setChangingGuestsOf(registration)
-  }
-
-  function cancelChangeGuests() {
-    setChangingGuestsOf(null)
-  }
-
-  async function saveGuests(guests: GuestInput[]) {
-    if (changingGuestsOf === null) return
-    setIsSavingGuests(true)
-    setGuestsError(null)
-    try {
-      const saved = await updateGuests(changingGuestsOf, guests)
-      setData((current) =>
-        current === null ? current : current.map((r) => (r.id === saved.id ? saved : r)),
-      )
-      setChangingGuestsOf(null)
-    } catch (err) {
-      setGuestsError(formatApiError(err))
-      // Where the registration now stands - closed, withdrawn or cancelled - is read again.
-      setLoadRegistrations(freshListLoader)
-    } finally {
-      setIsSavingGuests(false)
-    }
-  }
-
-  function askToWithdraw(registration: MyRegistration) {
-    setRefusal(null)
-    setPending(registration)
-  }
-
-  function cancelWithdraw() {
-    setPending(null)
-  }
-
-  async function confirmWithdraw() {
-    if (pending === null) return
-    setIsWithdrawing(true)
-    setRefusal(null)
-    try {
-      const withdrawn = await withdrawRegistration(pending)
-      setData((current) =>
-        current === null ? current : current.map((r) => (r.id === withdrawn.id ? withdrawn : r)),
-      )
-      setPending(null)
-    } catch (err) {
-      setRefusal({ message: formatApiError(err), isFinal: isFinalRefusal(err) })
-    } finally {
-      setIsWithdrawing(false)
-      // React calls a function given to a state setter as an updater: freshListLoader is called,
-      // and the new loader it returns becomes the state.
-      setLoadRegistrations(freshListLoader)
-    }
-  }
+  const { data: registrations, error, isLoading } = useLoaded(listMyRegistrations)
 
   return (
-    <div className="page page-wide my-registrations">
+    <div className="page page-wide">
       <p className="eyebrow">Attend</p>
       <PageHeader
-        title="My registrations"
+        title={MY_REGISTRATIONS_TITLE}
         subtitle="The events you have registered for, and where you stand at each."
       />
 
@@ -233,47 +82,9 @@ export function MyRegistrationsPage() {
       {registrations !== null && registrations.length > 0 && (
         <EventCardGrid>
           {registrations.map((registration) => (
-            <MyRegistrationCard
-              key={registration.id}
-              registration={registration}
-              onWithdraw={askToWithdraw}
-              onChangeGuests={askToChangeGuests}
-            />
+            <MyRegistrationCard key={registration.id} registration={registration} />
           ))}
         </EventCardGrid>
-      )}
-
-      {changingGuestsOf !== null && (
-        <ChangeGuestsDialog
-          // Story 18.5 AC3: the registration as last read, so a refusal's reload brings the guest
-          // limit up to date; what was typed stays, as the form only starts from it.
-          registration={
-            registrations?.find((r) => r.id === changingGuestsOf.id) ?? changingGuestsOf
-          }
-          isBusy={isSavingGuests}
-          error={guestsError}
-          onSave={saveGuests}
-          onCancel={cancelChangeGuests}
-        />
-      )}
-
-      {pending !== null && (
-        <ConfirmDialog
-          title={`Withdraw from ${pending.event_name}?`}
-          confirmLabel="Withdraw"
-          isBusy={isWithdrawing}
-          error={refusal?.message ?? null}
-          canConfirm={refusal === null || !refusal.isFinal}
-          cancelLabel={refusal?.isFinal ? 'Close' : undefined}
-          onConfirm={confirmWithdraw}
-          onCancel={cancelWithdraw}
-        >
-          <p>
-            {pending.guests.length > 0 && 'Your guests are withdrawn with you. '}
-            Your place will be given up for someone else. If registration has closed or the event
-            fills up, you may not be able to register again.
-          </p>
-        </ConfirmDialog>
       )}
     </div>
   )
