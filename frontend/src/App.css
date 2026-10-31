@@ -1581,6 +1581,7 @@ label.checkbox input {
   display: flex;
   align-items: center;
   gap: 0.875rem;
+  box-sizing: border-box;
   width: 100%;
   padding: 0.75rem 0.875rem;
   border: 0;
