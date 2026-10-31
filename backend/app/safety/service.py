@@ -252,7 +252,9 @@ def _same_fact(before: Any, after: Any) -> bool:
 
 def comparable_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """``facts`` without the display names: the ids, codes and figures a review judged, so a
-    renamed venue, layout, feature or equipment type compares equal (21.2 AC14)."""
+    renamed venue, layout, feature or equipment type compares equal (21.2 AC14). Each list fact is
+    also sorted (``_in_any_order``), so the same items in another order compare equal: rebooking
+    the same venue gives a new booking id, which would otherwise read as a change (21.3 AC8)."""
     return {
         key: (
             _in_any_order(
