@@ -48,9 +48,10 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
     dedicated to 15.1's e2e spec, three dedicated to 15.2's, one to 16.1's, one to 17.1's, one to
     8.4's, three to 12.5's, one to 12.1's real send, one to 11.1's, one to 12.7's, one to
     f12.1.2's, two to 9.4's, two to 21.2's, one to 19.2's, one to 6.2's, one to f7.1.2's, twelve
-    to 12.6's and one to 21.3's (its other events are the cancelled heritage walk, which is not
-    bookable, and coordinator 2's two) - "approved or later" includes them all, but not 21.2's two
-    awaiting the safety check. The pick-list offers all forty-two, soonest first."""
+    to 12.6's, one to 21.3's and one to 12.8's (its other events are the cancelled heritage walk,
+    which is not bookable, and coordinator 2's two) - "approved or later" includes them all, but
+    not 21.2's two awaiting the safety check. The pick-list offers all forty-three, soonest
+    first."""
     response = coordinator_client.get(PICK_LIST_PATH)
 
     assert response.status_code == 200
@@ -98,6 +99,7 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.CHARITY_RUN),
         str(Events.SAFETY_RELEASE),
         str(Events.LEADERSHIP_RETREAT),
+        str(Events.PRODUCT_BRIEFING),
     ]
 
 
