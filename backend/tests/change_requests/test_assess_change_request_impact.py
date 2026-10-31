@@ -1682,13 +1682,11 @@ def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Ses
         {"b": hall.id},
     ).one()
     assert (row.status, row.venue_unavailable_marked_at) == ("APPROVED", None)
-    assert (
-        db.execute(
-            text("SELECT count(*) FROM notifications WHERE related_entity_id = :b"),
-            {"b": hall.id},
-        ).scalar_one()
-        == 0
-    )
+    notices = db.execute(
+        text("SELECT notification_type FROM notifications WHERE event_id = :e"),
+        {"e": event.id},
+    ).scalars()
+    assert sorted(notices) == ["EVENT_CHANGE_APPROVED", "EVENT_CHANGE_REQUESTED"]
 
 
 @pytest.mark.story("19.3", ac=8)
