@@ -77,6 +77,9 @@ export const EVENTS = {
   // dated January 2028, with one pending item the 17.1 spec has Technical Support accept.
   cancelled: '33333333-0000-0000-0000-000000000015',
   waterfrontDemo: '33333333-0000-0000-0000-000000000080',
+  // Story 17.2, Planning, organiser: organiser2, coordinator, dated February 2028. One accepted
+  // and one pending equipment item; the 17.2 spec withdraws each.
+  riversideSummit: '33333333-0000-0000-0000-000000000081',
   // Story 8.4, Planning, organiser: organiser2, coordinator, dated March 2028. Three venue
   // requirements, each finding different venues; the 8.4 spec only reads it.
   smartCitiesExpo: '33333333-0000-0000-0000-000000000028',

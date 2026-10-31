@@ -7,7 +7,8 @@ is returned as ``EquipmentLineOut``, the shape the event page already reads. Sub
 equipment submission rather than calling an action on the event (backend/STYLE.md: a URL names a
 resource). The queue spans every event, so it has a path of its own, ``/equipment-requests``.
 Technical Support's decision on a request is likewise a resource of its own (story 16.1),
-``/equipment-requests/{item_id}/decision``, created once.
+``/equipment-requests/{item_id}/decision``, created once, and so is the coordinator's withdrawal
+of an item (story 17.2), ``/events/{event_id}/equipment/{item_id}/withdrawal``.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from app.equipment.schemas import (
     EquipmentQueueEntry,
     EquipmentQueueOrder,
     EquipmentQueueStatus,
+    EquipmentWithdrawalIn,
     EventEquipmentAvailabilityOut,
 )
 from app.events.schemas import EquipmentLineOut
@@ -121,7 +123,8 @@ def remove_equipment_item(
     actor: Annotated[CurrentUser, CanRequest],
 ) -> None:
     """AC2: remove an item and release its hold at once. AC7: a decided item is locked. AC9: only
-    the assigned coordinator, while the event's equipment can change."""
+    the assigned coordinator, while the event's equipment can change. Story 17.2 AC2: a Pending
+    item is withdrawn instead (409)."""
     try:
         service.remove_equipment_item(db, event_id, item_id, actor=actor)
     except service.EventNotFound:
@@ -132,6 +135,35 @@ def remove_equipment_item(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.EquipmentConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+
+
+@router.post(
+    "/{event_id}/equipment/{item_id}/withdrawal",
+    response_model=EquipmentLineOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def withdraw_equipment_item(
+    event_id: uuid.UUID,
+    item_id: uuid.UUID,
+    payload: EquipmentWithdrawalIn,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanRequest],
+) -> EquipmentLineOut:
+    """Story 17.2 AC1/AC2: withdraw an Accepted or Pending item, releasing its units at once;
+    returns it, Withdrawn (AC3). AC5/AC6/AC11: refused, changing nothing, once the event or the
+    item can no longer be withdrawn from, or the item has changed since it was seen. AC10: only
+    the assigned coordinator."""
+    try:
+        item = service.withdraw_equipment_item(db, event_id, item_id, payload, actor=actor)
+    except service.EventNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.EquipmentItemNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, ITEM_NOT_FOUND_MESSAGE) from None
+    except service.NotAssignedCoordinator as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
+    except service.EquipmentConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return EquipmentLineOut.from_line(item)
 
 
 @router.post(

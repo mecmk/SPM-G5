@@ -22,6 +22,7 @@ import {
   CANCELLED_AT_LABEL,
   CLEAR_SEARCH,
   NOT_RECORDED,
+  WITHDRAWN_AT_LABEL,
   formatDateTime,
   formatSchedule,
   shortReference,
@@ -43,13 +44,15 @@ type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
 /** Story 15.2 AC3: the queue's tabs, plus All (a team request beyond the AC), in the order of
  * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. Story 6.2 AC15:
- * Cancelled, read-only, for requests whose event was cancelled after they were sent. */
+ * Cancelled, read-only, for requests whose event was cancelled after they were sent. Story 17.2
+ * AC4: Withdrawn, read-only, for requests their coordinator withdrew. */
 const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'ACCEPTED', label: 'Accepted' },
   { key: 'DECLINED', label: 'Declined' },
   { key: 'CANCELLED', label: 'Cancelled' },
+  { key: 'WITHDRAWN', label: 'Withdrawn' },
 ]
 
 /** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
@@ -70,7 +73,9 @@ const EQUIPMENT_QUEUE_VIEW: QueueViewOptions<EquipmentQueueTabKey, EquipmentQueu
 function tabCount(tab: EquipmentQueueTabKey, counts: EquipmentQueueCounts): number {
   switch (tab) {
     case 'ALL':
-      return counts.pending + counts.accepted + counts.declined + counts.cancelled
+      return (
+        counts.pending + counts.accepted + counts.declined + counts.cancelled + counts.withdrawn
+      )
     case 'PENDING':
       return counts.pending
     case 'ACCEPTED':
@@ -79,6 +84,8 @@ function tabCount(tab: EquipmentQueueTabKey, counts: EquipmentQueueCounts): numb
       return counts.declined
     case 'CANCELLED':
       return counts.cancelled
+    case 'WITHDRAWN':
+      return counts.withdrawn
   }
 }
 
@@ -144,6 +151,9 @@ interface OpenDecision {
  * Story 6.2 AC15: a Cancelled tab lists, read-only, the requests closed when their event was
  * cancelled; their cards leave out what is available, since nothing is held for them any more.
  * AC16: such a card says when it was cancelled.
+ *
+ * Story 17.2 AC4: a Withdrawn tab lists, read-only, the requests their coordinator withdrew, each
+ * saying when and by whom, with no figures, since nothing is held for them any more.
  *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, equipment type and Requested by, orders the tab and counts each tab's matches. AC6:
@@ -295,7 +305,7 @@ export function EquipmentRequestsPage() {
                       <p className="fact-label">Requested</p>
                       <p className="fact-value">{entry.quantity}</p>
                     </div>
-                    {entry.status !== 'CANCELLED' && (
+                    {entry.available !== null && (
                       <>
                         <div className="subtle-block">
                           <p className="fact-label">Available</p>
@@ -351,6 +361,18 @@ export function EquipmentRequestsPage() {
                         {entry.cancelled_at === null
                           ? NOT_RECORDED
                           : formatDateTime(entry.cancelled_at)}
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.status === 'WITHDRAWN' && (
+                    <div className="subtle-block">
+                      <p className="fact-label">{WITHDRAWN_AT_LABEL}</p>
+                      <p>
+                        {entry.withdrawn_at === null
+                          ? NOT_RECORDED
+                          : formatDateTime(entry.withdrawn_at)}
+                        {entry.withdrawn_by_name !== null && ` by ${entry.withdrawn_by_name}`}
                       </p>
                     </div>
                   )}

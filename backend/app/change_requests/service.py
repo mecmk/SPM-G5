@@ -330,7 +330,8 @@ def _equipment_value(
 def _current_value(event: Event, field: str) -> Any:
     """The field's value on ``event`` as it stands, canonical - what a request raised now would
     record, and what an approval checks is still there (story 19.2 AC7). An equipment item kept,
-    Cancelled, after a change removed it (story 19.2 AC5) is no longer the event's."""
+    Cancelled, after a change removed it (story 19.2 AC5), or Withdrawn by the coordinator (story
+    17.2 AC3), is no longer the event's."""
     if field == ChangeRequestField.SCHEDULE:
         return _schedule_value(event.starts_at, event.ends_at)
     if field == ChangeRequestField.EXPECTED_ATTENDANCE:
@@ -342,7 +343,7 @@ def _current_value(event: Event, field: str) -> Any:
             [
                 (line.id, line.equipment_type.code, line.quantity, line.technical_notes)
                 for line in event.equipment_requests
-                if line.status != EquipmentRequestStatus.CANCELLED
+                if line.status not in equipment_service.KEPT_FOR_RECORD
             ]
         )
     raise TypeError(f"unhandled change request field: {field}")
@@ -891,7 +892,8 @@ def _proposed_equipment(event: Event, proposed: list[dict[str, Any]]) -> list[Ev
     by_type = {
         item.equipment_type.code: item.id
         for item in event.equipment_requests
-        if item.status not in (EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.DECLINED)
+        if item.status not in equipment_service.KEPT_FOR_RECORD
+        and item.status != EquipmentRequestStatus.DECLINED
     }
     items = []
     for value in proposed:
@@ -1733,7 +1735,7 @@ def _changed_equipment(
             )
         elif (
             planned.change == equipment_service.EquipmentChange.REMOVED
-            and item.status != EquipmentRequestStatus.CANCELLED
+            and item.status not in equipment_service.KEPT_FOR_RECORD
         ):
             status_after = equipment_service.status_after_removal(item.status)
             rows.append(

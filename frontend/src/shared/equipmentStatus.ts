@@ -2,7 +2,8 @@ import type { EquipmentItemStatus } from '../api/events'
 
 /** Story 15.1 AC1: how each item status reads on the event page, and story 19.3 in a change
  *  request's impact. Story 17.1 AC1/AC4: an accepted item is reserved, and one cancelled with its
- *  event (6.2) or removed by an approved change (19.2) is released. */
+ *  event (6.2) or removed by an approved change (19.2) is released. Story 17.2 AC3: one the
+ *  coordinator withdrew says so. */
 export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   REQUESTED: 'Not yet sent',
   PENDING: 'Pending',
@@ -10,4 +11,10 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   DECLINED: 'Declined',
   UNAVAILABLE: 'Unavailable',
   CANCELLED: 'Released',
+  WITHDRAWN: 'Withdrawn',
 }
+
+/** Story 19.2 AC5, 17.2 AC3: an item kept only for Technical Support's record - cancelled after it
+ *  was sent, or withdrawn by the coordinator - and no longer the event's. Mirrors the backend's
+ *  `KEPT_FOR_RECORD` (backend/app/equipment/service.py). */
+export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { formatApiError } from '../api/client'
+import { ApiError, formatApiError } from '../api/client'
 import {
   addEquipmentItem,
   fetchEquipmentAvailability,
@@ -7,6 +7,8 @@ import {
   submitEquipment,
   TECHNICAL_NOTES_MAX_LENGTH,
   updateEquipmentItem,
+  withdrawEquipmentItem,
+  WITHDRAWABLE_STATUSES,
   type EquipmentAvailability,
   type EquipmentItemChange,
 } from '../api/equipment'
@@ -21,6 +23,9 @@ import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 /** AC2/AC7: the items the coordinator may still edit or remove, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
 const EDITABLE_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'PENDING', 'UNAVAILABLE']
+/** Story 17.2 AC2: the items removed outright - never sent, or holding nothing. A sent one is
+ *  withdrawn instead, so Technical Support know. */
+const REMOVABLE_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'UNAVAILABLE']
 /** AC6: an item in one of these takes up its type on the event, mirroring `_OPEN_ITEM_STATUSES`;
  *  a declined or cancelled one does not, so its type can be requested again. */
 const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'ACCEPTED']
@@ -101,6 +106,11 @@ export interface EquipmentRequestsSectionProps {
  * while it holds nothing (the server decides). AC4: a released item says it holds nothing if it
  * was held until then, and keeps a decline's reason. AC6: the list is the event as loaded, so a
  * reload shows a newer decision. On a phone an item's text takes the row's width (App.css).
+ * Story 17.2 AC1/AC2: a sent item - Accepted or Pending - offers Withdraw rather than Remove, after
+ * confirming (AC7: closing the dialog changes nothing). AC3: a withdrawn item stays listed, saying
+ * who withdrew it and when, and its type is offered again. AC11: a refusal - a decision Technical
+ * Support saved meanwhile, or a second click - stays in the dialog with no Withdraw left to offer,
+ * and the event is loaded again, so the item shows its status now.
  */
 export function EquipmentRequestsSection({
   eventId,
@@ -127,6 +137,10 @@ export function EquipmentRequestsSection({
   const [pendingRemoval, setPendingRemoval] = useState<EquipmentLine | null>(null)
   const [isRemoving, setIsRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  const [pendingWithdrawal, setPendingWithdrawal] = useState<EquipmentLine | null>(null)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
+  const [canConfirmWithdrawal, setCanConfirmWithdrawal] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -254,6 +268,41 @@ export function EquipmentRequestsSection({
     }
   }
 
+  function askToWithdraw(item: EquipmentLine) {
+    setWithdrawError(null)
+    setCanConfirmWithdrawal(true)
+    setPendingWithdrawal(item)
+  }
+
+  function cancelWithdraw() {
+    setPendingWithdrawal(null)
+  }
+
+  async function confirmWithdraw() {
+    if (pendingWithdrawal === null || isWithdrawing) return
+    setIsWithdrawing(true)
+    setWithdrawError(null)
+    try {
+      await withdrawEquipmentItem(eventId, pendingWithdrawal)
+      setPendingWithdrawal(null)
+      await onChanged()
+    } catch (err) {
+      setWithdrawError(formatApiError(err))
+      // AC11: the item changed, or is gone, since it was shown - load it again behind the dialog.
+      // AC10: so is a coordinator no longer assigned, who has nothing left to withdraw.
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.status === 404 || err.status === 403)
+      ) {
+        setCanConfirmWithdrawal(false)
+        await onChanged()
+      }
+    } finally {
+      setIsWithdrawing(false)
+      reloadAvailability()
+    }
+  }
+
   async function sendToTechnicalSupport() {
     setIsSubmitting(true)
     setSubmitError(null)
@@ -373,6 +422,15 @@ export function EquipmentRequestsSection({
                       </span>
                     </>
                   )}
+                  {item.withdrawn_at !== null && (
+                    <>
+                      <br />
+                      <span className="item-timing">
+                        Withdrawn {formatDateTime(item.withdrawn_at)}
+                        {item.withdrawn_by_name !== null && ` by ${item.withdrawn_by_name}`}
+                      </span>
+                    </>
+                  )}
                   {item.status === 'UNAVAILABLE' && (
                     <>
                       <br />
@@ -391,26 +449,42 @@ export function EquipmentRequestsSection({
                   status={BADGE_STATUSES[item.status] ?? item.status}
                   label={EQUIPMENT_STATUS_LABELS[item.status]}
                 />
-                {canChange && EDITABLE_STATUSES.includes(item.status) && (
-                  <span className="row-actions">
-                    <button
-                      type="button"
-                      className="secondary"
-                      aria-label={`Edit ${item.equipment_type_name}`}
-                      onClick={() => startEditing(item)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      aria-label={`Remove ${item.equipment_type_name}`}
-                      onClick={() => askToRemove(item)}
-                    >
-                      Remove
-                    </button>
-                  </span>
-                )}
+                {canChange &&
+                  (EDITABLE_STATUSES.includes(item.status) ||
+                    WITHDRAWABLE_STATUSES.includes(item.status)) && (
+                    <span className="row-actions">
+                      {EDITABLE_STATUSES.includes(item.status) && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          aria-label={`Edit ${item.equipment_type_name}`}
+                          onClick={() => startEditing(item)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {REMOVABLE_STATUSES.includes(item.status) && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          aria-label={`Remove ${item.equipment_type_name}`}
+                          onClick={() => askToRemove(item)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      {WITHDRAWABLE_STATUSES.includes(item.status) && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          aria-label={`Withdraw ${item.equipment_type_name}`}
+                          onClick={() => askToWithdraw(item)}
+                        >
+                          Withdraw
+                        </button>
+                      )}
+                    </span>
+                  )}
                 {isDeclined(item) && (
                   <span className="decline-reason">
                     <span className="fact-label">Reason for declining</span>
@@ -522,6 +596,26 @@ export function EquipmentRequestsSection({
           <p>
             {pendingRemoval.equipment_type_name} ×{pendingRemoval.quantity} will be removed from
             this event, and the units it holds released.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {pendingWithdrawal && (
+        <ConfirmDialog
+          title="Withdraw this equipment?"
+          confirmLabel="Withdraw"
+          isBusy={isWithdrawing}
+          error={withdrawError}
+          canConfirm={canConfirmWithdrawal}
+          cancelLabel={canConfirmWithdrawal ? 'Cancel' : 'Close'}
+          onConfirm={confirmWithdraw}
+          onCancel={cancelWithdraw}
+        >
+          <p>
+            {pendingWithdrawal.equipment_type_name} ×{pendingWithdrawal.quantity} will be withdrawn
+            and the units {pendingWithdrawal.status === 'ACCEPTED' ? 'reserved' : 'held'} for it
+            released at once. Technical Support will be told it is no longer needed. It stays on
+            this event as Withdrawn.
           </p>
         </ConfirmDialog>
       )}

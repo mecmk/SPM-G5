@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.events.models import EquipmentRequestStatus, EventStatus
-from tests.support.factories import make_equipment_type, make_event
+from tests.support.factories import make_equipment_item, make_equipment_type, make_event
 
 MIGRATION_014 = (
     Path(__file__).resolve().parents[2] / "db" / "migrations" / "014_equipment_requests.sql"
@@ -127,8 +127,18 @@ def test_the_database_allows_every_status_the_application_uses(db: Session):
     ]
 
     for status in statuses:
+        if status == "WITHDRAWN":  # story 17.2 AC3: always with who withdrew it and when
+            make_equipment_item(
+                db,
+                event=event,
+                equipment_type=make_equipment_type(db),
+                quantity=1,
+                status=status,
+                is_held=False,
+            )
+            continue
         _insert_line(db, event_id=event.id, type_id=make_equipment_type(db).id, status=status)
 
     assert sorted(statuses) == sorted(
-        ["REQUESTED", "PENDING", "ACCEPTED", "DECLINED", "UNAVAILABLE", "CANCELLED"]
+        ["REQUESTED", "PENDING", "ACCEPTED", "DECLINED", "UNAVAILABLE", "CANCELLED", "WITHDRAWN"]
     )

@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { formatDateTime, inputToInstant, instantToInput, shortReference } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
@@ -287,11 +288,12 @@ export function ChangeRequestsSection({
         ? event.venue_requirements.map(requirementDraftFrom)
         : [newRequirementDraft()],
     )
-    // An item kept, Cancelled, after an approved change removed it is no longer the event's
-    // (story 19.2 AC5), as the backend's current value leaves it out.
+    // An item kept, Cancelled, after an approved change removed it (story 19.2 AC5), or Withdrawn
+    // by the coordinator (story 17.2 AC3), is no longer the event's, as the backend's current
+    // value leaves it out.
     setEquipment(
       event.equipment
-        .filter((line) => line.status !== 'CANCELLED')
+        .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
         .map((line) => ({
           key: newDraftKey(),
           sourceId: line.id,

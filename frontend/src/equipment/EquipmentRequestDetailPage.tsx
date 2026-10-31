@@ -11,7 +11,13 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
-import { CANCELLED_AT_LABEL, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import {
+  CANCELLED_AT_LABEL,
+  NOT_RECORDED,
+  WITHDRAWN_AT_LABEL,
+  formatDateTime,
+  formatSchedule,
+} from '../shared/format'
 import { queueBackPath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
@@ -36,7 +42,8 @@ function backToRequest(itemId: string): EventCardBackState {
  * View event details opens the event (story 7.1), whose back link returns to this page.
  *
  * Story 6.2 AC15/AC16: a request cancelled with its event is read-only; it says when it was
- * cancelled and leaves out what is available, since nothing is held for it any more.
+ * cancelled and leaves out what is available, since nothing is held for it any more. Story 17.2
+ * AC4: so is one its coordinator withdrew, which says when and by whom.
  *
  * Story 13.3 AC7: the back link returns to the queue as it was left - tab, search and order - when
  * the queue opened this page.
@@ -131,6 +138,14 @@ export function EquipmentRequestDetailPage() {
               {entry.cancelled_at === null ? NOT_RECORDED : formatDateTime(entry.cancelled_at)}
             </p>
           )}
+          {entry.status === 'WITHDRAWN' && (
+            <p className="subtle-block">
+              <span className="fact-label">{WITHDRAWN_AT_LABEL}</span>
+              <br />
+              {entry.withdrawn_at === null ? NOT_RECORDED : formatDateTime(entry.withdrawn_at)}
+              {entry.withdrawn_by_name !== null && ` by ${entry.withdrawn_by_name}`}
+            </p>
+          )}
 
           <div className="stack">
             <section className="stat-card-grid" aria-labelledby="equipment-summary-heading">
@@ -151,7 +166,7 @@ export function EquipmentRequestDetailPage() {
                   <p className="fact-label">Requested</p>
                   <p className="fact-value">{entry.quantity}</p>
                 </div>
-                {entry.status !== 'CANCELLED' && (
+                {entry.available !== null && (
                   <>
                     <div className="subtle-block">
                       <p className="fact-label">Available</p>
