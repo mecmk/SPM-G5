@@ -311,4 +311,5 @@ test('19.3 AC8: a venue the change leaves below half full is flagged, and kept',
   await expect(hall).toContainText(
     `Needs room for 50; ${GRAND_HALL} holds 400, more than twice that.`,
   )
+  await expect(hall).toContainText('You decide whether to keep this venue or replace it.')
 })

@@ -106,6 +106,10 @@ _KEPT_WITH_WARNING = (
     "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the "
     "change. Check with them that the venue still suits it, or reject the change."
 )
+_KEPT_LARGER_THAN_NEEDED = (
+    "Stays as it is: a warning never cancels a booking, and nobody is told of it. You decide "
+    "whether to keep this venue or replace it."
+)
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -1555,7 +1559,7 @@ def test_a_venue_below_half_full_is_flagged_and_exactly_half_is_not(
     }
     assert row["will_be_cancelled"] is False
     assert row["capacity_warning"] is None
-    assert row["after_approval"] == _KEPT_WITH_WARNING
+    assert row["after_approval"] == _KEPT_LARGER_THAN_NEEDED
     assert impact["has_impact"] is True
 
 

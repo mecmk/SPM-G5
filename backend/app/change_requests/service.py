@@ -1223,6 +1223,11 @@ _BOOKING_KEPT = (
     "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the "
     "change. Check with them that the venue still suits it, or reject the change."
 )
+# AC8: a venue larger than needed is the coordinator's own call, so there is no one to check with.
+_BOOKING_KEPT_LARGER_THAN_NEEDED = (
+    "Stays as it is: a warning never cancels a booking, and nobody is told of it. You decide "
+    "whether to keep this venue or replace it."
+)
 
 # AC2: what the approval does to each equipment item, as 19.2 does it.
 _ITEM_CANCELLED = "Removed: its hold is released, and it is kept as Cancelled for the record."
@@ -1486,6 +1491,12 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                 booking.venue, starts_at=needed.starts_at, ends_at=needed.ends_at
             )
         people = None if after is None else after.people
+        if misfits:
+            after_approval = _BOOKING_CANCELLED
+        elif oversize is not None:
+            after_approval = _BOOKING_KEPT_LARGER_THAN_NEEDED
+        else:
+            after_approval = _BOOKING_KEPT
         impacts.append(
             BookingImpactOut(
                 booking_id=booking.id,
@@ -1517,7 +1528,7 @@ def _booking_impacts(db: Session, event: Event, proposed: _ProposedEvent) -> _Ve
                     ends_at=closure.ends_at,
                 ),
                 is_outside_opening_hours=is_closed,
-                after_approval=_BOOKING_CANCELLED if misfits else _BOOKING_KEPT,
+                after_approval=after_approval,
             )
         )
     return _VenueImpact(affected=impacts, kept=kept)
