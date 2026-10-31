@@ -8,6 +8,7 @@ import {
   confirmRegistration,
   corsHeaders,
   expectNoSidewaysScroll,
+  mainOverflow,
   openEventPage,
   registerButton,
   registrationSection,
@@ -107,12 +108,6 @@ async function expectBadge(within: Locator, label: string, colour: RegExp) {
   const badge = within.getByText(label, { exact: true })
   await expect(badge).toBeVisible()
   await expect(badge).toHaveClass(colour)
-}
-
-/** The width the main column scrolls sideways by: the app scrolls inside it, so the document's
- *  own width (expectNoSidewaysScroll) never shows a page that is too wide. */
-async function mainOverflow(page: Page): Promise<number> {
-  return page.getByRole('main').evaluate((main) => main.scrollWidth - main.clientWidth)
 }
 
 /** Answer the page's call for an event with what the server sends, changed by `change`. */

@@ -1,5 +1,14 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
-import { ACCOUNTS, confirmRegistration, corsHeaders, signIn } from './support'
+import {
+  ACCOUNTS,
+  MIN_TOUCH_TARGET,
+  confirmRegistration,
+  corsHeaders,
+  expectNoSidewaysScroll,
+  mainOverflow,
+  registrationSection,
+  signIn,
+} from './support'
 
 /**
  * Story 18.2 - view and withdraw my registrations. END-TO-END tests: what an attendee clicks.
@@ -63,6 +72,8 @@ const EVENT_STARTED_MESSAGE = 'This event has started, so you can no longer with
 const EVENT_CANCELLED_MESSAGE = 'This event was cancelled, so there is nothing to withdraw from.'
 const NOT_FOUND_MESSAGE = 'This registration was not found.'
 const UNREACHABLE_MESSAGE = 'The server could not be reached. Check your connection and try again.'
+const SERVER_PROBLEM_MESSAGE = 'The server hit a problem. Try again in a moment.'
+const ALREADY_REGISTERED_MESSAGE = 'You are already registered for this event.'
 const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 // A picture (2.1 AC14) is decorative - no alt text, hidden from assistive technology - so it has
 // no role or name, and is found by its tag. The yoga has the seeded one; an uploaded one is served
@@ -76,19 +87,16 @@ const PNG_BYTES = Buffer.from(
 const LOADING_LABEL = 'Loading your registrations…'
 const EMPTY_MESSAGE = 'You have not registered for any events yet.'
 const PHONE_WIDTH = 390
+// Story 18.5: a guest's name with no space in it, longer than a phone is wide.
+const LONG_GUEST_NAME = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(3)
 
 /** A registration's card, found by its event's name. Upcoming events (18.1) uses the same card. */
 function eventCard(page: Page, name: string) {
   return page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3, name }) })
 }
 
-/** AC9: where an event's page says where the attendee stands, and offers Withdraw. */
-function registration(page: Page) {
-  return page.getByRole('region', { name: 'Registration', exact: true })
-}
-
 function withdrawButton(page: Page, name: string) {
-  return registration(page).getByRole('button', { name: `Withdraw from ${name}` })
+  return registrationSection(page).getByRole('button', { name: `Withdraw from ${name}` })
 }
 
 function withdrawDialog(page: Page, name: string) {
@@ -128,13 +136,6 @@ function trackWithdrawals(page: Page): string[] {
   return sent
 }
 
-async function expectNoSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )
-  expect(overflow).toBeLessThanOrEqual(0)
-}
-
 /**
  * Answer the page's `method` call to a path matching `isPath` with `status` and `body` instead of
  * the API. Only the `fetch` is stubbed; the CORS headers go with it, since the app and the API run
@@ -166,7 +167,25 @@ async function stubCall(
 /** An event's page as the API sends it: here only what the stubs below change. */
 interface EventPageBody {
   listing: unknown
-  registration: { status: string; can_withdraw: boolean; can_change_guests: boolean }
+  registration: {
+    status: string
+    can_withdraw: boolean
+    can_change_guests: boolean
+    guests: { full_name: string; dietary_requirements: string | null }[]
+  }
+}
+
+/** Answer the page's call for an event with what the server sends, changed by `change`. Nothing
+ *  is written. */
+async function changeEventPage(page: Page, change: (body: EventPageBody) => EventPageBody) {
+  await page.route(
+    (url) => PAGE_API_PATH.test(url.pathname),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, json: change((await response.json()) as EventPageBody) })
+    },
+  )
 }
 
 /**
@@ -299,7 +318,7 @@ test("18.2 AC9: clicking anywhere on a registration's card opens its event's pag
   await expect(main).toContainText('An hour of gentle yoga as the sun goes down.')
   await expect(main).toContainText('Sat, 27 Mar 2027 · 18:00–19:00')
   await expect(main.locator('img')).toHaveAttribute('src', YOGA_PICTURE)
-  const box = registration(page)
+  const box = registrationSection(page)
   await expect(box.getByText('Registered', { exact: true })).toHaveClass(/\bbadge-registered\b/)
   await expect(box).toContainText('You registered on Sun, 11 Oct 2026, 10:15')
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
@@ -319,7 +338,7 @@ test.describe('withdraws its seeded registration once', () => {
     page,
   }) => {
     await openRegisteredEvent(page, POETRY_NIGHT)
-    const box = registration(page)
+    const box = registrationSection(page)
     await expect(box.getByText('Registered', { exact: true })).toBeVisible()
 
     await withdrawButton(page, POETRY_NIGHT).click()
@@ -378,7 +397,7 @@ test('18.2 AC1: cancelling the confirmation keeps the registration and sends not
   await page.keyboard.press('Escape')
   await expect(withdrawDialog(page, SUNSET_YOGA)).toHaveCount(0)
 
-  await expect(registration(page).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(registrationSection(page).getByText('Registered', { exact: true })).toBeVisible()
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
   expect(sent).toHaveLength(0)
 })
@@ -452,22 +471,35 @@ test.describe('on an iPhone 12 Pro', () => {
     await expectNoSidewaysScroll(page)
   })
 
-  test("18.2 AC9: on a phone, an event's page fits without sideways scrolling, and Withdraw is full width and big enough for a thumb", async ({
+  test("18.2 AC9: on a phone, an event's page fits without sideways scrolling, even with a long guest name, and Withdraw is full width and big enough for a thumb", async ({
     page,
   }) => {
+    // Story 18.5 AC3: the page names the guests. No seeded guest has a name this long, so the
+    // yoga's page is stubbed to bring one.
+    await changeEventPage(page, (body) => ({
+      ...body,
+      registration: {
+        ...body.registration,
+        guests: [{ full_name: LONG_GUEST_NAME, dietary_requirements: null }],
+      },
+    }))
     await openRegisteredEvent(page, SUNSET_YOGA)
 
     const withdraw = withdrawButton(page, SUNSET_YOGA)
     await expect(withdraw).toBeVisible()
+    await expect(registrationSection(page)).toContainText(LONG_GUEST_NAME)
     await expectNoSidewaysScroll(page)
+    // The app scrolls inside its main column, so the document's width alone never shows it.
+    expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
     const button = (await withdraw.boundingBox())!
-    expect(button.height).toBeGreaterThanOrEqual(44)
+    expect(button.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
     expect(button.width).toBeGreaterThanOrEqual(PHONE_WIDTH * 0.75)
+    expect(button.x + button.width).toBeLessThanOrEqual(PHONE_WIDTH)
   })
 })
 
 // --- AC3 / AC10 / AC11: until the event starts -------------------------------------------------
-test("18.2 AC3/AC10: a registration for an event that has started opens its page, which offers no Withdraw and says why", async ({
+test('18.2 AC3/AC10: a registration for an event that has started opens its page, which offers no Withdraw and says why', async ({
   page,
 }) => {
   await openMyRegistrations(page)
@@ -477,7 +509,7 @@ test("18.2 AC3/AC10: a registration for an event that has started opens its page
 
   await openEventPage(page, BOOK_SWAP)
 
-  const box = registration(page)
+  const box = registrationSection(page)
   await expect(box.getByText('Registered', { exact: true })).toBeVisible()
   await expect(box).toContainText(STARTED_NOTE)
   // AC10: no longer listed, so nothing about places or registering.
@@ -509,7 +541,7 @@ test('18.2 AC3/AC11: a withdrawal refused because the event started meanwhile sa
   await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
-  const box = registration(page)
+  const box = registrationSection(page)
   await expect(box.getByText('Registered', { exact: true })).toBeVisible()
   await expect(box).toContainText(STARTED_NOTE)
   await expect(withdrawButton(page, SUNSET_YOGA)).toHaveCount(0)
@@ -536,7 +568,7 @@ test('18.2 AC8/AC11: a withdrawal refused because the event was cancelled meanwh
   await expect(dialog.getByRole('alert')).toHaveText(EVENT_CANCELLED_MESSAGE)
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toHaveCount(0)
-  const box = registration(page)
+  const box = registrationSection(page)
   await expect(box.getByText('Event cancelled', { exact: true })).toBeVisible()
   await expect(box).not.toContainText('places left')
   await expect(box.getByRole('button')).toHaveCount(0)
@@ -549,7 +581,7 @@ test.describe('withdraws its seeded registration once', () => {
     page,
   }) => {
     await openRegisteredEvent(page, LANTERN_PAINTING)
-    const box = registration(page)
+    const box = registrationSection(page)
     await expect(box.getByText('Registered', { exact: true })).toBeVisible()
 
     // The first two withdrawals never reach the server; the third does. Each one loads the page
@@ -628,6 +660,109 @@ test.describe('withdraws its seeded registration once', () => {
   })
 })
 
+test("18.2 AC9: a withdrawal the server took shows as Withdrawn, even if the event can't be read again", async ({
+  page,
+}) => {
+  // The withdrawal is answered and the reload refused here, so nothing is written: the yoga stays
+  // read-only.
+  let isWithdrawn = false
+  let mine: EventPageBody['registration'] | null = null
+  await page.route(
+    (url) => PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'POST') {
+        isWithdrawn = true
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            ...mine,
+            status: 'WITHDRAWN',
+            can_withdraw: false,
+            can_change_guests: false,
+          }),
+        })
+      }
+      if (isWithdrawn) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: '{}',
+        })
+      }
+      const response = await route.fetch()
+      const event = (await response.json()) as EventPageBody
+      mine = event.registration
+      return route.fulfill({ response, json: event })
+    },
+  )
+  await openRegisteredEvent(page, SUNSET_YOGA)
+
+  await confirmWithdrawal(page, SUNSET_YOGA)
+
+  await expect(page.getByRole('alert')).toHaveText(SERVER_PROBLEM_MESSAGE)
+  // Where registration now stands is the server's to say, and it could not: so the page shows the
+  // withdrawal, not the Registered it had before it.
+  const box = registrationSection(page)
+  await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(box.getByText('Registered', { exact: true })).toHaveCount(0)
+  await expect(box).not.toContainText('You registered on')
+  await expect(box).not.toContainText('places left')
+})
+
+test('18.2 AC1: pressing Withdraw clears why an earlier registration was refused', async ({
+  page,
+}) => {
+  // The yoga's page first answers as it did before Aiden registered - in another tab, say - so
+  // its Register is refused as already registered. Nothing is written.
+  let isRefused = false
+  await page.route(
+    (url) => url.pathname === MINE_API_PATH || PAGE_API_PATH.test(url.pathname),
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'POST') {
+        isRefused = true
+        return route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({ detail: ALREADY_REGISTERED_MESSAGE }),
+        })
+      }
+      if (isRefused || !PAGE_API_PATH.test(new URL(request.url()).pathname)) {
+        return route.fallback()
+      }
+      const response = await route.fetch()
+      const event = (await response.json()) as { listing: object }
+      return route.fulfill({
+        response,
+        json: {
+          ...event,
+          listing: { ...event.listing, state: 'OPEN', registered_at: null },
+          registration: null,
+        },
+      })
+    },
+  )
+  await openRegisteredEvent(page, SUNSET_YOGA)
+  const box = registrationSection(page)
+  await box.getByRole('button', { name: `Register for ${SUNSET_YOGA}` }).click()
+  await confirmRegistration(page)
+  await expect(box.getByRole('alert')).toHaveText(ALREADY_REGISTERED_MESSAGE)
+  await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
+
+  await withdrawButton(page, SUNSET_YOGA).click()
+  await withdrawDialog(page, SUNSET_YOGA).getByRole('button', { name: 'Cancel' }).click()
+
+  await expect(box.getByRole('alert')).toHaveCount(0)
+  await expect(box.getByText('Registered', { exact: true })).toBeVisible()
+})
+
 // --- AC4: registering again --------------------------------------------------------------------
 test.describe('withdraws its seeded registration once', () => {
   test.describe.configure({ retries: 0 })
@@ -637,7 +772,7 @@ test.describe('withdraws its seeded registration once', () => {
   }) => {
     await openRegisteredEvent(page, SKETCHING_WALK)
     await confirmWithdrawal(page, SKETCHING_WALK)
-    const box = registration(page)
+    const box = registrationSection(page)
     await expect(box.getByText('Open', { exact: true })).toBeVisible()
 
     await box.getByRole('button', { name: `Register for ${SKETCHING_WALK}` }).click()
@@ -708,10 +843,39 @@ test.describe('withdraws its seeded registration once', () => {
       .getByRole('button', { name: 'Withdraw', exact: true })
       .dblclick()
 
-    await expect(registration(page).getByText('Open', { exact: true })).toBeVisible()
+    await expect(registrationSection(page).getByText('Open', { exact: true })).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
     expect(sent).toHaveLength(1)
   })
+})
+
+// --- AC8 / AC10: an event no longer listed ------------------------------------------------------
+test('18.2 AC8/AC10: an event sent back to Planning keeps its page, and its registration can still be withdrawn', async ({
+  page,
+}) => {
+  // The yoga's page as the server sends it once the event is no longer listed. Which events those
+  // are is a backend case.
+  await changeEventPage(page, (body) => ({ ...body, listing: null }))
+  await openRegisteredEvent(page, SUNSET_YOGA)
+
+  const box = registrationSection(page)
+  await expect(box.getByText('Registered', { exact: true })).toBeVisible()
+  await expect(box).not.toContainText('places left')
+  await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
+  await expect(box.getByRole('button', { name: `Register for ${SUNSET_YOGA}` })).toHaveCount(0)
+  // Its venues are still booked, so they are named.
+  await expect(page.getByRole('main')).not.toContainText('Venue to be confirmed')
+})
+
+test('18.2 AC10: an event no longer listed shows Withdrawn to an attendee who withdrew', async ({
+  page,
+}) => {
+  await changeEventPage(page, (body) => ({ ...body, listing: null }))
+  await openRegisteredEvent(page, HERITAGE_TRAIL)
+
+  const box = registrationSection(page)
+  await expect(box.getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(box.getByRole('button')).toHaveCount(0)
 })
 
 // --- AC8 / AC10: a cancelled event -------------------------------------------------------------
@@ -731,7 +895,7 @@ test('18.2 AC8/AC10: a registration for a cancelled event shows Event cancelled,
 
   await openEventPage(page, CHARITY_FUN_RUN)
 
-  const box = registration(page)
+  const box = registrationSection(page)
   await expect(box.getByText('Event cancelled', { exact: true })).toBeVisible()
   await expect(box).not.toContainText(STARTED_NOTE)
   await expect(box).not.toContainText('places left')

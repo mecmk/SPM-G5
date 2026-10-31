@@ -200,6 +200,7 @@ test("18.5 AC3: an attendee registered alone adds a guest on the event's page, t
   await signIn(page, ACCOUNTS.attendee8)
   await openRegisteredEvent(page, KITE_AFTERNOON)
   const card = registrationSection(page)
+  await expect(card).toContainText('29 places left')
   await changeGuestsButton(page, KITE_AFTERNOON).click()
 
   const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
@@ -207,6 +208,8 @@ test("18.5 AC3: an attendee registered alone adds a guest on the event's page, t
   await dialog.getByRole('button', { name: 'Save guests' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(card).toContainText(ANA.name)
+  // A guest takes a place (AC2), and the page says so without being reloaded.
+  await expect(card).toContainText('28 places left')
 
   // Reloading shows what was saved.
   await page.reload()
@@ -221,6 +224,7 @@ test("18.5 AC3: an attendee registered alone adds a guest on the event's page, t
   await dialog.getByRole('button', { name: 'Save guests' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(card).not.toContainText(ANA.name)
+  await expect(card).toContainText('29 places left')
   await expect(card.getByText('Registered', { exact: true })).toBeVisible()
 })
 

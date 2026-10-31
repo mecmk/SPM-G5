@@ -159,6 +159,7 @@ function isFinalRefusal(err: unknown): boolean {
  * AC1/AC9: the attendee withdraws here, after confirming; the page then shows where registration
  *      stands, as for an attendee who never registered - Open, say - and offers Register again
  *      while the event is open (AC4). One badge at a time, and no history of when they withdrew.
+ *      Until the event is read again it shows Withdrawn, and still does if that read fails.
  * AC3: once the event has started there is no Withdraw, and the page says why.
  * AC10: an event they registered for opens even once it is no longer listed, with no places left
  *      or Register, and only the venues it still has booked.
@@ -172,8 +173,8 @@ function isFinalRefusal(err: unknown): boolean {
  *      their own; a group that no longer fits is refused in the dialog, where fewer can be sent.
  * AC3: while registered, the page names the guests, and Change guests - beside Withdraw, offered
  *      only while the server says the guests can still be changed - opens them to add to, rename
- *      or remove. A refusal stays in the dialog, and the event is loaded again, so the guest limit
- *      and where the registration stands catch up.
+ *      or remove. A refusal stays in the dialog. Saved or refused, the event is loaded again, so
+ *      the places left (AC2), the guest limit and where the registration stands catch up.
  * AC7: the withdraw dialog says the guests are withdrawn too.
  *
  * Story 18.4 AC2/AC3: Register opens "Confirm your details", filled in from the attendee's
@@ -329,8 +330,8 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
 
   /** 18.5 AC3: save the guests as the dialog has them, all at once. A refusal - registration
    *  closed, the registration withdrawn or cancelled, not enough places - stays in the dialog, so
-   *  nothing typed is lost, and the event is loaded again, so the page and the guest limit show
-   *  where the registration now stands. */
+   *  nothing typed is lost. Saved or refused, the event is loaded again, so the places left (18.5
+   *  AC2), the guest limit and where the registration stands catch up. */
   async function handleSaveGuests(guests: GuestInput[]) {
     if (registration === null) return
     setIsSavingGuests(true)
@@ -341,9 +342,9 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
       setIsChangingGuests(false)
     } catch (err) {
       setGuestsError(formatApiError(err))
-      loadEventAgain()
     } finally {
       setIsSavingGuests(false)
+      loadEventAgain()
     }
   }
 
@@ -367,7 +368,9 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
     setWithdrawalRefusal(null)
     try {
       const withdrawn = await withdrawRegistration(registration)
-      updateEvent((current) => ({ ...current, registration: withdrawn }))
+      // Where registration now stands - Open, Full, Closed - is the server's to say (AC9). Until
+      // the reload does, the page shows the withdrawal, not the Registered the listing still has.
+      updateEvent((current) => ({ ...current, listing: null, registration: withdrawn }))
       setIsConfirmingWithdrawal(false)
     } catch (err) {
       setWithdrawalRefusal({ message: formatApiError(err), isFinal: isFinalRefusal(err) })
@@ -514,7 +517,8 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
 /** Story 18.2 AC9: the one badge the page shows. While the event is listed, where registration
  *  stands for the attendee (18.1 AC1) - Registered, or, never registered or withdrawn, Open, Full
  *  and so on, as for anyone else. Once it is not, where they stand (AC10) - Registered, Withdrawn
- *  or Event cancelled. The page of an unlisted event is only ever one they registered for. */
+ *  or Event cancelled. The page of an unlisted event is only ever one they registered for - or,
+ *  just after a withdrawal, one whose listing waits on the event being read again. */
 function panelBadge({ listing, registration }: AttendeeEvent): RegistrationBadge | null {
   if (listing !== null) return STATE_BADGES[listing.state]
   return registration === null ? null : STANDING_BADGES[registration.status]
@@ -578,7 +582,7 @@ function RegistrationPanel({
       )}
       {listing !== null && <p>{describePlacesLeft(listing.places_left)}</p>}
       {panelTimes(event).map((line) => (
-        <p key={line} className="muted small">
+        <p key={line} className="muted small wrap-anywhere">
           {line}
         </p>
       ))}

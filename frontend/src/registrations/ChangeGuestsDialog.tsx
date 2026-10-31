@@ -16,8 +16,9 @@ interface ChangeGuestsDialogProps {
 /**
  * Story 18.5 AC3 - "Change your guests", opened from the page of an event the attendee is
  * registered for (18.2 AC9, fix f18.2.1): the guests registered with them, filled in, to add to,
- * rename or remove. Saving replaces them all; nothing changes until then. AC6: a guest with no name stops the save before anything is sent.
- * No more guests than there are places for, as the server works it out (`max_guests`).
+ * rename or remove. Saving replaces them all; nothing changes until then. AC6: a guest with no
+ * name stops the save before anything is sent. No more guests than there are places for, as the
+ * server works it out (`max_guests`).
  * Save guests is disabled while the save is on its way, so a double-click sends one.
  */
 export function ChangeGuestsDialog({

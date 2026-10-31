@@ -58,7 +58,7 @@ export function MyRegistrationsPage() {
   const { data: registrations, error, isLoading } = useLoaded(listMyRegistrations)
 
   return (
-    <div className="page page-wide my-registrations">
+    <div className="page page-wide">
       <p className="eyebrow">Attend</p>
       <PageHeader
         title={MY_REGISTRATIONS_TITLE}

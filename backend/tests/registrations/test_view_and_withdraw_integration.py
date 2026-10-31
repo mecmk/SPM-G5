@@ -16,10 +16,11 @@ registrations the test made. API tests run on the real clock, so they make event
 today and find rows by id.
 
 AC1 The attendee sees their registrations - one per event, the latest - each card with its event's
-    name, picture, date and status (Registered, Withdrawn or Event cancelled) and when they
-    registered and withdrew, events not yet started first (soonest first), then those that have
-    started (latest first). An active registration is withdrawn from its event's page (AC9) after
-    confirmation, and the place returns to capacity.
+    name, picture, date and status (Registered, Withdrawn or Event cancelled) and, while they are
+    registered, when they registered (when they withdrew is kept, not shown), events not yet
+    started first (soonest first), then those that have started (latest first). An active
+    registration is withdrawn from its event's page (AC9) after confirmation, and the place
+    returns to capacity.
 AC2 Withdrawal updates the registration and frees the place in one step on the server: the status,
     the moment it was withdrawn and the audit entry are written together, or not at all.
 AC3 Withdrawal is allowed until the event starts; the registration closing time does not stop it.
@@ -37,11 +38,11 @@ AC8 A registration shows as Event cancelled when its event was cancelled or it w
     the event, and cannot be withdrawn. One on an event sent back to Planning stays Registered and
     can be withdrawn.
 
-Event page (fix f18.2.1), waiting on the backlog's Change Log:
+Event page (fix f18.2.1):
 AC9 Clicking anywhere on a registration's card opens its event's page (18.1 AC9), which also shows
-    where the attendee stands and when they registered and withdrew. Withdraw is only on this
-    page; once withdrawn, it offers Register again while the event is open (AC4). A back link
-    returns to My registrations.
+    where the attendee stands - one badge - and, while they are registered, when they registered.
+    Withdraw is only on this page; once withdrawn, it offers Register again while the event is
+    open (AC4). A back link returns to My registrations.
 AC10 The page of an event the attendee registered for opens even once it is no longer listed -
     started, cancelled, sent back to Planning or made Private - with no places left or Register,
     and venues only while it still has them booked. Withdraw is offered only while AC3 and AC8
@@ -923,6 +924,22 @@ def test_a_registered_events_page_opens_once_it_is_no_longer_listed(
     assert page.listing is None  # no places left, no Register
     assert page.registration is not None
     assert (page.registration.standing, page.registration.can_withdraw) == (standing, can_withdraw)
+
+
+@pytest.mark.story("18.2", ac=10)
+def test_an_unlisted_events_page_still_opens_for_an_attendee_who_withdrew(db: Session):
+    event = _event(db)
+    attendee = _attendee(db)
+    registration = _registration(db, event, attendee.id)
+    _withdraw(db, registration.id, attendee)
+    db.execute(update(Event).where(Event.id == event.id).values(is_public=False))
+    db.expire(event)
+
+    page = _page(db, attendee, event)
+
+    assert page.listing is None
+    assert page.registration is not None
+    assert page.registration.standing == RegistrationStanding.WITHDRAWN
 
 
 @pytest.mark.story("18.2", ac=3)

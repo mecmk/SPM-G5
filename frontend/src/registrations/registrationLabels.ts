@@ -89,14 +89,11 @@ export function describeRegistration(event: RegistrationEvent): string {
 }
 
 /**
- * Story 18.1 AC9 (fix f18.1.2): the times an event's page gives - when the attendee registered,
- * once they have; otherwise when registration opens, while it has not, and when it closes or
- * closed.
+ * Story 18.1 AC9 (fix f18.1.2): the times an event's page gives an attendee who is not registered
+ * for it - when registration opens, while it has not, and when it closes or closed. A registered
+ * attendee's time is their registration's (story 18.2 AC9, describeActiveRegistration).
  */
 export function describeRegistrationTimes(event: RegistrationEvent): string[] {
-  if (event.registered_at !== null) {
-    return [describeRegisteredAt(event.registered_at)]
-  }
   if (event.registration_opens_at !== null && event.state === 'NOT_YET_OPEN') {
     return [describeOpening(event.registration_opens_at), describeClosing(event)]
   }

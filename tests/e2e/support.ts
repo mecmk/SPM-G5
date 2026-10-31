@@ -387,6 +387,12 @@ export async function expectNoSidewaysScroll(page: Page) {
   expect(fits).toBe(true)
 }
 
+/** The width the main column scrolls sideways by: the app scrolls inside it, so the document's
+ *  own width (expectNoSidewaysScroll) never shows a page that is too wide. */
+export async function mainOverflow(page: Page): Promise<number> {
+  return page.getByRole('main').evaluate((main) => main.scrollWidth - main.clientWidth)
+}
+
 /** Headers a stubbed `route.fulfill` needs, since the app and API run on different ports. */
 export function corsHeaders(request: Request) {
   return {
