@@ -1,6 +1,5 @@
 import type { BookingStatus } from '../api/bookings'
 import type { IconName } from '../components/Icon'
-import { NONE } from '../shared/format'
 
 /** Story 13.2.1 AC4: how each venue booking outcome reads on the event page - label, colour,
  * icon and the status sentence, matching the wording a Venue Staff decision already produces. */
@@ -50,17 +49,6 @@ export const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> 
     message:
       "This booking's hold expired before the event was confirmed, so the venue was released.",
   },
-}
-
-/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
-export function formatMinutesDuration(minutes: number): string {
-  if (minutes === 0) return NONE
-  const hours = Math.floor(minutes / 60)
-  const remainder = minutes % 60
-  const parts: string[] = []
-  if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`)
-  if (remainder > 0) parts.push(`${remainder} min`)
-  return parts.join(' ')
 }
 
 /** Story 12.7 AC1 (the customer's hold, 12 Oct 2026): an approved booking whose hold is still

@@ -44,15 +44,20 @@ import {
   bookingOutcomeLabels,
   EXPIRED_BOOKING_STATUS,
   closedAt,
+  closingReason,
   FIND_ANOTHER_LABEL,
   FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
+  isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  RELEASED_BY_SAFETY_REVIEW_LABEL,
+  RELEASED_BY_SAFETY_REVIEW_MESSAGE,
   replacedByLine,
   replacementRequestedLine,
   replacesLine,
+  turnaroundLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -96,12 +101,7 @@ import {
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
-import {
-  BOOKING_OUTCOME,
-  formatMinutesDuration,
-  OPEN_HOLD_MESSAGE,
-  VENUE_UNAVAILABLE_NOTE,
-} from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
 import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
@@ -114,8 +114,10 @@ const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCE
 
 /** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
- * booking an earlier change cancelled (19.2) keeps its own sentence. */
+ * booking an earlier change cancelled (19.2) keeps its own sentence. Story 21.3 AC2, AC8: a booking
+ * the Safety Officer's finding released says so first, whatever the event's own state. */
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
   if (
     booking.status === 'CANCELLED' &&
     event.cancelled_at !== null &&
@@ -1107,11 +1109,7 @@ export function EventDetailPage() {
                           {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
                         </span>
                       </div>
-                      <p className="small muted">
-                        Setup: {formatMinutesDuration(booking.setup_minutes)} · Event:{' '}
-                        {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)} · Teardown:{' '}
-                        {formatMinutesDuration(booking.teardown_minutes)}
-                      </p>
+                      <p className="small muted">{turnaroundLine(booking)}</p>
                     </div>
                   </div>
 
@@ -1124,6 +1122,12 @@ export function EventDetailPage() {
                       {booking.replaces_venue_name !== null && (
                         <p>
                           <strong>{replacesLine(booking.replaces_venue_name)}</strong>
+                        </p>
+                      )}
+                      {/* Story 21.3 AC2: a booking the Safety Officer's finding named. */}
+                      {isReleasedBySafetyReview(booking) && (
+                        <p>
+                          <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
                         </p>
                       )}
                       {booking.replaced_by_venue_name !== null && (
@@ -1195,12 +1199,12 @@ export function EventDetailPage() {
                       )}
                       {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
                           <venue>" above, which is also its reason, so it is not said twice. */}
-                      {booking.decision_reason !== null &&
+                      {closingReason(booking) !== null &&
                         booking.replaced_by_venue_name === null && (
                           <p>
                             <span className="fact-label">{outcomeLabels.why}</span>
                             <br />
-                            {booking.decision_reason}
+                            {closingReason(booking)}
                           </p>
                         )}
                       {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
