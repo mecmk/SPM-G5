@@ -47,6 +47,10 @@ const FINDING_ERROR_ID = 'safety-finding-error'
  * optionally the arrangement to rebook. AC9: no notes. AC10: each finding must say what must
  * change - checked here before anything is sent. AC20: the decision carries the facts the page was
  * read with, and a refusal has the page load the event again.
+ * Story 21.3 - AC1: a finding about venue bookings lists the event's approved bookings to tick, each
+ * with its setup line, and only while its arrangement is Venue bookings; switching away clears the
+ * ticks. AC2: the ticked ids go with the finding (`booking_ids`), and recording the decision
+ * releases them. AC7: a refusal that names bookings no longer approved has the page load again.
  */
 export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisionFormProps) {
   const firstFactor = check.factors[0]?.code ?? ''

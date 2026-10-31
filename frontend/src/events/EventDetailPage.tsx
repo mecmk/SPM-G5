@@ -114,7 +114,8 @@ const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCE
 
 /** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
- * booking an earlier change cancelled (19.2) keeps its own sentence. */
+ * booking an earlier change cancelled (19.2) keeps its own sentence. Story 21.3 AC2, AC8: a booking
+ * the Safety Officer's finding released says so first, whatever the event's own state. */
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
   if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
   if (
