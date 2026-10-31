@@ -4,7 +4,8 @@ Story 8.3 (create / update, Venue Staff only), delete (story 8.1 AC12), plus the
 stories 8.1 / 8.2 need, 8.1's search, and the calendar endpoint story 9.1 needs. Story 8.3
 AC5-AC10 (bug f8.3.2): a venue's pictures, added, arranged and removed by Venue Staff and served
 from /uploads/venues/. Story 9.4: Venue Staff mark a venue unavailable, edit and end the period,
-and preview the bookings it would affect.
+and preview the bookings it would affect. Story 8.6: the room layouts venues can offer, listed
+for every role that reads venues and added, changed and deleted by Venue Staff.
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ from app.venues import service
 from app.venues.schemas import (
     AffectedBookingOut,
     ReferenceItem,
+    RoomLayoutCreate,
+    RoomLayoutOut,
+    RoomLayoutUpdate,
     VenueCreate,
     VenueImageOrder,
     VenueOut,
@@ -55,6 +59,8 @@ CanManageUnavailability = Depends(require_permission(Permission.VENUE_UNAVAILABI
 DbSession = Annotated[Session, Depends(get_db)]
 
 VENUE_NOT_FOUND_MESSAGE = "Venue not found."
+# Story 8.6 AC12: also what a change gets when another Venue Staff member deleted the layout.
+ROOM_LAYOUT_NOT_FOUND_MESSAGE = "This room layout no longer exists."
 UNAVAILABILITY_NOT_FOUND_MESSAGE = "Unavailability period not found."
 PICTURE_NOT_FOUND_MESSAGE = "Picture not found."
 EMPTY_PICTURE_MESSAGE = "Choose a picture to upload."
@@ -77,6 +83,66 @@ def reference_data(db: DbSession) -> VenueReferenceData:
             ReferenceItem.model_validate(x) for x in data["accessibility_features"]
         ],
     )
+
+
+@router.get("/layouts", response_model=list[RoomLayoutOut], dependencies=[CanRead])
+def list_room_layouts(db: DbSession) -> list[RoomLayoutOut]:
+    """Story 8.6 AC1/AC9: every room layout, for any role that reads venues. Declared above
+    ``/{venue_id}`` so the literal path is not read as a venue id."""
+    return [RoomLayoutOut.model_validate(layout) for layout in service.list_room_layouts(db)]
+
+
+@router.post("/layouts", response_model=RoomLayoutOut, status_code=status.HTTP_201_CREATED)
+def create_room_layout(
+    payload: RoomLayoutCreate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> RoomLayoutOut:
+    """Story 8.6 AC2/AC9: only Venue Staff add a layout. AC5/AC7: a name or description the
+    rules refuse is 422; AC6/AC10: a name already in use is 409."""
+    try:
+        layout = service.create_room_layout(db, payload, actor=actor)
+    except service.InvalidRoomLayout as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.RoomLayoutNameTaken as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return RoomLayoutOut.model_validate(layout)
+
+
+@router.patch("/layouts/{code}", response_model=RoomLayoutOut)
+def update_room_layout(
+    code: str,
+    payload: RoomLayoutUpdate,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> RoomLayoutOut:
+    """Story 8.6 AC3/AC9: only Venue Staff change a layout's name or description. AC5/AC7: 422;
+    AC6/AC10: a name already in use is 409; AC12: a layout that no longer exists is 404."""
+    try:
+        layout = service.update_room_layout(db, code, payload, actor=actor)
+    except service.RoomLayoutNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, ROOM_LAYOUT_NOT_FOUND_MESSAGE) from None
+    except service.InvalidRoomLayout as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.RoomLayoutNameTaken as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    return RoomLayoutOut.model_validate(layout)
+
+
+@router.delete("/layouts/{code}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_room_layout(
+    code: str,
+    db: DbSession,
+    actor: Annotated[CurrentUser, CanManage],
+) -> None:
+    """Story 8.6 AC4/AC9: only Venue Staff delete a layout. AC8: one in use is 409, naming
+    what uses it; AC12: one that no longer exists is 404."""
+    try:
+        service.delete_room_layout(db, code, actor=actor)
+    except service.RoomLayoutNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, ROOM_LAYOUT_NOT_FOUND_MESSAGE) from None
+    except service.RoomLayoutInUse as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
 
 
 @router.get("", response_model=list[VenueSummary], dependencies=[CanRead])
@@ -292,12 +358,15 @@ def create_venue(
     db: DbSession,
     actor: Annotated[CurrentUser, CanManage],
 ) -> VenueOut:
-    """Story 8.3 AC1 / AC4: only Venue Staff may create venues."""
+    """Story 8.3 AC1 / AC4: only Venue Staff may create venues. Story 8.6 AC11: a layout that
+    no longer exists is 422, naming it."""
     try:
         venue = service.create_venue(db, payload, actor=actor)
     except service.VenueNameTaken as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.UnknownReferenceCode as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.RoomLayoutGone as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return VenueOut.from_venue(venue)
 
@@ -309,7 +378,8 @@ def update_venue(
     db: DbSession,
     actor: Annotated[CurrentUser, CanManage],
 ) -> VenueOut:
-    """Story 8.3 AC2 / AC4: only Venue Staff may edit venues."""
+    """Story 8.3 AC2 / AC4: only Venue Staff may edit venues. Story 8.6 AC11: a layout that
+    no longer exists is 422, naming it."""
     try:
         venue = service.update_venue(db, venue_id, payload, actor=actor)
     except service.VenueNotFound:
@@ -317,6 +387,8 @@ def update_venue(
     except service.VenueNameTaken as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except (service.UnknownReferenceCode, service.InvalidOperatingHours) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.RoomLayoutGone as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return VenueOut.from_venue(venue)
 

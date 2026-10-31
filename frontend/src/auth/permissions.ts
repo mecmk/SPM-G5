@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   EVENT_CHANGE_REQUESTS_CREATE: 'event_change_requests:create',
   EVENT_CHANGE_REQUESTS_DECIDE: 'event_change_requests:decide',
   BOOKINGS_READ: 'bookings:read',
+  BOOKINGS_READ_OWN: 'bookings:read_own',
   BOOKINGS_REQUEST: 'bookings:request',
   BOOKINGS_DECIDE: 'bookings:decide',
   EQUIPMENT_READ: 'equipment:read',

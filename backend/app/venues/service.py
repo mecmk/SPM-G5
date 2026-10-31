@@ -1,6 +1,6 @@
 """Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2),
-a venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2) and its availability
-calendar (story 9.1).
+a venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2), its availability
+calendar (story 9.1) and the room layouts venues can offer (story 8.6).
 
 Routers translate the exceptions raised here into HTTP statuses; keeping the rules in plain
 functions makes them easy to unit-test and to reuse from other features (e.g. booking
@@ -10,15 +10,17 @@ suitability checks in stories 11.x).
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta, timezone
-from itertools import chain
+from itertools import chain, count
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,6 +34,7 @@ from app.events.models import Event, EventStatus, VenueRequirement
 from app.notifications.service import NotificationType, notify
 from app.venues.models import (
     AccessibilityFeature,
+    DeletedRoomLayout,
     Facility,
     RoomLayout,
     UnavailabilityReason,
@@ -48,6 +51,8 @@ from app.venues.schemas import (
     HELD_REASON,
     AffectedBookingOut,
     RelaxHint,
+    RoomLayoutCreate,
+    RoomLayoutUpdate,
     VenueCreate,
     VenueSearchHit,
     VenueSearchQuery,
@@ -283,13 +288,13 @@ class VenueInUse(ValueError):
 
 # --- reads -------------------------------------------------------------------------------
 def list_reference_data(db: Session) -> dict[str, list[Any]]:
+    """The pick-lists of a venue's form and of the catalogue's filters. Story 8.6 AC1/AC2: the
+    layouts in the Room layouts page's order (``list_room_layouts``)."""
     return {
         "facilities": db.scalars(
             select(Facility).order_by(Facility.sort_order, Facility.name)
         ).all(),
-        "layouts": db.scalars(
-            select(RoomLayout).order_by(RoomLayout.sort_order, RoomLayout.name)
-        ).all(),
+        "layouts": list_room_layouts(db),
         "accessibility_features": db.scalars(
             select(AccessibilityFeature).order_by(
                 AccessibilityFeature.sort_order, AccessibilityFeature.name
@@ -893,7 +898,9 @@ _SCALAR_FIELDS = (
 
 
 def create_venue(db: Session, data: VenueCreate, *, actor: User) -> Venue:
-    """AC1: a venue can be created with at minimum name, location and capacity."""
+    """AC1: a venue can be created with at minimum name, location and capacity. Story 8.6 AC11:
+    a layout deleted after the check above is caught by its foreign key, and refused the same
+    way."""
     _validate_reference_codes(db, data)
     venue = Venue(
         **{f: getattr(data, f) for f in _SCALAR_FIELDS},
@@ -908,6 +915,8 @@ def create_venue(db: Session, data: VenueCreate, *, actor: User) -> Venue:
         db.rollback()
         if "uq_venues_name" in str(exc.orig):
             raise VenueNameTaken(data.name) from exc
+        if _VENUE_LAYOUTS_LAYOUT_FOREIGN_KEY in str(exc.orig):
+            _validate_reference_codes(db, data)
         raise
     record_audit(
         db,
@@ -924,7 +933,9 @@ def create_venue(db: Session, data: VenueCreate, *, actor: User) -> Venue:
 
 
 def update_venue(db: Session, venue_id: uuid.UUID, data: VenueUpdate, *, actor: User) -> Venue:
-    """AC2: existing characteristics can be edited and saved. Only supplied fields change."""
+    """AC2: existing characteristics can be edited and saved. Only supplied fields change.
+    Story 8.6 AC11: a layout deleted after the check below is caught by its foreign key, and
+    refused the same way."""
     venue = get_venue(db, venue_id)
     changes = data.model_dump(exclude_unset=True)
     _validate_reference_codes(db, data)
@@ -962,6 +973,8 @@ def update_venue(db: Session, venue_id: uuid.UUID, data: VenueUpdate, *, actor: 
         db.rollback()
         if "uq_venues_name" in str(exc.orig):
             raise VenueNameTaken(changes.get("name", venue.name)) from exc
+        if _VENUE_LAYOUTS_LAYOUT_FOREIGN_KEY in str(exc.orig):
+            _validate_reference_codes(db, data)
         raise
     after = {k: _jsonable(changes[k]) if k in changes else None for k in before}
     record_audit(
@@ -1009,6 +1022,309 @@ def delete_venue(db: Session, venue_id: uuid.UUID, *, actor: User) -> None:
     )
     db.commit()
     _delete_venue_image_files(image_urls)
+
+
+# --- room layouts (story 8.6) -------------------------------------------------------------
+ROOM_LAYOUT_NAME_MAX_LENGTH = 100
+ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH = 500
+ROOM_LAYOUT_NAME_REQUIRED_MESSAGE = "Enter the layout's name."
+ROOM_LAYOUT_NAME_TOO_LONG_MESSAGE = "A layout's name must be 100 characters or fewer."
+ROOM_LAYOUT_DESCRIPTION_REQUIRED_MESSAGE = "Enter the layout's description."
+ROOM_LAYOUT_DESCRIPTION_TOO_LONG_MESSAGE = "A layout's description must be 500 characters or fewer."
+ROOM_LAYOUT_NAME_TAKEN_MESSAGE = 'A room layout named "{name}" already exists.'
+ROOM_LAYOUT_IN_USE_MESSAGE = (
+    'You cannot delete "{name}" because {uses} use it. You can still rename it.'
+)
+ROOM_LAYOUT_GONE_MESSAGE = "The room layout {names} no longer exists. Untick it and save again."
+ROOM_LAYOUTS_GONE_MESSAGE = "The room layouts {names} no longer exist. Untick them and save again."
+
+ROOM_LAYOUT_ENTITY_TYPE = "room_layout"
+ROOM_LAYOUT_CREATED = "ROOM_LAYOUT_CREATED"
+ROOM_LAYOUT_UPDATED = "ROOM_LAYOUT_UPDATED"
+ROOM_LAYOUT_DELETED = "ROOM_LAYOUT_DELETED"
+
+# Names PostgreSQL gives the keys a layout's save or deletion can run into (migration 029).
+_ROOM_LAYOUTS_PRIMARY_KEY = "room_layouts_pkey"
+_ROOM_LAYOUTS_NAME_INDEX = "uq_room_layouts_name"
+_VENUE_LAYOUTS_LAYOUT_FOREIGN_KEY = "venue_layouts_layout_code_fkey"
+# AC8: what keeps a layout in use - each foreign key that points at it, the records it stands for
+# as a refusal names them, in this order, and the column that holds the layout's code.
+_ROOM_LAYOUT_USES = (
+    (_VENUE_LAYOUTS_LAYOUT_FOREIGN_KEY, "venues", VenueLayout.layout_code),
+    ("venue_requirements_layout_code_fkey", "venue requirements", VenueRequirement.layout_code),
+    (
+        "venue_bookings_required_layout_code_fkey",
+        "booking requests",
+        VenueBooking.required_layout_code,
+    ),
+)
+# AC1: names from A to Z as people read them, capitals and accents aside ("Élan" among the E's),
+# by ICU's root collation. The database's own (libc en_US.utf8 on Alpine) orders by character
+# code, which put "Zigzag" before "aardvark" and "Élan" after both.
+_ROOM_LAYOUT_NAME_COLLATION = "und-x-icu"
+# AC2: a code is the name in capitals, anything but letters and digits as one underscore.
+_ROOM_LAYOUT_CODE_SEPARATORS = re.compile(r"[^A-Z0-9]+")
+_ROOM_LAYOUT_CODE_MAX_LENGTH = 60
+_ROOM_LAYOUT_FALLBACK_CODE = "LAYOUT"
+
+
+def _and_join(items: list[str]) -> str:
+    """``["a", "b", "c"]`` as "a, b and c", for a sentence."""
+    if len(items) < 2:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+class RoomLayoutNotFound(LookupError):
+    pass
+
+
+class InvalidRoomLayout(ValueError):
+    """AC5/AC7: a name or description the rules refuse; the message says which rule."""
+
+
+class RoomLayoutNameTaken(ValueError):
+    """AC6/AC10: another layout has this name, ignoring capitals; ``name`` is that layout's."""
+
+    def __init__(self, name: str):
+        super().__init__(ROOM_LAYOUT_NAME_TAKEN_MESSAGE.format(name=name))
+        self.name = name
+
+
+class RoomLayoutInUse(ValueError):
+    """AC8: a layout that venues, venue requirements or booking requests use, named in
+    ``uses``."""
+
+    def __init__(self, name: str, *, uses: list[str]):
+        super().__init__(ROOM_LAYOUT_IN_USE_MESSAGE.format(name=name, uses=_and_join(uses)))
+        self.name = name
+        self.uses = uses
+
+
+class RoomLayoutGone(ValueError):
+    """AC11: a venue's save names layouts that were deleted, each by the name it had then
+    (``deleted_room_layouts``)."""
+
+    def __init__(self, names: list[str]):
+        message = ROOM_LAYOUT_GONE_MESSAGE if len(names) == 1 else ROOM_LAYOUTS_GONE_MESSAGE
+        super().__init__(message.format(names=_and_join([f'"{name}"' for name in names])))
+        self.names = names
+
+
+def list_room_layouts(db: Session) -> list[RoomLayout]:
+    """AC1: every layout, the standard ones first in their set order (``sort_order`` 10 to 70),
+    then the added ones (100) from A to Z, ignoring capitals and accents. Every pick-list offers
+    them in this order: a venue's form and the catalogue's filter (``list_reference_data``), and
+    an event's venue requirements and change requests (``events.service.list_reference_data``)."""
+    return list(
+        db.scalars(
+            select(RoomLayout).order_by(
+                RoomLayout.sort_order,
+                RoomLayout.name.collate(_ROOM_LAYOUT_NAME_COLLATION),
+                RoomLayout.code,
+            )
+        )
+    )
+
+
+def _checked_name(name: str | None) -> str:
+    """AC5: a name is required, and has at most 100 characters once its spaces are dropped."""
+    if name is None:
+        raise InvalidRoomLayout(ROOM_LAYOUT_NAME_REQUIRED_MESSAGE)
+    if len(name) > ROOM_LAYOUT_NAME_MAX_LENGTH:
+        raise InvalidRoomLayout(ROOM_LAYOUT_NAME_TOO_LONG_MESSAGE)
+    return name
+
+
+def _checked_description(description: str | None) -> str:
+    """AC7: a description is required too, and has at most 500 characters once its spaces are
+    dropped."""
+    if description is None:
+        raise InvalidRoomLayout(ROOM_LAYOUT_DESCRIPTION_REQUIRED_MESSAGE)
+    if len(description) > ROOM_LAYOUT_DESCRIPTION_MAX_LENGTH:
+        raise InvalidRoomLayout(ROOM_LAYOUT_DESCRIPTION_TOO_LONG_MESSAGE)
+    return description
+
+
+def _room_layout_codes(name: str) -> Iterator[str]:
+    """AC2: the codes a new layout called ``name`` may take, in turn: the name in capitals, its
+    accents dropped and anything but letters and digits as one underscore ("Café style" is
+    CAFE_STYLE), then that with _2, _3, ... "LAYOUT" stands in for a name with no letters or
+    digits."""
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    stem = _ROOM_LAYOUT_CODE_SEPARATORS.sub("_", plain.upper()).strip("_")
+    stem = stem[:_ROOM_LAYOUT_CODE_MAX_LENGTH].rstrip("_") or _ROOM_LAYOUT_FALLBACK_CODE
+    yield stem
+    for number in count(2):
+        yield f"{stem}_{number}"
+
+
+def _room_layout_code_used(db: Session, code: str) -> bool:
+    """AC2: whether a layout has, or once had, the code ``code``; a deleted layout's code is never
+    given to another. One statement reads both tables, so a delete landing meanwhile shows in one
+    or the other."""
+    used = select(
+        or_(
+            exists().where(RoomLayout.code == code),
+            exists().where(DeletedRoomLayout.code == code),
+        )
+    )
+    return bool(db.scalar(used))
+
+
+def _deleted_room_layouts(db: Session, codes: list[str]) -> dict[str, str]:
+    """AC11: the name each of ``codes`` had when Venue Staff deleted it, for those that were
+    deleted, from A to Z as the Room layouts page orders names."""
+    if not codes:
+        return {}
+    deleted = db.execute(
+        select(DeletedRoomLayout.code, DeletedRoomLayout.name)
+        .where(DeletedRoomLayout.code.in_(codes))
+        .order_by(DeletedRoomLayout.name.collate(_ROOM_LAYOUT_NAME_COLLATION))
+    )
+    return {code: name for code, name in deleted}
+
+
+def _name_taken(db: Session, name: str) -> RoomLayoutNameTaken:
+    """AC6: the refusal for ``name``, naming the layout that already has it."""
+    holder = db.scalar(
+        select(RoomLayout.name).where(func.lower(RoomLayout.name) == func.lower(name))
+    )
+    return RoomLayoutNameTaken(name if holder is None else holder)
+
+
+def _lock_room_layout(db: Session, code: str, *, is_deleting: bool) -> RoomLayout:
+    """AC12: the layout ``code``, locked until this change commits, so two changes to one layout
+    take turns, and one that waited on a delete finds no layout (``RoomLayoutNotFound``). A delete
+    locks the row outright, as its DELETE will. A change takes the lighter lock its UPDATE takes
+    anyway (FOR NO KEY UPDATE), so a venue, venue requirement or booking request saved with the
+    layout meanwhile, whose foreign key check only shares the row's key, does not wait for it."""
+    query = select(RoomLayout).where(RoomLayout.code == code)
+    locked = query.with_for_update() if is_deleting else query.with_for_update(key_share=True)
+    layout = db.scalar(locked)
+    if layout is None:
+        raise RoomLayoutNotFound(code)
+    return layout
+
+
+def create_room_layout(db: Session, data: RoomLayoutCreate, *, actor: User) -> RoomLayout:
+    """AC2: Venue Staff add a layout, under the first code its name makes
+    (``_room_layout_codes``) that no layout has or had (``_room_layout_code_used``); every
+    pick-list reads this table, so it is offered at once. A code taken in the meantime is refused
+    by the primary key, and the next one is tried.
+    AC5/AC7: its name and description are checked first. AC6/AC10: a name already in use,
+    ignoring capitals, is refused by uq_room_layouts_name, which also settles two Venue Staff
+    adding one name at the same moment."""
+    name = _checked_name(data.name)
+    description = _checked_description(data.description)
+    free_codes = (code for code in _room_layout_codes(name) if not _room_layout_code_used(db, code))
+    while True:
+        layout = RoomLayout(code=next(free_codes), name=name, description=description)
+        try:
+            with db.begin_nested():
+                db.add(layout)
+        except IntegrityError as exc:
+            if _ROOM_LAYOUTS_NAME_INDEX in str(exc.orig):
+                raise _name_taken(db, name) from exc
+            if _ROOM_LAYOUTS_PRIMARY_KEY not in str(exc.orig):
+                raise
+        else:
+            break
+    record_audit(
+        db,
+        actor=actor,
+        action=ROOM_LAYOUT_CREATED,
+        entity_type=ROOM_LAYOUT_ENTITY_TYPE,
+        details={"code": layout.code, "name": name, "description": description},
+        commit=False,
+    )
+    db.commit()
+    return layout
+
+
+def update_room_layout(
+    db: Session, code: str, data: RoomLayoutUpdate, *, actor: User
+) -> RoomLayout:
+    """AC3: Venue Staff change a layout's name or description; only the fields sent change. Its
+    code stays, and every page reads the name from here, so the new name shows wherever the
+    layout appears. AC12: the layout is locked first (``_lock_room_layout``), so a change to one
+    deleted meanwhile is told so whatever it sent. AC5/AC7: then the new values are checked.
+    AC6/AC10: a name already in use, ignoring capitals, is refused by uq_room_layouts_name."""
+    layout = _lock_room_layout(db, code, is_deleting=False)
+    sent = data.model_dump(exclude_unset=True)
+    wanted: dict[str, str] = {}
+    if "name" in sent:
+        wanted["name"] = _checked_name(sent["name"])
+    if "description" in sent:
+        wanted["description"] = _checked_description(sent["description"])
+    before = {
+        field: getattr(layout, field)
+        for field, value in wanted.items()
+        if getattr(layout, field) != value
+    }
+    for field in before:
+        setattr(layout, field, wanted[field])
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if _ROOM_LAYOUTS_NAME_INDEX in str(exc.orig):
+            raise _name_taken(db, wanted["name"]) from exc
+        raise
+    if before:
+        record_audit(
+            db,
+            actor=actor,
+            action=ROOM_LAYOUT_UPDATED,
+            entity_type=ROOM_LAYOUT_ENTITY_TYPE,
+            details={
+                "code": code,
+                **{field: {"from": before[field], "to": wanted[field]} for field in before},
+            },
+            commit=False,
+        )
+    db.commit()
+    return layout
+
+
+def _room_layout_uses(db: Session, code: str) -> list[str]:
+    """AC8: which records use the layout ``code`` - venues, venue requirements, booking requests
+    of any status - in the order the refusal names them."""
+    return [
+        records
+        for _key, records, column in _ROOM_LAYOUT_USES
+        if db.scalar(select(exists().where(column == code)))
+    ]
+
+
+def delete_room_layout(db: Session, code: str, *, actor: User) -> None:
+    """AC4: Venue Staff delete a layout nothing uses; every pick-list reads this table, so it is
+    offered nowhere afterwards. Its code and name are kept in deleted_room_layouts, so no layout
+    takes the code again (AC2) and a venue saved with it is told which layout went (AC11).
+    AC8: one in use is refused by the foreign keys that point at it, and the refusal names the
+    records that use it. AC12: the layout is locked first (``_lock_room_layout``)."""
+    layout = _lock_room_layout(db, code, is_deleting=True)
+    name = layout.name
+    db.delete(layout)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        fired = [records for key, records, _column in _ROOM_LAYOUT_USES if key in str(exc.orig)]
+        if not fired:
+            raise
+        # The key that fired names one use for sure, should the others have gone meanwhile.
+        raise RoomLayoutInUse(name, uses=_room_layout_uses(db, code) or fired) from exc
+    db.add(DeletedRoomLayout(code=code, name=name))
+    record_audit(
+        db,
+        actor=actor,
+        action=ROOM_LAYOUT_DELETED,
+        entity_type=ROOM_LAYOUT_ENTITY_TYPE,
+        details={"code": code, "name": name},
+        commit=False,
+    )
+    db.commit()
 
 
 # --- unavailability (story 9.4) -----------------------------------------------------------
@@ -1681,23 +1997,25 @@ def reorder_venue_images(
 
 # --- helpers -----------------------------------------------------------------------------
 def _validate_reference_codes(db: Session, data: VenueCreate | VenueUpdate) -> None:
-    checks = (
-        ("facility", Facility, getattr(data, "facilities", None)),
-        ("layout", RoomLayout, getattr(data, "layouts", None)),
-        (
-            "accessibility feature",
-            AccessibilityFeature,
-            getattr(data, "accessibility_features", None),
-        ),
-    )
-    for kind, model, items in checks:
-        if not items:
-            continue
-        wanted = {item.code for item in items}
-        known = set(db.scalars(select(model.code).where(model.code.in_(wanted))).all())
-        missing = sorted(wanted - known)
-        if missing:
-            raise UnknownReferenceCode(kind, missing)
+    """Every facility, layout and accessibility feature the venue names exists. Story 8.6 AC11:
+    a layout deleted while the venue's form was open is refused with a sentence naming it; a code
+    no layout ever had is unknown, as any other code is."""
+    facilities = getattr(data, "facilities", None) or []
+    missing = _unknown_codes(db, Facility, [item.code for item in facilities])
+    if missing:
+        raise UnknownReferenceCode("facility", missing)
+    layouts = getattr(data, "layouts", None) or []
+    missing = _unknown_codes(db, RoomLayout, [item.code for item in layouts])
+    deleted = _deleted_room_layouts(db, missing)
+    never_existed = [code for code in missing if code not in deleted]
+    if never_existed:
+        raise UnknownReferenceCode("layout", never_existed)
+    if deleted:
+        raise RoomLayoutGone(list(deleted.values()))
+    features = getattr(data, "accessibility_features", None) or []
+    missing = _unknown_codes(db, AccessibilityFeature, [item.code for item in features])
+    if missing:
+        raise UnknownReferenceCode("accessibility feature", missing)
 
 
 def _replace_characteristics(
