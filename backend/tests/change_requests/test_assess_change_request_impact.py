@@ -48,7 +48,7 @@ AC8 (fix f19.3.1, CL-171): a booking the approval keeps is flagged as oversized 
     is flagged only when the change lowers that number - a requirement's own number, or the
     attendance for a venue judged on it - and is a warning only: nothing is marked and nobody is
     told. A requirement with no number of its own is judged on the attendance, as an additional
-    venue is (CL-189, proposed: Q97 is still open with the PO, and CL-171 (4) says otherwise).
+    venue is (CL-189, a team decision over CL-171 (4), which said otherwise; Q97).
 
 Excluded, with reason:
 * How the assessment is shown, and the approval dialog showing an updated assessment before the
