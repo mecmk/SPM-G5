@@ -14,7 +14,7 @@ import {
   type Registration,
   type RegistrationEvent,
 } from '../api/registrations'
-import type { ErrorCode } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { useAuth } from '../auth/authContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { EventCardBackState } from '../components/EventCard'
@@ -56,23 +56,23 @@ interface RegistrationProblem {
 }
 
 /** What loading the page found: the event, or - story 18.1 AC10 - why there is none for this
- *  attendee, in the server's words: it is not listed, and they never registered for it. */
+ *  attendee: it is not listed and they never registered for it, or the address is no event's id. */
 interface LoadedEvent {
   event: AttendeeEvent | null
   reason: string | null
 }
 
 /** Story 18.1 AC1 / 18.2 AC1: a loader for the event that is not the one before it, so the page
- *  loads the event again after a registration or a withdrawal. A 404 is the server saying there
- *  is no page (18.1 AC10/AC11): an answer, not a failure to load, so the event is no longer shown.
+ *  loads the event again after a registration or a withdrawal. A 404, or an address that is no
+ *  event's id (a 422), is the answer that there is no page (18.1 AC10/AC11), not a failure to load.
  *  Any other failure is one, and the page keeps showing the event as it last had it. */
 function eventLoader(eventId: string): () => Promise<LoadedEvent> {
   return async () => {
     try {
       return { event: await fetchAttendeeEvent(eventId), reason: null }
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'REGISTRATION_EVENT_NOT_OPEN') {
-        return { event: null, reason: formatApiError(err) }
+      if (err instanceof ApiError && (err.status === 404 || err.status === 422)) {
+        return { event: null, reason: ERROR_REGISTRY.REGISTRATION_EVENT_NOT_OPEN.message }
       }
       throw err
     }
@@ -147,9 +147,12 @@ function isFinalRefusal(err: unknown): boolean {
  * AC6: Register and the dialog's Confirm and register are disabled while a registration is sent,
  *      so a double-click sends one.
  * AC10: an event that is neither listed nor registered for has no page: the server's 404 says it
- *      is not open for registration, as for an unknown event.
+ *      is not open for registration, as for an unknown event, and so does an address that is no
+ *      event's id.
  * AC11: a refused registration says why here, and the event is loaded again, so the page shows
- *      where it now stands - or, once it has no page, that it is not open (AC10).
+ *      where it now stands - or, once it has no page, that it is not open (AC10). A load that
+ *      fails keeps the event as the page last had it - a registration just taken (AC1) or why one
+ *      was refused - beside the failure.
  * AC5: attendees only - App.tsx guards the route, and the backend refuses everyone else.
  *
  * Story 18.2:
@@ -403,6 +406,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
         </p>
       )}
 
+      {/* AC10/AC11: once there is no page, only why is shown. A failed load keeps the event. */}
       {event !== null && (
         <>
           <div className="venue-hero">
@@ -431,7 +435,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
                   <p className="eyebrow" id="attendee-event-about-heading">
                     About this event
                   </p>
-                  <p className="attendee-event-description">{event.description}</p>
+                  <p className="attendee-event-description wrap-anywhere">{event.description}</p>
                 </section>
               )}
               {venues.length > 0 && (

@@ -1,11 +1,16 @@
-import { expect, test, type Page, type Request } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 import {
   ACCOUNTS,
   CONFIRM_AND_REGISTER,
   EVENTS,
+  MIN_TOUCH_TARGET,
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
+  expectNoSidewaysScroll,
+  openEventPage,
+  registerButton,
+  registrationSection,
   signIn,
 } from './support'
 
@@ -48,7 +53,8 @@ import {
  * place, and every other case only reads. Those three never retry: a retry could only fail on
  * what the first attempt changed, and would hide that attempt's trace. States the seed cannot
  * reach - no events at all, a failed load, a second page, an event closed mid-visit, an uploaded
- * picture - stub the calls with `page.route`, answering as the server would.
+ * picture, a reload that fails, a long link in a description - stub the calls with `page.route`,
+ * answering as the server would.
  */
 
 const UPCOMING_EVENTS_PATH = '/browse'
@@ -61,7 +67,21 @@ const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-pictured-gala.png'
 const REGISTER_API_PATH = '/registrations'
 const NOT_OPEN_MESSAGE = 'This event is not open for registration.'
 const BACK_TO_LIST = '← Upcoming events'
+const EVENT_FULL_MESSAGE = 'This event is full.'
+const UNREACHABLE_MESSAGE = 'The server could not be reached. Check your connection and try again.'
 const PHONE = { width: 390, height: 844 }
+// AC9: one unbroken word - a link pasted into the description - that must wrap on a phone.
+const LONG_LINK =
+  'https://www.connectsphere.example/events/harbourfrontjazzevening/foodstallsforthewholeevening'
+
+// AC1: each state's badge has a colour of its own, which its class names (App.css `.badge-*`).
+const OPEN_BADGE = /\bbadge-success\b/
+const REGISTERED_BADGE = /\bbadge-registered\b/
+const FULL_BADGE = /\bbadge-warning\b/
+const CLOSED_BADGE = /\bbadge-neutral\b/
+const NOT_YET_OPEN_BADGE = /\bbadge-info\b/
+// AC9: Register is the brand colour, so it stands out.
+const BRAND_BUTTON = /\bbrand\b/
 
 const JAZZ_EVENING = 'Harbourfront Jazz Evening' // open, two venues booked, a picture; only read
 const DESIGN_MASTERCLASS = 'Design Thinking Masterclass' // open; registered for once
@@ -76,25 +96,36 @@ function eventCard(page: Page, name: string) {
   return page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3, name }) })
 }
 
-/** AC9: where an event's page says where registration stands, and offers Register. */
-function registration(page: Page) {
-  return page.getByRole('region', { name: 'Registration', exact: true })
-}
-
-function registerButton(page: Page, name: string) {
-  return registration(page).getByRole('button', { name: `Register for ${name}` })
-}
-
 async function openUpcomingEvents(page: Page, account: string = ACCOUNTS.attendee) {
   await signIn(page, account)
   await page.goto(UPCOMING_EVENTS_PATH)
   await expect(page.getByRole('heading', { level: 1, name: 'Upcoming events' })).toBeVisible()
 }
 
-/** AC9: from Upcoming events, open an event's page by its card's link, its title. */
-async function openEventPage(page: Page, name: string) {
-  await eventCard(page, name).getByRole('link', { name }).click()
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+/** AC1: where registration stands shows as `label`, in that state's own colour. */
+async function expectBadge(within: Locator, label: string, colour: RegExp) {
+  const badge = within.getByText(label, { exact: true })
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveClass(colour)
+}
+
+/** The width the main column scrolls sideways by: the app scrolls inside it, so the document's
+ *  own width (expectNoSidewaysScroll) never shows a page that is too wide. */
+async function mainOverflow(page: Page): Promise<number> {
+  return page.getByRole('main').evaluate((main) => main.scrollWidth - main.clientWidth)
+}
+
+/** Answer the page's call for an event with what the server sends, changed by `change`. */
+async function changeEventCall(page: Page, change: (event: Record<string, unknown>) => object) {
+  await page.route(
+    (url) => url.pathname.startsWith(`${EVENTS_API_PATH}/`),
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, json: change(await response.json()) })
+    },
+  )
 }
 
 /** Today's date as the app writes it, on Singapore's clock. */
@@ -116,13 +147,6 @@ function escapeForRegExp(text: string): string {
 function registeredToday(before: string, after: string): RegExp {
   const days = [...new Set([before, after])].map(escapeForRegExp).join('|')
   return new RegExp(`You registered on (${days}), \\d{2}:\\d{2}`)
-}
-
-async function expectNoSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )
-  expect(overflow).toBeLessThanOrEqual(0)
 }
 
 /** A listed event as the API sends it, for a stubbed list or page. */
@@ -203,7 +227,7 @@ test('18.1 AC1: an attendee finds an open event under Upcoming events, with its 
   await expect(card).toContainText('Exhibition Foyer, Tower B, Level 1')
   await expect(card).toContainText('120 places left')
   await expect(card).toContainText('Registration closes Thu, 5 Oct 2028, 18:00')
-  await expect(card.getByText('Open', { exact: true })).toBeVisible()
+  await expectBadge(card, 'Open', OPEN_BADGE)
   // AC9: Register is on the event's page, not its card.
   await expect(card.getByRole('button')).toHaveCount(0)
 })
@@ -224,11 +248,12 @@ test("18.1 AC9: clicking anywhere on an event's card opens its page, with its de
   await expect(main).toContainText('Sat, 7 Oct 2028 · 19:00–22:00')
   await expect(main).toContainText('Grand Hall, Tower A, Level 1')
   await expect(main).toContainText('Exhibition Foyer, Tower B, Level 1')
-  const box = registration(page)
-  await expect(box.getByText('Open', { exact: true })).toBeVisible()
+  const box = registrationSection(page)
+  await expectBadge(box, 'Open', OPEN_BADGE)
   await expect(box).toContainText('120 places left')
   await expect(box).toContainText('Registration closes Thu, 5 Oct 2028, 18:00')
   await expect(registerButton(page, JAZZ_EVENING)).toBeEnabled()
+  await expect(registerButton(page, JAZZ_EVENING)).toHaveClass(BRAND_BUTTON)
 
   await page.getByRole('link', { name: BACK_TO_LIST }).click()
 
@@ -277,8 +302,8 @@ test.describe('registers for a seeded event once', () => {
       .getByRole('status')
       .filter({ hasText: `You are registered for ${DESIGN_MASTERCLASS}.` })
     await expect(confirmation).toContainText('Registered')
-    const box = registration(page)
-    await expect(box.getByText('Registered', { exact: true })).toBeVisible()
+    const box = registrationSection(page)
+    await expectBadge(box, 'Registered', REGISTERED_BADGE)
     await expect(box).toContainText(registeredToday(before, after))
     await expect(box).toContainText('59 places left')
     // No second Register; the page offers Withdraw instead (story 18.2 AC9, fix f18.2.1).
@@ -289,16 +314,66 @@ test.describe('registers for a seeded event once', () => {
     releaseReload()
 
     await page.reload()
-    await expect(box.getByText('Registered', { exact: true })).toBeVisible()
+    await expectBadge(box, 'Registered', REGISTERED_BADGE)
     await expect(box).toContainText(registeredToday(before, after))
     await expect(box).toContainText('59 places left')
 
     await page.getByRole('link', { name: BACK_TO_LIST }).click()
     const card = eventCard(page, DESIGN_MASTERCLASS)
-    await expect(card.getByText('Registered', { exact: true })).toBeVisible()
+    await expectBadge(card, 'Registered', REGISTERED_BADGE)
     await expect(card).toContainText(registeredToday(before, after))
     await expect(card).toContainText('59 places left')
   })
+})
+
+test('18.1 AC1: a registration taken stays on the page, Registered with its time, when the event cannot be read again after it', async ({
+  page,
+}) => {
+  // The registration is stubbed as taken, and the server cannot be reached for the event after
+  // it, so nothing is written: the jazz evening stays read-only.
+  let hasRegistered = false
+  await page.route(
+    (url) => url.pathname === REGISTER_API_PATH || url.pathname.startsWith(`${EVENTS_API_PATH}/`),
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'POST') {
+        hasRegistered = true
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000018101',
+            event_id: request.postDataJSON().event_id,
+            status: 'REGISTERED',
+            registered_at: new Date().toISOString(),
+            guests: [],
+          }),
+        })
+      }
+      if (hasRegistered) return route.abort('internetdisconnected')
+      return route.fallback()
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  const before = todayInSingapore()
+  await confirmRegistration(page)
+  const after = todayInSingapore()
+
+  // Once the event could not be read again, the page still says the attendee has their place.
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText(UNREACHABLE_MESSAGE)
+  await expect(page.getByRole('heading', { level: 1, name: JAZZ_EVENING })).toBeVisible()
+  const box = registrationSection(page)
+  await expectBadge(box, 'Registered', REGISTERED_BADGE)
+  await expect(box).toContainText(registeredToday(before, after))
+  await expect(box).toContainText('119 places left')
+  // No second Register; the page offers Withdraw instead (story 18.2 AC9, fix f18.2.1).
+  await expect(registerButton(page, JAZZ_EVENING)).toHaveCount(0)
+  await expect(box.getByRole('button', { name: `Withdraw from ${JAZZ_EVENING}` })).toBeEnabled()
 })
 
 // --- AC8: cover pictures -----------------------------------------------------------------------
@@ -499,19 +574,37 @@ test('18.1 AC1: at phone width the events fit without sideways scrolling', async
   await expectNoSidewaysScroll(page)
 })
 
-test("18.1 AC9: at phone width an event's page fits without sideways scrolling, and Register is a full-width button big enough for a thumb", async ({
+test("18.1 AC9: at phone width an event's page fits without sideways scrolling, even with a long link in its description, and Register is a full-width button big enough for a thumb", async ({
   page,
 }) => {
+  await changeEventCall(page, (event) => ({
+    ...event,
+    description: `${event.description} ${LONG_LINK}`,
+  }))
   await page.setViewportSize(PHONE)
-  await openUpcomingEvents(page)
+  await signIn(page, ACCOUNTS.attendee)
   await openEventPage(page, JAZZ_EVENING)
 
   const register = registerButton(page, JAZZ_EVENING)
   await expect(register).toBeVisible()
+  await expect(page.getByRole('main')).toContainText(LONG_LINK)
   await expectNoSidewaysScroll(page)
+  expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
   const button = (await register.boundingBox())!
-  expect(button.height).toBeGreaterThanOrEqual(44)
+  expect(button.height).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET)
   expect(button.width).toBeGreaterThanOrEqual(PHONE.width * 0.75)
+  expect(button.x + button.width).toBeLessThanOrEqual(PHONE.width)
+})
+
+test('18.1 AC9: an event with no description has no About section on its page', async ({
+  page,
+}) => {
+  await changeEventCall(page, (event) => ({ ...event, description: null }))
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+
+  await expect(registerButton(page, JAZZ_EVENING)).toBeVisible()
+  await expect(page.getByText('About this event')).toHaveCount(0)
 })
 
 // --- AC3: full, closed and not yet open -------------------------------------------------------
@@ -521,21 +614,23 @@ test('18.1 AC3: a full event and a closed one stay listed, and Register on their
   await openUpcomingEvents(page)
 
   const full = eventCard(page, PORTFOLIO_REVIEW)
-  await expect(full.getByText('Full', { exact: true })).toBeVisible()
+  await expectBadge(full, 'Full', FULL_BADGE)
   await expect(full).toContainText('0 places left')
   const closed = eventCard(page, WINE_APPRECIATION)
-  await expect(closed.getByText('Closed', { exact: true })).toBeVisible()
+  await expectBadge(closed, 'Closed', CLOSED_BADGE)
   await expect(closed).toContainText('Registration closed Thu, 1 Oct 2026, 18:00')
 
   await openEventPage(page, PORTFOLIO_REVIEW)
-  await expect(registration(page).getByText('Full', { exact: true })).toBeVisible()
-  await expect(registration(page)).toContainText('0 places left')
+  await expectBadge(registrationSection(page), 'Full', FULL_BADGE)
+  await expect(registrationSection(page)).toContainText('0 places left')
   await expect(registerButton(page, PORTFOLIO_REVIEW)).toBeDisabled()
 
   await page.getByRole('link', { name: BACK_TO_LIST }).click()
   await openEventPage(page, WINE_APPRECIATION)
-  await expect(registration(page).getByText('Closed', { exact: true })).toBeVisible()
-  await expect(registration(page)).toContainText('Registration closed Thu, 1 Oct 2026, 18:00')
+  await expectBadge(registrationSection(page), 'Closed', CLOSED_BADGE)
+  await expect(registrationSection(page)).toContainText(
+    'Registration closed Thu, 1 Oct 2026, 18:00',
+  )
   await expect(registerButton(page, WINE_APPRECIATION)).toBeDisabled()
 })
 
@@ -545,12 +640,12 @@ test('18.1 AC3: an event whose registration has not opened shows when it opens, 
   await openUpcomingEvents(page)
 
   const card = eventCard(page, LUNAR_NEW_YEAR_MARKET)
-  await expect(card.getByText('Not yet open', { exact: true })).toBeVisible()
+  await expectBadge(card, 'Not yet open', NOT_YET_OPEN_BADGE)
   await expect(card).toContainText('Registration opens Mon, 10 Jan 2028, 10:00')
 
   await openEventPage(page, LUNAR_NEW_YEAR_MARKET)
-  const box = registration(page)
-  await expect(box.getByText('Not yet open', { exact: true })).toBeVisible()
+  const box = registrationSection(page)
+  await expectBadge(box, 'Not yet open', NOT_YET_OPEN_BADGE)
   await expect(box).toContainText('Registration opens Mon, 10 Jan 2028, 10:00')
   await expect(box).toContainText('Registration closes Mon, 24 Jan 2028, 18:00')
   await expect(registerButton(page, LUNAR_NEW_YEAR_MARKET)).toBeDisabled()
@@ -566,9 +661,20 @@ test('18.1 AC10: the address of an event that is not open for registration says 
   await page.goto(`${UPCOMING_EVENTS_PATH}/${EVENTS.planning}`)
 
   await expect(page.getByRole('main').getByRole('alert')).toHaveText(NOT_OPEN_MESSAGE)
-  await expect(registration(page)).toHaveCount(0)
+  await expect(registrationSection(page)).toHaveCount(0)
   await page.getByRole('link', { name: BACK_TO_LIST }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Upcoming events' })).toBeVisible()
+})
+
+test("18.1 AC10: an address that is no event's id says the event is not open for registration, as for an unknown one", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.attendee)
+
+  await page.goto(`${UPCOMING_EVENTS_PATH}/not-an-event`)
+
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText(NOT_OPEN_MESSAGE)
+  await expect(registrationSection(page)).toHaveCount(0)
 })
 
 // --- AC11: an event that changes while its page is open ----------------------------------------
@@ -601,10 +707,55 @@ test('18.1 AC11: Register on an event that stopped taking registrations while it
   await confirmRegistration(page)
 
   await expect(page.getByRole('main').getByRole('alert')).toHaveText(NOT_OPEN_MESSAGE)
-  await expect(registration(page)).toHaveCount(0)
+  await expect(registrationSection(page)).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: NOT_OPEN_MESSAGE })).toContainText(
+    'Cannot register',
+  )
+})
+
+test('18.1 AC11: a refused registration still says why, with the event, when the event cannot be read again after it', async ({
+  page,
+}) => {
+  // The registration is stubbed as refused - the event filled up - and the event's reload after
+  // it as a server failure, so nothing is written: the jazz evening stays read-only.
+  let hasRefused = false
+  await page.route(
+    (url) => url.pathname === REGISTER_API_PATH || url.pathname.startsWith(`${EVENTS_API_PATH}/`),
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'POST') {
+        hasRefused = true
+        return route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({ detail: EVENT_FULL_MESSAGE }),
+        })
+      }
+      if (!hasRefused) return route.fallback()
+      return route.fulfill({
+        status: 500,
+        contentType: 'text/plain',
+        headers: corsHeaders(request),
+        body: 'Internal Server Error',
+      })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee)
+  await openEventPage(page, JAZZ_EVENING)
+
+  await registerButton(page, JAZZ_EVENING).click()
+  await confirmRegistration(page)
+
   await expect(
-    page.getByRole('status').filter({ hasText: NOT_OPEN_MESSAGE }),
-  ).toContainText('Cannot register')
+    page.getByRole('main').getByRole('alert').filter({ hasText: 'Internal Server Error' }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: JAZZ_EVENING })).toBeVisible()
+  const box = registrationSection(page)
+  await expect(box.getByRole('alert')).toHaveText(EVENT_FULL_MESSAGE)
+  await expectBadge(box, 'Open', OPEN_BADGE)
+  await expect(registerButton(page, JAZZ_EVENING)).toBeVisible()
 })
 
 // --- AC5: attendees only ------------------------------------------------------------------------
@@ -627,7 +778,7 @@ test("18.1 AC5: an organiser who opens an event's page is told it is not permitt
   await page.goto(`${UPCOMING_EVENTS_PATH}/${EVENTS.planning}`)
 
   await expect(page.getByRole('heading', { level: 1, name: 'Not permitted' })).toBeVisible()
-  await expect(registration(page)).toHaveCount(0)
+  await expect(registrationSection(page)).toHaveCount(0)
 })
 
 // --- AC6: one registration each, and one winner for the last place ----------------------------
@@ -651,7 +802,7 @@ test.describe('registers for a seeded event once', () => {
       .getByRole('button', { name: CONFIRM_AND_REGISTER, exact: true })
       .dblclick()
 
-    await expect(registration(page).getByText('Registered', { exact: true })).toBeVisible()
+    await expectBadge(registrationSection(page), 'Registered', REGISTERED_BADGE)
     await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0)
     expect(sent).toHaveLength(1)
   })
@@ -662,7 +813,7 @@ test.describe('registers for a seeded event once', () => {
   }) => {
     await openUpcomingEvents(page)
     await openEventPage(page, MENTORING_SLOT)
-    await expect(registration(page)).toContainText('1 place left')
+    await expect(registrationSection(page)).toContainText('1 place left')
 
     const otherContext = await browser.newContext({ baseURL: new URL(page.url()).origin })
     const other = await otherContext.newPage()
@@ -670,18 +821,18 @@ test.describe('registers for a seeded event once', () => {
     await openEventPage(other, MENTORING_SLOT)
     await registerButton(other, MENTORING_SLOT).click()
     await confirmRegistration(other)
-    await expect(registration(other).getByText('Registered', { exact: true })).toBeVisible()
+    await expectBadge(registrationSection(other), 'Registered', REGISTERED_BADGE)
     await otherContext.close()
 
     await registerButton(page, MENTORING_SLOT).click()
     await confirmRegistration(page)
 
-    const box = registration(page)
+    const box = registrationSection(page)
     await expect(box.getByRole('alert')).toHaveText('This event is full.')
     await expect(page.getByRole('status').filter({ hasText: 'This event is full.' })).toContainText(
       'Cannot register',
     )
-    await expect(box.getByText('Full', { exact: true })).toBeVisible()
+    await expectBadge(box, 'Full', FULL_BADGE)
     await expect(box).toContainText('0 places left')
     await expect(registerButton(page, MENTORING_SLOT)).toBeDisabled()
   })

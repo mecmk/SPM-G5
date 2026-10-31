@@ -7,6 +7,9 @@ import {
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
+  openEventPage,
+  registerButton,
+  registrationSection,
   signIn,
 } from './support'
 
@@ -49,7 +52,6 @@ import {
  * Oct 2026 (story 18.4's seed), and his registration with guests is stubbed, so nothing is written.
  */
 
-const UPCOMING_EVENTS_PATH = '/browse'
 const KITE_AFTERNOON_API_PATH = `/registrations/events/${EVENTS.kiteAfternoon}`
 const MY_REGISTRATIONS_PATH = '/registrations'
 const CHANGE_GUESTS_DIALOG = 'Change your guests'
@@ -97,18 +99,6 @@ async function addGuest(page: Page, n: number, guest: { name: string; dietary?: 
   }
 }
 
-/** 18.1 AC9: where an event's page says where registration stands, and offers Register. */
-function registration(page: Page) {
-  return page.getByRole('region', { name: 'Registration', exact: true })
-}
-
-/** 18.1 AC9: from Upcoming events, open an event's page by its card's link, its title. */
-async function openEventPage(page: Page, name: string) {
-  await page.goto(UPCOMING_EVENTS_PATH)
-  await eventCard(page, name).getByRole('link', { name }).click()
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-}
-
 /** 18.2 AC9: from My registrations, open a registration's event page by its card's link. */
 async function openRegisteredEvent(page: Page, name: string) {
   await page.goto(MY_REGISTRATIONS_PATH)
@@ -117,18 +107,18 @@ async function openRegisteredEvent(page: Page, name: string) {
 }
 
 function changeGuestsButton(page: Page, name: string) {
-  return registration(page).getByRole('button', { name: `Change guests for ${name}` })
+  return registrationSection(page).getByRole('button', { name: `Change guests for ${name}` })
 }
 
-/** Open an event's page and press Register, which opens "Confirm your details". */
+/** 18.1 AC9: open an event's page and press Register, which opens "Confirm your details". */
 async function startRegistering(page: Page, name: string) {
   await openEventPage(page, name)
-  await registration(page).getByRole('button', { name: `Register for ${name}` }).click()
+  await registerButton(page, name).click()
 }
 
 /** The places left an event's page shows, as a number. */
 async function placesLeft(page: Page): Promise<number> {
-  const text = await registration(page)
+  const text = await registrationSection(page)
     .getByText(/\d+ places? left/)
     .innerText()
   return Number(text.match(/\d+/)![0])
@@ -154,8 +144,8 @@ test('18.5 AC1/AC2/AC3/AC4: an attendee registers with two guests, who take plac
   await expect(dialog).toHaveCount(0)
 
   // AC2: the group took three of the thirty places.
-  await expect(registration(page).getByText('Registered', { exact: true })).toBeVisible()
-  await expect(registration(page)).toContainText('27 places left')
+  await expect(registrationSection(page).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(registrationSection(page)).toContainText('27 places left')
 
   // AC3: My registrations names the guests.
   await page.goto(MY_REGISTRATIONS_PATH)
@@ -209,7 +199,7 @@ test("18.5 AC3: an attendee registered alone adds a guest on the event's page, t
 }) => {
   await signIn(page, ACCOUNTS.attendee8)
   await openRegisteredEvent(page, KITE_AFTERNOON)
-  const card = registration(page)
+  const card = registrationSection(page)
   await changeGuestsButton(page, KITE_AFTERNOON).click()
 
   const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
@@ -244,9 +234,7 @@ test('18.5 AC6: after ten guests the dialog offers no more, and says why, before
   await signIn(page, ACCOUNTS.attendee7)
   await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await registration(page)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   for (let n = 1; n <= MAX_GUESTS; n++) {
@@ -269,9 +257,7 @@ test("18.5 AC1/AC6: a guest left without a name, or with only spaces, is refused
   await signIn(page, ACCOUNTS.attendee7)
   await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await registration(page)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   await addGuestButton(page).click()
@@ -295,7 +281,7 @@ test('18.5 AC3: a registration whose registration has closed offers Withdraw but
   await openRegisteredEvent(page, FOOD_TASTING_WALK)
 
   await expect(
-    registration(page).getByRole('button', { name: `Withdraw from ${FOOD_TASTING_WALK}` }),
+    registrationSection(page).getByRole('button', { name: `Withdraw from ${FOOD_TASTING_WALK}` }),
   ).toBeVisible()
   await expect(changeGuestsButton(page, FOOD_TASTING_WALK)).toHaveCount(0)
 })
@@ -343,15 +329,13 @@ test("18.5 AC2: the event's page counts the whole group at once, before the even
   await openEventPage(page, KITE_AFTERNOON)
   const before = await placesLeft(page)
 
-  await registration(page)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
   await addGuest(page, 1, RAVI)
   await addGuest(page, 2, MEI)
   await confirmRegistration(page)
 
-  await expect(registration(page).getByText('Registered', { exact: true })).toBeVisible()
-  await expect(registration(page)).toContainText(`${before - 3} places left`)
+  await expect(registrationSection(page).getByText('Registered', { exact: true })).toBeVisible()
+  await expect(registrationSection(page)).toContainText(`${before - 3} places left`)
   releaseEvent()
 })
 
@@ -377,9 +361,7 @@ test('18.5 AC2: with 2 places left the dialog allows one guest, and says why, be
   await signIn(page, ACCOUNTS.attendee7)
   await openEventPage(page, KITE_AFTERNOON)
   sent.length = 0
-  await registration(page)
-    .getByRole('button', { name: `Register for ${KITE_AFTERNOON}` })
-    .click()
+  await registerButton(page, KITE_AFTERNOON).click()
 
   const dialog = confirmDetailsDialog(page)
   await addGuest(page, 1, { name: 'Guest 1' })
@@ -548,7 +530,7 @@ test('18.5 AC7: withdrawing a registration with guests says the guests are withd
   )
   await signIn(page, ACCOUNTS.attendee8)
   await openRegisteredEvent(page, KITE_AFTERNOON)
-  await registration(page)
+  await registrationSection(page)
     .getByRole('button', { name: `Withdraw from ${KITE_AFTERNOON}` })
     .click()
 

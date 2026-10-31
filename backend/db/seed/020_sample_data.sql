@@ -1908,7 +1908,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Story 18.4: attendee profile details, and tests/e2e/attendee-profile.spec.ts. E2E specs run in
 -- parallel on one database, and a first registration happens once per attendee, so each flow
 -- that changes an attendee's details has an attendee of its own: Cara (01) has never been asked
--- for them and registers for the first time; Dion (02) changes them on Upcoming events; Esme (03)
+-- for them and registers for the first time; Dion (02) changes them on an event's page; Esme (03)
 -- changes them on My profile, and is registered for the charity quiz (07) from before; Finn (12)
 -- changes their name (CL-166: the name is editable). Every id
 -- is in the story's 0184NN block: 01-03 and 12 the attendees, 04-08 their events (Confirmed, Public,

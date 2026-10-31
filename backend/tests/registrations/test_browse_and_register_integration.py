@@ -48,14 +48,15 @@ Cover pictures (fix f18.1.1):
 AC8 Each event shows its cover picture (2.1 AC14), on its card and its page, or the placeholder
     when it has none or its picture can't be loaded.
 
-Event page (fix f18.1.2), waiting on the backlog's Change Log:
+Event page (fix f18.1.2, CL-186):
 AC9 Clicking anywhere on an event's card opens its page: its cover picture, name, description,
     date and time, each booked venue's name and location, the places left, where registration
     stands, and when registration opens and closes. Register is only on this page. A back link
     returns to Upcoming events.
 AC10 An event that is not listed (AC3, AC4) and that the attendee has never registered for has no
     page: opening one says it is not open for registration, the same as for an unknown event
-    (404). An event the attendee registered for keeps its page (18.2 AC10).
+    (404). An event the attendee registered for keeps its page (18.2 AC10): fix f18.2.1 adds
+    that, and test_view_and_withdraw_integration.py proves it.
 AC11 A registration refused because the event filled up, closed or stopped being listed while its
     page was open says why, and the page then shows where the event now stands.
 """
@@ -978,7 +979,7 @@ def test_an_event_that_is_not_listed_has_no_page(db: Session, overrides):
 def test_an_event_sent_back_to_planning_has_no_page_for_an_attendee_who_never_registered(
     db: Session,
 ):
-    """Another attendee's registration keeps the event (AC4), but gives no one else its page."""
+    """The event keeps another attendee's registration (AC4), but gives no one else its page."""
     event = _open_event(db)
     _register(db, event, _attendee(db))
     db.execute(update(Event).where(Event.id == event.id).values(status=EventStatus.PLANNING))

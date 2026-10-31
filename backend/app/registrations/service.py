@@ -414,10 +414,10 @@ def list_registration_events(
 def get_registration_event(
     db: Session, event_id: uuid.UUID, *, attendee: User, now: datetime
 ) -> RegistrationEventItem:
-    """AC9 (fix f18.1.2): one listed event as its page shows it to ``attendee`` - everything its
-    card shows (AC1), its description among them. AC10: an event that is not listed - unknown,
-    not open to attendees (AC3/AC4) or started - is not found, one answer for all, so a Private
-    event's existence is not given away."""
+    """AC9 (fix f18.1.2): one listed event as its page shows it to ``attendee`` - its entry in the
+    list (AC1), whose description the page shows and the card does not. AC10: an event that is
+    not listed - unknown, not open to attendees (AC3/AC4) or started - is not found, one answer
+    for all, so a Private event's existence is not given away."""
     row = db.execute(
         _listed_events(attendee=attendee, now=now).where(Event.id == event_id)
     ).one_or_none()
