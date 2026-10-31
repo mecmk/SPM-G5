@@ -4,6 +4,7 @@ import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import {
+  formatMinutesDuration,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   VENUE_UNAVAILABLE_LABEL,
@@ -17,12 +18,7 @@ import {
 } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
-import {
-  BOOKING_OUTCOME,
-  formatMinutesDuration,
-  OPEN_HOLD_MESSAGE,
-  VENUE_UNAVAILABLE_NOTE,
-} from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
