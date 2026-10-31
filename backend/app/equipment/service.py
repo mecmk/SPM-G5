@@ -177,14 +177,15 @@ _LIVE_TAB_STATUSES = (
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
-# Story 6.2 AC15, 17.2 AC4: kept in the queue for the record, holding nothing, so no figures.
-_RECORD_ONLY_STATUSES = frozenset(
-    {EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN}
-)
-# Story 17.2 AC6: sent to Technical Support and still holding its units.
-_WITHDRAWABLE_STATUSES = frozenset(
+# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from. Story
+# 17.2 AC6: the only items that can be withdrawn.
+WITH_TECHNICAL_SUPPORT = frozenset(
     {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
 )
+# No longer the event's, kept for Technical Support's record: cancelled by its event or a change
+# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves it as it is unless it
+# names it again. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
+KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
 # Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
 # date order, soonest first, then in the order they were recorded. AC6: a request with no recorded
 # time - sent before migration 014 - comes last whichever way requests are ordered by it.
@@ -512,7 +513,7 @@ def list_equipment_requests(
     available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
     rows = []
     for item, event in found:
-        if item.status in _RECORD_ONLY_STATUSES:
+        if item.status in KEPT_FOR_RECORD:
             rows.append(EquipmentQueueRow(item=item, event=event, available=None))
             continue
         if event.id not in available_by_event:
@@ -537,9 +538,7 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     if found is None:
         raise EquipmentRequestNotFound(item_id)
     item, event = found
-    available = (
-        None if item.status in _RECORD_ONLY_STATUSES else _available_to_accept(db, event, item)
-    )
+    available = None if item.status in KEPT_FOR_RECORD else _available_to_accept(db, event, item)
     return EquipmentQueueRow(item=item, event=event, available=available)
 
 
@@ -1024,16 +1023,8 @@ def recheck_equipment_for_new_dates(
 
 # --- story 19.2: an approved change to the event's equipment ------------------------------------
 
-# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from.
-WITH_TECHNICAL_SUPPORT = frozenset(
-    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
-)
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
 _EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
-# No longer the event's, kept for Technical Support's record: cancelled by its event or a change
-# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves it as it is unless it
-# names it again.
-KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
 # What withdrew the equipment, as Technical Support's notice opens (19.2 AC5, 6.2 AC5, f4.5.1).
 _CHANGE_WITHDREW = 'An approved change to "{event}"'
@@ -1336,7 +1327,7 @@ def withdraw_equipment_item(
     AC8/AC9 need nothing here: the safety check reads accepted items only (story 21.2)."""
     event = _event_for_change(db, event_id, actor=actor)
     item = _fresh_item_on(db, event, item_id)
-    if item.status not in _WITHDRAWABLE_STATUSES:
+    if item.status not in WITH_TECHNICAL_SUPPORT:
         raise NotWithdrawable(item)
     if item.status != data.expected_status:
         raise ItemStatusChanged(item)
