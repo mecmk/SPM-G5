@@ -101,12 +101,7 @@ import {
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
-import {
-  BOOKING_OUTCOME,
-  formatMinutesDuration,
-  OPEN_HOLD_MESSAGE,
-  VENUE_UNAVAILABLE_NOTE,
-} from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
 import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
