@@ -125,9 +125,11 @@ function AfterApproval({ children }: { children: ReactNode }) {
 }
 
 /** AC1/AC2/AC4/AC5: one venue booking - whether it is cancelled and why, a capacity warning
- *  apart from that, whether the same venue is free for the new times, and what happens next. */
+ *  apart from that, whether the same venue is free for the new times, and what happens next.
+ *  AC8: a kept venue the change leaves below half full is flagged as larger than needed. */
 function BookingRow({ booking }: { booking: BookingImpact }) {
   const warning = booking.capacity_warning
+  const oversize = booking.oversize_warning
   const hasNewTimes = booking.needed_starts_at !== null && booking.needed_ends_at !== null
   return (
     <li className="impact-item">
@@ -147,6 +149,7 @@ function BookingRow({ booking }: { booking: BookingImpact }) {
             <Pill tone="success">Kept</Pill>
           )}
           {warning !== null && <Pill tone="warning">Too small</Pill>}
+          {oversize !== null && <Pill tone="warning">Larger than needed</Pill>}
         </div>
       </div>
       <dl className="impact-facts">
@@ -162,6 +165,14 @@ function BookingRow({ booking }: { booking: BookingImpact }) {
             Needs room for {warning.people_needed}; {booking.venue_name} holds{' '}
             {warning.venue_capacity}
             {warning.layout_name === null ? '' : ` in the ${warning.layout_name} layout`}.
+          </Fact>
+        )}
+        {oversize !== null && (
+          <Fact label="Capacity">
+            Needs room for {oversize.people_needed}; {booking.venue_name} holds{' '}
+            {oversize.venue_capacity}
+            {oversize.layout_name === null ? '' : ` in the ${oversize.layout_name} layout`}, more
+            than twice that.
           </Fact>
         )}
         {hasNewTimes && (
@@ -335,7 +346,8 @@ function sentence(parts: string[]): string {
   return `${parts.join('; ')}.`
 }
 
-/** AC1: cancellations first, then capacity warnings, which never mean a cancellation. */
+/** AC1: cancellations first, then capacity warnings, which never mean a cancellation; AC8: then
+ *  venues left below half full, a warning too. */
 function bookingSummary(
   bookings: BookingImpact[],
   shortfall: CapacityShortfall | null,
@@ -345,12 +357,16 @@ function bookingSummary(
   }
   const cancelled = bookings.filter((booking) => booking.will_be_cancelled).length
   const warned = bookings.filter((booking) => booking.capacity_warning !== null).length
+  const oversized = bookings.filter((booking) => booking.oversize_warning !== null).length
   const parts: string[] = []
   if (cancelled > 0) {
     parts.push(`${counted(cancelled, 'booking')} will be cancelled on approval`)
   }
   if (warned > 0) {
     parts.push(`${counted(warned, 'venue')} too small for the people now needed`)
+  }
+  if (oversized > 0) {
+    parts.push(`${counted(oversized, 'venue')} below half full for the people now needed`)
   }
   if (shortfall !== null) {
     parts.push(
