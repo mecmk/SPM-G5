@@ -182,6 +182,9 @@ class Events:
     # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
     # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
+    # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
+    # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
+    LIGHT_SHOWCASE = _e(16201)
     # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
     # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
     LEADERSHIP_RETREAT = _e(7012)
@@ -407,6 +410,8 @@ class EquipmentItems:
 
     # Story 6.2: Events.CHARITY_RUN's four wireless microphones, sent to Technical Support, held.
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
+    # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
 
 
 class EquipmentHolds:
@@ -426,6 +431,8 @@ class EquipmentHolds:
     DEMO_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000027")
     # Story 6.2: the hold of Events.CHARITY_RUN's four wireless microphones (item 6666..62).
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
+    # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
 
 
 class EquipmentOutOfService:
