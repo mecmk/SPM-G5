@@ -16,7 +16,7 @@ import type { EquipmentItemStatus, EquipmentLine } from '../api/events'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
+import { EQUIPMENT_STATUS_LABELS, withdrawnWhenAndBy } from '../shared/equipmentStatus'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
@@ -426,8 +426,7 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="item-timing">
-                        Withdrawn {formatDateTime(item.withdrawn_at)}
-                        {item.withdrawn_by_name !== null && ` by ${item.withdrawn_by_name}`}
+                        Withdrawn {withdrawnWhenAndBy(item.withdrawn_at, item.withdrawn_by_name)}
                       </span>
                     </>
                   )}

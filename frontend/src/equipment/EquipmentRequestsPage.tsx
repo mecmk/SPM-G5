@@ -27,6 +27,7 @@ import {
   formatSchedule,
   shortReference,
 } from '../shared/format'
+import { EQUIPMENT_STATUS_LABELS, withdrawnWhenAndBy } from '../shared/equipmentStatus'
 import {
   COMMON_QUEUE_ORDERS,
   DEFAULT_QUEUE_ORDER,
@@ -52,7 +53,7 @@ const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
   { key: 'ACCEPTED', label: 'Accepted' },
   { key: 'DECLINED', label: 'Declined' },
   { key: 'CANCELLED', label: 'Cancelled' },
-  { key: 'WITHDRAWN', label: 'Withdrawn' },
+  { key: 'WITHDRAWN', label: EQUIPMENT_STATUS_LABELS.WITHDRAWN },
 ]
 
 /** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
@@ -365,15 +366,10 @@ export function EquipmentRequestsPage() {
                     </div>
                   )}
 
-                  {entry.status === 'WITHDRAWN' && (
+                  {entry.withdrawn_at !== null && (
                     <div className="subtle-block">
                       <p className="fact-label">{WITHDRAWN_AT_LABEL}</p>
-                      <p>
-                        {entry.withdrawn_at === null
-                          ? NOT_RECORDED
-                          : formatDateTime(entry.withdrawn_at)}
-                        {entry.withdrawn_by_name !== null && ` by ${entry.withdrawn_by_name}`}
-                      </p>
+                      <p>{withdrawnWhenAndBy(entry.withdrawn_at, entry.withdrawn_by_name)}</p>
                     </div>
                   )}
 

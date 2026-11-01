@@ -18,6 +18,7 @@ import {
   formatDateTime,
   formatSchedule,
 } from '../shared/format'
+import { withdrawnWhenAndBy } from '../shared/equipmentStatus'
 import { queueBackPath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
@@ -138,12 +139,11 @@ export function EquipmentRequestDetailPage() {
               {entry.cancelled_at === null ? NOT_RECORDED : formatDateTime(entry.cancelled_at)}
             </p>
           )}
-          {entry.status === 'WITHDRAWN' && (
+          {entry.withdrawn_at !== null && (
             <p className="subtle-block">
               <span className="fact-label">{WITHDRAWN_AT_LABEL}</span>
               <br />
-              {entry.withdrawn_at === null ? NOT_RECORDED : formatDateTime(entry.withdrawn_at)}
-              {entry.withdrawn_by_name !== null && ` by ${entry.withdrawn_by_name}`}
+              {withdrawnWhenAndBy(entry.withdrawn_at, entry.withdrawn_by_name)}
             </p>
           )}
 

@@ -1,4 +1,5 @@
 import type { EquipmentItemStatus } from '../api/events'
+import { formatDateTime } from './format'
 
 /** Story 15.1 AC1: how each item status reads on the event page, and story 19.3 in a change
  *  request's impact. Story 17.1 AC1/AC4: an accepted item is reserved, and one cancelled with its
@@ -18,3 +19,11 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
  *  was sent, or withdrawn by the coordinator - and no longer the event's. Mirrors the backend's
  *  `KEPT_FOR_RECORD` (backend/app/equipment/service.py). */
 export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']
+
+/** Story 17.2 AC3/AC4: when an item was withdrawn and by whom, as the event page and Technical
+ *  Support's queue both show it. */
+export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string | null): string {
+  return withdrawnByName === null
+    ? formatDateTime(withdrawnAt)
+    : `${formatDateTime(withdrawnAt)} by ${withdrawnByName}`
+}
