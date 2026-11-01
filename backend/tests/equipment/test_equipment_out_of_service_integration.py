@@ -1601,6 +1601,9 @@ _EVENT_LOCKS = {
     "change-decision": lambda db, event: events_service.get_event_for_update(
         db, event.id, viewer=event.assigned_coordinator
     ),
+    "cancellation": lambda db, event: events_service.lock_own_event(
+        db, event.id, actor=event.organiser
+    ),
 }
 
 

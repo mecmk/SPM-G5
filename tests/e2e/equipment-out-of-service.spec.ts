@@ -351,7 +351,7 @@ test('16.2 AC3: a missing quantity or start, a quantity of 0 or one too large to
   ).toBeVisible()
   await expect(fields.getByLabel('From')).toBeFocused()
 
-  // A number too long to hold exactly would be sent as 1e+25, which the server cannot read.
+  // A number too long to hold exactly would be sent as 1e+24, which the server cannot read.
   await fields.getByLabel('Units').fill(`1${'0'.repeat(24)}`)
   await fields.getByLabel('From').fill(inFuture(1500))
   await fields.getByLabel('Until').fill(inFuture(1501))
@@ -361,7 +361,7 @@ test('16.2 AC3: a missing quantity or start, a quantity of 0 or one too large to
   expect(sent).toHaveLength(0)
 })
 
-test('16.2 AC3: a year of five digits, or an Until left half typed, is refused before anything is sent', async ({
+test('16.2 AC3: a year of five digits, or a date left half typed, on either date is refused before anything is sent', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
@@ -382,6 +382,19 @@ test('16.2 AC3: a year of five digits, or an Until left half typed, is refused b
   await save.click()
   await expect(fields.getByRole('alert').filter({ hasText: DATE_INCOMPLETE_MESSAGE })).toBeVisible()
   await expect(fields.getByLabel('Until')).toBeFocused()
+
+  await fields.getByLabel('Until').fill('20311-03-04T09:00')
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: DATE_INVALID_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel('Until')).toBeFocused()
+
+  await fields.getByLabel('Until').fill('')
+  await fields.getByLabel('From').fill('')
+  await fields.getByLabel('From').focus()
+  await page.keyboard.type('0310')
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: DATE_INCOMPLETE_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel('From')).toBeFocused()
   expect(sent).toHaveLength(0)
 })
 
