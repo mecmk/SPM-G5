@@ -1275,6 +1275,7 @@ export function EventDetailPage() {
           equipment={event.equipment}
           canChange={canChangeEquipment}
           isFlagged={flagged.includes('EQUIPMENT')}
+          canSeeShortages={can(PERMISSIONS.EQUIPMENT_READ)}
           onChanged={reloadEvent}
         />
 
