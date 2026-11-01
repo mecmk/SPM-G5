@@ -150,7 +150,8 @@ STATUS_CHANGED_MESSAGE = "This equipment item is now {status}. Check it before y
 _OPEN_EVENT_STATUSES = frozenset(
     {EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED, EventStatus.PLANNING}
 )
-# AC2/AC7: the items the coordinator may still edit or remove.
+# AC2/AC7: the items the coordinator may still edit. Each can be removed too, but a Pending one
+# (17.2 AC2), which is withdrawn instead.
 _EDITABLE_ITEM_STATUSES = frozenset(
     {
         EquipmentRequestStatus.REQUESTED,
@@ -158,7 +159,8 @@ _EDITABLE_ITEM_STATUSES = frozenset(
         EquipmentRequestStatus.UNAVAILABLE,
     }
 )
-# AC6: an item in one of these takes up its type on the event; a declined or cancelled one does not.
+# AC6: an item in one of these takes up its type on the event; a declined, cancelled or withdrawn
+# one (17.2 AC3) does not.
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
@@ -1303,19 +1305,6 @@ def release_for_rejected_event(
 # --- story 17.2: the coordinator withdraws an item they no longer need ----------------------------
 
 
-def _fresh_item_on(db: Session, event: Event, item_id: uuid.UUID) -> EventEquipmentRequest:
-    """AC11: the item on ``event`` as it stands now, so a decision saved while this withdrawal
-    waited on the event's lock is seen."""
-    item = db.scalar(
-        select(EventEquipmentRequest)
-        .where(EventEquipmentRequest.id == item_id, EventEquipmentRequest.event_id == event.id)
-        .execution_options(populate_existing=True)
-    )
-    if item is None:
-        raise EquipmentItemNotFound(item_id)
-    return item
-
-
 def withdraw_equipment_item(
     db: Session,
     event_id: uuid.UUID,
@@ -1333,7 +1322,10 @@ def withdraw_equipment_item(
     the coordinator saw, so whichever is saved first wins and the other is told the status now.
     AC8/AC9 need nothing here: the safety check reads accepted items only (story 21.2)."""
     event = _event_for_change(db, event_id, actor=actor)
-    item = _fresh_item_on(db, event, item_id)
+    # Read only once the event is locked, so a decision saved while this waited is seen (AC11).
+    item = db.get(EventEquipmentRequest, item_id)
+    if item is None or item.event_id != event.id:
+        raise EquipmentItemNotFound(item_id)
     if item.status not in WITH_TECHNICAL_SUPPORT:
         raise NotWithdrawable(item)
     if item.status != data.expected_status:

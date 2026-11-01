@@ -179,7 +179,7 @@ def _withdraw(client, item: EventEquipmentRequest, *, expected_status: str | Non
     one it has."""
     return client.post(
         _withdrawal_path(item.event_id, item.id),
-        json={"expected_status": expected_status or item.status},
+        json={"expected_status": item.status if expected_status is None else expected_status},
     )
 
 
@@ -282,14 +282,12 @@ def test_a_pending_item_cannot_be_deleted_and_must_be_withdrawn(coordinator_clie
 
 # --- AC3: kept on the event page, no longer counted -----------------------------------------------
 @pytest.mark.story("17.2", ac=3)
-@pytest.mark.story("17.2", ac=10)
-def test_a_withdrawn_item_stays_listed_with_who_withdrew_it_and_when(login_as, db: Session):
+def test_a_withdrawn_item_stays_listed_with_who_withdrew_it_and_when(coordinator_client, db):
     item = _sent(db)
 
-    assert _withdraw(login_as(Users.COORDINATOR), item).status_code == 201
+    assert _withdraw(coordinator_client, item).status_code == 201
 
-    organiser = login_as(Users.ORGANISER)
-    [line] = organiser.get(f"/events/{item.event_id}").json()["equipment"]
+    [line] = coordinator_client.get(f"/events/{item.event_id}").json()["equipment"]
     assert line["id"] == str(item.id)
     assert line["status"] == WITHDRAWN
     assert line["withdrawn_by_name"] == Users.COORDINATOR.full_name
