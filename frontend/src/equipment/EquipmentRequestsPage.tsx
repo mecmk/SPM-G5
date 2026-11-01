@@ -286,7 +286,7 @@ export function EquipmentRequestsPage() {
           )}
 
           {!isStale && queue.items.length > 0 && (
-            <ul className="stack">
+            <ul className="stack queue-list">
               {queue.items.map((entry) => (
                 <li key={entry.id} className="card stack">
                   <div className="item-card-header">
