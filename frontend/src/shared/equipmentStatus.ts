@@ -17,7 +17,7 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
 
 /** Story 19.2 AC5, 17.2 AC3: an item kept only for Technical Support's record - cancelled after it
  *  was sent, or withdrawn by the coordinator - and no longer the event's. Mirrors the backend's
- *  `KEPT_FOR_RECORD` (backend/app/equipment/service.py). */
+ *  `KEPT_FOR_RECORD` (backend/app/events/service.py). */
 export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']
 
 /** Story 17.2 AC3, 15.1 AC6 (fix f15.1.1): items a correction leaves alone - those kept only for
@@ -34,4 +34,10 @@ export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string 
   return withdrawnByName === null
     ? formatDateTime(withdrawnAt)
     : `${formatDateTime(withdrawnAt)} by ${withdrawnByName}`
+}
+
+/** Story 16.2 AC4: the mark on an event's item that units out of service leave short, as its
+ *  coordinator reads it on the event's page. */
+export function describeItemShort(unitsShort: number, quantity: number): string {
+  return `Short: ${unitsShort} of ${quantity} out of service`
 }

@@ -1,6 +1,5 @@
 -- =====================================================================
 -- Migration 033 - story 17.2: the assigned coordinator withdraws equipment they no longer need.
--- (033: an open PR adds a 032.)
 --
 -- 1. An item sent to Technical Support - Pending or Accepted - is withdrawn rather than deleted,
 --    so their record keeps it (AC2, AC4): the status gains WITHDRAWN.

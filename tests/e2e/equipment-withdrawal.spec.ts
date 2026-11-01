@@ -16,12 +16,14 @@
  * AC11 Technical Support accept an item while its Withdraw dialog is open: the dialog says it is
  *     now accepted, offers only Close, and the page shows it Accepted. The race itself and a
  *     double-click are backend cases.
+ * AC2/AC3 Edit event: it offers no Remove on a sent item, locks an accepted one, and leaves a
+ *     withdrawn one out, so the type requested again can be corrected.
  * AC6 (which statuses can be withdrawn), AC8/AC9 (the safety check) and the API's refusals are
  * backend cases: backend/tests/equipment/test_withdraw_equipment.py.
  *
  * The riverside summit (EVENTS.riversideSummit) is this spec's own: each test withdraws a
  * different item on it, the accepted speakers or the pending microphones, so the tests can run
- * in parallel. The AC11 test submits a request of its own.
+ * in parallel. The AC11 test and the two Edit event tests each submit a request of their own.
  */
 import { expect, test, type Page } from '@playwright/test'
 import {
@@ -179,4 +181,106 @@ test('17.2 AC11: Technical Support accept an item while its Withdraw dialog is o
   await expect(dialog.getByRole('button', { name: 'Withdraw' })).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(laptop).toContainText('Accepted (reserved)')
+})
+
+async function addLaptop(page: Page) {
+  const addForm = equipmentSection(page).getByRole('form', { name: 'Add equipment' })
+  await addForm.getByLabel('Equipment type').selectOption('LAPTOP')
+  await addForm.getByLabel('Quantity').fill('1')
+  await addForm.getByRole('button', { name: 'Add item' }).click()
+}
+
+/** A request under review, assigned to Chloe, with one laptop sent to Technical Support. */
+async function sentLaptop(page: Page, name: string, days: number) {
+  await signIn(page, ACCOUNTS.organiser)
+  const eventId = await createAndSubmitRequest(page, name, days)
+  await page.goto(`/events/${eventId}`)
+  await assignByLead(page)
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${eventId}`)
+  await addLaptop(page)
+  await equipmentSection(page).getByRole('button', { name: 'Submit to Technical Support' }).click()
+  await expect(item(page, LAPTOP)).toContainText('Pending')
+  return eventId
+}
+
+async function saveCorrection(page: Page) {
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'PATCH' && response.ok()),
+    page.getByRole('button', { name: 'Save changes' }).click(),
+  ])
+}
+
+test('17.2 AC3: a withdrawn item stays out of Edit event, and the type requested again can be corrected', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const eventId = await sentLaptop(page, uniqueName('Corrected after withdrawing'), 530)
+
+  await item(page, LAPTOP)
+    .getByRole('button', { name: `Withdraw ${LAPTOP}` })
+    .click()
+  await page
+    .getByRole('dialog', { name: 'Withdraw this equipment?' })
+    .getByRole('button', { name: 'Withdraw' })
+    .click()
+  await expect(item(page, LAPTOP)).toContainText('Withdrawn')
+  await addLaptop(page)
+  await expect(item(page, LAPTOP)).toHaveCount(2)
+
+  await page.getByRole('link', { name: 'Edit event' }).click()
+  await expect(page.getByLabel('Description')).toBeVisible()
+  await expect(page.getByRole('group', { name: /^Equipment item/ })).toHaveCount(1)
+  await page.getByLabel('Description').fill('Corrected beside a withdrawn item.')
+  await saveCorrection(page)
+
+  await page.goto(`/events/${eventId}`)
+  await expect(item(page, LAPTOP)).toHaveCount(2)
+})
+
+test('17.2 AC2: Edit event offers no Remove on a sent item, and locks an accepted one', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000)
+  const name = uniqueName('Sent item in the form')
+  const eventId = await sentLaptop(page, name, 550)
+
+  await page.getByRole('link', { name: 'Edit event' }).click()
+  const row = page.getByRole('group', { name: 'Equipment item 1' })
+  await expect(row.getByLabel('Quantity')).toBeEnabled()
+  await expect(row.getByLabel('Equipment type')).toBeDisabled()
+  await expect(row.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+  await expect(row).toContainText('withdraw it on the event page')
+
+  const elsewhere = await browser.newContext({ baseURL: testInfo.project.use.baseURL })
+  const tech = await elsewhere.newPage()
+  await signIn(tech, ACCOUNTS.techSupport)
+  await tech.goto(QUEUE_PATH)
+  await tech
+    .getByRole('listitem')
+    .filter({ hasText: name })
+    .getByRole('button', { name: 'Accept' })
+    .click()
+  const accept = tech.getByRole('dialog', { name: 'Accept this request?' })
+  await accept.getByRole('button', { name: 'Accept' }).click()
+  await expect(accept).not.toBeVisible()
+
+  // AC10: the hint is for the one who can withdraw, not the organiser reading the form.
+  await tech.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(tech, ACCOUNTS.organiser)
+  await tech.goto(`/events/${eventId}/edit`)
+  const readOnly = tech.getByRole('group', { name: 'Equipment item 1' })
+  await expect(readOnly.getByLabel('Quantity')).toBeDisabled()
+  await expect(readOnly).not.toContainText('withdraw it on the event page')
+  await elsewhere.close()
+
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('link', { name: 'Edit event' }).click()
+  await expect(row.getByLabel('Quantity')).toBeDisabled()
+  await page.getByLabel('Description').fill('Corrected beside an accepted item.')
+  await saveCorrection(page)
+  await page.goto(`/events/${eventId}`)
+  await expect(item(page, LAPTOP)).toContainText('Accepted (reserved)')
 })

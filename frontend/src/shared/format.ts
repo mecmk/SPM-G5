@@ -99,6 +99,14 @@ export function inputToInstant(inputValue: string): string {
   return `${inputValue}:00${SINGAPORE_UTC_OFFSET}`
 }
 
+const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+
+/** Story 16.2 AC3, and 2.1's dates: whether the server can read a `datetime-local` value as a
+ *  date. A picker can hold a year of five or six digits, which the server cannot. */
+export function isReadableDateTime(inputValue: string): boolean {
+  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
+}
+
 /** The current moment as a Singapore `datetime-local` value, e.g. for a picker's `min`. */
 export function nowAsInput(): string {
   return instantToInput(new Date().toISOString())

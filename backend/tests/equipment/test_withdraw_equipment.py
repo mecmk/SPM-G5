@@ -11,7 +11,8 @@ AC2  An item sent to Technical Support and still awaiting their decision (Pendin
      yet sent are still simply removed (15.1 AC2).
 AC3  A withdrawn item stays on the event page as Withdrawn, with who withdrew it and when. It no
      longer counts towards the event's equipment, and the coordinator can request that equipment
-     type again (15.1).
+     type again (15.1). An approved change request (19.2) that names that type leaves the item
+     Withdrawn and adds the line as a new item (CL-196).
 AC4  Technical Support are notified of each withdrawal, naming the event, the equipment and the
      quantity. In their queue the item shows as Withdrawn, read-only, with no Accept or Decline.
 AC5  Equipment can be withdrawn while the event is Under Review, Clarification Requested or
@@ -43,7 +44,7 @@ while it was open (AC11) are there too; the refusal of a direct request is here.
 
 Every case uses a fresh equipment type (``make_equipment_type``), so a test owns its whole stock,
 on factory events dated November 2027, clear of every seeded hold. The exceptions are the 7.2
-corrections around a withdrawn item, which submit a real request for the seeded laptops, as
+corrections around a withdrawn or sent item, which submit a real request for the seeded laptops, as
 tests/events/test_correct_event_under_review.py does, and borrow its helpers.
 """
 
@@ -79,6 +80,7 @@ from tests.events.test_correct_event_under_review import (
     _correct,
     _equipment,
     _held,
+    _holds,
     _moved_to,
     _period,
     _read,
@@ -429,6 +431,165 @@ def test_the_type_requested_again_can_still_be_corrected(login_as, db: Session):
         "REQUESTED",
         WITHDRAWN,
     ]
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_correction_beside_a_withdrawn_item_leaves_the_other_holds_alone(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(210))
+    coordinator = login_as(Users.COORDINATOR)
+    added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
+    assert added.status_code == 201, added.text
+    event = _read(coordinator, event["id"])
+    before = _holds(db, event["id"])
+    line = {**_equipment("LAPTOP", 1), "id": added.json()["id"]}
+
+    response = _correct(coordinator, event, description="Clearer agenda.", equipment=[line])
+
+    assert response.status_code == 200, response.text
+    assert _holds(db, event["id"]) == before
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_the_change_history_leaves_out_a_withdrawn_item(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(150))
+    coordinator = login_as(Users.COORDINATOR)
+
+    response = _correct(coordinator, event, equipment=[_equipment("WIRELESS_MIC", 1)])
+
+    assert response.status_code == 200, response.text
+    changes = coordinator.get(f"/events/{event['id']}/changes").json()
+    [change] = [row for row in changes if row["field"] == "equipment"]
+    assert change["old_value"] == []
+    assert [line["equipment_type_code"] for line in change["new_value"]] == ["WIRELESS_MIC"]
+
+
+def _sent_line(login_as, db: Session, period, *, is_accepted: bool) -> tuple[dict, dict]:
+    """A submitted event with one laptop line sent to Technical Support, as the coordinator reads
+    it, and that line."""
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 2))
+    coordinator = login_as(Users.COORDINATOR)
+    assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
+    [line] = _read(coordinator, event["id"])["equipment"]
+    if is_accepted:
+        decided = login_as(Users.TECH_SUPPORT).post(
+            f"/equipment-requests/{line['id']}/decision", json={"outcome": ACCEPTED}
+        )
+        assert decided.status_code == 201, decided.text
+    event = _read(coordinator, event["id"])
+    return event, event["equipment"][0]
+
+
+@pytest.mark.story("17.2", ac=2)
+@pytest.mark.parametrize("is_accepted", [False, True], ids=[PENDING, ACCEPTED])
+def test_a_correction_cannot_drop_an_item_sent_to_technical_support(
+    login_as, db: Session, is_accepted
+):
+    period = _period(160)
+    event, line = _sent_line(login_as, db, period, is_accepted=is_accepted)
+
+    response = _correct(login_as(Users.COORDINATOR), event, equipment=[])
+
+    assert response.status_code == 422, response.text
+    assert "withdraw it instead" in response.json()["detail"]
+    [kept] = _read(login_as(Users.COORDINATOR), event["id"])["equipment"]
+    assert (kept["id"], kept["status"]) == (line["id"], line["status"])
+    assert _held(db, event["id"]) == {("LAPTOP", 2, period[0], period[1])}
+
+
+@pytest.mark.story("7.2", ac=4)
+@pytest.mark.parametrize("is_accepted", [False, True], ids=[PENDING, ACCEPTED])
+def test_a_correction_cannot_swap_a_sent_item_for_another_type(login_as, db: Session, is_accepted):
+    period = _period(165)
+    event, line = _sent_line(login_as, db, period, is_accepted=is_accepted)
+    coordinator = login_as(Users.COORDINATOR)
+
+    response = _correct(
+        coordinator,
+        event,
+        equipment=[{"id": line["id"], "equipment_type_code": "WIRELESS_MIC", "quantity": 2}],
+    )
+
+    assert response.status_code == 422, response.text
+    assert "withdraw it instead" in response.json()["detail"]
+    [kept] = _read(coordinator, event["id"])["equipment"]
+    assert (kept["equipment_type_code"], kept["status"]) == ("LAPTOP", line["status"])
+    assert _held(db, event["id"]) == {("LAPTOP", 2, period[0], period[1])}
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_correction_can_still_change_the_type_of_an_item_not_yet_sent(login_as, db: Session):
+    period = _period(175)
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 2))
+    [line] = event["equipment"]
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        equipment=[{"id": line["id"], "equipment_type_code": "WIRELESS_MIC", "quantity": 2}],
+    )
+
+    assert response.status_code == 200, response.text
+    assert _held(db, event["id"]) == {("WIRELESS_MIC", 2, period[0], period[1])}
+
+
+@pytest.mark.story("7.2", ac=4)
+@pytest.mark.parametrize(
+    "change", [{"quantity": 4}, {"technical_notes": "Bring spares."}], ids=["quantity", "notes"]
+)
+def test_a_correction_cannot_change_an_accepted_item(login_as, db: Session, change):
+    event, line = _sent_line(login_as, db, _period(170), is_accepted=True)
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        equipment=[{"id": line["id"], "equipment_type_code": "LAPTOP", "quantity": 2, **change}],
+    )
+
+    assert response.status_code == 422, response.text
+    assert "can no longer be changed" in response.json()["detail"]
+    [kept] = _read(login_as(Users.COORDINATOR), event["id"])["equipment"]
+    assert (kept["quantity"], kept["technical_notes"], kept["status"]) == (2, None, ACCEPTED)
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_correction_that_sends_a_sent_item_back_unchanged_still_saves(login_as, db: Session):
+    event, line = _sent_line(login_as, db, _period(180), is_accepted=True)
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        name=f"{event['name']} z",
+        equipment=[{"id": line["id"], "equipment_type_code": "LAPTOP", "quantity": 2}],
+    )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("7.2", ac=7)
+@pytest.mark.parametrize("is_accepted", [False, True], ids=[PENDING, ACCEPTED])
+def test_moving_the_dates_moves_the_hold_of_a_sent_item(login_as, db: Session, is_accepted):
+    event, _ = _sent_line(login_as, db, _period(220), is_accepted=is_accepted)
+    new = _period(230)
+
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, new))
+
+    assert response.status_code == 200, response.text
+    assert _held(db, event["id"]) == {("LAPTOP", 2, new[0], new[1])}
+
+
+@pytest.mark.story("15.1", ac=2)
+def test_a_correction_can_still_edit_a_pending_item(login_as, db: Session):
+    period = _period(190)
+    event, line = _sent_line(login_as, db, period, is_accepted=False)
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        equipment=[{"id": line["id"], "equipment_type_code": "LAPTOP", "quantity": 3}],
+    )
+
+    assert response.status_code == 200, response.text
+    assert _held(db, event["id"]) == {("LAPTOP", 3, period[0], period[1])}
 
 
 def _raise_change(login_as, item: EventEquipmentRequest, kit: EquipmentType) -> str:

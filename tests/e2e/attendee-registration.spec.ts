@@ -4,10 +4,12 @@ import {
   CONFIRM_AND_REGISTER,
   EVENTS,
   MIN_TOUCH_TARGET,
+  changeEventPage,
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
   expectNoSidewaysScroll,
+  mainOverflow,
   openEventPage,
   registerButton,
   registrationSection,
@@ -109,25 +111,6 @@ async function expectBadge(within: Locator, label: string, colour: RegExp) {
   await expect(badge).toHaveClass(colour)
 }
 
-/** The width the main column scrolls sideways by: the app scrolls inside it, so the document's
- *  own width (expectNoSidewaysScroll) never shows a page that is too wide. */
-async function mainOverflow(page: Page): Promise<number> {
-  return page.getByRole('main').evaluate((main) => main.scrollWidth - main.clientWidth)
-}
-
-/** Answer the page's call for an event with what the server sends, changed by `change`. */
-async function changeEventCall(page: Page, change: (event: Record<string, unknown>) => object) {
-  await page.route(
-    (url) => url.pathname.startsWith(`${EVENTS_API_PATH}/`),
-    async (route) => {
-      const request: Request = route.request()
-      if (request.resourceType() !== 'fetch') return route.fallback()
-      const response = await route.fetch()
-      return route.fulfill({ response, json: change(await response.json()) })
-    },
-  )
-}
-
 /** Today's date as the app writes it, on Singapore's clock. */
 function todayInSingapore(): string {
   return new Date().toLocaleDateString('en-SG', {
@@ -165,6 +148,23 @@ function listedEvent(name: string, overrides: Record<string, unknown> = {}) {
     registered_at: null,
     cover_image_url: null,
     ...overrides,
+  }
+}
+
+/** AC9: an event's page as the API sends it for a listed event the attendee never registered for:
+ *  the event, what its card shows, and no registration of theirs (18.2's fix f18.2.1). */
+function eventPage(listed: ReturnType<typeof listedEvent>) {
+  const { id, name, description, cover_image_url, starts_at, ends_at, venues } = listed
+  return {
+    id,
+    name,
+    description,
+    cover_image_url,
+    starts_at,
+    ends_at,
+    venues,
+    listing: listed,
+    registration: null,
   }
 }
 
@@ -289,7 +289,11 @@ test.describe('registers for a seeded event once', () => {
     await expectBadge(box, 'Registered', REGISTERED_BADGE)
     await expect(box).toContainText(registeredToday(before, after))
     await expect(box).toContainText('59 places left')
-    await expect(box.getByRole('button')).toHaveCount(0)
+    // No second Register; the page offers Withdraw instead (story 18.2 AC9, fix f18.2.1).
+    await expect(registerButton(page, DESIGN_MASTERCLASS)).toHaveCount(0)
+    await expect(
+      box.getByRole('button', { name: `Withdraw from ${DESIGN_MASTERCLASS}` }),
+    ).toBeEnabled()
     releaseReload()
 
     await page.reload()
@@ -350,7 +354,9 @@ test('18.1 AC1: a registration taken stays on the page, Registered with its time
   await expectBadge(box, 'Registered', REGISTERED_BADGE)
   await expect(box).toContainText(registeredToday(before, after))
   await expect(box).toContainText('119 places left')
-  await expect(box.getByRole('button')).toHaveCount(0)
+  // No second Register; the page offers Withdraw instead (story 18.2 AC9, fix f18.2.1).
+  await expect(registerButton(page, JAZZ_EVENING)).toHaveCount(0)
+  await expect(box.getByRole('button', { name: `Withdraw from ${JAZZ_EVENING}` })).toBeEnabled()
 })
 
 // --- AC8: cover pictures -----------------------------------------------------------------------
@@ -420,7 +426,7 @@ test("18.1 AC8: on an event's page, an uploaded picture is asked of the API, one
         status: 200,
         contentType: 'application/json',
         headers: corsHeaders(request),
-        body: JSON.stringify(id === pictured.id ? pictured : plain),
+        body: JSON.stringify(eventPage(id === pictured.id ? pictured : plain)),
       })
     },
   )
@@ -554,7 +560,7 @@ test('18.1 AC1: at phone width the events fit without sideways scrolling', async
 test("18.1 AC9: at phone width an event's page fits without sideways scrolling, even with a long link in its description, and Register is a full-width button big enough for a thumb", async ({
   page,
 }) => {
-  await changeEventCall(page, (event) => ({
+  await changeEventPage(page, (event) => ({
     ...event,
     description: `${event.description} ${LONG_LINK}`,
   }))
@@ -576,7 +582,7 @@ test("18.1 AC9: at phone width an event's page fits without sideways scrolling, 
 test('18.1 AC9: an event with no description has no About section on its page', async ({
   page,
 }) => {
-  await changeEventCall(page, (event) => ({ ...event, description: null }))
+  await changeEventPage(page, (event) => ({ ...event, description: null }))
   await signIn(page, ACCOUNTS.attendee)
   await openEventPage(page, JAZZ_EVENING)
 
