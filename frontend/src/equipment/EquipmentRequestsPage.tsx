@@ -44,7 +44,7 @@ type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 /** Story 15.2 AC3: the queue's tabs, plus All (a team request beyond the AC), in the order of
  * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. Story 6.2 AC15:
  * Cancelled, read-only, for requests whose event was cancelled after they were sent. Story 15.2.1
- * AC1: each tab's hint, the line under the tab strip saying what it holds. */
+ * AC1: each tab's hint, the page's subtitle while it is open, saying what it holds. */
 const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string; hint: string }[] = [
   { key: 'ALL', label: 'All', hint: 'Every request sent to Technical Support, in any status.' },
   {
@@ -162,7 +162,7 @@ interface OpenDecision {
  * cancelled; their cards leave out what is available, since nothing is held for them any more.
  * AC16: such a card says when it was cancelled.
  *
- * Story 15.2.1 AC1: a line under the tabs says what the selected tab holds.
+ * Story 15.2.1 AC1: the subtitle under the page title says what the selected tab holds.
  *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, equipment type and Requested by, orders the tab and counts each tab's matches. AC6:
@@ -243,10 +243,7 @@ export function EquipmentRequestsPage() {
 
   return (
     <div className="page page-wide">
-      <PageHeader
-        title={PAGE_TITLE}
-        subtitle="Equipment requests sent to Technical Support, with what is available for each."
-      />
+      <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
       {error && (
         <p role="alert" className="error">
@@ -258,7 +255,6 @@ export function EquipmentRequestsPage() {
       {queue !== null && (
         <div className="stack">
           <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
-          <p className="tab-hint">{tabHint}</p>
 
           <QueueSearchBar
             search={view.search}

@@ -65,9 +65,9 @@
  * case: backend/tests/bookings/test_booking_decided_at.py.
  *
  * Story 15.2.1 - fe: say what each tab holds.
- * AC2 the booking queue gets the same line under its tabs as the equipment queue (AC1, in
- *     equipment-queue.spec.ts): Expired and Cancelled say why a booking ended up there. Purely
- *     client-side text, so there is no backend case.
+ * AC2 the booking queue's subtitle says what the selected tab holds, as the equipment queue's
+ *     does (AC1, in equipment-queue.spec.ts): Expired and Cancelled say why a booking ended up
+ *     there. Purely client-side text, so there is no backend case.
  */
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
@@ -217,7 +217,7 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await expect(approvedGrandHallCard(page)).toBeVisible()
 })
 
-test('15.2.1 AC2: the line under the tabs says what the selected tab holds', async ({ page }) => {
+test('15.2.1 AC2: the subtitle says what the selected tab holds', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
 

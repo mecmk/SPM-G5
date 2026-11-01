@@ -197,8 +197,8 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * Story 6.2 AC14: a Cancelled tab lists, read-only, the bookings released when their event was
  * cancelled. AC16: such a card says when it was approved, if it was, and when it was cancelled.
  *
- * Story 15.2.1 AC2: a line under the tabs says what the selected tab holds, as on Technical
- * Support's equipment queue.
+ * Story 15.2.1 AC2: the subtitle under the page title says what the selected tab holds, as on
+ * Technical Support's equipment queue.
  *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, venue name and Submitted by, orders the tab and counts each tab's matches. AC4: a new
@@ -348,10 +348,7 @@ export function BookingRequestsPage() {
 
   return (
     <div className="page page-wide">
-      <PageHeader
-        title={PAGE_TITLE}
-        subtitle="Venue booking requests to decide, and the decisions already made."
-      />
+      <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
       {error && (
         <p role="alert" className="error">
@@ -363,7 +360,6 @@ export function BookingRequestsPage() {
       {queue !== null && (
         <div className="stack">
           <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
-          <p className="tab-hint">{tabHint}</p>
 
           <QueueSearchBar
             search={view.search}

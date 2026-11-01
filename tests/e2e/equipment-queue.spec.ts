@@ -19,8 +19,8 @@
  * backend/tests/equipment/test_view_equipment_requests.py.
  *
  * Story 15.2.1 - fe: say what each tab holds.
- * AC1 a line under the tabs says what the selected tab holds, and changes with it: Cancelled says
- *     why a request ended up there. Purely client-side text, so there is no backend case.
+ * AC1 the subtitle under the page title says what the selected tab holds, and changes with it:
+ *     Cancelled says why a request ended up there. Purely client-side text, so there is no backend case.
  *
  * The roadshow (EVENTS.equipmentRoadshow) and the other events in PENDING_EVENTS are
  * dedicated to this spec and only read here. Other specs send equipment to Technical Support
@@ -112,7 +112,7 @@ test('15.2 AC3: the All tab shows pending, accepted and declined requests togeth
   )
 })
 
-test('15.2.1 AC1: the line under the tabs says what the selected tab holds', async ({ page }) => {
+test('15.2.1 AC1: the subtitle says what the selected tab holds', async ({ page }) => {
   await signIn(page, ACCOUNTS.techSupport)
   await page.goto(QUEUE_PATH)
 

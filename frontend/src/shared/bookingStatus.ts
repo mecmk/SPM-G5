@@ -147,8 +147,8 @@ export function closedAt(request: { decided_at: string | null; released_at: stri
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN has no tab of its own and only shows up under
  * "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a tab of its own. Story
- * 6.2 AC14: so does a cancelled one, read-only. Story 15.2.1 AC2: each tab's hint, the line under
- * the tab strip saying what it holds. */
+ * 6.2 AC14: so does a cancelled one, read-only. Story 15.2.1 AC2: each tab's hint, the page's
+ * subtitle while it is open, saying what it holds. */
 export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string; hint: string }[] = [
   {
     key: 'ALL',
