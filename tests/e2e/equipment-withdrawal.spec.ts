@@ -11,21 +11,33 @@
  * AC2 a pending item offers Withdraw, not Remove, and is withdrawn the same way.
  * AC4 Technical Support find it under Withdrawn in their queue, read-only, with no Accept or
  *     Decline. Who is notified, and what the notice names, are backend cases.
- * AC5 (closed events refused), AC6 (which statuses can be withdrawn), AC8/AC9 (the safety check),
- * AC11 (a decision saved meanwhile, a double-click) and the API's refusals are backend cases:
- * backend/tests/equipment/test_withdraw_equipment.py.
+ * AC5 Withdraw is not offered once the event is Awaiting Safety Check (the harbour concert). That a
+ *     direct request is refused on every closed status is a backend case.
+ * AC11 Technical Support accept an item while its Withdraw dialog is open: the dialog says it is
+ *     now accepted, offers only Close, and the page shows it Accepted. The race itself and a
+ *     double-click are backend cases.
+ * AC6 (which statuses can be withdrawn), AC8/AC9 (the safety check) and the API's refusals are
+ * backend cases: backend/tests/equipment/test_withdraw_equipment.py.
  *
  * The riverside summit (EVENTS.riversideSummit) is this spec's own: each test withdraws a
  * different item on it, the accepted speakers or the pending microphones, so the tests can run
- * in parallel.
+ * in parallel. The AC11 test submits a request of its own.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, signIn } from './support'
+import {
+  ACCOUNTS,
+  EVENTS,
+  assignByLead,
+  createAndSubmitRequest,
+  signIn,
+  uniqueName,
+} from './support'
 
 const QUEUE_PATH = '/equipment/requests'
 const SUMMIT = 'Riverside Partner Summit'
 const SPEAKERS = 'Portable speaker set'
 const MICROPHONES = 'Wireless microphone'
+const LAPTOP = 'Presentation laptop'
 const WITHDRAWN_BY_CHLOE = /Withdrawn .* by Chloe Coordinator/
 
 function equipmentSection(page: Page) {
@@ -106,4 +118,65 @@ test('17.2 AC2/AC4: a pending item is withdrawn, not removed, and Technical Supp
   await expect(card).toContainText('Chloe Coordinator')
   await expect(card.getByRole('button', { name: 'Accept' })).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Decline' })).toHaveCount(0)
+})
+
+test('17.2 AC5: Withdraw is not offered once the event is Awaiting Safety Check', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(`/events/${EVENTS.harbourConcert}`)
+  await expect(equipmentSection(page).getByRole('listitem').first()).toContainText(
+    'Accepted (reserved)',
+  )
+  await expect(equipmentSection(page).getByRole('button', { name: /^Withdraw/ })).toHaveCount(0)
+})
+
+test('17.2 AC11: Technical Support accept an item while its Withdraw dialog is open, and the coordinator is shown it is now accepted', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000)
+  const name = uniqueName('Withdraw race')
+  await signIn(page, ACCOUNTS.organiser)
+  const eventId = await createAndSubmitRequest(page, name, 520)
+  await page.goto(`/events/${eventId}`)
+  await assignByLead(page)
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${eventId}`)
+  const addForm = equipmentSection(page).getByRole('form', {
+    name: 'Add equipment',
+  })
+  await addForm.getByLabel('Equipment type').selectOption('LAPTOP')
+  await addForm.getByLabel('Quantity').fill('1')
+  await addForm.getByRole('button', { name: 'Add item' }).click()
+  await equipmentSection(page).getByRole('button', { name: 'Submit to Technical Support' }).click()
+  const laptop = item(page, LAPTOP)
+  await expect(laptop).toContainText('Pending')
+
+  await laptop.getByRole('button', { name: `Withdraw ${LAPTOP}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'Withdraw this equipment?' })
+
+  // Meanwhile, in another session, Technical Support accept it.
+  const elsewhere = await browser.newContext({
+    baseURL: testInfo.project.use.baseURL,
+  })
+  const tech = await elsewhere.newPage()
+  await signIn(tech, ACCOUNTS.techSupport)
+  await tech.goto(QUEUE_PATH)
+  await tech
+    .getByRole('listitem')
+    .filter({ hasText: name })
+    .getByRole('button', { name: 'Accept' })
+    .click()
+  const accept = tech.getByRole('dialog', { name: 'Accept this request?' })
+  await accept.getByRole('button', { name: 'Accept' }).click()
+  await expect(accept).not.toBeVisible()
+  await elsewhere.close()
+
+  await dialog.getByRole('button', { name: 'Withdraw' }).click()
+  await expect(dialog).toContainText('This equipment item is now accepted')
+  await expect(dialog.getByRole('button', { name: 'Withdraw' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(laptop).toContainText('Accepted (reserved)')
 })
