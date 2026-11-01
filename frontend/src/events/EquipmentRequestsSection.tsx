@@ -20,14 +20,14 @@ import { EQUIPMENT_STATUS_LABELS, withdrawnWhenAndBy } from '../shared/equipment
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
-/** AC2/AC7: the items the coordinator may still edit or remove, mirroring the backend's
+/** AC2/AC7: the items the coordinator may still edit, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
 const EDITABLE_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'PENDING', 'UNAVAILABLE']
 /** Story 17.2 AC2: the items removed outright - never sent, or holding nothing. A sent one is
  *  withdrawn instead, so Technical Support know. */
 const REMOVABLE_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'UNAVAILABLE']
 /** AC6: an item in one of these takes up its type on the event, mirroring `_OPEN_ITEM_STATUSES`;
- *  a declined or cancelled one does not, so its type can be requested again. */
+ *  a declined, cancelled or withdrawn one does not, so its type can be requested again. */
 const OPEN_STATUSES: readonly EquipmentItemStatus[] = [...EDITABLE_STATUSES, 'ACCEPTED']
 const WHOLE_NUMBER = /^\d+$/
 const UNAVAILABLE_SENTENCE =

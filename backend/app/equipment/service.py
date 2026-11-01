@@ -181,8 +181,9 @@ _LIVE_TAB_STATUSES = (
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
 WITH_TECHNICAL_SUPPORT = events_service.WITH_TECHNICAL_SUPPORT
 # No longer the event's, kept for Technical Support's record: cancelled by its event or a change
-# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves it as it is unless it
-# names it again. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
+# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves a Cancelled one as it
+# is unless it names it again; a Withdrawn one stays Withdrawn even then, and the line is added as
+# new. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
 KEPT_FOR_RECORD = events_service.KEPT_FOR_RECORD
 # Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
 # date order, soonest first, then in the order they were recorded. AC6: a request with no recorded

@@ -1073,7 +1073,8 @@ def _check_equipment_available(
 
 
 def _current_lines(event: Event) -> list[EventEquipmentRequest]:
-    """The event's equipment lines, leaving out those kept only for the record."""
+    """Story 6.2, 19.2, 17.2 AC3: the event's equipment lines, leaving out those kept only for
+    Technical Support's record, which a correction neither holds, edits nor removes."""
     return [line for line in event.equipment_requests if line.status not in KEPT_FOR_RECORD]
 
 
@@ -1081,7 +1082,8 @@ def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> No
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
     requests for the last units cannot both be held; the loser is refused and nothing is held.
     Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
-    which is the assigned coordinator's step.
+    which is the assigned coordinator's step. Only Requested, Pending and Accepted lines are held:
+    one sent to Technical Support keeps its hold when the dates move (15.1 AC8).
     ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
     lines = [line for line in event.equipment_requests if line.status in _HELD_ITEM_STATUSES]
     if not lines or event.starts_at is None or event.ends_at is None:
