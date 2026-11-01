@@ -63,6 +63,11 @@
  *     a withdrawn or cancelled one shows when it was closed, with the queue's "Closed at" / "Note".
  * That the API returns `decided_at` at all (null while pending, set once decided) is a backend
  * case: backend/tests/bookings/test_booking_decided_at.py.
+ *
+ * Story 15.2.1 - fe: say what each tab holds.
+ * AC2 the booking queue gets the same line under its tabs as the equipment queue (AC1, in
+ *     equipment-queue.spec.ts): Expired and Cancelled say why a booking ended up there. Purely
+ *     client-side text, so there is no backend case.
  */
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
@@ -210,6 +215,33 @@ test('13.1.2 AC1: the queue opens on Pending, and the Approved tab shows a decid
   await page.getByRole('tab', { name: /^All/ }).click()
   await expect(pendingCard(page, '00000002')).toBeVisible()
   await expect(approvedGrandHallCard(page)).toBeVisible()
+})
+
+test('15.2.1 AC2: the line under the tabs says what the selected tab holds', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+
+  const pendingHint = page.getByText(
+    'Waiting for a decision. A pending request already holds its venue.',
+  )
+  await expect(pendingHint).toBeVisible()
+
+  await page.getByRole('tab', { name: /^Expired/ }).click()
+  await expect(
+    page.getByText(
+      'Approved, but the hold expired before the event was confirmed, so the venue was ' +
+        'released. Read-only.',
+    ),
+  ).toBeVisible()
+  await expect(pendingHint).toHaveCount(0)
+
+  await page.getByRole('tab', { name: /^Cancelled/ }).click()
+  await expect(
+    page.getByText(
+      'Released because the event was cancelled, a change to it no longer fit, a replacement ' +
+        'venue was approved, or a safety review released it. Read-only.',
+    ),
+  ).toBeVisible()
 })
 
 test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({
