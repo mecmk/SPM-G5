@@ -182,12 +182,14 @@ def test_rounds_are_listed_newest_first_with_their_findings(login_as, db, awaiti
             "factor_name": "Emergency access",
             "required_change": "Keep the north fire exit clear of the stage.",
             "arrangement": None,
+            "released_bookings": [],
         },
         {
             "factor_code": "CAPACITY_AND_LAYOUT",
             "factor_name": "Venue capacity and layout",
             "required_change": "Book a room that seats 300 in theatre layout.",
             "arrangement": "VENUE_BOOKINGS",
+            "released_bookings": [],
         },
     ]
     assert reviews[1]["flagged_arrangements"] == ["VENUE_BOOKINGS"]

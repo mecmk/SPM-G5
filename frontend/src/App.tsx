@@ -24,6 +24,7 @@ import { ServerNotificationProvider } from './notifications/ServerNotificationPr
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
+import { AttendeeEventPage } from './registrations/AttendeeEventPage'
 import { MyRegistrationsPage } from './registrations/MyRegistrationsPage'
 import { ProfilePage } from './registrations/ProfilePage'
 import { RegistrationReportPage } from './registrations/RegistrationReportPage'
@@ -55,7 +56,9 @@ import {
   SAFETY_CHECK_PATH,
   SAFETY_CHECKS_PATH,
   REGISTRATIONS_REPORT_PATH,
+  ROOM_LAYOUTS_PATH,
   UPCOMING_EVENTS_PATH,
+  UPCOMING_EVENT_PATH,
   VENUE_CATALOGUE_PATH,
   VENUE_EDIT_PATH,
   VENUE_NEW_PATH,
@@ -63,6 +66,7 @@ import {
   VENUE_REQUEST_PATH,
   VENUES_MANAGE_PATH,
 } from './routes'
+import { RoomLayoutsPage } from './venues/RoomLayoutsPage'
 import { VenueCataloguePage } from './venues/VenueCataloguePage'
 import { VenueDetailPage } from './venues/VenueDetailPage'
 import { VenueFormPage } from './venues/VenueFormPage'
@@ -97,10 +101,14 @@ function App() {
             >
               <Route index element={<HomePage />} />
 
-              {/* Story 8.1: venue catalogue, any internal role that can read venues. */}
+              {/*
+                Story 8.1: venue catalogue, any internal role that can read venues. Story 8.6: so
+                are the room layouts, which only Venue Staff change.
+              */}
               <Route element={<RequirePermission permission={PERMISSIONS.VENUES_READ} />}>
                 <Route path={VENUE_CATALOGUE_PATH} element={<VenueCataloguePage />} />
                 <Route path={VENUE_PATH} element={<VenueDetailPage />} />
+                <Route path={ROOM_LAYOUTS_PATH} element={<RoomLayoutsPage />} />
               </Route>
 
               {/*
@@ -184,11 +192,13 @@ function App() {
                 <Route path={CHANGE_REQUEST_QUEUE_PATH} element={<ChangeRequestQueuePage />} />
               </Route>
 
-              {/* Story 18.1: the events an attendee can browse and register for (AC5: attendees only).
+              {/* Story 18.1: the events an attendee can browse, and each one's page, where they
+                  register (AC5: attendees only; AC9, fix f18.1.2).
                   Story 18.2: their own registrations, and withdrawing one (AC5: attendees only).
                   Story 18.4: their profile (AC10: attendees only, each their own). */}
               <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATIONS_SELF} />}>
                 <Route path={UPCOMING_EVENTS_PATH} element={<UpcomingEventsPage />} />
+                <Route path={UPCOMING_EVENT_PATH} element={<AttendeeEventPage />} />
                 <Route path={MY_REGISTRATIONS_PATH} element={<MyRegistrationsPage />} />
                 <Route path={PROFILE_PATH} element={<ProfilePage />} />
               </Route>

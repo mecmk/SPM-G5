@@ -26,7 +26,8 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Identity & access | [`login_attempts`](#login_attempts) | 1.1 (AC6) | Failed sign-in counter per e-mail address, used to lock sign-in for a while after repeated failures |
 | Identity & access | [`client_organisations`](#client_organisations) | 2.x, 7.1 (organiser context) | External client organisations that Event Organisers belong to |
 | Reference lists | [`facilities`](#facilities) | 8.2, 8.3, 10.3, 11.1 | Facilities a venue can offer and an event can require (projector, sound system, video conferencing, ...) |
-| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
+| Reference lists | [`room_layouts`](#room_layouts) | 2.1, 8.2, 8.3, 8.6, 12.1 | Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require |
+| Reference lists | [`deleted_room_layouts`](#deleted_room_layouts) | 8.6 | The room layouts Venue Staff deleted (AC4), one row each, written in the same transaction as the delete |
 | Reference lists | [`accessibility_features`](#accessibility_features) | 2.1, 8.2, 8.3, 11.1 | Accessibility features a venue provides and an event may need (wheelchair access, hearing loop, ...) |
 | Reference lists | [`equipment_types`](#equipment_types) | 2.1, 15.x, 16.x, 17.x | The equipment catalogue, modelled as pooled stock per type (e.g |
 | Venues | [`venues`](#venues) | 8.1, 8.2, 8.3, 8.4, 9.x, 10.x, 11.x | The venue catalogue: rooms and spaces ConnectSphere owns |
@@ -46,6 +47,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_change_requests`](#event_change_requests) | 7.3, 19.x | A request by the organiser to change an important field (date and time, attendance, venue requirements or equipment) of an event in Planning (story 19.1) |
 | Event details & history | [`event_change_history`](#event_change_history) | 7.4 | Append-only record of each field changed on an event after submission: old and new value, who changed it with their role, and when |
 | Event details & history | [`event_safety_reviews`](#event_safety_reviews) | 21.1, 21.2 | One row per safety review of an event by the Safety Officer, kept so a later check shows the previous reviews and what has changed since the latest (21.1 AC3, AC5), and so confirming checks the latest approval still matches the event (21.2 AC7) |
+| Event details & history | [`event_safety_finding_bookings`](#event_safety_finding_bookings) | - | Story 21.3 AC1, AC9 |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
 | Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.2 | Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2) |
@@ -177,16 +179,33 @@ Facilities a venue can offer and an event can require (projector, sound system, 
 
 ### room_layouts
 
-**Stories:** 2.1, 8.2, 8.3, 12.1
+**Stories:** 2.1, 8.2, 8.3, 8.6, 12.1
 
-Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require.
+Room layouts (theatre, classroom, boardroom, banquet, exhibition, ...) that a venue supports and an event may require. Venue Staff add, rename and delete them in the app (story 8.6); the seed only adds the standard ones that are missing and were never deleted. A layout a venue, venue requirement or booking request uses cannot be deleted (AC8).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
-| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. |
-| `name` | `text` | no | - | - | Display name. |
-| `description` | `text` | yes | - | - | Optional longer description. |
-| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending). |
+| `code` | `text` | no | - | PK | Stable identifier, e.g. THEATRE. Made from the name when a layout is added in the app (story 8.6 AC2), with a number added when that code is taken or was a deleted layout's (THEATRE_2, THEATRE_3, ...), and never changed by a rename, so every reference to the layout keeps working. |
+| `name` | `text` | no | - | - | Display name, shown wherever the layout appears (story 8.6 AC3). Required, without spaces around it, at most 100 characters (AC5, ck_room_layouts_name), and unique ignoring capitals (AC6, uq_room_layouts_name). |
+| `description` | `text` | no | - | - | Longer description, shown with the name on the Room layouts page. Required, without spaces around it, at most 500 characters (story 8.6 AC7, ck_room_layouts_description); never blank. |
+| `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending): the standard layouts carry 10 to 70, and a layout added in the app the default 100, so it follows them from A to Z (story 8.6 AC1). |
+
+Rules and indexes:
+
+- check `ck_room_layouts_description`: `CHECK (((description = btrim(description)) AND (description <> ''::text) AND (char_length(description) <= 500)))`
+- check `ck_room_layouts_name`: `CHECK (((name = btrim(name)) AND (name <> ''::text) AND (char_length(name) <= 100)))`
+- unique index `uq_room_layouts_name`: `btree (lower(name))`
+
+### deleted_room_layouts
+
+**Stories:** 8.6
+
+The room layouts Venue Staff deleted (AC4), one row each, written in the same transaction as the delete. A deleted layout's code is never given to another layout, by the app (AC2) or the seed, so a pending change request, a saved catalogue link or an audit entry that kept the code is never taken for a different layout; and a venue saved with a deleted layout is told it no longer exists, by name (AC11), while a code no layout ever had is refused as unknown.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `code` | `text` | no | - | PK | The deleted layout's code, as it was in room_layouts.code. Primary key: a code is deleted at most once, as it never comes back. |
+| `name` | `text` | no | - | - | The name the layout had when it was deleted, so a refusal can name it (story 8.6 AC11). |
 
 ### accessibility_features
 
@@ -659,6 +678,19 @@ Rules and indexes:
 
 - index `ix_event_safety_reviews_event`: `btree (event_id, reviewed_at)`
 
+### event_safety_finding_bookings
+
+Story 21.3 AC1, AC9. The venue bookings a safety finding named, which the decision released in the same step. Written only by the Safety Officer's decision and append-only with its finding; a booking may be named by two findings of one decision and is released once. The service, not the database, checks that the booking belongs to the finding's event.
+
+| Column | Type | Null | Default | Key | Description |
+| --- | --- | --- | --- | --- | --- |
+| `finding_id` | `uuid` | no | - | PK FK → `event_safety_review_findings.id` | FK -> event_safety_review_findings.id (cascade). The finding that named the booking. |
+| `booking_id` | `uuid` | no | - | PK FK → `venue_bookings.id` | FK -> venue_bookings.id (cascade). The booking the finding named; an APPROVED booking of the reviewed event when named. |
+
+Rules and indexes:
+
+- index `ix_event_safety_finding_bookings_booking`: `btree (booking_id)`
+
 ## Venue bookings
 
 ### venue_bookings
@@ -702,6 +734,9 @@ A request by the assigned coordinator to book one venue for an event, and its ou
 | `replaced_by_booking_id` | `uuid` | yes | - | FK → `venue_bookings.id` | FK -> venue_bookings.id. On an original released by its replacement: the replacement whose approval released it (story 12.6 AC3), set in that same transaction and only on a CANCELLED booking (ck_venue_bookings_replaced_by_cancelled). The event page shows "Replaced by <venue>" only when this is set, so a replacement that was never approved is never shown as having replaced it (AC8). NULL otherwise; a booking replaces at most one original (uq_venue_bookings_replaced_by). |
 | `replaces_live_original` | `boolean` | no | `false` | - | TRUE on a replacement (replaces_booking_id) from the moment it is requested, while its original still holds its venue (story 12.6 AC4, AC10): the one-per-requirement index leaves out such a booking while it is PENDING, so it can sit beside its original. trg_venue_bookings_clear_replacement_carve_out sets it FALSE on a PENDING replacement when the original stops being PENDING or APPROVED by any route - the hold sweep, a release, a cancellation - so the pending replacement is then the requirement's request. The index reads it only for a PENDING booking: on a decided replacement it keeps what it had and means nothing. FALSE for every other booking. |
 | `cancelled_at` | `timestamp with time zone` | yes | - | - | When the booking was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change no longer fit it (19.2). Only on a CANCELLED booking; decided_by_id and decided_at keep its earlier decision. |
+| `release_cause` | `text` | yes | - | - | Why a CANCELLED booking was released: EVENT_CANCELLED (its event was cancelled, story 6.2), CHANGE_APPROVED (an approved change no longer fits it, story 19.2), REPLACED (its replacement was approved, story 12.6) or SAFETY_REVIEW (the Safety Officer named it in a finding, story 21.3). Set in the release, only on a CANCELLED booking (ck_venue_bookings_release_fields). NULL for a booking never released, and for a CANCELLED row written without one; migration 030 gave every booking cancelled before it a cause. |
+| `release_reason` | `text` | yes | - | - | Why the release happened, in the words of whoever caused it: for SAFETY_REVIEW, the required change of each finding that named the booking, in finding order, joined with " \| " (story 21.3 AC2, AC9); required then (ck_venue_bookings_safety_release_reason). NULL for every other cause. |
+| `released_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who released the booking: the Safety Officer for SAFETY_REVIEW, the organiser who cancelled the event for EVENT_CANCELLED, the coordinator whose decision applied the change for CHANGE_APPROVED, the Venue Staff member who approved the replacement for REPLACED (story 21.3). NULL when not released, and for a booking whose releaser migration 030 could not know. |
 
 Allowed values:
 
@@ -720,7 +755,10 @@ Rules and indexes:
 - check `ck_venue_bookings_live_original_is_a_replacement`: `CHECK (((NOT replaces_live_original) OR (replaces_booking_id IS NOT NULL)))`
 - check `ck_venue_bookings_not_self_replacement`: `CHECK ((replaces_booking_id IS DISTINCT FROM id))`
 - check `ck_venue_bookings_period`: `CHECK ((ends_at > starts_at))`
+- check `ck_venue_bookings_release_cause`: `CHECK (((release_cause IS NULL) OR (release_cause = ANY (ARRAY['EVENT_CANCELLED'::text, 'CHANGE_APPROVED'::text, 'REPLACED'::text, 'SAFETY_REVIEW'::text]))))`
+- check `ck_venue_bookings_release_fields`: `CHECK ((((release_cause IS NULL) AND (release_reason IS NULL) AND (released_by_id IS NULL)) OR ((release_cause IS NOT NULL) AND (status = 'CANCELLED'::text))))`
 - check `ck_venue_bookings_replaced_by_cancelled`: `CHECK (((replaced_by_booking_id IS NULL) OR (status = 'CANCELLED'::text)))`
+- check `ck_venue_bookings_safety_release_reason`: `CHECK (((release_cause IS DISTINCT FROM 'SAFETY_REVIEW'::text) OR (release_reason IS NOT NULL)))`
 - check `ck_venue_bookings_turnaround`: `CHECK (((setup_minutes >= 0) AND (teardown_minutes >= 0)))`
 - unique index `uq_venue_bookings_one_pending_replacement`: `btree (replaces_booking_id) WHERE ((status = 'PENDING'::text) AND (replaces_booking_id IS NOT NULL))`
 - unique index `uq_venue_bookings_one_per_requirement`: `btree (venue_requirement_id) WHERE ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text])) AND (NOT ((status = 'PENDING'::text) AND replaces_live_original)))`

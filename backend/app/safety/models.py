@@ -1,6 +1,8 @@
 """ORM models for the Safety Officer's reviews of an event: story 21.1 reads them, story 21.2
-writes them with their findings. Mirrors ``event_safety_reviews``, ``safety_review_factors`` and
-``event_safety_review_findings`` in backend/db/migrations (019, 024).
+writes them with their findings, and story 21.3 (AC1, AC2, AC9) links each finding to the venue
+bookings its decision released. Mirrors ``event_safety_reviews``, ``safety_review_factors``,
+``event_safety_review_findings`` and ``event_safety_finding_bookings`` in backend/db/migrations
+(019, 024, 030).
 """
 
 from __future__ import annotations
@@ -9,11 +11,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Table, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.auth.models import User
+from app.bookings.models import VenueBooking
 from app.db import Base, UUIDPrimaryKeyMixin
 
 
@@ -46,6 +49,26 @@ class SafetyReviewFactor(Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("100"))
 
 
+# Story 21.3 AC1, AC9: the bookings a finding named, which the decision released. Mirrors
+# ``event_safety_finding_bookings`` (migration 030); written through ``released_bookings``.
+finding_bookings = Table(
+    "event_safety_finding_bookings",
+    Base.metadata,
+    Column(
+        "finding_id",
+        UUID(as_uuid=True),
+        ForeignKey("event_safety_review_findings.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "booking_id",
+        UUID(as_uuid=True),
+        ForeignKey("venue_bookings.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
 class SafetyReviewFinding(UUIDPrimaryKeyMixin, Base):
     """One thing the officer requires changed (21.2 AC4). Append-only, with its review."""
 
@@ -64,6 +87,10 @@ class SafetyReviewFinding(UUIDPrimaryKeyMixin, Base):
     required_change: Mapped[str] = mapped_column(Text, nullable=False)
 
     factor: Mapped[SafetyReviewFactor] = relationship(lazy="joined")
+    # Story 21.3 AC9: the bookings this finding named, in booked-start order.
+    released_bookings: Mapped[list[VenueBooking]] = relationship(
+        secondary=finding_bookings, order_by="VenueBooking.starts_at, VenueBooking.id"
+    )
 
 
 class EventSafetyReview(UUIDPrimaryKeyMixin, Base):

@@ -608,13 +608,17 @@ def list_assigned_events(
 
 
 def list_reference_data(db: Session) -> EventReferenceData:
-    """AC4-AC6: the pick-lists for the request form. Inactive equipment types are hidden."""
+    """AC4-AC6: the pick-lists for the request form. Inactive equipment types are hidden. Story
+    8.6 AC1/AC2: the layouts in the Room layouts page's order, as a venue's form offers them."""
 
     def items(query: Any) -> list[ReferenceItemOut]:
         return [ReferenceItemOut.model_validate(row) for row in db.scalars(query).all()]
 
     return EventReferenceData(
-        layouts=items(select(RoomLayout).order_by(RoomLayout.sort_order, RoomLayout.code)),
+        layouts=[
+            ReferenceItemOut.model_validate(layout)
+            for layout in venue_service.list_room_layouts(db)
+        ],
         facilities=items(select(Facility).order_by(Facility.sort_order, Facility.code)),
         accessibility_features=items(
             select(AccessibilityFeature).order_by(

@@ -8,7 +8,7 @@ before touching anything under `backend/db/`.
 | Path | What it is |
 | --- | --- |
 | `backend/db/migrations/NNN_*.sql` | The schema, as plain PostgreSQL DDL. Applied once, in order. **Source of truth.** |
-| `backend/db/seed/010_reference_data.sql` | Roles, facilities, room layouts, accessibility features, equipment types. Idempotent upserts. |
+| `backend/db/seed/010_reference_data.sql` | Roles, facilities, room layouts, accessibility features, equipment types. Idempotent upserts, except the standard room layouts, which are only added where missing (story 8.6). |
 | `backend/db/seed/020_sample_data.sql` | Sample organisations, users (one per role), venues, events, bookings. Fixed UUIDs. Idempotent upserts. |
 | `backend/app/dbtool/` | The tool behind every `npm run db:*` script (migrate / seed / reset / ready / docs). |
 | `docs/database/DATA_DICTIONARY.md` | **Generated** from the live database (`COMMENT ON` text). Never edit by hand. |
@@ -59,7 +59,10 @@ Both, deliberately:
   local data survives `npm run db:ready` day to day. Rows you add while developing stay.
 - **Seed files are idempotent upserts**, so every `npm run db:ready` re-asserts the canonical
   sample rows (fixed UUIDs) without duplicating them or touching yours. If you mangle a sample
-  venue, the next run heals it.
+  venue, the next run heals it. Room layouts are the exception: Venue Staff manage them in the app
+  (story 8.6), so the seed only adds a standard layout that is missing and never undoes a rename.
+  A standard layout deleted in the app stays deleted: its code is in `deleted_room_layouts`, and
+  no layout takes it again.
 - **`npm run db:reset`** gives you a clean slate whenever you want one.
 - **Tests never use your dev database.** `backend/tests/conftest.py` drops and rebuilds
   `connectsphere_test` from the same migrations + seed on every run, and wraps each test in a
@@ -109,6 +112,11 @@ ALTER TABLE events ADD CONSTRAINT ck_events_status CHECK (status IN ('DRAFT', ..
 
 Edit `backend/db/seed/010_reference_data.sql`. No migration needed. The next `npm run db:ready`
 upserts it, and `npm run db:docs` lists it in the dictionary.
+
+Room layouts are added, renamed and deleted by Venue Staff on the app's Room layouts page (story
+8.6). A layout added to the seed file is only inserted where its code and name are both free and
+no deleted layout had its code, and a change to one already there is not applied, since the app
+owns the list.
 
 ### Adding sample rows
 

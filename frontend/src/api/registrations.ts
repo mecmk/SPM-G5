@@ -108,17 +108,23 @@ export function updateProfile(details: AttendeeDetails): Promise<Profile> {
   })
 }
 
-/** Story 18.1 AC1: how many events a page asks for - the backend's REGISTRATION_EVENTS_PAGE_SIZE.
- *  A refreshed list asks for at most REGISTRATION_EVENTS_MAX_LIMIT at once. */
+/** Story 18.1 AC1: how many events a page asks for - the backend's REGISTRATION_EVENTS_PAGE_SIZE. */
 export const REGISTRATION_EVENTS_PAGE_SIZE = 20
-export const REGISTRATION_EVENTS_MAX_LIMIT = 100
 
 /** Story 18.1 AC1: a page of the events open to attendees, from `offset`. */
-export function listRegistrationEvents(
-  offset: number,
-  limit: number = REGISTRATION_EVENTS_PAGE_SIZE,
-): Promise<RegistrationEventList> {
-  return api<RegistrationEventList>(`/registrations/events?offset=${offset}&limit=${limit}`)
+export function listRegistrationEvents(offset: number): Promise<RegistrationEventList> {
+  return api<RegistrationEventList>(
+    `/registrations/events?offset=${offset}&limit=${REGISTRATION_EVENTS_PAGE_SIZE}`,
+  )
+}
+
+/** Story 18.1 AC9 (fix f18.1.2): one listed event, as its page shows it - the same fields as its
+ *  entry in the list. AC10: one that is not listed is a 404, saying it is not open for
+ *  registration, as for an unknown event. */
+export function fetchRegistrationEvent(eventId: string): Promise<RegistrationEvent> {
+  return api<RegistrationEvent>(`/registrations/events/${encodeURIComponent(eventId)}`, {
+    errorCodes: { 404: 'REGISTRATION_EVENT_NOT_OPEN' },
+  })
 }
 
 /** Story 18.1 AC1: register the signed-in attendee. The notice is AC1's confirmation; a refusal

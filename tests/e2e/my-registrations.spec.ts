@@ -523,14 +523,13 @@ test.describe('withdraws its seeded registration once', () => {
       eventCard(page, SKETCHING_WALK).getByText('Withdrawn', { exact: true }),
     ).toBeVisible()
 
+    // Story 18.1 AC9 (fix f18.1.2): registering is on the event's page, opened from its card.
     await page.goto(UPCOMING_EVENTS_PATH)
-    await eventCard(page, SKETCHING_WALK)
-      .getByRole('button', { name: `Register for ${SKETCHING_WALK}` })
-      .click()
+    await eventCard(page, SKETCHING_WALK).getByRole('link', { name: SKETCHING_WALK }).click()
+    const registration = page.getByRole('region', { name: 'Registration', exact: true })
+    await registration.getByRole('button', { name: `Register for ${SKETCHING_WALK}` }).click()
     await confirmRegistration(page)
-    await expect(
-      eventCard(page, SKETCHING_WALK).getByText('Registered', { exact: true }),
-    ).toBeVisible()
+    await expect(registration.getByText('Registered', { exact: true })).toBeVisible()
 
     await page.goto(MY_REGISTRATIONS_PATH)
     await expect(eventCard(page, SKETCHING_WALK)).toHaveCount(1)

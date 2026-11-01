@@ -43,6 +43,44 @@ class VenueReferenceData(BaseModel):
     accessibility_features: list[ReferenceItem]
 
 
+# --- room layouts (story 8.6) ------------------------------------------------------------
+class RoomLayoutOut(BaseModel):
+    """Story 8.6 AC1: one room layout as the Room layouts page lists it. No defaults (response
+    schema)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    name: str
+    description: str
+
+
+class _RoomLayoutIn(BaseModel):
+    """A layout's name and description as Venue Staff send them. Spaces around either are
+    dropped, and a blank one is None (story 8.6 AC5, AC7). That both are required, and how long
+    each may be, the service judges, so a refusal is one sentence the page can show. The code is
+    the server's to make (AC2), so nothing else may be sent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    description: str | None = None
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def _normalize_text(cls, value):
+        return _blank_to_none(value)
+
+
+class RoomLayoutCreate(_RoomLayoutIn):
+    """Story 8.6 AC2: a layout Venue Staff add, with a name and a description."""
+
+
+class RoomLayoutUpdate(_RoomLayoutIn):
+    """Story 8.6 AC3: a change to a layout. Only the fields sent change: a name or description
+    sent blank is refused (AC5, AC7)."""
+
+
 # --- characteristic line items -----------------------------------------------------------
 class VenueFacilityIn(BaseModel):
     code: str = Field(min_length=1)
