@@ -46,11 +46,11 @@ type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
  * Cancelled, read-only, for requests whose event was cancelled after they were sent. Story 15.2.1
  * AC1: each tab's hint, the page's subtitle while it is open, saying what it holds. */
 const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string; hint: string }[] = [
-  { key: 'ALL', label: 'All', hint: 'Every request sent to Technical Support, in any status.' },
+  { key: 'ALL', label: 'All', hint: 'Every equipment request, in any status.' },
   {
     key: 'PENDING',
     label: 'Pending',
-    hint: 'Sent to Technical Support and waiting for a decision.',
+    hint: 'Waiting for a decision. A pending request already holds its equipment.',
   },
   {
     key: 'ACCEPTED',

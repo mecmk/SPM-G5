@@ -116,7 +116,9 @@ test('15.2.1 AC1: the subtitle says what the selected tab holds', async ({ page 
   await signIn(page, ACCOUNTS.techSupport)
   await page.goto(QUEUE_PATH)
 
-  const pendingHint = page.getByText('Sent to Technical Support and waiting for a decision.')
+  const pendingHint = page.getByText(
+    'Waiting for a decision. A pending request already holds its equipment.',
+  )
   await expect(pendingHint).toBeVisible()
 
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
