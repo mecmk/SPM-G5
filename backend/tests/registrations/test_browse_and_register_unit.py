@@ -12,7 +12,8 @@ AC2 Capacity is the event's expected attendance (2.1 AC17). The registration tha
     one at or after it is refused. When an opening time is set, a registration before it is
     refused and one at it is accepted. An event with no closing time recorded closes when it
     starts.
-AC3 Full, closed and not-yet-open events stay listed until they start, with Register disabled.
+AC3 Full, closed and not-yet-open events stay listed until they start, and their page shows
+    Register disabled.
     (Here: which state an event is listed in, and which wins when several apply.)
 """
 

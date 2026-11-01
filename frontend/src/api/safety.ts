@@ -28,6 +28,15 @@ export interface SafetyVenue {
   capacity: number
   people_to_hold: number
   over_capacity: boolean
+  /** Story 21.3 AC1: what the officer chooses a booking to release by - which booking, the
+   * requirement it is for (null for an additional venue), its own times and its setup and
+   * teardown. */
+  booking_id: string
+  requirement_name: string | null
+  starts_at: string
+  ends_at: string
+  setup_minutes: number
+  teardown_minutes: number
 }
 
 /** Values of `SafetyArrangement` (backend/app/safety/models.py): what a finding says must be
@@ -41,12 +50,22 @@ export interface SafetyFactor {
   description: string | null
 }
 
-/** Mirrors `SafetyFindingOut`: story 21.2 AC4, one thing the officer requires changed. */
+/** Mirrors `ReleasedBookingOut`: story 21.3 AC9, a booking a finding named, which the decision
+ * released; `requirement_name` is null for an additional venue. */
+export interface ReleasedBooking {
+  booking_id: string
+  venue_name: string
+  requirement_name: string | null
+}
+
+/** Mirrors `SafetyFindingOut`: story 21.2 AC4, one thing the officer requires changed; story 21.3
+ * AC9: with the bookings it released. */
 export interface SafetyFinding {
   factor_code: string
   factor_name: string
   required_change: string
   arrangement: SafetyArrangement | null
+  released_bookings: ReleasedBooking[]
 }
 
 /** Mirrors `SafetyReviewOut`: story 21.1 AC3, one previous review of the event, with its findings
@@ -105,11 +124,13 @@ export interface SafetyCheckDetail {
   facts_fingerprint: string
 }
 
-/** Mirrors `SafetyFindingIn`: story 21.2 AC4/AC10. */
+/** Mirrors `SafetyFindingIn`: story 21.2 AC4/AC10; story 21.3 AC1/AC7: the approved bookings
+ * the finding names, only on a finding about venue bookings. */
 export interface SafetyFindingInput {
   factor_code: string
   required_change: string
   arrangement: SafetyArrangement | null
+  booking_ids: string[]
 }
 
 /** Mirrors `SafetyDecisionIn`: story 21.2 AC2-AC5. Findings only with CHANGES_REQUESTED.

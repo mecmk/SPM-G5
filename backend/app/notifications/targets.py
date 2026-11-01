@@ -112,6 +112,7 @@ _RULES: tuple[tuple[Permission, TargetKind, frozenset[NotificationType]], ...] =
                 _T.SAFETY_CHANGES_REQUESTED,
                 _T.EVENT_CHANGE_REQUEST_WITHDRAWN,
                 _T.EVENT_CANCELLED,
+                _T.EQUIPMENT_SHORT,
             }
         ),
     ),

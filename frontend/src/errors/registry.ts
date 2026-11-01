@@ -122,6 +122,15 @@ export type ErrorCode =
   | 'EQUIPMENT_QUANTITY_INVALID'
   | 'EQUIPMENT_DECISION_REFUSED'
   | 'EQUIPMENT_REASON_REQUIRED'
+  | 'EQUIPMENT_TYPE_NOT_FOUND'
+  | 'OUT_OF_SERVICE_NOT_FOUND'
+  | 'OUT_OF_SERVICE_REFUSED'
+  | 'OUT_OF_SERVICE_QUANTITY_INVALID'
+  | 'OUT_OF_SERVICE_START_REQUIRED'
+  | 'OUT_OF_SERVICE_START_IN_PAST'
+  | 'OUT_OF_SERVICE_END_BEFORE_START'
+  | 'OUT_OF_SERVICE_DATE_INCOMPLETE'
+  | 'OUT_OF_SERVICE_DATE_INVALID'
   | 'CHANGE_REQUEST_REFUSED'
   | 'CHANGE_REQUEST_INVALID'
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
@@ -756,6 +765,54 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     message: 'Enter a reason for declining this request.',
   },
 
+  // Story 16.2: units of an equipment type out of service.
+  EQUIPMENT_TYPE_NOT_FOUND: {
+    title: 'Equipment not found',
+    message: 'Equipment type not found.',
+  },
+  OUT_OF_SERVICE_NOT_FOUND: {
+    title: 'Record not found',
+    message: 'This out-of-service record was not found.',
+  },
+  /** AC2/AC3: the backend's sentence names which - too many units for the period, or a record
+   *  ended, in force or not yet started. */
+  OUT_OF_SERVICE_REFUSED: {
+    title: 'Could not save',
+    message: 'The record could not be saved as it stands. Reload and try again.',
+  },
+  /** AC3: worded as the backend's OUT_OF_SERVICE_QUANTITY_MESSAGE. */
+  OUT_OF_SERVICE_QUANTITY_INVALID: {
+    title: 'Check the units',
+    message: 'Enter a whole number of at least 1.',
+  },
+  OUT_OF_SERVICE_START_REQUIRED: {
+    title: 'Check the start',
+    message: 'Enter when the units go out of service.',
+  },
+  /** AC3: worded as the backend's START_IN_THE_PAST_MESSAGE. */
+  OUT_OF_SERVICE_START_IN_PAST: {
+    title: 'Check the start',
+    message: 'The start cannot be in the past.',
+  },
+  /** AC3: worded as the backend's OUT_OF_SERVICE_END_NOT_AFTER_START_MESSAGE. */
+  OUT_OF_SERVICE_END_BEFORE_START: {
+    title: 'Check the end',
+    message: 'The end must be after the start.',
+  },
+  /** AC1/AC3: a date started but not finished, which the picker reports as blank - for Until,
+   * that would save the record as out until ended. */
+  OUT_OF_SERVICE_DATE_INCOMPLETE: {
+    title: 'Check the dates',
+    message:
+      'Finish entering the date and time, including AM or PM, and check the day exists in that ' +
+      'month.',
+  },
+  /** AC3: a date the picker holds but the server cannot read, such as a five-digit year. */
+  OUT_OF_SERVICE_DATE_INVALID: {
+    title: 'Check the dates',
+    message: 'Enter a valid date and time, with a four-digit year.',
+  },
+
   // Story 19.1: change requests and the point of contact on an approved event.
   /** AC5/AC6/AC8/AC10/AC12/AC13: a change request refused for the state it found - the event is
    *  not yet approved, awaiting its safety check, completed, cancelled, rejected, or within 24
@@ -817,7 +874,8 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
 
   // Story 18.1: an attendee registering for an event.
   /** AC3/AC4: the event is no longer open to attendees - cancelled, sent back to Planning, or
-   *  never listed. Worded as the backend's REGISTRATION_EVENT_NOT_FOUND_MESSAGE. */
+   *  never listed. AC10 (fix f18.1.2): also an event's page asked for when it is not listed.
+   *  Worded as the backend's REGISTRATION_EVENT_NOT_FOUND_MESSAGE. */
   REGISTRATION_EVENT_NOT_OPEN: {
     title: 'Cannot register',
     message: 'This event is not open for registration.',

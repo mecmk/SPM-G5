@@ -65,6 +65,7 @@ class Permission(StrEnum):
 
     # --- Venue bookings (12.x, 13.x, 14.x) ---
     BOOKINGS_READ = "bookings:read"
+    BOOKINGS_READ_OWN = "bookings:read_own"  # organiser reads own event's bookings (f7.1.2)
     BOOKINGS_REQUEST = "bookings:request"  # coordinator raises / withdraws (12.x)
     BOOKINGS_DECIDE = "bookings:decide"  # venue staff approve / reject (13.x)
 
@@ -101,6 +102,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         {
             Permission.EVENTS_CREATE,
             Permission.EVENTS_READ_OWN,
+            Permission.BOOKINGS_READ_OWN,
             Permission.EVENTS_CANCEL,
             Permission.EVENT_CHANGE_REQUESTS_CREATE,
             Permission.REGISTRATIONS_VIEW,

@@ -1,6 +1,7 @@
-"""HTTP endpoints for story 21.1 (the Safety Officer's safety check queue and detail) and story
+"""HTTP endpoints for story 21.1 (the Safety Officer's safety check queue and detail), story
 21.2 (the coordinator requests a review, the officer decides, the coordinator confirms, and the
-event page's safety summary)."""
+event page's safety summary) and story 21.3 (the decision releases the venue bookings a finding
+names)."""
 
 from __future__ import annotations
 
@@ -106,7 +107,9 @@ def decide_safety_check(
 ) -> SafetyCheckDetail:
     """21.2 AC2-AC5: approve, or request changes with findings. AC9/AC10: an invalid
     payload is a 422 before this runs. AC16: safety:review only. AC20: 404 unknown, 409 not
-    awaiting the check."""
+    awaiting the check. 21.3 AC2: the bookings a finding names are released with the decision.
+    AC7: 422 for an id that is not a booking of the event, 409 when a named booking is not
+    approved now. AC10: only the Safety Officer decides."""
     try:
         service.decide_safety_check(db, event_id, payload, actor=actor)
     except service.SafetyEventNotFound:
@@ -114,6 +117,8 @@ def decide_safety_check(
     except service.SafetyStateConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.UnknownSafetyFactor as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.BookingNotOfEvent as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return _safety_check_detail(db, event_id)
 

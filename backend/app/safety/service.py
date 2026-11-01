@@ -1,11 +1,19 @@
-"""Business rules for story 21.1 (the Safety Officer's queue of events awaiting the safety check)
-and story 21.2 (the coordinator requests a review, the officer decides, the coordinator confirms).
+"""Business rules for story 21.1 (the Safety Officer's queue of events awaiting the safety check),
+story 21.2 (the coordinator requests a review, the officer decides, the coordinator confirms) and
+story 21.3 (the decision releases the venue bookings a finding names).
 
 Story 21.2's flow::
 
     PLANNING --request (everything secured)--> AWAITING_SAFETY_CHECK
     AWAITING --approve--> PLANNING --confirm (the approval still matches)--> CONFIRMED
     AWAITING --request changes, with findings--> PLANNING --rebook, request again--> AWAITING
+
+Story 21.3: the decision that requests changes releases each booking a venue-bookings finding names,
+in its own transaction and all or none (AC2, AC3, AC6). A booking that could never be named is a 422
+and one that is no longer approved a 409 (AC7); the event is locked first, then the bookings in id
+order, so an expiry or a cancellation racing it wins or loses cleanly (AC11). The coordinator and
+Venue Staff are told (AC4), the requirement needs a venue again (AC5), the rebooking can be sent
+with 21.2 AC12's warning (AC8), and each round lists what it released (AC9).
 """
 
 from __future__ import annotations
@@ -26,8 +34,10 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.auth.permissions import RoleCode
+from app.bookings import service as bookings_service
 from app.bookings.models import (
     BookingStatus,
+    ReleaseCause,
     VenueBooking,
     marked_booking_conditions,
     pending_replacement_conditions,
@@ -41,7 +51,7 @@ from app.events.models import (
     EventStatus,
     EventStatusHistory,
 )
-from app.events.service import NotAssignedCoordinator, record_transition
+from app.events.service import NotAssignedCoordinator, lock_event, record_transition
 from app.notifications.service import NotificationType, active_members, notify
 from app.safety.models import (
     EventSafetyReview,
@@ -227,17 +237,34 @@ def _accepted_equipment(db: Session, event_id: uuid.UUID) -> list[EventEquipment
 _DISPLAY_NAME_KEYS = frozenset({"name", "layout_name", "feature_name", "equipment_type_name"})
 
 
+def _in_any_order(items: list[Any]) -> list[Any]:
+    """A list fact compared as a set: the same venues, needs or equipment in another order are the
+    same facts. Their order follows booking and request ids, which rebooking changes (21.3 AC8)."""
+    return sorted(items, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def _same_fact(before: Any, after: Any) -> bool:
+    """AC5's change list: whether one fact is as the latest review saw it, in any order."""
+    if isinstance(before, list) and isinstance(after, list):
+        return _in_any_order(before) == _in_any_order(after)
+    return before == after
+
+
 def comparable_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """``facts`` without the display names: the ids, codes and figures a review judged, so a
-    renamed venue, layout, feature or equipment type compares equal (21.2 AC14)."""
+    renamed venue, layout, feature or equipment type compares equal (21.2 AC14). Each list fact is
+    also sorted (``_in_any_order``), so the same items in another order compare equal: rebooking
+    the same venue gives a new booking id, which would otherwise read as a change (21.3 AC8)."""
     return {
         key: (
-            [
-                {k: v for k, v in item.items() if k not in _DISPLAY_NAME_KEYS}
-                if isinstance(item, dict)
-                else item
-                for item in value
-            ]
+            _in_any_order(
+                [
+                    {k: v for k, v in item.items() if k not in _DISPLAY_NAME_KEYS}
+                    if isinstance(item, dict)
+                    else item
+                    for item in value
+                ]
+            )
             if isinstance(value, list)
             else value
         )
@@ -297,7 +324,7 @@ def get_safety_check(db: Session, event_id: uuid.UUID) -> SafetyCheck:
         [
             FactChangeOut(fact=key, before=reviews[0].facts.get(key), after=value)
             for key, value in facts.items()
-            if reviews[0].facts.get(key) != value
+            if not _same_fact(reviews[0].facts.get(key), value)
         ]
         if reviews
         else []
@@ -380,6 +407,22 @@ _UNCHANGED_NAMES = {
     SafetyArrangement.VENUE_BOOKINGS: "venue bookings",
     SafetyArrangement.EQUIPMENT: "equipment",
 }
+# Story 21.3: what the officer's decision says of the bookings it released, and what it refuses.
+# AC4: the coordinator is told once, naming every released booking as its venue and requirement.
+RELEASED_DECISION_MESSAGE = (
+    "{officer} asked for changes before it can pass and released these venue bookings: "
+    "{bookings}. What must change: {changes}"
+)
+ADDITIONAL_VENUE_NAME = "Additional venue"
+# AC2, AC9: a booking two findings name is released once, and its reason is each finding's change.
+RELEASE_REASON_SEPARATOR = " | "
+# AC7: an id that is not a booking of the event is refused (422); a booking of the event that is
+# not approved when the decision is recorded is refused too (409), since the page is out of date.
+BOOKING_NOT_OF_EVENT_MESSAGE = "Only this event's bookings can be named."
+NAMED_BOOKINGS_NOT_APPROVED_MESSAGE = (
+    "Not approved now: {bookings}. Your decision was not recorded. "
+    "Reload the review and decide again."
+)
 _DECISION_NOTIFICATION = {
     SafetyReviewOutcome.APPROVED: NotificationType.SAFETY_APPROVED,
     SafetyReviewOutcome.CHANGES_REQUESTED: NotificationType.SAFETY_CHANGES_REQUESTED,
@@ -435,6 +478,34 @@ class EventNotConfirmable(SafetyStateConflict):
     def __init__(self, blockers: list[str]) -> None:
         super().__init__(" ".join([NOT_CONFIRMABLE_MESSAGE, *blockers]))
         self.blockers = blockers
+
+
+class BookingNotOfEvent(ValueError):
+    """AC7: a finding names an id that is not a booking of the event (a 422)."""
+
+    def __init__(self) -> None:
+        super().__init__(BOOKING_NOT_OF_EVENT_MESSAGE)
+
+
+def _in_booked_order(bookings: list[VenueBooking]) -> list[VenueBooking]:
+    """Bookings as every sentence about them lists them: by booked start, then id."""
+    return sorted(bookings, key=lambda booking: (booking.starts_at, booking.id))
+
+
+def _booking_label(booking: VenueBooking) -> str:
+    """AC4, AC11: a booking as the officer's decision names it - its venue and, in brackets, the
+    requirement it is for, or "Additional venue"."""
+    return f"{booking.venue.name} ({booking.requirement_label or ADDITIONAL_VENUE_NAME})"
+
+
+class NamedBookingsNotApproved(SafetyStateConflict):
+    """AC11: named bookings that were not approved when the decision was recorded - expired,
+    cancelled, withdrawn, rejected or never approved - so nothing is released, the review is
+    out of date, and the officer reloads it."""
+
+    def __init__(self, bookings: list[VenueBooking]) -> None:
+        listed = ", ".join(_booking_label(booking) for booking in _in_booked_order(bookings))
+        super().__init__(NAMED_BOOKINGS_NOT_APPROVED_MESSAGE.format(bookings=listed))
 
 
 class UnknownSafetyFactor(ValueError):
@@ -729,6 +800,35 @@ def _decision_notice(event: Event, data: SafetyDecisionIn, actor: User) -> _Noti
     )
 
 
+def _lock_named_bookings(
+    db: Session, event: Event, data: SafetyDecisionIn
+) -> dict[uuid.UUID, VenueBooking]:
+    """AC11: the bookings the findings name, each locked after the event, in id order. An id that
+    is not a booking of the event is refused (``BookingNotOfEvent``, AC7)."""
+    wanted = list(dict.fromkeys(id_ for finding in data.findings for id_ in finding.booking_ids))
+    if not wanted:
+        return {}
+    named = {
+        booking.id: booking
+        for booking in bookings_service.lock_named_bookings(db, event.id, wanted)
+    }
+    if set(wanted) != set(named):
+        raise BookingNotOfEvent()
+    return named
+
+
+def _release_reasons(
+    data: SafetyDecisionIn, named: dict[uuid.UUID, VenueBooking]
+) -> dict[uuid.UUID, str]:
+    """AC2, AC9: why each named booking is released - the required change of every finding that
+    names it, in finding order."""
+    changes: dict[uuid.UUID, list[str]] = {booking_id: [] for booking_id in named}
+    for finding in data.findings:
+        for booking_id in finding.booking_ids:
+            changes[booking_id].append(finding.required_change)
+    return {booking_id: RELEASE_REASON_SEPARATOR.join(each) for booking_id, each in changes.items()}
+
+
 def decide_safety_check(
     db: Session, event_id: uuid.UUID, data: SafetyDecisionIn, *, actor: User
 ) -> None:
@@ -736,15 +836,49 @@ def decide_safety_check(
     changes, each returning the event to Planning. AC6: the round keeps who, when and the facts.
     AC8: the coordinator and organiser are told. AC20: refused unless awaiting the check, or if
     the facts moved since the officer read them (``data.facts_fingerprint``), and of two
-    decisions at once only one is written."""
-    event = db.get(Event, event_id)
+    decisions at once only one is written.
+
+    Story 21.3: each booking a finding names is released in the same transaction (AC2). The event
+    is locked first and then the named bookings in id order, as a cancellation and a confirmation
+    take them, so whichever of the decision, an expiry or a cancellation is saved first wins
+    (AC11): a booking not approved by then, or an event no longer awaiting, refuses the decision
+    and releases and notifies nothing. The releases are attempted, all or none: ``release_booking``
+    releases an approved booking only, so a named booking it does not release is the refusal."""
+    event = lock_event(db, event_id)
     if event is None:
         raise SafetyEventNotFound(event_id)
     if event.status != EventStatus.AWAITING_SAFETY_CHECK:
         raise SafetyStateConflict(NOT_AWAITING_SAFETY_CHECK_MESSAGE)
+    named = _lock_named_bookings(db, event, data)
     facts = current_facts(db, event)  # read while still awaiting: what was reviewed
+    decided_at = datetime.now(UTC)
+    review_id = uuid.uuid4()
+    reasons = _release_reasons(data, named)
+    savepoint = db.begin_nested()
+    not_approved = [
+        booking
+        for booking in named.values()
+        if not bookings_service.release_booking(
+            db,
+            booking,
+            actor=actor,
+            cause=ReleaseCause.SAFETY_REVIEW,
+            reason=reasons[booking.id],
+            at=decided_at,
+            details={
+                "cause": ReleaseCause.SAFETY_REVIEW,
+                "reason": reasons[booking.id],
+                "review_id": str(review_id),
+            },
+        )
+    ]
+    if not_approved:
+        savepoint.rollback()
+        raise NamedBookingsNotApproved(not_approved)
     if facts_fingerprint(facts) != data.facts_fingerprint:
+        savepoint.rollback()
         raise EventStatusChanged()
+    savepoint.commit()
 
     _change_status(
         db,
@@ -756,9 +890,10 @@ def decide_safety_check(
     )
     db.add(
         EventSafetyReview(
+            id=review_id,
             event_id=event.id,
             reviewed_by_id=actor.id,
-            reviewed_at=datetime.now(UTC),
+            reviewed_at=decided_at,
             outcome=data.outcome,
             facts=facts,
             findings=[
@@ -767,6 +902,7 @@ def decide_safety_check(
                     factor_code=finding.factor_code,
                     arrangement=finding.arrangement,
                     required_change=finding.required_change,
+                    released_bookings=[named[booking_id] for booking_id in finding.booking_ids],
                 )
                 for position, finding in enumerate(data.findings)
             ],
@@ -780,15 +916,43 @@ def decide_safety_check(
             raise UnknownSafetyFactor() from exc
         raise
     notice = _decision_notice(event, data, actor)
-    _tell(
-        db,
-        event,
-        [event.assigned_coordinator, event.organiser],
-        actor=actor,
-        kind=_DECISION_NOTIFICATION[data.outcome],
-        title=notice.title,
-        message=notice.message,
-    )
+    kind = _DECISION_NOTIFICATION[data.outcome]
+    if named:
+        # AC4: the coordinator is told once what was released; the organiser, the decision only.
+        released = ", ".join(_booking_label(b) for b in _in_booked_order(list(named.values())))
+        coordinator_message = RELEASED_DECISION_MESSAGE.format(
+            officer=actor.full_name,
+            bookings=released,
+            changes="; ".join(finding.required_change for finding in data.findings),
+        )
+        _tell(
+            db,
+            event,
+            [event.assigned_coordinator],
+            actor=actor,
+            kind=kind,
+            title=notice.title,
+            message=coordinator_message,
+        )
+        _tell(
+            db,
+            event,
+            [event.organiser],
+            actor=actor,
+            kind=kind,
+            title=notice.title,
+            message=notice.message,
+        )
+    else:
+        _tell(
+            db,
+            event,
+            [event.assigned_coordinator, event.organiser],
+            actor=actor,
+            kind=kind,
+            title=notice.title,
+            message=notice.message,
+        )
     record_audit(
         db,
         actor=actor,

@@ -8,7 +8,13 @@ import {
   type SafetyReviewOutcome,
 } from '../api/safety'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { ARRANGEMENT_LABELS } from '../shared/safetyReview'
+import { turnaroundLine } from '../shared/bookingStatus'
+import {
+  ARRANGEMENT_LABELS,
+  RELEASE_BOOKINGS_HINT,
+  RELEASE_BOOKINGS_LEGEND,
+  bookingChoiceLabel,
+} from '../shared/safetyReview'
 
 const OUTCOMES: { value: SafetyReviewOutcome; label: string }[] = [
   { value: 'APPROVED', label: 'Approve' },
@@ -20,6 +26,8 @@ interface FindingDraft {
   factorCode: string
   requiredChange: string
   arrangement: SafetyArrangement | ''
+  /** Story 21.3 AC1: the bookings ticked to release, by id; only a venue-bookings finding has any. */
+  bookingIds: string[]
 }
 
 interface SafetyDecisionFormProps {
@@ -39,12 +47,16 @@ const FINDING_ERROR_ID = 'safety-finding-error'
  * optionally the arrangement to rebook. AC9: no notes. AC10: each finding must say what must
  * change - checked here before anything is sent. AC20: the decision carries the facts the page was
  * read with, and a refusal has the page load the event again.
+ * Story 21.3 - AC1: a finding about venue bookings lists the event's approved bookings to tick, each
+ * with its setup line, and only while its arrangement is Venue bookings; switching away clears the
+ * ticks. AC2: the ticked ids go with the finding (`booking_ids`), and recording the decision
+ * releases them. AC7: a refusal that names bookings no longer approved has the page load again.
  */
 export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisionFormProps) {
   const firstFactor = check.factors[0]?.code ?? ''
   const [outcome, setOutcome] = useState<SafetyReviewOutcome | null>(null)
   const [findings, setFindings] = useState<FindingDraft[]>([
-    { key: 1, factorCode: firstFactor, requiredChange: '', arrangement: '' },
+    { key: 1, factorCode: firstFactor, requiredChange: '', arrangement: '', bookingIds: [] },
   ])
   const [hasTriedToSubmit, setHasTriedToSubmit] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -70,8 +82,29 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
         factorCode: firstFactor,
         requiredChange: '',
         arrangement: '',
+        bookingIds: [],
       },
     ])
+  }
+
+  /** Story 21.3 AC1: another arrangement is another choice, so the ticks start again. */
+  function changeArrangement(key: number, arrangement: SafetyArrangement | '') {
+    updateFinding(key, { arrangement, bookingIds: [] })
+  }
+
+  function toggleBooking(key: number, bookingId: string, isTicked: boolean) {
+    setFindings((drafts) =>
+      drafts.map((draft) =>
+        draft.key === key
+          ? {
+              ...draft,
+              bookingIds: isTicked
+                ? [...draft.bookingIds, bookingId]
+                : draft.bookingIds.filter((id) => id !== bookingId),
+            }
+          : draft,
+      ),
+    )
   }
 
   function removeFinding(key: number) {
@@ -90,6 +123,7 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
               factor_code: finding.factorCode,
               required_change: finding.requiredChange,
               arrangement: finding.arrangement || null,
+              booking_ids: finding.arrangement === 'VENUE_BOOKINGS' ? finding.bookingIds : [],
             }))
           : [],
       })
@@ -177,9 +211,7 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
                   <select
                     value={finding.arrangement}
                     onChange={(event) =>
-                      updateFinding(finding.key, {
-                        arrangement: event.target.value as SafetyArrangement | '',
-                      })
+                      changeArrangement(finding.key, event.target.value as SafetyArrangement | '')
                     }
                   >
                     <option value="">None</option>
@@ -190,6 +222,27 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
                     ))}
                   </select>
                 </label>
+                {finding.arrangement === 'VENUE_BOOKINGS' && (
+                  <fieldset className="subtle-block stack">
+                    <legend className="fact-label">{RELEASE_BOOKINGS_LEGEND}</legend>
+                    <p className="small muted">{RELEASE_BOOKINGS_HINT}</p>
+                    {check.venues.map((booking) => (
+                      <div key={booking.booking_id}>
+                        <label className="checkbox">
+                          <input
+                            type="checkbox"
+                            checked={finding.bookingIds.includes(booking.booking_id)}
+                            onChange={(event) =>
+                              toggleBooking(finding.key, booking.booking_id, event.target.checked)
+                            }
+                          />
+                          {bookingChoiceLabel(booking)}
+                        </label>
+                        <p className="small muted">{turnaroundLine(booking)}</p>
+                      </div>
+                    ))}
+                  </fieldset>
+                )}
                 {findings.length > 1 && (
                   <button
                     type="button"

@@ -54,7 +54,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
       'Venue catalogue',
       'Equipment requests',
       'Equipment holds',
-      'Catalogue & availability',
+      'Equipment catalogue',
     ],
     hidden: ['All events', 'Manage venues', 'Bookings & schedule'],
   },

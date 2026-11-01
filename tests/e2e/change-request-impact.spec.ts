@@ -8,6 +8,12 @@
  *     who acts on it. No new flag or notification is added.
  * AC7 If the assessment changes after the request is opened, approving shows the new result
  *     before anything is applied.
+ * AC8 (fix f19.3.1, CL-171) A booking the approval keeps is flagged when the change leaves its
+ *     venue below half full, as a warning only.
+ * AC9 (fix f19.3.2, CL-191) Every category row in the impact panel, with or without anything
+ *     affected, fits inside its card at 1280 x 720 and at 390 x 844.
+ * AC10 (fix f19.3.2, CL-191) The summary text of a row with nothing affected keeps its right
+ *     padding inside the card at 390 x 844.
  * Definition of Done: the assessment reads at 1280 x 720 and at 390 x 844, the dialog's buttons
  *     stay on screen, and the page never scrolls sideways.
  *
@@ -33,13 +39,16 @@
  * from the day other specs' fresh events fall on, so the venues it requests are free and the holds
  * they leave hide nothing another spec looks for.
  */
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { approvedEvent, changeRequests, inFuture, signIn, venueCard } from './support'
 
 const CHANGE_REASON = 'The keynote speaker can only come a week later.'
 const GRAND_HALL = 'Grand Hall'
 const EXHIBITION_FOYER = 'Exhibition Foyer'
 const NO_IMPACT = 'No existing arrangements are affected.'
+const PANEL_TITLE = 'Impact of approving this change'
+/** .impact-category-header's 0.875rem: what a row keeps clear on its right. */
+const ROW_PADDING = 14
 const QUEUE_PATH = '/change-requests/review'
 const IMPACT_CHANGED =
   'The impact of this change has changed since you opened it. Review the updated impact, then approve again.'
@@ -52,6 +61,21 @@ const ATTENDANCE_KEEPS_BOOKINGS =
  *  and early enough that a week later is within the two years an event may be planned ahead. */
 function farDay(): number {
   return 400 + Math.floor(Math.random() * 120)
+}
+
+/** AC9/AC10: every row ends inside its card, and a row with nothing affected keeps its padding.
+ *  The panel's heading is as wide as the cards, and doesn't move with the rows. */
+async function expectRowsInsideCards(panel: Locator) {
+  const heading = (await panel
+    .getByRole('heading', { name: PANEL_TITLE, exact: true })
+    .boundingBox())!
+  const cardEdge = heading.x + heading.width
+  const venues = (await panel.getByRole('button', { name: /^Venue bookings/ }).boundingBox())!
+  expect(venues.x + venues.width).toBeLessThanOrEqual(cardEdge)
+  for (const summary of ['No equipment is affected.', 'No registrations are affected.']) {
+    const box = (await panel.getByText(summary).boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(cardEdge - ROW_PADDING)
+  }
 }
 
 /** As the organiser, on the event's page: ask to move it a week later. */
@@ -113,7 +137,7 @@ async function hasNoSidewaysScroll(page: Page): Promise<boolean> {
   return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 }
 
-test('19.3 AC1/AC2: each booked venue the change cancels is listed with why and what happens next', async ({
+test('19.3 AC1/AC2/AC9/AC10: each booked venue the change cancels is listed with why and what happens next', async ({
   page,
 }) => {
   test.setTimeout(150_000)
@@ -153,6 +177,7 @@ test('19.3 AC1/AC2: each booked venue the change cancels is listed with why and 
   await expect(foyer).toContainText('Additional venue')
   await expect(foyer).toContainText('Will be cancelled')
   expect(await hasNoSidewaysScroll(page)).toBe(true)
+  await expectRowsInsideCards(changeRequests(page))
 
   // In the approval dialog, on a phone.
   await page.setViewportSize({ width: 390, height: 844 })
@@ -167,6 +192,7 @@ test('19.3 AC1/AC2: each booked venue the change cancels is listed with why and 
   ).toHaveCount(2)
   await expect(dialog.getByRole('button', { name: 'Approve' })).toBeInViewport()
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport()
+  await expectRowsInsideCards(dialog)
   expect(await hasNoSidewaysScroll(page)).toBe(true)
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   // The request's own card - the assessment shown under it has list items of its own.
@@ -273,4 +299,41 @@ test('19.3 AC7: an impact that changed after the dialog opened is shown again be
   await dialog.getByRole('button', { name: 'Approve' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(changeRequests(page).getByRole('listitem')).toContainText('Approved')
+})
+
+test('19.3 AC8: a venue the change leaves below half full is flagged, and kept', async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  const days = farDay()
+  const { eventId, name, coordinator } = await approvedEvent(page, 'Impact oversized', days)
+  // The fresh event's Main venue needs room for 60: Olivia asks for 50.
+  const section = changeRequests(page)
+  await section.getByRole('button', { name: 'Request a change' }).click()
+  await section.getByLabel('What to change').selectOption({ label: 'Venue requirements' })
+  await section.getByLabel('Requirement 1 number of people').fill('50')
+  await section.getByLabel('Reason for the change').fill(CHANGE_REASON)
+  await section.getByRole('button', { name: 'Send change request' }).click()
+  await expect(section.getByRole('listitem')).toContainText('Pending')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await bookGrandHall(page, eventId, name)
+
+  // Grand Hall, booked for Main venue, holds 400: 50 is below half of it.
+  await section.getByRole('button', { name: 'Show impact' }).click()
+  const venueRow = section.getByRole('button', { name: /^Venue bookings/ })
+  await expect(venueRow).toContainText('1 venue below half full for the people now needed.')
+  await expect(venueRow).not.toContainText('will be cancelled')
+  await venueRow.click()
+  const hall = section
+    .getByRole('region', { name: 'Venue bookings affected' })
+    .getByRole('listitem')
+    .filter({ hasText: 'After approval' })
+  await expect(hall).toContainText(GRAND_HALL)
+  await expect(hall).toContainText('Kept')
+  await expect(hall).toContainText('Larger than needed')
+  await expect(hall).toContainText(
+    `Needs room for 50; ${GRAND_HALL} holds 400, more than twice that.`,
+  )
+  await expect(hall).toContainText('You decide whether to keep this venue or replace it.')
 })

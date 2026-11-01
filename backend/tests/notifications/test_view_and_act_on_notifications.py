@@ -377,6 +377,8 @@ TARGET_CASES = [
     # each registered attendee finds the registration, closed as the event's cancellation.
     _case(_T.EVENT_CANCELLED, Users.COORDINATOR, "event", "event", "event"),
     _case(_T.EVENT_CANCELLED, Users.LEAD, "event", "event", "event"),
+    # Story 16.2: an item units out of service leave short goes to its event's coordinator.
+    _case(_T.EQUIPMENT_SHORT, Users.COORDINATOR, "event", "event", "event"),
     _case(_T.REGISTRATION_CANCELLED, Users.ATTENDEE, "event", "registrations", None),
 ]
 

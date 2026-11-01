@@ -249,6 +249,9 @@ class BookingOut(BaseModel):
     alternative_suggestion: str | None
     # Story 6.2 AC16: when a cancelled booking was cancelled; None otherwise.
     cancelled_at: datetime | None
+    # Story 21.3 AC2: how a cancelled booking was released and why; None otherwise.
+    release_cause: str | None
+    release_reason: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -328,6 +331,9 @@ class BookingQueueEntry(BaseModel):
     # Story 12.6 AC3: when a released original was released - its replacement's approval, shown as
     # "Closed at" in place of its own earlier approval; None for any other request.
     released_at: datetime | None
+    # Story 21.3 AC8: how a cancelled booking was released and why, for the Cancelled tab.
+    release_cause: str | None
+    release_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -363,6 +369,8 @@ class BookingQueueEntry(BaseModel):
             approval_releases_venue_name=booking.approval_releases_venue_name,
             original_is_marked=booking.original_is_marked,
             released_at=booking.released_at,
+            release_cause=booking.release_cause,
+            release_reason=booking.release_reason,
         )
 
 
@@ -395,6 +403,49 @@ class BookingQueue(BaseModel):
     items: list[BookingQueueEntry]
     total: int
     counts: BookingStatusCounts
+
+
+class OrganiserBooking(BaseModel):
+    """Fix f7.1.2 (story 7.1 AC1): one venue booking as the event's organiser reads it - which
+    venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
+    Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
+    out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
+    confirmed, and when the booking was marked under story 9.4 - but not who changed the expiry,
+    or why."""
+
+    id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    # None for an additional venue (story 12.5 AC5).
+    venue_requirement_name: str | None
+    starts_at: datetime
+    ends_at: datetime
+    setup_minutes: int
+    teardown_minutes: int
+    status: str
+    hold_expires_at: datetime | None
+    hold_completed_at: datetime | None
+    # None when unmarked, and once the booking is closed (``venue_unavailable_mark``).
+    venue_unavailable_marked_at: datetime | None
+
+    @classmethod
+    def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
+        return cls(
+            id=booking.id,
+            venue_name=booking.venue.name,
+            venue_location=booking.venue.location,
+            venue_requirement_name=(
+                None if booking.venue_requirement is None else booking.venue_requirement.name
+            ),
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            setup_minutes=booking.setup_minutes,
+            teardown_minutes=booking.teardown_minutes,
+            status=booking.status,
+            hold_expires_at=booking.hold_expires_at,
+            hold_completed_at=booking.hold_completed_at,
+            venue_unavailable_marked_at=booking.venue_unavailable_mark,
+        )
 
 
 class BookingOutcome(BaseModel):
@@ -447,6 +498,9 @@ class BookingOutcome(BaseModel):
     # Story 12.6 AC3: when the original was released - its replacement's approval - which the card
     # shows as "Closed at" rather than the original's own, earlier approval; None otherwise.
     released_at: datetime | None
+    # Story 21.3 AC2: how a cancelled booking was released and why, for the event page.
+    release_cause: str | None
+    release_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -484,4 +538,6 @@ class BookingOutcome(BaseModel):
             replaced_by_venue_name=booking.replaced_by_venue_name,
             pending_replacement_venue_name=booking.pending_replacement_venue_name,
             released_at=booking.released_at,
+            release_cause=booking.release_cause,
+            release_reason=booking.release_reason,
         )

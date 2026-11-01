@@ -6,6 +6,9 @@ import {
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
+  openEventPage,
+  registerButton,
+  registrationSection,
   signIn,
 } from './support'
 
@@ -51,7 +54,6 @@ import {
  */
 
 const PROFILE_PATH = '/profile'
-const UPCOMING_EVENTS_PATH = '/browse'
 const PHONE = { width: 375, height: 667 }
 const DESKTOP = { width: 1280, height: 800 }
 /** The smallest height a control on a phone may have, to be pressed with a thumb. */
@@ -83,17 +85,9 @@ const WATERCOLOUR_CLASS = 'Evening Watercolour Class' // Cara's second, confirme
 const BOOK_CLUB = 'Community Book Club' // Dion's, changing a detail while confirming
 const JAZZ_EVENING = 'Harbourfront Jazz Evening' // 18.1's, only read: its registration is stubbed
 
-/** An event's card on Upcoming events, found by its name (as in attendee-registration.spec.ts). */
-function eventCard(page: Page, name: string) {
-  return page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3, name }) })
-}
-
-function registerButton(page: Page, name: string) {
-  return eventCard(page, name).getByRole('button', { name: `Register for ${name}` })
-}
-
-function registeredBadge(page: Page, name: string) {
-  return eventCard(page, name).getByText('Registered', { exact: true })
+/** Story 18.1 AC9 (fix f18.1.2): the event's page saying the attendee is registered. */
+function registeredBadge(page: Page) {
+  return registrationSection(page).getByText('Registered', { exact: true })
 }
 
 function registrations(page: Page) {
@@ -175,7 +169,7 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next sh
 }) => {
   await page.setViewportSize(PHONE)
   await signIn(page, ACCOUNTS.attendee3)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, POTTERY_TASTER)
 
   await registerButton(page, POTTERY_TASTER).click()
 
@@ -183,7 +177,7 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next sh
   const dialog = confirmDetailsDialog(page)
   await expect(dialog).toBeVisible()
   await expect(dialog).toContainText(`Before you register for ${POTTERY_TASTER}, give the name`)
-  await expect(registeredBadge(page, POTTERY_TASTER)).toHaveCount(0)
+  await expect(registeredBadge(page)).toHaveCount(0)
   await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(CARA.name)
   const phone = dialog.getByLabel('Phone number')
   await expect(phone).toHaveValue('')
@@ -201,10 +195,11 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next sh
   await confirm.click()
 
   await expect(dialog).toHaveCount(0)
-  await expect(registeredBadge(page, POTTERY_TASTER)).toBeVisible()
+  await expect(registeredBadge(page)).toBeVisible()
 
   // AC3: the next registration shows the saved details to confirm, and nothing is registered
   // until they are confirmed.
+  await openEventPage(page, WATERCOLOUR_CLASS)
   await registerButton(page, WATERCOLOUR_CLASS).click()
   await expect(dialog).toBeVisible()
   await expect(dialog).toContainText(
@@ -212,10 +207,10 @@ test('18.4 AC2/AC3: the first registration asks for the details, and the next sh
   )
   await expect(dialog.getByLabel('Phone number')).toHaveValue('+65 9184 0101')
   await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Vegetarian')
-  await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toHaveCount(0)
+  await expect(registeredBadge(page)).toHaveCount(0)
   await confirmRegistration(page)
   await expect(dialog).toHaveCount(0)
-  await expect(registeredBadge(page, WATERCOLOUR_CLASS)).toBeVisible()
+  await expect(registeredBadge(page)).toBeVisible()
   expect(await hasNoSidewaysScroll(page)).toBe(true)
 
   // AC2: saved to the profile.
@@ -228,7 +223,7 @@ test('18.4 AC3: a detail changed while confirming a registration is saved to My 
   page,
 }) => {
   await signIn(page, ACCOUNTS.attendee4)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, BOOK_CLUB)
 
   await registerButton(page, BOOK_CLUB).click()
 
@@ -239,7 +234,7 @@ test('18.4 AC3: a detail changed while confirming a registration is saved to My 
   await dialog.getByLabel('Dietary requirements').fill('No pork, no peanuts')
   await confirmRegistration(page)
   await expect(dialog).toHaveCount(0)
-  await expect(registeredBadge(page, BOOK_CLUB)).toBeVisible()
+  await expect(registeredBadge(page)).toBeVisible()
 
   await page.goto(PROFILE_PATH)
   await expect(page.getByLabel('Dietary requirements')).toHaveValue('No pork, no peanuts')
@@ -467,7 +462,7 @@ test('18.4 AC2/AC3: details the server refuses keep the dialog open, with what w
     },
   )
   await signIn(page, ACCOUNTS.attendee)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, JAZZ_EVENING)
 
   await registerButton(page, JAZZ_EVENING).click()
   const dialog = confirmDetailsDialog(page)
@@ -476,14 +471,17 @@ test('18.4 AC2/AC3: details the server refuses keep the dialog open, with what w
 
   await expect(dialog.getByRole('alert')).toHaveText(PHONE_REQUIRED_MESSAGE)
   await expect(dialog.getByLabel('Dietary requirements')).toHaveValue('Pescatarian')
-  await expect(registeredBadge(page, JAZZ_EVENING)).toHaveCount(0)
+  await expect(registeredBadge(page)).toHaveCount(0)
 })
 
-test('18.4 AC3: a detail changed while confirming fills the next dialog and the sidebar, even when the profile cannot be read again', async ({
+test('18.4 AC3: a detail changed while confirming shows in the sidebar, even when the profile cannot be read again', async ({
   page,
 }) => {
   // The registration is stubbed as taken, and reading the profile again after it fails, so
-  // nothing is written: Aiden's profile is only read.
+  // nothing is written: Aiden's profile is only read. Since story 18.1's fix f18.1.2 the next
+  // registration is on another event's page, which reads the profile when it opens, so what its
+  // dialog shows is the server's copy ("the profile read again after a registration corrects
+  // what the page shows").
   let hasRegistered = false
   await page.route(
     (url) => url.pathname === '/registrations' || url.pathname === PROFILE_PATH,
@@ -519,7 +517,7 @@ test('18.4 AC3: a detail changed while confirming fills the next dialog and the 
     },
   )
   await signIn(page, ACCOUNTS.attendee)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, JAZZ_EVENING)
   const changedName = 'Aiden Tan'
   const changedDietary = 'No peanuts: severe allergy'
 
@@ -535,9 +533,6 @@ test('18.4 AC3: a detail changed while confirming fills the next dialog and the 
   await expect(
     page.getByRole('complementary').getByText(changedName, { exact: true }),
   ).toBeVisible()
-  await registerButton(page, POTTERY_TASTER).click()
-  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(changedName)
-  await expect(dialog.getByLabel('Dietary requirements')).toHaveValue(changedDietary)
 })
 
 test('18.4 AC3: Register waits for the details to load, so the dialog never opens half filled', async ({
@@ -556,7 +551,7 @@ test('18.4 AC3: Register waits for the details to load, so the dialog never open
       return route.fallback()
     },
   )
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, JAZZ_EVENING)
 
   await expect(registerButton(page, JAZZ_EVENING)).toBeDisabled()
   releaseProfile()
@@ -611,7 +606,7 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
     },
   )
   await signIn(page, ACCOUNTS.attendee)
-  await page.goto(UPCOMING_EVENTS_PATH)
+  await openEventPage(page, JAZZ_EVENING)
 
   await registerButton(page, JAZZ_EVENING).click()
   await confirmDetailsDialog(page).getByLabel('Name', { exact: true }).fill('Aiden Tan')
@@ -620,6 +615,7 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
   await expect(
     page.getByRole('complementary').getByText('Aiden Tan (as stored)', { exact: true }),
   ).toBeVisible()
+  await openEventPage(page, POTTERY_TASTER)
   await registerButton(page, POTTERY_TASTER).click()
   await expect(confirmDetailsDialog(page).getByLabel('Dietary requirements')).toHaveValue(
     'Halal (as stored)',

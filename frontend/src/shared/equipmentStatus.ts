@@ -11,3 +11,9 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   UNAVAILABLE: 'Unavailable',
   CANCELLED: 'Released',
 }
+
+/** Story 16.2 AC4: the mark on an event's item that units out of service leave short, as its
+ *  coordinator reads it on the event's page. */
+export function describeItemShort(unitsShort: number, quantity: number): string {
+  return `Short: ${unitsShort} of ${quantity} out of service`
+}

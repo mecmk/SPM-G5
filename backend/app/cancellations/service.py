@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.auth.permissions import RoleCode
 from app.bookings import service as bookings_service
+from app.bookings.models import ReleaseCause
 from app.change_requests import service as change_requests_service
 from app.common.audit import record_audit
 from app.equipment import service as equipment_service
@@ -139,6 +140,7 @@ def cancel_event(db: Session, event_id: uuid.UUID, *, actor: User, reason: str) 
             db,
             booking,
             actor=actor,
+            cause=ReleaseCause.EVENT_CANCELLED,
             because=_BOOKING_RELEASED_BECAUSE,
             details={"cause": "EVENT_CANCELLED"},
             at=cancelled_at,
