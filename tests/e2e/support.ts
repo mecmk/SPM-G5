@@ -125,7 +125,7 @@ export const EVENTS = {
   awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
   pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
   neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
-  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its booking still marked
+  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its marked booking cancelled with it
   productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
   roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
   wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one

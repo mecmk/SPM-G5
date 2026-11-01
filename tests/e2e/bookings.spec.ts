@@ -459,7 +459,9 @@ test('13.2 AC1: approving from the queue card moves it from Pending to Approved'
   await expect(dialog).not.toBeVisible()
   await expect(card).toHaveCount(0)
 
+  // The Approved tab runs to several pages of seeded bookings, so the card is searched for.
   await page.getByRole('tab', { name: /^Approved/ }).click()
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill('Founders Day Fireside Chat')
   await expect(card.getByText('Approved', { exact: true })).toBeVisible()
   await expect(card.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Reject' })).toHaveCount(0)

@@ -21,7 +21,9 @@
  * at the 250-seat Exhibition Foyer, whose operating hours are not recorded, and has never been
  * reviewed. The book fair was sent back once, when it
  * expected 120 people and two microphones. The food festival (approved) and the night walk (sent
- * back) are the Accepted and Declined tabs' seeded events, also only read here.
+ * back) are the Accepted and Declined tabs' seeded events, also only read here. The seed's other
+ * Confirmed events are in the Accepted tab too, each reviewed before it was confirmed (c8), so the
+ * tabs are read for these four only.
  */
 import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn } from './support'
@@ -31,7 +33,9 @@ const CONCERT = 'Harbour Lights Concert'
 const BOOK_FAIR = 'Riverside Book Fair'
 const FOOD_FESTIVAL = 'Marina Food Festival'
 const NIGHT_WALK = 'Lantern Night Walk'
-const SEEDED_TITLES = /Harbour|Riverside|Marina|Lantern/
+// This spec's four, by their whole names: every other Confirmed event in the seed is reviewed and
+// approved too (c8), and several share a word with them.
+const SEEDED_TITLES = new RegExp(`^(${[CONCERT, BOOK_FAIR, FOOD_FESTIVAL, NIGHT_WALK].join('|')})$`)
 
 function queueCard(page: Page, name: string) {
   return page.getByRole('listitem').filter({ has: page.getByRole('heading', { name }) })
