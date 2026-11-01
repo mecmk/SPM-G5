@@ -2423,7 +2423,7 @@ def _request_values(event: Event) -> dict[str, Any]:
                 "quantity": line.quantity,
                 "technical_notes": line.technical_notes,
             }
-            for line in event.equipment_requests
+            for line in _current_lines(event)
         ),
         key=lambda item: item["equipment_type_code"],
     )

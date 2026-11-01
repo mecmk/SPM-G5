@@ -79,6 +79,7 @@ from tests.events.test_correct_event_under_review import (
     _correct,
     _equipment,
     _held,
+    _holds,
     _moved_to,
     _period,
     _read,
@@ -429,6 +430,36 @@ def test_the_type_requested_again_can_still_be_corrected(login_as, db: Session):
         "REQUESTED",
         WITHDRAWN,
     ]
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_correction_beside_a_withdrawn_item_leaves_the_other_holds_alone(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(210))
+    coordinator = login_as(Users.COORDINATOR)
+    added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
+    assert added.status_code == 201, added.text
+    event = _read(coordinator, event["id"])
+    before = _holds(db, event["id"])
+    line = {**_equipment("LAPTOP", 1), "id": added.json()["id"]}
+
+    response = _correct(coordinator, event, description="Clearer agenda.", equipment=[line])
+
+    assert response.status_code == 200, response.text
+    assert _holds(db, event["id"]) == before
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_the_change_history_leaves_out_a_withdrawn_item(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(150))
+    coordinator = login_as(Users.COORDINATOR)
+
+    response = _correct(coordinator, event, equipment=[_equipment("WIRELESS_MIC", 1)])
+
+    assert response.status_code == 200, response.text
+    changes = coordinator.get(f"/events/{event['id']}/changes").json()
+    [change] = [row for row in changes if row["field"] == "equipment"]
+    assert change["old_value"] == []
+    assert [line["equipment_type_code"] for line in change["new_value"]] == ["WIRELESS_MIC"]
 
 
 def _sent_line(login_as, db: Session, period, *, is_accepted: bool) -> tuple[dict, dict]:
