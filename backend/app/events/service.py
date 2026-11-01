@@ -205,6 +205,10 @@ _HELD_ITEM_STATUSES = (
 # Story 6.2, 19.2, 17.2 AC3: no longer the event's, kept for Technical Support's record. A 7.2
 # correction neither holds, edits nor removes them.
 KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
+# Story 15.1 AC6 (fix f15.1.1): a declined item stays listed as history and does not count, so a
+# correction leaves it alone too. It is not kept for the record: that set also decides how
+# Technical Support's queue (15.2) and an approved change (19.2) treat an item.
+_NOT_CORRECTED = KEPT_FOR_RECORD | {EquipmentRequestStatus.DECLINED}
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -1055,8 +1059,9 @@ def _check_equipment_available(
 
 
 def _current_lines(event: Event) -> list[EventEquipmentRequest]:
-    """The event's equipment lines, leaving out those kept only for the record."""
-    return [line for line in event.equipment_requests if line.status not in KEPT_FOR_RECORD]
+    """The event's equipment lines, leaving out those kept only for the record and, story 15.1 AC6
+    (fix f15.1.1), declined ones."""
+    return [line for line in event.equipment_requests if line.status not in _NOT_CORRECTED]
 
 
 def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> None:

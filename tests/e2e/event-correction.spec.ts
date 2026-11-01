@@ -429,7 +429,7 @@ test('7.2 AC10: an event awaiting its safety check still offers its details for 
 test('7.2 AC15: once approved, the form shows the equipment read-only and points to its own section', async ({
   page,
 }) => {
-  // Read only: the roadshow's pending, accepted and declined items are shown, never changed.
+  // Read only: the roadshow's pending and accepted items are shown, never changed.
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.equipmentRoadshow}`)
   await page.getByRole('link', { name: 'Edit event' }).click()
@@ -448,8 +448,6 @@ test('7.2 AC15: once approved, a correction leaves the equipment out of what it 
   page,
   browser,
 }) => {
-  // Leaving the list out is what lets an event carrying a declined type requested again (15.1)
-  // still be corrected: 2.1's one-line-per-type rule would refuse the list if it were sent.
   test.setTimeout(TWO_USER_TIMEOUT)
   const name = uniqueName('Approved kit')
   await signIn(page, ACCOUNTS.organiser)

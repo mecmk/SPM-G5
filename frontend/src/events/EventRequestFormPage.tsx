@@ -781,7 +781,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       let latest = event
       if (isSavingDetails) {
         // Story 7.2 AC15: an approved event's equipment is left out, as it is changed in its own
-        // section; sent, a declined type requested again (15.1) would read as a duplicate line.
+        // section.
         const { equipment, ...details } = eventInputFrom(form)
         latest = await correctEventUnderReview(
           latest.id,

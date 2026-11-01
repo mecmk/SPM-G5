@@ -1,6 +1,6 @@
 import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
-import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
+import { NOT_CORRECTED_STATUSES } from '../shared/equipmentStatus'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
 import { isBlankOrPhoneNumber } from '../shared/phone'
 
@@ -386,8 +386,9 @@ function formAsSaved(event: EventDetail): EventFormState {
     ),
     accessibilityNotes: textOf(event.accessibility_notes),
     // Story 17.2 AC3: an item kept only for the record is no longer the event's to correct.
+    // Story 15.1 AC6 (fix f15.1.1): nor is a declined one, which the event page lists as history.
     equipment: event.equipment
-      .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
+      .filter((line) => !NOT_CORRECTED_STATUSES.includes(line.status))
       .map((line) => {
         nextEquipmentKey += 1
         return {
@@ -820,8 +821,7 @@ export function findServerProblemField(
 
 /**
  * The first problem with the venue requirements and equipment, or null. Story 7.2 AC15: equipment
- * a save leaves out is not judged - an approved event's lines are Technical Support's to decide,
- * and can hold one type twice (a declined item requested again, 15.1).
+ * a save leaves out is not judged - an approved event's lines are Technical Support's to decide.
  */
 function validateRequirements(
   form: EventFormState,
