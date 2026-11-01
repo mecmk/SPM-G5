@@ -21,6 +21,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
     field_validator,
     model_validator,
 )
@@ -284,7 +285,7 @@ class OutOfServiceIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    quantity: int
+    quantity: StrictInt
     reason: OutOfServiceReason
     notes: str | None = None
     starts_at: AwareDatetime
@@ -308,7 +309,7 @@ class OutOfServiceUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    quantity: int = None  # type: ignore[assignment]
+    quantity: StrictInt = None  # type: ignore[assignment]
     reason: OutOfServiceReason = None  # type: ignore[assignment]
     notes: str | None = None
     starts_at: AwareDatetime = None  # type: ignore[assignment]

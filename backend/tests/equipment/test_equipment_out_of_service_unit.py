@@ -1,18 +1,20 @@
 """Story 16.2 - mark equipment out of service. UNIT tests: the rules on their own.
 
-Level: unit. Each test calls a pure function of ``app/equipment/service.py`` - how many units
-records have out of service at once, which holds a shortage leaves short, whether a start is in
-the past - or builds a request model of ``app/equipment/schemas.py``, with no database, no HTTP and
-no fixture. ``test_equipment_out_of_service_integration.py`` proves the API applies them; the flows
-Technical Support and a coordinator click through are e2e-tested in
+Level: unit. Each test calls a pure function - how many units records have out of service at
+once (``app/events/service.py``, which 2.1's availability shares), which holds a shortage leaves
+short and whether a start is in the past (``app/equipment/service.py``) - or builds a request
+model of ``app/equipment/schemas.py``, with no database, no HTTP and no fixture.
+``test_equipment_out_of_service_integration.py`` proves the API applies them; the flows Technical
+Support and a coordinator click through are e2e-tested in
 ``tests/e2e/equipment-out-of-service.spec.ts``.
 
 AC1 Technical Support records units of an equipment type as out of service: how many, why
     (Damaged, Under maintenance, Lost or Other), an optional note, from when and, optionally,
     until when (left blank: until ended). (Here: what a record may hold.)
 AC3 The quantity is a whole number from 1 up to the stock less the units other records already
-    have out at any moment of its period. The end must be after the start; the start cannot be in
-    the past. (Here: the units out at any one moment, the start's rule and the schema's checks.)
+    have out at any moment of its period still to come. The end must be after the start; the start
+    cannot be in the past. (Here: the units out at any one moment, the start's rule and the
+    schema's checks.)
 AC4 When the units left cannot cover the holds on that type over the period, the holds that
     cannot be covered - the most recently placed first, so earlier ones keep their units - are
     short. Only the part still to come counts. (Here: which holds, and by how many units.)
@@ -28,7 +30,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.equipment import schemas, service
-from app.equipment.service import HeldUnits, OutOfServiceWindow
+from app.equipment.service import HeldUnits
+from app.events import service as events_service
+from app.events.service import OutOfServiceWindow
 
 NOW = datetime(2030, 3, 1, 9, 30, 15, tzinfo=UTC)
 HOUR = timedelta(hours=1)
@@ -61,21 +65,21 @@ def _hold(start: float, end: float, units: int, *, placed: float = -100.0, hold_
 # =============================================================================================
 @pytest.mark.story("16.2", ac=3)
 def test_with_no_records_no_units_are_out():
-    assert service.units_out_at_most([], starts_at=_at(1), ends_at=_at(5)) == 0
+    assert events_service.units_out_at_most([], starts_at=_at(1), ends_at=_at(5)) == 0
 
 
 @pytest.mark.story("16.2", ac=3)
 def test_a_record_covering_the_period_counts_its_units():
     records = [_record(0, 10, 3)]
 
-    assert service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 3
+    assert events_service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 3
 
 
 @pytest.mark.story("16.2", ac=7)
 def test_overlapping_records_add_up():
     records = [_record(0, 10, 3), _record(2, 6, 2)]
 
-    assert service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 5
+    assert events_service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 5
 
 
 @pytest.mark.story("16.2", ac=7)
@@ -83,14 +87,14 @@ def test_records_one_after_another_count_the_larger_not_their_sum():
     """They are never out at the same moment, so the period can spare the larger of the two."""
     records = [_record(1, 2, 3), _record(3, 4, 2)]
 
-    assert service.units_out_at_most(records, starts_at=_at(0), ends_at=_at(5)) == 3
+    assert events_service.units_out_at_most(records, starts_at=_at(0), ends_at=_at(5)) == 3
 
 
 @pytest.mark.story("16.2", ac=7)
 def test_a_record_starting_inside_the_period_counts_from_its_start():
     records = [_record(0, 10, 1), _record(4, 8, 4)]
 
-    assert service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 5
+    assert events_service.units_out_at_most(records, starts_at=_at(1), ends_at=_at(5)) == 5
 
 
 @pytest.mark.story("16.2", ac=3)
@@ -98,35 +102,35 @@ def test_a_record_ending_as_the_period_starts_does_not_count():
     """Half-open, as holds are: the record's last moment is just before the period's first."""
     records = [_record(0, 2, 4)]
 
-    assert service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 0
+    assert events_service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 0
 
 
 @pytest.mark.story("16.2", ac=3)
 def test_a_record_starting_as_the_period_ends_does_not_count():
     records = [_record(5, 9, 4)]
 
-    assert service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 0
+    assert events_service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 0
 
 
 @pytest.mark.story("16.2", ac=3)
 def test_a_record_starting_just_before_the_period_ends_counts():
     records = [_record(4.9, 9, 4)]
 
-    assert service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 4
+    assert events_service.units_out_at_most(records, starts_at=_at(2), ends_at=_at(5)) == 4
 
 
 @pytest.mark.story("16.2", ac=3)
 def test_an_open_ended_record_counts_however_late_the_period():
     records = [_record(0, None, 2)]
 
-    assert service.units_out_at_most(records, starts_at=_at(1000), ends_at=_at(1001)) == 2
+    assert events_service.units_out_at_most(records, starts_at=_at(1000), ends_at=_at(1001)) == 2
 
 
 @pytest.mark.story("16.2", ac=3)
 def test_an_open_ended_period_counts_a_record_starting_any_time_after_it():
     records = [_record(500, 501, 2), _record(0, 1, 1)]
 
-    assert service.units_out_at_most(records, starts_at=_at(2), ends_at=None) == 2
+    assert events_service.units_out_at_most(records, starts_at=_at(2), ends_at=None) == 2
 
 
 # =============================================================================================
@@ -314,7 +318,7 @@ def test_a_note_left_blank_is_no_note(notes: str | None):
 
 @pytest.mark.story("16.2", ac=1)
 def test_a_note_of_1000_characters_is_kept_and_of_1001_refused():
-    longest = "n" * schemas.OUT_OF_SERVICE_NOTES_MAX_LENGTH
+    longest = "n" * 1000  # the AC's figure, not the constant under test
 
     assert schemas.OutOfServiceIn(**_record_in(notes=f" {longest} ")).notes == longest
     error = _refusal(schemas.OutOfServiceIn, **_record_in(notes=longest + "n"))

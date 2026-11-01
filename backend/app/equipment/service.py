@@ -21,6 +21,11 @@ equipment types by id - so two of them cannot deadlock:
 * each equipment type row, as 2.1's submission hold already does, so two events cannot both take
   the last units of a type.
 
+The event is held ``FOR NO KEY UPDATE``, as ``events.service.lock_event`` holds it. A record of
+units out of service (story 16.2) holds a type and then writes a notice that names an event, which
+takes a key-share lock on the event's row. ``FOR UPDATE`` would make that notice wait for a write
+holding the event, while that write waited for the type: a deadlock.
+
 The checks made under those locks cannot race, which is why "a type is open only once on an event"
 (AC6) is checked rather than left to a unique index: such an index would also refuse 2.1's draft
 edit that removes a line and adds the same type back, since the ORM inserts before it deletes
@@ -490,8 +495,9 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
 
 def _event_for_change(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9/AC10: the event, its row locked until the transaction ends, once ``actor`` is known to
-    be its assigned coordinator and its equipment can still change."""
-    db.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+    be its assigned coordinator and its equipment can still change. ``FOR NO KEY UPDATE``: see the
+    module docstring."""
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
     event = _visible_event(db, event_id, viewer=actor)
     if event.assigned_coordinator_id != actor.id:
         raise NotAssignedCoordinator()
@@ -784,7 +790,9 @@ def submit_equipment(
 
 
 def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
-    """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends."""
+    """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends -
+    ``FOR NO KEY UPDATE``, so a record of units out of service saved meanwhile can still tell the
+    event's coordinator (story 16.2; see the module docstring)."""
     event_id = db.scalar(
         select(EventEquipmentRequest.event_id).where(EventEquipmentRequest.id == item_id)
     )
@@ -793,7 +801,7 @@ def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
     return db.scalar(
         select(Event)
         .where(Event.id == event_id)
-        .with_for_update(of=Event)
+        .with_for_update(of=Event, key_share=True)
         .execution_options(populate_existing=True)
     )
 
@@ -1253,6 +1261,9 @@ _SHORT_HOLD_ENTITY_TYPE = "equipment_reservation"
 EQUIPMENT_TYPE_NOT_FOUND_MESSAGE = "Equipment type not found."
 OUT_OF_SERVICE_NOT_FOUND_MESSAGE = "This out-of-service record was not found."
 START_IN_THE_PAST_MESSAGE = "The start cannot be in the past."
+END_IN_THE_PAST_MESSAGE = (
+    "The end cannot be in the past. To bring the units back now, end the record."
+)
 RECORD_ENDED_MESSAGE = "This record has already ended."
 RECORD_START_LOCKED_MESSAGE = (
     "This record is in force, so its start cannot be moved. Change its end, or end it."
@@ -1333,15 +1344,6 @@ class RecordStarted(OutOfServiceConflict):
 
 
 @dataclass(frozen=True)
-class OutOfServiceWindow:
-    """AC3/AC7: units a record has out, from ``starts_at`` to ``ends_at`` (None: until ended)."""
-
-    starts_at: datetime
-    ends_at: datetime | None
-    quantity: int
-
-
-@dataclass(frozen=True)
 class HeldUnits:
     """AC4: the units a hold still takes over its period, and when it was placed."""
 
@@ -1352,33 +1354,11 @@ class HeldUnits:
     placed_at: datetime
 
 
-def _covers(record: OutOfServiceWindow, moment: datetime) -> bool:
-    """Half-open, as holds are: out from its start, back at its end."""
-    return record.starts_at <= moment and (record.ends_at is None or moment < record.ends_at)
-
-
-def units_out_at_most(
-    records: Iterable[OutOfServiceWindow], *, starts_at: datetime, ends_at: datetime | None
-) -> int:
-    """AC3/AC7: the most units ``records`` have out of service at any one moment from
-    ``starts_at`` to ``ends_at`` (None: from then on). Overlapping records add up; one after
-    another do not. The count only rises where a record starts, so those moments suffice."""
-    records = list(records)
-    moments = [starts_at] + [
-        record.starts_at
-        for record in records
-        if starts_at < record.starts_at and (ends_at is None or record.starts_at < ends_at)
-    ]
-    return max(
-        sum(record.quantity for record in records if _covers(record, moment)) for moment in moments
-    )
-
-
 def short_units(
     *,
     stock: int,
     holds: Iterable[HeldUnits],
-    records: Iterable[OutOfServiceWindow],
+    records: Iterable[events_service.OutOfServiceWindow],
     now: datetime,
 ) -> dict[uuid.UUID, int]:
     """AC4: how many units each hold cannot have, by hold, for those short of any. At each moment
@@ -1394,7 +1374,9 @@ def short_units(
     )
     short: dict[uuid.UUID, int] = {}
     for moment in moments:
-        left = stock - sum(record.quantity for record in records if _covers(record, moment))
+        left = stock - sum(
+            record.quantity for record in records if events_service.is_out_at(record, moment)
+        )
         under_way = sorted(
             (hold for hold in holds if hold.starts_at <= moment < hold.ends_at),
             key=lambda hold: (hold.placed_at, hold.hold_id),
@@ -1508,13 +1490,13 @@ def _record(db: Session, type_id: uuid.UUID, record_id: uuid.UUID) -> EquipmentU
     return record
 
 
-def _window(record: EquipmentUnavailabilityPeriod) -> OutOfServiceWindow:
-    return OutOfServiceWindow(record.starts_at, record.ends_at, record.quantity)
+def _window(record: EquipmentUnavailabilityPeriod) -> events_service.OutOfServiceWindow:
+    return events_service.OutOfServiceWindow(record.starts_at, record.ends_at, record.quantity)
 
 
 def _windows(
     db: Session, type_id: uuid.UUID, *, leaving_out: uuid.UUID | None = None
-) -> list[OutOfServiceWindow]:
+) -> list[events_service.OutOfServiceWindow]:
     """The records of ``type_id`` as windows, but for ``leaving_out``."""
     return [
         _window(record)
@@ -1540,12 +1522,13 @@ def _check_record(
     ends_at: datetime | None,
     record: EquipmentUnavailabilityPeriod | None,
     now: datetime,
-) -> list[OutOfServiceWindow]:
+) -> list[events_service.OutOfServiceWindow]:
     """AC3: refuse a record - new, or ``record`` as an edit would leave it - that the rules or the
     stock do not allow: an ended record (``RecordEnded``); the start of one in force moved
-    (``RecordStartLocked``); a new start in the past, or an end not after the start
-    (``InvalidOutOfService``); more units than the stock less what the other records have out at
-    any moment of the period (``TooManyOutOfService``). Returns those other records."""
+    (``RecordStartLocked``); a new start in the past, an end not after the start, or an end
+    before now - End does that (``InvalidOutOfService``); more units than the stock less what the
+    other records have out at any moment of the period still to come (``TooManyOutOfService``).
+    Returns those other records."""
     is_new_start = record is None or starts_at != record.starts_at
     if record is not None:
         if _has_ended(record, now):
@@ -1556,9 +1539,12 @@ def _check_record(
         raise InvalidOutOfService(START_IN_THE_PAST_MESSAGE)
     if ends_at is not None and ends_at <= starts_at:
         raise InvalidOutOfService(OUT_OF_SERVICE_END_NOT_AFTER_START_MESSAGE)
+    if ends_at is not None and ends_at <= now:
+        raise InvalidOutOfService(END_IN_THE_PAST_MESSAGE)
     others = _windows(db, equipment_type.id, leaving_out=None if record is None else record.id)
-    most = equipment_type.total_quantity - units_out_at_most(
-        others, starts_at=starts_at, ends_at=ends_at
+    # A record in force has its units out from now on: what others had out before cannot meet it.
+    most = equipment_type.total_quantity - events_service.units_out_at_most(
+        others, starts_at=max(starts_at, now), ends_at=ends_at
     )
     if quantity > most:
         raise TooManyOutOfService(most)
@@ -1568,7 +1554,7 @@ def _check_record(
 def _short_holds(
     db: Session,
     equipment_type: EquipmentType,
-    records: list[OutOfServiceWindow],
+    records: list[events_service.OutOfServiceWindow],
     *,
     now: datetime,
 ) -> list[ShortHold]:
@@ -1609,6 +1595,27 @@ def _short_holds(
     )
 
 
+def _left_shorter(
+    db: Session,
+    equipment_type: EquipmentType,
+    *,
+    before: list[events_service.OutOfServiceWindow],
+    after: list[events_service.OutOfServiceWindow],
+    now: datetime,
+) -> list[ShortHold]:
+    """AC4/AC5: the holds ``after`` leaves short, or shorter than ``before`` did - the ones a save
+    affects. The check before saving and the notices on saving both read this, so the holds
+    Technical Support is shown are the ones whose coordinators are told."""
+    was = {
+        each.hold.id: each.units_short for each in _short_holds(db, equipment_type, before, now=now)
+    }
+    return [
+        each
+        for each in _short_holds(db, equipment_type, after, now=now)
+        if each.units_short > was.get(each.hold.id, 0)
+    ]
+
+
 def check_out_of_service(
     db: Session,
     type_id: uuid.UUID,
@@ -1620,8 +1627,8 @@ def check_out_of_service(
     now: datetime,
 ) -> list[ShortHold]:
     """AC5: the holds a record of ``quantity`` units from ``starts_at`` to ``ends_at`` would leave
-    short - with ``record_id``, that record as an edit would leave it - refused as saving it would
-    be (AC3). Reads only."""
+    short, or shorter than they are - with ``record_id``, that record as an edit would leave it -
+    refused as saving it would be (AC3). Reads only."""
     equipment_type = _active_type(db, type_id)
     record = None if record_id is None else _record(db, type_id, record_id)
     others = _check_record(
@@ -1633,8 +1640,9 @@ def check_out_of_service(
         record=record,
         now=now,
     )
-    proposed = OutOfServiceWindow(starts_at, ends_at, quantity)
-    return _short_holds(db, equipment_type, [*others, proposed], now=now)
+    before = others if record is None else [*others, _window(record)]
+    after = [*others, events_service.OutOfServiceWindow(starts_at, ends_at, quantity)]
+    return _left_shorter(db, equipment_type, before=before, after=after, now=now)
 
 
 def _snapshot(record: EquipmentUnavailabilityPeriod) -> dict[str, Any]:
@@ -1663,22 +1671,20 @@ def _audit(
     )
 
 
-def _tell_newly_short(
+def _tell_left_shorter(
     db: Session,
     equipment_type: EquipmentType,
     *,
-    before: list[OutOfServiceWindow],
-    after: list[OutOfServiceWindow],
+    before: list[events_service.OutOfServiceWindow],
+    after: list[events_service.OutOfServiceWindow],
     actor: User,
     now: datetime,
 ) -> None:
-    """AC4: tell the coordinator of each event whose hold ``after`` leaves short, and ``before``
-    did not - one already short was told when it became so. An event with no coordinator yet is
-    marked all the same, and its coordinator sees the mark once they have it."""
-    already = {each.hold.id for each in _short_holds(db, equipment_type, before, now=now)}
-    for each in _short_holds(db, equipment_type, after, now=now):
-        if each.hold.id in already:
-            continue
+    """AC4: tell the coordinator of each event whose hold ``after`` leaves short, or shorter than
+    ``before`` did, how short it now is. One no shorter was told when it last became so. An event
+    with no coordinator yet is marked all the same, and its coordinator sees the mark once they
+    have it."""
+    for each in _left_shorter(db, equipment_type, before=before, after=after, now=now):
         notify(
             db,
             recipient=each.event.assigned_coordinator,
@@ -1699,8 +1705,8 @@ def add_out_of_service(
     db: Session, type_id: uuid.UUID, data: OutOfServiceIn, *, actor: User, now: datetime
 ) -> EquipmentUnavailabilityPeriod:
     """AC1/AC3: record ``data.quantity`` units of ``type_id`` out of service, audited. AC4: the
-    coordinators of the holds it newly leaves short are told, in the same transaction. AC7: under
-    the type's row lock, so two records, or a record and a hold, take turns."""
+    coordinators of the holds it leaves short, or shorter, are told, in the same transaction.
+    AC7: under the type's row lock, so two records, or a record and a hold, take turns."""
     lock_types(db, [type_id])
     equipment_type = _active_type(db, type_id)
     before = _check_record(
@@ -1726,7 +1732,7 @@ def add_out_of_service(
     _audit(
         db, record.id, action=OUT_OF_SERVICE_CREATED_ACTION, details=_snapshot(record), actor=actor
     )
-    _tell_newly_short(
+    _tell_left_shorter(
         db, equipment_type, before=before, after=[*before, _window(record)], actor=actor, now=now
     )
     db.commit()
@@ -1745,7 +1751,7 @@ def edit_out_of_service(
 ) -> EquipmentUnavailabilityPeriod:
     """AC2/AC3: change a record - only the fields sent - judged as it would become, or, with
     ``end_now``, end it (``_end_out_of_service``). The audit keeps what was replaced. AC4: the
-    coordinators of holds it newly leaves short are told."""
+    coordinators of holds it leaves short, or shorter, are told."""
     if data.end_now:
         return _end_out_of_service(db, type_id, record_id, actor=actor, now=now)
     lock_types(db, [type_id])
@@ -1778,7 +1784,7 @@ def edit_out_of_service(
         details={"before": was, "after": _snapshot(record)},
         actor=actor,
     )
-    _tell_newly_short(
+    _tell_left_shorter(
         db, equipment_type, before=before, after=[*others, _window(record)], actor=actor, now=now
     )
     db.commit()
@@ -1791,7 +1797,7 @@ def _end_out_of_service(
 ) -> EquipmentUnavailabilityPeriod:
     """AC2: end a record in force at ``now``. One that has ended is refused (``RecordEnded``), and
     so is one not yet started (``RecordNotStarted``: it is removed instead). Ending gives units
-    back, so it leaves nothing newly short."""
+    back, so it leaves no hold shorter."""
     lock_types(db, [type_id])
     _active_type(db, type_id)
     record = _record(db, type_id, record_id)
@@ -1819,7 +1825,7 @@ def remove_out_of_service(
 ) -> None:
     """AC2: remove a record not yet started, as it never took effect; the audit keeps its fields.
     One that has ended (``RecordEnded``) or is in force (``RecordStarted``: it is ended instead)
-    is refused. Removing gives units back, so it leaves nothing newly short."""
+    is refused. Removing gives units back, so it leaves no hold shorter."""
     lock_types(db, [type_id])
     _active_type(db, type_id)
     record = _record(db, type_id, record_id)

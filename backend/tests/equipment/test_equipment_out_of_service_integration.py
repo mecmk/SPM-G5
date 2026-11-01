@@ -2,8 +2,8 @@
 
 Level: integration. Each test calls the ``/equipment-types`` endpoints, or an event's
 ``/equipment-shortages``, through a signed-in client against the real schema in the rolled-back
-test transaction; the races at the end run real concurrent transactions, which commit, so they
-clean up after themselves. The counting rules on their own are unit-tested in
+test transaction; AC7's races run real concurrent transactions, which commit, so they clean up
+after themselves. The counting rules on their own are unit-tested in
 ``test_equipment_out_of_service_unit.py``; what Technical Support and a coordinator click through
 is e2e-tested in ``tests/e2e/equipment-out-of-service.spec.ts``.
 
@@ -22,32 +22,38 @@ AC2 Each equipment type has a page, opened from an Equipment catalogue listing e
     quantity, reason, note and dates. End ends a record in force now; one not yet started is
     removed, as it never took effect. Ended records leave the list.
 AC3 The quantity is a whole number from 1 up to the stock less the units other records already
-    have out at any moment of its period. The end must be after the start. The start cannot be in
-    the past, a record in force keeps its start, and an ended record cannot be edited.
+    have out at any moment of its period still to come. The end must be after the start, and
+    after now (End stops a record now). The start cannot be in the past, a record in force keeps
+    its start, and an ended record cannot be edited.
 AC4 When the units left cannot cover the holds on that type over the period, the holds that
     cannot be covered - the most recently placed first - are marked short on their event's
-    equipment list, and each event's coordinator is notified with the event, the equipment and
-    how many units are short. Only the part still to come counts, and the mark follows the
-    records: an edit or End that frees enough units clears it.
+    equipment list. Each time a save leaves a hold short, or shorter than before, its event's
+    coordinator is notified with the event, the equipment and how many units are short. Only the
+    part still to come counts, and the mark follows the records: an edit or End that frees enough
+    units clears it.
 AC5 Before saving, the server checks the quantity against the stock and returns the holds the
-    record would leave short, so the page can show them and ask to confirm. Saving checks again.
+    record would leave short, or shorter than they already are - the same holds whose coordinators
+    saving tells - so the page can show them and ask to confirm. Saving re-runs AC3's checks, and
+    counts a hold placed in between.
 AC6 Only Technical Support Staff can open the catalogue and the type pages, and record, edit or
     end records: others get 403 and signed-out users 401.
 AC7 Records that overlap in time add up and never exceed the stock, also when two are saved at
-    once, or one is saved as a hold is placed.
+    once, or one is saved as a hold is placed or accepted.
 """
 
 from __future__ import annotations
 
+import queue
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -393,6 +399,27 @@ def test_units_out_of_service_outside_the_events_period_leave_it_whole(tech_clie
     assert figure["available"] == 4
 
 
+@pytest.mark.story("16.2", ac=1)
+@pytest.mark.story("16.2", ac=7)
+def test_records_one_after_another_hold_back_only_the_most_out_at_once(tech_client, db: Session):
+    """Records that do not overlap do not add up (AC7), so an event across both is offered what
+    the busier one leaves - 1 of 3 here - not the stock less the two together."""
+    kit = make_equipment_type(db, total_quantity=3)
+    event = _event(db, start=10, end=12)
+    _out(db, kit, 1, start=10, end=10.9)
+    _out(db, kit, 2, start=11, end=12)
+
+    tech_client.login(Users.COORDINATOR)
+    figures = tech_client.get(f"/events/{event.id}/equipment-availability").json()
+    held = tech_client.post(
+        f"/events/{event.id}/equipment", json={"equipment_type_code": kit.code, "quantity": 1}
+    )
+
+    [figure] = [each for each in figures if each["equipment_type_code"] == kit.code]
+    assert figure["available"] == 1
+    assert held.status_code == 201
+
+
 # =============================================================================================
 # AC2 - editing, ending and removing a record
 # =============================================================================================
@@ -600,8 +627,26 @@ def test_widening_a_record_onto_another_counts_the_other(tech_client, db: Sessio
 @pytest.mark.story("16.2", ac=3)
 @pytest.mark.parametrize(
     "fields",
-    [{"quantity": 0}, {"quantity": "two"}, {"reason": "STOLEN"}, {"notes": "n" * 1001}],
-    ids=["quantity-0", "not-a-number", "unknown-reason", "note-over-1000"],
+    [
+        {"quantity": 0},
+        {"quantity": "two"},
+        {"quantity": "2"},
+        {"quantity": True},
+        {"quantity": 1.5},
+        {"reason": "STOLEN"},
+        {"notes": "n" * 1001},
+        {"starts_at": None},
+    ],
+    ids=[
+        "quantity-0",
+        "not-a-number",
+        "number-in-quotes",
+        "true",
+        "fraction",
+        "unknown-reason",
+        "note-over-1000",
+        "no-start",
+    ],
 )
 def test_a_record_outside_the_rules_is_refused_and_nothing_is_saved(
     tech_client, db: Session, fields: dict
@@ -698,6 +743,76 @@ def test_a_record_in_force_keeps_its_start_but_its_end_and_quantity_can_change(
 
 
 @pytest.mark.story("16.2", ac=3)
+def test_a_record_sent_with_no_start_is_refused(tech_client, db: Session):
+    kit = make_equipment_type(db)
+    body = _body()
+    del body["starts_at"]
+
+    response = tech_client.post(_records_path(kit.id), json=body)
+
+    assert response.status_code == 422
+    assert (
+        db.scalar(
+            select(func.count()).where(EquipmentUnavailabilityPeriod.equipment_type_id == kit.id)
+        )
+        == 0
+    )
+
+
+@pytest.mark.story("16.2", ac=3)
+@pytest.mark.parametrize("quantity", ["2", True, 1.5], ids=["number-in-quotes", "true", "fraction"])
+def test_an_edit_to_a_quantity_that_is_not_a_whole_number_is_refused(
+    tech_client, db: Session, quantity
+):
+    kit = make_equipment_type(db, total_quantity=5)
+    record = _out(db, kit, 1, start=3, end=4)
+
+    response = tech_client.patch(_record_path(kit.id, record.id), json={"quantity": quantity})
+
+    assert response.status_code == 422
+    db.refresh(record)
+    assert record.quantity == 1
+
+
+@pytest.mark.story("16.2", ac=3)
+def test_an_edit_ending_a_record_in_the_past_is_refused_and_points_to_end(tech_client, db: Session):
+    """End brings a record's units back now; an edit cannot end it before now, which would take
+    it off the list with no way to correct it. The check refuses it as saving would (AC5)."""
+    kit = make_equipment_type(db)
+    record = _out(db, kit, 1, start=-1, end=None)
+    past = _days(-0.5)
+
+    checked = _check(
+        tech_client,
+        kit.id,
+        quantity=1,
+        starts_at=record.starts_at,
+        ends_at=past,
+        record_id=record.id,
+    )
+    edited = tech_client.patch(_record_path(kit.id, record.id), json={"ends_at": past.isoformat()})
+
+    assert (checked.status_code, checked.json()["detail"]) == (422, service.END_IN_THE_PAST_MESSAGE)
+    assert (edited.status_code, edited.json()["detail"]) == (422, service.END_IN_THE_PAST_MESSAGE)
+    db.refresh(record)
+    assert record.ends_at is None
+
+
+@pytest.mark.story("16.2", ac=3)
+def test_raising_a_record_in_force_counts_only_the_records_still_to_come(tech_client, db: Session):
+    """Units out before now cannot meet the units this record has out from now on."""
+    kit = make_equipment_type(db, total_quantity=3)
+    record = _out(db, kit, 1, start=-5, end=None)
+    _out(db, kit, 2, start=-4, end=-2)  # over two days ago
+
+    response = tech_client.patch(_record_path(kit.id, record.id), json={"quantity": 2})
+
+    assert response.status_code == 200
+    db.refresh(record)
+    assert record.quantity == 2
+
+
+@pytest.mark.story("16.2", ac=3)
 @pytest.mark.parametrize("change", [{"quantity": 2}, {"end_now": True}])
 def test_an_ended_record_cannot_be_edited_or_ended_again(tech_client, db: Session, change: dict):
     kit = make_equipment_type(db)
@@ -755,6 +870,51 @@ def test_the_check_lists_nothing_when_the_holds_stay_covered(tech_client, db: Se
     _held(db, _event(db), kit, 3)
 
     response = _check(tech_client, kit.id, quantity=1, starts_at=_days(10), ends_at=_days(12))
+
+    assert response.json() == {"short_holds": []}
+
+
+@pytest.mark.story("16.2", ac=5)
+def test_the_check_leaves_out_a_hold_another_record_left_short(tech_client, db: Session):
+    """The list is the holds this record leaves short, or shorter - the ones whose coordinators
+    saving it tells (AC4) - not every hold of the type already short."""
+    kit = make_equipment_type(db, total_quantity=3)
+    _held(db, _event(db), kit, 3)
+    _out(db, kit, 1, start=10, end=12)  # already leaves the hold 1 short
+
+    response = _check(tech_client, kit.id, quantity=1, starts_at=_days(30), ends_at=_days(31))
+
+    assert response.json() == {"short_holds": []}
+
+
+@pytest.mark.story("16.2", ac=5)
+def test_the_check_lists_a_hold_already_short_that_the_record_leaves_shorter(
+    tech_client, db: Session
+):
+    kit = make_equipment_type(db, total_quantity=3)
+    _held(db, _event(db), kit, 3)
+    _out(db, kit, 1, start=10, end=12)
+
+    response = _check(tech_client, kit.id, quantity=1, starts_at=_days(10), ends_at=_days(12))
+
+    [short] = response.json()["short_holds"]
+    assert (short["units_held"], short["units_short"]) == (3, 2)
+
+
+@pytest.mark.story("16.2", ac=5)
+def test_the_check_of_an_edit_that_eases_a_shortage_lists_nothing(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    _held(db, _event(db), kit, 3)
+    record = _out(db, kit, 2, start=10, end=12)  # leaves the hold 2 short
+
+    response = _check(
+        tech_client,
+        kit.id,
+        quantity=1,
+        starts_at=record.starts_at,
+        ends_at=record.ends_at,
+        record_id=record.id,
+    )
 
     assert response.json() == {"short_holds": []}
 
@@ -915,14 +1075,63 @@ def test_only_the_hold_placed_last_is_short_and_only_its_coordinator_is_told(
 
 
 @pytest.mark.story("16.2", ac=4)
-def test_a_hold_already_short_is_not_told_again(tech_client, db: Session):
+def test_a_hold_already_short_is_not_told_again_by_a_record_leaving_it_no_shorter(
+    tech_client, db: Session
+):
     kit = make_equipment_type(db, total_quantity=3)
     event = _event(db)
     _held(db, event, kit, 3)
-    _out(db, kit, 1, start=10, end=12)  # already leaves it short
+    _out(db, kit, 1, start=10, end=12)  # already leaves it 1 short
 
-    tech_client.post(_records_path(kit.id), json=_body(1, start=10.6, end=12))
+    tech_client.post(_records_path(kit.id), json=_body(1, start=30, end=31))
 
+    assert _short_notices(db, event) == []
+
+
+@pytest.mark.story("16.2", ac=4)
+def test_a_hold_left_shorter_is_told_again_how_short_it_now_is(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3, name="Mobile kit")
+    event = _event(db)
+    _held(db, event, kit, 3)
+    tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
+
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    assert sorted(notice.message for notice in _short_notices(db, event)) == [
+        service.short_message(name="Mobile kit", short=1, held=3),
+        service.short_message(name="Mobile kit", short=3, held=3),
+    ]
+
+
+@pytest.mark.story("16.2", ac=4)
+def test_an_edit_that_leaves_a_hold_short_tells_its_coordinator(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    event = _event(db)
+    _held(db, event, kit, 3)
+    record = _out(db, kit, 1, start=20, end=21)  # clear of the event
+
+    response = tech_client.patch(
+        _record_path(kit.id, record.id),
+        json={"starts_at": _days(10).isoformat(), "ends_at": _days(12).isoformat()},
+    )
+
+    assert response.status_code == 200
+    [notice] = _short_notices(db, event)
+    assert notice.recipient_id == Users.COORDINATOR.id
+
+
+@pytest.mark.story("16.2", ac=4)
+def test_an_edit_of_only_the_note_tells_nobody(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    event = _event(db)
+    _held(db, event, kit, 3)
+    record = _out(db, kit, 1, start=10, end=12)  # leaves the hold 1 short, as it did before
+
+    response = tech_client.patch(
+        _record_path(kit.id, record.id), json={"notes": "Sent away for repair"}
+    )
+
+    assert response.status_code == 200
     assert _short_notices(db, event) == []
 
 
@@ -992,21 +1201,25 @@ def test_the_events_equipment_shows_the_item_short_until_an_edit_covers_it_again
     kit = make_equipment_type(db, total_quantity=3)
     event = _event(db)
     hold = _held(db, event, kit, 3)
-    record_id = tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12)).json()[
-        "id"
-    ]
+    record_path = _record_path(
+        kit.id,
+        uuid.UUID(
+            tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12)).json()["id"]
+        ),
+    )
     item = str(_item_of(db, hold))
 
     tech_client.login(Users.COORDINATOR)
     assert _shortages(tech_client, event) == [{"item_id": item, "units_short": 2}]
 
     tech_client.login(Users.TECH_SUPPORT)
-    tech_client.patch(_record_path(kit.id, uuid.UUID(record_id)), json={"quantity": 1})
+    tech_client.patch(record_path, json={"quantity": 1})
     tech_client.login(Users.COORDINATOR)
     assert _shortages(tech_client, event) == [{"item_id": item, "units_short": 1}]
 
     tech_client.login(Users.TECH_SUPPORT)
-    tech_client.delete(_record_path(kit.id, uuid.UUID(record_id)))
+    moved = {"starts_at": _days(20).isoformat(), "ends_at": _days(21).isoformat()}
+    assert tech_client.patch(record_path, json=moved).status_code == 200
     tech_client.login(Users.COORDINATOR)
     assert _shortages(tech_client, event) == []
 
@@ -1229,6 +1442,151 @@ def test_a_record_racing_a_hold_for_the_last_units_is_seen_by_it_or_sees_it(engi
         else:
             assert hold == service.EquipmentNotAvailable(name).args[0]
             assert told == 0
+
+
+# --- AC7 - a save that finds the type taken waits for it, then counts what it wrote -------------
+def _in_own_session(engine, attempt: Callable[[Session], str], pids: queue.Queue[int]) -> str:
+    """``attempt`` in a session of its own, as one request would run it, its database process id
+    put in ``pids`` first so a test can watch that session alone."""
+    with Session(engine) as session:
+        pids.put(session.execute(text("SELECT pg_backend_pid()")).scalar_one())
+        return attempt(session)
+
+
+def _waited_on_a_lock(engine, attempt: Future, pids: queue.Queue[int]) -> bool:
+    """Whether ``attempt``'s own session comes to wait on a lock. False if it finishes first, as
+    one that took no lock would: nothing holds it up."""
+    pid = pids.get(timeout=10)
+    deadline = time.monotonic() + 10
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        while time.monotonic() < deadline:
+            if attempt.done():
+                return False
+            waiting = conn.execute(
+                text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                {"pid": pid},
+            ).scalar()
+            if waiting:
+                return True
+            time.sleep(0.01)
+    return False
+
+
+def _with_a_save_under_way(engine, kit_id: uuid.UUID, attempt: Callable[[Session], str]) -> str:
+    """Run ``attempt`` while another save holds the type, as every save takes it, with 2 units
+    recorded out over days 10-12 and not yet committed. ``attempt`` has to wait for that save,
+    then count its units; this asserts the wait and returns what ``attempt`` returned."""
+    rival = Session(engine)
+    service.lock_types(rival, [kit_id])
+    rival.add(
+        EquipmentUnavailabilityPeriod(
+            equipment_type_id=kit_id,
+            quantity=2,
+            reason="DAMAGED",
+            starts_at=_days(10),
+            ends_at=_days(12),
+            created_by_id=Users.TECH_SUPPORT.id,
+        )
+    )
+    rival.flush()
+    pids: queue.Queue[int] = queue.Queue()
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            waiting = pool.submit(_in_own_session, engine, attempt, pids)
+            assert _waited_on_a_lock(engine, waiting, pids)
+            rival.commit()
+            return waiting.result(timeout=10)
+    finally:
+        rival.close()
+
+
+def _editor(kit_id: uuid.UUID, record_id: uuid.UUID, quantity: int):
+    def attempt(session: Session) -> str:
+        actor = session.get(User, Users.TECH_SUPPORT.id)
+        data = schemas.OutOfServiceUpdate(quantity=quantity)
+        try:
+            service.edit_out_of_service(session, kit_id, record_id, data, actor=actor, now=_now())
+        except service.TooManyOutOfService as refusal:
+            return str(refusal)
+        return CREATED
+
+    return attempt
+
+
+@pytest.mark.story("16.2", ac=7)
+def test_a_record_waits_for_one_being_saved_and_counts_it(engine):
+    with _committed_kit(engine, stock=3) as (kit_id, _event_id):
+        outcome = _with_a_save_under_way(engine, kit_id, _recorder(kit_id, 2))
+
+        assert outcome == service.too_many_out_message(most=1)
+
+
+@pytest.mark.story("16.2", ac=7)
+def test_an_edit_waits_for_a_record_being_saved_and_counts_it(engine):
+    with _committed_kit(engine, stock=3) as (kit_id, _event_id):
+        with Session(engine) as session:
+            assert _recorder(kit_id, 1)(session) == CREATED
+            [record_id] = session.scalars(
+                select(EquipmentUnavailabilityPeriod.id).where(
+                    EquipmentUnavailabilityPeriod.equipment_type_id == kit_id
+                )
+            ).all()
+
+        outcome = _with_a_save_under_way(engine, kit_id, _editor(kit_id, record_id, 2))
+
+        assert outcome == service.too_many_out_message(most=1)
+
+
+def _accepter(item_id: uuid.UUID):
+    def attempt(session: Session) -> str:
+        actor = session.get(User, Users.TECH_SUPPORT.id)
+        data = schemas.EquipmentDecisionIn(outcome="ACCEPTED")
+        try:
+            service.decide_equipment_request(session, item_id, data, actor=actor)
+        except service.NotEnoughToAccept as refusal:
+            return str(refusal)
+        return CREATED
+
+    return attempt
+
+
+@pytest.mark.story("16.2", ac=7)
+@pytest.mark.story("16.2", ac=4)
+def test_an_accept_and_a_record_saved_at_once_take_turns_without_deadlock(engine):
+    """Accept (16.1) takes the event's row, then the type's. A record takes the type's, then
+    tells the coordinator of the hold it leaves short, and that notice names the event, so it
+    needs a key-share lock on the event's row. Accept therefore holds the event FOR NO KEY UPDATE,
+    which a key share does not wait for; FOR UPDATE would leave each waiting on the other. The
+    event is held first, so Accept is queued on it, and the record behind it, every time."""
+    with _committed_kit(engine, stock=3) as (kit_id, event_id):
+        with Session(engine) as session:
+            item_id = make_equipment_item(
+                session,
+                event=session.get(Event, event_id),
+                equipment_type=session.get(EquipmentType, kit_id),
+                quantity=3,
+                status="PENDING",
+            ).id
+            session.commit()
+        holder = Session(engine)
+        holder.execute(select(Event.id).where(Event.id == event_id).with_for_update()).all()
+        accepting_pids: queue.Queue[int] = queue.Queue()
+        saving_pids: queue.Queue[int] = queue.Queue()
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                accepting = pool.submit(_in_own_session, engine, _accepter(item_id), accepting_pids)
+                assert _waited_on_a_lock(engine, accepting, accepting_pids)
+                saving = pool.submit(_in_own_session, engine, _recorder(kit_id, 1), saving_pids)
+                assert _waited_on_a_lock(engine, saving, saving_pids)
+                holder.rollback()
+                saved, accepted = saving.result(timeout=20), accepting.result(timeout=20)
+        finally:
+            holder.close()
+
+        assert saved == CREATED
+        with Session(engine) as session:
+            name = session.get(EquipmentType, kit_id).name
+        assert accepted == service.NOT_ENOUGH_TO_ACCEPT_MESSAGE.format(name=name)
 
 
 # --- AC2 / AC3 / AC4 - at the very moment a record starts or ends ------------------------------

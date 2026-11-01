@@ -4578,6 +4578,12 @@ button.requirement-choice.requirement-covered:hover,
   margin-bottom: 1rem;
 }
 
+/* AC2: the catalogue's headers and names wrap, so its three columns fit a phone. */
+.equipment-catalogue th,
+.equipment-catalogue td {
+  white-space: normal;
+}
+
 .out-of-service-form h2 {
   margin: 0;
 }

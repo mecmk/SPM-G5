@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, signIn } from './support'
+import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signIn } from './support'
 
 /**
  * Story 16.2 - mark equipment out of service. END-TO-END tests: what Technical Support and a
@@ -14,19 +14,22 @@ import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, signIn } from './su
  *     note, from when and, optionally, until when.
  * AC2 The Equipment catalogue lists each type with its stock and the units out of service now;
  *     a type's page has the Out of service form and its current records, each with Edit and End.
- *     End removes a record not yet started.
- * AC3 The quantity is a whole number of at least 1, the end is after the start and the start is
- *     not in the past - checked before anything is sent; more units than are free over the
+ *     End ends a record in force now, and removes one not yet started.
+ * AC3 The quantity is a whole number of at least 1, there is a start, each date is finished and
+ *     readable, the end is after the start and the start is not in the past - checked before
+ *     anything is sent; a record in force keeps its start; more units than are free over the
  *     period are refused by the server, and the form says so.
  * AC4 A record that leaves a hold short marks the item on its event's equipment for the
  *     coordinator.
- * AC5 Before saving, the page lists the holds the record would leave short and asks to confirm.
+ * AC5 Before saving, the page lists the holds the record would leave short and asks to confirm;
+ *     Cancel saves nothing.
  * AC6 Only Technical Support has the catalogue; anyone else is told it is not permitted.
  *
  * Specs share one database and run in parallel, so each flow that records units uses a window
- * of its own, years ahead, on a type no other flow here records against: the conference phones
- * in 2031, and the mobile LED screens over the evening of Events.LIGHT_SHOWCASE in February 2030,
- * which nothing else holds. Neither moves a figure another spec reads.
+ * of its own on a type no other flow here records against: the conference phones in 2031, and
+ * from now until tomorrow for the one record in force (the seeded conference phone holds are in
+ * 2027), and the mobile LED screens over the evening of Events.LIGHT_SHOWCASE in February 2030,
+ * which nothing else holds. None moves a figure another spec reads.
  */
 
 const CATALOGUE_PATH = '/equipment/catalogue'
@@ -39,8 +42,16 @@ const LED_SCREEN = 'Mobile LED screen' // stock 3, all held by the light showcas
 const LIGHT_SHOWCASE = 'Riverside Light Showcase'
 
 const QUANTITY_MESSAGE = 'Enter a whole number of at least 1.'
+const START_REQUIRED_MESSAGE = 'Enter when the units go out of service.'
 const END_NOT_AFTER_START_MESSAGE = 'The end must be after the start.'
 const START_IN_THE_PAST_MESSAGE = 'The start cannot be in the past.'
+const DATE_INCOMPLETE_MESSAGE = 'Finish entering the date and time'
+const DATE_INVALID_MESSAGE = 'Enter a valid date and time, with a four-digit year.'
+
+/** Singapore's clock, which every date field reads (frontend/src/shared/format.ts). */
+const SINGAPORE_OFFSET_MS = 8 * 60 * 60 * 1000
+/** Seconds left in a minute that are enough to fill the form and save before it rolls over. */
+const LATEST_SECOND_TO_START = 40
 
 function catalogue(page: Page) {
   return page.getByRole('table', { name: 'Equipment types' })
@@ -64,6 +75,26 @@ async function openType(page: Page, name: string) {
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
+/** The current minute, as the From field takes it: a record that starts now. It waits for a
+ *  fresh minute when this one is nearly over, so the start cannot slip into the past between
+ *  filling the form and saving it. */
+async function thisMinute(): Promise<string> {
+  await expect
+    .poll(() => new Date().getSeconds(), { timeout: 30_000 })
+    .toBeLessThan(LATEST_SECOND_TO_START)
+  return new Date(Date.now() + SINGAPORE_OFFSET_MS).toISOString().slice(0, 16)
+}
+
+/** Every save of a record from now on: the check before saving is not one. */
+function trackSaves(page: Page): string[] {
+  const sent: string[] = []
+  page.on('request', (request) => {
+    const isWrite = ['POST', 'PATCH', 'DELETE'].includes(request.method())
+    if (isWrite && request.url().includes('/out-of-service')) sent.push(request.url())
+  })
+  return sent
+}
+
 /** Every request that would change a record, from now on. */
 function trackWrites(page: Page): string[] {
   const sent: string[] = []
@@ -77,7 +108,13 @@ function trackWrites(page: Page): string[] {
 
 async function fillRecord(
   page: Page,
-  { units, reason, note, from, until }: {
+  {
+    units,
+    reason,
+    note,
+    from,
+    until,
+  }: {
     units: string
     reason: string
     note?: string
@@ -86,7 +123,8 @@ async function fillRecord(
   },
 ) {
   const fields = form(page)
-  await fields.getByLabel('Units').fill(units)
+  // Anchored: a refused From's label holds its message, which says "units" too.
+  await fields.getByLabel(/^Units/).fill(units)
   await fields.getByLabel('Reason').selectOption({ label: reason })
   if (note !== undefined) await fields.getByLabel('Note').fill(note)
   await fields.getByLabel('From').fill(from)
@@ -125,7 +163,9 @@ test('16.2 AC6: anyone but Technical Support is told the catalogue is not permit
   await signIn(page, ACCOUNTS.coordinator)
 
   await expect(
-    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Equipment catalogue' }),
+    page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: 'Equipment catalogue' }),
   ).toHaveCount(0)
   await page.goto(CATALOGUE_PATH)
   await expect(page.getByRole('heading', { level: 1, name: 'Not permitted' })).toBeVisible()
@@ -188,13 +228,97 @@ test.describe('records units out of service', () => {
     const saved = record(page, 'Left at the Tower B foyer')
     await expect(saved).toContainText('until ended')
     await saved.getByRole('button', { name: 'End' }).click()
-    await page.getByRole('dialog', { name: 'Remove this record?' }).getByRole('button', { name: 'Remove', exact: true }).click()
+    await page
+      .getByRole('dialog', { name: 'Remove this record?' })
+      .getByRole('button', { name: 'Remove', exact: true })
+      .click()
+    await expect(saved).toHaveCount(0)
+  })
+
+  test('16.2 AC2/AC3: a record in force keeps its start on Edit, and End ends it now and closes its edit', async ({
+    page,
+  }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, CONF_PHONE)
+    // One unbroken run of serial numbers: the note still wraps inside its row.
+    const serials = `Serials ${Date.now()}: ${'SN0123456789'.repeat(34)}`
+
+    await fillRecord(page, {
+      units: '2',
+      reason: 'Under maintenance',
+      note: serials,
+      from: await thisMinute(),
+      until: inFuture(1),
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+
+    const saved = record(page, serials)
+    const badge = saved.getByText('In force', { exact: true })
+    await expect(badge).toBeVisible()
+    await expect(page.getByRole('main')).toContainText('2 out of service now')
+    const note = (await saved.getByText(serials).boundingBox())!
+    expect(note.x + note.width).toBeLessThanOrEqual((await badge.boundingBox())!.x)
+
+    // AC3: a record in force keeps its start; its units can still change.
+    await saved.getByRole('button', { name: 'Edit' }).click()
+    await expect(form(page).getByLabel('From')).toBeDisabled()
+    await form(page).getByLabel('Units').fill('3')
+    await form(page).getByRole('button', { name: 'Save changes' }).click()
+    await expect(saved).toContainText('3 out of service')
+    await expect(page.getByRole('main')).toContainText('3 out of service now')
+
+    // AC2: End ends it now, after asking, and an edit open on it closes with it.
+    await saved.getByRole('button', { name: 'Edit' }).click()
+    await expect(
+      form(page).getByRole('heading', { name: 'Edit units out of service' }),
+    ).toBeVisible()
+    await saved.getByRole('button', { name: 'End' }).click()
+    await page
+      .getByRole('dialog', { name: 'End this record now?' })
+      .getByRole('button', { name: 'End now' })
+      .click()
+    await expect(saved).toHaveCount(0)
+    await expect(page.getByRole('main')).toContainText('0 out of service now')
+    await expect(
+      form(page).getByRole('heading', { name: 'Take units out of service' }),
+    ).toBeVisible()
+  })
+
+  test('16.2 AC3: an edit can take the whole stock out, as the record is not counted against itself', async ({
+    page,
+  }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, CONF_PHONE)
+    const note = `Whole batch recalled ${Date.now()}`
+
+    await fillRecord(page, {
+      units: '5',
+      reason: 'Other',
+      note,
+      // Before the open-ended record of the test above, which runs alongside.
+      from: '2031-05-05T09:00',
+      until: '2031-05-06T09:00',
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+    const saved = record(page, note)
+    await expect(saved).toContainText('5 out of service')
+
+    await saved.getByRole('button', { name: 'Edit' }).click()
+    await form(page).getByLabel('Units').fill('6')
+    await form(page).getByRole('button', { name: 'Save changes' }).click()
+    await expect(saved).toContainText('6 out of service')
+
+    await saved.getByRole('button', { name: 'End' }).click()
+    await page
+      .getByRole('dialog', { name: 'Remove this record?' })
+      .getByRole('button', { name: 'Remove', exact: true })
+      .click()
     await expect(saved).toHaveCount(0)
   })
 })
 
 // --- AC3: the form's own checks, and the server's -----------------------------------------------
-test('16.2 AC3: a missing quantity, an end before the start and a start in the past are refused before anything is sent', async ({
+test('16.2 AC3: a missing quantity or start, a quantity of 0, an end before the start and a start in the past are refused before anything is sent', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
@@ -203,11 +327,23 @@ test('16.2 AC3: a missing quantity, an end before the start and a start in the p
   const fields = form(page)
   const save = fields.getByRole('button', { name: 'Take out of service' })
 
-  await fillRecord(page, { units: '0', reason: 'Other', from: inFuture(1500), until: inFuture(1499) })
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: QUANTITY_MESSAGE })).toBeVisible()
+  await expect(fields.getByRole('alert').filter({ hasText: START_REQUIRED_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel(/^Units/)).toBeFocused()
+
+  await fillRecord(page, {
+    units: '0',
+    reason: 'Other',
+    from: inFuture(1500),
+    until: inFuture(1499),
+  })
   await save.click()
 
   await expect(fields.getByRole('alert').filter({ hasText: QUANTITY_MESSAGE })).toBeVisible()
-  await expect(fields.getByRole('alert').filter({ hasText: END_NOT_AFTER_START_MESSAGE })).toBeVisible()
+  await expect(
+    fields.getByRole('alert').filter({ hasText: END_NOT_AFTER_START_MESSAGE }),
+  ).toBeVisible()
   await expect(fields.getByLabel('Units')).toBeFocused()
   await expect(fields.getByLabel('Units')).toHaveAttribute('aria-invalid', 'true')
 
@@ -215,8 +351,34 @@ test('16.2 AC3: a missing quantity, an end before the start and a start in the p
   await fields.getByLabel('From').fill(inFuture(-1))
   await fields.getByLabel('Until').fill(inFuture(1))
   await save.click()
-  await expect(fields.getByRole('alert').filter({ hasText: START_IN_THE_PAST_MESSAGE })).toBeVisible()
+  await expect(
+    fields.getByRole('alert').filter({ hasText: START_IN_THE_PAST_MESSAGE }),
+  ).toBeVisible()
   await expect(fields.getByLabel('From')).toBeFocused()
+  expect(sent).toHaveLength(0)
+})
+
+test('16.2 AC3: a year of five digits, or an Until left half typed, is refused before anything is sent', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.techSupport)
+  await openType(page, CONF_PHONE)
+  const sent = trackWrites(page)
+  const fields = form(page)
+  const save = fields.getByRole('button', { name: 'Take out of service' })
+
+  await fillRecord(page, { units: '1', reason: 'Damaged', from: '20311-03-03T09:00' })
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: DATE_INVALID_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel('From')).toBeFocused()
+
+  // A date started but not finished reads as blank, which for Until would mean "until ended".
+  await fields.getByLabel('From').fill('2031-03-03T09:00')
+  await fields.getByLabel('Until').focus()
+  await page.keyboard.type('0310')
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: DATE_INCOMPLETE_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel('Until')).toBeFocused()
   expect(sent).toHaveLength(0)
 })
 
@@ -226,7 +388,12 @@ test('16.2 AC3: more units than are free over the period are refused by the serv
   await signIn(page, ACCOUNTS.techSupport)
   await openType(page, PROJECTOR)
 
-  await fillRecord(page, { units: '9', reason: 'Other', from: inFuture(1600), until: inFuture(1601) })
+  await fillRecord(page, {
+    units: '9',
+    reason: 'Other',
+    from: inFuture(1600),
+    until: inFuture(1601),
+  })
   await form(page).getByRole('button', { name: 'Take out of service' }).click()
 
   await expect(form(page).getByRole('alert')).toHaveText(
@@ -240,7 +407,7 @@ test('16.2 AC3: more units than are free over the period are refused by the serv
 test.describe('takes a seeded hold short once', () => {
   test.describe.configure({ retries: 0 })
 
-  test("16.2 AC4/AC5: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event", async ({
+  test('16.2 AC4/AC5: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event', async ({
     page,
   }) => {
     await signIn(page, ACCOUNTS.techSupport)
@@ -272,19 +439,52 @@ test.describe('takes a seeded hold short once', () => {
     const item = page.getByRole('listitem').filter({ hasText: LED_SCREEN })
     await expect(item).toContainText('Short: 1 of 3 out of service')
   })
+
+  test('16.2 AC5: Cancel on the list of holds left short saves nothing', async ({ page }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, LED_SCREEN)
+    const saves = trackSaves(page)
+    const note = `Cracked panel ${Date.now()}`
+
+    await fillRecord(page, {
+      units: '1',
+      reason: 'Damaged',
+      note,
+      from: '2030-02-20T12:00',
+      until: '2030-02-21T12:00',
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Some holds will be short' })
+    await expect(dialog.getByRole('listitem').filter({ hasText: LIGHT_SHOWCASE })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(dialog).toHaveCount(0)
+    await expect(record(page, note)).toHaveCount(0)
+    expect(saves).toHaveLength(0)
+  })
 })
 
 // --- On a phone -----------------------------------------------------------------------------------
-test("16.2 AC2: on a phone, a type's page fits without sideways scrolling, its fields take the width and its button is big enough for a thumb", async ({
+test("16.2 AC2: on a phone, the catalogue's columns and a type's page fit without sideways scrolling, its fields take the width and its button is big enough for a thumb", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE)
   await signIn(page, ACCOUNTS.techSupport)
   await page.goto(CATALOGUE_PATH)
+  await expect(
+    catalogue(page).getByRole('columnheader', { name: 'Out of service now' }),
+  ).toBeVisible()
+  // The table scrolls inside its own frame, so it is the table that has to fit, not the page.
+  const tableFits = await catalogue(page).evaluate(
+    (table) => table.scrollWidth <= table.parentElement!.clientWidth,
+  )
+  expect(tableFits).toBe(true)
+  expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
   await expectNoSidewaysScroll(page)
   await catalogue(page).getByRole('link', { name: CONF_PHONE, exact: true }).click()
 
   await expect(form(page)).toBeVisible()
+  expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
   await expectNoSidewaysScroll(page)
   for (const label of ['Units', 'Reason', 'From', 'Until']) {
     const box = (await form(page).getByLabel(label).boundingBox())!

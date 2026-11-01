@@ -129,6 +129,8 @@ export type ErrorCode =
   | 'OUT_OF_SERVICE_START_REQUIRED'
   | 'OUT_OF_SERVICE_START_IN_PAST'
   | 'OUT_OF_SERVICE_END_BEFORE_START'
+  | 'OUT_OF_SERVICE_DATE_INCOMPLETE'
+  | 'OUT_OF_SERVICE_DATE_INVALID'
   | 'CHANGE_REQUEST_REFUSED'
   | 'CHANGE_REQUEST_INVALID'
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
@@ -796,6 +798,19 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   OUT_OF_SERVICE_END_BEFORE_START: {
     title: 'Check the end',
     message: 'The end must be after the start.',
+  },
+  /** AC1/AC3: a date started but not finished, which the picker reports as blank - for Until,
+   * that would save the record as out until ended. */
+  OUT_OF_SERVICE_DATE_INCOMPLETE: {
+    title: 'Check the dates',
+    message:
+      'Finish entering the date and time, including AM or PM, and check the day exists in that ' +
+      'month.',
+  },
+  /** AC3: a date the picker holds but the server cannot read, such as a five-digit year. */
+  OUT_OF_SERVICE_DATE_INVALID: {
+    title: 'Check the dates',
+    message: 'Enter a valid date and time, with a four-digit year.',
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.

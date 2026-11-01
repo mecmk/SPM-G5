@@ -7,11 +7,10 @@ import {
 } from '../api/equipment'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
-import { EQUIPMENT_CATALOGUE_PATH } from '../routes'
+import { EQUIPMENT_CATALOGUE_PATH, EQUIPMENT_CATALOGUE_TITLE } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 import { OutOfServiceForm } from './OutOfServiceForm'
 import { OutOfServiceRecords } from './OutOfServiceRecords'
-import { CATALOGUE_TITLE } from './outOfServiceLabels'
 
 /** The type as last loaded, and when, which labels each record In force or Scheduled. */
 interface LoadedType {
@@ -28,9 +27,11 @@ function typeLoader(typeId: string): () => Promise<LoadedType> {
 /**
  * Story 16.2 AC2 - one equipment type's page, for Technical Support, opened from the catalogue:
  * its stock, the units out of service now and where it is kept; its current records, each with
- * Edit and End; and the Out of service form (AC1, AC3, AC5), each the page's full width. After each change the type is
- * loaded again, so the figures and the list show what the server now has. A back link returns
- * to the catalogue. Keyed by the type in the address, so moving to another type starts afresh.
+ * Edit and End; and the Out of service form (AC1, AC3, AC5), each the page's full width. After
+ * each change the type is loaded again, so the figures and the list show what the server now
+ * has, and a record ended or removed takes its edit with it (AC3: an ended record is not edited).
+ * A back link returns to the catalogue. Keyed by the type in the address, so moving to another
+ * type starts afresh.
  */
 export function EquipmentTypePage() {
   const { typeId = '' } = useParams()
@@ -60,10 +61,15 @@ function EquipmentTypeView({ typeId }: { typeId: string }) {
     setEditing(null)
   }
 
+  function handleChanged(recordId: string) {
+    if (editing?.id === recordId) setEditing(null)
+    loadAgain()
+  }
+
   return (
     <div className="page page-wide equipment-type">
       <Link to={EQUIPMENT_CATALOGUE_PATH} className="back-link">
-        ← {CATALOGUE_TITLE}
+        ← {EQUIPMENT_CATALOGUE_TITLE}
       </Link>
 
       {error && (
@@ -88,7 +94,7 @@ function EquipmentTypeView({ typeId }: { typeId: string }) {
               records={page.records}
               loadedAt={loaded.loadedAt}
               onEdit={handleEdit}
-              onChanged={loadAgain}
+              onChanged={handleChanged}
             />
             <OutOfServiceForm
               key={editing?.id ?? 'new'}

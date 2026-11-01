@@ -1819,8 +1819,9 @@ ON CONFLICT (id) DO NOTHING;
 -- Story 16.2: tests/e2e/equipment-out-of-service.spec.ts. Technical Support takes a mobile LED
 -- screen out of service over this event's evening, which leaves its accepted hold of all three
 -- short by one, and its coordinator (coordinator 2) sees that on the event. Organiser 2 and
--- coordinator 2, whose events no test lists in full; February 2030, so no other spec or backend
--- test shares its period, nor holds any LED screen then.
+-- coordinator 2, whose events only tests/events/test_my_event_requests.py lists in full, and it
+-- names this one; February 2030, so no other spec or backend test shares its period, nor holds
+-- any LED screen then.
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, venue_none_required, accessibility_none_required,

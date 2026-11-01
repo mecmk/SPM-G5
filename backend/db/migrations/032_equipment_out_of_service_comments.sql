@@ -1,7 +1,6 @@
 -- =====================================================================
 -- Migration 032 - story 16.2: Technical Support records equipment out of service. Comments only;
--- no table, column or constraint changes. (032: main has 028; open PRs #134 and #136 each add a
--- 029, one of which will take 030; #138 adds 031.)
+-- no table, column or constraint changes.
 --
 -- equipment_unavailability_periods (001) already holds what story 16.2 records, and 2.1's
 -- availability already takes its units away. Its comments named stories 16.1 and 16.3, from the

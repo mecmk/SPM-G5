@@ -3,15 +3,14 @@ import { listEquipmentCatalogue } from '../api/equipment'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
-import { equipmentTypePath } from '../routes'
+import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { CATALOGUE_TITLE } from './outOfServiceLabels'
 
 /**
  * Story 16.2 AC2 - the equipment catalogue, for Technical Support: every active type, by name,
  * with its stock and the units out of service now, each opening the type's page. AC6: App.tsx
  * guards the route with equipment:manage, and the backend refuses everyone else. On a phone the
- * table keeps its three narrow columns, so nothing scrolls sideways.
+ * headers and names wrap (App.css), so the three columns fit and nothing scrolls sideways.
  */
 export function EquipmentCataloguePage() {
   const { data: types, error, isLoading } = useLoaded(listEquipmentCatalogue)
@@ -20,7 +19,7 @@ export function EquipmentCataloguePage() {
     <div className="page page-wide">
       <p className="eyebrow">Equipment</p>
       <PageHeader
-        title={CATALOGUE_TITLE}
+        title={EQUIPMENT_CATALOGUE_TITLE}
         subtitle="Each equipment type's stock, and how many units are out of service now."
       />
 

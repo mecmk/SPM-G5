@@ -213,6 +213,9 @@ export function equipmentRequestPath(itemId: string): string {
 // Story 16.2: Technical Support's equipment catalogue, and each type's page with its units out of
 // service.
 export const EQUIPMENT_CATALOGUE_PATH = '/equipment/catalogue'
+/** The catalogue's title: its heading, its sidebar entry and the link back to it from a type's
+ *  page. */
+export const EQUIPMENT_CATALOGUE_TITLE = 'Equipment catalogue'
 export const EQUIPMENT_TYPE_PATH = '/equipment/catalogue/:typeId'
 
 export function equipmentTypePath(typeId: string): string {

@@ -4,6 +4,7 @@ import {
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
   EQUIPMENT_CATALOGUE_PATH,
+  EQUIPMENT_CATALOGUE_TITLE,
   EQUIPMENT_REQUESTS_PATH,
   EVENTS_INBOX_PATH,
   EVENTS_UNASSIGNED_PATH,
@@ -206,7 +207,7 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         to: EQUIPMENT_CATALOGUE_PATH,
-        label: 'Equipment catalogue',
+        label: EQUIPMENT_CATALOGUE_TITLE,
         description: 'Stock levels, and the units out of service and until when.',
         icon: 'grid',
         permission: PERMISSIONS.EQUIPMENT_MANAGE,

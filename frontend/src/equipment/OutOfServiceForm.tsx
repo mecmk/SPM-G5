@@ -17,6 +17,7 @@ import { formatSchedule, inputToInstant, instantToInput } from '../shared/format
 import { REASON_CODES, REASON_LABELS, describeHoldShort, hasStarted } from './outOfServiceLabels'
 
 const WHOLE_NUMBER = /^\d+$/
+const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const UNTIL_HINT = 'Leave blank to keep them out until the record is ended.'
 
 /** What the form holds: the inputs' own strings. */
@@ -47,6 +48,15 @@ interface Problems {
   until: string | null
 }
 
+/** Which dates hold one started but not finished. The picker reports such a date as blank, which
+ *  for Until would mean "until ended", so only the input itself can tell (`validity.badInput`). */
+interface UnfinishedDates {
+  from: boolean
+  until: boolean
+}
+
+const NO_UNFINISHED_DATES: UnfinishedDates = { from: false, until: false }
+
 /** The first moment of the current minute: a start in it is not in the past (the server's rule). */
 function startOfThisMinute(): number {
   const now = new Date()
@@ -54,29 +64,50 @@ function startOfThisMinute(): number {
   return now.getTime()
 }
 
+/** A picker can hold a five-digit year, which the server cannot read as a date. */
+function isReadableDateTime(inputValue: string): boolean {
+  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
+}
+
 /**
  * Story 16.2 AC3: what is wrong with the form before anything is sent - the units not a whole
- * number of at least 1, no start, a start in the past (only when it is a new one: a record in force
- * keeps its own), an end not after the start. How many the stock can spare is the server's to say.
+ * number of at least 1, no start, a date not finished or not readable, a start in the past (only
+ * when it is a new one: a record in force keeps its own), an end not after the start. How many
+ * the stock can spare, and an end before now, are the server's to say.
  */
-function problemsOf(values: FormValues, opened: FormValues, isEditing: boolean): Problems {
+function problemsOf(
+  values: FormValues,
+  opened: FormValues,
+  isEditing: boolean,
+  unfinished: UnfinishedDates,
+): Problems {
   const isNewStart = !isEditing || values.from !== opened.from
   let from: string | null = null
-  if (values.from === '') from = ERROR_REGISTRY.OUT_OF_SERVICE_START_REQUIRED.message
-  else if (isNewStart && Date.parse(inputToInstant(values.from)) < startOfThisMinute()) {
+  if (unfinished.from) from = ERROR_REGISTRY.OUT_OF_SERVICE_DATE_INCOMPLETE.message
+  else if (values.from === '') from = ERROR_REGISTRY.OUT_OF_SERVICE_START_REQUIRED.message
+  else if (!isReadableDateTime(values.from)) {
+    from = ERROR_REGISTRY.OUT_OF_SERVICE_DATE_INVALID.message
+  } else if (isNewStart && Date.parse(inputToInstant(values.from)) < startOfThisMinute()) {
     from = ERROR_REGISTRY.OUT_OF_SERVICE_START_IN_PAST.message
   }
-  const isEndBeforeStart =
-    values.from !== '' &&
+  let until: string | null = null
+  if (unfinished.until) until = ERROR_REGISTRY.OUT_OF_SERVICE_DATE_INCOMPLETE.message
+  else if (values.until !== '' && !isReadableDateTime(values.until)) {
+    until = ERROR_REGISTRY.OUT_OF_SERVICE_DATE_INVALID.message
+  } else if (
     values.until !== '' &&
+    isReadableDateTime(values.from) &&
     Date.parse(inputToInstant(values.until)) <= Date.parse(inputToInstant(values.from))
+  ) {
+    until = ERROR_REGISTRY.OUT_OF_SERVICE_END_BEFORE_START.message
+  }
   return {
     units:
       WHOLE_NUMBER.test(values.units) && Number(values.units) >= 1
         ? null
         : ERROR_REGISTRY.OUT_OF_SERVICE_QUANTITY_INVALID.message,
     from,
-    until: isEndBeforeStart ? ERROR_REGISTRY.OUT_OF_SERVICE_END_BEFORE_START.message : null,
+    until,
   }
 }
 
@@ -146,6 +177,7 @@ export function OutOfServiceForm({
   // Decided once, as the form opens on the record: the page keys the form on it.
   const [isStartLocked] = useState(() => editing !== null && hasStarted(editing, Date.now()))
   const [values, setValues] = useState(opened)
+  const [unfinished, setUnfinished] = useState(NO_UNFINISHED_DATES)
   const [isChecked, setIsChecked] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -155,12 +187,25 @@ export function OutOfServiceForm({
   const fromInput = useRef<HTMLInputElement>(null)
   const untilInput = useRef<HTMLInputElement>(null)
 
-  const problems = isChecked ? problemsOf(values, opened, editing !== null) : null
+  const problems = isChecked ? problemsOf(values, opened, editing !== null, unfinished) : null
   const headingId = `${ids}-heading`
   const problemId = (field: keyof Problems) => `${ids}-${field}-problem`
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }))
+  }
+
+  function readUnfinishedDates(): UnfinishedDates {
+    return {
+      from: fromInput.current?.validity.badInput ?? false,
+      until: untilInput.current?.validity.badInput ?? false,
+    }
+  }
+
+  /** A date the picker has changed: finished, cleared or still being typed. */
+  function setDate(field: 'from' | 'until', value: string) {
+    set(field, value)
+    setUnfinished(readUnfinishedDates())
   }
 
   async function save() {
@@ -176,7 +221,10 @@ export function OutOfServiceForm({
     event.preventDefault()
     setIsChecked(true)
     setFormError(null)
-    const found = problemsOf(values, opened, editing !== null)
+    // Typing part of a date changes nothing the form is told of, so look again now.
+    const unfinishedNow = readUnfinishedDates()
+    setUnfinished(unfinishedNow)
+    const found = problemsOf(values, opened, editing !== null, unfinishedNow)
     const inOrder: [string | null, RefObject<HTMLInputElement | null>][] = [
       [found.units, unitsInput],
       [found.from, fromInput],
@@ -295,7 +343,7 @@ export function OutOfServiceForm({
             disabled={isSaving || isStartLocked}
             aria-invalid={problems?.from ? true : undefined}
             aria-describedby={problems?.from ? problemId('from') : undefined}
-            onChange={(e) => set('from', e.target.value)}
+            onChange={(e) => setDate('from', e.target.value)}
           />
           {isStartLocked && (
             <span className="small muted">In force, so its start stays as it is.</span>
@@ -317,7 +365,7 @@ export function OutOfServiceForm({
             aria-describedby={
               problems?.until ? `${ids}-until-hint ${problemId('until')}` : `${ids}-until-hint`
             }
-            onChange={(e) => set('until', e.target.value)}
+            onChange={(e) => setDate('until', e.target.value)}
           />
           <span id={`${ids}-until-hint`} className="small muted">
             {UNTIL_HINT}

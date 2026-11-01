@@ -1,9 +1,6 @@
 import type { OutOfServiceReason, OutOfServiceRecord } from '../api/equipment'
 import { formatDateTime } from '../shared/format'
 
-/** Story 16.2 AC2: the catalogue's title, which each type's page links back to. */
-export const CATALOGUE_TITLE = 'Equipment catalogue'
-
 /** Story 16.2 AC1: each reason as Technical Support reads it, in the order the form offers them. */
 export const REASON_LABELS: Record<OutOfServiceReason, string> = {
   DAMAGED: 'Damaged',

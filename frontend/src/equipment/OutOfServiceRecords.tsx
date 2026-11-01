@@ -23,8 +23,9 @@ export interface OutOfServiceRecordsProps {
   loadedAt: number
   /** Edit was pressed: the page opens its form on this record. */
   onEdit: (record: OutOfServiceRecord) => void
-  /** A record was ended or removed, so the page loads the type again. */
-  onChanged: () => void
+  /** This record was ended or removed, or found to be no longer what its row showed, so the page
+   *  loads the type again and closes an edit open on it. */
+  onChanged: (recordId: string) => void
 }
 
 /**
@@ -54,9 +55,9 @@ export function OutOfServiceRecords({
 
   function handleCancel() {
     setEnding(null)
-    if (isOutOfDate) {
+    if (isOutOfDate && ending !== null) {
       setIsOutOfDate(false)
-      onChanged()
+      onChanged(ending.record.id)
     }
   }
 
@@ -68,7 +69,7 @@ export function OutOfServiceRecords({
       if (ending.action === 'end') await endOutOfServiceNow(typeId, typeName, ending.record.id)
       else await removeOutOfService(typeId, typeName, ending.record.id)
       setEnding(null)
-      onChanged()
+      onChanged(ending.record.id)
     } catch (err) {
       setError(formatApiError(err))
       // Gone (404) or no longer what the row showed (409): the list is loaded again on closing.
@@ -158,7 +159,7 @@ function RecordRow({ record, now, onEdit, onEnd }: RecordRowProps) {
         {record.notes && (
           <>
             <br />
-            <span className="small">{record.notes}</span>
+            <span className="small wrap-anywhere">{record.notes}</span>
           </>
         )}
         <br />
