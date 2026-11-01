@@ -97,8 +97,8 @@ export function inputToInstant(inputValue: string): string {
 
 const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 
-/** Whether the server can read a `datetime-local` value as a date: a picker can hold a year of
- *  five or six digits, which it cannot (stories 2.1 and 16.2). */
+/** Story 16.2 AC3, and 2.1's dates: whether the server can read a `datetime-local` value as a
+ *  date. A picker can hold a year of five or six digits, which the server cannot. */
 export function isReadableDateTime(inputValue: string): boolean {
   return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
 }
