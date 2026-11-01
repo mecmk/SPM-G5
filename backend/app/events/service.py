@@ -333,8 +333,9 @@ class EquipmentChangedAfterApproval(InvalidEventRequest):
 
 
 class SentEquipmentChanged(InvalidEventRequest):
-    """Story 17.2 AC2: a correction before approval cannot drop an item sent to Technical Support,
-    which is withdrawn so they know. Story 15.1 AC7: nor change an Accepted one."""
+    """Story 7.2 AC4, 17.2 AC2: a correction before approval cannot drop an item sent to Technical
+    Support or swap it for another type: it is withdrawn, so they know. Nor can it change an
+    Accepted one (15.1 AC7)."""
 
     def __init__(self, name: str, *, is_removed: bool):
         message = SENT_ITEM_REMOVED_MESSAGE if is_removed else ACCEPTED_ITEM_CHANGED_MESSAGE
@@ -1124,7 +1125,7 @@ def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> No
     requests for the last units cannot both be held; the loser is refused and nothing is held.
     Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
     which is the assigned coordinator's step. Only Requested, Pending and Accepted lines are held:
-    one sent to Technical Support keeps its hold when the dates move (15.1 AC8).
+    one sent to Technical Support keeps its hold when the dates move (7.2 AC7).
     ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
     lines = [line for line in event.equipment_requests if line.status in _HELD_ITEM_STATUSES]
     if not lines or event.starts_at is None or event.ends_at is None:
@@ -2512,19 +2513,20 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
 
 
 def _check_sent_equipment_kept(event: Event, data: EventReviewCorrection) -> None:
-    """Story 17.2 AC2, 15.1 AC7: every item sent to Technical Support comes back, and an Accepted
-    one exactly as it is. A Pending one can still be edited (15.1 AC2)."""
+    """Story 7.2 AC4, 17.2 AC2, 15.1 AC7: every item sent to Technical Support comes back as the
+    same type, since another type would remove it without telling them, and an Accepted one
+    exactly as it is. A Pending one's quantity and notes can still be edited (15.1 AC2)."""
     if data.equipment is None:
         return
-    sent = {item.id: item for item in data.equipment if item.id is not None}
+    resent = {item.id: item for item in data.equipment if item.id is not None}
     for line in _current_lines(event):
-        item = sent.get(line.id)
-        if item is None:
-            if line.status in WITH_TECHNICAL_SUPPORT:
-                raise SentEquipmentChanged(line.equipment_type.name, is_removed=True)
-        elif line.status == EquipmentRequestStatus.ACCEPTED and (
-            (item.equipment_type_code, item.quantity, item.technical_notes)
-            != (line.equipment_type.code, line.quantity, line.technical_notes)
+        if line.status not in WITH_TECHNICAL_SUPPORT:
+            continue
+        item = resent.get(line.id)
+        if item is None or item.equipment_type_code != line.equipment_type.code:
+            raise SentEquipmentChanged(line.equipment_type.name, is_removed=True)
+        if line.status == EquipmentRequestStatus.ACCEPTED and (
+            (item.quantity, item.technical_notes) != (line.quantity, line.technical_notes)
         ):
             raise SentEquipmentChanged(line.equipment_type.name, is_removed=False)
 

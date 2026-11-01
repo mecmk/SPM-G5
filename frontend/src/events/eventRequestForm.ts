@@ -337,7 +337,8 @@ function venueRequirementDraftFrom(
   }
 }
 
-/** Story 17.2 AC2: sent to Technical Support, so withdrawn on the event page, not removed here. */
+/** Story 7.2 AC4, 17.2 AC2: sent to Technical Support, so withdrawn on the event page, not removed
+ *  or swapped for another type here. */
 export function isSentToTechnicalSupport(line: EquipmentDraft): boolean {
   return line.status !== null && WITHDRAWABLE_STATUSES.includes(line.status)
 }

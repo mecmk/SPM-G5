@@ -1428,6 +1428,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                     <select
                       {...fieldProps(getEquipmentTypeId(line.key))}
                       value={line.typeCode}
+                      disabled={isSentToTechnicalSupport(line)}
                       onChange={(e) => updateEquipment(line.key, { typeCode: e.target.value })}
                     >
                       <option value={NO_EQUIPMENT_CHOSEN}>Choose equipment…</option>
@@ -1477,7 +1478,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   </label>
                 </div>
                 {equipmentAvailabilityNote(line)}
-                {!isEquipmentApproved && isSentToTechnicalSupport(line) && (
+                {!isEquipmentReadOnly && isSentToTechnicalSupport(line) && (
                   <p className="form-hint">{SENT_EQUIPMENT_HINT}</p>
                 )}
                 {!isEquipmentApproved && !isSentToTechnicalSupport(line) && (

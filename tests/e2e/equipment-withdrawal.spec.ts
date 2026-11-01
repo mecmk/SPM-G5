@@ -23,7 +23,7 @@
  *
  * The riverside summit (EVENTS.riversideSummit) is this spec's own: each test withdraws a
  * different item on it, the accepted speakers or the pending microphones, so the tests can run
- * in parallel. The AC11 test submits a request of its own.
+ * in parallel. The AC11 test and the two Edit event tests each submit a request of their own.
  */
 import { expect, test, type Page } from '@playwright/test'
 import {
@@ -250,6 +250,7 @@ test('17.2 AC2: Edit event offers no Remove on a sent item, and locks an accepte
   await page.getByRole('link', { name: 'Edit event' }).click()
   const row = page.getByRole('group', { name: 'Equipment item 1' })
   await expect(row.getByLabel('Quantity')).toBeEnabled()
+  await expect(row.getByLabel('Equipment type')).toBeDisabled()
   await expect(row.getByRole('button', { name: 'Remove' })).toHaveCount(0)
   await expect(row).toContainText('withdraw it on the event page')
 
@@ -265,6 +266,14 @@ test('17.2 AC2: Edit event offers no Remove on a sent item, and locks an accepte
   const accept = tech.getByRole('dialog', { name: 'Accept this request?' })
   await accept.getByRole('button', { name: 'Accept' }).click()
   await expect(accept).not.toBeVisible()
+
+  // AC10: the hint is for the one who can withdraw, not the organiser reading the form.
+  await tech.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(tech, ACCOUNTS.organiser)
+  await tech.goto(`/events/${eventId}/edit`)
+  const readOnly = tech.getByRole('group', { name: 'Equipment item 1' })
+  await expect(readOnly.getByLabel('Quantity')).toBeDisabled()
+  await expect(readOnly).not.toContainText('withdraw it on the event page')
   await elsewhere.close()
 
   await page.goto(`/events/${eventId}`)
