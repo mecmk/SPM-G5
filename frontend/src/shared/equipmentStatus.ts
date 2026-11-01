@@ -27,3 +27,9 @@ export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string 
     ? formatDateTime(withdrawnAt)
     : `${formatDateTime(withdrawnAt)} by ${withdrawnByName}`
 }
+
+/** Story 16.2 AC4: the mark on an event's item that units out of service leave short, as its
+ *  coordinator reads it on the event's page. */
+export function describeItemShort(unitsShort: number, quantity: number): string {
+  return `Short: ${unitsShort} of ${quantity} out of service`
+}

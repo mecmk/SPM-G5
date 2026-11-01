@@ -761,9 +761,11 @@ def _get_own_event(
     second waits, then reads what the first committed."""
     # Only the request's own row is held, and in a statement of its own: the coordinator Event
     # joins in eagerly is read afterwards, so a handover that landed while this waited is seen
-    # (``lock_event`` explains why one statement would miss it).
+    # (``lock_event`` explains why one statement would miss it). FOR NO KEY UPDATE, as there: a
+    # submission then takes equipment types, and a record of units out of service (story 16.2)
+    # holds a type and then writes a notice naming the event, which FOR UPDATE would make wait.
     if for_update:
-        db.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+        db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
     event = db.get(Event, event_id, populate_existing=for_update)
     if event is None or event.organiser_id != actor.id:
         raise EventNotFound(event_id)
@@ -965,6 +967,40 @@ def _known(
 # --- writes --------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class OutOfServiceWindow:
+    """Story 16.2 AC3/AC7: units a record has out, from ``starts_at`` to ``ends_at`` (None: until
+    ended)."""
+
+    starts_at: datetime
+    ends_at: datetime | None
+    quantity: int
+
+
+def is_out_at(record: OutOfServiceWindow, *, moment: datetime) -> bool:
+    """Story 16.2: whether ``record`` has its units out at ``moment``. Half-open, as holds are:
+    out from its start, back at its end."""
+    return record.starts_at <= moment and (record.ends_at is None or moment < record.ends_at)
+
+
+def units_out_at_most(
+    records: Iterable[OutOfServiceWindow], *, starts_at: datetime, ends_at: datetime | None
+) -> int:
+    """Story 16.2 AC3/AC7: the most units ``records`` have out of service at any one moment from
+    ``starts_at`` to ``ends_at`` (None: from then on). Overlapping records add up; one after
+    another do not. The count only rises where a record starts, so those moments suffice."""
+    records = list(records)
+    moments = [starts_at] + [
+        record.starts_at
+        for record in records
+        if starts_at < record.starts_at and (ends_at is None or record.starts_at < ends_at)
+    ]
+    return max(
+        sum(record.quantity for record in records if is_out_at(record, moment=moment))
+        for moment in moments
+    )
+
+
 def available_by_type(
     db: Session,
     period_start: datetime,
@@ -974,7 +1010,8 @@ def available_by_type(
     exclude_request_ids: Collection[uuid.UUID] = (),
 ) -> dict[uuid.UUID, int]:
     """AC6: units free for a period, per equipment type: the stock, less units held for other
-    events over the period (a hold's quantity less what was released), less units out of service.
+    events over the period (a hold's quantity less what was released), less the most units out of
+    service at any one moment of it (story 16.2 AC7: records one after another do not add up).
     Overlap is half-open, so a hold ending exactly as the period starts does not count. Story 15.1
     (``app/equipment/service.py``) uses the same calculation for the coordinator's items.
     Story 7.2 AC7: ``exclude_event_id`` leaves that event's own holds out, so an event being
@@ -1005,22 +1042,26 @@ def available_by_type(
             )
         )
     held = dict(db.execute(held_query).all())
-    out_of_service = dict(
-        db.execute(
-            select(
-                EquipmentUnavailabilityPeriod.equipment_type_id,
-                func.sum(EquipmentUnavailabilityPeriod.quantity),
-            )
-            .where(
-                EquipmentUnavailabilityPeriod.starts_at < period_end,
-                or_(
-                    EquipmentUnavailabilityPeriod.ends_at.is_(None),
-                    EquipmentUnavailabilityPeriod.ends_at > period_start,
-                ),
-            )
-            .group_by(EquipmentUnavailabilityPeriod.equipment_type_id)
-        ).all()
-    )
+    records: dict[uuid.UUID, list[OutOfServiceWindow]] = {}
+    for type_id, starts_at, ends_at, quantity in db.execute(
+        select(
+            EquipmentUnavailabilityPeriod.equipment_type_id,
+            EquipmentUnavailabilityPeriod.starts_at,
+            EquipmentUnavailabilityPeriod.ends_at,
+            EquipmentUnavailabilityPeriod.quantity,
+        ).where(
+            EquipmentUnavailabilityPeriod.starts_at < period_end,
+            or_(
+                EquipmentUnavailabilityPeriod.ends_at.is_(None),
+                EquipmentUnavailabilityPeriod.ends_at > period_start,
+            ),
+        )
+    ):
+        records.setdefault(type_id, []).append(OutOfServiceWindow(starts_at, ends_at, quantity))
+    out_of_service = {
+        type_id: units_out_at_most(windows, starts_at=period_start, ends_at=period_end)
+        for type_id, windows in records.items()
+    }
     stock = db.execute(select(EquipmentType.id, EquipmentType.total_quantity)).all()
     return {
         type_id: max(0, total - int(held.get(type_id, 0)) - int(out_of_service.get(type_id, 0)))
@@ -2922,8 +2963,12 @@ def get_event_for_update(db: Session, event_id: uuid.UUID, *, viewer: User) -> E
     """Story 19.2: the event as ``get_event`` shows it to ``viewer``, its row held until the
     transaction ends, so a decision on one of its change requests waits for a withdrawal or a
     reassignment already under way (and they for it), then reads what landed first. Only the
-    event's own row is held, as in ``_get_own_event``."""
-    event = db.get(Event, event_id, with_for_update={"of": Event}, populate_existing=True)
+    event's own row is held, as in ``_get_own_event``, and ``FOR NO KEY UPDATE`` for the same
+    reason: an approval then takes equipment types (story 19.3), which a record of units out of
+    service holds while it writes a notice naming the event (story 16.2)."""
+    event = db.get(
+        Event, event_id, with_for_update={"of": Event, "key_share": True}, populate_existing=True
+    )
     if event is None or not can_view_event(viewer, event):
         raise EventNotFound(event_id)
     return event

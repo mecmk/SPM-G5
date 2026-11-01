@@ -2,7 +2,7 @@ import { WITHDRAWABLE_STATUSES } from '../api/equipment'
 import type { EquipmentItemStatus, EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
-import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
+import { inputToInstant, instantToInput, isReadableDateTime, nowAsInput } from '../shared/format'
 import { isBlankOrPhoneNumber } from '../shared/phone'
 
 /**
@@ -96,7 +96,6 @@ export const CONTACT_EMAIL_MAX_LENGTH = 254
 /** Story 2.1 AC14: what a cover picture may be, mirrored from the backend's service. */
 export const MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
 export const COVER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
 // The largest value the backend's INTEGER columns hold.
 const MAX_WHOLE_NUMBER = 2_147_483_647
@@ -496,11 +495,6 @@ export function getLatestEndInput(startsAt: string): string {
     new Date(Date.parse(inputToInstant(anchor)) + MAX_EVENT_DAYS * MS_PER_DAY).toISOString(),
   )
   return latest < LATEST_DATE_INPUT ? latest : LATEST_DATE_INPUT
-}
-
-/** A picker can hold a six-digit year, which the backend cannot read as a date. */
-function isReadableDateTime(inputValue: string): boolean {
-  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
 }
 
 /**
