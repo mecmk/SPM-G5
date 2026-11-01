@@ -228,8 +228,6 @@ REPLACED_BY_REASON = "Replaced by {venue}"
 # Story 12.6 AC3: the sentence the coordinator's approval notice adds when it released the booking
 # the approved replacement replaces - and does not, when there was nothing to release (AC3).
 ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
-# Story 21.3 AC4: what Venue Staff are told when the Safety Officer's finding released a booking:
-# the booked period (setup and teardown included, 12.1 AC1) and the finding's required change.
 # Story 19.1 AC12 (team decision on the review of #125), story 12.8 AC4: an event's plans stop
 # changing this long before its set-up time - which also covers an event under way or over, that
 # nothing marks Completed (Q57). Kept here because the set-up time is read from the bookings.
@@ -249,6 +247,8 @@ _RETURNED_MESSAGE = (
     "back in Planning and needs a new safety check before it is confirmed again."
 )
 
+# Story 21.3 AC4: what Venue Staff are told when the Safety Officer's finding released a booking:
+# the booked period (setup and teardown included, 12.1 AC1) and the finding's required change.
 SAFETY_RELEASE_NOTICE = (
     'The booking of {venue} for "{event}" {period} was released by the safety review. '
     "Required change: {reason}"
