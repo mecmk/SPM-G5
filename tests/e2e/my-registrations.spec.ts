@@ -1,11 +1,14 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
 import {
   ACCOUNTS,
+  EVENT_PAGE_API_PATH,
   MIN_TOUCH_TARGET,
+  changeEventPage,
   confirmRegistration,
   corsHeaders,
   expectNoSidewaysScroll,
   mainOverflow,
+  openRegisteredEvent,
   registrationSection,
   signIn,
 } from './support'
@@ -38,8 +41,8 @@ import {
  *     where registration stands, as for an attendee who never registered - Open, say - and offers
  *     Register again. A back link returns to My registrations.
  * AC10 (fix f18.2.1) The page of an event the attendee registered for opens even once it is no
- *     longer listed - here, started or cancelled - with no places left or Register. Which events
- *     those are is a backend case.
+ *     longer listed - here, started or cancelled - with no places left or Register, and names the
+ *     venues it still has booked. Which events and venues those are is a backend case.
  * AC11 (fix f18.2.1) A withdrawal refused because the event started or was cancelled while its
  *     page was open says why, and the page then shows where the attendee stands.
  *
@@ -55,7 +58,6 @@ import {
 const MY_REGISTRATIONS_PATH = '/registrations'
 const UPCOMING_EVENTS_PATH = '/browse'
 const MINE_API_PATH = '/registrations'
-const PAGE_API_PATH = /^\/registrations\/events\/[^/]+$/
 const WITHDRAW_API_PATH = /^\/registrations\/[^/]+\/withdraw$/
 const BACK_TO_LIST = '← My registrations'
 
@@ -114,17 +116,6 @@ async function openMyRegistrations(page: Page, account: string = ACCOUNTS.attend
   await expect(page.getByRole('heading', { level: 1, name: 'My registrations' })).toBeVisible()
 }
 
-/** AC9: from My registrations, open a registration's event page by its card's link, its title. */
-async function openEventPage(page: Page, name: string) {
-  await eventCard(page, name).getByRole('link', { name }).click()
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-}
-
-async function openRegisteredEvent(page: Page, name: string) {
-  await openMyRegistrations(page)
-  await openEventPage(page, name)
-}
-
 /** Every withdrawal the page sends from now on. */
 function trackWithdrawals(page: Page): string[] {
   const sent: string[] = []
@@ -166,6 +157,7 @@ async function stubCall(
 
 /** An event's page as the API sends it: here only what the stubs below change. */
 interface EventPageBody {
+  venues: { name: string; location: string }[]
   listing: unknown
   registration: {
     status: string
@@ -173,19 +165,6 @@ interface EventPageBody {
     can_change_guests: boolean
     guests: { full_name: string; dietary_requirements: string | null }[]
   }
-}
-
-/** Answer the page's call for an event with what the server sends, changed by `change`. Nothing
- *  is written. */
-async function changeEventPage(page: Page, change: (body: EventPageBody) => EventPageBody) {
-  await page.route(
-    (url) => PAGE_API_PATH.test(url.pathname),
-    async (route) => {
-      if (route.request().resourceType() !== 'fetch') return route.fallback()
-      const response = await route.fetch()
-      return route.fulfill({ response, json: change((await response.json()) as EventPageBody) })
-    },
-  )
 }
 
 /**
@@ -200,7 +179,7 @@ async function stubChangedMeanwhile(
 ) {
   let hasChanged = false
   await page.route(
-    (url) => PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
+    (url) => EVENT_PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
     async (route) => {
       const request: Request = route.request()
       if (request.resourceType() !== 'fetch') return route.fallback()
@@ -337,6 +316,7 @@ test.describe('withdraws its seeded registration once', () => {
   test("18.2 AC1/AC9: withdrawing on the event's page after confirming shows it open again with Register, the card Withdrawn, and Upcoming events has the place back", async ({
     page,
   }) => {
+    await signIn(page, ACCOUNTS.attendee)
     await openRegisteredEvent(page, POETRY_NIGHT)
     const box = registrationSection(page)
     await expect(box.getByText('Registered', { exact: true })).toBeVisible()
@@ -387,6 +367,7 @@ test.describe('withdraws its seeded registration once', () => {
 test('18.2 AC1: cancelling the confirmation keeps the registration and sends nothing', async ({
   page,
 }) => {
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
   const sent = trackWithdrawals(page)
 
@@ -476,13 +457,14 @@ test.describe('on an iPhone 12 Pro', () => {
   }) => {
     // Story 18.5 AC3: the page names the guests. No seeded guest has a name this long, so the
     // yoga's page is stubbed to bring one.
-    await changeEventPage(page, (body) => ({
+    await changeEventPage<EventPageBody>(page, (body) => ({
       ...body,
       registration: {
         ...body.registration,
         guests: [{ full_name: LONG_GUEST_NAME, dietary_requirements: null }],
       },
     }))
+    await signIn(page, ACCOUNTS.attendee)
     await openRegisteredEvent(page, SUNSET_YOGA)
 
     const withdraw = withdrawButton(page, SUNSET_YOGA)
@@ -507,7 +489,7 @@ test('18.2 AC3/AC10: a registration for an event that has started opens its page
   await expect(card.getByText('Registered', { exact: true })).toBeVisible()
   await expect(card).toContainText('Sat, 3 Oct 2026 · 10:00–13:00')
 
-  await openEventPage(page, BOOK_SWAP)
+  await openRegisteredEvent(page, BOOK_SWAP)
 
   const box = registrationSection(page)
   await expect(box.getByText('Registered', { exact: true })).toBeVisible()
@@ -526,6 +508,7 @@ test('18.2 AC3/AC11: a withdrawal refused because the event started meanwhile sa
     // Story 18.5 AC3: a started event's registration has closed, so its guests are fixed too.
     registration: { ...body.registration, can_withdraw: false, can_change_guests: false },
   }))
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
   await confirmWithdrawal(page, SUNSET_YOGA)
@@ -560,6 +543,7 @@ test('18.2 AC8/AC11: a withdrawal refused because the event was cancelled meanwh
       can_change_guests: false,
     },
   }))
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
   await confirmWithdrawal(page, SUNSET_YOGA)
@@ -580,6 +564,7 @@ test.describe('withdraws its seeded registration once', () => {
   test('18.2 AC1: a withdrawal that cannot reach the server says so, and can be tried again', async ({
     page,
   }) => {
+    await signIn(page, ACCOUNTS.attendee)
     await openRegisteredEvent(page, LANTERN_PAINTING)
     const box = registrationSection(page)
     await expect(box.getByText('Registered', { exact: true })).toBeVisible()
@@ -598,7 +583,7 @@ test.describe('withdraws its seeded registration once', () => {
       releaseStalePage = resolve
     })
     await page.route(
-      (url) => PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
+      (url) => EVENT_PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
       async (route) => {
         const request: Request = route.request()
         if (request.resourceType() !== 'fetch') return route.fallback()
@@ -646,7 +631,7 @@ test.describe('withdraws its seeded registration once', () => {
       (request) =>
         request.resourceType() === 'fetch' &&
         request.method() === 'GET' &&
-        PAGE_API_PATH.test(new URL(request.url()).pathname),
+        EVENT_PAGE_API_PATH.test(new URL(request.url()).pathname),
     )
     releaseStalePage()
     await stalePageAnswered
@@ -668,7 +653,7 @@ test("18.2 AC9: a withdrawal the server took shows as Withdrawn, even if the eve
   let isWithdrawn = false
   let mine: EventPageBody['registration'] | null = null
   await page.route(
-    (url) => PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
+    (url) => EVENT_PAGE_API_PATH.test(url.pathname) || WITHDRAW_API_PATH.test(url.pathname),
     async (route) => {
       const request: Request = route.request()
       if (request.resourceType() !== 'fetch') return route.fallback()
@@ -700,6 +685,7 @@ test("18.2 AC9: a withdrawal the server took shows as Withdrawn, even if the eve
       return route.fulfill({ response, json: event })
     },
   )
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
   await confirmWithdrawal(page, SUNSET_YOGA)
@@ -721,7 +707,7 @@ test('18.2 AC1: pressing Withdraw clears why an earlier registration was refused
   // its Register is refused as already registered. Nothing is written.
   let isRefused = false
   await page.route(
-    (url) => url.pathname === MINE_API_PATH || PAGE_API_PATH.test(url.pathname),
+    (url) => url.pathname === MINE_API_PATH || EVENT_PAGE_API_PATH.test(url.pathname),
     async (route) => {
       const request: Request = route.request()
       if (request.resourceType() !== 'fetch') return route.fallback()
@@ -734,7 +720,7 @@ test('18.2 AC1: pressing Withdraw clears why an earlier registration was refused
           body: JSON.stringify({ detail: ALREADY_REGISTERED_MESSAGE }),
         })
       }
-      if (isRefused || !PAGE_API_PATH.test(new URL(request.url()).pathname)) {
+      if (isRefused || !EVENT_PAGE_API_PATH.test(new URL(request.url()).pathname)) {
         return route.fallback()
       }
       const response = await route.fetch()
@@ -749,6 +735,7 @@ test('18.2 AC1: pressing Withdraw clears why an earlier registration was refused
       })
     },
   )
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
   const box = registrationSection(page)
   await box.getByRole('button', { name: `Register for ${SUNSET_YOGA}` }).click()
@@ -770,6 +757,7 @@ test.describe('withdraws its seeded registration once', () => {
   test("18.2 AC4: after withdrawing, registering again on the event's page makes the registration active again", async ({
     page,
   }) => {
+    await signIn(page, ACCOUNTS.attendee)
     await openRegisteredEvent(page, SKETCHING_WALK)
     await confirmWithdrawal(page, SKETCHING_WALK)
     const box = registrationSection(page)
@@ -796,6 +784,7 @@ test('18.2 AC6: a withdrawal of a registration that is no longer found says so',
     status: 404,
     body: { detail: NOT_FOUND_MESSAGE },
   })
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
   await confirmWithdrawal(page, SUNSET_YOGA)
@@ -835,6 +824,7 @@ test.describe('withdraws its seeded registration once', () => {
   test.describe.configure({ retries: 0 })
 
   test('18.2 AC7: a double-click on Withdraw sends one withdrawal', async ({ page }) => {
+    await signIn(page, ACCOUNTS.attendee)
     await openRegisteredEvent(page, BOARD_GAMES_SOCIAL)
     const sent = trackWithdrawals(page)
 
@@ -850,12 +840,13 @@ test.describe('withdraws its seeded registration once', () => {
 })
 
 // --- AC8 / AC10: an event no longer listed ------------------------------------------------------
-test('18.2 AC8/AC10: an event sent back to Planning keeps its page, and its registration can still be withdrawn', async ({
+test('18.2 AC8/AC10: an event no longer listed keeps its page, offering Withdraw while the registration stands', async ({
   page,
 }) => {
   // The yoga's page as the server sends it once the event is no longer listed. Which events those
   // are is a backend case.
-  await changeEventPage(page, (body) => ({ ...body, listing: null }))
+  await changeEventPage<EventPageBody>(page, (body) => ({ ...body, listing: null }))
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
   const box = registrationSection(page)
@@ -863,14 +854,29 @@ test('18.2 AC8/AC10: an event sent back to Planning keeps its page, and its regi
   await expect(box).not.toContainText('places left')
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
   await expect(box.getByRole('button', { name: `Register for ${SUNSET_YOGA}` })).toHaveCount(0)
-  // Its venues are still booked, so they are named.
+  // The yoga has no venue booked, and an event no longer listed has none on the way.
   await expect(page.getByRole('main')).not.toContainText('Venue to be confirmed')
+})
+
+test('18.2 AC10: an event no longer listed names the venues it still has booked', async ({
+  page,
+}) => {
+  await changeEventPage<EventPageBody>(page, (body) => ({
+    ...body,
+    listing: null,
+    venues: [{ name: 'Harbour Hall', location: 'Pier 3' }],
+  }))
+  await signIn(page, ACCOUNTS.attendee)
+  await openRegisteredEvent(page, SUNSET_YOGA)
+
+  await expect(page.getByRole('main')).toContainText('Harbour Hall, Pier 3')
 })
 
 test('18.2 AC10: an event no longer listed shows Withdrawn to an attendee who withdrew', async ({
   page,
 }) => {
-  await changeEventPage(page, (body) => ({ ...body, listing: null }))
+  await changeEventPage<EventPageBody>(page, (body) => ({ ...body, listing: null }))
+  await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, HERITAGE_TRAIL)
 
   const box = registrationSection(page)
@@ -893,7 +899,7 @@ test('18.2 AC8/AC10: a registration for a cancelled event shows Event cancelled,
   await expect(card).toContainText('Sat, 10 Apr 2027 · 07:00–10:00')
   await expect(card.getByRole('button')).toHaveCount(0)
 
-  await openEventPage(page, CHARITY_FUN_RUN)
+  await openRegisteredEvent(page, CHARITY_FUN_RUN)
 
   const box = registrationSection(page)
   await expect(box.getByText('Event cancelled', { exact: true })).toBeVisible()

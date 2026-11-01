@@ -4,6 +4,7 @@ import {
   CONFIRM_AND_REGISTER,
   EVENTS,
   MIN_TOUCH_TARGET,
+  changeEventPage,
   confirmDetailsDialog,
   confirmRegistration,
   corsHeaders,
@@ -108,19 +109,6 @@ async function expectBadge(within: Locator, label: string, colour: RegExp) {
   const badge = within.getByText(label, { exact: true })
   await expect(badge).toBeVisible()
   await expect(badge).toHaveClass(colour)
-}
-
-/** Answer the page's call for an event with what the server sends, changed by `change`. */
-async function changeEventCall(page: Page, change: (event: Record<string, unknown>) => object) {
-  await page.route(
-    (url) => url.pathname.startsWith(`${EVENTS_API_PATH}/`),
-    async (route) => {
-      const request: Request = route.request()
-      if (request.resourceType() !== 'fetch') return route.fallback()
-      const response = await route.fetch()
-      return route.fulfill({ response, json: change(await response.json()) })
-    },
-  )
 }
 
 /** Today's date as the app writes it, on Singapore's clock. */
@@ -572,7 +560,7 @@ test('18.1 AC1: at phone width the events fit without sideways scrolling', async
 test("18.1 AC9: at phone width an event's page fits without sideways scrolling, even with a long link in its description, and Register is a full-width button big enough for a thumb", async ({
   page,
 }) => {
-  await changeEventCall(page, (event) => ({
+  await changeEventPage(page, (event) => ({
     ...event,
     description: `${event.description} ${LONG_LINK}`,
   }))
@@ -594,7 +582,7 @@ test("18.1 AC9: at phone width an event's page fits without sideways scrolling, 
 test('18.1 AC9: an event with no description has no About section on its page', async ({
   page,
 }) => {
-  await changeEventCall(page, (event) => ({ ...event, description: null }))
+  await changeEventPage(page, (event) => ({ ...event, description: null }))
   await signIn(page, ACCOUNTS.attendee)
   await openEventPage(page, JAZZ_EVENING)
 

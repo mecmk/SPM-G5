@@ -519,7 +519,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
  *  and so on, as for anyone else. Once it is not, where they stand (AC10) - Registered, Withdrawn
  *  or Event cancelled. The page of an unlisted event is only ever one they registered for - or,
  *  just after a withdrawal, one whose listing waits on the event being read again. */
-function panelBadge({ listing, registration }: AttendeeEvent): RegistrationBadge | null {
+function chooseBadge({ listing, registration }: AttendeeEvent): RegistrationBadge | null {
   if (listing !== null) return STATE_BADGES[listing.state]
   return registration === null ? null : STANDING_BADGES[registration.status]
 }
@@ -527,7 +527,7 @@ function panelBadge({ listing, registration }: AttendeeEvent): RegistrationBadge
 /** Story 18.2 AC3/AC9: when the attendee registered, while they still are, and why there is no
  *  Withdraw once the event has started; otherwise, story 18.1 AC9, while the event is listed,
  *  when registration opens and closes. No history of when they withdrew. */
-function panelTimes({ listing, registration }: AttendeeEvent): string[] {
+function describeTimes({ listing, registration }: AttendeeEvent): string[] {
   if (registration?.status === 'REGISTERED') {
     const lines = describeActiveRegistration(registration)
     if (!registration.can_withdraw) lines.push(STARTED_NOTE)
@@ -566,7 +566,7 @@ function RegistrationPanel({
   onWithdraw,
 }: RegistrationPanelProps) {
   const { listing, registration } = event
-  const badge = panelBadge(event)
+  const badge = chooseBadge(event)
   return (
     <section
       className="card stack attendee-event-registration"
@@ -581,7 +581,7 @@ function RegistrationPanel({
         </div>
       )}
       {listing !== null && <p>{describePlacesLeft(listing.places_left)}</p>}
-      {panelTimes(event).map((line) => (
+      {describeTimes(event).map((line) => (
         <p key={line} className="muted small wrap-anywhere">
           {line}
         </p>

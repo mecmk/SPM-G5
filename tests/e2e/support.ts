@@ -184,16 +184,47 @@ export const VENUES = {
   sunriseStudio: 'Sunrise Studio',
 } as const
 
-/** Story 18.1 AC9 (fix f18.1.2): from Upcoming events, open an event's page by its card's link,
- *  its title. */
-export async function openEventPage(page: Page, name: string) {
-  await page.goto('/browse')
+/** Open the event's page an event's card links to, by the link, its title (18.1 and 18.2 AC9). */
+async function openFromCard(page: Page, name: string) {
   await page
     .getByRole('listitem')
     .filter({ has: page.getByRole('heading', { level: 3, name }) })
     .getByRole('link', { name })
     .click()
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+}
+
+/** Story 18.1 AC9 (fix f18.1.2): from Upcoming events, open an event's page by its card's link,
+ *  its title. */
+export async function openEventPage(page: Page, name: string) {
+  await page.goto('/browse')
+  await openFromCard(page, name)
+}
+
+/** Story 18.2 AC9 (fix f18.2.1): from My registrations, open a registration's event page by its
+ *  card's link, its title. */
+export async function openRegisteredEvent(page: Page, name: string) {
+  await page.goto('/registrations')
+  await openFromCard(page, name)
+}
+
+/** Story 18.1 AC9 (fix f18.1.2): where an attendee's call for an event's page goes. */
+export const EVENT_PAGE_API_PATH = /^\/registrations\/events\/[^/]+$/
+
+/** Answer the call for an event's page with what the server sends, changed by `change`. Only the
+ *  `fetch` is stubbed, and nothing is written. */
+export async function changeEventPage<Body = Record<string, unknown>>(
+  page: Page,
+  change: (body: Body) => object,
+) {
+  await page.route(
+    (url) => EVENT_PAGE_API_PATH.test(url.pathname),
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, json: change((await response.json()) as Body) })
+    },
+  )
 }
 
 /** Story 18.1 AC9: where an event's page says where registration stands, and offers Register. */

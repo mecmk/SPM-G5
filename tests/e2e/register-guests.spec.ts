@@ -8,6 +8,7 @@ import {
   confirmRegistration,
   corsHeaders,
   openEventPage,
+  openRegisteredEvent,
   registerButton,
   registrationSection,
   signIn,
@@ -64,6 +65,7 @@ const GUEST_DIETARY_MAX_LENGTH = 500
 const NOT_ENOUGH_PLACES_MESSAGE = 'There are not enough places left for you and your guests.'
 const GUESTS_WITHDRAWN_TOO = 'Your guests are withdrawn with you.'
 const GUESTS_NOT_ENOUGH_PLACES_MESSAGE = 'There are not enough places left for these guests.'
+const SERVER_PROBLEM_MESSAGE = 'The server hit a problem. Try again in a moment.'
 
 const BATIK_WORKSHOP = 'Batik Printing Workshop' // 30 places; Gina registers with two guests
 const KITE_AFTERNOON = 'Kite Flying Afternoon' // 30 places; Hana registered alone
@@ -97,13 +99,6 @@ async function addGuest(page: Page, n: number, guest: { name: string; dietary?: 
   if (guest.dietary !== undefined) {
     await group.getByLabel("Guest's dietary requirements").fill(guest.dietary)
   }
-}
-
-/** 18.2 AC9: from My registrations, open a registration's event page by its card's link. */
-async function openRegisteredEvent(page: Page, name: string) {
-  await page.goto(MY_REGISTRATIONS_PATH)
-  await eventCard(page, name).getByRole('link', { name }).click()
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
 function changeGuestsButton(page: Page, name: string) {
@@ -515,6 +510,60 @@ test('18.5 AC3: a change the server refuses for want of places keeps every guest
   await expect(guestGroup(page, 1).getByLabel("Guest's name")).toHaveValue(RAVI.name)
   await expect(addGuestButton(page)).toBeDisabled()
   await expect(dialog).toContainText(NO_PLACES_FOR_MORE_GUESTS_MESSAGE)
+})
+
+test("18.5 AC3: guests saved on the event's page show at once, even if the event can't be read again", async ({
+  page,
+}) => {
+  // Hana's kite afternoon as the server sends it, with no guests, until the save: that is answered
+  // as the server would, with her guest, and the event read after it is refused, so only the
+  // save's answer can show the guest. Nothing is written.
+  let isSaved = false
+  let mine: Record<string, unknown> | null = null
+  await page.route(
+    (url) => url.pathname.startsWith('/registrations'),
+    async (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'PUT') {
+        isSaved = true
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            ...mine,
+            guests: [{ full_name: ANA.name, dietary_requirements: ANA.dietary }],
+          }),
+        })
+      }
+      if (new URL(request.url()).pathname !== KITE_AFTERNOON_API_PATH) return route.fallback()
+      if (isSaved) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: '{}',
+        })
+      }
+      const response = await route.fetch()
+      const event = (await response.json()) as { registration: Record<string, unknown> }
+      event.registration.guests = []
+      mine = event.registration
+      return route.fulfill({ response, json: event })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee8)
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
+  const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
+  await addGuest(page, 1, ANA)
+
+  await dialog.getByRole('button', { name: 'Save guests' }).click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveText(SERVER_PROBLEM_MESSAGE)
+  await expect(registrationSection(page)).toContainText(ANA.name)
 })
 
 test('18.5 AC7: withdrawing a registration with guests says the guests are withdrawn too', async ({
