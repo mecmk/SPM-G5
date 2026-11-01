@@ -242,6 +242,10 @@ test('15.2.1 AC2: the subtitle says what the selected tab holds', async ({ page 
         'venue was approved, or a safety review released it. Read-only.',
     ),
   ).toBeVisible()
+
+  await page.goto('/venue-staff/booking-requests?search=no-such-request')
+  await expect(page.getByRole('tab', { name: 'Pending (0)' })).toBeVisible()
+  await expect(pendingHint).toBeVisible()
 })
 
 test('13.1.2 AC3: a cancelled request shows when it was closed, not when staff decided it', async ({

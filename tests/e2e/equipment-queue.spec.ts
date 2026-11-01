@@ -20,7 +20,8 @@
  *
  * Story 15.2.1 - fe: say what each tab holds.
  * AC1 the subtitle under the page title says what the selected tab holds, and changes with it:
- *     Cancelled says why a request ended up there. Purely client-side text, so there is no backend case.
+ *     Cancelled says why a request ended up there. Purely client-side text, so there is
+ *     no backend case.
  *
  * The roadshow (EVENTS.equipmentRoadshow) and the other events in PENDING_EVENTS are
  * dedicated to this spec and only read here. Other specs send equipment to Technical Support
@@ -124,11 +125,15 @@ test('15.2.1 AC1: the subtitle says what the selected tab holds', async ({ page 
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
   await expect(
     page.getByText(
-      'Withdrawn after they were sent, because the event was cancelled or rejected, or a ' +
-        'change to it removed them. Read-only.',
+      'Closed because the event was cancelled or rejected, or an approved change removed ' +
+        'them. Read-only.',
     ),
   ).toBeVisible()
   await expect(pendingHint).toHaveCount(0)
+
+  await page.goto(`${QUEUE_PATH}?search=no-such-request`)
+  await expect(page.getByRole('tab', { name: 'Pending (0)' })).toBeVisible()
+  await expect(pendingHint).toBeVisible()
 })
 
 test('15.2 AC1: View details opens the request and the event name opens the event, each leading back', async ({
