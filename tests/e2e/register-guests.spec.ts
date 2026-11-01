@@ -8,6 +8,7 @@ import {
   confirmRegistration,
   corsHeaders,
   openEventPage,
+  openRegisteredEvent,
   registerButton,
   registrationSection,
   signIn,
@@ -41,7 +42,8 @@ import {
  * AC7 Withdrawing a registration withdraws the whole group. (Here: the withdraw dialog says so.)
  *
  * An attendee registers from an event's page (18.1 AC9, fix f18.1.2), opened from its card on
- * Upcoming events.
+ * Upcoming events, and changes their guests or withdraws on the same page, opened from their
+ * registration's card on My registrations (18.2 AC9, fix f18.2.1).
  *
  * Each flow has a seeded attendee of its own (backend/db/seed/020_sample_data.sql, story 18.5's
  * block), since specs run in parallel and a registration happens once: Gina registers for the
@@ -63,6 +65,7 @@ const GUEST_DIETARY_MAX_LENGTH = 500
 const NOT_ENOUGH_PLACES_MESSAGE = 'There are not enough places left for you and your guests.'
 const GUESTS_WITHDRAWN_TOO = 'Your guests are withdrawn with you.'
 const GUESTS_NOT_ENOUGH_PLACES_MESSAGE = 'There are not enough places left for these guests.'
+const SERVER_PROBLEM_MESSAGE = 'The server hit a problem. Try again in a moment.'
 
 const BATIK_WORKSHOP = 'Batik Printing Workshop' // 30 places; Gina registers with two guests
 const KITE_AFTERNOON = 'Kite Flying Afternoon' // 30 places; Hana registered alone
@@ -96,6 +99,10 @@ async function addGuest(page: Page, n: number, guest: { name: string; dietary?: 
   if (guest.dietary !== undefined) {
     await group.getByLabel("Guest's dietary requirements").fill(guest.dietary)
   }
+}
+
+function changeGuestsButton(page: Page, name: string) {
+  return registrationSection(page).getByRole('button', { name: `Change guests for ${name}` })
 }
 
 /** 18.1 AC9: open an event's page and press Register, which opens "Confirm your details". */
@@ -182,25 +189,28 @@ test('18.5 AC1/AC2/AC3/AC4: an attendee registers with two guests, who take plac
   ).toBe(true)
 })
 
-test('18.5 AC3: an attendee registered alone adds a guest on My registrations, then removes them', async ({
+test("18.5 AC3: an attendee registered alone adds a guest on the event's page, then removes them", async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.attendee8)
-  await page.goto(MY_REGISTRATIONS_PATH)
-  const card = eventCard(page, KITE_AFTERNOON)
-  await card.getByRole('button', { name: `Change guests for ${KITE_AFTERNOON}` }).click()
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  const card = registrationSection(page)
+  await expect(card).toContainText('29 places left')
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
 
   const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
   await addGuest(page, 1, ANA)
   await dialog.getByRole('button', { name: 'Save guests' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(card).toContainText(ANA.name)
+  // A guest takes a place (AC2), and the page says so without being reloaded.
+  await expect(card).toContainText('28 places left')
 
   // Reloading shows what was saved.
   await page.reload()
   await expect(card).toContainText(ANA.name)
 
-  await card.getByRole('button', { name: `Change guests for ${KITE_AFTERNOON}` }).click()
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
   await expect(guestGroup(page, 1).getByLabel("Guest's name")).toHaveValue(ANA.name)
   await expect(guestGroup(page, 1).getByLabel("Guest's dietary requirements")).toHaveValue(
     ANA.dietary,
@@ -209,6 +219,7 @@ test('18.5 AC3: an attendee registered alone adds a guest on My registrations, t
   await dialog.getByRole('button', { name: 'Save guests' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(card).not.toContainText(ANA.name)
+  await expect(card).toContainText('29 places left')
   await expect(card.getByText('Registered', { exact: true })).toBeVisible()
 })
 
@@ -266,15 +277,12 @@ test('18.5 AC3: a registration whose registration has closed offers Withdraw but
   page,
 }) => {
   await signIn(page, ACCOUNTS.attendee)
-  await page.goto(MY_REGISTRATIONS_PATH)
+  await openRegisteredEvent(page, FOOD_TASTING_WALK)
 
-  const closed = eventCard(page, FOOD_TASTING_WALK)
   await expect(
-    closed.getByRole('button', { name: `Withdraw from ${FOOD_TASTING_WALK}` }),
+    registrationSection(page).getByRole('button', { name: `Withdraw from ${FOOD_TASTING_WALK}` }),
   ).toBeVisible()
-  await expect(
-    closed.getByRole('button', { name: `Change guests for ${FOOD_TASTING_WALK}` }),
-  ).toHaveCount(0)
+  await expect(changeGuestsButton(page, FOOD_TASTING_WALK)).toHaveCount(0)
 })
 
 test("18.5 AC2: the event's page counts the whole group at once, before the event is read again", async ({
@@ -340,8 +348,8 @@ test('18.5 AC2: with 2 places left the dialog allows one guest, and says why, be
     async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.fallback()
       const response = await route.fetch()
-      const event = (await response.json()) as { places_left: number }
-      event.places_left = 2
+      const event = (await response.json()) as { listing: { places_left: number } }
+      event.listing.places_left = 2
       return route.fulfill({ response, json: event })
     },
   )
@@ -366,35 +374,24 @@ test('18.5 AC2: with 2 places left the dialog allows one guest, and says why, be
 test('18.5 AC3: Change guests allows only as many guests as there are places for', async ({
   page,
 }) => {
-  // Hana's registrations are the server's own, with no places left for the kite afternoon's
+  // Hana's registration is the server's own, with no places left for the kite afternoon's
   // guests: a state the seed cannot reach without filling the event. Nothing is sent.
   await page.route(
-    (url) => url.pathname === '/registrations',
+    (url) => url.pathname === KITE_AFTERNOON_API_PATH,
     async (route) => {
-      const request = route.request()
-      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
-        return route.fallback()
-      }
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
       const response = await route.fetch()
-      const mine = (await response.json()) as {
-        event_name: string
-        guests: unknown[]
-        max_guests: number
-      }[]
-      for (const registration of mine) {
-        if (registration.event_name === KITE_AFTERNOON) {
-          registration.guests = []
-          registration.max_guests = 0
-        }
+      const event = (await response.json()) as {
+        registration: { guests: unknown[]; max_guests: number }
       }
-      return route.fulfill({ response, json: mine })
+      event.registration.guests = []
+      event.registration.max_guests = 0
+      return route.fulfill({ response, json: event })
     },
   )
   await signIn(page, ACCOUNTS.attendee8)
-  await page.goto(MY_REGISTRATIONS_PATH)
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Change guests for ${KITE_AFTERNOON}` })
-    .click()
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
 
   const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
   await expect(addGuestButton(page)).toBeDisabled()
@@ -436,8 +433,8 @@ test('18.5 AC2: a group the server refuses for want of places keeps the dialog o
       if (new URL(request.url()).pathname === KITE_AFTERNOON_API_PATH) {
         if (!isRefused) return route.fallback()
         const response = await route.fetch()
-        const event = (await response.json()) as { places_left: number }
-        event.places_left = 2
+        const event = (await response.json()) as { listing: { places_left: number } }
+        event.listing.places_left = 2
         return route.fulfill({ response, json: event })
       }
       if (request.method() !== 'POST') return route.fallback()
@@ -473,7 +470,7 @@ test('18.5 AC2: a group the server refuses for want of places keeps the dialog o
 test('18.5 AC3: a change the server refuses for want of places keeps every guest typed, and the limit catches up', async ({
   page,
 }) => {
-  // Hana's registrations are the server's own, with room for two guests on the kite afternoon
+  // Hana's registration is the server's own, with room for two guests on the kite afternoon
   // until the change is refused - another attendee took the places meanwhile, a state the seed
   // cannot reach - and none after it. Nothing is written.
   let isRefused = false
@@ -491,29 +488,19 @@ test('18.5 AC3: a change the server refuses for want of places keeps every guest
           body: JSON.stringify({ detail: GUESTS_NOT_ENOUGH_PLACES_MESSAGE }),
         })
       }
-      if (new URL(request.url()).pathname !== '/registrations' || request.method() !== 'GET') {
-        return route.fallback()
-      }
+      if (new URL(request.url()).pathname !== KITE_AFTERNOON_API_PATH) return route.fallback()
       const response = await route.fetch()
-      const mine = (await response.json()) as {
-        event_name: string
-        guests: unknown[]
-        max_guests: number
-      }[]
-      for (const registration of mine) {
-        if (registration.event_name === KITE_AFTERNOON) {
-          registration.guests = []
-          registration.max_guests = isRefused ? 0 : 2
-        }
+      const event = (await response.json()) as {
+        registration: { guests: unknown[]; max_guests: number }
       }
-      return route.fulfill({ response, json: mine })
+      event.registration.guests = []
+      event.registration.max_guests = isRefused ? 0 : 2
+      return route.fulfill({ response, json: event })
     },
   )
   await signIn(page, ACCOUNTS.attendee8)
-  await page.goto(MY_REGISTRATIONS_PATH)
-  await eventCard(page, KITE_AFTERNOON)
-    .getByRole('button', { name: `Change guests for ${KITE_AFTERNOON}` })
-    .click()
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
   const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
   await addGuest(page, 1, RAVI)
 
@@ -525,31 +512,78 @@ test('18.5 AC3: a change the server refuses for want of places keeps every guest
   await expect(dialog).toContainText(NO_PLACES_FOR_MORE_GUESTS_MESSAGE)
 })
 
-test('18.5 AC7: withdrawing a registration with guests says the guests are withdrawn too', async ({
+test("18.5 AC3: guests saved on the event's page show at once, even if the event can't be read again", async ({
   page,
 }) => {
-  // Hana's registrations are the server's own, with a guest on the kite afternoon's: the dialog is
-  // only opened and cancelled, so nothing is written.
+  // Hana's kite afternoon as the server sends it, with no guests, until the save: that is answered
+  // as the server would, with her guest, and the event read after it is refused, so only the
+  // save's answer can show the guest. Nothing is written.
+  let isSaved = false
+  let mine: Record<string, unknown> | null = null
   await page.route(
-    (url) => url.pathname === '/registrations',
+    (url) => url.pathname.startsWith('/registrations'),
     async (route) => {
       const request = route.request()
-      if (request.resourceType() !== 'fetch' || request.method() !== 'GET') {
-        return route.fallback()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      if (request.method() === 'PUT') {
+        isSaved = true
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: JSON.stringify({
+            ...mine,
+            guests: [{ full_name: ANA.name, dietary_requirements: ANA.dietary }],
+          }),
+        })
+      }
+      if (new URL(request.url()).pathname !== KITE_AFTERNOON_API_PATH) return route.fallback()
+      if (isSaved) {
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          headers: corsHeaders(request),
+          body: '{}',
+        })
       }
       const response = await route.fetch()
-      const mine = (await response.json()) as { event_name: string; guests: unknown[] }[]
-      for (const registration of mine) {
-        if (registration.event_name === KITE_AFTERNOON) {
-          registration.guests = [{ full_name: ANA.name, dietary_requirements: ANA.dietary }]
-        }
-      }
-      return route.fulfill({ response, json: mine })
+      const event = (await response.json()) as { registration: Record<string, unknown> }
+      event.registration.guests = []
+      mine = event.registration
+      return route.fulfill({ response, json: event })
     },
   )
   await signIn(page, ACCOUNTS.attendee8)
-  await page.goto(MY_REGISTRATIONS_PATH)
-  await eventCard(page, KITE_AFTERNOON)
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  await changeGuestsButton(page, KITE_AFTERNOON).click()
+  const dialog = page.getByRole('dialog', { name: CHANGE_GUESTS_DIALOG })
+  await addGuest(page, 1, ANA)
+
+  await dialog.getByRole('button', { name: 'Save guests' }).click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveText(SERVER_PROBLEM_MESSAGE)
+  await expect(registrationSection(page)).toContainText(ANA.name)
+})
+
+test('18.5 AC7: withdrawing a registration with guests says the guests are withdrawn too', async ({
+  page,
+}) => {
+  // Hana's registration is the server's own, with a guest on the kite afternoon's: the dialog is
+  // only opened and cancelled, so nothing is written.
+  await page.route(
+    (url) => url.pathname === KITE_AFTERNOON_API_PATH,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      const event = (await response.json()) as { registration: { guests: unknown[] } }
+      event.registration.guests = [{ full_name: ANA.name, dietary_requirements: ANA.dietary }]
+      return route.fulfill({ response, json: event })
+    },
+  )
+  await signIn(page, ACCOUNTS.attendee8)
+  await openRegisteredEvent(page, KITE_AFTERNOON)
+  await registrationSection(page)
     .getByRole('button', { name: `Withdraw from ${KITE_AFTERNOON}` })
     .click()
 
