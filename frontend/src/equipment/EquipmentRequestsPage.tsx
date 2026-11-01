@@ -43,13 +43,30 @@ type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 
 /** Story 15.2 AC3: the queue's tabs, plus All (a team request beyond the AC), in the order of
  * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. Story 6.2 AC15:
- * Cancelled, read-only, for requests whose event was cancelled after they were sent. */
-const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'ACCEPTED', label: 'Accepted' },
-  { key: 'DECLINED', label: 'Declined' },
-  { key: 'CANCELLED', label: 'Cancelled' },
+ * Cancelled, read-only, for requests whose event was cancelled after they were sent. Story 15.2.1
+ * AC1: each tab's hint, the line under the tab strip saying what it holds. */
+const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string; hint: string }[] = [
+  { key: 'ALL', label: 'All', hint: 'Every request sent to Technical Support, in any status.' },
+  {
+    key: 'PENDING',
+    label: 'Pending',
+    hint: 'Sent to Technical Support and waiting for a decision.',
+  },
+  {
+    key: 'ACCEPTED',
+    label: 'Accepted',
+    hint: 'Accepted, with the units reserved for the event.',
+  },
+  {
+    key: 'DECLINED',
+    label: 'Declined',
+    hint: 'Declined, with the reason given. They stay here if the event is later cancelled or rejected.',
+  },
+  {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    hint: 'Withdrawn after they were sent, because the event was cancelled or rejected, or a change to it removed them. Read-only.',
+  },
 ]
 
 /** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
@@ -145,6 +162,8 @@ interface OpenDecision {
  * cancelled; their cards leave out what is available, since nothing is held for them any more.
  * AC16: such a card says when it was cancelled.
  *
+ * Story 15.2.1 AC1: a line under the tabs says what the selected tab holds.
+ *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, equipment type and Requested by, orders the tab and counts each tab's matches. AC6:
  * a search nothing matches says so, with Clear search. AC7: the tab, search and order live in the
@@ -180,6 +199,8 @@ export function EquipmentRequestsPage() {
       })),
     [queue],
   )
+
+  const tabHint = EQUIPMENT_QUEUE_TABS.find((item) => item.key === tab)?.hint
 
   function changeTab(next: EquipmentQueueTabKey) {
     changeView({ tab: next })
@@ -237,6 +258,7 @@ export function EquipmentRequestsPage() {
       {queue !== null && (
         <div className="stack">
           <Tabs tabs={tabs} activeKey={tab} onChange={changeTab} />
+          <p className="tab-hint">{tabHint}</p>
 
           <QueueSearchBar
             search={view.search}

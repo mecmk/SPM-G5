@@ -2054,6 +2054,16 @@ td.num {
   border-bottom-color: var(--accent);
 }
 
+/* Story 15.2.1: the line under a queue's tab strip saying what the selected tab holds. */
+.tabs:has(+ .tab-hint) {
+  margin-bottom: 0;
+}
+
+.tab-hint {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
 .pills {
   display: flex;
   flex-wrap: wrap;

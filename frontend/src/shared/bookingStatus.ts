@@ -147,14 +147,35 @@ export function closedAt(request: { decided_at: string | null; released_at: stri
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN has no tab of its own and only shows up under
  * "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a tab of its own. Story
- * 6.2 AC14: so does a cancelled one, read-only. */
-export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'APPROVED', label: 'Approved' },
-  { key: 'REJECTED', label: 'Rejected' },
-  { key: 'EXPIRED', label: 'Expired' },
-  { key: 'CANCELLED', label: 'Cancelled' },
+ * 6.2 AC14: so does a cancelled one, read-only. Story 15.2.1 AC2: each tab's hint, the line under
+ * the tab strip saying what it holds. */
+export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string; hint: string }[] = [
+  {
+    key: 'ALL',
+    label: 'All',
+    hint: 'Every booking request, including ones the coordinator withdrew, which have no tab of their own.',
+  },
+  {
+    key: 'PENDING',
+    label: 'Pending',
+    hint: 'Waiting for a decision. A pending request already holds its venue.',
+  },
+  {
+    key: 'APPROVED',
+    label: 'Approved',
+    hint: 'Approved. The hold keeps the venue until it expires, unless the event is confirmed first.',
+  },
+  { key: 'REJECTED', label: 'Rejected', hint: 'Rejected, with the reason given.' },
+  {
+    key: 'EXPIRED',
+    label: 'Expired',
+    hint: 'Approved, but the hold expired before the event was confirmed, so the venue was released. Read-only.',
+  },
+  {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, or a safety review released it. Read-only.',
+  },
 ]
 
 /** The status a tab asks the backend for, or `null` for "All". */
