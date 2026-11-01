@@ -4,16 +4,18 @@
  *     a blank reason is refused in the dialog before anything is sent.
  * AC2 the cancelled booking stays in the event's booking list as Cancelled, with its reason, and
  *     its requirement needs a venue again.
+ * AC4 the cancel is not offered once cancelling has closed (stubbed: the seeded event is far off).
+ * AC7 the cancel is not offered while a replacement is pending (stubbed: the seed has none here).
  * AC8 only the assigned coordinator is offered the cancel, and only on an approved booking. Every
  *     refusal the API makes is a backend case.
- * Every other AC (AC3-AC7, AC9) is a backend case:
- * backend/tests/bookings/test_cancel_approved_booking.py.
+ * Every other AC (AC3, AC5, AC6, AC9), and the API's own refusals for AC4 and AC7, are backend
+ * cases: backend/tests/bookings/test_cancel_approved_booking.py.
  *
- * The tests run in order on one seeded event, the riverside product briefing. The first two leave
- * its booking approved; the third cancels it for good and the fourth reads what that left. A retry
+ * The tests run in order on one seeded event, the riverside product briefing. The first four leave
+ * its booking approved; the fifth cancels it for good and the sixth reads what that left. A retry
  * could only fail on the cancelled booking and hide the first trace: serial, no retries.
  */
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Request } from '@playwright/test'
 import { ACCOUNTS, EVENTS, signIn } from './support'
 
 test.describe.configure({ mode: 'serial', retries: 0 })
@@ -35,12 +37,55 @@ async function openCancelDialog(page: Page) {
   return page.getByRole('dialog', { name: 'Cancel this venue booking?' })
 }
 
+/** Answer the page's call to `path` with what the server sends, changed by `change`. */
+async function changeCall(page: Page, path: string, change: (body: never) => unknown) {
+  await page.route(
+    (url) => url.pathname === path,
+    async (route) => {
+      const request: Request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      return route.fulfill({ response, json: change(await response.json()) })
+    },
+  )
+}
+
 test('12.8 AC8: only the assigned coordinator is offered the cancel', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.productBriefing}`)
   await expect(page.getByRole('heading', { name: EVENT_NAME })).toBeVisible()
   await expect(page.getByRole('main')).toContainText('Seminar Room 2.1')
   await expect(page.getByRole('button', { name: CANCEL_BUTTON })).toHaveCount(0)
+})
+
+test('12.8 AC4: the cancel is not offered once cancelling has closed', async ({ page }) => {
+  const windowPath = `/events/${EVENTS.productBriefing}/change-request-window`
+  await changeCall(page, windowPath, (window: object) => ({ ...window, is_open: false }))
+  await signIn(page, ACCOUNTS.coordinator)
+  const windowRead = page.waitForResponse((response) => response.url().endsWith(windowPath))
+  await page.goto(`/events/${EVENTS.productBriefing}`)
+
+  await windowRead
+  await expect(section(page, 'Venue booking')).toContainText('Approved')
+  await expect(page.getByRole('button', { name: CANCEL_BUTTON })).toHaveCount(0)
+})
+
+test('12.8 AC7: the cancel is not offered while a replacement is pending', async ({ page }) => {
+  await changeCall(
+    page,
+    `/bookings/for-event/${EVENTS.productBriefing}`,
+    (bookings: Record<string, unknown>[]) =>
+      bookings.map((booking) => ({
+        ...booking,
+        pending_replacement_venue_name: 'Exhibition Foyer',
+      })),
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.productBriefing}`)
+
+  const bookings = section(page, 'Venue booking')
+  await expect(bookings).toContainText('Replacement requested: Exhibition Foyer')
+  await expect(bookings.getByRole('button', { name: CANCEL_BUTTON })).toHaveCount(0)
 })
 
 test('12.8 AC1: a blank reason is refused before anything is sent', async ({ page }) => {

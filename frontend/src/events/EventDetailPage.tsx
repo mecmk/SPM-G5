@@ -337,14 +337,15 @@ export function EventDetailPage() {
 
   /** Story 19.1 AC12: when change requests close, read for the organiser of a Planning or
    *  Confirmed event, and again whenever the event is - its bookings, and so its set-up time, may
-   *  have changed. */
+   *  have changed. Story 12.8 AC4: read for the assigned coordinator too, since cancelling a
+   *  booking closes at the same time. */
   useEffect(() => {
     if (event === null || user === null) return undefined
     const mayRequestChanges =
       can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
       event.organiser_id === user.id &&
       CHANGE_REQUESTABLE_STATUSES.includes(event.status)
-    if (!mayRequestChanges) return undefined
+    if (!mayRequestChanges && event.assigned_coordinator_id !== user.id) return undefined
     let cancelled = false
     fetchChangeRequestWindow(eventId)
       .then((window) => {
@@ -762,6 +763,10 @@ export function EventDetailPage() {
     mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
   const shownRequestWindow = readRequestWindow?.window ?? null
   const canRequestChanges = shownRequestWindow?.is_open === true
+  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window the
+   *  server sent hides the cancel; until it is read, or if it can't be, the server still refuses. */
+  const isBookingCancelClosed =
+    requestWindow?.eventId === eventId && requestWindow.window?.is_open === false
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
   const canViewChangeRequests =
@@ -1312,23 +1317,27 @@ export function EventDetailPage() {
                     </div>
                   )}
                   {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
-                   *  only an approved booking - mirrors the backend's own checks. */}
-                  {booking.status === APPROVED_BOOKING_STATUS && isAssignedCoordinator && (
-                    <div className="cluster">
-                      <button
-                        type="button"
-                        className="secondary button-sm"
-                        aria-label={
-                          forRequirement === null
-                            ? `Cancel the booking of ${booking.venue_name}`
-                            : `Cancel the booking of ${booking.venue_name} for ${forRequirement}`
-                        }
-                        onClick={() => askToCancelBooking(booking)}
-                      >
-                        Cancel booking
-                      </button>
-                    </div>
-                  )}
+                   *  only an approved booking, with no replacement pending (AC7), before the
+                   *  cut-off (AC4) - mirrors the backend's own checks. */}
+                  {booking.status === APPROVED_BOOKING_STATUS &&
+                    booking.pending_replacement_venue_name === null &&
+                    !isBookingCancelClosed &&
+                    isAssignedCoordinator && (
+                      <div className="cluster">
+                        <button
+                          type="button"
+                          className="secondary button-sm"
+                          aria-label={
+                            forRequirement === null
+                              ? `Cancel the booking of ${booking.venue_name}`
+                              : `Cancel the booking of ${booking.venue_name} for ${forRequirement}`
+                          }
+                          onClick={() => askToCancelBooking(booking)}
+                        >
+                          Cancel booking
+                        </button>
+                      </div>
+                    )}
                   {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
                    *  event's assigned coordinator while it can take a booking (AC8): a replacement
                    *  for an approved one, the catalogue's Switch for a pending one. */}
