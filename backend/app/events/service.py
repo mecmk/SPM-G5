@@ -202,6 +202,9 @@ _HELD_ITEM_STATUSES = (
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
 )
+# Story 6.2, 19.2, 17.2 AC3: no longer the event's, kept for Technical Support's record. A 7.2
+# correction neither holds, edits nor removes them.
+KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -1051,13 +1054,18 @@ def _check_equipment_available(
         raise EquipmentNotAvailable(short)
 
 
+def _current_lines(event: Event) -> list[EventEquipmentRequest]:
+    """The event's equipment lines, leaving out those kept only for the record."""
+    return [line for line in event.equipment_requests if line.status not in KEPT_FOR_RECORD]
+
+
 def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> None:
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
     requests for the last units cannot both be held; the loser is refused and nothing is held.
     Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
     which is the assigned coordinator's step.
     ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
-    lines = list(event.equipment_requests)
+    lines = [line for line in event.equipment_requests if line.status in _HELD_ITEM_STATUSES]
     if not lines or event.starts_at is None or event.ends_at is None:
         return
     type_ids = sorted({line.equipment_type_id for line in lines})
@@ -1155,9 +1163,10 @@ def _replace_equipment(
     """AC6/AC7: make the request's equipment lines match ``items``. A line whose ``id`` is sent is
     kept and edited; one left out is removed; one without an ``id`` is new. New lines get
     increasing creation times so the request lists them in the order they were added."""
-    existing = {line.id: line for line in event.equipment_requests}
+    current = _current_lines(event)
+    existing = {line.id: line for line in current}
     kept_ids = {item.id for item in items if item.id is not None}
-    for line in [line for line in event.equipment_requests if line.id not in kept_ids]:
+    for line in [line for line in current if line.id not in kept_ids]:
         event.equipment_requests.remove(line)
     added_at = datetime.now(UTC)
     for position, item in enumerate(items):
@@ -1301,7 +1310,7 @@ def _is_hold_changed(
     if items is None:
         return False
     stored = Counter(
-        (line.id, line.equipment_type_id, line.quantity) for line in event.equipment_requests
+        (line.id, line.equipment_type_id, line.quantity) for line in _current_lines(event)
     )
     edited = Counter((item.id, types[item.equipment_type_code].id, item.quantity) for item in items)
     return edited != stored
@@ -1403,7 +1412,7 @@ def _validate_request_edit(
         )
         # Checked before anything is changed, so a refused edit leaves the request as it was.
         _check_equipment_lines(
-            data.equipment, owned_line_ids={line.id for line in event.equipment_requests}
+            data.equipment, owned_line_ids={line.id for line in _current_lines(event)}
         )
 
     is_hold_changed = False
@@ -1411,7 +1420,7 @@ def _validate_request_edit(
         lines = (
             [(types[e.equipment_type_code], e.quantity) for e in data.equipment]
             if data.equipment is not None
-            else [(line.equipment_type, line.quantity) for line in event.equipment_requests]
+            else [(line.equipment_type, line.quantity) for line in _current_lines(event)]
         )
         is_hold_changed = _is_hold_changed(event, starts_at, ends_at, data.equipment, types)
         if is_stock_checked and (recheck_resent_equipment or is_hold_changed):
@@ -2429,7 +2438,7 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
         return
     stored = Counter(
         (line.id, line.equipment_type.code, line.quantity, line.technical_notes)
-        for line in event.equipment_requests
+        for line in _current_lines(event)
     )
     sent = Counter(
         (item.id, item.equipment_type_code, item.quantity, item.technical_notes)

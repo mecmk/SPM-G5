@@ -185,7 +185,7 @@ WITH_TECHNICAL_SUPPORT = frozenset(
 # No longer the event's, kept for Technical Support's record: cancelled by its event or a change
 # (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves it as it is unless it
 # names it again. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
-KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
+KEPT_FOR_RECORD = events_service.KEPT_FOR_RECORD
 # Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
 # date order, soonest first, then in the order they were recorded. AC6: a request with no recorded
 # time - sent before migration 014 - comes last whichever way requests are ordered by it.
@@ -1126,9 +1126,15 @@ class EquipmentChangePlan:
 
 def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> EquipmentChangePlan:
     """Story 19.2 AC5: match ``lines`` to ``event``'s items by id. An item no line names is
-    removed; one whose type, quantity and notes are unchanged - and is not Cancelled or Withdrawn
-    - is left as it is; any other named item is changed. A line without an ``id`` is new."""
-    wanted = {line.id: line for line in lines if line.id is not None}
+    removed; one whose type, quantity and notes are unchanged - and is not Cancelled - is left
+    as it is; any other named item is changed. A line without an ``id`` is new, as is one naming
+    a Withdrawn item (17.2 AC3), which stays Withdrawn."""
+    withdrawn = {
+        item.id
+        for item in event.equipment_requests
+        if item.status == EquipmentRequestStatus.WITHDRAWN
+    }
+    wanted = {line.id: line for line in lines if line.id is not None and line.id not in withdrawn}
     planned = []
     for item in event.equipment_requests:
         line = wanted.get(item.id)
@@ -1145,7 +1151,9 @@ def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> Equipm
         else:
             change = EquipmentChange.CHANGED
         planned.append(PlannedItem(item=item, line=line, change=change))
-    return EquipmentChangePlan(items=planned, added=[line for line in lines if line.id is None])
+    return EquipmentChangePlan(
+        items=planned, added=[line for line in lines if line.id is None or line.id in withdrawn]
+    )
 
 
 def apply_equipment_change(
@@ -1162,7 +1170,8 @@ def apply_equipment_change(
       or flagged Unavailable. A Cancelled item named again comes back the same way.
     * A removed item releases its hold; one ever sent to Technical Support is kept as Cancelled
       for their record, stamped with when (6.2 AC16), one never sent is deleted. A Cancelled item
-      named again loses that stamp, and a Withdrawn one (17.2) its withdrawal's.
+      named again loses that stamp. A Withdrawn one stays Withdrawn (17.2 AC3), and the line
+      is added as new.
     * A new item is added and held the same way a changed one is.
 
     Technical Support are told of any item they had pending or accepted that was changed or
@@ -1205,8 +1214,6 @@ def apply_equipment_change(
         item.decided_at = None
         item.status_notes = None
         item.cancelled_at = None
-        item.withdrawn_at = None
-        item.withdrawn_by_id = None
         to_hold.append(item)
 
     for position, line in enumerate(plan.added):

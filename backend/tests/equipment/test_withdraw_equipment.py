@@ -38,11 +38,13 @@ withdrawn over unseen (AC11).
 The confirmation and closing it (AC1, AC7), Withdraw replacing Remove on a sent item (AC2), the
 type offered again in the Add equipment list (AC3), the queue card with no Accept or Decline (AC4)
 and the organiser's read-only view (AC10) are proven at e2e: tests/e2e/equipment-withdrawal.spec.ts.
-Withdraw not being offered on a closed event (AC5) is the event page's existing ``canChange``,
-which 15.1's e2e spec already covers; the refusal of a direct request is here.
+Withdraw not being offered on a closed event (AC5) and the dialog's answer to a decision saved
+while it was open (AC11) are there too; the refusal of a direct request is here.
 
 Every case uses a fresh equipment type (``make_equipment_type``), so a test owns its whole stock,
-on factory events dated November 2027, clear of every seeded hold.
+on factory events dated November 2027, clear of every seeded hold. The exceptions are the 7.2
+corrections around a withdrawn item, which submit a real request for the seeded laptops, as
+tests/events/test_correct_event_under_review.py does, and borrow its helpers.
 """
 
 from __future__ import annotations
@@ -72,8 +74,19 @@ from app.events.models import (
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import current_facts
+from tests.events.test_correct_event_under_review import (
+    LAPTOP_STOCK,
+    _correct,
+    _equipment,
+    _held,
+    _moved_to,
+    _period,
+    _read,
+    _submitted_with_equipment,
+)
 from tests.support.change_requests import approve_as_seen
 from tests.support.factories import (
+    make_equipment_hold,
     make_equipment_item,
     make_equipment_type,
     make_event,
@@ -327,11 +340,150 @@ def test_a_withdrawn_item_is_not_the_events_equipment_for_a_change_request(login
     assert added.status_code == 201, added.text
     assert added.json()["current_value"] == []
     db.commit()  # the approval's own rollback on a refusal must not undo the rows above
-    approved = approve_as_seen(
-        login_as(Users.COORDINATOR), item.event_id, uuid.UUID(added.json()["id"])
-    )
+    coordinator = login_as(Users.COORDINATOR)
+    impact = coordinator.get(f"{url}/{added.json()['id']}/impact")
+    assert [row["change"] for row in impact.json()["equipment"]] == ["added"]
+    approved = approve_as_seen(coordinator, item.event_id, uuid.UUID(added.json()["id"]))
     assert approved.status_code == 200, approved.text
     assert _fresh(db, item).status == WITHDRAWN
+
+
+def _withdrawn_line(login_as, db: Session, period, quantity: int = 2) -> tuple[dict, str]:
+    """A submitted event with one laptop line, sent and withdrawn, as the coordinator reads it."""
+    event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", quantity))
+    coordinator = login_as(Users.COORDINATOR)
+    assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
+    [line] = _read(coordinator, event["id"])["equipment"]
+    withdrawn = coordinator.post(
+        _withdrawal_path(event["id"], line["id"]), json={"expected_status": line["status"]}
+    )
+    assert withdrawn.status_code == 201, withdrawn.text
+    return _read(coordinator, event["id"]), line["id"]
+
+
+@pytest.mark.story("17.2", ac=1)
+def test_moving_the_dates_holds_nothing_for_a_withdrawn_item(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(40))
+
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, _period(60)))
+
+    assert response.status_code == 200, response.text
+    assert _held(db, event["id"]) == set()
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_withdrawn_item_does_not_refuse_a_date_move(login_as, db: Session):
+    new = _period(90)
+    event, _ = _withdrawn_line(login_as, db, _period(70))
+    make_equipment_hold(
+        db, type_code="LAPTOP", quantity=LAPTOP_STOCK, starts_at=new[0], ends_at=new[1]
+    )
+    db.commit()
+
+    response = _correct(login_as(Users.COORDINATOR), event, **_moved_to(event, new))
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_correction_that_sends_no_lines_keeps_a_withdrawn_item(login_as, db: Session):
+    event, item_id = _withdrawn_line(login_as, db, _period(100))
+
+    response = _correct(login_as(Users.COORDINATOR), event, name=f"{event['name']} x", equipment=[])
+
+    assert response.status_code == 200, response.text
+    [line] = _read(login_as(Users.COORDINATOR), event["id"])["equipment"]
+    assert (line["id"], line["status"]) == (item_id, WITHDRAWN)
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_correction_cannot_edit_a_withdrawn_item(login_as, db: Session):
+    event, item_id = _withdrawn_line(login_as, db, _period(120))
+
+    response = _correct(
+        login_as(Users.COORDINATOR),
+        event,
+        equipment=[{"id": item_id, "equipment_type_code": "LAPTOP", "quantity": 4}],
+    )
+
+    assert response.status_code == 422, response.text
+    [line] = _read(login_as(Users.COORDINATOR), event["id"])["equipment"]
+    assert line["quantity"] == 2
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_the_type_requested_again_can_still_be_corrected(login_as, db: Session):
+    event, _ = _withdrawn_line(login_as, db, _period(140))
+    coordinator = login_as(Users.COORDINATOR)
+    added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
+    assert added.status_code == 201, added.text
+    event = _read(coordinator, event["id"])
+    current = [
+        {"id": line["id"], "equipment_type_code": "LAPTOP", "quantity": line["quantity"]}
+        for line in event["equipment"]
+        if line["status"] != WITHDRAWN
+    ]
+
+    response = _correct(coordinator, event, name=f"{event['name']} y", equipment=current)
+
+    assert response.status_code == 200, response.text
+    assert sorted(line["status"] for line in _read(coordinator, event["id"])["equipment"]) == [
+        "REQUESTED",
+        WITHDRAWN,
+    ]
+
+
+def _raise_change(login_as, item: EventEquipmentRequest, kit: EquipmentType) -> str:
+    """The organiser asks for ``item`` at 4 instead of its 3."""
+    raised = login_as(Users.ORGANISER).post(
+        f"/events/{item.event_id}/change-requests",
+        json={
+            "field": "equipment",
+            "proposed": [{"id": str(item.id), "equipment_type_code": kit.code, "quantity": 4}],
+            "reason": "Plans have changed.",
+        },
+    )
+    assert raised.status_code == 201, raised.text
+    return raised.json()["id"]
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_change_naming_a_withdrawn_item_leaves_it_withdrawn(login_as, db: Session):
+    kit = make_equipment_type(db, total_quantity=10)
+    item = _sent(db, equipment_type=kit, quantity=3)
+    assert _withdraw(login_as(Users.COORDINATOR), item).status_code == 201
+    request_id = _raise_change(login_as, item, kit)
+    db.commit()
+
+    approved = approve_as_seen(login_as(Users.COORDINATOR), item.event_id, uuid.UUID(request_id))
+
+    assert approved.status_code == 200, approved.text
+    fresh = _fresh(db, item)
+    assert (fresh.status, fresh.quantity) == (WITHDRAWN, 3)
+    assert fresh.withdrawn_by_id == Users.COORDINATOR.id
+
+
+@pytest.mark.story("17.2", ac=3)
+def test_a_change_raised_before_the_withdrawal_leaves_it_withdrawn(login_as, db: Session):
+    kit = make_equipment_type(db, total_quantity=10)
+    item = _sent(db, equipment_type=kit, quantity=3)
+    request_id = _raise_change(login_as, item, kit)
+    assert _withdraw(login_as(Users.COORDINATOR), item).status_code == 201
+    again = login_as(Users.COORDINATOR).post(
+        f"/events/{item.event_id}/equipment",
+        json={"equipment_type_code": kit.code, "quantity": 3},
+    )
+    assert again.status_code == 201, again.text
+    db.commit()
+
+    approved = approve_as_seen(login_as(Users.COORDINATOR), item.event_id, uuid.UUID(request_id))
+
+    assert approved.status_code == 200, approved.text
+    rows = db.execute(
+        text("SELECT status, quantity FROM event_equipment_requests WHERE event_id = :e"),
+        {"e": item.event_id},
+    ).all()
+    assert sorted(tuple(row) for row in rows) == [("REQUESTED", 4), (WITHDRAWN, 3)]
 
 
 # --- AC4: Technical Support are told, and see it read-only ----------------------------------------

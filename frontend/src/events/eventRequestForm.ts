@@ -1,5 +1,6 @@
 import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
+import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
 import { isBlankOrPhoneNumber } from '../shared/phone'
 
@@ -384,17 +385,20 @@ function formAsSaved(event: EventDetail): EventFormState {
       event.accessibility_needs.map((need) => [need.code, { notes: textOf(need.notes) }]),
     ),
     accessibilityNotes: textOf(event.accessibility_notes),
-    equipment: event.equipment.map((line) => {
-      nextEquipmentKey += 1
-      return {
-        key: nextEquipmentKey,
-        id: line.id,
-        typeCode: line.equipment_type_code,
-        typeName: line.equipment_type_name,
-        quantity: String(line.quantity),
-        notes: textOf(line.technical_notes),
-      }
-    }),
+    // Story 17.2 AC3: an item kept only for the record is no longer the event's to correct.
+    equipment: event.equipment
+      .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
+      .map((line) => {
+        nextEquipmentKey += 1
+        return {
+          key: nextEquipmentKey,
+          id: line.id,
+          typeCode: line.equipment_type_code,
+          typeName: line.equipment_type_name,
+          quantity: String(line.quantity),
+          notes: textOf(line.technical_notes),
+        }
+      }),
     isRegistrationRequired: event.registration_required,
     registrationOpensAt: event.registration_opens_at
       ? instantToInput(event.registration_opens_at)
