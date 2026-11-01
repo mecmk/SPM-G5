@@ -94,6 +94,9 @@ RETURNED_MESSAGE = (
 APPROVAL_OUT_OF_DATE = (
     "The event's venue bookings changed after the safety approval; request a safety review again."
 )
+BOOKING_CANCELLED = (
+    "A venue booking was cancelled after the safety approval; request a safety review again."
+)
 
 
 @dataclass(frozen=True)
@@ -166,10 +169,6 @@ def _notices(db: Session, event_id: uuid.UUID, kind: str) -> list[Notification]:
     )
 
 
-def _recipients(db: Session, event_id: uuid.UUID, kind: str) -> list[uuid.UUID]:
-    return sorted(notice.recipient_id for notice in _notices(db, event_id, kind))
-
-
 def _active_safety_officers(db: Session) -> list[uuid.UUID]:
     return sorted(
         db.scalars(
@@ -190,13 +189,15 @@ def _untouched(db: Session, booking: VenueBooking, event: Event, status: str) ->
         assert _notices(db, event.id, kind) == []
 
 
-def _approve_safety(db: Session, event: Event) -> None:
+def _approve_safety(
+    db: Session, event: Event, *, at: datetime = datetime(2026, 10, 1, tzinfo=UTC)
+) -> None:
     """The Safety Officer's approval of the event as it stands now (story 21.2)."""
     db.add(
         EventSafetyReview(
             event_id=event.id,
             reviewed_by_id=Users.SAFETY_OFFICER.id,
-            reviewed_at=datetime(2026, 10, 1, tzinfo=UTC),
+            reviewed_at=at,
             outcome=SafetyReviewOutcome.APPROVED,
             facts=current_facts(db, event),
         )
@@ -431,6 +432,69 @@ def test_a_planning_events_approval_no_longer_allows_confirm(
     response = coordinator_client.post(f"/events/{scene.event.id}/confirm")
     assert response.status_code == 409
     assert APPROVAL_OUT_OF_DATE in response.json()["detail"]
+
+
+@pytest.mark.story("12.8", ac=5)
+def test_a_venue_added_after_the_approval_then_cancelled_still_needs_a_new_check(
+    coordinator_client, db: Session
+):
+    """The approval saw only the requirement's booking, so once the added venue has gone the facts
+    read as they did: only the cancellation itself can stop the confirmation."""
+    secured = make_secured_event(db, status=EventStatus.CONFIRMED, expected_attendance=60)
+    event = secured.event
+    _approve_safety(db, event)
+    added = make_booking(
+        db,
+        event_id=event.id,
+        venue_id=Venues.EXHIBITION_FOYER,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        status=BookingStatus.APPROVED,
+        expected_attendance=60,
+        hold_expires_at=datetime.now(UTC) + timedelta(days=30),
+        decided_by_id=Users.VENUE_STAFF.id,
+        decided_at=datetime(2026, 10, 1, 9, 0, tzinfo=UTC),
+    )
+
+    _cancelled(coordinator_client, added)
+
+    assert _fresh(db, event).status == EventStatus.PLANNING
+    response = coordinator_client.post(f"/events/{event.id}/confirm")
+    assert response.status_code == 409
+    assert BOOKING_CANCELLED in response.json()["detail"]
+
+
+@pytest.mark.story("12.8", ac=6)
+def test_booking_the_same_venue_again_does_not_bring_the_approval_back(
+    login_as, db: Session, scene: Scene
+):
+    """Grand Hall is booked again for the same requirement and Venue Staff approve it, so the facts
+    read as they did. The approval still needs doing again, and a new one lets the event through."""
+    _approve_safety(db, scene.event)
+    coordinator = login_as(Users.COORDINATOR)
+    _cancelled(coordinator, scene.first)
+    raised = coordinator.post(
+        "/bookings",
+        json={
+            "event_id": str(scene.event.id),
+            "venue_id": str(scene.first.venue_id),
+            "venue_requirement_id": str(scene.requirement_id),
+        },
+    )
+    assert raised.status_code == 201, raised.text
+    approved = login_as(Users.VENUE_STAFF).post(
+        f"/bookings/{raised.json()['id']}/approve",
+        json={"hold_expires_at": (datetime.now(UTC) + timedelta(days=20)).isoformat()},
+    )
+    assert approved.status_code == 200, approved.text
+
+    coordinator = login_as(Users.COORDINATOR)
+    response = coordinator.post(f"/events/{scene.event.id}/confirm")
+
+    assert response.status_code == 409
+    assert BOOKING_CANCELLED in response.json()["detail"]
+    _approve_safety(db, scene.event, at=datetime.now(UTC))
+    assert coordinator.post(f"/events/{scene.event.id}/confirm").status_code == 200
 
 
 # --- AC7: a marked booking can be cancelled; a pending replacement blocks it -------------------
@@ -671,12 +735,9 @@ def test_a_replacement_requested_first_blocks_the_cancel(engine):
 
     def replace(holding: threading.Event, go: threading.Event) -> None:
         with Session(engine) as session:
-            session.execute(
-                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
-            )
+            original = bookings_service.get_booking_for_switch(session, booking_id)
             holding.set()
             go.wait(LOCK_WAIT_SECONDS)
-            original = bookings_service.get_booking_for_decision(session, booking_id)
             bookings_service.request_replacement_booking(
                 session,
                 original,

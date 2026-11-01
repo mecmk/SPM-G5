@@ -104,6 +104,14 @@ lapsed since that sweep is expired there and then (AC7). Rows are taken ``FOR UP
 so two sweeps never expire or warn about one booking twice, and the event's confirmation and the
 expiry of one hold are serialized by the row lock (AC10).
 
+Story 12.8 - "Cancel an approved venue booking": the event's coordinator cancels one approved
+booking with a reason, without cancelling the event (``cancel_booking``). It is released through
+``release_booking`` as COORDINATOR_CANCELLED, its requirement needs a venue again and Venue Staff
+are told. An event Awaiting Safety Check or Confirmed goes back to Planning, and either way it needs
+a new safety approval before it is confirmed. Refused for anyone but the assigned coordinator, for a
+booking that is not approved or has a replacement pending, and once the 24-hour cut-off before
+set-up has passed.
+
 Story 13.3 - "As a Venue Staff or Technical Support Staff member I want to search and sort the
 requests in my queue so that I can find a particular request quickly and work through them in the
 order I need": ``list_booking_requests`` searches the event name, the venue name and who submitted
@@ -128,7 +136,6 @@ from app.bookings.models import (
     BookingStatus,
     ReleaseCause,
     VenueBooking,
-    pending_replacement_conditions,
 )
 from app.bookings.schemas import (
     BookingCancellation,
@@ -1317,11 +1324,11 @@ def cancel_booking(
     """Story 12.8: ``actor`` cancels an approved booking of their event with ``data.reason``,
     without cancelling the event (AC1).
 
-    Locks are taken in the order every other write takes them - the event (``lock_event``, as
-    story 6.2's cancellation and 21.3's safety decision do), then the booking - so an event
-    cancellation, a hold expiring or a replacement being asked for meanwhile is waited for and
-    then seen. Refusals come in this order, each changing nothing: not the event's assigned
-    coordinator (``NotAssignedCoordinator``, AC8); a booking that is not APPROVED
+    Locks are taken event first (``lock_event``, as story 6.2's cancellation, 21.3's safety
+    decision and 12.6's replacement request through ``get_booking_for_switch`` do), then the
+    booking, so an event cancellation, a hold expiring or a replacement being asked for meanwhile
+    is waited for and then seen. Refusals come in this order, each changing nothing: not the
+    event's assigned coordinator (``NotAssignedCoordinator``, AC8); a booking that is not APPROVED
     (``BookingNotApproved``, AC8); a replacement still pending (``ReplacementPending``, AC7); the
     24-hour cut-off before set-up passed (``CancellingClosed``, AC4). A booking marked "Venue
     unavailable" (9.4) is cancelled like any other (AC7).
@@ -1330,9 +1337,8 @@ def cancel_booking(
     COORDINATOR_CANCELLED, recording who and why (AC9) - its hold goes at once, it stays on the
     event's list as Cancelled, its requirement needs a venue again (AC2) and Venue Staff are told,
     with nothing to approve (AC3). An event Awaiting Safety Check or Confirmed goes back to Planning
-    and the organiser and Safety Officers are told (AC5). One in Planning stays there; its safety
-    approval no longer matches the venues booked, so ``safety_service.confirm_blockers`` stops
-    the confirmation (AC6)."""
+    and the organiser and Safety Officers are told (AC5). One in Planning stays there (AC6). Either
+    way ``safety_service.confirm_blockers`` stops the confirmation until a new safety approval."""
     found = db.get(VenueBooking, booking_id)
     if found is None:
         raise BookingNotFound(booking_id)
@@ -1349,11 +1355,7 @@ def cancel_booking(
         raise NotAssignedCoordinator(message=CANCEL_NOT_ASSIGNED_COORDINATOR_MESSAGE)
     if booking.status != BookingStatus.APPROVED:
         raise BookingNotApproved(booking)
-    replacement = db.scalar(
-        select(VenueBooking)
-        .options(joinedload(VenueBooking.venue))
-        .where(VenueBooking.replaces_booking_id == booking.id, *pending_replacement_conditions())
-    )
+    replacement = find_pending_replacement(db, booking.id)
     if replacement is not None:
         raise ReplacementPending(replacement)
     now = datetime.now(UTC)
@@ -1732,8 +1734,9 @@ def request_replacement_booking(
     original stays approved and on record until the replacement is approved (AC4). The period,
     attendance, layout and facilities are the requirement's - or, for an additional venue, the
     event's - as for any request; the setup and teardown are the original's unless ``data`` sends
-    its own. Callers fetch ``original`` with ``get_booking_for_decision``, so two tabs asking at
-    once wait on its row lock, and a closure ending beside this request is serialised with it.
+    its own. Callers fetch ``original`` with ``get_booking_for_switch``, so two tabs asking at
+    once wait on its row lock, a cancel of it (story 12.8) waits or is waited for on the event,
+    and a closure ending beside this request is serialised with it.
 
     Refusals come in this order: not the event's assigned coordinator (``NotAssignedCoordinator``,
     before anything about the booking is said, AC9); an event that takes no booking, a cancelled
