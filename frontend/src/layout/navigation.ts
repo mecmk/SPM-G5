@@ -7,7 +7,6 @@ import {
   EVENTS_INBOX_PATH,
   EVENTS_UNASSIGNED_PATH,
   EVENTS_ASSIGNMENTS_PATH,
-  VENUE_SCHEDULE_PATH,
   EVENTS_MINE_PATH,
   REGISTRATIONS_REPORT_PATH,
   ROOM_LAYOUTS_PATH,
@@ -24,7 +23,8 @@ import {
  * The sidebar and the main page are both built from this list, so a role sees everything it can
  * use and nothing else (team decision, 17 Sep 2026). A section whose page is still being built
  * is listed with `isAvailable: false` and opens a "coming soon" page naming its story; the story
- * that builds the page flips the flag and adds its own route in App.tsx.
+ * that builds the page flips the flag and adds its own route in App.tsx. A story that puts the
+ * work on another page removes the item instead (1.2 AC5).
  */
 export interface NavItem {
   /** Route path, unique across the app. */
@@ -34,8 +34,6 @@ export interface NavItem {
   icon: IconName
   /** Shown only to roles holding this permission. */
   permission: Permission
-  /** Hidden from roles that also hold any of these permissions, because another item covers it. */
-  hiddenWith?: Permission[]
   /** Backlog story that delivers the page. */
   story: string
   isAvailable: boolean
@@ -86,34 +84,8 @@ export const NAV_SECTIONS: NavSection[] = [
         story: '5.5',
         isAvailable: true,
       },
-      {
-        to: '/events/all',
-        label: 'All events',
-        description: 'Every event on record, to plan venues and equipment around.',
-        icon: 'calendar',
-        permission: PERMISSIONS.EVENTS_READ_ALL,
-        // Hidden from Event Coordinator (covered by "Events inbox"), from Venue Staff (1.2.2:
-        // their view of an event is scoped to the bookings they decide, via BOOKINGS_DECIDE, not
-        // a browse-everything list), from Technical Support Staff (1.2.3, via EQUIPMENT_MANAGE)
-        // and from the Safety Officer (21.1, via SAFETY_REVIEW: they work from the safety queue).
-        hiddenWith: [
-          PERMISSIONS.EVENTS_REVIEW,
-          PERMISSIONS.BOOKINGS_DECIDE,
-          PERMISSIONS.EQUIPMENT_MANAGE,
-          PERMISSIONS.SAFETY_REVIEW,
-        ],
-        story: '7.1',
-        isAvailable: false,
-      },
-      {
-        to: '/change-requests',
-        label: 'Change requests',
-        description: 'Ask for changes to an approved event and follow each decision.',
-        icon: 'swap',
-        permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE,
-        story: '19.1',
-        isAvailable: false,
-      },
+      // c9 (1.2 AC5): this is the coordinator's queue. An organiser raises and follows change
+      // requests on the event's page (19.1), so they have no section for them.
       {
         to: CHANGE_REQUEST_QUEUE_PATH,
         label: 'Change requests',
@@ -160,8 +132,9 @@ export const NAV_SECTIONS: NavSection[] = [
         isAvailable: true,
       },
       // Story 8.6 AC1/AC9: every role that reads venues sees the room layouts; Venue Staff also
-      // add, rename and delete them there. Kept at the bottom of the section: only the coming-soon
-      // Venue Schedule sits below it, and the story that builds that page (9.1) moves it above.
+      // add, rename and delete them there.
+      // c9 (1.2 AC5): no Venue Schedule section. The availability calendar is on each venue's
+      // page (9.1) and on each booking request's (13.1.3).
       {
         to: ROOM_LAYOUTS_PATH,
         label: 'Room layouts',
@@ -170,15 +143,6 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.VENUES_READ,
         story: '8.6',
         isAvailable: true,
-      },
-      {
-        to: VENUE_SCHEDULE_PATH,
-        label: 'Venue Schedule',
-        description: 'View venue availability and confirmed bookings.',
-        icon: 'calendar',
-        permission: PERMISSIONS.BOOKINGS_DECIDE,
-        story: '9.1',
-        isAvailable: false,
       },
     ],
   },
@@ -193,15 +157,6 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.EQUIPMENT_MANAGE,
         story: '15.2',
         isAvailable: true,
-      },
-      {
-        to: '/equipment/holds',
-        label: 'Equipment holds',
-        description: 'Equipment held for upcoming events, releases and the waitlist.',
-        icon: 'box',
-        permission: PERMISSIONS.EQUIPMENT_MANAGE,
-        story: '15.3',
-        isAvailable: false,
       },
       {
         to: '/equipment/catalogue',
@@ -268,8 +223,6 @@ export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((section) => section.it
 export function visibleNavSections(can: (permission: Permission) => boolean): NavSection[] {
   return NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter(
-      (item) => can(item.permission) && !item.hiddenWith?.some((permission) => can(permission)),
-    ),
+    items: section.items.filter((item) => can(item.permission)),
   })).filter((section) => section.items.length > 0)
 }

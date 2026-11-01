@@ -30,6 +30,7 @@ import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
 import { SafetyChecksPage } from './safety/SafetyChecksPage'
 import {
+  ALL_EVENTS_PATH,
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
@@ -208,6 +209,12 @@ function App() {
                 AC2 by answering with a "not found" response either way.
               */}
               <Route path={EVENT_PATH} element={<EventDetailPage />} />
+
+              {/*
+                c9 (1.2 AC5): no story delivers an All events page, so its old address opens
+                the main page, as the other retired addresses do through the catch-all below.
+              */}
+              <Route path={ALL_EVENTS_PATH} element={<Navigate to={HOME_PATH} replace />} />
 
               {/*
                 Story 7.2: the assigned Event Coordinator edits an event in the 2.1 request form -

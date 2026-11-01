@@ -6,6 +6,8 @@
  *     page.
  * AC3 users can only view the functions permitted for their role.
  * AC4 direct URLs to functions outside the role are rejected.
+ * AC5 a section no backlog story delivers is not listed, and its old address opens the main page
+ *     (chore c9).
  * The API-level refusals (401/403) are backend cases: backend/tests/auth/test_rbac.py.
  */
 import { expect, test, type Page } from '@playwright/test'
@@ -19,11 +21,19 @@ interface SidebarExpectation {
 }
 
 const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
+  // Chore c9 (1.2 AC5): an organiser raises and follows a change request on the event's page
+  // (19.1 AC1), so unlike the coordinator they have no Change requests section.
   {
     role: 'organiser',
     email: ACCOUNTS.organiser,
-    visible: ['My events', 'Change requests', 'Registrations'],
-    hidden: ['Manage venues', 'Events inbox', 'Upcoming events', 'Venue catalogue'],
+    visible: ['My events', 'Registrations'],
+    hidden: [
+      'Manage venues',
+      'Events inbox',
+      'Upcoming events',
+      'Venue catalogue',
+      'Change requests',
+    ],
   },
   {
     role: 'coordinator',
@@ -41,22 +51,35 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
       'Safety checks',
     ],
   },
+  // Stories 5.4 and 5.5: the Lead works from the unassigned queue and the assignments overview.
+  // Chore c9 (1.2 AC5): they were the last role listing All events, which no story delivers.
+  {
+    role: 'coordinator lead',
+    email: ACCOUNTS.lead,
+    visible: ['Unassigned events', 'Assignments', 'Venue catalogue'],
+    hidden: ['All events', 'Events inbox', 'My events', 'Booking Requests', 'Equipment requests'],
+  },
+  // Chore c9 (1.2 AC5): no Venue Schedule section. The calendar is on each venue's page (9.1)
+  // and on each booking request's (13.1.3).
   {
     role: 'venue staff',
     email: ACCOUNTS.venueStaff,
-    visible: ['Venue catalogue', 'Booking Requests', 'Venue Schedule'],
-    hidden: ['Manage venues', 'Events inbox', 'Equipment requests', 'My events', 'All events'],
+    visible: ['Venue catalogue', 'Booking Requests', 'Room layouts'],
+    hidden: [
+      'Manage venues',
+      'Events inbox',
+      'Equipment requests',
+      'My events',
+      'All events',
+      'Venue Schedule',
+    ],
   },
+  // Chore c9 (1.2 AC5): no Equipment holds section. Story 15.3 merged into the queue (15.2).
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
-    visible: [
-      'Venue catalogue',
-      'Equipment requests',
-      'Equipment holds',
-      'Catalogue & availability',
-    ],
-    hidden: ['All events', 'Manage venues', 'Bookings & schedule'],
+    visible: ['Venue catalogue', 'Equipment requests', 'Catalogue & availability'],
+    hidden: ['All events', 'Manage venues', 'Bookings & schedule', 'Equipment holds'],
   },
   // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the
   // catalogue (venues:read).
@@ -104,7 +127,7 @@ test('1.2 AC2: the main page lists every section from the sidebar', async ({ pag
   await signIn(page, ACCOUNTS.venueStaff)
   const main = page.getByRole('main')
 
-  for (const name of ['Venue catalogue', 'Booking Requests', 'Venue Schedule']) {
+  for (const name of ['Venue catalogue', 'Booking Requests', 'Room layouts']) {
     await expect(main.getByRole('heading', { name, exact: true })).toBeVisible()
   }
   const sidebarLinks = await mainNav(page).getByRole('link').count()
@@ -131,6 +154,27 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
+
+// Chore c9: the address of each section no story delivers, with the role that was offered it.
+const RETIRED_SECTIONS = [
+  { role: 'an organiser', email: ACCOUNTS.organiser, address: '/change-requests' },
+  { role: 'a coordinator lead', email: ACCOUNTS.lead, address: '/events/all' },
+  { role: 'venue staff', email: ACCOUNTS.venueStaff, address: '/venue-staff/schedule' },
+  { role: 'technical support', email: ACCOUNTS.techSupport, address: '/equipment/holds' },
+]
+
+for (const { role, email, address } of RETIRED_SECTIONS) {
+  test(`1.2 AC5: ${address} opens the main page for ${role}`, async ({ page }) => {
+    await signIn(page, email)
+    await expectSignedIn(page)
+
+    await page.goto(address)
+
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('heading', { name: /^Welcome, /, level: 1 })).toBeVisible()
+    await expect(page.getByText('This page is on its way.')).toHaveCount(0)
+  })
+}
 
 test('1.2: the sidebar collapses to icons and remembers the choice', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)

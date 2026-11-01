@@ -138,7 +138,8 @@ Permission codes are constants in `src/auth/permissions.ts`, mirrored from
 `src/layout/navigation.ts`, with the permission it needs, and both the sidebar and the main page
 are built from that list (team decision, 17 Sep 2026: a role sees everything it can use there).
 An item whose page is not built yet has `isAvailable: false`, and `App.tsx` routes it to
-`ComingSoonPage`, which names the story that delivers it.
+`ComingSoonPage`, which names the story that delivers it. A story that puts the work on another
+page removes the item instead (1.2 AC5).
 
 ## Do not
 
