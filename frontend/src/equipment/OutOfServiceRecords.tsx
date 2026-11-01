@@ -12,7 +12,10 @@ import {
 } from './outOfServiceLabels'
 
 /** What End does to a record: ends one in force now, or removes one not yet started. */
-type Ending = { record: OutOfServiceRecord; action: 'end' | 'remove' }
+interface Ending {
+  record: OutOfServiceRecord
+  action: 'end' | 'remove'
+}
 
 export interface OutOfServiceRecordsProps {
   typeId: string

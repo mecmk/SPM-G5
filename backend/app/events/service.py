@@ -956,7 +956,7 @@ class OutOfServiceWindow:
     quantity: int
 
 
-def is_out_at(record: OutOfServiceWindow, moment: datetime) -> bool:
+def is_out_at(record: OutOfServiceWindow, *, moment: datetime) -> bool:
     """Story 16.2: whether ``record`` has its units out at ``moment``. Half-open, as holds are:
     out from its start, back at its end."""
     return record.starts_at <= moment and (record.ends_at is None or moment < record.ends_at)
@@ -975,7 +975,7 @@ def units_out_at_most(
         if starts_at < record.starts_at and (ends_at is None or record.starts_at < ends_at)
     ]
     return max(
-        sum(record.quantity for record in records if is_out_at(record, moment))
+        sum(record.quantity for record in records if is_out_at(record, moment=moment))
         for moment in moments
     )
 

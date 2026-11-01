@@ -286,7 +286,7 @@ def list_equipment_catalogue(db: DbSession) -> list[EquipmentCatalogueEntryOut]:
 
 
 @types_router.get("/{type_id}", response_model=EquipmentTypePageOut, dependencies=[CanManage])
-def get_equipment_type(type_id: uuid.UUID, db: DbSession) -> EquipmentTypePageOut:
+def get_equipment_type_page(type_id: uuid.UUID, db: DbSession) -> EquipmentTypePageOut:
     """Story 16.2 AC2: one type's page - its stock, the units out now and its current records."""
     try:
         page = service.get_equipment_type_page(db, type_id, now=datetime.now(UTC))

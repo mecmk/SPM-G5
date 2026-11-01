@@ -1375,7 +1375,7 @@ def short_units(
     short: dict[uuid.UUID, int] = {}
     for moment in moments:
         left = stock - sum(
-            record.quantity for record in records if events_service.is_out_at(record, moment)
+            record.quantity for record in records if events_service.is_out_at(record, moment=moment)
         )
         under_way = sorted(
             (hold for hold in holds if hold.starts_at <= moment < hold.ends_at),
@@ -1498,18 +1498,15 @@ def _windows(
     db: Session, type_id: uuid.UUID, *, leaving_out: uuid.UUID | None = None
 ) -> list[events_service.OutOfServiceWindow]:
     """The records of ``type_id`` as windows, but for ``leaving_out``."""
-    return [
-        _window(record)
-        for record in db.scalars(
-            select(EquipmentUnavailabilityPeriod).where(
-                EquipmentUnavailabilityPeriod.equipment_type_id == type_id
-            )
-        )
-        if record.id != leaving_out
-    ]
+    statement = select(EquipmentUnavailabilityPeriod).where(
+        EquipmentUnavailabilityPeriod.equipment_type_id == type_id
+    )
+    if leaving_out is not None:
+        statement = statement.where(EquipmentUnavailabilityPeriod.id != leaving_out)
+    return [_window(record) for record in db.scalars(statement)]
 
 
-def _has_ended(record: EquipmentUnavailabilityPeriod, now: datetime) -> bool:
+def _has_ended(record: EquipmentUnavailabilityPeriod, *, now: datetime) -> bool:
     return record.ends_at is not None and record.ends_at <= now
 
 
@@ -1531,7 +1528,7 @@ def _check_record(
     Returns those other records."""
     is_new_start = record is None or starts_at != record.starts_at
     if record is not None:
-        if _has_ended(record, now):
+        if _has_ended(record, now=now):
             raise RecordEnded()
         if is_new_start and record.starts_at < now:
             raise RecordStartLocked()
@@ -1801,7 +1798,7 @@ def _end_out_of_service(
     lock_types(db, [type_id])
     _active_type(db, type_id)
     record = _record(db, type_id, record_id)
-    if _has_ended(record, now):
+    if _has_ended(record, now=now):
         raise RecordEnded()
     if record.starts_at >= now:
         raise RecordNotStarted()
@@ -1829,7 +1826,7 @@ def remove_out_of_service(
     lock_types(db, [type_id])
     _active_type(db, type_id)
     record = _record(db, type_id, record_id)
-    if _has_ended(record, now):
+    if _has_ended(record, now=now):
         raise RecordEnded()
     if record.starts_at < now:
         raise RecordStarted()

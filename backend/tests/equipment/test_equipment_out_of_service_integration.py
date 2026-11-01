@@ -59,6 +59,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.common.audit import AuditLog
 from app.equipment import schemas, service
+from app.events import service as events_service
 from app.events.models import (
     EquipmentReservation,
     EquipmentType,
@@ -1490,14 +1491,14 @@ def _with_a_save_under_way(engine, kit_id: uuid.UUID, attempt: Callable[[Session
     )
     rival.flush()
     pids: queue.Queue[int] = queue.Queue()
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            waiting = pool.submit(_in_own_session, engine, attempt, pids)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        waiting = pool.submit(_in_own_session, engine, attempt, pids)
+        try:
             assert _waited_on_a_lock(engine, waiting, pids)
             rival.commit()
-            return waiting.result(timeout=10)
-    finally:
-        rival.close()
+        finally:
+            rival.close()  # inside the pool: leaving it waits for whatever this holds up
+        return waiting.result(timeout=10)
 
 
 def _editor(kit_id: uuid.UUID, record_id: uuid.UUID, quantity: int):
@@ -1572,21 +1573,59 @@ def test_an_accept_and_a_record_saved_at_once_take_turns_without_deadlock(engine
         holder.execute(select(Event.id).where(Event.id == event_id).with_for_update()).all()
         accepting_pids: queue.Queue[int] = queue.Queue()
         saving_pids: queue.Queue[int] = queue.Queue()
-        try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            try:
                 accepting = pool.submit(_in_own_session, engine, _accepter(item_id), accepting_pids)
                 assert _waited_on_a_lock(engine, accepting, accepting_pids)
                 saving = pool.submit(_in_own_session, engine, _recorder(kit_id, 1), saving_pids)
                 assert _waited_on_a_lock(engine, saving, saving_pids)
-                holder.rollback()
-                saved, accepted = saving.result(timeout=20), accepting.result(timeout=20)
-        finally:
-            holder.close()
+            finally:
+                holder.close()  # inside the pool: leaving it waits for whatever this holds up
+            saved, accepted = saving.result(timeout=20), accepting.result(timeout=20)
 
         assert saved == CREATED
         with Session(engine) as session:
             name = session.get(EquipmentType, kit_id).name
         assert accepted == service.NOT_ENOUGH_TO_ACCEPT_MESSAGE.format(name=name)
+
+
+# Each lock on an event taken before a type: the two ends of the deadlock above, on every path.
+_EVENT_LOCKS = {
+    "accept": lambda db, event: service._locked_event_of(db, event.equipment_requests[0].id),
+    "coordinators-equipment": lambda db, event: service._event_for_change(
+        db, event.id, actor=event.assigned_coordinator
+    ),
+    "submission": lambda db, event: events_service._get_own_event(
+        db, event.id, event.organiser, for_update=True
+    ),
+    "change-decision": lambda db, event: events_service.get_event_for_update(
+        db, event.id, viewer=event.assigned_coordinator
+    ),
+}
+
+
+@pytest.mark.story("16.2", ac=7)
+@pytest.mark.parametrize("lock", _EVENT_LOCKS.values(), ids=_EVENT_LOCKS.keys())
+def test_every_lock_taken_before_a_type_leaves_a_notice_free_to_name_the_event(engine, lock):
+    """A record holds the type, then its notice needs a key-share lock on the event. Each of these
+    locks is taken before a type, so each has to be FOR NO KEY UPDATE, which a key share does not
+    wait for. NOWAIT says so at once, with nothing left waiting."""
+    with _committed_kit(engine, stock=3) as (kit_id, event_id):
+        with Session(engine) as session:
+            make_equipment_item(
+                session,
+                event=session.get(Event, event_id),
+                equipment_type=session.get(EquipmentType, kit_id),
+                quantity=1,
+            )
+            session.commit()
+        with Session(engine) as holder, Session(engine) as notice:
+            lock(holder, holder.get(Event, event_id))
+            notice.execute(
+                select(Event.id)
+                .where(Event.id == event_id)
+                .with_for_update(read=True, key_share=True, nowait=True)
+            )
 
 
 # --- AC2 / AC3 / AC4 - at the very moment a record starts or ends ------------------------------
@@ -1660,6 +1699,33 @@ def test_a_record_ending_this_moment_has_ended(db: Session):
         service.edit_out_of_service(
             db, kit.id, record.id, schemas.OutOfServiceUpdate(quantity=2), actor=actor, now=moment
         )
+
+
+@pytest.mark.story("16.2", ac=3)
+def test_an_edit_ending_a_record_this_moment_is_refused_and_a_moment_later_is_not(db: Session):
+    """End is how a record stops now, so an edit's end has to come after this moment, not at it."""
+    kit = make_equipment_type(db)
+    actor = db.get(User, Users.TECH_SUPPORT.id)
+    moment = _days(1)
+    record = _out_at(
+        db, kit, 1, starts_at=moment - timedelta(days=1), ends_at=moment + timedelta(days=1)
+    )
+
+    with pytest.raises(service.InvalidOutOfService) as refused:
+        service.edit_out_of_service(
+            db,
+            kit.id,
+            record.id,
+            schemas.OutOfServiceUpdate(ends_at=moment),
+            actor=actor,
+            now=moment,
+        )
+    assert str(refused.value) == service.END_IN_THE_PAST_MESSAGE
+    later = moment + timedelta(minutes=1)
+    edited = service.edit_out_of_service(
+        db, kit.id, record.id, schemas.OutOfServiceUpdate(ends_at=later), actor=actor, now=moment
+    )
+    assert edited.ends_at == later
 
 
 @pytest.mark.story("16.2", ac=2)

@@ -85,23 +85,16 @@ async function thisMinute(): Promise<string> {
   return new Date(Date.now() + SINGAPORE_OFFSET_MS).toISOString().slice(0, 16)
 }
 
-/** Every save of a record from now on: the check before saving is not one. */
-function trackSaves(page: Page): string[] {
-  const sent: string[] = []
-  page.on('request', (request) => {
-    const isWrite = ['POST', 'PATCH', 'DELETE'].includes(request.method())
-    if (isWrite && request.url().includes('/out-of-service')) sent.push(request.url())
-  })
-  return sent
-}
-
-/** Every request that would change a record, from now on. */
-function trackWrites(page: Page): string[] {
+/** Every save of a record from now on - and, with `isCheckCounted`, the check before saving
+ *  too, which writes nothing but is only sent for a form that passed its own checks. */
+function trackSends(page: Page, { isCheckCounted }: { isCheckCounted: boolean }): string[] {
   const sent: string[] = []
   page.on('request', (request) => {
     const isWrite = ['POST', 'PATCH', 'DELETE'].includes(request.method())
     const isCheck = new URL(request.url()).pathname.endsWith('/out-of-service/check')
-    if ((isWrite || isCheck) && request.url().includes('/out-of-service')) sent.push(request.url())
+    if ((isWrite || (isCheckCounted && isCheck)) && request.url().includes('/out-of-service')) {
+      sent.push(request.url())
+    }
   })
   return sent
 }
@@ -178,19 +171,20 @@ test.describe('records units out of service', () => {
   test('16.2 AC1/AC2: units recorded out of service are listed, can be edited, and a record not yet started is removed by End', async ({
     page,
   }) => {
+    const grille = `Cracked speaker grille ${Date.now()}`
     await signIn(page, ACCOUNTS.techSupport)
     await openType(page, CONF_PHONE)
 
     await fillRecord(page, {
       units: '2',
       reason: 'Damaged',
-      note: 'Cracked speaker grille',
+      note: grille,
       from: '2031-03-03T09:00',
       until: '2031-03-10T17:00',
     })
     await form(page).getByRole('button', { name: 'Take out of service' }).click()
 
-    const saved = record(page, 'Cracked speaker grille')
+    const saved = record(page, grille)
     await expect(saved).toContainText('2 out of service')
     await expect(saved).toContainText('Damaged')
     await expect(saved).toContainText('Mon, 3 Mar 2031, 09:00')
@@ -214,18 +208,19 @@ test.describe('records units out of service', () => {
   })
 
   test('16.2 AC1: a record with no end says it is out until ended', async ({ page }) => {
+    const foyer = `Left at the Tower B foyer ${Date.now()}`
     await signIn(page, ACCOUNTS.techSupport)
     await openType(page, CONF_PHONE)
 
     await fillRecord(page, {
       units: '1',
       reason: 'Lost',
-      note: 'Left at the Tower B foyer',
+      note: foyer,
       from: '2031-06-02T09:00',
     })
     await form(page).getByRole('button', { name: 'Take out of service' }).click()
 
-    const saved = record(page, 'Left at the Tower B foyer')
+    const saved = record(page, foyer)
     await expect(saved).toContainText('until ended')
     await saved.getByRole('button', { name: 'End' }).click()
     await page
@@ -318,12 +313,12 @@ test.describe('records units out of service', () => {
 })
 
 // --- AC3: the form's own checks, and the server's -----------------------------------------------
-test('16.2 AC3: a missing quantity or start, a quantity of 0, an end before the start and a start in the past are refused before anything is sent', async ({
+test('16.2 AC3: a missing quantity or start, a quantity of 0 or one too large to hold, an end before the start and a start in the past are refused before anything is sent', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
   await openType(page, CONF_PHONE)
-  const sent = trackWrites(page)
+  const sent = trackSends(page, { isCheckCounted: true })
   const fields = form(page)
   const save = fields.getByRole('button', { name: 'Take out of service' })
 
@@ -355,6 +350,14 @@ test('16.2 AC3: a missing quantity or start, a quantity of 0, an end before the 
     fields.getByRole('alert').filter({ hasText: START_IN_THE_PAST_MESSAGE }),
   ).toBeVisible()
   await expect(fields.getByLabel('From')).toBeFocused()
+
+  // A number too long to hold exactly would be sent as 1e+25, which the server cannot read.
+  await fields.getByLabel('Units').fill(`1${'0'.repeat(24)}`)
+  await fields.getByLabel('From').fill(inFuture(1500))
+  await fields.getByLabel('Until').fill(inFuture(1501))
+  await save.click()
+  await expect(fields.getByRole('alert').filter({ hasText: QUANTITY_MESSAGE })).toBeVisible()
+  await expect(fields.getByLabel('Units')).toBeFocused()
   expect(sent).toHaveLength(0)
 })
 
@@ -363,7 +366,7 @@ test('16.2 AC3: a year of five digits, or an Until left half typed, is refused b
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
   await openType(page, CONF_PHONE)
-  const sent = trackWrites(page)
+  const sent = trackSends(page, { isCheckCounted: true })
   const fields = form(page)
   const save = fields.getByRole('button', { name: 'Take out of service' })
 
@@ -410,13 +413,14 @@ test.describe('takes a seeded hold short once', () => {
   test('16.2 AC4/AC5: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event', async ({
     page,
   }) => {
+    const pixels = `Dead pixels across the top row ${Date.now()}`
     await signIn(page, ACCOUNTS.techSupport)
     await openType(page, LED_SCREEN)
 
     await fillRecord(page, {
       units: '1',
       reason: 'Damaged',
-      note: 'Dead pixels across the top row',
+      note: pixels,
       from: '2030-02-20T12:00',
       until: '2030-02-21T12:00',
     })
@@ -430,7 +434,7 @@ test.describe('takes a seeded hold short once', () => {
     await expect(records(page)).toContainText('No units are out of service.')
     await dialog.getByRole('button', { name: 'Save anyway' }).click()
     await expect(dialog).toHaveCount(0)
-    await expect(record(page, 'Dead pixels across the top row')).toContainText('1 out of service')
+    await expect(record(page, pixels)).toContainText('1 out of service')
 
     // AC4: the event's coordinator sees the item short.
     await page.getByRole('button', { name: 'Sign out' }).click()
@@ -443,7 +447,7 @@ test.describe('takes a seeded hold short once', () => {
   test('16.2 AC5: Cancel on the list of holds left short saves nothing', async ({ page }) => {
     await signIn(page, ACCOUNTS.techSupport)
     await openType(page, LED_SCREEN)
-    const saves = trackSaves(page)
+    const saves = trackSends(page, { isCheckCounted: false })
     const note = `Cracked panel ${Date.now()}`
 
     await fillRecord(page, {

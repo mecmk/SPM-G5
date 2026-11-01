@@ -13,11 +13,15 @@ import {
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { RequiredMark } from '../components/RequiredMark'
 import { ERROR_REGISTRY } from '../errors/registry'
-import { formatSchedule, inputToInstant, instantToInput } from '../shared/format'
+import {
+  formatSchedule,
+  inputToInstant,
+  instantToInput,
+  isReadableDateTime,
+} from '../shared/format'
 import { REASON_CODES, REASON_LABELS, describeHoldShort, hasStarted } from './outOfServiceLabels'
 
 const WHOLE_NUMBER = /^\d+$/
-const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const UNTIL_HINT = 'Leave blank to keep them out until the record is ended.'
 
 /** What the form holds: the inputs' own strings. */
@@ -64,16 +68,12 @@ function startOfThisMinute(): number {
   return now.getTime()
 }
 
-/** A picker can hold a five-digit year, which the server cannot read as a date. */
-function isReadableDateTime(inputValue: string): boolean {
-  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
-}
-
 /**
  * Story 16.2 AC3: what is wrong with the form before anything is sent - the units not a whole
- * number of at least 1, no start, a date not finished or not readable, a start in the past (only
- * when it is a new one: a record in force keeps its own), an end not after the start. How many
- * the stock can spare, and an end before now, are the server's to say.
+ * number of at least 1, or one too long to send exactly, no start, a date not finished or not
+ * readable, a start in the past (only when it is a new one: a record in force keeps its own), an
+ * end not after the start. How many the stock can spare, and an end before now, are the server's
+ * to say.
  */
 function problemsOf(
   values: FormValues,
@@ -103,7 +103,9 @@ function problemsOf(
   }
   return {
     units:
-      WHOLE_NUMBER.test(values.units) && Number(values.units) >= 1
+      WHOLE_NUMBER.test(values.units) &&
+      Number.isSafeInteger(Number(values.units)) &&
+      Number(values.units) >= 1
         ? null
         : ERROR_REGISTRY.OUT_OF_SERVICE_QUANTITY_INVALID.message,
     from,
@@ -118,14 +120,14 @@ function inputOf(
   opened: FormValues,
   record: OutOfServiceRecord | null,
 ): OutOfServiceInput {
-  const keepsStart = record !== null && values.from === opened.from
-  const keepsEnd = record !== null && values.until === opened.until
+  const isStartKept = record !== null && values.from === opened.from
+  const isEndKept = record !== null && values.until === opened.until
   return {
     quantity: Number(values.units),
     reason: values.reason,
     notes: values.note.trim() || null,
-    starts_at: keepsStart ? record.starts_at : inputToInstant(values.from),
-    ends_at: keepsEnd ? record.ends_at : values.until === '' ? null : inputToInstant(values.until),
+    starts_at: isStartKept ? record.starts_at : inputToInstant(values.from),
+    ends_at: isEndKept ? record.ends_at : values.until === '' ? null : inputToInstant(values.until),
   }
 }
 
