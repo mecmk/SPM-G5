@@ -179,11 +179,7 @@ _LIVE_TAB_STATUSES = (
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
-# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from. Story
-# 17.2 AC6: the only items that can be withdrawn.
-WITH_TECHNICAL_SUPPORT = frozenset(
-    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
-)
+WITH_TECHNICAL_SUPPORT = events_service.WITH_TECHNICAL_SUPPORT
 # No longer the event's, kept for Technical Support's record: cancelled by its event or a change
 # (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves it as it is unless it
 # names it again. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).

@@ -62,6 +62,7 @@ import {
   getMissingForSubmission,
   getVenueRequirementFieldId,
   isEquipmentTypeTaken,
+  isSentToTechnicalSupport,
   withEventDefaults,
   newEquipmentDraft,
   newEventForm,
@@ -165,6 +166,10 @@ interface EventRequestFormPageProps {
    *  confirmed, its internal notes until it is closed. */
   isCoordinatorEdit?: boolean
 }
+
+/** Story 17.2 AC2: why a sent item has no Remove here. */
+const SENT_EQUIPMENT_HINT =
+  'Sent to Technical Support. If it is no longer needed, withdraw it on the event page.'
 
 /**
  * Story 2.1 - an Event Organiser records a request and sends it for review.
@@ -1411,7 +1416,11 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               <p className="form-hint">No equipment requested. Add each item you need.</p>
             )}
             {form.equipment.map((line, index) => (
-              <fieldset key={line.key} className="equipment-item">
+              <fieldset
+                key={line.key}
+                className="equipment-item"
+                disabled={line.status === 'ACCEPTED'}
+              >
                 <legend>{`Equipment item ${index + 1}`}</legend>
                 <div className="form-grid">
                   <label className="span-2">
@@ -1468,7 +1477,10 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   </label>
                 </div>
                 {equipmentAvailabilityNote(line)}
-                {!isEquipmentApproved && (
+                {!isEquipmentApproved && isSentToTechnicalSupport(line) && (
+                  <p className="form-hint">{SENT_EQUIPMENT_HINT}</p>
+                )}
+                {!isEquipmentApproved && !isSentToTechnicalSupport(line) && (
                   <button
                     type="button"
                     className="secondary button-sm"

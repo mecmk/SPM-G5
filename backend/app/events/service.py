@@ -138,6 +138,10 @@ ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE = (
     "event's own dates and attendance. Keep them within what was booked, or withdraw the booking "
     "first if it is still pending."
 )
+SENT_ITEM_REMOVED_MESSAGE = (
+    "{item} has been sent to Technical Support, so withdraw it instead of removing it."
+)
+ACCEPTED_ITEM_CHANGED_MESSAGE = "Technical Support accepted {item}, so it can no longer be changed."
 EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE = (
     "This event has been approved, so its equipment can no longer be changed here. While the "
     "event is in Planning, change it in the Equipment requirements section of the event page."
@@ -201,6 +205,11 @@ _HELD_ITEM_STATUSES = (
     EquipmentRequestStatus.REQUESTED,
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
+)
+# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from. Story
+# 17.2 AC2/AC6: the only items that can be withdrawn, and so never dropped from a correction.
+WITH_TECHNICAL_SUPPORT = frozenset(
+    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
 )
 # Story 6.2, 19.2, 17.2 AC3: no longer the event's, kept for Technical Support's record. A 7.2
 # correction neither holds, edits nor removes them.
@@ -321,6 +330,15 @@ class EquipmentChangedAfterApproval(InvalidEventRequest):
 
     def __init__(self):
         super().__init__(EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE)
+
+
+class SentEquipmentChanged(InvalidEventRequest):
+    """Story 17.2 AC2: a correction before approval cannot drop an item sent to Technical Support,
+    which is withdrawn so they know. Story 15.1 AC7: nor change an Accepted one."""
+
+    def __init__(self, name: str, *, is_removed: bool):
+        message = SENT_ITEM_REMOVED_MESSAGE if is_removed else ACCEPTED_ITEM_CHANGED_MESSAGE
+        super().__init__(message.format(item=name))
 
 
 class EquipmentHoldNotCovering(InvalidEventRequest):
@@ -1161,8 +1179,10 @@ def _replace_equipment(
     event: Event, items: list[EventEquipmentIn], types: dict[str, EquipmentType], *, actor: User
 ) -> None:
     """AC6/AC7: make the request's equipment lines match ``items``. A line whose ``id`` is sent is
-    kept and edited; one left out is removed; one without an ``id`` is new. New lines get
-    increasing creation times so the request lists them in the order they were added."""
+    kept and edited; one left out is removed; one without an ``id`` is new. A line kept for the
+    record is left as it is, and one sent to Technical Support was never left out
+    (``_check_sent_equipment_kept``). New lines get increasing creation times so the request
+    lists them in the order they were added."""
     current = _current_lines(event)
     existing = {line.id: line for line in current}
     kept_ids = {item.id for item in items if item.id is not None}
@@ -2448,6 +2468,24 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
         raise EquipmentChangedAfterApproval()
 
 
+def _check_sent_equipment_kept(event: Event, data: EventReviewCorrection) -> None:
+    """Story 17.2 AC2, 15.1 AC7: every item sent to Technical Support comes back, and an Accepted
+    one exactly as it is. A Pending one can still be edited (15.1 AC2)."""
+    if data.equipment is None:
+        return
+    sent = {item.id: item for item in data.equipment if item.id is not None}
+    for line in _current_lines(event):
+        item = sent.get(line.id)
+        if item is None:
+            if line.status in WITH_TECHNICAL_SUPPORT:
+                raise SentEquipmentChanged(line.equipment_type.name, is_removed=True)
+        elif line.status == EquipmentRequestStatus.ACCEPTED and (
+            (item.equipment_type_code, item.quantity, item.technical_notes)
+            != (line.equipment_type.code, line.quantity, line.technical_notes)
+        ):
+            raise SentEquipmentChanged(line.equipment_type.name, is_removed=False)
+
+
 def _check_equipment_holds_cover(db: Session, event: Event, data: EventReviewCorrection) -> None:
     """AC15: every open item that holds stock for the event must still be held for the whole of
     the event's new period. A move inside the held period keeps every hold and decision as it is;
@@ -2698,6 +2736,8 @@ def _apply_correction(
         _check_equipment_unchanged(event, data)
         _check_equipment_holds_cover(db, event, data)
         booked = _live_bookings(db, event)
+    else:
+        _check_sent_equipment_kept(event, data)
     before = _request_values(event)
     attendance_before = event.expected_attendance
     edit = _validate_request_edit(

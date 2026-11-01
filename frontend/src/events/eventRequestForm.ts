@@ -1,4 +1,5 @@
-import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
+import { WITHDRAWABLE_STATUSES } from '../api/equipment'
+import type { EquipmentItemStatus, EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
@@ -50,6 +51,8 @@ export interface EquipmentDraft {
   typeName: string
   quantity: string
   notes: string
+  /** Story 17.2 AC2, 15.1 AC7: the saved line's status; null on a line not saved yet. */
+  status: EquipmentItemStatus | null
 }
 
 export interface EventFormState {
@@ -335,6 +338,11 @@ function venueRequirementDraftFrom(
   }
 }
 
+/** Story 17.2 AC2: sent to Technical Support, so withdrawn on the event page, not removed here. */
+export function isSentToTechnicalSupport(line: EquipmentDraft): boolean {
+  return line.status !== null && WITHDRAWABLE_STATUSES.includes(line.status)
+}
+
 export function newEquipmentDraft(): EquipmentDraft {
   nextEquipmentKey += 1
   return {
@@ -344,6 +352,7 @@ export function newEquipmentDraft(): EquipmentDraft {
     typeName: '',
     quantity: '1',
     notes: '',
+    status: null,
   }
 }
 
@@ -397,6 +406,7 @@ function formAsSaved(event: EventDetail): EventFormState {
           typeName: line.equipment_type_name,
           quantity: String(line.quantity),
           notes: textOf(line.technical_notes),
+          status: line.status,
         }
       }),
     isRegistrationRequired: event.registration_required,
