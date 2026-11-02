@@ -9,7 +9,6 @@ import { HOME_PATH, LOGIN_PATH } from '../routes'
 import { visibleNavSections, type NavSection } from './navigation'
 
 const SIDEBAR_COLLAPSED_KEY = 'connectsphere.sidebarCollapsed'
-const COMING_SOON_HINT = 'soon'
 
 function readCollapsedPreference(): boolean {
   try {
@@ -35,7 +34,6 @@ function sidebarItems(sections: NavSection[]): SidebarNavItem[] {
       to: item.to,
       group: section.label,
       icon: item.icon,
-      hint: item.isAvailable ? undefined : COMING_SOON_HINT,
     })),
   )
   return [home, ...sectionItems]
