@@ -408,8 +408,13 @@ def make_equipment_item(
     **overrides,
 ) -> EventEquipmentRequest:
     """An equipment item on ``event`` (story 15.1). ``is_held`` also places the hold a recorded
-    item has on a submitted event, for the event's period; an item that was declined, cancelled
-    or flagged unavailable holds nothing, so pass ``is_held=False`` for those."""
+    item has on a submitted event, for the event's period; an item that was declined, cancelled,
+    withdrawn or flagged unavailable holds nothing, so pass ``is_held=False`` for those. A
+    withdrawn one is stamped as withdrawn now by Users.COORDINATOR unless told otherwise (story
+    17.2 AC3, ck_event_equipment_requests_withdrawal)."""
+    if status == "WITHDRAWN":
+        overrides.setdefault("withdrawn_at", datetime.now(UTC))
+        overrides.setdefault("withdrawn_by_id", Users.COORDINATOR.id)
     item = EventEquipmentRequest(
         event_id=event.id,
         equipment_type_id=equipment_type.id,

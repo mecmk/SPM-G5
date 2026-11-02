@@ -1,5 +1,7 @@
-import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
+import { WITHDRAWABLE_STATUSES } from '../api/equipment'
+import type { EquipmentItemStatus, EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
+import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { inputToInstant, instantToInput, isReadableDateTime, nowAsInput } from '../shared/format'
 import { isBlankOrPhoneNumber } from '../shared/phone'
 
@@ -49,6 +51,8 @@ export interface EquipmentDraft {
   typeName: string
   quantity: string
   notes: string
+  /** Story 17.2 AC2, 15.1 AC7: the saved line's status; null on a line not saved yet. */
+  status: EquipmentItemStatus | null
 }
 
 export interface EventFormState {
@@ -333,6 +337,12 @@ function venueRequirementDraftFrom(
   }
 }
 
+/** Story 7.2 AC4, 17.2 AC2: sent to Technical Support, so withdrawn on the event page, not removed
+ *  or swapped for another type here. */
+export function isSentToTechnicalSupport(line: EquipmentDraft): boolean {
+  return line.status !== null && WITHDRAWABLE_STATUSES.includes(line.status)
+}
+
 export function newEquipmentDraft(): EquipmentDraft {
   nextEquipmentKey += 1
   return {
@@ -342,6 +352,7 @@ export function newEquipmentDraft(): EquipmentDraft {
     typeName: '',
     quantity: '1',
     notes: '',
+    status: null,
   }
 }
 
@@ -383,17 +394,21 @@ function formAsSaved(event: EventDetail): EventFormState {
       event.accessibility_needs.map((need) => [need.code, { notes: textOf(need.notes) }]),
     ),
     accessibilityNotes: textOf(event.accessibility_notes),
-    equipment: event.equipment.map((line) => {
-      nextEquipmentKey += 1
-      return {
-        key: nextEquipmentKey,
-        id: line.id,
-        typeCode: line.equipment_type_code,
-        typeName: line.equipment_type_name,
-        quantity: String(line.quantity),
-        notes: textOf(line.technical_notes),
-      }
-    }),
+    // Story 17.2 AC3: an item kept only for the record is no longer the event's to correct.
+    equipment: event.equipment
+      .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
+      .map((line) => {
+        nextEquipmentKey += 1
+        return {
+          key: nextEquipmentKey,
+          id: line.id,
+          typeCode: line.equipment_type_code,
+          typeName: line.equipment_type_name,
+          quantity: String(line.quantity),
+          notes: textOf(line.technical_notes),
+          status: line.status,
+        }
+      }),
     isRegistrationRequired: event.registration_required,
     registrationOpensAt: event.registration_opens_at
       ? instantToInput(event.registration_opens_at)
