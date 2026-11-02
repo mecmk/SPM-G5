@@ -933,6 +933,10 @@ def decide_equipment_request(
     else:
         _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
         item.status_notes = data.reason
+        # Fix f15.1.1: a declined item leaves 7.2's corrections, so a form already open is out of
+        # date. Stamping the event's version has its save refused as stale (the trigger sets the
+        # real value). An accepted item stays on the form, so accepting leaves the version alone.
+        event.updated_at = datetime.now(UTC)
         action = "EQUIPMENT_DECLINED"
     item.status = data.outcome
     item.decided_by_id = actor.id

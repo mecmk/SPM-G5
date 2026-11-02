@@ -7,7 +7,8 @@ AC6 Each type can appear only once among the event's open items (not yet sent, P
     Accepted). A declined item stays listed as history and does not count.
 
 A correction leaves a declined item alone: it is not counted against the stock when the dates
-move, cannot be edited, and is not removed by a list that leaves it out.
+move, cannot be edited, and is not removed by a list that leaves it out. A form opened before the
+item was declined is out of date, so its save is refused with 7.2 AC9's reload message.
 
 The form does not list one, so what it sends is the list these tests send. That the form stops
 offering it, and that its own stock and one-line-per-type checks no longer stop a save, happens
@@ -21,11 +22,29 @@ Excluded, with reason:
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
+from app.common.audit import AuditLog
+from app.equipment.schemas import EquipmentDecisionIn
+from app.equipment.service import decide_equipment_request
+from app.events.models import (
+    EquipmentReservation,
+    EquipmentType,
+    Event,
+    EventEquipmentRequest,
+    EventStatus,
+)
+from app.events.schemas import EventEquipmentIn, EventReviewCorrection
+from app.events.service import StaleEventEdit, correct_event_under_review
 from tests.events.test_correct_event_under_review import (
     LAPTOP_STOCK,
     _correct,
@@ -46,8 +65,9 @@ from tests.support.factories import (
 )
 from tests.support.seed import Users
 
-REQUESTED, DECLINED = "REQUESTED", "DECLINED"
+REQUESTED, PENDING, ACCEPTED, DECLINED = "REQUESTED", "PENDING", "ACCEPTED", "DECLINED"
 REASON = "None spare that week."
+CORRECTED = "Corrected while Technical Support was deciding."
 NOT_ENOUGH_LAPTOPS = "Not enough Presentation laptop available for the proposed dates."
 NOT_ON_THE_REQUEST = "An equipment item does not belong to this request."
 
@@ -257,21 +277,114 @@ def test_an_approved_events_equipment_resent_without_a_declined_item_is_not_a_ch
     assert (_item_status(db, declined.id), _item_status(db, requested.id)) == (DECLINED, REQUESTED)
 
 
-# --- Conflict: declined while the correction is open ------------------------------------------
 @pytest.mark.story("15.1", ac=6)
-def test_an_item_declined_while_the_form_is_open_is_refused_and_stays_as_decided(
-    login_as, db: Session
-):
-    """A decision changes the item, not the event, so the stale-copy check (7.2 AC9) lets the save
-    through to here, still naming the line as the coordinator saw it."""
-    opened = _sent(login_as, db, _period(200))
-    [line] = opened["equipment"]
-    _decline(login_as, line)
+def test_the_change_history_leaves_out_a_declined_item(login_as, db: Session):
+    event, _ = _declined(login_as, db, _period(200))
     coordinator = login_as(Users.COORDINATOR)
 
-    response = _correct(coordinator, opened, equipment=[{**_resent(line), "quantity": 2}])
+    response = _correct(coordinator, event, equipment=[_equipment("WIRELESS_MIC", 1)])
 
-    assert response.status_code == 422, response.text
-    assert response.json()["detail"] == NOT_ON_THE_REQUEST
-    [kept] = _read(coordinator, opened["id"])["equipment"]
-    assert (kept["quantity"], kept["status"]) == (4, DECLINED)
+    assert response.status_code == 200, response.text
+    changes = coordinator.get(f"/events/{event['id']}/changes").json()
+    [change] = [row for row in changes if row["field"] == "equipment"]
+    assert change["old_value"] == []
+    assert [line["equipment_type_code"] for line in change["new_value"]] == ["WIRELESS_MIC"]
+
+
+# --- Conflict: decided while the correction is open --------------------------------------------
+@dataclass(frozen=True)
+class _OpenForm:
+    """What a coordinator's open form holds: the version it was read at and its one line."""
+
+    event_id: uuid.UUID
+    item_id: uuid.UUID
+    expected_updated_at: datetime
+    line: EventEquipmentIn
+
+
+@contextmanager
+def _open_form(engine) -> Iterator[_OpenForm]:
+    """A form open on an event under review with one Pending item. Committed, as the ``db``
+    fixture's one transaction freezes now(), which the trigger stamps ``updated_at`` with; removed
+    afterwards with everything the test wrote."""
+    with Session(engine) as session:
+        kit = make_equipment_type(session, name=f"Open form kit {uuid.uuid4().hex[:8]}")
+        event, _ = _planning_event(session, status=EventStatus.UNDER_REVIEW)
+        item = make_equipment_item(
+            session, event=event, equipment_type=kit, quantity=2, status=PENDING
+        )
+        session.commit()
+        form = _OpenForm(
+            event_id=event.id,
+            item_id=item.id,
+            expected_updated_at=event.updated_at,
+            line=EventEquipmentIn(id=item.id, equipment_type_code=kit.code, quantity=2),
+        )
+        kit_id = kit.id
+    try:
+        yield form
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(AuditLog).where(AuditLog.entity_id == form.event_id))
+            session.execute(
+                delete(EquipmentReservation).where(EquipmentReservation.event_id == form.event_id)
+            )
+            session.execute(
+                delete(EventEquipmentRequest).where(EventEquipmentRequest.event_id == form.event_id)
+            )
+            session.execute(delete(Event).where(Event.id == form.event_id))
+            session.execute(delete(EquipmentType).where(EquipmentType.id == kit_id))
+            session.commit()
+
+
+def _decide(engine, form: _OpenForm, outcome: str) -> None:
+    decision = EquipmentDecisionIn(outcome=outcome, reason=REASON if outcome == DECLINED else None)
+    with Session(engine) as session:
+        decide_equipment_request(
+            session, form.item_id, decision, actor=session.get(User, Users.TECH_SUPPORT.id)
+        )
+
+
+def _save(engine, form: _OpenForm, *, quantity: int = 2) -> None:
+    """The coordinator saves a new description from the form, which sends its line back."""
+    correction = EventReviewCorrection(
+        expected_updated_at=form.expected_updated_at,
+        description=CORRECTED,
+        equipment=[form.line.model_copy(update={"quantity": quantity})],
+    )
+    with Session(engine) as session:
+        correct_event_under_review(
+            session,
+            session.get(Event, form.event_id),
+            correction,
+            actor=session.get(User, Users.COORDINATOR.id),
+        )
+
+
+@pytest.mark.story("15.1", ac=6)
+@pytest.mark.story("7.2", ac=9)
+@pytest.mark.parametrize("quantity", [2, 3], ids=["line sent back untouched", "line edited"])
+def test_an_item_declined_while_the_form_is_open_is_refused_as_a_stale_copy(engine, quantity):
+    with _open_form(engine) as form:
+        _decide(engine, form, DECLINED)
+
+        with pytest.raises(StaleEventEdit):
+            _save(engine, form, quantity=quantity)
+
+        with Session(engine) as session:
+            item = session.get(EventEquipmentRequest, form.item_id)
+            assert (item.quantity, item.status) == (2, DECLINED)
+            assert session.get(Event, form.event_id).description != CORRECTED
+
+
+@pytest.mark.story("7.2", ac=9)
+def test_an_item_accepted_while_the_form_is_open_does_not_refuse_the_save(engine):
+    """An accepted item stays on the form, so the copy the coordinator has is still good."""
+    with _open_form(engine) as form:
+        _decide(engine, form, ACCEPTED)
+
+        _save(engine, form)
+
+        with Session(engine) as session:
+            assert session.get(Event, form.event_id).description == CORRECTED
+            assert session.get(EventEquipmentRequest, form.item_id).status == ACCEPTED
