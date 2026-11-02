@@ -119,6 +119,9 @@ export const EVENTS = {
   // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
   // a setup that starts before Seminar Room 2.1 opens.
   supplierInduction: '33333333-0000-0000-0000-000000000046',
+  // Story 12.6, organiser: organiser2, February 2029: the heritage walk, CANCELLED by Omar (c8),
+  // which cancelled its Exhibition Foyer booking with it; only read.
+  heritageWalk: '33333333-0000-0000-0000-000000012668',
   // Story 9.5, organiser: organiser, coordinator, October 2028 (the 0095NN block). Seminar Room 2.1 is
   // closed on the 24th by venue-closure-ends-bookings.spec.ts over the first two; the third is a
   // booking already replaced, only read.
