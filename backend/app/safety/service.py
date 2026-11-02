@@ -381,6 +381,11 @@ APPROVAL_OUT_OF_DATE = (
 CHANGE_APPROVED_SINCE_REVIEW = (
     "A change to the event was approved after its safety approval; request a safety review again."
 )
+# Story 12.8 AC5/AC6: a cancelled booking can leave every compared fact as it was (a venue added
+# since the review and cancelled, or the same venue booked again), but the approval still lapses.
+BOOKING_CANCELLED_SINCE_REVIEW = (
+    "A venue booking was cancelled after the safety approval; request a safety review again."
+)
 # AC14: each fact a stale approval names, in words.
 _FACT_NAMES = {
     "description": "description",
@@ -597,11 +602,27 @@ def _change_approved_since(db: Session, event: Event, review: EventSafetyReview)
     )
 
 
+def _booking_cancelled_since(db: Session, event: Event, review: EventSafetyReview) -> bool:
+    """Story 12.8 AC5/AC6: the coordinator cancelled a booking of ``event`` after ``review``, so
+    the event goes through its safety check again before it is confirmed - whether the cancel sent
+    it back to Planning or found it there, and whatever the facts read now."""
+    return db.scalar(
+        select(
+            exists().where(
+                VenueBooking.event_id == event.id,
+                VenueBooking.release_cause == ReleaseCause.COORDINATOR_CANCELLED,
+                VenueBooking.cancelled_at > review.reviewed_at,
+            )
+        )
+    )
+
+
 def confirm_blockers(db: Session, event: Event) -> list[str]:
     """AC7/AC14/AC21: what stops the event being confirmed now; ``[]`` offers it. The latest
     review must be an approval that saw the facts the event has now, with no change request
-    approved since (story 19.2 AC8). Story 12.6 AC12: a booking marked unavailable, or with a
-    replacement pending, is named here as it is for the review's request."""
+    approved since (story 19.2 AC8) and no booking cancelled since (story 12.8 AC5/AC6). Story 12.6
+    AC12: a booking marked unavailable, or with a replacement pending, is named here as it is for
+    the review's request."""
     if event.status != EventStatus.PLANNING:
         return [NOT_IN_PLANNING_FOR_CONFIRM_MESSAGE]
     blockers = [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
@@ -614,6 +635,8 @@ def confirm_blockers(db: Session, event: Event) -> list[str]:
     changed = [_FACT_NAMES[key] for key in _FACT_NAMES if approved.get(key) != now.get(key)]
     if changed:
         blockers.append(APPROVAL_OUT_OF_DATE.format(facts=" and ".join(changed)))
+    elif _booking_cancelled_since(db, event, review):
+        blockers.append(BOOKING_CANCELLED_SINCE_REVIEW)
     if _change_approved_since(db, event, review):
         blockers.append(CHANGE_APPROVED_SINCE_REVIEW)
     return blockers
