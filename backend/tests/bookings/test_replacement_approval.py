@@ -83,8 +83,6 @@ import pytest
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
-from app.auth.models import User
-from app.bookings import schemas as booking_schemas
 from app.bookings import service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import AuditLog
@@ -297,10 +295,10 @@ def test_two_approvals_at_once_release_the_original_once(engine):
     original; the other finds it no longer pending."""
     with Session(engine) as session:
         scene = make_scenario(session)
+        replacement_id = uuid.UUID(request_replacement(session, scene)["id"])
         session.commit()
         original_id, event_id = scene.original.id, scene.event.id
         venue_ids = [scene.original_venue.id, scene.alternative.id]
-        alternative_id = scene.alternative.id
     start = threading.Barrier(2)
 
     def approve_it(replacement_id) -> str:
@@ -319,16 +317,6 @@ def test_two_approvals_at_once_release_the_original_once(engine):
             return "approved"
 
     try:
-        with Session(engine) as session:
-            actor = session.get(User, Users.COORDINATOR.id)
-            original = service.get_booking_for_decision(session, original_id)
-            replacement = service.request_replacement_booking(
-                session,
-                original,
-                booking_schemas.BookingReplacementIn(venue_id=alternative_id),
-                actor=actor,
-            )
-            replacement_id = replacement.id
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(approve_it, replacement_id) for _ in range(2)]
             outcomes = sorted(future.result(timeout=30) for future in futures)

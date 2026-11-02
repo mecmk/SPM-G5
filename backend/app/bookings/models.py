@@ -14,7 +14,6 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql.elements import ColumnElement
 
 from app.auth.models import User
 from app.db import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -45,28 +44,6 @@ class ReleaseCause:
     REPLACED = "REPLACED"  # story 12.6: its replacement was approved
     SAFETY_REVIEW = "SAFETY_REVIEW"  # story 21.3: the Safety Officer named it in a finding
     COORDINATOR_CANCELLED = "COORDINATOR_CANCELLED"  # story 12.8: its coordinator cancelled it
-
-
-def marked_booking_conditions() -> tuple[ColumnElement[bool], ...]:
-    """Story 9.4 AC3 / story 12.6 AC11, AC12: the booking still holds its venue - pending or
-    approved - and is marked "Venue unavailable - alternative needed". One definition for every
-    reader of the mark: the coordinator's list (``Venue unavailable`` tab) and the safety review
-    and confirmation, which refuse while an event has such a booking. A mark left on a closed
-    booking is history and is not one."""
-    return (
-        VenueBooking.status.in_((BookingStatus.PENDING, BookingStatus.APPROVED)),
-        VenueBooking.venue_unavailable_marked_at.is_not(None),
-    )
-
-
-def pending_replacement_conditions() -> tuple[ColumnElement[bool], ...]:
-    """Story 12.6: the booking is a replacement still waiting for Venue Staff's decision. Its
-    approval releases the booking it replaces, so the event's safety review and confirmation wait
-    for it, as they wait for a mark: the review saw the original venue, not this one."""
-    return (
-        VenueBooking.status == BookingStatus.PENDING,
-        VenueBooking.replaces_booking_id.is_not(None),
-    )
 
 
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -202,14 +179,6 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         return requirement.name or f"Venue {requirement.position + 1}"
 
     @property
-    def venue_unavailable_mark(self) -> datetime | None:
-        """Story 9.4 AC3: the mark as readers see it - only on a booking still pending or
-        approved. A value left on a rejected, withdrawn, cancelled or expired booking is history
-        and is not reported."""
-        holds_venue = self.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
-        return self.venue_unavailable_marked_at if holds_venue else None
-
-    @property
     def replaces_venue_name(self) -> str | None:
         """Story 12.6 AC3: the venue of the booking this one replaces, whatever its state."""
         return None if self.replaced_booking is None else self.replaced_booking.venue.name
@@ -247,10 +216,3 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         if self.status != BookingStatus.PENDING or original is None or not holds_venue:
             return None
         return original.venue.name
-
-    @property
-    def original_is_marked(self) -> bool | None:
-        """Story 12.6 AC6: for a replacement, whether the booking it replaces is still marked
-        "Venue unavailable"; None for any other booking."""
-        original = self.replaced_booking
-        return None if original is None else original.venue_unavailable_mark is not None

@@ -90,7 +90,6 @@ from tests.support.replacement import (
     add_pending_replacement,
     approve,
     column,
-    end_the_closure,
     hall,
     make_scenario,
     request_replacement,
@@ -110,7 +109,6 @@ def test_the_original_is_untouched_while_a_replacement_is_pending(coordinator_cl
         scene.original.decided_by_id,
         scene.original.decided_at,
         scene.original.hold_expires_at,
-        scene.original.venue_unavailable_marked_at,
     )
 
     request_replacement(db, scene)
@@ -122,7 +120,6 @@ def test_the_original_is_untouched_while_a_replacement_is_pending(coordinator_cl
         original.decided_by_id,
         original.decided_at,
         original.hold_expires_at,
-        original.venue_unavailable_marked_at,
     ) == before
     assert column(db, original.id, "replaced_by_booking_id") is None
 
@@ -151,11 +148,9 @@ def test_the_event_list_names_the_pending_replacement_on_the_original(coordinato
 
 
 @pytest.mark.story("12.6", ac=6)
-def test_a_pending_replacement_can_still_be_withdrawn_after_the_mark_clears(login_as, db):
+def test_a_pending_replacement_can_still_be_withdrawn(login_as, db):
     scene = make_scenario(db)
     body = request_replacement(db, scene)
-    end_the_closure(login_as, scene)
-    assert column(db, scene.original.id, "venue_unavailable_marked_at") is None
 
     withdrawn = login_as(Users.COORDINATOR).post(f"{BOOKINGS_PATH}/{body['id']}/withdraw")
 

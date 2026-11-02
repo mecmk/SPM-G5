@@ -31,7 +31,6 @@ from app.common.audit import record_audit
 from app.config import settings
 from app.events import service as events_service
 from app.events.models import Event, EventStatus, VenueRequirement
-from app.notifications.service import NotificationType, notify
 from app.venues.models import (
     AccessibilityFeature,
     DeletedRoomLayout,
@@ -123,9 +122,6 @@ UNAVAILABILITY_CREATED = "VENUE_UNAVAILABILITY_CREATED"
 UNAVAILABILITY_UPDATED = "VENUE_UNAVAILABILITY_UPDATED"
 UNAVAILABILITY_ENDED = "VENUE_UNAVAILABILITY_ENDED"
 UNAVAILABILITY_REMOVED = "VENUE_UNAVAILABILITY_REMOVED"
-# Story 9.4 AC3/AC6: the audit actions of a booking marked, and of one cleared.
-BOOKING_MARKED = "BOOKING_VENUE_UNAVAILABLE_MARKED"
-BOOKING_CLEARED = "BOOKING_VENUE_UNAVAILABLE_CLEARED"
 
 
 class UnavailabilityNotFound(LookupError):
@@ -428,9 +424,6 @@ def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> Venue
     judged = _requirement_judged_by_search(db, query.event, query.requirement, actor=actor)
 
     scope = [] if query.include_withdrawn else [Venue.status == VenueStatus.ACTIVE]
-    if query.exclude_venue is not None:
-        # Story 12.6 AC1: in the scope, so it is outside the count and the removal hints too.
-        scope.append(Venue.id != query.exclude_venue)
     groups = _search_groups(query, period)
     venues = db.scalars(
         select(Venue).where(*scope, *chain.from_iterable(groups.values())).order_by(Venue.name)
@@ -1375,124 +1368,6 @@ def _get_period(
     return period
 
 
-@dataclass(frozen=True)
-class RecheckResult:
-    """What ``recheck_venue_bookings`` changed: the bookings it newly marked and the ones it
-    cleared, each in id order. The caller tells the people of the events the newly marked
-    bookings belong to (``_settle_marked_events``)."""
-
-    newly_marked: list[VenueBooking]
-    cleared: list[VenueBooking]
-
-
-def recheck_venue_bookings(
-    db: Session, venue_id: uuid.UUID, *, now: datetime, actor: User
-) -> RecheckResult:
-    """Story 9.4 AC3/AC6/AC8/AC10: bring the marks of ``venue_id``'s bookings in line with its
-    periods, whichever of them just changed. A candidate is a PENDING or APPROVED booking of an
-    event that is Planning, Awaiting Safety Check or Confirmed, whose held period (setup and
-    teardown included) has not ended by ``now``. It is overlapped when a period of the venue
-    covers part of what is still to come of that held period - from ``now`` or its start,
-    whichever is later - half-open as bookings are (AC5), so a period wholly in the past flags
-    nothing, and one ended early stops covering what it no longer reaches (AC6, AC8). A candidate
-    newly overlapped is marked at ``now``; one still overlapped keeps the time it was marked; one
-    no longer overlapped is cleared. A booking outside the candidates is left as it is: a
-    leftover mark on a closed booking is history.
-
-    The candidates' events are locked first, then the candidates, each in id order and re-read
-    (``populate_existing``), so a booking another transaction is approving is waited for and
-    marked as it then stands (AC10), a confirmation of one of the events, which takes the event
-    and then its bookings, cannot deadlock with this, and two re-checks of one venue lock in the
-    same order. The events are locked ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: that still
-    serialises with an UPDATE of the event, such as a confirmation, but not with the foreign-key
-    checks (``FOR KEY SHARE``) of inserts that reference the event - a notification, a history
-    row. An approval holds its booking and then notifies, so a stronger event lock would wait on
-    the approval, which waits on the booking this waits for: a deadlock.
-
-    The bookings are locked ``FOR UPDATE``, the default, and could be ``FOR NO KEY UPDATE`` too,
-    since only a non-key column changes; nothing needs the difference, and a test shows if it
-    ever does. The caller commits; each change leaves an audit row."""
-    overlapped = _overlapped_from(now)
-    is_candidate = (
-        VenueBooking.venue_id == venue_id,
-        VenueBooking.status.in_(_HOLDING_STATUSES),
-        VenueBooking.event.has(Event.status.in_(_FLAGGABLE_EVENT_STATUSES)),
-        VenueBooking.held_until > now,
-    )
-    # The events are locked before their bookings, in id order, as a confirmation takes them: the
-    # event row, then the bookings its trigger updates. Candidates are read without a lock first
-    # to know which events; a booking that became a candidate since is locked with the rest.
-    event_ids = db.scalars(
-        select(VenueBooking.event_id)
-        .where(*is_candidate)
-        .distinct()
-        .order_by(VenueBooking.event_id)
-    ).all()
-    db.execute(
-        select(Event)
-        .where(Event.id.in_(event_ids))
-        .order_by(Event.id)
-        .with_for_update(of=Event, key_share=True)
-        .execution_options(populate_existing=True)
-    )
-    bookings = db.scalars(
-        select(VenueBooking)
-        .where(*is_candidate)
-        .order_by(VenueBooking.id)
-        .with_for_update(of=VenueBooking)
-        .execution_options(populate_existing=True)
-    ).all()
-    # Which of them are overlapped is a statement of its own, read once the locks are held: a
-    # statement that waited for a lock still reads the periods as they were when it began, and a
-    # period another save committed meanwhile is what keeps a booking flagged.
-    overlapped_ids = set(
-        db.scalars(
-            select(VenueBooking.id).where(
-                VenueBooking.id.in_([booking.id for booking in bookings]), overlapped
-            )
-        )
-    )
-
-    newly_marked: list[VenueBooking] = []
-    cleared: list[VenueBooking] = []
-    for booking in bookings:
-        is_overlapped = booking.id in overlapped_ids
-        if is_overlapped and booking.venue_unavailable_marked_at is None:
-            booking.venue_unavailable_marked_at = now
-            newly_marked.append(booking)
-        elif not is_overlapped and booking.venue_unavailable_marked_at is not None:
-            booking.venue_unavailable_marked_at = None
-            cleared.append(booking)
-    db.flush()
-    for action, bookings in ((BOOKING_MARKED, newly_marked), (BOOKING_CLEARED, cleared)):
-        for booking in bookings:
-            record_audit(
-                db,
-                actor=actor,
-                action=action,
-                entity_type="venue_booking",
-                entity_id=booking.id,
-                details={"venue_id": str(venue_id), "event_id": str(booking.event_id)},
-                commit=False,
-            )
-    return RecheckResult(newly_marked=newly_marked, cleared=cleared)
-
-
-def _overlapped_from(now: datetime) -> ColumnElement[bool]:
-    """Story 9.4 AC8: a period of the booking's venue covers part of the booking's held period
-    that is still to come: it starts before the booking's held period ends and ends after the
-    later of ``now`` and the held period's start. Half-open, as bookings are."""
-    return (
-        select(VenueUnavailabilityPeriod.id)
-        .where(
-            VenueUnavailabilityPeriod.venue_id == VenueBooking.venue_id,
-            VenueUnavailabilityPeriod.starts_at < VenueBooking.held_until,
-            VenueUnavailabilityPeriod.ends_at > func.greatest(VenueBooking.held_from, now),
-        )
-        .exists()
-    )
-
-
 def _describe_period(starts_at: datetime, ends_at: datetime) -> str:
     """``from Thu 4 Mar 2027, 00:00 to Sat 6 Mar 2027, 00:00``, in Singapore time."""
 
@@ -1501,75 +1376,6 @@ def _describe_period(starts_at: datetime, ends_at: datetime) -> str:
         return f"{local:%a} {local.day} {local:%b %Y}, {local:%H:%M}"
 
     return f"from {moment(starts_at)} to {moment(ends_at)}"
-
-
-def _settle_marked_events(
-    db: Session,
-    venue: Venue,
-    marked: list[VenueBooking],
-    *,
-    actor: User,
-    now: datetime,
-) -> None:
-    """Story 9.4 AC3/AC4: for each event with a booking a save has just marked - once, however
-    many of its bookings - a Confirmed event, or one Awaiting Safety Check, goes back to Planning,
-    and its assigned coordinator, if it has one, and its organiser are told the venue, the period
-    and the reason. The period named is the one that overlaps the booking (the earliest of the
-    event's), not the one just saved: a save can flag a booking an earlier period covers. The
-    coordinator's notice and the status history carry the description; the organiser's does not
-    (PO decision, AC4). The person who saved is never told (20.1 AC3), and nothing is sent when a
-    mark clears."""
-    by_event: dict[uuid.UUID, list[VenueBooking]] = {}
-    for booking in marked:
-        by_event.setdefault(booking.event_id, []).append(booking)
-    for bookings in by_event.values():
-        first = min(bookings, key=lambda booking: (booking.held_from, booking.id))
-        event = first.event
-        period = find_blocking_unavailability(
-            db, venue.id, starts_at=max(first.held_from, now), ends_at=first.held_until
-        )
-        if period is None:
-            # Nothing overlaps it any more (the period went in the same transaction): the mark
-            # stands for the re-check, but there is no period to name.
-            continue
-        reason_name = _CLOSURE_REASON_LABELS[period.reason]
-        with_description = reason_name if period.notes is None else f"{reason_name}: {period.notes}"
-        when = _describe_period(period.starts_at, period.ends_at)
-        events_service.return_event_to_planning(
-            db,
-            event,
-            actor=actor,
-            at=now,
-            reason=(
-                f"{venue.name} was marked unavailable ({with_description}), so this event needs "
-                "another venue."
-            ),
-            details={"venue_id": str(venue.id), "period_id": str(period.id)},
-        )
-        coordinator_message = (
-            f"{venue.name} is unavailable {when} ({with_description}). Its "
-            f'booking for "{event.name}" falls in that period, so the event needs another venue.'
-        )
-        organiser_message = (
-            f"{venue.name} is unavailable {when} ({reason_name}). Its "
-            f'booking for "{event.name}" falls in that period, so the event needs another venue.'
-        )
-        for recipient, message in (
-            (event.assigned_coordinator, coordinator_message),
-            (event.organiser, organiser_message),
-        ):
-            notify(
-                db,
-                recipient=recipient,
-                actor=actor,
-                notification_type=NotificationType.BOOKING_VENUE_UNAVAILABLE,
-                event_id=event.id,
-                title=f'{venue.name} is unavailable for "{event.name}"',
-                message=message,
-                related_entity_type="event",
-                related_entity_id=event.id,
-                commit=False,
-            )
 
 
 def add_unavailability(
@@ -1582,10 +1388,8 @@ def add_unavailability(
 ) -> VenueUnavailabilityPeriod:
     """Story 9.4 AC1/AC5: mark ``venue_id`` unavailable from ``starts_at`` to ``ends_at`` for a
     reason. A period may start in the past and may overlap another of the venue's; bookings in
-    the way do not stop it being saved (AC2); the ones it overlaps are marked (AC3) in the same
-    transaction (``recheck_venue_bookings``), their Confirmed events return to Planning, and
-    their coordinators and organisers are told (AC3, AC4)."""
-    venue = get_venue(db, venue_id)
+    the way do not stop it being saved (AC2)."""
+    get_venue(db, venue_id)
     _check_period(data.starts_at, data.ends_at, description=data.description)
     _check_horizon(data.ends_at, now=now)
     period = VenueUnavailabilityPeriod(
@@ -1607,8 +1411,6 @@ def add_unavailability(
         details={"venue_id": str(venue_id), **_snapshot(period)},
         commit=False,
     )
-    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
-    _settle_marked_events(db, venue, rechecked.newly_marked, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
@@ -1656,8 +1458,6 @@ def edit_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
-    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
-    _settle_marked_events(db, get_venue(db, venue_id), rechecked.newly_marked, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
@@ -1693,8 +1493,6 @@ def end_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
-    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
-    _settle_marked_events(db, get_venue(db, venue_id), rechecked.newly_marked, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
@@ -1727,8 +1525,6 @@ def remove_unavailability(
         details=details,
         commit=False,
     )
-    rechecked = recheck_venue_bookings(db, venue_id, now=now, actor=actor)
-    _settle_marked_events(db, get_venue(db, venue_id), rechecked.newly_marked, actor=actor, now=now)
     db.commit()
 
 
@@ -1757,7 +1553,6 @@ def list_affected_bookings(
             VenueBooking.status,
             VenueBooking.held_from,
             VenueBooking.held_until,
-            VenueBooking.venue_unavailable_marked_at.is_not(None).label("already_marked"),
         )
         .join(Event, Event.id == VenueBooking.event_id)
         .where(
@@ -1778,7 +1573,6 @@ def list_affected_bookings(
             status=row.status,
             held_from=row.held_from,
             held_until=row.held_until,
-            already_marked=row.already_marked,
         )
         for row in rows
     ]
