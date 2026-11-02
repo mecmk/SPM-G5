@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-10-30 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-10-31 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -40,7 +40,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`venue_requirements`](#venue_requirements) | 2.7, 7.1, 12.1, 8.4, 12.5 | One venue an event needs: a name, how many people it must hold, when, and what the room must offer |
 | Event details & history | [`venue_requirement_facilities`](#venue_requirement_facilities) | 2.7, 10.3, 11.1, 12.1 | Facilities one venue requirement needs, optionally how many |
 | Event details & history | [`event_accessibility_needs`](#event_accessibility_needs) | 2.1, 11.1 | Accessibility features the event needs (many-to-many) |
-| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.1, 15.2, 16.1, 17.1 | One item per equipment type an event needs, with quantity and technical notes |
+| Event details & history | [`event_equipment_requests`](#event_equipment_requests) | 2.1 (AC6), 15.1, 15.2, 16.1, 17.1, 17.2 | One item per equipment type an event needs, with quantity and technical notes |
 | Event details & history | [`event_status_history`](#event_status_history) | 4.6, 6.1, 6.4 | Append-only log of every event status transition (previous status, new status, actor, time, reason) |
 | Event details & history | [`event_coordinator_assignments`](#event_coordinator_assignments) | 5.1, 5.2, 5.3 | History of which coordinator was responsible for an event and when |
 | Event details & history | [`event_clarifications`](#event_clarifications) | 4.2, 4.3, 4.6 | The clarification conversation between coordinator and organiser, kept with the event record |
@@ -50,7 +50,7 @@ or with the VS Code Excalidraw extension). Design notes and workflow: [README.md
 | Event details & history | [`event_safety_finding_bookings`](#event_safety_finding_bookings) | - | Story 21.3 AC1, AC9 |
 | Venue bookings | [`venue_bookings`](#venue_bookings) | 12.x, 13.x, 14.x, 9.2 | A request by the assigned coordinator to book one venue for an event, and its outcome |
 | Equipment | [`equipment_reservations`](#equipment_reservations) | 2.1, 15.1, 16.1, 16.2, 17.1 | A hold of N units of an equipment type for an event over a period: placed when an item is recorded on a submitted event (2.1 AC11, 15.1 AC2) and kept, as the reservation, once Technical Support accepts it (16.1) |
-| Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.1, 16.3 | Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability |
+| Equipment | [`equipment_unavailability_periods`](#equipment_unavailability_periods) | 16.2 | Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2) |
 | Registration | [`event_registrations`](#event_registrations) | 18.1 (browse and register), 18.2 (view and withdraw), 18.3 (the organiser's list) | An attendee's registration for an event |
 | Registration | [`event_registration_guests`](#event_registration_guests) | 18.5 | The guests an attendee brings, registered with them as one group |
 | Notifications & audit | [`notifications`](#notifications) | 20.x | In-app notifications, one row per recipient |
@@ -505,9 +505,9 @@ Accessibility features the event needs (many-to-many). See events.accessibility_
 
 ### event_equipment_requests
 
-**Stories:** 2.1 (AC6), 15.1, 15.2, 16.1, 17.1
+**Stories:** 2.1 (AC6), 15.1, 15.2, 16.1, 17.1, 17.2
 
-One item per equipment type an event needs, with quantity and technical notes. The organiser records them on the request (2.1); the assigned coordinator adds, edits and removes them and submits them to Technical Support (15.1), who accept or decline each (16.1). The units an item holds are separate rows in equipment_reservations.
+One item per equipment type an event needs, with quantity and technical notes. The organiser records them on the request (2.1); the assigned coordinator adds, edits and removes them and submits them to Technical Support (15.1), who accept or decline each (16.1); the coordinator withdraws a sent item no longer needed (17.2). The units an item holds are separate rows in equipment_reservations.
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -516,7 +516,7 @@ One item per equipment type an event needs, with quantity and technical notes. T
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
 | `quantity` | `integer` | no | - | - | Units requested. Positive whole number (story 2.1 AC3, 15.1 AC4). |
 | `technical_notes` | `text` | yes | - | - | Technical requirements for this item. Optional; at most 1,000 characters when the coordinator records it (story 15.1 AC5). |
-| `status` | `text` | no | `'REQUESTED'` | - | REQUESTED: recorded, not yet sent to Technical Support. PENDING: sent, awaiting Technical Support. ACCEPTED or DECLINED: Technical Support's decision (story 16.1). UNAVAILABLE: the event's new dates can no longer cover it (story 15.1 AC8). CANCELLED: its event was cancelled (story 6.2). |
+| `status` | `text` | no | `'REQUESTED'` | - | REQUESTED: recorded, not yet sent to Technical Support. PENDING: sent, awaiting Technical Support. ACCEPTED or DECLINED: Technical Support's decision (story 16.1). UNAVAILABLE: the event's new dates can no longer cover it (story 15.1 AC8). CANCELLED: its event was cancelled (story 6.2), or an approved change removed it once sent (19.2). WITHDRAWN: the coordinator withdrew it once sent, Pending or Accepted (story 17.2). |
 | `status_notes` | `text` | yes | - | - | Technical Support's note on its decision, such as the reason for declining (story 16.1). |
 | `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. Who recorded the item: the organiser (story 2.1) or the coordinator (story 15.1). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
@@ -526,15 +526,18 @@ One item per equipment type an event needs, with quantity and technical notes. T
 | `decided_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who accepted or declined the item (story 16.1 AC3). NULL until it is decided. |
 | `decided_at` | `timestamp with time zone` | yes | - | - | When the item was accepted or declined (story 16.1 AC3). NULL until it is decided. |
 | `cancelled_at` | `timestamp with time zone` | yes | - | - | When the item was cancelled, because its event was cancelled (story 6.2 AC16) or an approved change removed it (19.2). Only on a CANCELLED item; cleared when a change brings it back. |
+| `withdrawn_at` | `timestamp with time zone` | yes | - | - | When the coordinator withdrew the item (story 17.2 AC3). Set with withdrawn_by_id, exactly when the item is WITHDRAWN. |
+| `withdrawn_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The assigned coordinator who withdrew the item (story 17.2 AC3). Set with withdrawn_at, exactly when the item is WITHDRAWN. |
 
 Allowed values:
 
-- `status`: `REQUESTED`, `PENDING`, `ACCEPTED`, `DECLINED`, `UNAVAILABLE`, `CANCELLED`
+- `status`: `REQUESTED`, `PENDING`, `ACCEPTED`, `DECLINED`, `UNAVAILABLE`, `CANCELLED`, `WITHDRAWN`
 
 Rules and indexes:
 
 - check `ck_event_equipment_requests_cancelled_at`: `CHECK (((cancelled_at IS NULL) OR (status = 'CANCELLED'::text)))`
 - check `ck_event_equipment_requests_quantity`: `CHECK ((quantity > 0))`
+- check `ck_event_equipment_requests_withdrawal`: `CHECK ((((status = 'WITHDRAWN'::text) = ((withdrawn_at IS NOT NULL) AND (withdrawn_by_id IS NOT NULL))) AND (num_nonnulls(withdrawn_at, withdrawn_by_id) = ANY (ARRAY[0, 2]))))`
 - index `ix_event_equipment_requests_event`: `btree (event_id)`
 
 ### event_status_history
@@ -805,20 +808,20 @@ Rules and indexes:
 
 ### equipment_unavailability_periods
 
-**Stories:** 16.1, 16.3
+**Stories:** 16.2
 
-Units of an equipment type that are out of service (damaged, under maintenance, ...) for a period, so they are excluded from availability.
+Units of an equipment type out of service (damaged, under maintenance, lost, ...) for a period, recorded by Technical Support, so they are excluded from availability (2.1, 15.1, 15.2). Records that overlap in time add up and never exceed the stock, checked in the service layer under the equipment type's row lock, because SQL constraints cannot sum across rows (AC3, AC7).
 
 | Column | Type | Null | Default | Key | Description |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | `gen_random_uuid()` | PK | - |
 | `equipment_type_id` | `uuid` | no | - | FK → `equipment_types.id` | FK -> equipment_types.id. |
-| `quantity` | `integer` | no | - | - | Units out of service. Positive. |
-| `reason` | `text` | no | - | - | DAMAGED, MAINTENANCE, LOST or OTHER. |
-| `starts_at` | `timestamp with time zone` | no | - | - | Start of the out-of-service period. |
-| `ends_at` | `timestamp with time zone` | yes | - | - | End (exclusive). NULL = open-ended until Technical Support Staff end it (story 16.3 AC3). |
-| `notes` | `text` | yes | - | - | Free text. |
-| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. |
+| `quantity` | `integer` | no | - | - | Units out of service. At least 1, and at most the stock less the units other records have out at any moment of the period (story 16.2 AC3). |
+| `reason` | `text` | no | - | - | DAMAGED, MAINTENANCE (shown as Under maintenance), LOST or OTHER (story 16.2 AC1). |
+| `starts_at` | `timestamp with time zone` | no | - | - | Start of the out-of-service period. Not in the past when recorded; kept once the record is in force (story 16.2 AC3). |
+| `ends_at` | `timestamp with time zone` | yes | - | - | End (exclusive), after the start. NULL = out of service until Technical Support end the record, which sets it to the moment they do (story 16.2 AC1, AC2). |
+| `notes` | `text` | yes | - | - | Optional note, at most 1,000 characters (story 16.2 AC1). |
+| `created_by_id` | `uuid` | yes | - | FK → `users.id` | FK -> users.id. The Technical Support Staff member who recorded it (story 16.2 AC1). |
 | `created_at` | `timestamp with time zone` | no | `now()` | - | Row creation time. |
 | `updated_at` | `timestamp with time zone` | no | `now()` | - | Last modification time (maintained by trigger). |
 

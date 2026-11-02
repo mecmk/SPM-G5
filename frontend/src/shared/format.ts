@@ -19,6 +19,10 @@ export const NONE = 'None'
  * its event, or by an approved change (19.2). */
 export const CANCELLED_AT_LABEL = 'Cancelled at'
 
+/** Story 17.2 AC4: the label of when a withdrawn equipment request was withdrawn, on Technical
+ *  Support's queue card and on the request's own page. */
+export const WITHDRAWN_AT_LABEL = 'Withdrawn at'
+
 /** What a page shows for a venue requirement or booking that asks for no particular layout. */
 export const ANY_LAYOUT = 'Any'
 
@@ -93,6 +97,14 @@ const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
  */
 export function inputToInstant(inputValue: string): string {
   return `${inputValue}:00${SINGAPORE_UTC_OFFSET}`
+}
+
+const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+
+/** Story 16.2 AC3, and 2.1's dates: whether the server can read a `datetime-local` value as a
+ *  date. A picker can hold a year of five or six digits, which the server cannot. */
+export function isReadableDateTime(inputValue: string): boolean {
+  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
 }
 
 /** The current moment as a Singapore `datetime-local` value, e.g. for a picker's `min`. */

@@ -78,7 +78,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
-    visible: ['Venue catalogue', 'Equipment requests', 'Catalogue & availability'],
+    visible: ['Venue catalogue', 'Equipment requests', 'Equipment catalogue'],
     hidden: ['All events', 'Manage venues', 'Bookings & schedule', 'Equipment holds'],
   },
   // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the

@@ -142,6 +142,8 @@ class Events:
     EQUIPMENT_DECISIONS = _e(27)  # organiser 2, coordinator 1, dedicated to 16.1's e2e decisions
     # Story 17.1's e2e event: organiser 2, coordinator 1, PLANNING, 19 January 2028.
     WATERFRONT_DEMO = _e(80)  # one pending item (EquipmentItems.DEMO_LAPTOPS), accepted by the spec
+    # Story 17.2's e2e event: organiser 2, coordinator 1, PLANNING, 23 February 2028.
+    RIVERSIDE_SUMMIT = _e(81)  # one accepted and one pending item, both withdrawn by the spec
     SMART_CITIES_EXPO = _e(28)  # organiser 2, coordinator 1, three requirements, for 8.4's e2e
     MOBILITY_FORUM = _e(29)  # organiser 2, coordinator 1, three requirements, for 12.5's e2e
     RESILIENCE_WORKSHOP = _e(30)  # organiser 2, coordinator 1, its one requirement booked
@@ -182,6 +184,9 @@ class Events:
     # approved booking of Sunrise Studio, an earlier Harbour Pavilion booking cancelled by a
     # change, and four wireless microphones sent to Technical Support, held.
     CHARITY_RUN = _e(62)
+    # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
+    # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
+    LIGHT_SHOWCASE = _e(16201)
     # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
     # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
     LEADERSHIP_RETREAT = _e(7012)
@@ -399,9 +404,14 @@ class EquipmentItems:
     MIXER_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000035")
     MIXER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000000037")
     DEMO_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000000036")
+    # Story 17.2's, on Events.RIVERSIDE_SUMMIT, each holding its units; the spec withdraws both.
+    SUMMIT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000000038")  # accepted
+    SUMMIT_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000039")  # pending
 
     # Story 6.2: Events.CHARITY_RUN's four wireless microphones, sent to Technical Support, held.
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
+    # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
 
 
 class EquipmentHolds:
@@ -419,8 +429,12 @@ class EquipmentHolds:
     CONCERT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000025")
     BOOK_FAIR_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000026")
     DEMO_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000027")
+    SUMMIT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000063")
+    SUMMIT_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000064")
     # Story 6.2: the hold of Events.CHARITY_RUN's four wireless microphones (item 6666..62).
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
+    # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
+    LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
 
 
 class EquipmentOutOfService:

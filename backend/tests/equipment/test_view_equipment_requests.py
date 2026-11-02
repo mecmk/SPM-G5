@@ -20,6 +20,8 @@ AC5 A request the coordinator removes disappears. If the event is cancelled or r
     backend/tests/events/test_reject_event.py, and the empty queue in
     tests/e2e/equipment-queue.spec.ts. An item still open on a cancelled or rejected event - one
     from before 6.2 or f4.5.1 closed its items - disappears.
+    (Amended by 17.2 AC2/AC4.) A sent request the coordinator no longer needs is withdrawn rather
+    than removed, and stays, read-only, under Withdrawn: tested in test_withdraw_equipment.py.
 AC6 Only Technical Support Staff can see the queue. Other roles are refused, including through
     the API.
 AC7 The figures reflect every hold and reservation at the moment the page loads, and refreshing
@@ -290,6 +292,7 @@ def test_counts_cover_every_tab_whichever_is_asked_for(tech_client, db):
     assert after == {
         **{key: before[key] + 1 for key in ("pending", "accepted", "declined")},
         "cancelled": before["cancelled"],
+        "withdrawn": before["withdrawn"],
     }
 
 
@@ -443,16 +446,6 @@ def test_a_hold_overlapping_the_event_by_a_minute_is_deducted(tech_client, db):
 
 
 # --- AC5: what leaves the queue -----------------------------------------------------------------
-@pytest.mark.story("15.2", ac=5)
-def test_an_item_the_coordinator_removes_disappears(login_as, db):
-    event = _event(db)
-    item = _sent(db, event=event, equipment_type=make_equipment_type(db), quantity=1)
-    removed = login_as(Users.COORDINATOR).delete(f"/events/{event.id}/equipment/{item.id}")
-    assert removed.status_code == 204
-
-    assert str(item.id) not in _ids(login_as(Users.TECH_SUPPORT))
-
-
 @pytest.mark.story("15.2", ac=5)
 @pytest.mark.parametrize(
     ("status", "event_status"),

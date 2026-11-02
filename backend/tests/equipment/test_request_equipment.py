@@ -12,7 +12,8 @@ AC1  On the event page's Equipment requirements section (there is no separate eq
      recording which coordinator submitted it and when.
 AC2  Every recorded item holds its quantity for the event's period: the organiser's items from the
      event's submission (2.1 AC11), the coordinator's from when they are saved. Editing an item
-     that is not yet sent or Pending adjusts its hold, and removing it releases the hold. If
+     that is not yet sent or Pending adjusts its hold, and removing it releases the hold (since
+     story 17.2 AC2, a Pending item is withdrawn rather than removed). If
      Technical Support declines an item (16.1), its hold is released and the coordinator can
      request that type again.
 AC3  The form shows, next to each type, how many are available for the event's period, counting
@@ -214,6 +215,9 @@ def test_coordinator_records_an_item_which_waits_to_be_sent(coordinator_client, 
         # Story 17.1 AC1: the event's period (START to END, in UTC), which the item is held for.
         "period_starts_at": "2027-08-02T01:00:00Z",
         "period_ends_at": "2027-08-02T09:00:00Z",
+        # Story 17.2 AC3: never withdrawn.
+        "withdrawn_at": None,
+        "withdrawn_by_name": None,
     }
     assert _lines(coordinator_client, event.id) == [body]
 
@@ -475,11 +479,11 @@ def test_notes_can_be_cleared_and_an_empty_edit_changes_nothing(coordinator_clie
 
 
 @pytest.mark.story("15.1", ac=2)
-@pytest.mark.parametrize("status", ["REQUESTED", "PENDING"])
-def test_removing_an_item_releases_its_hold_at_once(coordinator_client, db: Session, status):
+def test_removing_an_item_releases_its_hold_at_once(coordinator_client, db: Session):
+    """A sent item is withdrawn instead (story 17.2 AC2), so only one not yet sent is removed."""
     event, other = _event(db), _event(db)
     kit = make_equipment_type(db, total_quantity=5)
-    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=3, status=status)
+    item = make_equipment_item(db, event=event, equipment_type=kit, quantity=3)
     [hold] = _active_holds(db, event.id)
     hold_id = hold.id
 

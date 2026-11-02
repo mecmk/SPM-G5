@@ -209,6 +209,18 @@ export function equipmentRequestPath(itemId: string): string {
   return EQUIPMENT_REQUEST_PATH.replace(':itemId', encodeURIComponent(itemId))
 }
 
+// Story 16.2: Technical Support's equipment catalogue, and each type's page with its units out of
+// service.
+export const EQUIPMENT_CATALOGUE_PATH = '/equipment/catalogue'
+/** The catalogue's title: its heading, its sidebar entry and the link back to it from a type's
+ *  page. */
+export const EQUIPMENT_CATALOGUE_TITLE = 'Equipment catalogue'
+export const EQUIPMENT_TYPE_PATH = '/equipment/catalogue/:typeId'
+
+export function equipmentTypePath(typeId: string): string {
+  return EQUIPMENT_TYPE_PATH.replace(':typeId', encodeURIComponent(typeId))
+}
+
 // Story 21.1: the Safety Officer's queue of events awaiting the safety check, and each one's page.
 export const SAFETY_CHECKS_PATH = '/safety-checks'
 export const SAFETY_CHECK_PATH = '/safety-checks/:eventId'

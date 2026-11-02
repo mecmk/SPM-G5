@@ -21,6 +21,11 @@ equipment types by id - so two of them cannot deadlock:
 * each equipment type row, as 2.1's submission hold already does, so two events cannot both take
   the last units of a type.
 
+The event is held ``FOR NO KEY UPDATE``, as ``events.service.lock_event`` holds it. A record of
+units out of service (story 16.2) holds a type and then writes a notice that names an event, which
+takes a key-share lock on the event's row. ``FOR UPDATE`` would make that notice wait for a write
+holding the event, while that write waited for the type: a deadlock.
+
 The checks made under those locks cannot race, which is why "a type is open only once on an event"
 (AC6) is checked rather than left to a unique index: such an index would also refuse 2.1's draft
 edit that removes a line and adds the same type back, since the ORM inserts before it deletes
@@ -43,6 +48,12 @@ reservation on accepting, or releases it on declining, in the same transaction a
 It takes the event's row lock first, as every write above does, so a decision is serialised with
 the coordinator's edits and with another decision on the same request (AC9), and the lock order -
 the event, then the types - still holds.
+
+Story 17.2 - "As an Event Coordinator, I want to be able to withdraw my booked equipment so that I
+can remove the equipment that I do not need anymore." ``withdraw_equipment_item`` closes an item
+sent to Technical Support - Pending or Accepted - as Withdrawn rather than deleting it, so their
+record keeps it, releases its units at once, and tells them. It takes the event's row lock first,
+as a decision does, so the two are serialised (AC11).
 """
 
 from __future__ import annotations
@@ -52,6 +63,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -62,13 +74,18 @@ from app.auth.permissions import RoleCode
 from app.common.audit import record_audit
 from app.common.search import by_name, matches_any, search_term
 from app.equipment.schemas import (
+    OUT_OF_SERVICE_END_NOT_AFTER_START_MESSAGE,
     EquipmentDecisionIn,
     EquipmentDecisionOutcome,
     EquipmentItemIn,
     EquipmentItemUpdate,
     EquipmentQueueOrder,
     EquipmentQueueStatus,
+    EquipmentShortageOut,
+    EquipmentWithdrawalIn,
     EventEquipmentAvailabilityOut,
+    OutOfServiceIn,
+    OutOfServiceUpdate,
 )
 from app.events import service as events_service
 from app.events.models import (
@@ -76,6 +93,7 @@ from app.events.models import (
     EquipmentRequestStatus,
     EquipmentReservation,
     EquipmentType,
+    EquipmentUnavailabilityPeriod,
     Event,
     EventEquipmentRequest,
     EventStatus,
@@ -111,13 +129,40 @@ NOT_PENDING_MESSAGES = {
         "coordinator."
     ),
     EquipmentRequestStatus.CANCELLED: "This equipment request was cancelled with its event.",
+    # Story 17.2 AC4/AC11.
+    EquipmentRequestStatus.WITHDRAWN: "This equipment request was withdrawn by its coordinator.",
 }
+# Story 17.2 AC2: a sent item is withdrawn, so Technical Support know, rather than removed.
+WITHDRAW_INSTEAD_MESSAGE = (
+    "This equipment item has been sent to Technical Support, so withdraw it instead of removing it."
+)
+# Story 17.2 AC6: why an item that is not Pending or Accepted cannot be withdrawn, one sentence per
+# status. AC11: an already-withdrawn one is a second click, or a second page.
+NOT_WITHDRAWABLE_MESSAGES = {
+    EquipmentRequestStatus.REQUESTED: (
+        "This equipment item has not been sent to Technical Support yet, so remove it instead."
+    ),
+    EquipmentRequestStatus.UNAVAILABLE: (
+        "This equipment item no longer fits the event's dates and holds nothing, so remove it "
+        "instead."
+    ),
+    EquipmentRequestStatus.DECLINED: (
+        "Technical Support declined this equipment item, so there is nothing to withdraw."
+    ),
+    EquipmentRequestStatus.CANCELLED: (
+        "This equipment item was cancelled, so there is nothing to withdraw."
+    ),
+    EquipmentRequestStatus.WITHDRAWN: "This equipment item has already been withdrawn.",
+}
+# Story 17.2 AC11: the item is no longer in the status the coordinator saw when they confirmed.
+STATUS_CHANGED_MESSAGE = "This equipment item is now {status}. Check it before you withdraw it."
 
 # AC9: the event statuses in which the assigned coordinator may change its equipment.
 _OPEN_EVENT_STATUSES = frozenset(
     {EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED, EventStatus.PLANNING}
 )
-# AC2/AC7: the items the coordinator may still edit or remove.
+# AC2/AC7: the items the coordinator may still edit. Each can be removed too, but a Pending one
+# (17.2 AC2), which is withdrawn instead.
 _EDITABLE_ITEM_STATUSES = frozenset(
     {
         EquipmentRequestStatus.REQUESTED,
@@ -125,7 +170,8 @@ _EDITABLE_ITEM_STATUSES = frozenset(
         EquipmentRequestStatus.UNAVAILABLE,
     }
 )
-# AC6: an item in one of these takes up its type on the event; a declined or cancelled one does not.
+# AC6: an item in one of these takes up its type on the event; a declined, cancelled or withdrawn
+# one (17.2 AC3) does not.
 _OPEN_ITEM_STATUSES = _EDITABLE_ITEM_STATUSES | {EquipmentRequestStatus.ACCEPTED}
 # AC8: a sent item whose decision was for the old dates goes back to Technical Support.
 _SENT_ITEM_STATUSES = frozenset({EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED})
@@ -144,6 +190,12 @@ _LIVE_TAB_STATUSES = (
 # Story 16.1 AC7: an event whose equipment can no longer be decided - the same events the queue
 # leaves out (15.2 AC5).
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
+WITH_TECHNICAL_SUPPORT = events_service.WITH_TECHNICAL_SUPPORT
+# No longer the event's, kept for Technical Support's record: cancelled by its event or a change
+# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves a Cancelled one as it
+# is unless it names it again; a Withdrawn one stays Withdrawn even then, and the line is added as
+# new. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
+KEPT_FOR_RECORD = events_service.KEPT_FOR_RECORD
 # Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
 # date order, soonest first, then in the order they were recorded. AC6: a request with no recorded
 # time - sent before migration 014 - comes last whichever way requests are ordered by it.
@@ -165,7 +217,8 @@ def in_technical_support_queue() -> ColumnElement[bool]:
     """Story 15.2 AC3/AC5, 6.2 AC15: the condition for an item Technical Support's queue lists.
     It reads ``EventEquipmentRequest`` joined to its ``Event``, so the caller joins them. The queue
     and a notification's target (20.2) both use it, so the page a notice opens is one that holds
-    the item. Fix f4.5.1: a rejected event's sent items are kept as a cancelled event's are."""
+    the item. Fix f4.5.1: a rejected event's sent items are kept as a cancelled event's are. Story
+    17.2 AC4: a withdrawn item was always sent, so it is kept, whatever its event."""
     return or_(
         and_(
             EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
@@ -179,6 +232,7 @@ def in_technical_support_queue() -> ColumnElement[bool]:
             EventEquipmentRequest.status == EquipmentRequestStatus.DECLINED,
             Event.status.in_(_CLOSED_QUEUE_EVENT_STATUSES),
         ),
+        EventEquipmentRequest.status == EquipmentRequestStatus.WITHDRAWN,
     )
 
 
@@ -277,6 +331,29 @@ class NotEnoughToAccept(EquipmentConflict):
         super().__init__(NOT_ENOUGH_TO_ACCEPT_MESSAGE.format(name=item.equipment_type.name))
         self.available = available
         self.shortfall = item.quantity - available
+
+
+class WithdrawInstead(EquipmentConflict):
+    """Story 17.2 AC2: a Pending item is withdrawn, not removed."""
+
+    def __init__(self) -> None:
+        super().__init__(WITHDRAW_INSTEAD_MESSAGE)
+
+
+class NotWithdrawable(EquipmentConflict):
+    """Story 17.2 AC6: only a Pending or Accepted item holds anything to withdraw. AC11: an item
+    already withdrawn - a double-click - is told so."""
+
+    def __init__(self, item: EventEquipmentRequest) -> None:
+        super().__init__(NOT_WITHDRAWABLE_MESSAGES[item.status])
+
+
+class ItemStatusChanged(EquipmentConflict):
+    """Story 17.2 AC11: Technical Support decided the item, or new dates sent it back to them,
+    after the coordinator saw it, so it is not withdrawn unseen."""
+
+    def __init__(self, item: EventEquipmentRequest) -> None:
+        super().__init__(STATUS_CHANGED_MESSAGE.format(status=as_words(item.status)))
 
 
 # --- reads ---------------------------------------------------------------------------------------
@@ -446,7 +523,7 @@ def list_equipment_requests(
     available_by_event: dict[uuid.UUID, dict[uuid.UUID, int]] = {}
     rows = []
     for item, event in found:
-        if item.status == EquipmentRequestStatus.CANCELLED:
+        if item.status in KEPT_FOR_RECORD:
             rows.append(EquipmentQueueRow(item=item, event=event, available=None))
             continue
         if event.id not in available_by_event:
@@ -462,7 +539,7 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     """Story 16.1: one request as the queue shows it, for its own page, where it can be decided as
     from the queue. AC7: only what the queue lists (15.2 AC3/AC5, 6.2 AC15) - a request not yet
     sent, flagged, never sent before it was cancelled, or open on a cancelled or rejected event is
-    not found. A cancelled one has no ``available`` (6.2 AC15)."""
+    not found. A cancelled or withdrawn one has no ``available`` (6.2 AC15, 17.2 AC4)."""
     found = db.execute(
         select(EventEquipmentRequest, Event)
         .join(Event, Event.id == EventEquipmentRequest.event_id)
@@ -471,11 +548,7 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
     if found is None:
         raise EquipmentRequestNotFound(item_id)
     item, event = found
-    available = (
-        None
-        if item.status == EquipmentRequestStatus.CANCELLED
-        else _available_to_accept(db, event, item)
-    )
+    available = None if item.status in KEPT_FOR_RECORD else _available_to_accept(db, event, item)
     return EquipmentQueueRow(item=item, event=event, available=available)
 
 
@@ -484,8 +557,9 @@ def get_equipment_request(db: Session, item_id: uuid.UUID) -> EquipmentQueueRow:
 
 def _event_for_change(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     """AC9/AC10: the event, its row locked until the transaction ends, once ``actor`` is known to
-    be its assigned coordinator and its equipment can still change."""
-    db.execute(select(Event.id).where(Event.id == event_id).with_for_update())
+    be its assigned coordinator and its equipment can still change. ``FOR NO KEY UPDATE``: see the
+    module docstring."""
+    db.execute(select(Event.id).where(Event.id == event_id).with_for_update(key_share=True))
     event = _visible_event(db, event_id, viewer=actor)
     if event.assigned_coordinator_id != actor.id:
         raise NotAssignedCoordinator()
@@ -669,9 +743,12 @@ def update_equipment_item(
 def remove_equipment_item(
     db: Session, event_id: uuid.UUID, item_id: uuid.UUID, *, actor: User
 ) -> None:
-    """AC2: remove an item, releasing its hold at once. AC7: a decided item is locked."""
+    """AC2: remove an item, releasing its hold at once. AC7: a decided item is locked. Story 17.2
+    AC2: a Pending item is withdrawn instead, so Technical Support know it is no longer needed."""
     event = _event_for_change(db, event_id, actor=actor)
     item = _editable_item(db, event, item_id)
+    if item.status == EquipmentRequestStatus.PENDING:
+        raise WithdrawInstead()
     _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
     record_audit(
         db,
@@ -778,7 +855,9 @@ def submit_equipment(
 
 
 def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
-    """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends."""
+    """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends -
+    ``FOR NO KEY UPDATE``, so a record of units out of service saved meanwhile can still tell the
+    event's coordinator (story 16.2; see the module docstring)."""
     event_id = db.scalar(
         select(EventEquipmentRequest.event_id).where(EventEquipmentRequest.id == item_id)
     )
@@ -787,7 +866,7 @@ def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
     return db.scalar(
         select(Event)
         .where(Event.id == event_id)
-        .with_for_update(of=Event)
+        .with_for_update(of=Event, key_share=True)
         .execution_options(populate_existing=True)
     )
 
@@ -957,10 +1036,6 @@ def recheck_equipment_for_new_dates(
 
 # --- story 19.2: an approved change to the event's equipment ------------------------------------
 
-# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from.
-WITH_TECHNICAL_SUPPORT = frozenset(
-    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
-)
 # Ever sent to Technical Support, so a removed one is kept, Cancelled, for their record.
 _EVER_SENT_STATUSES = WITH_TECHNICAL_SUPPORT | {EquipmentRequestStatus.DECLINED}
 _CHANGED_HOLD_NOTE = "Held again for an approved change request."
@@ -975,8 +1050,8 @@ def _notify_technical_support_of_withdrawal(
 ) -> None:
     """Story 19.2 AC5: items Technical Support had pending or accepted were changed or removed by
     an approved change request; story 6.2 AC5: their event was cancelled; fix f4.5.1: their event
-    was rejected. Every active member is told which, as they are told of a new submission (story
-    20.1); ``cause`` opens the sentence."""
+    was rejected; story 17.2 AC4: the coordinator withdrew one. Every active member is told which,
+    as they are told of a new submission (story 20.1); ``cause`` opens the sentence."""
     message = f"{cause} withdrew equipment sent to you: {_describe_items(items)}."
     for member in active_members(db, role_code=RoleCode.TECH_SUPPORT_STAFF):
         notify(
@@ -1001,9 +1076,11 @@ def status_after_change(*, is_held: bool) -> str:
 
 def status_after_removal(status: str) -> str | None:
     """Story 19.2 AC5: the status a removed item ends in - Cancelled, kept for Technical Support's
-    record, if it was ever sent to them; None if it is deleted. An item already Cancelled stays
-    so, and is not removed again."""
-    if status in _EVER_SENT_STATUSES or status == EquipmentRequestStatus.CANCELLED:
+    record, if it was ever sent to them; None if it is deleted. An item already Cancelled, or
+    Withdrawn (17.2 AC3), stays so, and is not removed again."""
+    if status in KEPT_FOR_RECORD:
+        return status
+    if status in _EVER_SENT_STATUSES:
         return EquipmentRequestStatus.CANCELLED
     return None
 
@@ -1063,8 +1140,14 @@ class EquipmentChangePlan:
 def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> EquipmentChangePlan:
     """Story 19.2 AC5: match ``lines`` to ``event``'s items by id. An item no line names is
     removed; one whose type, quantity and notes are unchanged - and is not Cancelled - is left
-    as it is; any other named item is changed. A line without an ``id`` is new."""
-    wanted = {line.id: line for line in lines if line.id is not None}
+    as it is; any other named item is changed. A line without an ``id`` is new, as is one naming
+    a Withdrawn item (17.2 AC3), which stays Withdrawn."""
+    withdrawn = {
+        item.id
+        for item in event.equipment_requests
+        if item.status == EquipmentRequestStatus.WITHDRAWN
+    }
+    wanted = {line.id: line for line in lines if line.id is not None and line.id not in withdrawn}
     planned = []
     for item in event.equipment_requests:
         line = wanted.get(item.id)
@@ -1076,12 +1159,14 @@ def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> Equipm
             item.quantity,
             item.technical_notes,
         )
-        if is_unchanged and item.status != EquipmentRequestStatus.CANCELLED:
+        if is_unchanged and item.status not in KEPT_FOR_RECORD:
             change = EquipmentChange.UNCHANGED
         else:
             change = EquipmentChange.CHANGED
         planned.append(PlannedItem(item=item, line=line, change=change))
-    return EquipmentChangePlan(items=planned, added=[line for line in lines if line.id is None])
+    return EquipmentChangePlan(
+        items=planned, added=[line for line in lines if line.id is None or line.id in withdrawn]
+    )
 
 
 def apply_equipment_change(
@@ -1098,7 +1183,8 @@ def apply_equipment_change(
       or flagged Unavailable. A Cancelled item named again comes back the same way.
     * A removed item releases its hold; one ever sent to Technical Support is kept as Cancelled
       for their record, stamped with when (6.2 AC16), one never sent is deleted. A Cancelled item
-      named again loses that stamp.
+      named again loses that stamp. A Withdrawn one stays Withdrawn (17.2 AC3), and the line
+      is added as new.
     * A new item is added and held the same way a changed one is.
 
     Technical Support are told of any item they had pending or accepted that was changed or
@@ -1130,7 +1216,7 @@ def apply_equipment_change(
             status = status_after_removal(item.status)
             if status is None:
                 event.equipment_requests.remove(item)
-            elif item.status != EquipmentRequestStatus.CANCELLED:
+            elif item.status not in KEPT_FOR_RECORD:
                 item.status = status
                 item.cancelled_at = changed_at
             continue
@@ -1225,3 +1311,682 @@ def release_for_rejected_event(
     return _release_for_closed_event(
         db, event, actor=actor, at=at, withdrew=_REJECTION_WITHDREW.format(event=event.name)
     )
+
+
+# --- story 17.2: the coordinator withdraws an item they no longer need ----------------------------
+
+
+def withdraw_equipment_item(
+    db: Session,
+    event_id: uuid.UUID,
+    item_id: uuid.UUID,
+    data: EquipmentWithdrawalIn,
+    *,
+    actor: User,
+) -> EventEquipmentRequest:
+    """AC1/AC2: withdraw an item sent to Technical Support - Accepted or Pending - releasing its
+    units at once, so other events can have them over its period. AC3: it is kept as Withdrawn,
+    stamped with who and when, and no longer takes up its type (15.1 AC6). AC4: Technical Support
+    are told, in the same transaction. AC5/AC10: only the assigned coordinator, while the event's
+    equipment can change (``_event_for_change``). AC6: only a Pending or Accepted item. AC11: the
+    event's row lock serialises this with a decision, and the item must still be in the status
+    the coordinator saw, so whichever is saved first wins and the other is told the status now.
+    AC8/AC9 need nothing here: the safety check reads accepted items only (story 21.2)."""
+    event = _event_for_change(db, event_id, actor=actor)
+    # Read only once the event is locked, so a decision saved while this waited is seen (AC11).
+    item = db.get(EventEquipmentRequest, item_id)
+    if item is None or item.event_id != event.id:
+        raise EquipmentItemNotFound(item_id)
+    if item.status not in WITH_TECHNICAL_SUPPORT:
+        raise NotWithdrawable(item)
+    if item.status != data.expected_status:
+        raise ItemStatusChanged(item)
+
+    _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+    withdrawn_from = item.status
+    item.status = EquipmentRequestStatus.WITHDRAWN
+    item.withdrawn_at = datetime.now(UTC)
+    item.withdrawn_by_id = actor.id
+    _notify_technical_support_of_withdrawal(db, event, [item], actor=actor, cause=actor.full_name)
+    record_audit(
+        db,
+        actor=actor,
+        action="EQUIPMENT_WITHDRAWN",
+        entity_type="event",
+        entity_id=event.id,
+        details={
+            "item_id": str(item.id),
+            "equipment_type_code": item.equipment_type.code,
+            "quantity": item.quantity,
+            "from_status": withdrawn_from,
+        },
+        commit=False,
+    )
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+# =============================================================================================
+# Story 16.2: units of an equipment type out of service
+# =============================================================================================
+# "As a Technical Support Staff member I want to record equipment as unavailable so that damaged
+# or serviced items aren't allocated." Records live in equipment_unavailability_periods, which
+# 2.1's availability (``events.service.available_by_type``) already takes away, so a record keeps
+# its units from every hold placed after it. A record is bounded by the stock and the other
+# records, not by the holds (AC3): one that leaves holds short is saved, and the holds it leaves
+# short - first come, first served - are worked out whenever they are read, so the mark follows
+# the records (AC4). Every write takes the equipment type's row first (``lock_types``), as placing
+# a hold does, so a record and a hold, or two records, never miss each other (AC7).
+OUT_OF_SERVICE_ENTITY_TYPE = "equipment_unavailability_period"
+OUT_OF_SERVICE_CREATED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_CREATED"
+OUT_OF_SERVICE_UPDATED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_UPDATED"
+OUT_OF_SERVICE_ENDED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_ENDED"
+OUT_OF_SERVICE_REMOVED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_REMOVED"
+_SHORT_HOLD_ENTITY_TYPE = "equipment_reservation"
+EQUIPMENT_TYPE_NOT_FOUND_MESSAGE = "Equipment type not found."
+OUT_OF_SERVICE_NOT_FOUND_MESSAGE = "This out-of-service record was not found."
+START_IN_THE_PAST_MESSAGE = "The start cannot be in the past."
+END_IN_THE_PAST_MESSAGE = (
+    "The end cannot be in the past. To bring the units back now, end the record."
+)
+RECORD_ENDED_MESSAGE = "This record has already ended."
+RECORD_START_LOCKED_MESSAGE = (
+    "This record is in force, so its start cannot be moved. Change its end, or end it."
+)
+RECORD_NOT_STARTED_MESSAGE = "This record has not started, so it is removed, not ended."
+RECORD_STARTED_MESSAGE = "This record is in force, so it is ended, not removed."
+
+
+def too_many_out_message(*, most: int) -> str:
+    """AC3: why a record of more units than the period can spare is refused."""
+    return f"At most {most} can be taken out of service for that period."
+
+
+def short_message(*, name: str, short: int, held: int) -> str:
+    """AC4: what the coordinator of an event whose hold is left short is told."""
+    return (
+        f"{name}: {short} of the {held} held for this event cannot be supplied, as they are out"
+        " of service."
+    )
+
+
+class EquipmentTypeNotFound(LookupError):
+    """AC2: no active equipment type with this id."""
+
+    def __init__(self) -> None:
+        super().__init__(EQUIPMENT_TYPE_NOT_FOUND_MESSAGE)
+
+
+class OutOfServiceNotFound(LookupError):
+    """AC2: no such record on this equipment type."""
+
+    def __init__(self) -> None:
+        super().__init__(OUT_OF_SERVICE_NOT_FOUND_MESSAGE)
+
+
+class InvalidOutOfService(ValueError):
+    """AC3: a record outside the rules a request model cannot judge alone - a start in the past,
+    or an end that an edit leaves at or before the start."""
+
+
+class OutOfServiceConflict(RuntimeError):
+    """AC2/AC3: a record the stock, or the record as it now stands, does not allow."""
+
+
+class TooManyOutOfService(OutOfServiceConflict):
+    """AC3/AC7: more units than the stock less the other records' leaves for the period."""
+
+    def __init__(self, most: int) -> None:
+        super().__init__(too_many_out_message(most=most))
+
+
+class RecordEnded(OutOfServiceConflict):
+    """AC3: an ended record is history - not edited, ended again or removed."""
+
+    def __init__(self) -> None:
+        super().__init__(RECORD_ENDED_MESSAGE)
+
+
+class RecordStartLocked(OutOfServiceConflict):
+    """AC3: a record in force keeps its start - moving it later would make it removable."""
+
+    def __init__(self) -> None:
+        super().__init__(RECORD_START_LOCKED_MESSAGE)
+
+
+class RecordNotStarted(OutOfServiceConflict):
+    """AC2: only a record in force is ended; one not yet started is removed."""
+
+    def __init__(self) -> None:
+        super().__init__(RECORD_NOT_STARTED_MESSAGE)
+
+
+class RecordStarted(OutOfServiceConflict):
+    """AC2: a record in force is ended, not removed, so what happened is kept."""
+
+    def __init__(self) -> None:
+        super().__init__(RECORD_STARTED_MESSAGE)
+
+
+@dataclass(frozen=True)
+class HeldUnits:
+    """AC4: the units a hold still takes over its period, and when it was placed."""
+
+    hold_id: uuid.UUID
+    units: int
+    starts_at: datetime
+    ends_at: datetime
+    placed_at: datetime
+
+
+def short_units(
+    *,
+    stock: int,
+    holds: Iterable[HeldUnits],
+    records: Iterable[events_service.OutOfServiceWindow],
+    now: datetime,
+) -> dict[uuid.UUID, int]:
+    """AC4: how many units each hold cannot have, by hold, for those short of any. At each moment
+    from ``now`` on, the units left once ``records`` are taken out go to the holds under way, the
+    earliest placed first (ties by id), so a later hold is short before an earlier one. A hold's
+    shortfall is the most it is short at any moment. Shortfalls only begin where a hold or a record
+    starts, so those moments - and now - suffice; the past is left alone."""
+    holds, records = list(holds), list(records)
+    moments = sorted(
+        {now}
+        | {hold.starts_at for hold in holds if hold.starts_at > now}
+        | {record.starts_at for record in records if record.starts_at > now}
+    )
+    short: dict[uuid.UUID, int] = {}
+    for moment in moments:
+        left = stock - sum(
+            record.quantity for record in records if events_service.is_out_at(record, moment=moment)
+        )
+        under_way = sorted(
+            (hold for hold in holds if hold.starts_at <= moment < hold.ends_at),
+            key=lambda hold: (hold.placed_at, hold.hold_id),
+        )
+        for hold in under_way:
+            missing = hold.units - min(max(left, 0), hold.units)
+            left -= hold.units
+            if missing > 0:
+                short[hold.hold_id] = max(short.get(hold.hold_id, 0), missing)
+    return short
+
+
+def starts_in_the_past(starts_at: datetime, *, now: datetime) -> bool:
+    """AC3: whether a start is before the current minute. A form that starts the record now sends
+    the minute it was filled in, which has to count as now."""
+    return starts_at < now.replace(second=0, microsecond=0)
+
+
+@dataclass(frozen=True)
+class CatalogueEntry:
+    """AC2: one active type, and the units out of service now."""
+
+    equipment_type: EquipmentType
+    out_of_service_now: int
+
+
+@dataclass(frozen=True)
+class TypePage:
+    """AC2: one type, the units out of service now, and its current records, soonest first."""
+
+    equipment_type: EquipmentType
+    out_of_service_now: int
+    records: list[EquipmentUnavailabilityPeriod]
+
+
+@dataclass(frozen=True)
+class ShortHold:
+    """AC4/AC5: a hold the records leave short, with its event, the units it still holds and how
+    many of those it cannot have."""
+
+    hold: EquipmentReservation
+    event: Event
+    units_held: int
+    units_short: int
+
+
+def _not_yet_ended(now: datetime) -> ColumnElement[bool]:
+    """AC2: a record in force or still to come."""
+    return or_(
+        EquipmentUnavailabilityPeriod.ends_at.is_(None),
+        EquipmentUnavailabilityPeriod.ends_at > now,
+    )
+
+
+def list_equipment_catalogue(db: Session, *, now: datetime) -> list[CatalogueEntry]:
+    """AC2: every active type, by name, with the units its records have out of service now."""
+    out_now = dict(
+        db.execute(
+            select(
+                EquipmentUnavailabilityPeriod.equipment_type_id,
+                func.sum(EquipmentUnavailabilityPeriod.quantity),
+            )
+            .where(EquipmentUnavailabilityPeriod.starts_at <= now, _not_yet_ended(now))
+            .group_by(EquipmentUnavailabilityPeriod.equipment_type_id)
+        ).all()
+    )
+    types = db.scalars(
+        select(EquipmentType)
+        .where(EquipmentType.is_active.is_(True))
+        .order_by(EquipmentType.name, EquipmentType.id)
+    )
+    return [CatalogueEntry(each, out_now.get(each.id, 0)) for each in types]
+
+
+def _active_type(db: Session, type_id: uuid.UUID) -> EquipmentType:
+    equipment_type = db.scalar(
+        select(EquipmentType).where(EquipmentType.id == type_id, EquipmentType.is_active.is_(True))
+    )
+    if equipment_type is None:
+        raise EquipmentTypeNotFound()
+    return equipment_type
+
+
+def get_equipment_type_page(db: Session, type_id: uuid.UUID, *, now: datetime) -> TypePage:
+    """AC2: an active type's page - its records not yet ended, soonest first (ties by id), and the
+    units the ones in force have out now."""
+    equipment_type = _active_type(db, type_id)
+    records = list(
+        db.scalars(
+            select(EquipmentUnavailabilityPeriod)
+            .where(EquipmentUnavailabilityPeriod.equipment_type_id == type_id, _not_yet_ended(now))
+            .order_by(EquipmentUnavailabilityPeriod.starts_at, EquipmentUnavailabilityPeriod.id)
+        )
+    )
+    out_now = sum(record.quantity for record in records if record.starts_at <= now)
+    return TypePage(equipment_type, out_now, records)
+
+
+def _record(db: Session, type_id: uuid.UUID, record_id: uuid.UUID) -> EquipmentUnavailabilityPeriod:
+    """The record of ``type_id``. A write reads it after taking the type's row lock, which every
+    write to the type's records takes first, so two writes to it take turns and the second reads
+    what the first committed, or finds it gone: the record needs no lock of its own."""
+    record = db.scalar(
+        select(EquipmentUnavailabilityPeriod).where(
+            EquipmentUnavailabilityPeriod.id == record_id,
+            EquipmentUnavailabilityPeriod.equipment_type_id == type_id,
+        )
+    )
+    if record is None:
+        raise OutOfServiceNotFound()
+    return record
+
+
+def _window(record: EquipmentUnavailabilityPeriod) -> events_service.OutOfServiceWindow:
+    return events_service.OutOfServiceWindow(record.starts_at, record.ends_at, record.quantity)
+
+
+def _windows(
+    db: Session, type_id: uuid.UUID, *, leaving_out: uuid.UUID | None = None
+) -> list[events_service.OutOfServiceWindow]:
+    """The records of ``type_id`` as windows, but for ``leaving_out``."""
+    statement = select(EquipmentUnavailabilityPeriod).where(
+        EquipmentUnavailabilityPeriod.equipment_type_id == type_id
+    )
+    if leaving_out is not None:
+        statement = statement.where(EquipmentUnavailabilityPeriod.id != leaving_out)
+    return [_window(record) for record in db.scalars(statement)]
+
+
+def _has_ended(record: EquipmentUnavailabilityPeriod, *, now: datetime) -> bool:
+    return record.ends_at is not None and record.ends_at <= now
+
+
+def _check_record(
+    db: Session,
+    equipment_type: EquipmentType,
+    *,
+    quantity: int,
+    starts_at: datetime,
+    ends_at: datetime | None,
+    record: EquipmentUnavailabilityPeriod | None,
+    now: datetime,
+) -> list[events_service.OutOfServiceWindow]:
+    """AC3: refuse a record - new, or ``record`` as an edit would leave it - that the rules or the
+    stock do not allow: an ended record (``RecordEnded``); the start of one in force moved
+    (``RecordStartLocked``); a new start in the past, an end not after the start, or an end
+    before now - End does that (``InvalidOutOfService``); more units than the stock less what the
+    other records have out at any moment of the period still to come (``TooManyOutOfService``).
+    Returns those other records."""
+    is_new_start = record is None or starts_at != record.starts_at
+    if record is not None:
+        if _has_ended(record, now=now):
+            raise RecordEnded()
+        if is_new_start and record.starts_at < now:
+            raise RecordStartLocked()
+    if is_new_start and starts_in_the_past(starts_at, now=now):
+        raise InvalidOutOfService(START_IN_THE_PAST_MESSAGE)
+    if ends_at is not None and ends_at <= starts_at:
+        raise InvalidOutOfService(OUT_OF_SERVICE_END_NOT_AFTER_START_MESSAGE)
+    if ends_at is not None and ends_at <= now:
+        raise InvalidOutOfService(END_IN_THE_PAST_MESSAGE)
+    others = _windows(db, equipment_type.id, leaving_out=None if record is None else record.id)
+    # A record in force has its units out from now on: what others had out before cannot meet it.
+    most = equipment_type.total_quantity - events_service.units_out_at_most(
+        others, starts_at=max(starts_at, now), ends_at=ends_at
+    )
+    if quantity > most:
+        raise TooManyOutOfService(most)
+    return others
+
+
+def _short_holds(
+    db: Session,
+    equipment_type: EquipmentType,
+    records: list[events_service.OutOfServiceWindow],
+    *,
+    now: datetime,
+) -> list[ShortHold]:
+    """AC4: the holds of ``equipment_type`` that ``records`` leave short - those still reserved and
+    not yet over, each by the units it has not released - soonest first."""
+    holds = list(
+        db.scalars(
+            select(EquipmentReservation).where(
+                EquipmentReservation.equipment_type_id == equipment_type.id,
+                EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+                EquipmentReservation.ends_at > now,
+            )
+        )
+    )
+    units = {hold.id: hold.quantity - hold.released_quantity for hold in holds}
+    short = short_units(
+        stock=equipment_type.total_quantity,
+        holds=[
+            HeldUnits(hold.id, units[hold.id], hold.starts_at, hold.ends_at, hold.reserved_at)
+            for hold in holds
+        ],
+        records=records,
+        now=now,
+    )
+    short_holds = [hold for hold in holds if hold.id in short]
+    events = {
+        event.id: event
+        for event in db.scalars(
+            select(Event).where(Event.id.in_({hold.event_id for hold in short_holds}))
+        )
+    }
+    return sorted(
+        (
+            ShortHold(hold, events[hold.event_id], units[hold.id], short[hold.id])
+            for hold in short_holds
+        ),
+        key=lambda each: (each.hold.starts_at, each.event.name, each.hold.id),
+    )
+
+
+def _left_shorter(
+    db: Session,
+    equipment_type: EquipmentType,
+    *,
+    before: list[events_service.OutOfServiceWindow],
+    after: list[events_service.OutOfServiceWindow],
+    now: datetime,
+) -> list[ShortHold]:
+    """AC4/AC5: the holds ``after`` leaves short, or shorter than ``before`` did - the ones a save
+    affects. The check before saving and the notices on saving both read this, so the holds
+    Technical Support is shown are the ones whose coordinators are told."""
+    was = {
+        each.hold.id: each.units_short for each in _short_holds(db, equipment_type, before, now=now)
+    }
+    return [
+        each
+        for each in _short_holds(db, equipment_type, after, now=now)
+        if each.units_short > was.get(each.hold.id, 0)
+    ]
+
+
+def check_out_of_service(
+    db: Session,
+    type_id: uuid.UUID,
+    *,
+    quantity: int,
+    starts_at: datetime,
+    ends_at: datetime | None,
+    record_id: uuid.UUID | None,
+    now: datetime,
+) -> list[ShortHold]:
+    """AC5: the holds a record of ``quantity`` units from ``starts_at`` to ``ends_at`` would leave
+    short, or shorter than they are - with ``record_id``, that record as an edit would leave it -
+    refused as saving it would be (AC3). Reads only."""
+    equipment_type = _active_type(db, type_id)
+    record = None if record_id is None else _record(db, type_id, record_id)
+    others = _check_record(
+        db,
+        equipment_type,
+        quantity=quantity,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        record=record,
+        now=now,
+    )
+    before = others if record is None else [*others, _window(record)]
+    after = [*others, events_service.OutOfServiceWindow(starts_at, ends_at, quantity)]
+    return _left_shorter(db, equipment_type, before=before, after=after, now=now)
+
+
+def _snapshot(record: EquipmentUnavailabilityPeriod) -> dict[str, Any]:
+    """AC1: a record's fields, as its audit entries keep them."""
+    return {
+        "equipment_type_id": str(record.equipment_type_id),
+        "quantity": record.quantity,
+        "reason": record.reason,
+        "notes": record.notes,
+        "starts_at": record.starts_at.isoformat(),
+        "ends_at": None if record.ends_at is None else record.ends_at.isoformat(),
+    }
+
+
+def _audit(
+    db: Session, record_id: uuid.UUID, *, action: str, details: dict[str, Any], actor: User
+) -> None:
+    record_audit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type=OUT_OF_SERVICE_ENTITY_TYPE,
+        entity_id=record_id,
+        details=details,
+        commit=False,
+    )
+
+
+def _tell_left_shorter(
+    db: Session,
+    equipment_type: EquipmentType,
+    *,
+    before: list[events_service.OutOfServiceWindow],
+    after: list[events_service.OutOfServiceWindow],
+    actor: User,
+    now: datetime,
+) -> None:
+    """AC4: tell the coordinator of each event whose hold ``after`` leaves short, or shorter than
+    ``before`` did, how short it now is. One no shorter was told when it last became so. An event
+    with no coordinator yet is marked all the same, and its coordinator sees the mark once they
+    have it."""
+    for each in _left_shorter(db, equipment_type, before=before, after=after, now=now):
+        notify(
+            db,
+            recipient=each.event.assigned_coordinator,
+            actor=actor,
+            notification_type=NotificationType.EQUIPMENT_SHORT,
+            title=f"Equipment short: {each.event.name}",
+            message=short_message(
+                name=equipment_type.name, short=each.units_short, held=each.units_held
+            ),
+            event_id=each.event.id,
+            related_entity_type=_SHORT_HOLD_ENTITY_TYPE,
+            related_entity_id=each.hold.id,
+            commit=False,
+        )
+
+
+def add_out_of_service(
+    db: Session, type_id: uuid.UUID, data: OutOfServiceIn, *, actor: User, now: datetime
+) -> EquipmentUnavailabilityPeriod:
+    """AC1/AC3: record ``data.quantity`` units of ``type_id`` out of service, audited. AC4: the
+    coordinators of the holds it leaves short, or shorter, are told, in the same transaction.
+    AC7: under the type's row lock, so two records, or a record and a hold, take turns."""
+    lock_types(db, [type_id])
+    equipment_type = _active_type(db, type_id)
+    before = _check_record(
+        db,
+        equipment_type,
+        quantity=data.quantity,
+        starts_at=data.starts_at,
+        ends_at=data.ends_at,
+        record=None,
+        now=now,
+    )
+    record = EquipmentUnavailabilityPeriod(
+        equipment_type_id=type_id,
+        quantity=data.quantity,
+        reason=data.reason,
+        notes=data.notes,
+        starts_at=data.starts_at,
+        ends_at=data.ends_at,
+        created_by_id=actor.id,
+    )
+    db.add(record)
+    db.flush()
+    _audit(
+        db, record.id, action=OUT_OF_SERVICE_CREATED_ACTION, details=_snapshot(record), actor=actor
+    )
+    _tell_left_shorter(
+        db, equipment_type, before=before, after=[*before, _window(record)], actor=actor, now=now
+    )
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def edit_out_of_service(
+    db: Session,
+    type_id: uuid.UUID,
+    record_id: uuid.UUID,
+    data: OutOfServiceUpdate,
+    *,
+    actor: User,
+    now: datetime,
+) -> EquipmentUnavailabilityPeriod:
+    """AC2/AC3: change a record - only the fields sent - judged as it would become, or, with
+    ``end_now``, end it (``_end_out_of_service``). The audit keeps what was replaced. AC4: the
+    coordinators of holds it leaves short, or shorter, are told."""
+    if data.end_now:
+        return _end_out_of_service(db, type_id, record_id, actor=actor, now=now)
+    lock_types(db, [type_id])
+    equipment_type = _active_type(db, type_id)
+    record = _record(db, type_id, record_id)
+    sent = data.model_fields_set
+    quantity = data.quantity if "quantity" in sent else record.quantity
+    starts_at = data.starts_at if "starts_at" in sent else record.starts_at
+    ends_at = data.ends_at if "ends_at" in sent else record.ends_at
+    others = _check_record(
+        db,
+        equipment_type,
+        quantity=quantity,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        record=record,
+        now=now,
+    )
+    before, was = [*others, _window(record)], _snapshot(record)
+    record.quantity, record.starts_at, record.ends_at = quantity, starts_at, ends_at
+    if "reason" in sent:
+        record.reason = data.reason
+    if "notes" in sent:
+        record.notes = data.notes
+    db.flush()
+    _audit(
+        db,
+        record.id,
+        action=OUT_OF_SERVICE_UPDATED_ACTION,
+        details={"before": was, "after": _snapshot(record)},
+        actor=actor,
+    )
+    _tell_left_shorter(
+        db, equipment_type, before=before, after=[*others, _window(record)], actor=actor, now=now
+    )
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def _end_out_of_service(
+    db: Session, type_id: uuid.UUID, record_id: uuid.UUID, *, actor: User, now: datetime
+) -> EquipmentUnavailabilityPeriod:
+    """AC2: end a record in force at ``now``. One that has ended is refused (``RecordEnded``), and
+    so is one not yet started (``RecordNotStarted``: it is removed instead). Ending gives units
+    back, so it leaves no hold shorter."""
+    lock_types(db, [type_id])
+    _active_type(db, type_id)
+    record = _record(db, type_id, record_id)
+    if _has_ended(record, now=now):
+        raise RecordEnded()
+    if record.starts_at >= now:
+        raise RecordNotStarted()
+    was = _snapshot(record)
+    record.ends_at = now
+    db.flush()
+    _audit(
+        db,
+        record.id,
+        action=OUT_OF_SERVICE_ENDED_ACTION,
+        details={"before": was, "after": _snapshot(record)},
+        actor=actor,
+    )
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def remove_out_of_service(
+    db: Session, type_id: uuid.UUID, record_id: uuid.UUID, *, actor: User, now: datetime
+) -> None:
+    """AC2: remove a record not yet started, as it never took effect; the audit keeps its fields.
+    One that has ended (``RecordEnded``) or is in force (``RecordStarted``: it is ended instead)
+    is refused. Removing gives units back, so it leaves no hold shorter."""
+    lock_types(db, [type_id])
+    _active_type(db, type_id)
+    record = _record(db, type_id, record_id)
+    if _has_ended(record, now=now):
+        raise RecordEnded()
+    if record.starts_at < now:
+        raise RecordStarted()
+    details = _snapshot(record)
+    db.delete(record)
+    db.flush()
+    _audit(db, record_id, action=OUT_OF_SERVICE_REMOVED_ACTION, details=details, actor=actor)
+    db.commit()
+
+
+def list_event_shortages(
+    db: Session, event_id: uuid.UUID, *, viewer: User, now: datetime
+) -> list[EquipmentShortageOut]:
+    """AC4: the items of an event that ``viewer`` can see whose holds the records leave short, and
+    by how many units - worked out now, so the mark follows the records."""
+    event = _visible_event(db, event_id, viewer=viewer)
+    type_ids = sorted(
+        set(
+            db.scalars(
+                select(EquipmentReservation.equipment_type_id).where(
+                    EquipmentReservation.event_id == event.id,
+                    EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+                )
+            )
+        )
+    )
+    shortages = []
+    for type_id in type_ids:
+        equipment_type = db.get(EquipmentType, type_id)
+        for each in _short_holds(db, equipment_type, _windows(db, type_id), now=now):
+            if each.hold.event_id == event.id and each.hold.equipment_request_id is not None:
+                shortages.append(
+                    EquipmentShortageOut(
+                        item_id=each.hold.equipment_request_id, units_short=each.units_short
+                    )
+                )
+    return shortages

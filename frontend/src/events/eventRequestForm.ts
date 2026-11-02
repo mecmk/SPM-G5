@@ -1,6 +1,8 @@
-import type { EventDetail, EventInput, VenueRequirement } from '../api/events'
+import { WITHDRAWABLE_STATUSES } from '../api/equipment'
+import type { EquipmentItemStatus, EventDetail, EventInput, VenueRequirement } from '../api/events'
 import type { ErrorCode } from '../errors/registry'
-import { inputToInstant, instantToInput, nowAsInput } from '../shared/format'
+import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
+import { inputToInstant, instantToInput, isReadableDateTime, nowAsInput } from '../shared/format'
 import { isBlankOrPhoneNumber } from '../shared/phone'
 
 /**
@@ -49,6 +51,8 @@ export interface EquipmentDraft {
   typeName: string
   quantity: string
   notes: string
+  /** Story 17.2 AC2, 15.1 AC7: the saved line's status; null on a line not saved yet. */
+  status: EquipmentItemStatus | null
 }
 
 export interface EventFormState {
@@ -92,7 +96,6 @@ export const CONTACT_EMAIL_MAX_LENGTH = 254
 /** Story 2.1 AC14: what a cover picture may be, mirrored from the backend's service. */
 export const MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024
 export const COVER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const DATE_TIME_INPUT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const DATE_TIME_INPUT_LENGTH = 'YYYY-MM-DDTHH:mm'.length
 // The largest value the backend's INTEGER columns hold.
 const MAX_WHOLE_NUMBER = 2_147_483_647
@@ -334,6 +337,12 @@ function venueRequirementDraftFrom(
   }
 }
 
+/** Story 7.2 AC4, 17.2 AC2: sent to Technical Support, so withdrawn on the event page, not removed
+ *  or swapped for another type here. */
+export function isSentToTechnicalSupport(line: EquipmentDraft): boolean {
+  return line.status !== null && WITHDRAWABLE_STATUSES.includes(line.status)
+}
+
 export function newEquipmentDraft(): EquipmentDraft {
   nextEquipmentKey += 1
   return {
@@ -343,6 +352,7 @@ export function newEquipmentDraft(): EquipmentDraft {
     typeName: '',
     quantity: '1',
     notes: '',
+    status: null,
   }
 }
 
@@ -384,17 +394,21 @@ function formAsSaved(event: EventDetail): EventFormState {
       event.accessibility_needs.map((need) => [need.code, { notes: textOf(need.notes) }]),
     ),
     accessibilityNotes: textOf(event.accessibility_notes),
-    equipment: event.equipment.map((line) => {
-      nextEquipmentKey += 1
-      return {
-        key: nextEquipmentKey,
-        id: line.id,
-        typeCode: line.equipment_type_code,
-        typeName: line.equipment_type_name,
-        quantity: String(line.quantity),
-        notes: textOf(line.technical_notes),
-      }
-    }),
+    // Story 17.2 AC3: an item kept only for the record is no longer the event's to correct.
+    equipment: event.equipment
+      .filter((line) => !KEPT_FOR_RECORD_STATUSES.includes(line.status))
+      .map((line) => {
+        nextEquipmentKey += 1
+        return {
+          key: nextEquipmentKey,
+          id: line.id,
+          typeCode: line.equipment_type_code,
+          typeName: line.equipment_type_name,
+          quantity: String(line.quantity),
+          notes: textOf(line.technical_notes),
+          status: line.status,
+        }
+      }),
     isRegistrationRequired: event.registration_required,
     registrationOpensAt: event.registration_opens_at
       ? instantToInput(event.registration_opens_at)
@@ -482,11 +496,6 @@ export function getLatestEndInput(startsAt: string): string {
     new Date(Date.parse(inputToInstant(anchor)) + MAX_EVENT_DAYS * MS_PER_DAY).toISOString(),
   )
   return latest < LATEST_DATE_INPUT ? latest : LATEST_DATE_INPUT
-}
-
-/** A picker can hold a six-digit year, which the backend cannot read as a date. */
-function isReadableDateTime(inputValue: string): boolean {
-  return DATE_TIME_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputToInstant(inputValue)))
 }
 
 /**
