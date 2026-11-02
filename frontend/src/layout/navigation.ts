@@ -3,6 +3,7 @@ import type { IconName } from '../components/Icon'
 import {
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
+  CHANGE_REQUESTS_TITLE,
   EQUIPMENT_CATALOGUE_PATH,
   EQUIPMENT_CATALOGUE_TITLE,
   EQUIPMENT_REQUESTS_PATH,
@@ -86,7 +87,7 @@ export const NAV_SECTIONS: NavSection[] = [
       // event's page (19.1).
       {
         to: MY_CHANGE_REQUESTS_PATH,
-        label: 'Change requests',
+        label: CHANGE_REQUESTS_TITLE,
         description: 'Every change you have asked for on your events, and where each one stands.',
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE,
@@ -94,7 +95,7 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         to: CHANGE_REQUEST_QUEUE_PATH,
-        label: 'Change requests',
+        label: CHANGE_REQUESTS_TITLE,
         description: 'Changes organisers have asked for on your events, waiting for your decision.',
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE,

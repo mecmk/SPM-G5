@@ -13,16 +13,34 @@
  * the order the backend sends. No conflict case: the page only reads.
  *
  * Other specs raise change requests as the same organiser, so the list is read by event name,
- * never by its length. The empty state needs an organiser with no requests: Nadia, whose account
- * only notifications.spec.ts reads, and who raises none.
+ * never by its length. The seed does not promise an organiser with none, so AC5 stubs the list
+ * call: the empty answer itself is a backend case.
  */
-import { expect, test } from '@playwright/test'
-import { ACCOUNTS, approvedEvent, changeRequests, inFuture, signIn } from './support'
+import { expect, test, type Page } from '@playwright/test'
+import { ACCOUNTS, approvedEvent, changeRequests, corsHeaders, inFuture, signIn } from './support'
 
 const PAGE_PATH = '/change-requests'
+const LIST_PATH = '/change-requests/mine'
 const REASON = 'The venue can only take us a day later.'
 
-test('19.4 AC1 AC3: an organiser sees a raised request on the page and opens its event', async ({
+/** The list call answers with no requests. */
+async function stubNoRequests(page: Page) {
+  await page.route(
+    (url) => url.pathname === LIST_PATH,
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+        headers: corsHeaders(request),
+      })
+    },
+  )
+}
+
+test('19.4 AC1/AC3: an organiser sees a raised request on the page and opens its event', async ({
   page,
 }) => {
   // Three sign-ins (organiser, coordinator, organiser) to reach an approved event.
@@ -49,10 +67,22 @@ test('19.4 AC1 AC3: an organiser sees a raised request on the page and opens its
   await expect(row).toContainText('Pending')
   await expect(row).toContainText(/Requested at.+\d{4}/)
 
+  // The status tabs list only their own status.
+  await page.getByRole('tab', { name: /^Withdrawn/ }).click()
+  await expect(row).toHaveCount(0)
+  await page.getByRole('tab', { name: /^Pending/ }).click()
+  await expect(row).toContainText('Pending')
+
   await row.getByRole('link', { name }).click()
 
   await expect(page).toHaveURL(new RegExp(`/events/${eventId}$`))
   await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+
+  // The event leads back to this page, and a click anywhere on the row opens it too.
+  await page.getByRole('main').getByRole('link', { name: 'Change requests' }).click()
+  await expect(page).toHaveURL(new RegExp(`${PAGE_PATH}$`))
+  await row.getByText('Requested at').click()
+  await expect(page).toHaveURL(new RegExp(`/events/${eventId}$`))
 })
 
 test('19.4 AC4: a coordinator opening the page sees Not permitted at the same address', async ({
@@ -69,7 +99,8 @@ test('19.4 AC4: a coordinator opening the page sees Not permitted at the same ad
 test('19.4 AC5: with no change requests the page says so and points to My events', async ({
   page,
 }) => {
-  await signIn(page, ACCOUNTS.notice)
+  await signIn(page, ACCOUNTS.organiser)
+  await stubNoRequests(page)
 
   await page.goto(PAGE_PATH)
 

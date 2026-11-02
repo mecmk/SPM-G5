@@ -73,8 +73,9 @@ def test_lists_my_request_with_its_event_field_date_and_status(organiser_client,
 
 @pytest.mark.story("19.4", ac=1)
 def test_lists_my_requests_of_every_status(organiser_client, db: Session):
-    """Unlike the coordinator's queue, a request still pending on a cancelled event is listed:
-    it is still one the organiser raised."""
+    """Every status is listed. The list does not filter on the event's status either: the last row
+    is a factory state the app cannot reach (cancelling an event cancels its pending requests, and
+    none can be raised on a cancelled event), kept only to show no such filter exists."""
     event = _planning_event(db)
     by_status = {
         status: make_change_request(db, event=event, field=field, status=status)

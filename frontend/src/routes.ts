@@ -234,6 +234,10 @@ export const CHANGE_REQUEST_QUEUE_PATH = '/change-requests/review'
 
 // Story 19.4: the organiser's own change requests, across all their events.
 export const MY_CHANGE_REQUESTS_PATH = '/change-requests'
+/** Both change request pages' sidebar entry and the back link to them from an event (19.2, 19.4). */
+export const CHANGE_REQUESTS_TITLE = 'Change requests'
+/** Both change request pages' heading (19.2, 19.4). */
+export const CHANGE_REQUESTS_HEADING = 'Change Requests'
 
 // Story 18.1: the events an attendee can browse and register for.
 export const UPCOMING_EVENTS_PATH = '/browse'

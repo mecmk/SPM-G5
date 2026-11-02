@@ -14,12 +14,23 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
-import { EVENTS_MINE_PATH, eventPath, MY_CHANGE_REQUESTS_PATH } from '../routes'
-import { formatDateTime, formatSchedule, shortReference } from '../shared/format'
+import {
+  CHANGE_REQUESTS_HEADING,
+  CHANGE_REQUESTS_TITLE,
+  EVENTS_MINE_PATH,
+  eventPath,
+  MY_CHANGE_REQUESTS_PATH,
+} from '../routes'
+import {
+  formatDateTime,
+  formatSchedule,
+  REQUESTED_AT_LABEL,
+  shortReference,
+} from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
-import { changeTitle, STATUS_LABELS } from './changeRequestValues'
+import { changeTitle, STATUS_LABELS, VIEW_EVENT, YOUR_REASON } from './changeRequestValues'
 
 type TabKey = 'ALL' | ChangeRequestStatus
 
@@ -45,7 +56,7 @@ const EMPTY_TAB_MESSAGES: Record<ChangeRequestStatus, string> = {
 /** An event opened from a row here leads back to this page, not to Home (story 7.1's back link). */
 const BACK_TO_MY_CHANGE_REQUESTS: EventCardBackState = {
   from: MY_CHANGE_REQUESTS_PATH,
-  fromLabel: 'Change requests',
+  fromLabel: CHANGE_REQUESTS_TITLE,
 }
 
 function inTab(entry: ChangeRequestQueueEntry, tab: TabKey): boolean {
@@ -86,7 +97,7 @@ export function MyChangeRequestsPage() {
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Change Requests"
+        title={CHANGE_REQUESTS_HEADING}
         subtitle="The changes you have asked for on your events, and where each one stands."
       />
 
@@ -153,7 +164,7 @@ export function MyChangeRequestsPage() {
 
                 <div className="fact-grid">
                   <div className="subtle-block">
-                    <p className="fact-label">Requested at</p>
+                    <p className="fact-label">{REQUESTED_AT_LABEL}</p>
                     <p className="fact-value">{formatDateTime(entry.created_at)}</p>
                   </div>
                 </div>
@@ -165,7 +176,7 @@ export function MyChangeRequestsPage() {
                     <Icon name="message" />
                   </span>
                   <div>
-                    <p className="change-note-label">Your reason</p>
+                    <p className="change-note-label">{YOUR_REASON}</p>
                     <p className="wrap-anywhere">{entry.reason}</p>
                   </div>
                 </div>
@@ -178,7 +189,7 @@ export function MyChangeRequestsPage() {
                     state={BACK_TO_MY_CHANGE_REQUESTS}
                     className="link"
                   >
-                    View event →
+                    {VIEW_EVENT}
                   </Link>
                 </div>
               </li>

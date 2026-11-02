@@ -1,6 +1,7 @@
 """Business rules for story 19.1: raise an event change request, list them, withdraw one; for
-story 19.2: the coordinator's queue and record of them, and approving or rejecting one; and for
-story 19.3: the impact approving one would have.
+story 19.2: the coordinator's queue and record of them, and approving or rejecting one; for
+story 19.3: the impact approving one would have; and for story 19.4: the organiser's own change
+requests across all their events.
 
 A change request records one field of an event in Planning or Confirmed, raised until 24 hours
 before its set-up time (fix f19.1.1, AC11/AC12), its value now, the value proposed and why.
@@ -602,7 +603,7 @@ def withdraw_change_request(
     """AC9/AC10: the owning organiser withdraws a pending change request. It is kept, marked
     Withdrawn, so the history stays whole and the field is free again (the pending index ignores
     it). The update is conditional on the request still being pending, so a decision that lands
-    first (19.4/19.5) makes it match no row, and the withdrawal is refused rather than undoing
+    first (19.2) makes it match no row, and the withdrawal is refused rather than undoing
     that decision. Withdrawing never changes the event, so its status does not matter."""
     event = events_service.get_own_event_for_update(db, event_id, actor=actor)
     request = db.scalar(

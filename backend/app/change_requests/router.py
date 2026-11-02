@@ -5,11 +5,11 @@ organiser's own change requests across all their events (``/change-requests/mine
 
 They sit under the event they belong to (``/events/{event_id}/change-requests``, and
 ``/events/{event_id}/change-request-window`` for when they close - outside ``/change-requests/``
-so it can never be read as a request's id), except the queue, which spans the coordinator's events
-(``/change-requests``). Withdrawing, approving and
-rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs like story
-12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with its own
-rules, notification and audit record (see backend/STYLE.md, Standing divergences).
+so it can never be read as a request's id), except the coordinator's queue (``/change-requests``)
+and the organiser's own list (``/change-requests/mine``), which span many events. Withdrawing,
+approving and rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs
+like story 12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with
+its own rules, notification and audit record (see backend/STYLE.md, Standing divergences).
 """
 
 from __future__ import annotations

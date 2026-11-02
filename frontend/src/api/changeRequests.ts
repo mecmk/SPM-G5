@@ -65,7 +65,8 @@ export interface ChangeRequest {
 }
 
 /** Mirrors `ChangeRequestQueueEntryOut`: story 19.2 AC1, a change request in the coordinator's
- *  queue - pending, or in their record of decisions - with the event it is for. */
+ *  queue - pending, or in their record of decisions - with the event it is for. Story 19.4 AC1
+ *  lists the organiser's own requests in the same shape. */
 export interface ChangeRequestQueueEntry extends ChangeRequest {
   event_name: string
   event_status: EventStatus
