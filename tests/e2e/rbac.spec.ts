@@ -21,19 +21,13 @@ interface SidebarExpectation {
 }
 
 const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
-  // c9 (1.2 AC5): an organiser raises and follows a change request on the event's page
-  // (19.1 AC1), so unlike the coordinator they have no Change requests section.
+  // Story 19.4: an organiser's Change requests section lists their requests across all their
+  // events; they still raise and withdraw one on the event's page (19.1).
   {
     role: 'organiser',
     email: ACCOUNTS.organiser,
-    visible: ['My events', 'Registrations'],
-    hidden: [
-      'Manage venues',
-      'Events inbox',
-      'Upcoming events',
-      'Venue catalogue',
-      'Change requests',
-    ],
+    visible: ['My events', 'Change requests', 'Registrations'],
+    hidden: ['Manage venues', 'Events inbox', 'Upcoming events', 'Venue catalogue'],
   },
   {
     role: 'coordinator',
@@ -155,10 +149,9 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
 
-// c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Stories
-// 19.4 and 17.3 bring back the first and the last: each drops its row when it ships.
+// c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Story
+// 17.3 brings back the last: it drops its row when it ships (19.4 dropped the organiser's).
 const RETIRED_SECTIONS = [
-  { role: 'an organiser', email: ACCOUNTS.organiser, address: '/change-requests' },
   { role: 'a coordinator lead', email: ACCOUNTS.lead, address: '/events/all' },
   { role: 'venue staff', email: ACCOUNTS.venueStaff, address: '/venue-staff/schedule' },
   { role: 'technical support', email: ACCOUNTS.techSupport, address: '/equipment/holds' },
