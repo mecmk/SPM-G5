@@ -143,7 +143,7 @@ those. A new feature area gets its line here in the same PR (see
 backend/
   app/                  # one package per feature area: router.py, service.py, schemas.py, models.py
     auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
-    bookings/           # venue booking requests, Venue Staff's decisions, withdrawals
+    bookings/           # venue booking requests, Venue Staff's decisions, withdrawals, the coordinator cancelling an approved booking
     cancellations/      # the organiser cancelling their own event, releasing everything it holds
     change_requests/    # an organiser's requested changes to an approved event, withdrawals, and the coordinator's decisions
     coordination/       # assigning and reassigning an event's coordinator
@@ -167,7 +167,7 @@ frontend/
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the bell and its panel: the user's server notifications and the log of their own actions
-    pages/              # pages of no feature area: home, not permitted, coming soon
+    pages/              # pages of no feature area: home, not permitted
     shared/             # helpers used by more than one page
     errors/             # the registry of every user-facing error
 tests/

@@ -57,10 +57,20 @@ const SHORTFALL_ADVICE =
 const ATTENDANCE_KEEPS_BOOKINGS =
   'Venue bookings are kept as they are. Check that the venues booked still hold everyone between them, and request an additional venue from the event page if they do not.'
 
+/** The seeded Smart Cities Expo's first day, 14 Mar 2028. venue-requirement-search.spec.ts needs
+ *  Grand Hall free on it and the day after. */
+const EXPO_STARTS = Date.parse('2028-03-14T00:00:00+08:00')
+const DAY_MS = 24 * 60 * 60 * 1000
+
 /** A day for an event that books venues: over a year ahead, spread out so reruns rarely meet,
- *  and early enough that a week later is within the two years an event may be planned ahead. */
+ *  and early enough that a week later is within the two years an event may be planned ahead.
+ *  Neither the day nor the week later falls on the Expo, so its Grand Hall stays free. */
 function farDay(): number {
-  return 400 + Math.floor(Math.random() * 120)
+  const expo = Math.floor((EXPO_STARTS - Date.now()) / DAY_MS)
+  let day
+  do day = 400 + Math.floor(Math.random() * 120)
+  while (day >= expo - 8 && day <= expo + 2)
+  return day
 }
 
 /** AC9/AC10: every row ends inside its card, and a row with nothing affected keeps its padding.

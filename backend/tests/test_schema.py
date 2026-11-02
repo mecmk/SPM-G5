@@ -10,7 +10,7 @@ Plus guard-rails that keep the ORM models, the seed constants and the SQL in ste
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 import app.auth.models  # noqa: F401  (register models on Base.metadata)
@@ -19,8 +19,12 @@ import app.events.models  # noqa: F401
 import app.registrations.models  # noqa: F401
 import app.safety.models  # noqa: F401
 import app.venues.models  # noqa: F401
+from app.bookings.models import BookingStatus, VenueBooking
 from app.db import Base
 from app.dbtool import migrate
+from app.events.models import Event, EventStatus
+from app.registrations.models import EventRegistration, RegistrationStatus
+from app.safety.service import confirm_blockers
 from tests.support.seed import (
     Bookings,
     Clarifications,
@@ -305,7 +309,8 @@ def test_seed_constants_match_database(db: Session):
             == status
         )
     # Story 12.6's e2e bookings: each marked, bar the maker faire's requirement booking, with the
-    # closure of its day; the product showcase's is pending and the rest approved.
+    # closure of its day; the product showcase's is pending, the heritage walk's was cancelled with
+    # its event (c8) and the rest approved.
     for booking_id, status, is_marked in (
         (Bookings.LANTERN_SHOWCASE_FOYER, "APPROVED", True),
         (Bookings.MAKER_FAIRE_SEMINAR_ROOM, "APPROVED", False),
@@ -314,7 +319,7 @@ def test_seed_constants_match_database(db: Session):
         (Bookings.AWARDS_EVENING_FOYER, "APPROVED", True),
         (Bookings.PITCH_NIGHT_FOYER, "APPROVED", True),
         (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, "APPROVED", True),
-        (Bookings.HERITAGE_WALK_FOYER, "APPROVED", True),
+        (Bookings.HERITAGE_WALK_FOYER, "CANCELLED", True),
         (Bookings.PRODUCT_SHOWCASE_FOYER, "PENDING", True),
         (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, "APPROVED", True),
         (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
@@ -362,7 +367,7 @@ def test_seed_constants_match_database(db: Session):
         (Registrations.BOARD_GAMES_SOCIAL, Events.BOARD_GAMES_SOCIAL, "REGISTERED"),
         (Registrations.SUNSET_YOGA, Events.SUNSET_YOGA, "REGISTERED"),
         (Registrations.HERITAGE_TRAIL, Events.HERITAGE_TRAIL, "WITHDRAWN"),
-        (Registrations.CHARITY_FUN_RUN, Events.CHARITY_FUN_RUN, "REGISTERED"),
+        (Registrations.CHARITY_FUN_RUN, Events.CHARITY_FUN_RUN, "CANCELLED"),
         (Registrations.BOOK_SWAP, Events.BOOK_SWAP, "REGISTERED"),
         (Registrations.LANTERN_PAINTING, Events.LANTERN_PAINTING, "REGISTERED"),
     ):
@@ -546,3 +551,48 @@ def test_updated_at_is_maintained_by_trigger(db: Session):
         text("SELECT updated_at FROM venues WHERE id = :id"), {"id": Venues.BOARDROOM}
     ).scalar()
     assert after > before
+
+
+@pytest.mark.story("1", ac=3)
+def test_seeded_confirmed_events_meet_what_confirming_requires(db: Session):
+    """AC3: the seed skips the app, so each Confirmed or Completed event must still hold what
+    confirming asks of it (``confirm_blockers``, story 21.2 AC7/AC14): every requirement booked,
+    no venue in the way, and a latest review that approved the facts the event has now. The dinner
+    (Events.CONFIRMED) is left unbooked on purpose: tests/e2e/booking-requests.spec.ts requests a
+    venue for its Main venue."""
+    events = db.scalars(
+        select(Event).where(
+            Event.status.in_([EventStatus.CONFIRMED, EventStatus.COMPLETED]),
+            Event.id != Events.CONFIRMED,
+        )
+    ).all()
+    offenders = {}
+    for event in events:
+        # confirm_blockers answers for a Planning event; the fixture rolls this back.
+        event.status = EventStatus.PLANNING
+        if blockers := confirm_blockers(db, event):
+            offenders[event.name] = blockers
+    assert not offenders
+
+
+@pytest.mark.story("1", ac=3)
+def test_seeded_cancelled_events_hold_nothing(db: Session):
+    """AC3: cancelling an event releases its venues and registrations and records who cancelled
+    it and why (story 6.2), so no seeded Cancelled event still holds either."""
+    cancelled = select(Event.id).where(Event.status == EventStatus.CANCELLED)
+    holding = db.scalars(
+        select(VenueBooking.event_id).where(
+            VenueBooking.event_id.in_(cancelled),
+            VenueBooking.status.in_([BookingStatus.PENDING, BookingStatus.APPROVED]),
+        )
+    ).all()
+    registered = db.scalars(
+        select(EventRegistration.event_id).where(
+            EventRegistration.event_id.in_(cancelled),
+            EventRegistration.status == RegistrationStatus.REGISTERED,
+        )
+    ).all()
+    unrecorded = db.scalars(
+        select(Event.name).where(Event.id.in_(cancelled), Event.cancelled_at.is_(None))
+    ).all()
+    assert (holding, registered, unrecorded) == ([], [], [])

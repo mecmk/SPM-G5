@@ -124,8 +124,8 @@ class Events:
     APPROVED_4 = _e(10)  # organiser 1, coordinator 1, pending booking dedicated to 13.2 e2e
     APPROVED_5 = _e(11)  # organiser 2, coordinator 2, pending booking dedicated to 13.2 e2e
     PLANNING = _e(12)  # organiser 1, coordinator 1
-    CONFIRMED = _e(13)  # organiser 2, coordinator 1
-    COMPLETED = _e(14)  # organiser 1, coordinator 1, dated in the past
+    CONFIRMED = _e(13)  # organiser 2, coordinator 1; no venue booked, for booking-requests.spec
+    COMPLETED = _e(14)  # organiser 1, coordinator 1, dated in the past; Grand Hall booked
     CANCELLED = _e(15)  # organiser 2, coordinator 1
     APPROVED_6 = _e(16)  # organiser 1, coordinator 1, pending booking dedicated to 13.2.1 e2e
     APPROVED_7 = _e(17)  # organiser 2, coordinator 2, pending booking dedicated to 13.2.1 e2e
@@ -154,12 +154,13 @@ class Events:
     # Story 21.1's, both organiser 2, coordinator 2 and AWAITING_SAFETY_CHECK, August 2028.
     HARBOUR_CONCERT = _e(35)  # 300 expected at the 250-seat Exhibition Foyer; first in the queue
     BOOK_FAIR = _e(36)  # within capacity; sent back once (SafetyReviews.BOOK_FAIR_CHANGES)
-    # Story 21.1's reviewed events, organiser 2, coordinator 2, no venue booked.
+    # Story 21.1's reviewed events, organiser 2, coordinator 2. The food festival's venue is booked,
+    # Grand Hall (Bookings.APPROVED_FOOD_FESTIVAL_GRAND_HALL); the night walk has none.
     FOOD_FESTIVAL = _e(37)  # CONFIRMED; approved (SafetyReviews.FOOD_FESTIVAL_APPROVED)
     NIGHT_WALK = _e(38)  # PLANNING; sent back and not resent (SafetyReviews.NIGHT_WALK_CHANGES)
     # Story 18.1's, all CONFIRMED, Public and taking registrations: organiser 2, coordinator 2.
-    # Each is one case of tests/e2e/attendee-registration.spec.ts. Only the jazz evening has venues
-    # booked.
+    # Each is one case of tests/e2e/attendee-registration.spec.ts. The jazz evening has two venues
+    # booked; each other has its Main venue at Exhibition Foyer (c8).
     JAZZ_EVENING = _e(39)  # open, 120 places, two venues, the cover picture; only read
     DESIGN_MASTERCLASS = _e(40)  # open, 60 places; the spec registers for it
     FOUNDERS_FIRESIDE = _e(41)  # open, 80 places; the spec double-clicks Register
@@ -198,7 +199,7 @@ class Events:
     BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
     SUNSET_YOGA = _e(73)  # CONFIRMED; only read
     HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
-    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
+    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration cancelled with it
     BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
     LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
@@ -210,7 +211,7 @@ class Events:
     AWARDS_EVENING = _e(12665)  # ... and Venue Staff approve it
     PITCH_NIGHT = _e(12666)  # ... and the coordinator withdraws it, then asks again
     NEIGHBOURHOOD_SUMMIT = _e(12667)  # ... and Venue Staff remove the closure first
-    HERITAGE_WALK = _e(12668)  # CANCELLED, its booking still marked
+    HERITAGE_WALK = _e(12668)  # CANCELLED, its marked booking cancelled with it
     PRODUCT_SHOWCASE = _e(12669)  # a marked PENDING booking
     ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; read only
     WELLNESS_EXPO = _e(12679)  # coordinator 2's; the spec raises a replacement
@@ -222,7 +223,9 @@ class Events:
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
     # Story 20.2: Nadia Notice's, in planning with Carl, the event nine notifications are about.
     NOTICE_GALA = _e(20202)
-    # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028.
+    # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028. The
+    # pottery taster's venue is Seminar Room 2.1 (Bookings.APPROVED_POTTERY_SEMINAR_ROOM), the
+    # others' Exhibition Foyer (c8).
     POTTERY_TASTER = _e(18404)  # open; Users.ATTENDEE_3's first registration
     WATERCOLOUR_CLASS = _e(18405)  # open; Users.ATTENDEE_3's second, in one click
     BOOK_CLUB = _e(18406)  # open; Users.ATTENDEE_4 registers after changing their details
@@ -234,6 +237,9 @@ class Events:
     # Story 21.3: PLANNING, secured, never reviewed; coordinator 1, organiser 1, 10 April 2029. The
     # spec sends it for its safety review and the officer releases its Seminar Room 2.1 booking.
     SAFETY_RELEASE = _e(21301)
+    # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
+    # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
+    PRODUCT_BRIEFING = _e(12801)
 
 
 class Bookings:
@@ -259,6 +265,32 @@ class Bookings:
     # Story 18.1: Events.JAZZ_EVENING's two venues, approved, each hold completed.
     APPROVED_JAZZ_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000013")
     APPROVED_JAZZ_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000014")  # extra venue
+    # c8: Confirmed and Completed events' Main venues (bar Events.CONFIRMED's, left unbooked for
+    # tests/e2e/booking-requests.spec.ts), approved, each hold completed. Every one of
+    # 18.1's, 18.2's, 18.4's and 18.5's but the jazz evening's and the pottery taster's is at
+    # Exhibition Foyer; those below the first three are named for their events.
+    APPROVED_FOOD_FESTIVAL_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000000037")
+    APPROVED_YOGA_FOYER = uuid.UUID("44444444-0000-0000-0000-000000000073")
+    APPROVED_POTTERY_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000018404")
+    APPROVED_TOWN_HALL_GRAND_HALL = uuid.UUID("44444444-0000-0000-0008-000000000014")  # past
+    APPROVED_DESIGN_MASTERCLASS = uuid.UUID("44444444-0000-0000-0008-000000000040")
+    APPROVED_FOUNDERS_FIRESIDE = uuid.UUID("44444444-0000-0000-0008-000000000041")
+    APPROVED_MENTORING_SLOT = uuid.UUID("44444444-0000-0000-0008-000000000042")
+    APPROVED_PORTFOLIO_REVIEW = uuid.UUID("44444444-0000-0000-0008-000000000043")
+    APPROVED_WINE_APPRECIATION = uuid.UUID("44444444-0000-0000-0008-000000000044")
+    APPROVED_LUNAR_NEW_YEAR_MARKET = uuid.UUID("44444444-0000-0000-0008-000000000045")
+    APPROVED_POETRY_NIGHT = uuid.UUID("44444444-0000-0000-0008-000000000070")
+    APPROVED_SKETCHING_WALK = uuid.UUID("44444444-0000-0000-0008-000000000071")
+    APPROVED_BOARD_GAMES_SOCIAL = uuid.UUID("44444444-0000-0000-0008-000000000072")
+    APPROVED_HERITAGE_TRAIL = uuid.UUID("44444444-0000-0000-0008-000000000074")
+    APPROVED_BOOK_SWAP = uuid.UUID("44444444-0000-0000-0008-000000000076")
+    APPROVED_LANTERN_PAINTING = uuid.UUID("44444444-0000-0000-0008-000000000077")
+    APPROVED_WATERCOLOUR_CLASS = uuid.UUID("44444444-0000-0000-0008-000000018405")
+    APPROVED_BOOK_CLUB = uuid.UUID("44444444-0000-0000-0008-000000018406")
+    APPROVED_CHARITY_QUIZ = uuid.UUID("44444444-0000-0000-0008-000000018407")
+    APPROVED_FOOD_TASTING_WALK = uuid.UUID("44444444-0000-0000-0008-000000018408")
+    APPROVED_BATIK_WORKSHOP = uuid.UUID("44444444-0000-0000-0008-000000018503")
+    APPROVED_KITE_AFTERNOON = uuid.UUID("44444444-0000-0000-0008-000000018504")
     # Story 21.2's, each at Seminar Room 2.1.
     APPROVED_BOOTCAMP_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000015")
     APPROVED_CYBER_CLINIC_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000000016")
@@ -277,6 +309,8 @@ class Bookings:
     # minutes of setup, and its additional venue at Exhibition Foyer; both approved by Vera.
     SAFETY_RELEASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021303")
     SAFETY_RELEASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021304")
+    # Story 12.8: Events.PRODUCT_BRIEFING's requirement "Main hall" at Seminar Room 2.1, approved.
+    PRODUCT_BRIEFING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012803")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
     # except the product showcase's, which is pending.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
@@ -449,6 +483,9 @@ class SafetyReviews:
     NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")
     # Story 21.2: Events.DATA_SUMMIT's, with one finding flagging its venue bookings.
     DATA_SUMMIT_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000004")
+    # c8: every other Confirmed or Completed event's approving review, bar Events.CONFIRMED's (it
+    # has none), is ffffffff-0000-0000-0008-<its event's last twelve digits>, e.g. the town hall's.
+    TOWN_HALL_APPROVED = uuid.UUID("ffffffff-0000-0000-0008-000000000014")
 
 
 class Notifications:

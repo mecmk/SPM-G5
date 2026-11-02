@@ -52,6 +52,36 @@ def _entered_check(db: Session, event: Event, at: datetime) -> None:
     db.flush()
 
 
+# Chore c8: the confirmed events reviewed and approved before story 21.1's food festival, by
+# when each entered the check - the town hall 24 Jun, the book swap 5 Sep, 18.1's, 18.2's,
+# 18.4's and 18.5's 24 Sep (by id), and the jazz evening, yoga and pottery 2 Oct. The dinner
+# (Events.CONFIRMED) is left unbooked and unreviewed, for tests/e2e/booking-requests.spec.ts.
+EARLIER_ACCEPTED = [
+    Events.COMPLETED,
+    Events.BOOK_SWAP,
+    Events.DESIGN_MASTERCLASS,
+    Events.FOUNDERS_FIRESIDE,
+    Events.MENTORING_SLOT,
+    Events.PORTFOLIO_REVIEW,
+    Events.WINE_APPRECIATION,
+    Events.LUNAR_NEW_YEAR_MARKET,
+    Events.POETRY_NIGHT,
+    Events.SKETCHING_WALK,
+    Events.BOARD_GAMES_SOCIAL,
+    Events.HERITAGE_TRAIL,
+    Events.LANTERN_PAINTING,
+    Events.WATERCOLOUR_CLASS,
+    Events.BOOK_CLUB,
+    Events.CHARITY_QUIZ,
+    Events.FOOD_TASTING_WALK,
+    Events.BATIK_WORKSHOP,
+    Events.KITE_AFTERNOON,
+    Events.JAZZ_EVENING,
+    Events.SUNSET_YOGA,
+    Events.POTTERY_TASTER,
+]
+
+
 def _ids(client, tab: str | None = "PENDING") -> list[str]:
     response = client.get(QUEUE_PATH, params={} if tab is None else {"status": tab})
     assert response.status_code == 200, response.text
@@ -180,7 +210,10 @@ def test_only_approved_bookings_count_as_venues(safety_client, db: Session):
 # --- AC2 (team request): the Pending, Accepted, Declined and All tabs ---------------------------
 @pytest.mark.story("21.1", ac=2)
 def test_accepted_tab_lists_events_whose_latest_review_approved_them(safety_client):
-    assert _ids(safety_client, "ACCEPTED") == [str(Events.FOOD_FESTIVAL)]
+    assert _ids(safety_client, "ACCEPTED") == [
+        *(str(event) for event in EARLIER_ACCEPTED),
+        str(Events.FOOD_FESTIVAL),
+    ]
 
 
 @pytest.mark.story("21.1", ac=2)
@@ -192,10 +225,12 @@ def test_declined_tab_lists_events_sent_back_and_not_yet_resent(safety_client):
 
 @pytest.mark.story("21.1", ac=2)
 def test_all_tab_lists_every_tab_oldest_first(safety_client):
-    """By when each last entered the check: night walk 4 Oct, food festival 5 Oct 09:00, data
-    summit 5 Oct 12:00, concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct, AI workshop 13 Oct.
+    """By when each last entered the check: c8's earlier ones, night walk 4 Oct, food festival
+    5 Oct 09:00, data summit 5 Oct 12:00, concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct,
+    AI workshop 13 Oct.
     """
     assert _ids(safety_client, tab=None) == [
+        *(str(event) for event in EARLIER_ACCEPTED),
         str(Events.NIGHT_WALK),
         str(Events.FOOD_FESTIVAL),
         str(Events.DATA_SUMMIT),
@@ -211,6 +246,7 @@ def test_each_entry_says_which_tab_it_belongs_to(safety_client):
     entries = safety_client.get(QUEUE_PATH).json()
 
     assert {row["id"]: row["safety_status"] for row in entries} == {
+        **{str(event): "ACCEPTED" for event in EARLIER_ACCEPTED},
         str(Events.NIGHT_WALK): "DECLINED",
         str(Events.FOOD_FESTIVAL): "ACCEPTED",
         str(Events.HARBOUR_CONCERT): "PENDING",

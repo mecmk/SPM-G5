@@ -37,11 +37,7 @@ export function HomePage() {
                   </span>
                   <h3 className="tile-title">{item.label}</h3>
                   <p className="tile-text">{item.description}</p>
-                  {item.isAvailable ? (
-                    <Chip label="Open" tone="success" />
-                  ) : (
-                    <Chip label={`Coming with story ${item.story}`} />
-                  )}
+                  <Chip label="Open" tone="success" />
                 </Link>
               ))}
             </div>
