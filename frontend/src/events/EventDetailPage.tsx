@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { listBookingsForEvent, withdrawBooking, type BookingOutcome } from '../api/bookings'
+import {
+  cancelBooking,
+  listBookingsForEvent,
+  withdrawBooking,
+  type BookingOutcome,
+} from '../api/bookings'
 import { cancelEvent } from '../api/cancellations'
 import { formatApiError, mediaUrl } from '../api/client'
 import { fetchChangeRequestWindow, type ChangeRequestWindow } from '../api/changeRequests'
@@ -41,7 +46,9 @@ import {
   venueSearchPath,
 } from '../routes'
 import {
+  APPROVED_BOOKING_STATUS,
   bookingOutcomeLabels,
+  CANCELLED_BY_COORDINATOR_MESSAGE,
   EXPIRED_BOOKING_STATUS,
   closedAt,
   closingReason,
@@ -49,10 +56,11 @@ import {
   FIND_REPLACEMENT_LABEL,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
+  isCancelledByCoordinator,
   isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
-  RELEASED_BY_SAFETY_REVIEW_LABEL,
+  releasedByLabel,
   RELEASED_BY_SAFETY_REVIEW_MESSAGE,
   replacedByLine,
   replacementRequestedLine,
@@ -109,15 +117,20 @@ import { SafetyReviewSection } from './SafetyReviewSection'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
+/** Story 12.8 AC5: the statuses an event leaves for Planning when one of its bookings is
+ *  cancelled, which the cancel dialog warns of. */
+const RETURNS_TO_PLANNING_STATUSES: readonly EventStatus[] = ['AWAITING_SAFETY_CHECK', 'CONFIRMED']
 /** Fix f7.1.2 AC8 (CL-184): an event that holds no bookings for its organiser to see. */
 const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCELLED']
 
 /** Story 6.2 AC16: the status sentence of a booking, saying a booking cancelled with its event went
  * with it. The cancellation stamps the event and each booking it releases with one time, so a
  * booking an earlier change cancelled (19.2) keeps its own sentence. Story 21.3 AC2, AC8: a booking
- * the Safety Officer's finding released says so first, whatever the event's own state. */
+ * the Safety Officer's finding released says so first, whatever the event's own state. Story 12.8
+ * AC2: so does one its coordinator cancelled. */
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
   if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
+  if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_MESSAGE
   if (
     booking.status === 'CANCELLED' &&
     event.cancelled_at !== null &&
@@ -270,6 +283,10 @@ export function EventDetailPage() {
   const [pendingWithdraw, setPendingWithdraw] = useState<BookingOutcome | null>(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
+  const [pendingCancelBooking, setPendingCancelBooking] = useState<BookingOutcome | null>(null)
+  const [isCancellingBooking, setIsCancellingBooking] = useState(false)
+  const [cancelBookingError, setCancelBookingError] = useState<string | null>(null)
+  const [cancelBookingReason, setCancelBookingReason] = useState('')
   const [isConfirmingReassign, setIsConfirmingReassign] = useState(false)
   const [registrations, setRegistrations] = useState<EventRegistrationList | null>(null)
   const [registrationsError, setRegistrationsError] = useState<string | null>(null)
@@ -320,14 +337,15 @@ export function EventDetailPage() {
 
   /** Story 19.1 AC12: when change requests close, read for the organiser of a Planning or
    *  Confirmed event, and again whenever the event is - its bookings, and so its set-up time, may
-   *  have changed. */
+   *  have changed. Story 12.8 AC4: read for the assigned coordinator too, since cancelling a
+   *  booking closes at the same time. */
   useEffect(() => {
     if (event === null || user === null) return undefined
     const mayRequestChanges =
       can(PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE) &&
       event.organiser_id === user.id &&
       CHANGE_REQUESTABLE_STATUSES.includes(event.status)
-    if (!mayRequestChanges) return undefined
+    if (!mayRequestChanges && event.assigned_coordinator_id !== user.id) return undefined
     let cancelled = false
     fetchChangeRequestWindow(eventId)
       .then((window) => {
@@ -574,6 +592,60 @@ export function EventDetailPage() {
     }
   }
 
+  /** Story 12.8 AC1: the assigned coordinator asks to cancel an approved booking. */
+  function askToCancelBooking(booking: BookingOutcome) {
+    setCancelBookingError(null)
+    setCancelBookingReason('')
+    setPendingCancelBooking(booking)
+  }
+
+  function keepBooking() {
+    setPendingCancelBooking(null)
+  }
+
+  /** Story 12.8 AC1/AC2/AC5: cancels with the reason given - refused here when it is blank, before
+   *  anything is sent - then shows the booking as cancelled with its reason and reads the event
+   *  again, which may be back in Planning with its safety review's blockers changed. */
+  async function confirmCancelBooking() {
+    if (!pendingCancelBooking) return
+    if (!cancelBookingReason.trim()) {
+      setCancelBookingError(ERROR_REGISTRY.BOOKING_CANCELLATION_REASON_REQUIRED.message)
+      return
+    }
+    setIsCancellingBooking(true)
+    setCancelBookingError(null)
+    try {
+      const updated = await cancelBooking(
+        pendingCancelBooking.id,
+        cancelBookingReason,
+        pendingCancelBooking.venue_name,
+      )
+      setBookings(
+        (current) =>
+          current &&
+          current.map((booking) =>
+            booking.id === updated.id
+              ? {
+                  ...booking,
+                  status: updated.status,
+                  cancelled_at: updated.cancelled_at,
+                  release_cause: updated.release_cause,
+                  release_reason: updated.release_reason,
+                  // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
+                  venue_unavailable_marked_at: null,
+                }
+              : booking,
+          ),
+      )
+      setPendingCancelBooking(null)
+      void reloadEvent()
+    } catch (err) {
+      setCancelBookingError(formatApiError(err))
+    } finally {
+      setIsCancellingBooking(false)
+    }
+  }
+
   function askToReassign() {
     setIsConfirmingReassign(true)
   }
@@ -691,6 +763,10 @@ export function EventDetailPage() {
     mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
   const shownRequestWindow = readRequestWindow?.window ?? null
   const canRequestChanges = shownRequestWindow?.is_open === true
+  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window the
+   *  server sent hides the cancel; until it is read, or if it can't be, the server still refuses. */
+  const isBookingCancelClosed =
+    requestWindow?.eventId === eventId && requestWindow.window?.is_open === false
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
    *  approved event, mirroring the backend's `list_change_requests`. */
   const canViewChangeRequests =
@@ -1124,10 +1200,11 @@ export function EventDetailPage() {
                           <strong>{replacesLine(booking.replaces_venue_name)}</strong>
                         </p>
                       )}
-                      {/* Story 21.3 AC2: a booking the Safety Officer's finding named. */}
-                      {isReleasedBySafetyReview(booking) && (
+                      {/* Story 21.3 AC2: a booking the Safety Officer's finding named. Story 12.8
+                          AC2: one its coordinator cancelled. */}
+                      {releasedByLabel(booking) !== null && (
                         <p>
-                          <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
+                          <strong>{releasedByLabel(booking)}</strong>
                         </p>
                       )}
                       {booking.replaced_by_venue_name !== null && (
@@ -1239,6 +1316,28 @@ export function EventDetailPage() {
                       </button>
                     </div>
                   )}
+                  {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
+                   *  only an approved booking, with no replacement pending (AC7), before the
+                   *  cut-off (AC4) - mirrors the backend's own checks. */}
+                  {booking.status === APPROVED_BOOKING_STATUS &&
+                    booking.pending_replacement_venue_name === null &&
+                    !isBookingCancelClosed &&
+                    isAssignedCoordinator && (
+                      <div className="cluster">
+                        <button
+                          type="button"
+                          className="secondary button-sm"
+                          aria-label={
+                            forRequirement === null
+                              ? `Cancel the booking of ${booking.venue_name}`
+                              : `Cancel the booking of ${booking.venue_name} for ${forRequirement}`
+                          }
+                          onClick={() => askToCancelBooking(booking)}
+                        >
+                          Cancel booking
+                        </button>
+                      </div>
+                    )}
                   {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
                    *  event's assigned coordinator while it can take a booking (AC8): a replacement
                    *  for an approved one, the catalogue's Switch for a pending one. */}
@@ -1465,6 +1564,39 @@ export function EventDetailPage() {
             The request for {pendingWithdraw.venue_name} will be withdrawn and its hold on the venue
             released. Venue Staff will be told.
           </p>
+        </ConfirmDialog>
+      )}
+      {pendingCancelBooking && (
+        <ConfirmDialog
+          title="Cancel this venue booking?"
+          confirmLabel="Cancel booking"
+          cancelLabel="Keep booking"
+          isBusy={isCancellingBooking}
+          error={cancelBookingError}
+          errorId="cancel-booking-error"
+          onConfirm={confirmCancelBooking}
+          onCancel={keepBooking}
+        >
+          <p>
+            The booking of {pendingCancelBooking.venue_name} will be cancelled and the venue
+            released straight away. Venue Staff will be told. This cannot be undone.
+          </p>
+          {RETURNS_TO_PLANNING_STATUSES.includes(event.status) && (
+            <p>
+              {event.name} will go back to Planning and need a new safety check before it is
+              confirmed again.
+            </p>
+          )}
+          <label>
+            Reason for cancelling
+            <textarea
+              rows={3}
+              placeholder="Shown to Venue Staff."
+              value={cancelBookingReason}
+              aria-describedby={cancelBookingError ? 'cancel-booking-error' : undefined}
+              onChange={(e) => setCancelBookingReason(e.target.value)}
+            />
+          </label>
         </ConfirmDialog>
       )}
       {isConfirmingReassign && event.assigned_coordinator_id !== null && (

@@ -60,12 +60,32 @@ export function isReleasedBySafetyReview(booking: Pick<Booking, 'release_cause'>
   return booking.release_cause === 'SAFETY_REVIEW'
 }
 
-/** Story 21.3 AC2: why a closed booking was closed, as its page words it - the finding's required
- * change for a booking the safety review released, otherwise the decision's own reason. */
+/** Story 12.8 AC2: how the event page and Venue Staff's pages say a booking its coordinator
+ * cancelled was released, and what the event page adds to that. */
+export const CANCELLED_BY_COORDINATOR_LABEL = 'Cancelled by the coordinator'
+export const CANCELLED_BY_COORDINATOR_MESSAGE =
+  'The coordinator cancelled this booking, so the venue is free for other events.'
+
+/** Story 12.8 AC2: whether the event's coordinator cancelled this booking. */
+export function isCancelledByCoordinator(booking: Pick<Booking, 'release_cause'>): boolean {
+  return booking.release_cause === 'COORDINATOR_CANCELLED'
+}
+
+/** Story 21.3 AC2, story 12.8 AC2: the line naming who released a closed booking, for the two
+ * releases that record why in their own words; null for any other booking. */
+export function releasedByLabel(booking: Pick<Booking, 'release_cause'>): string | null {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_LABEL
+  if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_LABEL
+  return null
+}
+
+/** Story 21.3 AC2, story 12.8 AC2: why a closed booking was closed, as its page words it - the
+ * finding's required change for a booking the safety review released, the coordinator's reason
+ * for one they cancelled, otherwise the decision's own reason. */
 export function closingReason(
   booking: Pick<Booking, 'decision_reason' | 'release_cause' | 'release_reason'>,
 ): string | null {
-  return isReleasedBySafetyReview(booking) ? booking.release_reason : booking.decision_reason
+  return releasedByLabel(booking) !== null ? booking.release_reason : booking.decision_reason
 }
 
 /** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
@@ -147,14 +167,35 @@ export function closedAt(request: { decided_at: string | null; released_at: stri
 /** Story 13.1.2 AC1: the tab strip for the venue staff booking queue, matching the coordinator's
  * Events inbox tab pattern (story 6.1). WITHDRAWN has no tab of its own and only shows up under
  * "All". Story 12.7 AC3: a booking whose hold expired leaves Approved for a tab of its own. Story
- * 6.2 AC14: so does a cancelled one, read-only. */
-export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'APPROVED', label: 'Approved' },
-  { key: 'REJECTED', label: 'Rejected' },
-  { key: 'EXPIRED', label: 'Expired' },
-  { key: 'CANCELLED', label: 'Cancelled' },
+ * 6.2 AC14: so does a cancelled one, read-only. Story 15.2.1 AC2: each tab's hint, the page's
+ * subtitle while it is open, saying what it holds. */
+export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string; hint: string }[] = [
+  {
+    key: 'ALL',
+    label: 'All',
+    hint: 'Every booking request, including ones the coordinator withdrew, which have no tab of their own.',
+  },
+  {
+    key: 'PENDING',
+    label: 'Pending',
+    hint: 'Waiting for a decision. A pending request already holds its venue.',
+  },
+  {
+    key: 'APPROVED',
+    label: 'Approved',
+    hint: 'Approved. The hold keeps the venue until it expires, unless the event is confirmed first.',
+  },
+  { key: 'REJECTED', label: 'Rejected', hint: 'Rejected, with the reason given.' },
+  {
+    key: 'EXPIRED',
+    label: 'Expired',
+    hint: 'Approved, but the hold expired before the event was confirmed, so the venue was released. Read-only.',
+  },
+  {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, a safety review released it, or the coordinator cancelled it. Read-only.',
+  },
 ]
 
 /** The status a tab asks the backend for, or `null` for "All". */

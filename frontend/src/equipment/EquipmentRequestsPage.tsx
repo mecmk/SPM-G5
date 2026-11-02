@@ -46,14 +46,35 @@ type EquipmentQueueTabKey = 'ALL' | EquipmentQueueStatus
 /** Story 15.2 AC3: the queue's tabs, plus All (a team request beyond the AC), in the order of
  * Venue Staff's booking queue. The page opens on Pending so it reads as a queue. Story 6.2 AC15:
  * Cancelled, read-only, for requests whose event was cancelled after they were sent. Story 17.2
- * AC4: Withdrawn, read-only, for requests their coordinator withdrew. */
-const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'ACCEPTED', label: 'Accepted' },
-  { key: 'DECLINED', label: 'Declined' },
-  { key: 'CANCELLED', label: 'Cancelled' },
-  { key: 'WITHDRAWN', label: EQUIPMENT_STATUS_LABELS.WITHDRAWN },
+ * AC4: Withdrawn, read-only, for requests their coordinator withdrew. Story 15.2.1 AC1: each tab's
+ * hint, the page's subtitle while it is open, saying what it holds. */
+const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string; hint: string }[] = [
+  { key: 'ALL', label: 'All', hint: 'Every request sent to you, in any status.' },
+  {
+    key: 'PENDING',
+    label: 'Pending',
+    hint: 'Waiting for a decision. A pending request already holds its equipment.',
+  },
+  {
+    key: 'ACCEPTED',
+    label: 'Accepted',
+    hint: 'Accepted, with the units reserved for the event.',
+  },
+  {
+    key: 'DECLINED',
+    label: 'Declined',
+    hint: 'Declined, with the reason given. They stay here if the event is later cancelled or rejected.',
+  },
+  {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    hint: 'Closed because the event was cancelled or rejected, or an approved change removed them. Read-only.',
+  },
+  {
+    key: 'WITHDRAWN',
+    label: EQUIPMENT_STATUS_LABELS.WITHDRAWN,
+    hint: 'Withdrawn by the event coordinator, so nothing is held for them. Read-only.',
+  },
 ]
 
 /** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
@@ -156,6 +177,8 @@ interface OpenDecision {
  * Story 17.2 AC4: a Withdrawn tab lists, read-only, the requests their coordinator withdrew, each
  * saying when and by whom, with no figures, since nothing is held for them any more.
  *
+ * Story 15.2.1 AC1: the subtitle under the page title says what the selected tab holds.
+ *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, equipment type and Requested by, orders the tab and counts each tab's matches. AC6:
  * a search nothing matches says so, with Clear search. AC7: the tab, search and order live in the
@@ -191,6 +214,8 @@ export function EquipmentRequestsPage() {
       })),
     [queue],
   )
+
+  const tabHint = EQUIPMENT_QUEUE_TABS.find((item) => item.key === tab)?.hint
 
   function changeTab(next: EquipmentQueueTabKey) {
     changeView({ tab: next })
@@ -233,10 +258,7 @@ export function EquipmentRequestsPage() {
 
   return (
     <div className="page page-wide">
-      <PageHeader
-        title={PAGE_TITLE}
-        subtitle="Equipment requests sent to Technical Support, with what is available for each."
-      />
+      <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
       {error && (
         <p role="alert" className="error">
@@ -279,7 +301,7 @@ export function EquipmentRequestsPage() {
           )}
 
           {!isStale && queue.items.length > 0 && (
-            <ul className="stack">
+            <ul className="stack queue-list">
               {queue.items.map((entry) => (
                 <li key={entry.id} className="card stack">
                   <div className="item-card-header">

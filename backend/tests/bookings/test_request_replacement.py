@@ -443,7 +443,7 @@ def test_a_replacement_raced_by_the_closure_ending_is_made_or_refused_whole(engi
             actor = session.get(User, Users.COORDINATOR.id)
             start.wait()
             try:
-                original = service.get_booking_for_decision(session, original_id)
+                original = service.get_booking_for_switch(session, original_id)
                 service.request_replacement_booking(
                     session,
                     original,
@@ -716,7 +716,7 @@ def test_two_replacements_sent_at_once_make_one(engine):
             actor = session.get(User, Users.COORDINATOR.id)
             start.wait()
             try:
-                original = service.get_booking_for_decision(session, original_id)
+                original = service.get_booking_for_switch(session, original_id)
                 service.request_replacement_booking(
                     session,
                     original,

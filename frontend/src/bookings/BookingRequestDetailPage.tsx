@@ -24,10 +24,9 @@ import {
   closingReason,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRES_LABEL,
-  isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
-  RELEASED_BY_SAFETY_REVIEW_LABEL,
+  releasedByLabel,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
@@ -418,9 +417,9 @@ export function BookingRequestDetailPage() {
 
       {closingReason(booking) !== null && (
         <p className="subtle-block">
-          {isReleasedBySafetyReview(booking) && (
+          {releasedByLabel(booking) !== null && (
             <>
-              <strong>{RELEASED_BY_SAFETY_REVIEW_LABEL}</strong>
+              <strong>{releasedByLabel(booking)}</strong>
               <br />
             </>
           )}

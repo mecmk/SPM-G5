@@ -133,7 +133,7 @@ export const EVENTS = {
   awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
   pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
   neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
-  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its booking still marked
+  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its marked booking cancelled with it
   productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
   roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
   wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
@@ -177,6 +177,9 @@ export const EVENTS = {
   // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
   // sends it for its safety review and releases its Seminar Room 2.1 booking for good.
   safetyRelease: '33333333-0000-0000-0000-000000021301',
+  // Story 12.8: Planning; organiser, coordinator. cancel-approved-booking.spec.ts cancels its one
+  // approved booking, Seminar Room 2.1 for "Main hall", for good.
+  productBriefing: '33333333-0000-0000-0000-000000012801',
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
