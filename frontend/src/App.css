@@ -163,6 +163,9 @@
 
 .page {
   max-width: 56rem;
+  /* .app-main is already the content column left over after the sidebar (flex: 1 in
+     .app-shell), so centring within it needs no sidebar-width math. */
+  margin-inline: auto;
 }
 
 .page-wide {
@@ -472,16 +475,33 @@
   line-height: 1.3;
 }
 
-/* Story 13.2.1: the booking queue card's title, unlike .item-card-title above, links to the
-   booking detail page rather than the item itself - scoped here so it does not also recolor
-   the venue catalogue's (story 8.1) title links. */
+/* Stories 8.1, 13.1, 13.2.1: a card's title links to its page but keeps the title's own colour
+   rather than the link blue, in the venue catalogue and the queues alike. */
+.item-card-title a,
 .queue-card-title a {
   color: inherit;
   text-decoration: none;
 }
 
-/* Story 19.2: a list of queue cards (change requests, and since story 15.2.1 bookings and
-   equipment), without bullets or the list's indent, so each card lines up with the page heading. */
+/* Story 8.1: a venue card opens its record from a click anywhere on it (VenueCard.tsx), so the
+   card says it is clickable and rings itself when its title has focus. */
+.item-card-linked {
+  cursor: pointer;
+}
+
+.item-card-linked:hover .item-card-title a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.item-card-linked:has(.item-card-title a:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Story 19.2: a list of queue cards (change requests, since story 15.2.1 bookings and equipment,
+   and since c3.1 safety checks and room layouts), without bullets or the list's indent, so each
+   card lines up with the page heading. */
 .queue-list {
   list-style: none;
   margin: 0;
@@ -890,16 +910,6 @@ label.choice-chip:has(input:checked)::before {
 }
 
 /* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
-
-/*
- * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
- * so centring within it needs no sidebar-width math - it just has to stop being flush left.
- */
-.event-detail-page,
-.event-routine-edit-page,
-.equipment-request-page {
-  margin-inline: auto;
-}
 
 .divider {
   height: 0;

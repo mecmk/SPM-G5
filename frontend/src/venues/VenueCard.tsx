@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
+import { useState, type MouseEvent, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { mediaUrl } from '../api/client'
 import type { VenueSummary } from '../api/venues'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
+import { isCardOpenClick } from '../shared/cardClick'
 
 export interface VenueCardProps {
   venue: VenueSummary
@@ -20,22 +21,28 @@ export interface VenueCardProps {
 
 /**
  * Story 8.1: one venue in the catalogue. AC1 name, location and capacity, and the name opens the
- * full record. A withdrawn venue is listed only when Venue Staff ask for it (AC12), and is badged
- * so it cannot pass for one in service (AC2: "excluded or clearly marked"). Story 8.3 AC6: the
- * venue's first picture fills the band at the top; without one, or if it fails to load, the
- * placeholder stays.
+ * full record, and so does a click anywhere else on the card, from a click handler that steps
+ * aside for the footer's buttons (the pattern of `EventCard`). A withdrawn venue is listed only
+ * when Venue Staff ask for it (AC12), and is badged so it cannot pass for one in service (AC2:
+ * "excluded or clearly marked"). Story 8.3 AC6: the venue's first picture fills the band at the
+ * top; without one, or if it fails to load, the placeholder stays.
  */
 export function VenueCard({ venue, recordPath, notes, actions }: VenueCardProps) {
   // The address that failed, not just that one did, so a new cover is tried rather than hidden.
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   const coverUrl = venue.cover_image_url
+  const navigate = useNavigate()
 
   function markCoverFailed() {
     setFailedCoverUrl(coverUrl)
   }
 
+  function handleCardClick(click: MouseEvent<HTMLElement>) {
+    if (isCardOpenClick(click)) navigate(recordPath)
+  }
+
   return (
-    <article className="item-card">
+    <article className="item-card item-card-linked" onClick={handleCardClick}>
       <div className="item-card-picture" aria-hidden="true">
         {coverUrl !== null && coverUrl !== failedCoverUrl ? (
           <img
