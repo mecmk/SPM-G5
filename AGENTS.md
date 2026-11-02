@@ -167,7 +167,7 @@ frontend/
     components/         # presentational pieces used by more than one page
     layout/             # the signed-in frame: sidebar, phone drawer, the navigation list
     notifications/      # the bell and its panel: the user's server notifications and the log of their own actions
-    pages/              # pages of no feature area: home, not permitted, coming soon
+    pages/              # pages of no feature area: home, not permitted
     shared/             # helpers used by more than one page
     errors/             # the registry of every user-facing error
 tests/

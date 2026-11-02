@@ -18,10 +18,8 @@ import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AssignmentOverviewPage } from './events/AssignmentOverviewPage'
 import { UnassignedQueuePage } from './events/UnassignedQueuePage'
 import { AppLayout } from './layout/AppLayout'
-import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
 import { ServerNotificationProvider } from './notifications/ServerNotificationProvider'
-import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import { AttendeeEventPage } from './registrations/AttendeeEventPage'
@@ -32,6 +30,7 @@ import { UpcomingEventsPage } from './registrations/UpcomingEventsPage'
 import { SafetyCheckDetailPage } from './safety/SafetyCheckDetailPage'
 import { SafetyChecksPage } from './safety/SafetyChecksPage'
 import {
+  ALL_EVENTS_PATH,
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
@@ -75,8 +74,7 @@ import './App.css'
 /**
  * The route map. Signed-in pages sit inside <RequireAuth> and render within <AppLayout>
  * (story 1.1); a role-restricted page also sits inside <RequirePermission> for its permission
- * (story 1.2). Sections whose page is not built yet (NAV_ITEMS with isAvailable: false) get a
- * placeholder. The log of the user's own actions and their server notifications (story 20.2) wrap
+ * (story 1.2). The log of the user's own actions and their server notifications (story 20.2) wrap
  * the signed-in frame, so signing out clears them.
  * The story c3 component gallery stays reachable in development builds.
  */
@@ -217,6 +215,12 @@ function App() {
               <Route path={EVENT_PATH} element={<EventDetailPage />} />
 
               {/*
+                c9 (1.2 AC5): no story delivers an All events page, so its old address opens
+                the main page, as the other retired addresses do through the catch-all below.
+              */}
+              <Route path={ALL_EVENTS_PATH} element={<Navigate to={HOME_PATH} replace />} />
+
+              {/*
                 Story 7.2: the assigned Event Coordinator edits an event in the 2.1 request form -
                 its internal notes until it is closed, the organiser's request too until it is
                 confirmed (f7.2.4). Sits behind EVENTS_EDIT_ROUTINE (a role
@@ -229,12 +233,6 @@ function App() {
                   element={<EventRequestFormPage key="coordinator-edit" isCoordinatorEdit />}
                 />
               </Route>
-
-              {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (
-                <Route key={item.to} element={<RequirePermission permission={item.permission} />}>
-                  <Route path={item.to} element={<ComingSoonPage item={item} />} />
-                </Route>
-              ))}
             </Route>
           </Route>
           <Route path="*" element={<Navigate to={HOME_PATH} replace />} />

@@ -1,6 +1,7 @@
 /**
- * Story 9.1: venue availability calendar (the 14-criterion version; AC6, the Venue Schedule page
- * for Venue Staff, is a later step).
+ * Story 9.1: venue availability calendar (the 14-criterion version). Its AC6, a Venue Schedule
+ * page for Venue Staff, left the backlog: the calendar is on each venue's page and each booking
+ * request's (c9, 1.2 AC5).
  * AC1 one venue, one month at a time, with previous / next.
  * AC2 a confirmed booking is unavailable; a pending request shows as "Held - pending", with the
  * words as well as the colour.
