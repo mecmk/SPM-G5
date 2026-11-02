@@ -20,6 +20,14 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
  *  `KEPT_FOR_RECORD` (backend/app/events/service.py). */
 export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']
 
+/** Story 17.2 AC3, 15.1 AC6 (fix f15.1.1): items a correction leaves alone - those kept only for
+ *  the record, and a declined one, which the event page lists as history and which does not count.
+ *  Mirrors the backend's `_NOT_CORRECTED` (backend/app/events/service.py). */
+export const NOT_CORRECTED_STATUSES: readonly EquipmentItemStatus[] = [
+  ...KEPT_FOR_RECORD_STATUSES,
+  'DECLINED',
+]
+
 /** Story 17.2 AC3/AC4: when an item was withdrawn and by whom, as the event page and Technical
  *  Support's queue both show it. */
 export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string | null): string {
