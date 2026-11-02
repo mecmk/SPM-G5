@@ -197,6 +197,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * Story 6.2 AC14: a Cancelled tab lists, read-only, the bookings released when their event was
  * cancelled. AC16: such a card says when it was approved, if it was, and when it was cancelled.
  *
+ * Story 15.2.1 AC2: the subtitle under the page title says what the selected tab holds, as on
+ * Technical Support's equipment queue.
+ *
  * Story 13.3 AC1-AC3: a search box and an Order by list beside the tabs; the server searches the
  * event name, venue name and Submitted by, orders the tab and counts each tab's matches. AC4: a new
  * search or order starts again at page 1. AC6: a search nothing matches says so, with Clear
@@ -240,6 +243,8 @@ export function BookingRequestsPage() {
     fromLabel: PAGE_TITLE,
   }
   const isSearched = view.search.trim() !== ''
+
+  const tabHint = BOOKING_STATUS_TABS.find((item) => item.key === tab)?.hint
 
   function changeTab(next: BookingStatusTabKey) {
     changeView({ tab: next })
@@ -343,10 +348,7 @@ export function BookingRequestsPage() {
 
   return (
     <div className="page page-wide">
-      <PageHeader
-        title={PAGE_TITLE}
-        subtitle="Venue booking requests to decide, and the decisions already made."
-      />
+      <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
       {error && (
         <p role="alert" className="error">
@@ -389,7 +391,7 @@ export function BookingRequestsPage() {
           )}
 
           {!isStale && queue.items.length > 0 && (
-            <ul className="stack">
+            <ul className="stack queue-list">
               {queue.items.map((entry) => (
                 <li key={entry.id} className="card stack">
                   <div className="item-card-header">
