@@ -82,7 +82,6 @@ from app.auth.models import User
 from app.bookings import service as booking_service
 from app.bookings.models import VenueBooking
 from app.common.audit import AuditLog
-from app.events import service as events_service
 from app.events.models import Event, EventStatus, EventStatusHistory
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
@@ -356,6 +355,31 @@ def _pause_before_commit(session: Session, engine, pids: dict, holding, waiter: 
         real()
 
     session.commit = paused
+
+
+def _pause_after_first_lock(session: Session, engine, pids: dict, holding, waiter: str) -> None:
+    """The first statement of ``session`` that locks rows (FOR UPDATE, FOR NO KEY UPDATE) is let
+    through, and then ``session`` waits until ``waiter`` stands on a lock this transaction holds -
+    so which row a save locks first decides whether a confirmation can deadlock with it."""
+    real_execute, real_scalars = session.execute, session.scalars
+
+    def pause(statement) -> None:
+        if getattr(statement, "_for_update_arg", None) is not None:
+            session.execute, session.scalars = real_execute, real_scalars
+            holding.set()
+            wait_until_waiting(engine, pids, waiter)
+
+    def execute(statement, *args, **kwargs):
+        result = real_execute(statement, *args, **kwargs)
+        pause(statement)
+        return result
+
+    def scalars(statement, *args, **kwargs):
+        result = real_scalars(statement, *args, **kwargs)
+        pause(statement)
+        return result
+
+    session.execute, session.scalars = execute, scalars
 
 
 def _committed_pending_request(engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
@@ -1999,14 +2023,12 @@ def test_a_save_and_the_events_confirmation_at_the_same_moment_both_finish(engin
 
 
 @pytest.mark.story("9.5", ac=10)
-def test_a_save_that_holds_the_event_first_and_a_confirmation_that_follows_both_finish(
-    engine, monkeypatch
-):
-    """AC10, save first. The save holds the event's row, then pauses before it returns the event
-    to Planning; the confirmation starts and blocks on that row; once it is waiting, the save goes
-    on and commits; the confirmation then goes through. Both finish. Without the save's lock on the
-    event the confirmation took the event first, its trigger then waited on the bookings the save
-    held, and the save's own update of the event waited on the confirmation: a deadlock."""
+def test_a_save_that_holds_the_event_first_and_a_confirmation_that_follows_both_finish(engine):
+    """AC10, save first. The save takes its first lock - the event's row - and pauses; the
+    confirmation starts and blocks on that row; once it is waiting, the save goes on and commits;
+    the confirmation then goes through. Both finish. Had the save locked the booking first, the
+    confirmation would take the event, its trigger would wait on the booking the save held, and the
+    save's lock on the event would wait on the confirmation: a deadlock."""
     expiry = datetime.now(UTC) + timedelta(days=1)
     with Session(engine) as session:
         venue = make_venue(session)
@@ -2018,18 +2040,11 @@ def test_a_save_that_holds_the_event_first_and_a_confirmation_that_follows_both_
         venue_id, event_id, booking_id = venue.id, event.id, booking.id
     pids: dict[str, int] = {}
     holding = threading.Event()
-    original = events_service.return_event_to_planning
-
-    def paused(*args, **kwargs):
-        holding.set()
-        wait_until_waiting(engine, pids, "confirm")
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(events_service, "return_event_to_planning", paused)
 
     def save() -> None:
         with Session(engine) as session:
             pids["save"] = backend_pid(session)
+            _pause_after_first_lock(session, engine, pids, holding, "confirm")
             venue_service.add_unavailability(
                 session,
                 venue_id,
