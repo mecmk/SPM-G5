@@ -944,10 +944,11 @@ def lock_named_bookings(
 
 
 def get_booking_for_switch(db: Session, booking_id: uuid.UUID) -> VenueBooking:
-    """Story 12.5's switch, row-locked as ``get_booking_for_decision`` locks it, with its event
-    locked first. The switch requests another venue for the event, so it must read the event under
-    lock (``_bookable_event``); taking the event before the booking, as story 6.2's cancellation
-    and story 9.4's re-check do, means the two can never each hold what the other waits for."""
+    """Story 12.5's switch and story 12.6's replacement request, row-locked as
+    ``get_booking_for_decision`` locks it, with its event locked first. Each requests another venue
+    for the event, so it must read the event under lock (``_bookable_event``); taking the event
+    before the booking, as story 6.2's cancellation, story 9.4's re-check and story 12.8's cancel
+    do, means the two can never each hold what the other waits for."""
     event_id = db.scalar(select(VenueBooking.event_id).where(VenueBooking.id == booking_id))
     if event_id is None:
         raise BookingNotFound(booking_id)
@@ -1591,7 +1592,8 @@ def find_covering_booking(db: Session, requirement_id: uuid.UUID) -> VenueBookin
 
 
 def find_pending_replacement(db: Session, original_id: uuid.UUID) -> VenueBooking | None:
-    """Story 12.6 AC10: the pending replacement asked for ``original_id``, if any."""
+    """Story 12.6 AC10, story 12.8 AC7: the pending replacement asked for ``original_id``, if
+    any."""
     return db.scalar(
         select(VenueBooking)
         .options(joinedload(VenueBooking.venue))
@@ -1735,8 +1737,8 @@ def request_replacement_booking(
     attendance, layout and facilities are the requirement's - or, for an additional venue, the
     event's - as for any request; the setup and teardown are the original's unless ``data`` sends
     its own. Callers fetch ``original`` with ``get_booking_for_switch``, so two tabs asking at
-    once wait on its row lock, a cancel of it (story 12.8) waits or is waited for on the event,
-    and a closure ending beside this request is serialised with it.
+    once, a cancel of it (story 12.8) and a closure ending beside this request all take turns on
+    the event.
 
     Refusals come in this order: not the event's assigned coordinator (``NotAssignedCoordinator``,
     before anything about the booking is said, AC9); an event that takes no booking, a cancelled

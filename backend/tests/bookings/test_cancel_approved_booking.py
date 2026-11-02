@@ -50,6 +50,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
+from app.bookings import router as bookings_router
 from app.bookings import service as bookings_service
 from app.bookings.models import BookingStatus, VenueBooking
 from app.bookings.schemas import BookingReplacementIn
@@ -497,6 +498,23 @@ def test_booking_the_same_venue_again_does_not_bring_the_approval_back(
     assert coordinator.post(f"/events/{scene.event.id}/confirm").status_code == 200
 
 
+@pytest.mark.story("12.8", ac=6)
+def test_another_events_cancelled_booking_leaves_the_approval_alone(
+    coordinator_client, db: Session, scene: Scene
+):
+    """Only a cancel of this event's own booking ends its approval."""
+    other = _scene(
+        db,
+        starts_at=datetime(2030, 3, 5, 1, 0, tzinfo=UTC),
+        ends_at=datetime(2030, 3, 5, 9, 0, tzinfo=UTC),
+    )
+    _approve_safety(db, scene.event)
+
+    _cancelled(coordinator_client, other.extra)
+
+    assert coordinator_client.post(f"/events/{scene.event.id}/confirm").status_code == 200
+
+
 # --- AC7: a marked booking can be cancelled; a pending replacement blocks it -------------------
 @pytest.mark.story("12.8", ac=7)
 def test_a_booking_marked_venue_unavailable_can_be_cancelled(coordinator_client, db: Session):
@@ -752,5 +770,42 @@ def test_a_replacement_requested_first_blocks_the_cancel(engine):
             alternative = session.get(Venue, alternative_id).name
             assert outcome == REPLACEMENT_PENDING.format(venue=alternative)
             assert session.get(VenueBooking, booking_id).status == BookingStatus.APPROVED
+    finally:
+        purge(engine, event_ids=[event_id], venue_ids=venue_ids)
+
+
+@pytest.mark.story("12.8", ac=7)
+def test_the_replacement_route_takes_the_event_before_the_booking(engine):
+    """The cancel locks the event and then the booking, so the route must too, or each could hold
+    what the other waits for. While the route stands waiting on the event, the booking is free."""
+    event_id, booking_id, alternative_id, venue_ids = _committed(engine)
+    pids: dict[str, int] = {}
+
+    def route() -> None:
+        with Session(engine) as session:
+            pids["route"] = backend_pid(session)
+            bookings_router.request_replacement_booking(
+                booking_id,
+                BookingReplacementIn(venue_id=alternative_id),
+                session,
+                session.get(User, Users.COORDINATOR.id),
+            )
+
+    try:
+        with Session(engine) as holder, ThreadPoolExecutor(max_workers=1) as pool:
+            holder.execute(
+                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
+            )
+            requested = pool.submit(route)
+            try:
+                wait_until_waiting(engine, pids, "route")
+                assert holder.scalar(
+                    select(VenueBooking.id)
+                    .where(VenueBooking.id == booking_id)
+                    .with_for_update(nowait=True)
+                )
+            finally:
+                holder.rollback()
+            requested.result(timeout=LOCK_WAIT_SECONDS)
     finally:
         purge(engine, event_ids=[event_id], venue_ids=venue_ids)

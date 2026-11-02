@@ -51,7 +51,7 @@ async function changeCall(page: Page, path: string, change: (body: never) => unk
 }
 
 test('12.8 AC8: only the assigned coordinator is offered the cancel', async ({ page }) => {
-  await signIn(page, ACCOUNTS.organiser)
+  await signIn(page, ACCOUNTS.coordinator2)
   await page.goto(`/events/${EVENTS.productBriefing}`)
   await expect(page.getByRole('heading', { name: EVENT_NAME })).toBeVisible()
   await expect(page.getByRole('main')).toContainText('Seminar Room 2.1')
