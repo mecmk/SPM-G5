@@ -436,17 +436,20 @@ def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as
 def test_a_never_approved_replacement_is_not_shown_as_replacing_when_both_are_cancelled(
     login_as, db
 ):
-    """The event is cancelled and both bookings end CANCELLED, as a cancellation would leave
-    them. The replacement was never approved, so nothing says the original was replaced."""
+    """12.6 AC8 and CL-194 (8). Both bookings end CANCELLED, the original first, while the
+    replacement is still pending: closing the original cleared the replacement's link to it, so
+    when the replacement is cancelled in turn it is not shown as having replaced anything, and the
+    original never reads "Replaced by" it, as the replacement was never approved."""
     scene = make_scenario(db)
     replacement = add_pending_replacement(db, scene)
     set_status(db, scene.original.id, BookingStatus.CANCELLED)
     set_status(db, replacement.id, BookingStatus.CANCELLED)
+    assert column(db, replacement.id, "replaces_booking_id") is None
 
     listed = _listed(login_as(Users.COORDINATOR), scene)
 
     assert listed[str(scene.original.id)]["replaced_by_venue_name"] is None
-    assert listed[str(replacement.id)]["replaces_venue_name"] == scene.original_venue.name
+    assert listed[str(replacement.id)]["replaces_venue_name"] is None
 
 
 # --- AC3: the original closed first ------------------------------------------------------------

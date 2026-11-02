@@ -668,8 +668,6 @@ def _cancel_in(engine: Engine, booking_id: uuid.UUID, pids: dict[str, int]) -> s
             )
         except bookings_service.BookingNotApproved as refused:
             return str(refused)
-        except bookings_service.ReplacementPending as refused:
-            return str(refused)
         return "cancelled"
 
 

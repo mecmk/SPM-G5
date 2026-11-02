@@ -1756,22 +1756,24 @@ def _remove_period_rows(engine, venue_id: uuid.UUID) -> None:
         session.commit()
 
 
-def _race_on_a_period(engine, monkeypatch, *, first, second):
+def _race_on_a_period(engine, monkeypatch, *, action, first, second):
     """Run ``first`` and ``second`` on one period, the first holding its row lock (the period is
-    written, the transaction not yet committed) until the second is waiting on a lock. ``first``
+    written, the transaction not yet committed) until the second is waiting on a lock: the pause is
+    the period's own audit entry, ``action``, so no other audit row triggers it. ``first``
     and ``second`` are called with a session of their own; ``second`` starts once the first holds.
     Returns what each returned or raised."""
     pids: dict[str, int] = {}
     holding = threading.Event()
-    original = venue_service.recheck_venue_bookings
+    original = venue_service.record_audit
 
     def paused(*args, **kwargs):
-        if not holding.is_set():
+        result = original(*args, **kwargs)
+        if kwargs.get("action") == action and not holding.is_set():
             holding.set()
             _wait_until(engine, pids, "second")
-        return original(*args, **kwargs)
+        return result
 
-    monkeypatch.setattr(venue_service, "recheck_venue_bookings", paused)
+    monkeypatch.setattr(venue_service, "record_audit", paused)
 
     def run_first():
         with Session(engine) as session:
@@ -1805,6 +1807,7 @@ def test_an_edit_that_waited_for_end_now_finds_the_period_ended(engine, monkeypa
         refusal = _race_on_a_period(
             engine,
             monkeypatch,
+            action=venue_service.UNAVAILABILITY_ENDED,
             first=lambda session: venue_service.end_unavailability(
                 session,
                 venue_id,
@@ -1839,6 +1842,7 @@ def test_an_edit_that_waited_for_a_removal_finds_the_period_gone(engine, monkeyp
         refusal = _race_on_a_period(
             engine,
             monkeypatch,
+            action=venue_service.UNAVAILABILITY_REMOVED,
             first=lambda session: venue_service.remove_unavailability(
                 session,
                 venue_id,
@@ -1871,6 +1875,7 @@ def test_a_removal_that_waited_for_an_edit_sees_what_the_edit_made(engine, monke
         refusal = _race_on_a_period(
             engine,
             monkeypatch,
+            action=venue_service.UNAVAILABILITY_UPDATED,
             first=lambda session: venue_service.edit_unavailability(
                 session,
                 venue_id,
