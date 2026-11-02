@@ -153,6 +153,12 @@ export function listCoordinatorChangeRequests(): Promise<ChangeRequestQueueEntry
   return api<ChangeRequestQueueEntry[]>('/change-requests')
 }
 
+/** Story 19.4 AC1/AC2: every change request on the signed-in organiser's own events, whatever its
+ *  status - pending ones first, newest first within each status. */
+export function listMyChangeRequests(): Promise<ChangeRequestQueueEntry[]> {
+  return api<ChangeRequestQueueEntry[]>('/change-requests/mine')
+}
+
 /** Story 19.2 AC2: approve a pending change request, applying it to the event. Story 19.3 AC7:
  *  with the fingerprint of the impact assessment the coordinator saw; a 412 means the impact has
  *  changed since, and nothing was applied. */
