@@ -360,8 +360,9 @@ APPROVAL_OUT_OF_DATE = (
 CHANGE_APPROVED_SINCE_REVIEW = (
     "A change to the event was approved after its safety approval; request a safety review again."
 )
-# Story 12.8 AC5/AC6: a cancelled booking can leave every compared fact as it was (a venue added
-# since the review and cancelled, or the same venue booked again), but the approval still lapses.
+# Story 12.8 AC5/AC6, story 9.5 AC3: a cancelled booking - by its coordinator, or by a venue
+# closure - can leave every compared fact as it was (a venue added since the review and cancelled,
+# or the same venue booked again once the closure is gone), but the approval still lapses.
 BOOKING_CANCELLED_SINCE_REVIEW = (
     "A venue booking was cancelled after the safety approval; request a safety review again."
 )
@@ -542,14 +543,18 @@ def _change_approved_since(db: Session, event: Event, review: EventSafetyReview)
 
 
 def _booking_cancelled_since(db: Session, event: Event, review: EventSafetyReview) -> bool:
-    """Story 12.8 AC5/AC6: the coordinator cancelled a booking of ``event`` after ``review``, so
-    the event goes through its safety check again before it is confirmed - whether the cancel sent
-    it back to Planning or found it there, and whatever the facts read now."""
+    """Story 12.8 AC5/AC6, story 9.5 AC3: the coordinator cancelled a booking of ``event`` after
+    ``review``, or a venue closure did, so the event goes through its safety check again before it
+    is confirmed - whether the cancel sent it back to Planning or found it there, and whatever the
+    facts read now (a closure removed or shortened, and the venue booked again, leaves them as the
+    approval saw them)."""
     return db.scalar(
         select(
             exists().where(
                 VenueBooking.event_id == event.id,
-                VenueBooking.release_cause == ReleaseCause.COORDINATOR_CANCELLED,
+                VenueBooking.release_cause.in_(
+                    (ReleaseCause.COORDINATOR_CANCELLED, ReleaseCause.VENUE_UNAVAILABLE)
+                ),
                 VenueBooking.cancelled_at > review.reviewed_at,
             )
         )
