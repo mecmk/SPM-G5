@@ -163,6 +163,9 @@
 
 .page {
   max-width: 56rem;
+  /* .app-main is already the content column left over after the sidebar (flex: 1 in
+     .app-shell), so centring within it needs no sidebar-width math. */
+  margin-inline: auto;
 }
 
 .page-wide {
@@ -496,8 +499,9 @@
   outline-offset: 2px;
 }
 
-/* Story 19.2: a list of queue cards (change requests, and since story 15.2.1 bookings and
-   equipment), without bullets or the list's indent, so each card lines up with the page heading. */
+/* Story 19.2: a list of queue cards (change requests, since story 15.2.1 bookings and equipment,
+   and since c3.1 safety checks and room layouts), without bullets or the list's indent, so each
+   card lines up with the page heading. */
 .queue-list {
   list-style: none;
   margin: 0;
@@ -906,16 +910,6 @@ label.choice-chip:has(input:checked)::before {
 }
 
 /* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
-
-/*
- * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
- * so centring within it needs no sidebar-width math - it just has to stop being flush left.
- */
-.event-detail-page,
-.event-routine-edit-page,
-.equipment-request-page {
-  margin-inline: auto;
-}
 
 .divider {
   height: 0;

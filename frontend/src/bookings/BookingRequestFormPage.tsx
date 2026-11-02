@@ -292,7 +292,13 @@ export function BookingRequestFormPage() {
     )
   }
   // Story 12.5: a switch names the request it replaces, so that is found first.
-  if (!subject || isFindingReplaced) return <LoadingState label="Loading the request…" />
+  if (!subject || isFindingReplaced) {
+    return (
+      <div className="page">
+        <LoadingState label="Loading the request…" />
+      </div>
+    )
+  }
 
   const { event, venue } = subject
   // Story 12.5 AC1: what the request carries - its venue requirement's own, or the event's own
