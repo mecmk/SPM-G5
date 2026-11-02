@@ -13,6 +13,9 @@
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
+--   A row the app has closed comes back too, so every upsert into events,
+--   venue_bookings and event_equipment_requests also clears the closing
+--   stamps: a check constraint refuses a stamp beside the old status.
 -- * Story 1 AC3: "schema can be populated with sample data without
 --   integrity errors" - this file is that sample data; the test
 --   tests/test_schema.py::test_seed_loads_without_integrity_errors proves it.
@@ -346,7 +349,8 @@ ON CONFLICT (id) DO UPDATE SET
     registration_closes_at = EXCLUDED.registration_closes_at, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
-    decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason;
+    decided_by_id = EXCLUDED.decided_by_id, decision_reason = EXCLUDED.decision_reason,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 -- 3333..15 (story 6.1's cancelled event): approved by Chloe on 26 Aug, then cancelled by its
 -- organiser, Omar, on 27 Aug with a reason (story 6.2), recorded apart from that approval as
@@ -429,7 +433,8 @@ ON CONFLICT (id) DO UPDATE SET
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
-    cover_image_url = EXCLUDED.cover_image_url;
+    cover_image_url = EXCLUDED.cover_image_url,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 -- Story 18.2: the events Aiden has registered for (registrations below) - his My registrations, and
 -- tests/e2e/my-registrations.spec.ts. Each case of the spec that withdraws has an event of its own,
@@ -499,7 +504,8 @@ ON CONFLICT (id) DO UPDATE SET
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
     decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
-    decision_reason = EXCLUDED.decision_reason, cover_image_url = EXCLUDED.cover_image_url;
+    decision_reason = EXCLUDED.decision_reason, cover_image_url = EXCLUDED.cover_image_url,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 -- 3333..70-77's open assignment to coordinator 2, whom each event row names: self-assigned, on the
 -- day it was submitted, as 9.4's 60 and 61 are, so current_assignment() reads them as assigned
@@ -705,7 +711,8 @@ INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity,
     ('66666666-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000001', 1, 'Room already has one; spare requested', 'REQUESTED', '11111111-0000-0000-0000-000000000001')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
-    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, created_by_id = EXCLUDED.created_by_id;
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, created_by_id = EXCLUDED.created_by_id,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 -- Story 15.1's e2e items: the organiser's projectors on 3333..19, held since the request was
 -- submitted but not yet sent to Technical Support, and a speaker set on 3333..20 the coordinator
@@ -725,7 +732,8 @@ ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
-    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at;
+    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 -- More of story 15.2's queue, on 3333..22-26: mostly pending, some accepted, a few declined with
 -- Technical Support's reason, each sent by its event's coordinator. Every item but a declined one
@@ -765,7 +773,8 @@ ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
-    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at;
+    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000019', '66666666-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000001', 2,
@@ -999,6 +1008,39 @@ ON CONFLICT (id) DO NOTHING;
 -- ``now()`` default, so the queue's "Requested" timestamp (story 13.1 AC2) doesn't show every
 -- seed row landing in the same instant a bulk insert would otherwise give them.
 -- ---------------------------------------------------------------------
+-- A seeded booking comes back on every start, unless a newer booking now holds what it would
+-- need. Writing it then would break a rule the database enforces and db:ready would fail, so the
+-- row is left as it is, like the seeded registrations (18.2). Every upsert below asks this of the
+-- row it would write: a live booking is displaced by a newer live one on its venue and held
+-- period, its venue requirement, or its original if it is a replacement; a replacement waiting
+-- beside a live original also is once that original is gone. EXCLUDED has no venue requirement
+-- for the bookings the 12.5 UPDATE below names one, so that comes from the row itself. Temporary,
+-- so the seed adds nothing to the schema.
+CREATE OR REPLACE FUNCTION pg_temp.seeded_booking_is_displaced(seeded venue_bookings) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+    SELECT seeded.status IN ('PENDING', 'APPROVED') AND (
+        (seeded.replaces_live_original AND NOT EXISTS (
+            SELECT 1 FROM venue_bookings AS original
+            WHERE original.id = seeded.replaces_booking_id AND original.status IN ('PENDING', 'APPROVED')))
+        OR EXISTS (
+            SELECT 1
+            FROM venue_bookings AS newer
+            JOIN venue_bookings AS existing ON existing.id = seeded.id
+            WHERE newer.id <> seeded.id
+              AND newer.status IN ('PENDING', 'APPROVED')
+              AND (
+                  -- ex_venue_bookings_no_double_booking
+                  (newer.venue_id = seeded.venue_id
+                   AND tstzrange(newer.held_from, newer.held_until, '[)') && tstzrange(seeded.held_from, seeded.held_until, '[)'))
+                  -- uq_venue_bookings_one_pending_replacement
+                  OR (newer.status = 'PENDING' AND seeded.status = 'PENDING'
+                      AND newer.replaces_booking_id = seeded.replaces_booking_id)
+                  -- uq_venue_bookings_one_per_requirement
+                  OR (newer.venue_requirement_id = existing.venue_requirement_id
+                      AND NOT (newer.status = 'PENDING' AND newer.replaces_live_original)
+                      AND NOT (seeded.status = 'PENDING' AND seeded.replaces_live_original)))));
+$$;
+
 -- Story 12.7 (the customer's hold, 12 Oct 2026, R11): the approved booking's hold lasts until the
 -- start of its booked period, setup included - the latest AC5 allows - so a development database
 -- that is not re-seeded keeps it booked. A pending request has no hold to expire.
@@ -1050,7 +1092,10 @@ ON CONFLICT (id) DO UPDATE SET
     required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
-    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
 -- Seminar Room 2.1, approved by Vera. Its e2e spec reads the "All required venues booked" state
@@ -1100,7 +1145,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 12.5: the earlier seeded bookings name the requirement they were made for: each its
 -- event's Main venue (2.7 AC13), as migration 017 links bookings made before it, except Nimbus's
@@ -1152,7 +1200,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- c8: every other confirmed event's Main venue, approved by Vera and its hold completed when the
 -- event was confirmed, as confirming requires (21.2 AC7): the town hall (14), confirmed before it
@@ -1222,7 +1273,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
 -- is listed as Full. On a database where she has since withdrawn and registered again, the row is
@@ -1330,7 +1384,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0080-000000000001', '33333333-0000-0000-0000-000000000080', 0, 'Demo hall', 50,
@@ -1358,7 +1413,8 @@ ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
-    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at;
+    decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000080', '66666666-0000-0000-0000-000000000036', '77777777-0000-0000-0000-000000000004', 2,
@@ -1390,7 +1446,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0081-000000000001', '33333333-0000-0000-0000-000000000081', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-13 09:00+08', NULL)
@@ -1410,7 +1467,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
     decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    withdrawn_at = NULL, withdrawn_by_id = NULL;
+    withdrawn_at = NULL, withdrawn_by_id = NULL,
+    cancelled_at = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000063', '33333333-0000-0000-0000-000000000081', '66666666-0000-0000-0000-000000000038', '77777777-0000-0000-0000-000000000005', 2,
@@ -1459,7 +1517,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0050-000000000001', '33333333-0000-0000-0000-000000000050', 0, 'Training room', 60,
@@ -1502,7 +1561,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0021-000000000001', '33333333-0000-0000-0000-000000000050', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
@@ -1563,7 +1625,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0051-000000000001', '33333333-0000-0000-0000-000000000051', 0, 'Studio', 60,
@@ -1588,7 +1651,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0021-000000000009', '33333333-0000-0000-0000-000000000051', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)
@@ -1631,9 +1697,6 @@ ON CONFLICT (id) DO NOTHING;
 --      a replacement for 79. Nothing else may be marked on coordinator 2.
 -- Nothing else may book Exhibition Foyer or Grand Hall on these days. Grand Hall (400, standing)
 -- takes every one of these requirements, so a replacement is always found there.
--- Once one of these bookings has been replaced (a replacement raised and approved) the seed cannot be
--- applied again over it: its upsert puts status back to APPROVED but leaves replaced_by_booking_id,
--- which ck_venue_bookings_replaced_by_cancelled refuses. Run npm run db:reset instead of db:ready.
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
@@ -1709,7 +1772,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0126-000000006201', '33333333-0000-0000-0000-000000012662', 0, 'Main hall', 100, '2029-02-05 10:00+08', '2029-02-05 16:00+08', 'STANDING'),
@@ -1851,7 +1915,10 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     venue_unavailable_marked_at = EXCLUDED.venue_unavailable_marked_at,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- 3333..0126-82's pending replacement (booking 38), marked by its own venue's closure: a replacement
 -- links to its original (booking 37, the same event) and starts with the one-per-requirement
@@ -1875,7 +1942,10 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     venue_unavailable_marked_at = EXCLUDED.venue_unavailable_marked_at,
     replaces_booking_id = EXCLUDED.replaces_booking_id, replaces_live_original = EXCLUDED.replaces_live_original,
-    hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- ---------------------------------------------------------------------
 -- Story 6.2 AC14/AC15: tests/e2e/cancel-event.spec.ts. The charity run (3333..62) is cancelled by
@@ -1926,7 +1996,9 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
-    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
@@ -1944,7 +2016,9 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at,
-    release_cause = EXCLUDED.release_cause, release_reason = NULL, released_by_id = NULL;
+    release_cause = EXCLUDED.release_cause, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
     ('66666666-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '77777777-0000-0000-0000-000000000002', 4, 'Start line and finish line', 'PENDING', NULL,
@@ -1954,7 +2028,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL;
+    cancelled_at = NULL,
+    withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '66666666-0000-0000-0000-000000000062', '77777777-0000-0000-0000-000000000002', 4,
@@ -2003,7 +2078,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL;
+    cancelled_at = NULL,
+    withdrawn_at = NULL, withdrawn_by_id = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000016201', '33333333-0000-0000-0000-000000016201', '66666666-0000-0000-0000-000000016201', '77777777-0000-0000-0000-000000000007', 3,
@@ -2046,7 +2122,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000020203', '33333333-0000-0000-0000-000000020202', 0, 'Gala hall', 60,
@@ -2186,7 +2263,8 @@ ON CONFLICT (id) DO UPDATE SET
     registration_opens_at = EXCLUDED.registration_opens_at, registration_closes_at = EXCLUDED.registration_closes_at,
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
-    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
+    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
     ('aaaaaaaa-0000-0000-0000-000000018404', '33333333-0000-0000-0000-000000018404', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
@@ -2238,7 +2316,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- c8: 18.4's other events' Main venues at Exhibition Foyer, approved and their holds completed
 -- when the events were confirmed.
@@ -2283,7 +2364,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- ---------------------------------------------------------------------
 -- Fix f7.1.2 (story 7.1 AC4, AC8): tests/e2e/events.spec.ts. The leadership retreat (3333..7012)
@@ -2332,7 +2416,9 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
-    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-7012-000000000001', '33333333-0000-0000-0000-000000007012', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-06 09:00+08', NULL)
@@ -2383,7 +2469,8 @@ ON CONFLICT (id) DO UPDATE SET
     registration_opens_at = EXCLUDED.registration_opens_at, registration_closes_at = EXCLUDED.registration_closes_at,
     contact_name = EXCLUDED.contact_name, contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
     submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at,
-    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at;
+    decided_by_id = EXCLUDED.decided_by_id, confirmed_at = EXCLUDED.confirmed_at,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
     ('aaaaaaaa-0000-0000-0000-000000018503', '33333333-0000-0000-0000-000000018503', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-09-20 09:00+08'),
@@ -2436,7 +2523,10 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
-    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- ---------------------------------------------------------------------
 -- c8: the cancelled events' cancellations, as cancelling records them (6.2): who cancelled and
@@ -2705,7 +2795,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000021302', '33333333-0000-0000-0000-000000021301', 0, 'Main hall', 60,
@@ -2735,7 +2826,9 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
-    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0000-000000021305', '33333333-0000-0000-0000-000000021301', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)
@@ -2762,7 +2855,8 @@ ON CONFLICT (id) DO UPDATE SET
     assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
     accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
     contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
-    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id;
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000012802', '33333333-0000-0000-0000-000000012801', 0, 'Main hall', 40,
@@ -2788,7 +2882,9 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
-    release_cause = NULL, release_reason = NULL, released_by_id = NULL;
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0000-000000012804', '33333333-0000-0000-0000-000000012801', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)

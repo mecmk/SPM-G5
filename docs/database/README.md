@@ -124,6 +124,20 @@ Edit `backend/db/seed/020_sample_data.sql` using the fixed-UUID convention at th
 file, and mirror any row tests need in `backend/tests/support/seed.py`. Keep every statement an
 `INSERT ... ON CONFLICT ... DO UPDATE` so re-running stays safe.
 
+`npm run db:ready` re-applies the seed to a database people have used, so a sample row the app has
+closed comes back:
+
+- An upsert into `events`, `venue_bookings` or `event_equipment_requests` sets every closing stamp,
+  to `NULL` unless the row is seeded closed: a check constraint refuses a stamp beside the status the
+  upsert puts back.
+- An upsert into `venue_bookings` ends with `WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED)`,
+  which leaves the row as it is when a newer booking holds its slot, venue requirement or original.
+  The seeded registrations do the same with a `WHERE NOT EXISTS` of their own.
+
+`tests/test_schema.py::test_reseeding_puts_every_closed_row_back` closes every row of those tables and
+re-runs the seed, so an upsert that misses a stamp fails there. A venue requirement replaced by a new
+one of the same name is the one case the seed cannot get past: `npm run db:reset` recovers it.
+
 ## Design decisions (and why)
 
 | Decision | Reason |

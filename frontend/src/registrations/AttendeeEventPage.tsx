@@ -22,7 +22,7 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { UPCOMING_EVENTS_PATH } from '../routes'
-import { formatSchedule } from '../shared/format'
+import { CLOSE, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { AttendeeDetailsDialog } from './AttendeeDetailsDialog'
 import { ChangeGuestsDialog } from './ChangeGuestsDialog'
@@ -499,7 +499,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           isBusy={isWithdrawing}
           error={withdrawalRefusal?.message ?? null}
           canConfirm={withdrawalRefusal === null || !withdrawalRefusal.isFinal}
-          cancelLabel={withdrawalRefusal?.isFinal ? 'Close' : undefined}
+          cancelLabel={withdrawalRefusal?.isFinal ? CLOSE : undefined}
           onConfirm={handleConfirmWithdrawal}
           onCancel={handleCancelWithdrawal}
         >
