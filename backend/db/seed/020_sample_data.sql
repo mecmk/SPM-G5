@@ -2910,3 +2910,18 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
     ('99999999-0000-0000-0000-000000009512', '33333333-0000-0000-0000-000000009504', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
     ('99999999-0000-0000-0000-000000009513', '33333333-0000-0000-0000-000000009507', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- The Confirmed event (3333..009501) holds what confirming requires (21.2 AC7), as every seeded
+-- Confirmed event does (c8): its Main venue booked above, and a Safety Officer's approval of the
+-- facts it has now.
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
+    ('ffffffff-0000-0000-0000-000000009514', '33333333-0000-0000-0000-000000009501', '11111111-0000-0000-0000-000000000009', '2026-10-04 10:00+08',
+     'APPROVED',
+     '{"description": "A morning brunch for the alumni network.",
+       "expected_attendance": 40,
+       "starts_at": "2029-06-12T01:00:00+00:00", "ends_at": "2029-06-12T04:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 40, "layout": "CLASSROOM", "layout_name": "Classroom"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
