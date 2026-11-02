@@ -47,9 +47,9 @@ test('19.4 AC1 AC3: an organiser sees a raised request on the page and opens its
   const row = page.getByRole('listitem').filter({ hasText: name })
   await expect(row).toContainText('Changes to date and time')
   await expect(row).toContainText('Pending')
-  await expect(row).toContainText(/Raised .+\d{4}/)
+  await expect(row).toContainText(/Requested at.+\d{4}/)
 
-  await row.getByRole('link').click()
+  await row.getByRole('link', { name }).click()
 
   await expect(page).toHaveURL(new RegExp(`/events/${eventId}$`))
   await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
