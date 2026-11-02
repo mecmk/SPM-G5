@@ -190,6 +190,9 @@ class Events:
     # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
     # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
     LEADERSHIP_RETREAT = _e(7012)
+    # Fix f7.1.3 (story 7.1 AC10)'s e2e event: organiser 1, coordinator 2, PLANNING, June 2029,
+    # a booking the safety review released and one its coordinator cancelled. Only read.
+    PARTNER_SUMMIT = _e(7013)
     # Story 18.2's: organiser 2, coordinator 2, each with one of Users.ATTENDEE's registrations
     # (Registrations below), for tests/e2e/my-registrations.spec.ts. Each case that withdraws has
     # one of its own; the cases that only read share them, the yoga's most of all.
@@ -276,6 +279,12 @@ class Bookings:
     CANCELLED_CHARITY_RUN_PAVILION = uuid.UUID("44444444-0000-0000-0000-000000000063")
     # Fix f7.1.2: Events.LEADERSHIP_RETREAT's two-day booking of Sunrise Studio, held.
     APPROVED_LEADERSHIP_RETREAT_STUDIO = uuid.UUID("44444444-0000-0000-0000-000000007012")
+    # Fix f7.1.3: Events.PARTNER_SUMMIT's two, both CANCELLED - the Seminar Room 2.1 booking
+    # released by a safety finding, the Grand Hall one cancelled by its coordinator.
+    SAFETY_RELEASED_PARTNER_SUMMIT_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000007013")
+    COORDINATOR_CANCELLED_PARTNER_SUMMIT_GRAND_HALL = uuid.UUID(
+        "44444444-0000-0000-0000-000000007014"
+    )
     # Story 21.3: Events.SAFETY_RELEASE's requirement "Main hall" at Seminar Room 2.1, with 30
     # minutes of setup, and its additional venue at Exhibition Foyer; both approved by Vera.
     SAFETY_RELEASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021303")
@@ -379,6 +388,9 @@ class VenueRequirements:
     CHARITY_RUN_START_VILLAGE = uuid.UUID("cccccccc-0000-0000-0062-000000000001")  # CLASSROOM, 60
     # Fix f7.1.2: Events.LEADERSHIP_RETREAT's one requirement, over two days.
     LEADERSHIP_RETREAT_STUDIO = uuid.UUID("cccccccc-0000-0000-7012-000000000001")  # CLASSROOM, 40
+    # Fix f7.1.3: Events.PARTNER_SUMMIT's two - THEATRE for 60, and CLASSROOM for 30.
+    PARTNER_SUMMIT_KEYNOTE_HALL = uuid.UUID("cccccccc-0000-0000-7013-000000000001")
+    PARTNER_SUMMIT_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-7013-000000000002")
 
 
 class EquipmentItems:

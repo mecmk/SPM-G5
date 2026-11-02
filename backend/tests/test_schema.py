@@ -299,6 +299,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.SPRING_FAIR, "PLANNING"),
         (Events.GARDEN_FAIR, "PLANNING"),
         (Events.LEADERSHIP_RETREAT, "PLANNING"),
+        (Events.PARTNER_SUMMIT, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()

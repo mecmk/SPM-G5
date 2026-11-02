@@ -2166,6 +2166,68 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
+-- Fix f7.1.3 (story 7.1 AC10): tests/e2e/events.spec.ts. The partner summit (3333..7013) is only
+-- read, by its organiser. Organiser 1, coordinator 2, Planning, June 2029: its Breakout room
+-- booking of Seminar Room 2.1 was released by a safety finding (story 21.3), and its Keynote hall
+-- booking of Grand Hall was cancelled by its coordinator (story 12.8), each with its reason.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000007013', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Harbourfront Partner Summit', 'Networking', 'A day of keynotes and breakouts for our channel partners.', '2029-06-12 09:00+08', '2029-06-12 17:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-05 09:00+08', '2026-10-06 09:00+08', '11111111-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-7013-000000000001', '33333333-0000-0000-0000-000000007013', 0, 'Keynote hall', 60,
+     '2029-06-12 09:00+08', '2029-06-12 17:00+08', 'THEATRE'),
+    ('cccccccc-0000-0000-7013-000000000002', '33333333-0000-0000-0000-000000007013', 1, 'Breakout room', 30,
+     '2029-06-12 13:00+08', '2029-06-12 17:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, cancelled_at, release_cause, release_reason, released_by_id) VALUES
+    ('44444444-0000-0000-0000-000000007013', '33333333-0000-0000-0000-000000007013', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000004', '2029-06-12 13:00+08', '2029-06-12 17:00+08', 0, 0,
+     30, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-07 15:00+08', NULL, '2026-10-07 12:00+08',
+     'cccccccc-0000-0000-7013-000000000002', '2029-06-01 09:00+08', '2026-10-20 10:00+08', 'SAFETY_REVIEW',
+     'Move the breakout to a room with a second fire exit.', '11111111-0000-0000-0000-000000000009'),
+    ('44444444-0000-0000-0000-000000007014', '33333333-0000-0000-0000-000000007013', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000004', '2029-06-12 09:00+08', '2029-06-12 17:00+08', 0, 0,
+     60, 'THEATRE', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-07 16:00+08', NULL, '2026-10-07 13:00+08',
+     'cccccccc-0000-0000-7013-000000000001', '2029-06-01 09:00+08', '2026-10-22 10:00+08', 'COORDINATOR_CANCELLED',
+     'The client moved the keynote to a webinar.', '11111111-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at,
+    release_cause = EXCLUDED.release_cause, release_reason = EXCLUDED.release_reason,
+    released_by_id = EXCLUDED.released_by_id;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-7013-000000000001', '33333333-0000-0000-0000-000000007013', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-06 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
 -- Story 18.5: registering with guests, and tests/e2e/register-guests.spec.ts. Each flow has an
 -- attendee of its own, since specs run in parallel: Gina (01) registers for the batik workshop
 -- (03) with two guests; Hana (02) is registered for the kite afternoon (04) on her own (05) and

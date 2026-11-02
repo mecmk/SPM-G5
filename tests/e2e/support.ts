@@ -58,6 +58,9 @@ export const EVENTS = {
   lightShowcase: '33333333-0000-0000-0000-000000016201',
   // Fix f7.1.2, organiser: a two-day booking of Sunrise Studio; events.spec.ts cancels it.
   leadershipRetreat: '33333333-0000-0000-0000-000000007012',
+  // Fix f7.1.3, organiser: a booking the safety review released and one its coordinator
+  // cancelled; only read.
+  partnerSummit: '33333333-0000-0000-0000-000000007013',
   confirmed: '33333333-0000-0000-0000-000000000013', // organiser: organiser2, coordinator, Confirmed
   completed: '33333333-0000-0000-0000-000000000014', // organiser: organiser, Completed
   // Cancelled, organiser: organiser2, dated April 2027 - not yet over, so only its status hides
