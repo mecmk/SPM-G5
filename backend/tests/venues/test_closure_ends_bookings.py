@@ -1189,7 +1189,8 @@ def test_the_safety_officers_are_told_when_an_event_goes_back_and_the_organiser_
 @pytest.mark.story("9.5", ac=4)
 def test_a_text_only_edit_tells_nobody(db, venue_staff_client):
     """AC4: editing the reason or description of a closure sends nothing and ends nothing; the
-    notices of the first save are all there are."""
+    notices of the first save are all there are. A request a save missed sits inside the closure
+    meanwhile (unconfirmed), and a text-only edit neither refuses for it nor ends it."""
     venue = make_venue(db)
     event = _event_for(db)
     booking = _pending_of(db, event, venue.id, _day(3))
@@ -1197,10 +1198,13 @@ def test_a_text_only_edit_tells_nobody(db, venue_staff_client):
     assert _stored(db, booking.id).status == "REJECTED"
     assert len(_told(db, event.id)) == 2
     released_before = len(_notices(db, RELEASED))
+    missed = _live(db, venue.id, _day(5))
 
-    _edit(venue_staff_client, venue.id, period["id"], reason="SAFETY")
-    _edit(venue_staff_client, venue.id, period["id"], description="Rewiring")
+    first = _edit(venue_staff_client, venue.id, period["id"], reason="SAFETY")
+    second = _edit(venue_staff_client, venue.id, period["id"], description="Rewiring")
 
+    assert (first.status_code, second.status_code) == (200, 200)
+    assert _stored(db, missed.id).status == "PENDING"
     assert len(_told(db, event.id)) == 2
     assert len(_notices(db, RELEASED)) == released_before
 
