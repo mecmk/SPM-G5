@@ -12,9 +12,9 @@ backed by PostgreSQL.
 ```
 
 - **Frontend** (`frontend/`): a React + TypeScript SPA built with Vite, styled with the plain-CSS
-  design system from story c3. Every section a role can use is in its sidebar; one whose story is
-  not built yet opens a page naming that story. Feature pages live in `src/<feature>/`, with a
-  matching `src/api/<feature>.ts`. See [frontend/CLAUDE.md](../frontend/CLAUDE.md).
+  design system from story c3. Every section a role can use is in its sidebar, and a section is
+  listed only once a story delivers its page (1.2 AC5). Feature pages live in `src/<feature>/`,
+  with a matching `src/api/<feature>.ts`. See [frontend/CLAUDE.md](../frontend/CLAUDE.md).
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds

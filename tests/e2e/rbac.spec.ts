@@ -44,7 +44,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
     hidden: [
       'Manage venues',
       'My events',
-      'Bookings & schedule',
+      'Booking Requests',
       'Equipment holds',
       'Request a venue',
       'Equipment requests',
@@ -79,7 +79,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
     role: 'technical support',
     email: ACCOUNTS.techSupport,
     visible: ['Venue catalogue', 'Equipment requests', 'Equipment catalogue'],
-    hidden: ['All events', 'Manage venues', 'Bookings & schedule', 'Equipment holds'],
+    hidden: ['All events', 'Manage venues', 'Booking Requests', 'Equipment holds'],
   },
   // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the
   // catalogue (venues:read).

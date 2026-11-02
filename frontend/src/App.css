@@ -2346,7 +2346,7 @@ td.num {
   border-color: var(--success-border);
 }
 
-/* Story 9.1 AC5: a day with entries is a button that opens that day's list. A button centres
+/* Story 9.1: a day with entries is a button that opens that day's list. A button centres
    its content, so it is laid out as a column from the top like the other cells; the open and
    focused states are outlines, not borders, so pressing a day never moves the grid. */
 .calendar-cell-openable {

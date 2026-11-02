@@ -1,6 +1,5 @@
-"""Story 9.1: venue availability calendar (the 14-criterion version). Its AC6, a Venue Schedule
-page for Venue Staff, left the backlog: the calendar is on each venue's page and each booking
-request's (c9, 1.2 AC5).
+"""Story 9.1: venue availability calendar. A Venue Schedule page for Venue Staff left the backlog:
+the calendar is on each venue's page and each booking request's (c9, 1.2 AC5).
 
 AC1  a calendar shows availability for one venue across a range of dates (the page asks for one
      month at a time).
@@ -9,20 +8,22 @@ AC2  confirmed bookings are unavailable for their full held period (setup and te
      BOOKED one. Overlap is the database's own half-open rule
      (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not
      in it. venue_unavailability_periods has no such constraint but is checked the same way.
-AC3  every occupied period carries its event name, for everyone who can view the calendar.
-AC4  the API returns the chosen venue's bookings and holds only, to the three internal roles.
-AC5  each window also carries the booking's own period - its requested slot, not necessarily
+     Each window also carries the booking's own period - its requested slot, not necessarily
      its event's whole schedule - so a day's list can show it beside the held window (null for
      a closure).
-AC7  several non-clashing events on one day come back as separate windows.
-AC8  a booking ending at 12:00 and another starting at 12:00 are separate windows that meet.
-AC9  a multi-day booking, setup and teardown included, is one window covering every day.
-AC11 a rejected, withdrawn or cancelled booking no longer occupies the calendar.
-AC12 a range with nothing in it comes back empty.
-AC13 restricted to Event Coordinator, Venue Staff and Technical Support (the calendar's
+AC3  every occupied period carries its event name, for everyone who can view the calendar.
+AC4  the API returns the chosen venue's bookings and holds only, to the three internal roles.
+AC5  several non-clashing events on one day come back as separate windows.
+AC6  a booking ending at 12:00 and another starting at 12:00 are separate windows that meet.
+AC7  a multi-day booking, setup and teardown included, is one window covering every day.
+AC9  a rejected, withdrawn or cancelled booking no longer occupies the calendar.
+AC10 a range with nothing in it comes back empty.
+AC11 restricted to Event Coordinator, Venue Staff and Technical Support (the calendar's
      VENUE_CALENDAR_READ, see permissions.py); Event Organiser and Attendee are refused.
-AC14 a booking approved or rejected while the calendar is open shows its new state on the next
+AC12 a booking approved or rejected while the calendar is open shows its new state on the next
      request: one window, never two.
+
+AC8, previous and next, is a frontend case: tests/e2e/venue-calendar.spec.ts.
 """
 
 from __future__ import annotations
@@ -228,7 +229,7 @@ def test_calendar_returns_only_the_chosen_venues_bookings(coordinator_client, db
     assert [w["label"] for w in windows] == [_event_name(db, Events.APPROVED)]
 
 
-@pytest.mark.story("9.1", ac=5)
+@pytest.mark.story("9.1", ac=2)
 def test_calendar_window_carries_the_bookings_own_period_and_none_for_a_closure(
     coordinator_client,
 ):
@@ -259,7 +260,7 @@ def test_calendar_window_carries_the_bookings_own_period_and_none_for_a_closure(
     assert closure["booking_ends_at"] is None
 
 
-@pytest.mark.story("9.1", ac=5)
+@pytest.mark.story("9.1", ac=2)
 def test_calendar_window_carries_the_bookings_own_period_even_when_it_differs_from_the_event(
     coordinator_client,
 ):
@@ -277,7 +278,7 @@ def test_calendar_window_carries_the_bookings_own_period_even_when_it_differs_fr
     assert _instant(window["booking_ends_at"]) == datetime(2026, 11, 25, 18, 0, tzinfo=SINGAPORE)
 
 
-@pytest.mark.story("9.1", ac=7)
+@pytest.mark.story("9.1", ac=5)
 def test_calendar_lists_several_non_clashing_events_on_one_day_separately(
     coordinator_client, db: Session
 ):
@@ -305,7 +306,7 @@ def test_calendar_lists_several_non_clashing_events_on_one_day_separately(
     ]
 
 
-@pytest.mark.story("9.1", ac=8)
+@pytest.mark.story("9.1", ac=6)
 def test_calendar_shows_back_to_back_bookings_as_adjacent_not_overlapping(
     coordinator_client, db: Session
 ):
@@ -330,7 +331,7 @@ def test_calendar_shows_back_to_back_bookings_as_adjacent_not_overlapping(
     assert _instant(first["ends_at"]) == _instant(second["starts_at"]) == _sgt(10, 12)
 
 
-@pytest.mark.story("9.1", ac=9)
+@pytest.mark.story("9.1", ac=7)
 def test_calendar_returns_a_multi_day_booking_as_one_window_covering_every_day(
     coordinator_client, db: Session
 ):
@@ -355,7 +356,7 @@ def test_calendar_returns_a_multi_day_booking_as_one_window_covering_every_day(
         assert _instant(window["booking_ends_at"]) == _sgt(12, 10)
 
 
-@pytest.mark.story("9.1", ac=11)
+@pytest.mark.story("9.1", ac=9)
 @pytest.mark.parametrize(
     "status",
     [BookingStatus.REJECTED, BookingStatus.WITHDRAWN, BookingStatus.CANCELLED],
@@ -375,7 +376,7 @@ def test_calendar_ignores_a_booking_that_no_longer_holds_the_venue(
     assert _windows(coordinator_client, venue.id, _sgt(10, 0), _sgt(11, 0)) == []
 
 
-@pytest.mark.story("9.1", ac=12)
+@pytest.mark.story("9.1", ac=10)
 def test_calendar_is_empty_when_nothing_overlaps(coordinator_client):
     response = _calendar(
         coordinator_client,
@@ -409,7 +410,7 @@ def test_calendar_for_a_missing_venue_is_404(coordinator_client):
     assert response.status_code == 404
 
 
-@pytest.mark.story("9.1", ac=13)
+@pytest.mark.story("9.1", ac=11)
 @pytest.mark.story("9.1", ac=4)
 @pytest.mark.parametrize(
     ("client_fixture", "expected_status"),
@@ -429,7 +430,7 @@ def test_calendar_is_restricted_to_internal_roles(request, client_fixture, expec
     assert response.status_code == expected_status, response.text
 
 
-@pytest.mark.story("9.1", ac=13)
+@pytest.mark.story("9.1", ac=11)
 def test_calendar_requires_a_session(client):
     response = _calendar(
         client, Venues.GRAND_HALL, "2026-11-24T00:00:00+08:00", "2026-11-26T00:00:00+08:00"
@@ -437,7 +438,7 @@ def test_calendar_requires_a_session(client):
     assert response.status_code == 401
 
 
-@pytest.mark.story("9.1", ac=14)
+@pytest.mark.story("9.1", ac=12)
 def test_approving_a_pending_booking_turns_its_held_window_into_one_booked_window(
     coordinator_client, db: Session
 ):
@@ -464,7 +465,7 @@ def test_approving_a_pending_booking_turns_its_held_window_into_one_booked_windo
     assert after[0]["starts_at"] == before[0]["starts_at"]
 
 
-@pytest.mark.story("9.1", ac=14)
+@pytest.mark.story("9.1", ac=12)
 def test_rejecting_a_pending_booking_removes_its_window(coordinator_client, db: Session):
     venue = make_venue(db)
     booking = make_booking(
