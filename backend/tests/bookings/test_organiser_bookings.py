@@ -15,7 +15,14 @@ AC7 (CL-184, Q94-Q96) An open hold carries its expiry, so the page does not show
     and a hold its event's confirmation completed says when; who changed the expiry, and why, is
     not returned. A booking marked under story 9.4 says when it was marked.
 
-AC4, AC8 and AC9 are how the page shows these bookings: tests/e2e/events.spec.ts.
+AC10 (f7.1.3, CL-210) A booking the safety review released (21.3) or the coordinator cancelled
+    (12.8) is returned too, Cancelled, with its cause and the reason recorded with it (the
+    finding's required change, or the coordinator's reason); who released it is not. A booking a
+    venue closure cancelled (9.5) joins them once 9.5 is built.
+AC11 Every other cancelled booking stays hidden: replaced (12.6), released by an approved change
+    (19.2), or released with its event (6.2).
+
+AC4, AC8, AC9 and AC10 are how the page shows these bookings: tests/e2e/events.spec.ts.
 
 Conflict cases do not apply: the endpoint only reads.
 
@@ -32,7 +39,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.bookings.router import EVENT_NOT_FOUND_MESSAGE
 from app.events.models import Event, EventStatus
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
@@ -57,6 +64,8 @@ _SAFE_FIELDS = {
     "hold_expires_at",
     "hold_completed_at",
     "venue_unavailable_marked_at",
+    "release_cause",
+    "release_reason",
 }
 
 
@@ -255,6 +264,72 @@ def test_a_booking_marked_unavailable_says_when(login_as):
     by_id = {entry["id"]: entry for entry in client.get(_path(Events.LANTERN_SHOWCASE)).json()}
 
     assert by_id[str(Bookings.LANTERN_SHOWCASE_FOYER)]["venue_unavailable_marked_at"] is not None
+
+
+# --- AC10, AC11: bookings released by the safety review or cancelled by the coordinator ------
+def _released(db: Session, event: Event, cause: str, *, reason: str | None = None) -> VenueBooking:
+    """A booking of ``event`` that ``cause`` released, as ``release_booking`` leaves one."""
+    return _booking(
+        db,
+        event,
+        status=BookingStatus.CANCELLED,
+        requirement="Breakout room",
+        decided_by_id=Users.VENUE_STAFF.id,
+        decided_at=datetime.now(UTC) - timedelta(days=2),
+        cancelled_at=datetime.now(UTC) - timedelta(hours=1),
+        release_cause=cause,
+        release_reason=reason,
+        released_by_id=Users.SAFETY_OFFICER.id,
+    )
+
+
+@pytest.mark.story("7.1", ac=10)
+@pytest.mark.parametrize(
+    ("cause", "reason"),
+    [
+        (ReleaseCause.SAFETY_REVIEW, "Move the breakout to a room with a second fire exit."),
+        (ReleaseCause.COORDINATOR_CANCELLED, "The client moved the breakout online."),
+    ],
+    ids=["safety review", "coordinator"],
+)
+def test_a_released_booking_is_shown_as_cancelled_with_its_reason(
+    organiser_client, db: Session, cause, reason
+):
+    event = _event(db)
+    live = _booking(db, event, requirement="Plenary hall")
+    released = _released(db, event, cause, reason=reason)
+
+    by_id = {entry["id"]: entry for entry in organiser_client.get(_path(event.id)).json()}
+
+    assert set(by_id) == {str(live.id), str(released.id)}
+    entry = by_id[str(released.id)]
+    assert entry["status"] == BookingStatus.CANCELLED
+    assert entry["release_cause"] == cause
+    assert entry["release_reason"] == reason
+    assert by_id[str(live.id)]["release_cause"] is None
+
+
+@pytest.mark.story("7.1", ac=10)
+def test_who_released_a_booking_is_not_returned(organiser_client, db: Session):
+    event = _event(db)
+    _released(db, event, ReleaseCause.SAFETY_REVIEW, reason="Add a second fire exit.")
+
+    [entry] = organiser_client.get(_path(event.id)).json()
+
+    assert set(entry) == _SAFE_FIELDS
+
+
+@pytest.mark.story("7.1", ac=11)
+@pytest.mark.parametrize(
+    "cause",
+    [ReleaseCause.REPLACED, ReleaseCause.CHANGE_APPROVED, ReleaseCause.EVENT_CANCELLED],
+)
+def test_a_booking_cancelled_any_other_way_stays_hidden(organiser_client, db: Session, cause):
+    event = _event(db)
+    live = _booking(db, event, requirement="Plenary hall")
+    _released(db, event, cause)
+
+    assert _ids(organiser_client.get(_path(event.id))) == {str(live.id)}
 
 
 # --- AC2: only the event's own organiser -----------------------------------------------------
