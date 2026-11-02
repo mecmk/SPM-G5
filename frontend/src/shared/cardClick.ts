@@ -6,8 +6,8 @@ const INTERACTIVE_ELEMENTS =
 
 /**
  * Whether a click on a linked card should open it: a plain primary click that is not on a control
- * inside the card (a button, another link) and does not end a text selection. Shared by every
- * card that opens its page from a click anywhere on it (stories 7.1 and 8.1).
+ * inside the card (a button, another link) and does not end a text selection. Shared by
+ * `EventCard` (story 7.1) and `VenueCard` (story 8.1 AC1).
  */
 export function isCardOpenClick(click: MouseEvent<HTMLElement>): boolean {
   if (click.button !== 0) return false
