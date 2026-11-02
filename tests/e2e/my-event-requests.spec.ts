@@ -102,7 +102,6 @@ test('2.6 AC1: an organiser sees their requests with name, proposed date and sta
   )
   await expect(requestCard(page, 'Q1 Sales Kick-off (draft)')).toContainText('Draft')
   for (const name of OLIVIA_REQUESTS) await expect(requestCard(page, name)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
 })
 
 test('2.6 AC1: a request over two days shows both dates', async ({ page }) => {

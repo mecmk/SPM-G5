@@ -1,14 +1,15 @@
 """HTTP endpoints for story 19.1: raise, list and withdraw an event's change requests, and say when
 they close (fix f19.1.1); for story 19.2: the coordinator's queue of pending ones, and approving or
-rejecting one; and for story 19.3: the impact approving one would have.
+rejecting one; for story 19.3: the impact approving one would have; and for story 19.4: the
+organiser's own change requests across all their events (``/change-requests/mine``).
 
 They sit under the event they belong to (``/events/{event_id}/change-requests``, and
 ``/events/{event_id}/change-request-window`` for when they close - outside ``/change-requests/``
-so it can never be read as a request's id), except the queue, which spans the coordinator's events
-(``/change-requests``). Withdrawing, approving and
-rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs like story
-12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with its own
-rules, notification and audit record (see backend/STYLE.md, Standing divergences).
+so it can never be read as a request's id), except the coordinator's queue (``/change-requests``)
+and the organiser's own list (``/change-requests/mine``), which span many events. Withdrawing,
+approving and rejecting are ``POST .../withdraw``, ``.../approve`` and ``.../reject``, action URLs
+like story 12.2's booking withdrawal and 4.4/4.5's event decisions - each a state transition with
+its own rules, notification and audit record (see backend/STYLE.md, Standing divergences).
 """
 
 from __future__ import annotations
@@ -157,6 +158,23 @@ def list_coordinator_change_requests(
     """Story 19.2 AC1: the change requests on the coordinator's own events - pending ones first,
     oldest first, then those decided or withdrawn, latest first."""
     requests = service.list_coordinator_change_requests(db, viewer=viewer)
+    return [
+        ChangeRequestQueueEntryOut.from_queued_request(
+            request, is_out_of_date=service.is_out_of_date(request)
+        )
+        for request in requests
+    ]
+
+
+@queue_router.get("/mine", response_model=list[ChangeRequestQueueEntryOut])
+def list_organiser_change_requests(
+    db: DbSession,
+    viewer: Annotated[CurrentUser, CanRequestChanges],
+) -> list[ChangeRequestQueueEntryOut]:
+    """Story 19.4 AC1/AC2: every change request on the organiser's own events, each with its
+    event, pending ones first, newest first. AC4: organisers only; the service keeps it to their
+    own events."""
+    requests = service.list_organiser_change_requests(db, viewer=viewer)
     return [
         ChangeRequestQueueEntryOut.from_queued_request(
             request, is_out_of_date=service.is_out_of_date(request)

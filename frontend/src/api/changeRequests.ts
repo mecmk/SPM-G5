@@ -65,7 +65,8 @@ export interface ChangeRequest {
 }
 
 /** Mirrors `ChangeRequestQueueEntryOut`: story 19.2 AC1, a change request in the coordinator's
- *  queue - pending, or in their record of decisions - with the event it is for. */
+ *  queue - pending, or in their record of decisions - with the event it is for. Story 19.4 AC1
+ *  lists the organiser's own requests in the same shape. */
 export interface ChangeRequestQueueEntry extends ChangeRequest {
   event_name: string
   event_status: EventStatus
@@ -151,6 +152,12 @@ export function withdrawChangeRequest(
  *  oldest first, then those decided or withdrawn, latest first. */
 export function listCoordinatorChangeRequests(): Promise<ChangeRequestQueueEntry[]> {
   return api<ChangeRequestQueueEntry[]>('/change-requests')
+}
+
+/** Story 19.4 AC1/AC2: every change request on the signed-in organiser's own events, whatever its
+ *  status - pending ones first, newest first within each status. */
+export function listMyChangeRequests(): Promise<ChangeRequestQueueEntry[]> {
+  return api<ChangeRequestQueueEntry[]>('/change-requests/mine')
 }
 
 /** Story 19.2 AC2: approve a pending change request, applying it to the event. Story 19.3 AC7:
