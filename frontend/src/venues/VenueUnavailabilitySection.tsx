@@ -136,9 +136,12 @@ export function VenueUnavailabilitySection({
     return Date.parse(endsAt) > Date.parse(startsAt) ? { startsAt, endsAt } : null
   }, [starts, ends])
   const previewKey = period === null ? null : `${period.startsAt}|${period.endsAt}`
+  /** Story 9.5 AC1 (D22): an edit that leaves the start and the end where they were adds no time,
+   *  so it covers no booking and has nothing to list. */
+  const isRangeUnchanged = opened !== null && starts === opened.starts && ends === opened.ends
 
   useEffect(() => {
-    if (period === null || previewKey === null) return
+    if (period === null || previewKey === null || isRangeUnchanged) return
     let cancelled = false
     fetchAffectedBookings(venueId, period.startsAt, period.endsAt, editing?.id)
       .then((bookings) => {
@@ -150,12 +153,15 @@ export function VenueUnavailabilitySection({
     return () => {
       cancelled = true
     }
-  }, [venueId, editing, period, previewKey, previewAttempt])
+  }, [venueId, editing, period, previewKey, previewAttempt, isRangeUnchanged])
 
-  const isPreviewCurrent = preview !== null && preview.key === previewKey
-  const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
+  const current =
+    !isRangeUnchanged && preview !== null && preview.key === previewKey ? preview : null
+  const isPreviewCurrent = isRangeUnchanged || current !== null
+  const previewError = current?.error ?? null
+  const affected = current?.bookings ?? []
   /** Story 9.4 AC2: the form saves only once the list for these very dates has answered. */
-  const canSave = period !== null && isPreviewCurrent && preview.error === null
+  const canSave = period !== null && isPreviewCurrent && previewError === null
   /** Story 9.4 AC5: both ends given and the end not after the start. */
   const isEndBeforeStart =
     starts !== '' &&
@@ -335,10 +341,10 @@ export function VenueUnavailabilitySection({
             </h3>
             <div role="status" aria-live="polite" className="stack">
               {!isPreviewCurrent && <p className="muted">Checking the venue&apos;s bookings…</p>}
-              {isPreviewCurrent && preview.error === null && affected.length === 0 && (
+              {isPreviewCurrent && previewError === null && affected.length === 0 && (
                 <p className="muted">No bookings are affected.</p>
               )}
-              {isPreviewCurrent && preview.error === null && affected.length > 0 && (
+              {isPreviewCurrent && previewError === null && affected.length > 0 && (
                 <p className="muted">
                   {affected.length === 1
                     ? '1 booking is affected.'
@@ -346,9 +352,9 @@ export function VenueUnavailabilitySection({
                 </p>
               )}
             </div>
-            {isPreviewCurrent && preview.error !== null && (
+            {isPreviewCurrent && previewError !== null && (
               <p role="alert" className="error">
-                {preview.error}{' '}
+                {previewError}{' '}
                 <button type="button" className="secondary button-sm" onClick={checkAgain}>
                   Check again
                 </button>
@@ -390,7 +396,7 @@ export function VenueUnavailabilitySection({
         {period !== null && !isPreviewCurrent && (
           <p className="muted small">Save is available once the affected bookings have loaded.</p>
         )}
-        {isPreviewCurrent && preview.error !== null && (
+        {isPreviewCurrent && previewError !== null && (
           <p className="muted small">
             Save is unavailable until the affected bookings can be checked.
           </p>

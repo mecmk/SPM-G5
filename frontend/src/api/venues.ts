@@ -476,6 +476,14 @@ export function fetchAffectedBookings(
   })
 }
 
+/** Story 9.5 AC1: `body` with the ids of the bookings the save was confirmed to end, left out when
+ * there are none, so a save that ends nothing sends what it always sent. */
+function withConfirmed<T extends object>(body: T, confirmedBookingIds: string[]) {
+  return confirmedBookingIds.length === 0
+    ? body
+    : { ...body, confirmed_booking_ids: confirmedBookingIds }
+}
+
 /** Story 9.4 AC1/AC5, story 9.5 AC1: mark a venue unavailable. `confirmedBookingIds` are the bookings
  * the preview listed and Venue Staff confirmed; saving rejects or cancels each. A booking it would
  * end that is not among them refuses the save with a 409 (`UNAVAILABILITY_NEEDS_CONFIRMATION`)
@@ -488,7 +496,7 @@ export function addUnavailability(
 ): Promise<Unavailability> {
   return api<Unavailability>(`/venues/${venueId}/unavailability`, {
     method: 'POST',
-    body: { ...input, confirmed_booking_ids: confirmedBookingIds },
+    body: withConfirmed(input, confirmedBookingIds),
     errorCodes: { 404: 'VENUE_NOT_FOUND', 409: 'UNAVAILABILITY_NEEDS_CONFIRMATION' },
     notify: {
       title: 'Time blocked off',
@@ -509,7 +517,7 @@ export function editUnavailability(
 ): Promise<Unavailability> {
   return api<Unavailability>(`/venues/${venueId}/unavailability/${periodId}`, {
     method: 'PATCH',
-    body: { ...changes, confirmed_booking_ids: confirmedBookingIds },
+    body: withConfirmed(changes, confirmedBookingIds),
     errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND', 409: 'UNAVAILABILITY_NEEDS_CONFIRMATION' },
     notify: {
       title: 'Unavailability changed',
