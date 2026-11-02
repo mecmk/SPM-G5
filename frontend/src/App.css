@@ -480,6 +480,13 @@
   text-decoration: none;
 }
 
+/* Story 8.1: with the link blue gone, the catalogue's title underlines on hover and keyboard
+   focus so it still reads as a link. */
+.item-card-title a:hover,
+.item-card-title a:focus-visible {
+  text-decoration: underline;
+}
+
 /* Story 19.2: a list of queue cards (change requests, and since story 15.2.1 bookings and
    equipment), without bullets or the list's indent, so each card lines up with the page heading. */
 .queue-list {
