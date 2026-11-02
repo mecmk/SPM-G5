@@ -88,7 +88,7 @@ export function EquipmentRequestDetailPage() {
   }
 
   return (
-    <div className="page page-wide equipment-request-page">
+    <div className="page page-wide">
       <Link to={queueBackPath(location.state, EQUIPMENT_REQUESTS_PATH)} className="back-link">
         ← Equipment Requests
       </Link>

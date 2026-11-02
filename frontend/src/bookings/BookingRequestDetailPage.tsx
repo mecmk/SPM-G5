@@ -292,7 +292,13 @@ export function BookingRequestDetailPage() {
       </div>
     )
   }
-  if (!booking || !venue || !event) return <LoadingState label="Loading the booking request…" />
+  if (!booking || !venue || !event) {
+    return (
+      <div className="page page-wide">
+        <LoadingState label="Loading the booking request…" />
+      </div>
+    )
+  }
   // Story 2.7: the facilities of the venue requirement a request carries - story 12.5 AC1: the
   // one it names; none for an additional venue.
   const requiredFacilities =
