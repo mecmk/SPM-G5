@@ -36,6 +36,7 @@ import {
   FIELD_LABELS,
   OUT_OF_DATE_NOTE,
   STATUS_LABELS,
+  YOUR_REASON,
 } from './changeRequestValues'
 import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
 
@@ -553,7 +554,7 @@ export function ChangeRequestsSection({
                     </span>
                     <div>
                       <p className="change-note-label">
-                        {isOwnRequest ? 'Your reason' : "Organiser's reason"}
+                        {isOwnRequest ? YOUR_REASON : "Organiser's reason"}
                       </p>
                       <p className="wrap-anywhere">{request.reason}</p>
                     </div>

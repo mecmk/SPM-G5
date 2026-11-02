@@ -13,6 +13,7 @@ import { EquipmentTypePage } from './equipment/EquipmentTypePage'
 import { ChangeRequestQueuePage } from './events/ChangeRequestQueuePage'
 import { EventDetailPage } from './events/EventDetailPage'
 import { EventRequestFormPage } from './events/EventRequestFormPage'
+import { MyChangeRequestsPage } from './events/MyChangeRequestsPage'
 import { MyEventsPage } from './events/MyEventsPage'
 import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AssignmentOverviewPage } from './events/AssignmentOverviewPage'
@@ -34,6 +35,7 @@ import {
   BOOKING_REQUEST_PATH,
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
+  MY_CHANGE_REQUESTS_PATH,
   COMPONENT_GALLERY_PATH,
   BOOKING_REQUEST_NEW_PATH,
   EQUIPMENT_REQUEST_PATH,
@@ -188,6 +190,16 @@ function App() {
                 }
               >
                 <Route path={CHANGE_REQUEST_QUEUE_PATH} element={<ChangeRequestQueuePage />} />
+              </Route>
+
+              {/* Story 19.4: the organiser's own change requests, across all their events (AC4:
+                  organisers only). */}
+              <Route
+                element={
+                  <RequirePermission permission={PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE} />
+                }
+              >
+                <Route path={MY_CHANGE_REQUESTS_PATH} element={<MyChangeRequestsPage />} />
               </Route>
 
               {/* Story 18.1: the events an attendee can browse, and each one's page, where they
