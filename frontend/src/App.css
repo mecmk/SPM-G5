@@ -163,6 +163,9 @@
 
 .page {
   max-width: 56rem;
+  /* .app-main is already the content column left over after the sidebar (flex: 1 in
+     .app-shell), so centring within it needs no sidebar-width math. */
+  margin-inline: auto;
 }
 
 .page-wide {
@@ -890,16 +893,6 @@ label.choice-chip:has(input:checked)::before {
 }
 
 /* ---------- event detail: summary stats, two-column requirement cards (story 7.1) ---------- */
-
-/*
- * .app-main is already the content column left over after the sidebar (flex: 1 in .app-shell),
- * so centring within it needs no sidebar-width math - it just has to stop being flush left.
- */
-.event-detail-page,
-.event-routine-edit-page,
-.equipment-request-page {
-  margin-inline: auto;
-}
 
 .divider {
   height: 0;

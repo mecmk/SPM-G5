@@ -802,7 +802,7 @@ export function EventDetailPage() {
         }))
 
   return (
-    <div className="page page-wide event-detail-page">
+    <div className="page page-wide">
       <Link to={backTo} className="back-link">
         ← {backLabel}
       </Link>
