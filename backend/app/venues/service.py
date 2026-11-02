@@ -322,11 +322,11 @@ def get_venue_calendar(
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: every approved booking, pending request (held) and unavailability
     period overlapping the range, as a flat list of periods (not pre-expanded per day). AC3: each
-    booking carries its event's name; AC5: and the booking's own period beside the held one.
+    booking carries its event's name; AC2: and the booking's own period beside the held one.
     Overlap mirrors the database's own half-open exclusion constraint on venue_bookings
     (ex_venue_bookings_no_double_booking): a period that only touches the range's edge is not a
     conflict. venue_unavailability_periods has no such DB constraint, but is checked the same
-    way for consistency. AC11: a booking that no longer holds the venue is not read.
+    way for consistency. AC9: a booking that no longer holds the venue is not read.
 
     Story 12.7 AC1: an approved booking's window carries when its hold expires, while the hold
     is open - not once its event's confirmation completed it. AC11: an expired booking holds

@@ -22,7 +22,7 @@ export const UNAVAILABLE_LABEL = 'Unavailable'
 export const ENDED_LABEL = 'Ended'
 
 const HELD_ENTRY_PREFIX = 'Held'
-// Story 9.1: on a day the booking's own period is on, but the venue is blocked for longer
+// Story 9.1 AC2: on a day the booking's own period is on, but the venue is blocked for longer
 // (setup before it, teardown after it, or both), which side names the second line.
 const TURNAROUND_SETUP_LABEL = 'Setup included'
 const TURNAROUND_TEARDOWN_LABEL = 'Teardown included'
@@ -137,7 +137,7 @@ function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
   return isHeld ? HELD_LABEL : BOOKED_LABEL
 }
 
-/** Story 9.1: which side of the booking's own period the extra blocked time on this day
+/** Story 9.1 AC2: which side of the booking's own period the extra blocked time on this day
  *  falls on - before it (setup), after it (teardown), or both. */
 function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string {
   const hasSetup = blocked.start < bookingSlice.start

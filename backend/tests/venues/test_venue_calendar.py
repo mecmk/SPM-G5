@@ -12,16 +12,17 @@ AC2  confirmed bookings are unavailable for their full held period (setup and te
      its event's whole schedule - so a day's list can show it beside the held window (null for
      a closure).
 AC3  every occupied period carries its event name, for everyone who can view the calendar.
-AC4  the API returns the chosen venue's bookings and holds only, to the three internal roles.
+AC4  the API returns the chosen venue's bookings and holds only, to every internal role.
 AC5  several non-clashing events on one day come back as separate windows.
 AC6  a booking ending at 12:00 and another starting at 12:00 are separate windows that meet.
 AC7  a multi-day booking, setup and teardown included, is one window covering every day.
 AC9  a rejected, withdrawn or cancelled booking no longer occupies the calendar.
 AC10 a range with nothing in it comes back empty.
-AC11 restricted to Event Coordinator, Venue Staff and Technical Support (the calendar's
-     VENUE_CALENDAR_READ, see permissions.py); Event Organiser and Attendee are refused.
-AC12 a booking approved or rejected while the calendar is open shows its new state on the next
-     request: one window, never two.
+AC11 restricted to every internal role (VENUE_CALENDAR_READ is in _INTERNAL_COMMON, see
+     permissions.py); Event Organiser and Attendee are refused.
+AC12 a booking approved or withdrawn while the calendar is open shows its new state on the next
+     request: one window, never two. The tests here approve and reject one; a withdrawn one
+     is AC9's test_calendar_ignores_a_booking_that_no_longer_holds_the_venue.
 
 AC8, previous and next, is a frontend case: tests/e2e/venue-calendar.spec.ts.
 """

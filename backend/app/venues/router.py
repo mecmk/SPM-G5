@@ -205,7 +205,7 @@ def get_venue_calendar(
     ends_at: Annotated[AwareDatetime, Query()],
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
-    overlapping the range. AC13: Event Coordinator, Venue Staff and Technical Support only.
+    overlapping the range. AC11: internal roles only (VENUE_CALENDAR_READ is in _INTERNAL_COMMON).
     Story 12.7 AC1: a booked window carries when its open hold expires; AC11: a lapsed one is
     gone."""
     try:
