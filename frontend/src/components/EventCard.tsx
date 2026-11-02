@@ -1,5 +1,6 @@
 import { useState, type MouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { isCardOpenClick } from '../shared/cardClick'
 import { Icon } from './Icon'
 
 /** Story 7.1: the page this card was reached from, so its back link can return there. */
@@ -20,10 +21,6 @@ export interface EventCardProps {
    *  click on it is its own, never the card's. On a phone it drops below the details. */
   action?: ReactNode
 }
-
-/** Anything a click on it is meant for, so the card does not also open. */
-const INTERACTIVE_ELEMENTS =
-  'a, button, input, select, textarea, label, summary, [role="button"], [role="link"]'
 
 /**
  * One card style for every list of events (team decision, 17 Sep 2026): a full-width row with a square picture
@@ -46,13 +43,7 @@ export function EventCard({ title, imageUrl, details, to, state, action }: Event
   }
 
   function handleCardClick(click: MouseEvent<HTMLLIElement>) {
-    if (to === undefined || click.button !== 0) return
-    if (click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return
-    if (click.target instanceof Element) {
-      const inner = click.target.closest(INTERACTIVE_ELEMENTS)
-      if (inner !== null && click.currentTarget.contains(inner)) return
-    }
-    if (window.getSelection()?.isCollapsed === false) return
+    if (to === undefined || !isCardOpenClick(click)) return
     navigate(to, { state })
   }
 
