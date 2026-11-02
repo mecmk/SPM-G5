@@ -21,6 +21,10 @@
  * cancels (AC8); a safety review flagging venue bookings flags the section (AC9). The AC4/AC8 test
  * cancels the seeded Lakeside Leadership Retreat; the other events it reads are never changed.
  *
+ * f7.1.3 (AC10): a booking the safety review released, or the coordinator cancelled, stays in the
+ * section as a read-only Cancelled card saying why. Which cancelled bookings are returned, and
+ * that who released them is not, is proven in test_organiser_bookings.py.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -178,6 +182,26 @@ test('7.1 AC4/AC8: a two-day booking names both dates, and the section goes once
   // At once, with no reload.
   await expect(dialog).toHaveCount(0)
   await expect(organiserBookings(page)).toHaveCount(0)
+})
+
+test('7.1 AC10: bookings the safety review released or the coordinator cancelled show as Cancelled, with why', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.partnerSummit}`)
+
+  const cards = organiserBookings(page).getByRole('listitem')
+  const released = cards.filter({ hasText: 'Seminar Room 2.1' })
+  await expect(released).toContainText('Cancelled')
+  await expect(released).toContainText('Released by the safety review')
+  await expect(released).toContainText('Move the breakout to a room with a second fire exit.')
+
+  const cancelled = cards.filter({ hasText: 'Grand Hall' })
+  await expect(cancelled).toContainText('Cancelled')
+  await expect(cancelled).toContainText('Cancelled by the coordinator')
+  await expect(cancelled).toContainText('The client moved the keynote to a webinar.')
+
+  await expect(organiserBookings(page).getByRole('button')).toHaveCount(0)
 })
 
 test('7.1 AC1: a draft with no dates or attendance shows clear empty states', async ({ page }) => {
