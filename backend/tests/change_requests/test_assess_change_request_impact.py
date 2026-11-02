@@ -1666,7 +1666,7 @@ def test_lowering_an_already_oversized_venue_flags_it(login_as, db: Session):
 
 @pytest.mark.story("19.3", ac=8)
 def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Session):
-    """A warning only: the hall stays approved and unmarked, and no notice is written about it."""
+    """A warning only: the hall stays approved, and no notice is written about it."""
     event = _planning_event(db, expected_attendance=120)
     requirement = _requirement(db, event, capacity=120)
     hall = _book(db, event, people=120, requirement_id=requirement, capacity=200)
@@ -1678,10 +1678,10 @@ def test_approving_keeps_an_oversized_booking_and_tells_nobody(login_as, db: Ses
     assert response.status_code == 200, response.text
     db.expire_all()
     row = db.execute(
-        text("SELECT status, venue_unavailable_marked_at FROM venue_bookings WHERE id = :b"),
+        text("SELECT status FROM venue_bookings WHERE id = :b"),
         {"b": hall.id},
     ).one()
-    assert (row.status, row.venue_unavailable_marked_at) == ("APPROVED", None)
+    assert row.status == "APPROVED"
     notices = db.execute(
         text("SELECT notification_type FROM notifications WHERE event_id = :e"),
         {"e": event.id},

@@ -90,7 +90,7 @@ from tests.support.replacement import (
 )
 from tests.support.seed import Users
 
-FIELDS = ("replaces_venue_name", "approval_releases_venue_name", "original_is_marked")
+FIELDS = ("replaces_venue_name", "approval_releases_venue_name")
 
 
 def _queue_entry(client, booking_id: uuid.UUID) -> dict:
@@ -114,7 +114,6 @@ def test_the_queue_card_says_which_venue_it_replaces_and_will_release(venue_staf
 
     assert entry["replaces_venue_name"] == scene.original_venue.name
     assert entry["approval_releases_venue_name"] == scene.original_venue.name
-    assert entry["original_is_marked"] is True
 
 
 @pytest.mark.story("12.6", ac=3)
@@ -126,7 +125,6 @@ def test_the_request_page_says_which_venue_it_replaces_and_will_release(venue_st
 
     assert body["replaces_venue_name"] == scene.original_venue.name
     assert body["approval_releases_venue_name"] == scene.original_venue.name
-    assert body["original_is_marked"] is True
 
 
 @pytest.mark.story("9.5", ac=8)
@@ -151,7 +149,7 @@ def test_an_ordinary_request_shows_no_replacement_facts(venue_staff_client, db):
 
     entry = _queue_entry(venue_staff_client, scene.original.id)
 
-    assert [entry[field] for field in FIELDS] == [None, None, None]
+    assert [entry[field] for field in FIELDS] == [None, None]
     assert entry["released_at"] is None
 
 

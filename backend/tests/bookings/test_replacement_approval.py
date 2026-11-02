@@ -86,7 +86,7 @@ from sqlalchemy.orm import Session
 from app.auth.models import User
 from app.bookings import schemas as booking_schemas
 from app.bookings import service
-from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
+from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import AuditLog
 from app.notifications.service import NotificationType
 from tests.support.factories import make_unavailability, make_user
@@ -382,15 +382,6 @@ def test_an_additional_venues_replacement_releases_its_original_when_approved(lo
     )
     assert str(column(db, original.id, "replaced_by_booking_id")) == body["id"]
     assert _outcome_of(db, uuid.UUID(body["id"])).status == BookingStatus.APPROVED
-    db.expire_all()
-    assert (
-        db.scalar(
-            select(func.count())
-            .select_from(VenueBooking)
-            .where(VenueBooking.event_id == scene.event.id, *marked_booking_conditions())
-        )
-        == 0
-    )
 
 
 @pytest.mark.story("12.6", ac=3)

@@ -51,10 +51,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
-from app.bookings import router as bookings_router
 from app.bookings import service as bookings_service
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingReplacementIn
 from app.cancellations import service as cancellations_service
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, EventStatusHistory
@@ -645,7 +643,7 @@ def _committed(engine: Engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, list[uu
     sessions can meet on its rows. Returns the event, the booking, the alternative venue and the
     venues to purge."""
     with Session(engine) as session:
-        scenario = make_scenario(session, marked=True)
+        scenario = make_scenario(session)
         session.commit()
         return (
             scenario.event.id,
@@ -745,42 +743,5 @@ def test_a_release_that_lands_first_wins_and_the_cancel_is_refused(engine, rival
             assert booking.release_cause != "COORDINATOR_CANCELLED"
             told = _notices(session, event_id, "BOOKING_RELEASED")
             assert len(told) == (1 if rival == "event-cancelled" else 0)
-    finally:
-        purge(engine, event_ids=[event_id], venue_ids=venue_ids)
-
-
-@pytest.mark.story("12.8", ac=7)
-def test_the_replacement_route_takes_the_event_before_the_booking(engine):
-    """The cancel locks the event and then the booking, so the route must too, or each could hold
-    what the other waits for. While the route stands waiting on the event, the booking is free."""
-    event_id, booking_id, alternative_id, venue_ids = _committed(engine)
-    pids: dict[str, int] = {}
-
-    def route() -> None:
-        with Session(engine) as session:
-            pids["route"] = backend_pid(session)
-            bookings_router.request_replacement_booking(
-                booking_id,
-                BookingReplacementIn(venue_id=alternative_id),
-                session,
-                session.get(User, Users.COORDINATOR.id),
-            )
-
-    try:
-        with Session(engine) as holder, ThreadPoolExecutor(max_workers=1) as pool:
-            holder.execute(
-                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
-            )
-            requested = pool.submit(route)
-            try:
-                wait_until_waiting(engine, pids, "route")
-                assert holder.scalar(
-                    select(VenueBooking.id)
-                    .where(VenueBooking.id == booking_id)
-                    .with_for_update(nowait=True)
-                )
-            finally:
-                holder.rollback()
-            requested.result(timeout=LOCK_WAIT_SECONDS)
     finally:
         purge(engine, event_ids=[event_id], venue_ids=venue_ids)
