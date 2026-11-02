@@ -447,10 +447,15 @@ export interface OrganiserBooking {
   hold_completed_at: string | null
   /** AC7: when the booking was marked under story 9.4; null when unmarked. */
   venue_unavailable_marked_at: string | null
+  /** Fix f7.1.3 (AC10): why the safety review released it, or the coordinator cancelled it; both
+   * null for any other booking. Who released it is not sent. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
 }
 
 /** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most
- * recent first. Another organiser's event answers 404 (AC2). */
+ * recent first. Another organiser's event answers 404 (AC2). Fix f7.1.3 (AC10): with them, the
+ * ones the safety review released or the coordinator cancelled. */
 export function listBookingsForOwnEvent(eventId: string): Promise<OrganiserBooking[]> {
   return api<OrganiserBooking[]>(`/bookings/for-my-event/${eventId}`)
 }

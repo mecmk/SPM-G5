@@ -1,11 +1,17 @@
 import { useCallback } from 'react'
-import { listBookingsForOwnEvent } from '../api/bookings'
+import { listBookingsForOwnEvent, type OrganiserBooking } from '../api/bookings'
 import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import {
+  CANCELLED_BY_COORDINATOR_MESSAGE,
   HOLD_EXPIRES_LABEL,
+  isCancelledByCoordinator,
+  isReleasedBySafetyReview,
   openHoldExpiry,
+  REASON_LABEL,
+  releasedByLabel,
+  RELEASED_BY_SAFETY_REVIEW_MESSAGE,
   turnaroundLine,
   VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
@@ -26,6 +32,14 @@ export interface OrganiserBookingsSectionProps {
   isFlagged: boolean
 }
 
+/** Fix f7.1.3 (AC10): the status sentence of a booking the safety review released or the
+ * coordinator cancelled says so, as the coordinator's card does; any other uses its status's. */
+function bookingMessage(booking: OrganiserBooking): string {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
+  if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_MESSAGE
+  return BOOKING_OUTCOME[booking.status].message
+}
+
 /**
  * Fix f7.1.2 (story 7.1 AC1): the organiser's read-only view of their event's approved and
  * pending venue bookings, drawn as the coordinator's Venue booking cards are - venue, the
@@ -35,6 +49,9 @@ export interface OrganiserBookingsSectionProps {
  * CL-184: AC4 a booking over more than one day names both dates, as the event's schedule does
  * (f7.1.1); AC7 an open hold reads as held, not confirmed, with when it expires, and a booking
  * marked under 9.4 says so; AC9 the section is flagged when the safety review flags venue bookings.
+ *
+ * Fix f7.1.3 (AC10): a booking the safety review released, or the coordinator cancelled, stays as
+ * a Cancelled card saying which and why, but not who.
  */
 export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookingsSectionProps) {
   const loadBookings = useCallback(() => listBookingsForOwnEvent(eventId), [eventId])
@@ -116,7 +133,19 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                 <div className="booking-outcome-message">
                   <Icon name={bookingOutcome.icon} size={18} />
                   <div>
-                    <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                    <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(booking)}</p>
+                    {releasedByLabel(booking) !== null && (
+                      <>
+                        <p>
+                          <strong>{releasedByLabel(booking)}</strong>
+                        </p>
+                        <p>
+                          <span className="fact-label">{REASON_LABEL}</span>
+                          <br />
+                          {booking.release_reason}
+                        </p>
+                      </>
+                    )}
                     {booking.venue_unavailable_marked_at !== null && (
                       <p>
                         <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
