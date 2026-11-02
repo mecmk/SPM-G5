@@ -137,6 +137,7 @@ class EquipmentRequestStatus:
     CANCELLED = (
         "CANCELLED"  # its event was cancelled (6.2), or a change removed it once sent (19.2)
     )
+    WITHDRAWN = "WITHDRAWN"  # the coordinator withdrew it once sent (17.2)
 
 
 class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -169,6 +170,12 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Story 6.2 AC16: when the item was cancelled - with its event, or by an approved change
     # (19.2); NULL otherwise, for one cancelled before migration 026, and once a change revives it.
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Story 17.2 AC3: when the coordinator withdrew the item, and who; both set exactly when it is
+    # WITHDRAWN (ck_event_equipment_requests_withdrawal).
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    withdrawn_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
 
     # Story 17.1 AC1: the event, whose period an item holding nothing is for.
     event: Mapped[Event] = relationship(back_populates="equipment_requests")
@@ -187,6 +194,7 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     equipment_type: Mapped[EquipmentType] = relationship(lazy="joined")
     submitted_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[submitted_by_id])
     decided_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[decided_by_id])
+    withdrawn_by: Mapped[User | None] = relationship(lazy="joined", foreign_keys=[withdrawn_by_id])
 
 
 class EquipmentHoldStatus:
