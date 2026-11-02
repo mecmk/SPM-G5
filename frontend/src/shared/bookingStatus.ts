@@ -194,7 +194,7 @@ export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string; hin
   {
     key: 'CANCELLED',
     label: 'Cancelled',
-    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, or a safety review released it. Read-only.',
+    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, a safety review released it, or the coordinator cancelled it. Read-only.',
   },
 ]
 
