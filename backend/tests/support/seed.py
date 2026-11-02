@@ -188,6 +188,8 @@ class Events:
     # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
     # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
     LIGHT_SHOWCASE = _e(16201)
+    # Fix f16.1.1: organiser 2, coordinator 2, March 2030; the 16.1 spec decides both its items.
+    VOLUNTEER_EVENING = _e(16110)
     # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
     # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
     LEADERSHIP_RETREAT = _e(7012)
@@ -446,6 +448,9 @@ class EquipmentItems:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
     # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
+    # Fix f16.1.1's, on Events.VOLUNTEER_EVENING, both pending and holding their units.
+    VOLUNTEER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000016111")
+    VOLUNTEER_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000016112")
 
 
 class EquipmentHolds:

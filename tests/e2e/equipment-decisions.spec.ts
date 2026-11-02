@@ -19,13 +19,18 @@
  *     deciding at once is a backend case.
  * The Offsite runs over two days, so the queue card, the Accept dialog and the request's page each
  * name both dates (f7.1.1's formatSchedule): the hold covers the whole period.
+ * AC10 two decisions on one event reach its coordinator as one notice in the bell, naming the
+ *     equipment, the quantity and the reason, and it opens the event. What joins a notice and
+ *     what doesn't, and who is told, are backend cases.
  * AC3 (who and when, saved with the hold), AC5/AC6 (availability on accepting), AC7 (only Pending
  * can be decided) and AC8 (only Technical Support) are backend cases:
  * backend/tests/equipment/test_decide_equipment_requests.py.
  *
  * The Leadership Offsite (EVENTS.equipmentDecisions) is dedicated to this spec. Each test decides
  * its own item, a different equipment type, so the tests can run in parallel; the laptops are
- * never decided.
+ * never decided. A decision on it joins the coordinator's unread notice, so AC10 has an event of
+ * its own (EVENTS.volunteerEvening): another test's decision would replace the notice under its
+ * click.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { ACCOUNTS, EVENTS, signIn } from "./support";
@@ -33,13 +38,14 @@ import { ACCOUNTS, EVENTS, signIn } from "./support";
 const QUEUE_PATH = "/equipment/requests";
 const OFFSITE = "Leadership Offsite";
 const OFFSITE_PERIOD = "Wed, 8 Dec 2027, 09:00 – Thu, 9 Dec 2027, 17:00";
+const VOLUNTEER_EVENING = "Volunteer Thank-You Evening";
 const REASON_REQUIRED = "Enter a reason for declining this request.";
 const DECISION_PATH = /\/equipment-requests\/[^/]+\/decision$/;
 
-function queueCard(page: Page, typeName: string) {
+function queueCard(page: Page, typeName: string, eventName = OFFSITE) {
   return page
     .getByRole("listitem")
-    .filter({ hasText: OFFSITE })
+    .filter({ hasText: eventName })
     .filter({ hasText: typeName });
 }
 
@@ -318,4 +324,50 @@ test("16.1 AC9: a decision refused because another page decided first shows the 
   await expect(page.getByText("Accepted", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Decline" })).toHaveCount(0);
+});
+
+test("16.1 AC10: two decisions reach the coordinator as one notice, which opens the event", async ({
+  page,
+}) => {
+  const reason = "Both cameras that week are out for repair.";
+  const title = `Equipment update for "${VOLUNTEER_EVENING}"`;
+  await signIn(page, ACCOUNTS.techSupport);
+  await page.goto(QUEUE_PATH);
+
+  const projector = queueCard(page, "Portable projector", VOLUNTEER_EVENING);
+  await projector.getByRole("button", { name: "Accept" }).click();
+  const acceptDialog = page.getByRole("dialog", { name: "Accept this request?" });
+  await acceptDialog.getByRole("button", { name: "Accept" }).click();
+  await expect(projector).toHaveCount(0);
+
+  const camera = queueCard(page, "Video camera", VOLUNTEER_EVENING);
+  await camera.getByRole("button", { name: "Decline" }).click();
+  const declineDialog = page.getByRole("dialog", { name: "Decline this request?" });
+  await declineDialog.getByLabel("Reason for declining").fill(reason);
+  await declineDialog.getByRole("button", { name: "Decline" }).click();
+  await expect(camera).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, ACCOUNTS.coordinator2);
+  await page.getByRole("button", { name: /^Notifications/ }).click();
+
+  const notice = page
+    .getByRole("region", { name: "Notifications" })
+    .getByRole("listitem")
+    .filter({ hasText: title });
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText("Unread");
+  const decisions = notice.locator(".notification-message");
+  await expect(decisions).toContainText("Theo Tech accepted 1 × Portable projector.");
+  await expect(decisions).toContainText(
+    `Theo Tech declined 1 × Video camera. Reason: ${reason}`,
+  );
+  // One line each: a notice of many decisions has to stay readable.
+  await expect(decisions).toHaveCSS("white-space", "pre-line");
+
+  await notice.getByRole("button", { name: title }).click();
+  await expect(page).toHaveURL(`/events/${EVENTS.volunteerEvening}`);
+  await expect(
+    page.getByRole("heading", { name: VOLUNTEER_EVENING, level: 1 }),
+  ).toBeVisible();
 });
