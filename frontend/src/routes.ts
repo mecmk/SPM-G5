@@ -221,6 +221,17 @@ export function equipmentTypePath(typeId: string): string {
   return EQUIPMENT_TYPE_PATH.replace(':typeId', encodeURIComponent(typeId))
 }
 
+// Story 17.3: Technical Support's schedule of every equipment hold, by type. Its filters live in
+// the page address (AC3), so a reload, and a request page's link back, keep them.
+export const EQUIPMENT_HOLDS_PATH = '/equipment/holds'
+/** The schedule's title: its heading, its sidebar entry and a request page's link back to it. */
+export const EQUIPMENT_HOLDS_TITLE = 'Equipment holds'
+export const EQUIPMENT_HOLDS_PARAMS = {
+  type: 'type',
+  from: 'from',
+  to: 'to',
+} as const
+
 // Story 21.1: the Safety Officer's queue of events awaiting the safety check, and each one's page.
 export const SAFETY_CHECKS_PATH = '/safety-checks'
 export const SAFETY_CHECK_PATH = '/safety-checks/:eventId'

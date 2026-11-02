@@ -146,13 +146,21 @@ export function queuePath(path: string, query: string): string {
 }
 
 /**
+ * Whether the link that opened a page came from `path`, with or without a query (the `from` of
+ * story 7.1's back state). Story 17.3 AC4: an equipment request's page reads it to tell whether
+ * the holds schedule or the queue opened it.
+ */
+export function isOpenedFrom(state: unknown, path: string): state is { from: string } {
+  if (typeof state !== 'object' || state === null || !('from' in state)) return false
+  const { from } = state
+  return typeof from === 'string' && (from === path || from.startsWith(`${path}?`))
+}
+
+/**
  * Story 13.3 AC7: where a request's page leads back to - the queue as the link that opened it left
  * it (the `from` of story 7.1's back state), or the plain queue when the page was opened another
  * way. Only an address of that queue is followed.
  */
 export function queueBackPath(state: unknown, path: string): string {
-  if (typeof state !== 'object' || state === null || !('from' in state)) return path
-  const { from } = state
-  if (typeof from !== 'string') return path
-  return from === path || from.startsWith(`${path}?`) ? from : path
+  return isOpenedFrom(state, path) ? state.from : path
 }

@@ -10,7 +10,13 @@ import type { EventCardBackState } from '../components/EventCard'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
-import { EQUIPMENT_REQUESTS_PATH, equipmentRequestPath, eventPath } from '../routes'
+import {
+  EQUIPMENT_HOLDS_PATH,
+  EQUIPMENT_HOLDS_TITLE,
+  EQUIPMENT_REQUESTS_PATH,
+  equipmentRequestPath,
+  eventPath,
+} from '../routes'
 import {
   CANCELLED_AT_LABEL,
   NOT_RECORDED,
@@ -19,13 +25,28 @@ import {
   formatSchedule,
 } from '../shared/format'
 import { withdrawnWhenAndBy } from '../shared/equipmentStatus'
-import { queueBackPath } from '../shared/queueView'
+import { isOpenedFrom, queueBackPath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
 
 /** The event page's back link returns to this request's page (story 7.1's back state). */
 function backToRequest(itemId: string): EventCardBackState {
   return { from: equipmentRequestPath(itemId), fromLabel: 'Equipment Request' }
+}
+
+/** Where the page's back link goes, and what it says. */
+interface BackLink {
+  to: string
+  label: string
+}
+
+/** Story 17.3 AC4: opened from the holds schedule, the back link returns to it as it was filtered;
+ *  otherwise to the queue (story 13.3 AC7). */
+function backLinkFor(state: unknown): BackLink {
+  if (isOpenedFrom(state, EQUIPMENT_HOLDS_PATH)) {
+    return { to: state.from, label: EQUIPMENT_HOLDS_TITLE }
+  }
+  return { to: queueBackPath(state, EQUIPMENT_REQUESTS_PATH), label: 'Equipment Requests' }
 }
 
 /**
@@ -47,11 +68,13 @@ function backToRequest(itemId: string): EventCardBackState {
  * AC4: so is one its coordinator withdrew, which says when and by whom.
  *
  * Story 13.3 AC7: the back link returns to the queue as it was left - tab, search and order - when
- * the queue opened this page.
+ * the queue opened this page. Story 17.3 AC4: opened from the holds schedule, it returns there,
+ * with the schedule's filters.
  */
 export function EquipmentRequestDetailPage() {
   const { itemId = '' } = useParams()
   const location = useLocation()
+  const back = backLinkFor(location.state)
   const loadRequest = useCallback(() => getEquipmentRequest(itemId), [itemId])
   const { data: entry, error, isLoading, setData: setEntry } = useLoaded(loadRequest)
   const [openOutcome, setOpenOutcome] = useState<EquipmentDecisionOutcome | null>(null)
@@ -89,8 +112,8 @@ export function EquipmentRequestDetailPage() {
 
   return (
     <div className="page page-wide equipment-request-page">
-      <Link to={queueBackPath(location.state, EQUIPMENT_REQUESTS_PATH)} className="back-link">
-        ← Equipment Requests
+      <Link to={back.to} className="back-link">
+        ← {back.label}
       </Link>
 
       {error && (

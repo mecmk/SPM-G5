@@ -112,6 +112,19 @@ export function nowAsInput(): string {
   return instantToInput(new Date().toISOString())
 }
 
+const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/
+
+/** Story 17.3 AC3: whether the server can read a date picker's value as a day. A picker can hold a
+ *  year of five or six digits, which the server cannot. */
+export function isReadableDate(inputValue: string): boolean {
+  return DATE_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputValue))
+}
+
+/** Today in Singapore as a date picker's value ("2026-11-18"), e.g. for its `min`. */
+export function todayAsDateInput(): string {
+  return nowAsInput().slice(0, 'YYYY-MM-DD'.length)
+}
+
 /** The reverse of `inputToInstant`: a server timestamp as a Singapore `datetime-local` value. */
 export function instantToInput(stamp: string): string {
   // The Swedish locale writes "2026-11-18 09:00:00", which is the input's format bar the space.
