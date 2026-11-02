@@ -8,31 +8,34 @@ every status and ordering are 19.1 and 19.2's own cases (test_raise_change_reque
 test_decide_change_request.py), made from factories; nothing here repeats them.
 
 Happy path
-* Chloe's queue holds the Customer Success Forum's pending request, Carl's the Annual Sales
-  Kickoff's; each reads with its two values, its reason and who asked.
-* The rest of each coordinator's record: Chloe's approved and rejected one, Carl's withdrawn one
-  and the approved one on Nadia's event.
-* Each organiser reads their own requests on their events' pages, in more than one status.
+* Each coordinator's queue holds their own pending requests, each reading with its two values, its
+  reason and who asked; Chloe's has three, Carl's two.
+* The rest of each coordinator's record, approved, rejected and withdrawn, and never the other's.
+* Each organiser reads their own requests on their events' pages, in every status.
+* The sample spreads over every status, as a real queue would.
 
 Boundary
 * Every seeded value is canonical JSON, as the service writes it, so the app reads it back.
 * A pending request is not out of date: it records the value its event has now.
 
 Edge
-* The approved requests record a change the event already shows; the rejected, withdrawn and
-  pending ones leave its figure as it was.
+* An approved request records a change the event already shows; a rejected, withdrawn or pending
+  one leaves the event's value as it was recorded.
 * A decision names a coordinator and a time; a rejection also its reason; a pending or withdrawn
   request names neither.
+* A decision comes after the request, and a request after its event was approved.
 * Nadia's "Change approved" notification names a request that exists, on her event.
 
-Permission and conflict cases do not apply: the seed adds no rule, and who may decide (19.2 AC6)
-and the one pending request a field takes (19.1 AC6) are proved from factories in the files above.
-The index behind AC6 would also refuse a seed that broke it, so the seed loading proves the rest.
+Permission and conflict cases do not apply: the seed adds no rule, and who may decide (19.2 AC6) and
+the one pending request a field takes (19.1 AC6) are proved from factories in the files above. The
+index behind AC6 would also refuse a seed that broke it, so the seed loading proves the rest.
 """
 
 import json
 import uuid
+from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any
 
 import pytest
@@ -44,8 +47,34 @@ from app.events.models import Event
 from app.notifications.models import Notification
 from tests.support.seed import ChangeRequests, Events, Notifications, Users
 
-_KICKOFF_NOW = {"ends_at": "2027-08-18T10:00:00+00:00", "starts_at": "2027-08-18T01:00:00+00:00"}
-_NEXT_DAY = {"ends_at": "2027-08-19T10:00:00+00:00", "starts_at": "2027-08-19T01:00:00+00:00"}
+_SALES_KICKOFF = {"ends_at": "2027-08-18T10:00:00+00:00", "starts_at": "2027-08-18T01:00:00+00:00"}
+_SALES_KICKOFF_NEXT_DAY = {
+    "ends_at": "2027-08-19T10:00:00+00:00",
+    "starts_at": "2027-08-19T01:00:00+00:00",
+}
+_FIRESIDE = {"ends_at": "2027-06-01T09:00:00+00:00", "starts_at": "2027-06-01T07:00:00+00:00"}
+_FIRESIDE_LATER = {"ends_at": "2027-06-01T10:00:00+00:00", "starts_at": "2027-06-01T08:00:00+00:00"}
+_TOWNHALL = {"ends_at": "2027-01-15T04:00:00+00:00", "starts_at": "2027-01-15T02:00:00+00:00"}
+_TOWNHALL_EARLIER = {
+    "ends_at": "2027-01-14T04:00:00+00:00",
+    "starts_at": "2027-01-14T02:00:00+00:00",
+}
+_DEMO_DAY = {"ends_at": "2027-07-01T04:00:00+00:00", "starts_at": "2027-07-01T01:00:00+00:00"}
+_DEMO_DAY_EVENING = {
+    "ends_at": "2027-07-01T13:00:00+00:00",
+    "starts_at": "2027-07-01T10:00:00+00:00",
+}
+_CHARITY_GALA = {"ends_at": "2027-08-01T14:00:00+00:00", "starts_at": "2027-08-01T10:00:00+00:00"}
+_CHARITY_GALA_NEXT_WEEK = {
+    "ends_at": "2027-08-08T14:00:00+00:00",
+    "starts_at": "2027-08-08T10:00:00+00:00",
+}
+
+_REJECTION_REASONS = {
+    ChangeRequests.CHARITY_GALA_ATTENDANCE: "No banquet venue we can book seats 400.",
+    ChangeRequests.HOMECOMING_ATTENDANCE: "The campus venues we hold seat far fewer than that.",
+    ChangeRequests.DEMO_DAY_SCHEDULE: "The venue is booked that evening, so the time stays.",
+}
 
 
 @dataclass(frozen=True)
@@ -59,79 +88,165 @@ class Seeded:
     current: Any
     proposed: Any
     status: str
-    decision_reason: str | None = None
+
+
+def _attendance(id, event_id, name, organiser, coordinator, current, proposed, status):
+    return Seeded(
+        id, event_id, name, organiser, coordinator, "expected_attendance", current, proposed, status
+    )
+
+
+def _schedule(id, event_id, name, organiser, coordinator, current, proposed, status):
+    return Seeded(id, event_id, name, organiser, coordinator, "schedule", current, proposed, status)
 
 
 SEEDED = (
-    Seeded(
+    # Pending
+    _attendance(
         ChangeRequests.CUSTOMER_FORUM_ATTENDANCE,
         Events.CUSTOMER_FORUM,
         "Customer Success Forum",
         Users.ORGANISER_2,
         Users.COORDINATOR,
-        "expected_attendance",
         150,
         180,
         "PENDING",
     ),
-    Seeded(
+    _attendance(
+        ChangeRequests.ROADMAP_TOWNHALL_ATTENDANCE,
+        Events.APPROVED_3,
+        "Product Roadmap Townhall",
+        Users.ORGANISER_2,
+        Users.COORDINATOR,
+        300,
+        260,
+        "PENDING",
+    ),
+    _schedule(
+        ChangeRequests.FIRESIDE_SCHEDULE,
+        Events.APPROVED_4,
+        "Founders Day Fireside Chat",
+        Users.ORGANISER,
+        Users.COORDINATOR,
+        _FIRESIDE,
+        _FIRESIDE_LATER,
+        "PENDING",
+    ),
+    _schedule(
         ChangeRequests.SALES_KICKOFF_SCHEDULE,
         Events.SALES_KICKOFF,
         "Annual Sales Kickoff",
         Users.ORGANISER_2,
         Users.COORDINATOR_2,
-        "schedule",
-        _KICKOFF_NOW,
-        _NEXT_DAY,
+        _SALES_KICKOFF,
+        _SALES_KICKOFF_NEXT_DAY,
         "PENDING",
     ),
-    Seeded(
+    _attendance(
+        ChangeRequests.PARTNER_GALA_ATTENDANCE,
+        Events.PARTNER_GALA,
+        "Year-End Partner Gala",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        180,
+        220,
+        "PENDING",
+    ),
+    # Approved
+    _attendance(
         ChangeRequests.FIRESIDE_ATTENDANCE,
         Events.APPROVED_4,
         "Founders Day Fireside Chat",
         Users.ORGANISER,
         Users.COORDINATOR,
-        "expected_attendance",
         180,
         200,
         "APPROVED",
     ),
-    Seeded(
-        ChangeRequests.CHARITY_GALA_ATTENDANCE,
-        Events.APPROVED_6,
-        "Winter Charity Gala",
-        Users.ORGANISER,
-        Users.COORDINATOR,
-        "expected_attendance",
-        220,
-        400,
-        "REJECTED",
-        decision_reason="The banquet venues we can book do not seat 400 guests.",
-    ),
-    Seeded(
-        ChangeRequests.FINTECH_BREAKFAST_ATTENDANCE,
-        Events.FINTECH_BREAKFAST,
-        "Fintech Leaders Breakfast",
+    _schedule(
+        ChangeRequests.ROADMAP_TOWNHALL_SCHEDULE,
+        Events.APPROVED_3,
+        "Product Roadmap Townhall",
         Users.ORGANISER_2,
-        Users.COORDINATOR_2,
-        "expected_attendance",
-        45,
-        60,
-        "WITHDRAWN",
+        Users.COORDINATOR,
+        _TOWNHALL_EARLIER,
+        _TOWNHALL,
+        "APPROVED",
     ),
-    Seeded(
+    _attendance(
         ChangeRequests.NOTICE_GALA_ATTENDANCE,
         Events.NOTICE_GALA,
         "Harbour Lights Gala",
         Users.NOTICE,
         Users.COORDINATOR_2,
-        "expected_attendance",
         40,
         60,
         "APPROVED",
     ),
+    _attendance(
+        ChangeRequests.DEMO_DAY_ATTENDANCE,
+        Events.APPROVED_5,
+        "Investor Demo Day",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        80,
+        100,
+        "APPROVED",
+    ),
+    # Rejected
+    _attendance(
+        ChangeRequests.CHARITY_GALA_ATTENDANCE,
+        Events.APPROVED_6,
+        "Winter Charity Gala",
+        Users.ORGANISER,
+        Users.COORDINATOR,
+        220,
+        400,
+        "REJECTED",
+    ),
+    _attendance(
+        ChangeRequests.HOMECOMING_ATTENDANCE,
+        Events.APPROVED_7,
+        "Alumni Homecoming Weekend",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        100,
+        250,
+        "REJECTED",
+    ),
+    _schedule(
+        ChangeRequests.DEMO_DAY_SCHEDULE,
+        Events.APPROVED_5,
+        "Investor Demo Day",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        _DEMO_DAY,
+        _DEMO_DAY_EVENING,
+        "REJECTED",
+    ),
+    # Withdrawn
+    _attendance(
+        ChangeRequests.FINTECH_BREAKFAST_ATTENDANCE,
+        Events.FINTECH_BREAKFAST,
+        "Fintech Leaders Breakfast",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        45,
+        60,
+        "WITHDRAWN",
+    ),
+    _schedule(
+        ChangeRequests.CHARITY_GALA_SCHEDULE,
+        Events.APPROVED_6,
+        "Winter Charity Gala",
+        Users.ORGANISER,
+        Users.COORDINATOR,
+        _CHARITY_GALA,
+        _CHARITY_GALA_NEXT_WEEK,
+        "WITHDRAWN",
+    ),
 )
-_BY_ID = {seeded.id: seeded for seeded in SEEDED}
+_IDS = lambda seeded: f"{seeded.event_name} {seeded.field} {seeded.status}"  # noqa: E731
 
 
 def _row(db: Session, request_id: uuid.UUID) -> EventChangeRequest:
@@ -147,10 +262,17 @@ def _queue(client, coordinator) -> dict[str, dict]:
     return {entry["id"]: entry for entry in response.json()}
 
 
+def _event_value(event: Event, field: str) -> Any:
+    if field == "expected_attendance":
+        return event.expected_attendance
+    return {
+        "ends_at": event.ends_at.astimezone(UTC).isoformat(),
+        "starts_at": event.starts_at.astimezone(UTC).isoformat(),
+    }
+
+
 @pytest.mark.story("19.2", ac=1)
-@pytest.mark.parametrize(
-    "seeded", SEEDED, ids=lambda seeded: f"{seeded.event_name} {seeded.status}"
-)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
 def test_a_seeded_request_records_what_the_seed_describes(db: Session, seeded: Seeded):
     row = _row(db, seeded.id)
 
@@ -164,9 +286,7 @@ def test_a_seeded_request_records_what_the_seed_describes(db: Session, seeded: S
 
 
 @pytest.mark.story("19.2", ac=1)
-@pytest.mark.parametrize(
-    "seeded", SEEDED, ids=lambda seeded: f"{seeded.event_name} {seeded.status}"
-)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
 def test_a_seeded_value_is_canonical_json(db: Session, seeded: Seeded):
     """Stored the way the service writes it - keys sorted, no spaces - so the same value always
     reads the same and an identical proposal is recognised (19.1 AC4)."""
@@ -177,9 +297,7 @@ def test_a_seeded_value_is_canonical_json(db: Session, seeded: Seeded):
 
 
 @pytest.mark.story("19.2", ac=1)
-@pytest.mark.parametrize(
-    "seeded", SEEDED, ids=lambda seeded: f"{seeded.event_name} {seeded.status}"
-)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
 def test_a_seeded_decision_names_who_decided_and_when(db: Session, seeded: Seeded):
     row = _row(db, seeded.id)
 
@@ -190,13 +308,21 @@ def test_a_seeded_decision_names_who_decided_and_when(db: Session, seeded: Seede
     else:
         assert row.decided_by_id is None
         assert row.decided_at is None
-    assert row.decision_reason == seeded.decision_reason
+    assert row.decision_reason == _REJECTION_REASONS.get(seeded.id)
 
 
 @pytest.mark.story("19.2", ac=1)
-@pytest.mark.parametrize(
-    "seeded", SEEDED, ids=lambda seeded: f"{seeded.event_name} {seeded.status}"
-)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
+def test_a_seeded_request_comes_after_its_event_was_approved(db: Session, seeded: Seeded):
+    """A request is raised on an approved event, so none is older than the event's approval."""
+    event = db.get(Event, seeded.event_id)
+
+    assert event.decided_at is not None
+    assert _row(db, seeded.id).created_at > event.decided_at
+
+
+@pytest.mark.story("19.2", ac=1)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
 def test_a_seeded_request_sits_on_an_event_its_coordinator_owns(db: Session, seeded: Seeded):
     """It is in that coordinator's queue and no other's, and the event is the one it names."""
     event = db.get(Event, seeded.event_id)
@@ -207,48 +333,66 @@ def test_a_seeded_request_sits_on_an_event_its_coordinator_owns(db: Session, see
 
 
 @pytest.mark.story("19.2", ac=1)
+@pytest.mark.parametrize("seeded", SEEDED, ids=_IDS)
+def test_the_event_shows_the_value_its_requests_leave_it_with(db: Session, seeded: Seeded):
+    """An approved change is already on the event; a pending, rejected or withdrawn one is not, so
+    the event still has the value the request recorded as current."""
+    event = db.get(Event, seeded.event_id)
+
+    expected = seeded.proposed if seeded.status == "APPROVED" else seeded.current
+    assert _event_value(event, seeded.field) == expected
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_the_sample_spreads_over_every_status_as_a_real_queue_does(db: Session):
+    """Not one of each: several pending and decided, some withdrawn, in both coordinators' hands."""
+    rows = [_row(db, seeded.id) for seeded in SEEDED]
+
+    assert Counter(row.status for row in rows) == {
+        "PENDING": 5,
+        "APPROVED": 4,
+        "REJECTED": 3,
+        "WITHDRAWN": 2,
+    }
+    assert (
+        Counter((seeded.coordinator, seeded.status) for seeded in SEEDED)[
+            (Users.COORDINATOR, "PENDING")
+        ]
+        == 3
+    )
+    assert (
+        Counter((seeded.coordinator, seeded.status) for seeded in SEEDED)[
+            (Users.COORDINATOR_2, "PENDING")
+        ]
+        == 2
+    )
+    assert {row.field_name for row in rows} == {"expected_attendance", "schedule"}
+
+
+@pytest.mark.story("19.2", ac=1)
 @pytest.mark.parametrize(
-    "seeded", [s for s in SEEDED if s.field == "expected_attendance"], ids=lambda s: s.event_name
+    "coordinator", [Users.COORDINATOR, Users.COORDINATOR_2], ids=["Chloe", "Carl"]
 )
-def test_the_event_shows_the_attendance_its_requests_leave_it_with(db: Session, seeded: Seeded):
-    """An approved change is already on the event; a pending, rejected or withdrawn one is not,
-    so the event still has the figure the request recorded as current."""
-    attendance = db.get(Event, seeded.event_id).expected_attendance
+def test_a_coordinators_queue_holds_their_pending_requests_with_what_was_asked(client, coordinator):
+    queue = _queue(client, coordinator)
 
-    assert attendance == (seeded.proposed if seeded.status == "APPROVED" else seeded.current)
-
-
-@pytest.mark.story("19.2", ac=1)
-def test_chloes_queue_holds_the_customer_forums_pending_request(client):
-    entry = _queue(client, Users.COORDINATOR)[str(ChangeRequests.CUSTOMER_FORUM_ATTENDANCE)]
-
-    assert entry["event_name"] == "Customer Success Forum"
-    assert entry["event_status"] == "PLANNING"
-    assert entry["field"] == "expected_attendance"
-    assert (entry["current_value"], entry["proposed_value"]) == (150, 180)
-    assert entry["reason"]
-    assert entry["status"] == "PENDING"
-    assert entry["requested_by_name"] == Users.ORGANISER_2.full_name
-    assert entry["is_out_of_date"] is False
-
-
-@pytest.mark.story("19.2", ac=1)
-def test_carls_queue_holds_the_sales_kickoffs_pending_date_change(client):
-    entry = _queue(client, Users.COORDINATOR_2)[str(ChangeRequests.SALES_KICKOFF_SCHEDULE)]
-
-    assert entry["event_name"] == "Annual Sales Kickoff"
-    assert entry["field"] == "schedule"
-    assert entry["current_value"] == _KICKOFF_NOW
-    assert entry["proposed_value"] == _NEXT_DAY
-    assert entry["status"] == "PENDING"
-    assert entry["requested_by_name"] == Users.ORGANISER_2.full_name
-    assert entry["is_out_of_date"] is False
+    for seeded in (s for s in SEEDED if s.coordinator == coordinator and s.status == "PENDING"):
+        entry = queue[str(seeded.id)]
+        assert entry["event_name"] == seeded.event_name
+        assert entry["event_status"] == "PLANNING"
+        assert entry["field"] == seeded.field
+        assert entry["current_value"] == seeded.current
+        assert entry["proposed_value"] == seeded.proposed
+        assert entry["reason"]
+        assert entry["status"] == "PENDING"
+        assert entry["requested_by_name"] == seeded.organiser.full_name
+        assert entry["is_out_of_date"] is False
 
 
 @pytest.mark.story("19.2", ac=1)
 def test_each_coordinators_record_holds_only_their_own_events_requests(client):
-    """Chloe's record has Olivia's approved and rejected ones; Carl's the withdrawn one and the
-    approved one on Nadia's event. Neither holds the other's."""
+    """Chloe's record has Olivia's and Omar's on her events; Carl's his, Nadia's included.
+    Neither holds the other's."""
     chloe = _queue(client, Users.COORDINATOR)
     carl = _queue(client, Users.COORDINATOR_2)
 
@@ -259,32 +403,37 @@ def test_each_coordinators_record_holds_only_their_own_events_requests(client):
 
 
 @pytest.mark.story("19.2", ac=1)
-def test_the_rejection_and_the_approval_read_with_who_decided(client):
-    queue = _queue(client, Users.COORDINATOR)
+def test_the_queue_reads_pending_requests_before_the_record_oldest_first(client):
+    """What waits comes first, oldest first, so the pending ones the seed raises over a fortnight
+    read in the order they were raised."""
+    for coordinator in (Users.COORDINATOR, Users.COORDINATOR_2):
+        queue = list(_queue(client, coordinator).values())
+        seeded_ids = {str(seeded.id) for seeded in SEEDED if seeded.coordinator == coordinator}
+        mine = [entry for entry in queue if entry["id"] in seeded_ids]
+        statuses = [entry["status"] for entry in mine]
+        pending = [entry for entry in mine if entry["status"] == "PENDING"]
 
-    rejected = queue[str(ChangeRequests.CHARITY_GALA_ATTENDANCE)]
-    assert (
-        rejected["decision_reason"]
-        == _BY_ID[ChangeRequests.CHARITY_GALA_ATTENDANCE].decision_reason
-    )
-    assert rejected["decided_by_name"] == Users.COORDINATOR.full_name
-    approved = queue[str(ChangeRequests.FIRESIDE_ATTENDANCE)]
-    assert approved["decided_by_name"] == Users.COORDINATOR.full_name
-    assert approved["decision_reason"] is None
+        assert statuses[: len(pending)] == ["PENDING"] * len(pending)
+        assert [entry["created_at"] for entry in pending] == sorted(
+            entry["created_at"] for entry in pending
+        )
 
 
 @pytest.mark.story("19.2", ac=1)
-@pytest.mark.parametrize(
-    ("organiser", "statuses"),
-    [
-        (Users.ORGANISER, {"APPROVED", "REJECTED"}),
-        (Users.ORGANISER_2, {"PENDING", "WITHDRAWN"}),
-    ],
-    ids=["Olivia", "Omar"],
-)
-def test_an_organiser_reads_their_requests_on_their_events_in_more_than_one_status(
-    client, organiser, statuses: set[str]
-):
+def test_the_rejections_and_an_approval_read_with_who_decided(client):
+    for coordinator in (Users.COORDINATOR, Users.COORDINATOR_2):
+        queue = _queue(client, coordinator)
+
+        for seeded in (s for s in SEEDED if s.coordinator == coordinator):
+            if seeded.status in ("APPROVED", "REJECTED"):
+                entry = queue[str(seeded.id)]
+                assert entry["decided_by_name"] == coordinator.full_name
+                assert entry["decision_reason"] == _REJECTION_REASONS.get(seeded.id)
+
+
+@pytest.mark.story("19.2", ac=1)
+@pytest.mark.parametrize("organiser", [Users.ORGANISER, Users.ORGANISER_2], ids=["Olivia", "Omar"])
+def test_an_organiser_reads_their_requests_on_their_events_in_every_status(client, organiser):
     client.login(organiser)
     mine = [seeded for seeded in SEEDED if seeded.organiser == organiser]
 
@@ -296,7 +445,7 @@ def test_an_organiser_reads_their_requests_on_their_events_in_more_than_one_stat
         assert row["proposed_value"] == seeded.proposed
         seen.append(row["status"])
 
-    assert set(seen) == statuses
+    assert set(seen) == {"PENDING", "APPROVED", "REJECTED", "WITHDRAWN"}
 
 
 @pytest.mark.story("19.2", ac=1)

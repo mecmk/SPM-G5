@@ -552,30 +552,42 @@ def _cr(n: int) -> uuid.UUID:
 
 
 class ChangeRequests:
-    """c14: the sample change requests, one per status, each on an event no other test raises one
-    on. Each id ends in its event's number, and each asks to change the event's expected
-    attendance except the Sales Kickoff's, which moves its date. A coordinator's queue holds the
-    pending ones first, then the record of the rest."""
+    """c14: the sample change requests, a spread of every status as a real queue would hold, on
+    events no other test raises one on. The first six end in their event's number, the rest are
+    numbered from 101. Each asks to change the event's expected attendance or its schedule. A
+    coordinator's queue holds the pending ones first, then the record of the rest."""
 
-    # Pending: Events.CUSTOMER_FORUM (organiser 2, coordinator 1), 150 to 180 people.
+    # Pending. Chloe: Events.CUSTOMER_FORUM 150 to 180 people; Events.APPROVED_3 (Product Roadmap
+    # Townhall) 300 to 260; Events.APPROVED_4 (Founders Day) an hour later. Carl:
+    # Events.SALES_KICKOFF a day later; Events.PARTNER_GALA 180 to 220.
     CUSTOMER_FORUM_ATTENDANCE = _cr(23)
-    # Pending: Events.SALES_KICKOFF (organiser 2, coordinator 2), one day later.
+    ROADMAP_TOWNHALL_ATTENDANCE = _cr(101)
+    FIRESIDE_SCHEDULE = _cr(102)
     SALES_KICKOFF_SCHEDULE = _cr(24)
-    # Approved by coordinator 1: Events.APPROVED_4 (organiser 1), 180 to the 200 it has now.
+    PARTNER_GALA_ATTENDANCE = _cr(103)
+    # Approved. Chloe: Events.APPROVED_4 180 to the 200 it has now; Events.APPROVED_3 moved to the
+    # date it has now. Carl: Events.NOTICE_GALA (Nadia) 40 to the 60 it has now, the request the
+    # "Change approved" notification in Notifications names (before c14 a row that did not exist;
+    # its id keeps that notification's eeeeeeee prefix); Events.APPROVED_5 (Investor Demo Day)
+    # 80 to the 100 it has now.
     FIRESIDE_ATTENDANCE = _cr(10)
-    # Rejected by coordinator 1, with a reason: Events.APPROVED_6 (organiser 1), 220 to 400.
-    CHARITY_GALA_ATTENDANCE = _cr(16)
-    # Withdrawn by organiser 2: Events.FINTECH_BREAKFAST (coordinator 2), 45 to 60.
-    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
-    # Approved by coordinator 2: Events.NOTICE_GALA (Nadia), 40 to the 60 it has now. The request
-    # the "Change approved" notification in Notifications names, before c14 a row that did not
-    # exist. Its id keeps the notification's eeeeeeee prefix.
+    ROADMAP_TOWNHALL_SCHEDULE = _cr(104)
     NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
+    DEMO_DAY_ATTENDANCE = _cr(105)
+    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 400.
+    # Carl: Events.APPROVED_7 (Alumni Homecoming) 100 to 250; Events.APPROVED_5 to an evening start.
+    CHARITY_GALA_ATTENDANCE = _cr(16)
+    HOMECOMING_ATTENDANCE = _cr(106)
+    DEMO_DAY_SCHEDULE = _cr(107)
+    # Withdrawn by their organiser: Omar's Events.FINTECH_BREAKFAST 45 to 60 (coordinator 2) and
+    # Olivia's Events.APPROVED_6 to a week later (coordinator 1).
+    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
+    CHARITY_GALA_SCHEDULE = _cr(108)
 
-    PENDING = (CUSTOMER_FORUM_ATTENDANCE, SALES_KICKOFF_SCHEDULE)
-    DECIDED_OR_WITHDRAWN = (
-        FIRESIDE_ATTENDANCE,
-        CHARITY_GALA_ATTENDANCE,
-        FINTECH_BREAKFAST_ATTENDANCE,
-        NOTICE_GALA_ATTENDANCE,
+    PENDING = (
+        CUSTOMER_FORUM_ATTENDANCE,
+        ROADMAP_TOWNHALL_ATTENDANCE,
+        FIRESIDE_SCHEDULE,
+        SALES_KICKOFF_SCHEDULE,
+        PARTNER_GALA_ATTENDANCE,
     )
