@@ -325,8 +325,6 @@ def cancel_booking(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.BookingNotApproved as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.ReplacementPending as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.CancellingClosed as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return BookingOut.model_validate(booking)

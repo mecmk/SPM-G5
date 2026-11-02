@@ -478,6 +478,9 @@ class VenueUnavailabilityCreate(BaseModel):
     ends_at: AwareDatetime
     reason: str
     description: str | None = None
+    # Story 9.5 AC1 (D21): the bookings the preview listed and Venue Staff confirmed. Saving ends
+    # only these; a booking it would end that is not here refuses the save.
+    confirmed_booking_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @field_validator("reason")
     @classmethod
@@ -500,6 +503,9 @@ class VenueUnavailabilityUpdate(BaseModel):
     reason: str | None = None
     description: str | None = None
     end_now: Literal[True] | None = None
+    # Story 9.5 AC1 (D21, D22): the bookings the preview of this edit listed and Venue Staff
+    # confirmed; it names a booking only if the edit adds time. Not a field to change.
+    confirmed_booking_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @field_validator("reason")
     @classmethod
@@ -513,7 +519,7 @@ class VenueUnavailabilityUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _check_what_was_sent(self) -> VenueUnavailabilityUpdate:
-        sent = self.model_fields_set
+        sent = self.model_fields_set - {"confirmed_booking_ids"}
         if not sent:
             raise ValueError(NOTHING_TO_CHANGE_MESSAGE)
         if "end_now" in sent and self.end_now is None:

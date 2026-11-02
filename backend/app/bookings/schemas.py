@@ -236,6 +236,9 @@ class BookingOut(BaseModel):
     # Story 21.3 AC2: how a cancelled booking was released and why; None otherwise.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -314,6 +317,9 @@ class BookingQueueEntry(BaseModel):
     # Story 21.3 AC8: how a cancelled booking was released and why, for the Cancelled tab.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -349,6 +355,8 @@ class BookingQueueEntry(BaseModel):
             released_at=booking.released_at,
             release_cause=booking.release_cause,
             release_reason=booking.release_reason,
+            closure_reason=booking.closure_reason,
+            closure_description=booking.closure_description,
         )
 
 
@@ -473,6 +481,9 @@ class BookingOutcome(BaseModel):
     # Story 21.3 AC2: how a cancelled booking was released and why, for the event page.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -511,4 +522,6 @@ class BookingOutcome(BaseModel):
             released_at=booking.released_at,
             release_cause=booking.release_cause,
             release_reason=booking.release_reason,
+            closure_reason=booking.closure_reason,
+            closure_description=booking.closure_description,
         )

@@ -2052,7 +2052,8 @@ def test_a_save_that_holds_the_event_first_and_a_confirmation_that_follows_both_
         with Session(engine) as session:
             row = session.get(VenueBooking, booking_id)
             assert row.status == "CANCELLED"
-            assert row.hold_completed_at is not None
+            # Cancelled before the confirmation ran, so its trigger completed no hold.
+            assert row.hold_completed_at is None
             assert session.get(Event, event_id).status == EventStatus.CONFIRMED
             returned = [
                 history

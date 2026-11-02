@@ -183,11 +183,6 @@ CANCEL_NOT_ASSIGNED_COORDINATOR_MESSAGE = (
 # Story 12.8 AC8: a booking that holds no approval has nothing to cancel; a pending request is
 # withdrawn instead (12.2).
 BOOKING_NOT_APPROVED_MESSAGE = "Only an approved booking can be cancelled. This one is {status}."
-# Story 12.8 AC7: the replacement asked for (12.6) is decided or withdrawn first.
-CANCEL_REPLACEMENT_PENDING_MESSAGE = (
-    "A replacement at {venue} is waiting for Venue Staff. Withdraw it before cancelling this "
-    "booking."
-)
 # Story 12.8 AC4: the cut-off change requests share (``CHANGES_CUTOFF``).
 CANCELLING_CLOSED_MESSAGE = (
     "Cancelling this event's venue bookings closed 24 hours before its set-up time."
@@ -221,6 +216,24 @@ _RETURNED_TITLE = '"{event}" is back in Planning'
 _RETURNED_MESSAGE = (
     '{coordinator} cancelled the booking of {venue} for "{event}" while it was {status}, so it is '
     "back in Planning and needs a new safety check before it is confirmed again."
+)
+
+# Story 9.5 AC2: why a request a venue closure rejected is closed, as the queue words it.
+CLOSURE_REJECTED_REASON = "Venue closed: {reason}"
+# Story 9.5 AC4: Venue Staff's notice of a request a closure rejected (the cancelled booking's is
+# ``release_booking``'s), and the Safety Officers' of an event a closure sent back to Planning.
+CLOSURE_REJECTED_NOTICE_TITLE = "A venue booking request was rejected"
+CLOSURE_REJECTED_NOTICE = (
+    'The request for {venue} for "{event}" {period} was rejected because the venue is closed '
+    "({reason})."
+)
+CLOSURE_RELEASE_BECAUSE = "the venue was closed ({reason})"
+_CLOSURE_RETURNED_TO_PLANNING_REASON = (
+    "{venue} was closed ({reason}), so this event needs another venue."
+)
+_CLOSURE_RETURNED_MESSAGE = (
+    '{venue} was closed ({reason}), so "{event}" is back in Planning and needs a new safety check '
+    "before it is confirmed again."
 )
 
 # Story 21.3 AC4: what Venue Staff are told when the Safety Officer's finding released a booking:
@@ -374,14 +387,6 @@ class BookingNotApproved(ValueError):
 
     def __init__(self, booking: VenueBooking) -> None:
         super().__init__(BOOKING_NOT_APPROVED_MESSAGE.format(status=booking.status.lower()))
-
-
-class ReplacementPending(ValueError):
-    """Story 12.8 AC7: the booking has a replacement waiting for Venue Staff (12.6), whose
-    approval would release it; it is withdrawn first. Names the replacement's venue."""
-
-    def __init__(self, replacement: VenueBooking) -> None:
-        super().__init__(CANCEL_REPLACEMENT_PENDING_MESSAGE.format(venue=replacement.venue.name))
 
 
 class CancellingClosed(ValueError):
@@ -756,6 +761,8 @@ def _notify_venue_staff_of_replacement(
 # Story 21.3 AC2, story 12.8 AC1: the causes that record why, in the words of whoever released it,
 # and release an approved booking only.
 _RELEASES_WITH_REASON = frozenset({ReleaseCause.SAFETY_REVIEW, ReleaseCause.COORDINATOR_CANCELLED})
+# Story 9.5 AC2: a venue closure ends an approved booking only; a pending request is rejected.
+_RELEASES_APPROVED_ONLY = _RELEASES_WITH_REASON | {ReleaseCause.VENUE_UNAVAILABLE}
 
 
 def release_booking(
@@ -769,6 +776,7 @@ def release_booking(
     details: dict[str, str] | None = None,
     at: datetime | None = None,
     replacement: VenueBooking | None = None,
+    closure: tuple[str, str] | None = None,
 ) -> bool:
     """Releases ``booking``, cancelling it so its venue is free, and tells Venue Staff - the one
     release every story makes. Who approved it and when stay on the record. The update is
@@ -793,13 +801,19 @@ def release_booking(
     original's ``released_at`` is read), audited ``BOOKING_REPLACED``, Venue Staff told which
     venue replaced it.
 
+    Story 9.5 AC2: VENUE_UNAVAILABLE is a venue closure's cancellation of an approved booking. It
+    takes the closure's ``(reason, description)`` as ``closure``, recorded on the booking beside the
+    cause, and no ``reason`` of its own (``release_reason`` stays NULL).
+
     What a path gives: a replacement, for REPLACED and only for it; ``reason`` and ``at``, for a
-    safety release (21.3 AC2) or a coordinator's cancellation (12.8 AC1); ``because`` and ``at``,
-    for any other cause."""
+    safety release (21.3 AC2) or a coordinator's cancellation (12.8 AC1); ``closure``, ``because``
+    and ``at``, for a closure's; ``because`` and ``at``, for any other cause."""
     if (cause == ReleaseCause.REPLACED) != (replacement is not None):
         raise ValueError("release_booking takes a replacement for REPLACED, and only for it.")
     if replacement is None and at is None:
         raise ValueError("release_booking needs the time of a release that has no replacement.")
+    if (cause == ReleaseCause.VENUE_UNAVAILABLE) != (closure is not None):
+        raise ValueError("release_booking takes a closure for VENUE_UNAVAILABLE, and only for it.")
     if cause in _RELEASES_WITH_REASON:
         if reason is None:
             raise ValueError("release_booking needs the reason for a release of this cause.")
@@ -811,6 +825,8 @@ def release_booking(
         "release_reason": reason,
         "released_by_id": actor.id,
     }
+    if closure is not None:
+        values["closure_reason"], values["closure_description"] = closure
     if replacement is not None:
         values["decision_reason"] = REPLACED_BY_REASON.format(venue=replacement.venue.name)
         values["replaced_by_booking_id"] = replacement.id
@@ -818,7 +834,9 @@ def release_booking(
         values["cancelled_at"] = at
     # Story 21.3 AC7, story 12.8 AC8: the safety review and the coordinator's cancel release an
     # approved booking only, never a pending one.
-    releasable = (BookingStatus.APPROVED,) if cause in _RELEASES_WITH_REASON else _HOLDING_STATUSES
+    releasable = (
+        (BookingStatus.APPROVED,) if cause in _RELEASES_APPROVED_ONLY else _HOLDING_STATUSES
+    )
     released = db.execute(
         update(VenueBooking)
         .where(VenueBooking.id == booking.id, VenueBooking.status.in_(releasable))
@@ -1112,14 +1130,34 @@ def reject_booking(
     if booking.status != BookingStatus.PENDING:
         raise BookingNotPending(booking, action="rejected")
 
+    actor = db.get(User, actor_id)
+    _mark_rejected(db, booking, actor=actor, decision_reason=decision_reason)
+    _notify_coordinator_of_decision(db, booking, actor=actor)
+    db.commit()
+    db.refresh(booking)
+
+
+def _mark_rejected(
+    db: Session,
+    booking: VenueBooking,
+    *,
+    actor: User,
+    decision_reason: str,
+    closure: tuple[str, str] | None = None,
+    details: dict[str, str] | None = None,
+) -> None:
+    """13.2.1 AC1: the rejection itself - the status, who rejected it, when and why, and the audit
+    entry - flushed but not committed and with no notice, as ``_mark_withdrawn`` is, so Venue
+    Staff's decision and story 9.5's closure both write it. ``closure`` is the venue closure's
+    ``(reason, description)`` that rejected it (9.5 AC2); ``details`` replace the audit entry's
+    ``reason`` (the decision reason) with the caller's own."""
     booking.status = BookingStatus.REJECTED
-    booking.decided_by_id = actor_id
+    booking.decided_by_id = actor.id
     booking.decided_at = datetime.now(UTC)
     booking.decision_reason = decision_reason
+    if closure is not None:
+        booking.closure_reason, booking.closure_description = closure
     db.flush()
-
-    actor = db.get(User, actor_id)
-    _notify_coordinator_of_decision(db, booking, actor=actor)
     record_audit(
         db,
         actor=actor,
@@ -1129,12 +1167,10 @@ def reject_booking(
         details={
             "venue_id": str(booking.venue_id),
             "event_id": str(booking.event_id),
-            "reason": decision_reason,
+            **(details if details is not None else {"reason": decision_reason}),
         },
         commit=False,
     )
-    db.commit()
-    db.refresh(booking)
 
 
 def _notify_venue_staff_of_request(
@@ -1236,24 +1272,26 @@ def _mark_withdrawn(db: Session, booking: VenueBooking, *, actor: User) -> None:
 
 # --- 12.8: the coordinator cancels an approved booking ------------------------------------------
 def _notify_of_return_to_planning(
-    db: Session, event: Event, booking: VenueBooking, *, actor: User, from_status: str
+    db: Session,
+    event: Event,
+    *,
+    actor: User,
+    title: str,
+    message: str,
+    recipients: Iterable[User],
 ) -> None:
-    """Story 12.8 AC5: the event left the Safety Officers' check, or lost the confirmation their
-    approval allowed, so the organiser and every active Safety Officer are told."""
-    message = _RETURNED_MESSAGE.format(
-        coordinator=actor.full_name,
-        venue=booking.venue.name,
-        event=event.name,
-        status=from_status.lower().replace("_", " "),
-    )
-    for recipient in (event.organiser, *active_members(db, role_code=RoleCode.SAFETY_OFFICER)):
+    """Story 12.8 AC5, story 9.5 AC4: the event left the Safety Officers' check, or lost the
+    confirmation their approval allowed, so ``recipients`` are told ``message``. 12.8 tells the
+    organiser and every active Safety Officer; a venue closure tells the Safety Officers only,
+    since the organiser has the closure's notice."""
+    for recipient in recipients:
         notify(
             db,
             recipient=recipient,
             actor=actor,
             notification_type=NotificationType.EVENT_RETURNED_TO_PLANNING,
             event_id=event.id,
-            title=_RETURNED_TITLE.format(event=event.name),
+            title=title,
             message=message,
             related_entity_type="event",
             related_entity_id=event.id,
@@ -1272,9 +1310,9 @@ def cancel_booking(
     booking, so an event cancellation, a hold expiring or a replacement being asked for meanwhile
     is waited for and then seen. Refusals come in this order, each changing nothing: not the
     event's assigned coordinator (``NotAssignedCoordinator``, AC8); a booking that is not APPROVED
-    (``BookingNotApproved``, AC8); a replacement still pending (``ReplacementPending``, AC7); the
-    24-hour cut-off before set-up passed (``CancellingClosed``, AC4). A booking marked "Venue
-    unavailable" (9.4) is cancelled like any other (AC7).
+    (``BookingNotApproved``, AC8); the 24-hour cut-off before set-up passed (``CancellingClosed``,
+    AC4). A pending replacement raised before story 9.5 does not stop it (AC7): if that request
+    is approved later, the cancelled booking stays as it is.
 
     Then, in one commit: the booking is released through ``release_booking`` with its own cause,
     COORDINATOR_CANCELLED, recording who and why (AC9) - its hold goes at once, it stays on the
@@ -1298,9 +1336,6 @@ def cancel_booking(
         raise NotAssignedCoordinator(message=CANCEL_NOT_ASSIGNED_COORDINATOR_MESSAGE)
     if booking.status != BookingStatus.APPROVED:
         raise BookingNotApproved(booking)
-    replacement = find_pending_replacement(db, booking.id)
-    if replacement is not None:
-        raise ReplacementPending(replacement)
     now = datetime.now(UTC)
     closes_at = changes_close_at(db, event)
     if closes_at is None or now >= closes_at:
@@ -1326,10 +1361,192 @@ def cancel_booking(
         details={"booking_id": str(booking.id)},
     )
     if is_returned:
-        _notify_of_return_to_planning(db, event, booking, actor=actor, from_status=from_status)
+        _notify_of_return_to_planning(
+            db,
+            event,
+            actor=actor,
+            title=_RETURNED_TITLE.format(event=event.name),
+            message=_RETURNED_MESSAGE.format(
+                coordinator=actor.full_name,
+                venue=booking.venue.name,
+                event=event.name,
+                status=from_status.lower().replace("_", " "),
+            ),
+            recipients=(event.organiser, *active_members(db, role_code=RoleCode.SAFETY_OFFICER)),
+        )
     db.commit()
     db.refresh(booking)
     return booking
+
+
+# --- 9.5: a venue closure ends the bookings it covers -------------------------------------------
+def _notify_venue_staff_of_closure_rejection(
+    db: Session, booking: VenueBooking, *, actor: User, reason_name: str
+) -> None:
+    """Story 9.5 AC4: every other active Venue Staff member is told a request was rejected because
+    its venue closed, under a title of its own - the member who saved the closure is not (20.1
+    AC3), and ``notify`` leaves them out."""
+    message = CLOSURE_REJECTED_NOTICE.format(
+        venue=booking.venue.name,
+        event=booking.event.name,
+        period=_describe_held_period(booking.held_from, booking.held_until),
+        reason=reason_name,
+    )
+    for member in active_members(db, role_code=RoleCode.VENUE_STAFF):
+        notify(
+            db,
+            recipient=member,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_RELEASED,
+            event_id=booking.event_id,
+            title=CLOSURE_REJECTED_NOTICE_TITLE,
+            message=message,
+            related_entity_type="venue_booking",
+            related_entity_id=booking.id,
+            commit=False,
+        )
+
+
+def _count_phrase(count: int, noun: str, plural: str, verb: str) -> str:
+    return f"its {noun} was {verb}" if count == 1 else f"its {count} {plural} were {verb}"
+
+
+def _notify_event_of_closure(
+    db: Session,
+    venue: Venue,
+    period: VenueUnavailabilityPeriod,
+    event: Event,
+    *,
+    cancelled: int,
+    rejected: int,
+    is_returned: bool,
+    actor: User,
+) -> None:
+    """Story 9.5 AC4: the event's assigned coordinator, if it has one, and its organiser are told
+    once - however many of its bookings ended - the venue, the period, the reason and what happened
+    to its bookings. The coordinator's notice carries the closure's description; the organiser's
+    does not. The member who saved is never told (20.1 AC3)."""
+    reason_name = venue_service.CLOSURE_REASON_LABELS[period.reason]
+    outcomes = []
+    if cancelled:
+        outcomes.append(
+            _count_phrase(cancelled, "approved booking", "approved bookings", "cancelled")
+        )
+    if rejected:
+        outcomes.append(_count_phrase(rejected, "pending request", "pending requests", "rejected"))
+    what_happened = f'For "{event.name}", {" and ".join(outcomes)}.'
+    if is_returned:
+        what_happened += (
+            " It is back in Planning and needs a new safety check before it is confirmed again."
+        )
+    when = venue_service.describe_period(period.starts_at, period.ends_at)
+    for recipient, detail in (
+        (event.assigned_coordinator, f"{reason_name}: {period.notes}"),
+        (event.organiser, reason_name),
+    ):
+        notify(
+            db,
+            recipient=recipient,
+            actor=actor,
+            notification_type=NotificationType.BOOKING_VENUE_UNAVAILABLE,
+            event_id=event.id,
+            title=f'{venue.name} is unavailable for "{event.name}"',
+            message=f"{venue.name} is unavailable {when} ({detail}). {what_happened}",
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
+def end_bookings_for_closure(
+    db: Session,
+    venue: Venue,
+    period: VenueUnavailabilityPeriod,
+    bookings: Iterable[VenueBooking],
+    *,
+    actor: User,
+    now: datetime,
+) -> None:
+    """Story 9.5 AC2-AC4: the closure ``period`` of ``venue`` ends ``bookings``, which the caller
+    holds locked, event first and then the bookings in id order (``venue_service`` takes them). A
+    pending request is rejected (``_mark_rejected``, "Venue closed: <reason>"); an approved booking
+    is released through ``release_booking`` with the cause VENUE_UNAVAILABLE. Each records the
+    closure's reason and description, who saved it and when. Then, once for each event:
+
+    * an event Awaiting Safety Check or Confirmed whose approved booking was cancelled goes back
+      to Planning (``events_service.return_event_to_planning``) - not one that lost only a pending
+      request, since it never relied on it (AC3) - and the Safety Officers are told;
+    * its assigned coordinator and organiser are told what ended (AC4);
+    * every other active Venue Staff member is told of each booking ended, by the notice of the
+      path that ended it.
+
+    Written, not committed: the caller commits, so a failure anywhere leaves nothing saved
+    (AC2)."""
+    reason_name = venue_service.CLOSURE_REASON_LABELS[period.reason]
+    closure = (period.reason, period.notes)
+    audit = {"closure_id": str(period.id), "reason": period.reason}
+    by_event: dict[uuid.UUID, list[VenueBooking]] = {}
+    for booking in sorted(bookings, key=lambda each: each.id):
+        by_event.setdefault(booking.event_id, []).append(booking)
+    for event_bookings in by_event.values():
+        event = event_bookings[0].event
+        cancelled = rejected = 0
+        for booking in event_bookings:
+            if booking.status == BookingStatus.PENDING:
+                _mark_rejected(
+                    db,
+                    booking,
+                    actor=actor,
+                    decision_reason=CLOSURE_REJECTED_REASON.format(reason=reason_name),
+                    closure=closure,
+                    details=audit,
+                )
+                _notify_venue_staff_of_closure_rejection(
+                    db, booking, actor=actor, reason_name=reason_name
+                )
+                rejected += 1
+            elif release_booking(
+                db,
+                booking,
+                actor=actor,
+                cause=ReleaseCause.VENUE_UNAVAILABLE,
+                because=CLOSURE_RELEASE_BECAUSE.format(reason=reason_name),
+                details={**audit, "cause": ReleaseCause.VENUE_UNAVAILABLE},
+                at=now,
+                closure=closure,
+            ):
+                cancelled += 1
+        is_returned = bool(cancelled) and events_service.return_event_to_planning(
+            db,
+            event,
+            actor=actor,
+            at=now,
+            reason=_CLOSURE_RETURNED_TO_PLANNING_REASON.format(
+                venue=venue.name, reason=reason_name
+            ),
+            details={"venue_id": str(venue.id), "period_id": str(period.id)},
+        )
+        _notify_event_of_closure(
+            db,
+            venue,
+            period,
+            event,
+            cancelled=cancelled,
+            rejected=rejected,
+            is_returned=is_returned,
+            actor=actor,
+        )
+        if is_returned:
+            _notify_of_return_to_planning(
+                db,
+                event,
+                actor=actor,
+                title=_RETURNED_TITLE.format(event=event.name),
+                message=_CLOSURE_RETURNED_MESSAGE.format(
+                    venue=venue.name, reason=reason_name, event=event.name
+                ),
+                recipients=active_members(db, role_code=RoleCode.SAFETY_OFFICER),
+            )
 
 
 # --- 12.1: raising a request ----------------------------------------------------------------
@@ -1529,19 +1746,6 @@ def find_covering_booking(db: Session, requirement_id: uuid.UUID) -> VenueBookin
                 VenueBooking.status != BookingStatus.PENDING,
                 VenueBooking.replaces_live_original.is_(False),
             ),
-        )
-    )
-
-
-def find_pending_replacement(db: Session, original_id: uuid.UUID) -> VenueBooking | None:
-    """Story 12.6 AC10, story 12.8 AC7: the pending replacement asked for ``original_id``, if
-    any."""
-    return db.scalar(
-        select(VenueBooking)
-        .options(joinedload(VenueBooking.venue))
-        .where(
-            VenueBooking.replaces_booking_id == original_id,
-            VenueBooking.status == BookingStatus.PENDING,
         )
     )
 

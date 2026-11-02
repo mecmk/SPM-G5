@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth.models import User
 from app.auth.permissions import Permission, role_has
@@ -106,6 +106,11 @@ END_NOT_AFTER_START_MESSAGE = "The end of the range must be after its start."
 
 # Story 9.4: why a change to a venue's unavailability is refused.
 PERIOD_END_NOT_AFTER_START_MESSAGE = "The end must be after the start."
+# Story 9.5 AC1: a save that would end a booking its caller did not confirm is refused.
+CLOSURE_NEEDS_CONFIRMATION_MESSAGE = (
+    "Bookings changed since you reviewed the list, so this closure was not saved. "
+    "Review the list and save again."
+)
 DESCRIPTION_REQUIRED_MESSAGE = "Describe why the venue is blocked off."
 PERIOD_NOT_STARTED_MESSAGE = (
     "This period has not started, so it cannot be ended. Remove it instead."
@@ -133,6 +138,16 @@ class DescriptionRequired(ValueError):
 
     def __init__(self) -> None:
         super().__init__(DESCRIPTION_REQUIRED_MESSAGE)
+
+
+class ClosureNeedsConfirmation(ValueError):
+    """Story 9.5 AC1 (D21): saving would reject or cancel a booking the caller did not confirm - a
+    request raised since the preview, say. Nothing is written; ``bookings`` is the fresh list the
+    save would end, for the page to show again."""
+
+    def __init__(self, bookings: list[AffectedBookingOut]) -> None:
+        super().__init__(CLOSURE_NEEDS_CONFIRMATION_MESSAGE)
+        self.bookings = bookings
 
 
 class PeriodNotStarted(ValueError):
@@ -259,7 +274,7 @@ assert set(_CALENDAR_BOOKING_REASONS) == set(_HOLDING_STATUSES)
 # used only when it has no notes, so the day list reads "Annual servicing" or "Maintenance"
 # rather than the raw code next to "Closed - Maintenance" (mirrors CLOSURE_REASON_NAMES in
 # frontend/src/venues/venueCalendarDays.ts).
-_CLOSURE_REASON_LABELS = {
+CLOSURE_REASON_LABELS = {
     UnavailabilityReason.MAINTENANCE: "Maintenance",
     UnavailabilityReason.EQUIPMENT_FAILURE: "Equipment failure",
     UnavailabilityReason.RENOVATION: "Renovation",
@@ -383,7 +398,7 @@ def get_venue_calendar(
             booking_starts_at=None,
             booking_ends_at=None,
             reason=period.reason,
-            label=period.notes or _CLOSURE_REASON_LABELS.get(period.reason, period.reason),
+            label=period.notes or CLOSURE_REASON_LABELS.get(period.reason, period.reason),
             hold_expires_at=None,
             description=period.notes,
         )
@@ -1368,7 +1383,7 @@ def _get_period(
     return period
 
 
-def _describe_period(starts_at: datetime, ends_at: datetime) -> str:
+def describe_period(starts_at: datetime, ends_at: datetime) -> str:
     """``from Thu 4 Mar 2027, 00:00 to Sat 6 Mar 2027, 00:00``, in Singapore time."""
 
     def moment(value: datetime) -> str:
@@ -1376,6 +1391,110 @@ def _describe_period(starts_at: datetime, ends_at: datetime) -> str:
         return f"{local:%a} {local.day} {local:%b %Y}, {local:%H:%M}"
 
     return f"from {moment(starts_at)} to {moment(ends_at)}"
+
+
+def _added_slices(
+    period: VenueUnavailabilityPeriod, starts_at: datetime, ends_at: datetime
+) -> list[tuple[datetime, datetime]]:
+    """Story 9.5 AC1 (D22): what an edit newly covers - [new start, old start) when the start
+    moves earlier, and (old end, new end] when the end moves later. Shortening, ending early and
+    a change of text add nothing."""
+    slices = []
+    if starts_at < period.starts_at:
+        slices.append((starts_at, period.starts_at))
+    if ends_at > period.ends_at:
+        slices.append((period.ends_at, ends_at))
+    return slices
+
+
+def _covered_by(slices: list[tuple[datetime, datetime]], now: datetime) -> ColumnElement[bool]:
+    """Story 9.5 AC1/AC5: a booking's held period overlaps part of a slice that is still to come -
+    from the later of ``now`` and its own start - half-open, as bookings are."""
+    return or_(
+        *(
+            and_(
+                VenueBooking.held_until > start,
+                func.greatest(VenueBooking.held_from, now) < end,
+            )
+            for start, end in slices
+        )
+    )
+
+
+def _candidate_bookings(
+    venue_id: uuid.UUID, slices: list[tuple[datetime, datetime]], now: datetime
+) -> tuple[ColumnElement[bool], ...]:
+    """Story 9.5 AC1/AC5: the pending and approved bookings of ``venue_id``, of an event that is
+    Planning, Awaiting Safety Check or Confirmed, whose held period has not ended by ``now`` and
+    is covered by ``slices``."""
+    return (
+        VenueBooking.venue_id == venue_id,
+        VenueBooking.status.in_(_HOLDING_STATUSES),
+        VenueBooking.event.has(Event.status.in_(_FLAGGABLE_EVENT_STATUSES)),
+        VenueBooking.held_until > now,
+        _covered_by(slices, now),
+    )
+
+
+def _affected_out(bookings: Iterable[VenueBooking]) -> list[AffectedBookingOut]:
+    return [
+        AffectedBookingOut(
+            booking_id=booking.id,
+            event_id=booking.event_id,
+            event_name=booking.event.name,
+            status=booking.status,
+            held_from=booking.held_from,
+            held_until=booking.held_until,
+        )
+        for booking in sorted(bookings, key=lambda each: (each.held_from, each.id))
+    ]
+
+
+def _lock_covered_bookings(
+    db: Session, venue_id: uuid.UUID, slices: list[tuple[datetime, datetime]], *, now: datetime
+) -> list[VenueBooking]:
+    """Story 9.5 AC10: the bookings a save would end, with their events locked first and then the
+    bookings, each in id order and re-read (``populate_existing``): the order a confirmation takes
+    them (the event row, then the bookings its trigger updates), so the two cannot deadlock, and
+    two saves over one venue lock alike. A booking another transaction is approving, withdrawing
+    or expiring is waited for and seen as it then stands, so whichever is saved first wins. The
+    events are locked ``FOR NO KEY UPDATE``, as ``lock_event`` takes them: an approval holds its
+    booking and then writes a notice naming the event, which ``FOR UPDATE`` would make wait on it.
+    Nothing is changed here; the caller commits or rolls back."""
+    if not slices:
+        return []
+    is_candidate = _candidate_bookings(venue_id, slices, now)
+    event_ids = db.scalars(
+        select(VenueBooking.event_id)
+        .where(*is_candidate)
+        .distinct()
+        .order_by(VenueBooking.event_id)
+    ).all()
+    db.execute(
+        select(Event)
+        .where(Event.id.in_(event_ids))
+        .order_by(Event.id)
+        .with_for_update(of=Event, key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    return list(
+        db.scalars(
+            select(VenueBooking)
+            .where(*is_candidate)
+            .order_by(VenueBooking.id)
+            .with_for_update(of=VenueBooking)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def _confirmed(bookings: list[VenueBooking], data_ids: Iterable[uuid.UUID]) -> None:
+    """Story 9.5 AC1 (D21): every booking the save would end was confirmed. One that left the list
+    meanwhile - withdrawn, expired - is not in ``bookings`` and so cannot stop the save; one
+    approved meanwhile is still on it."""
+    confirmed = set(data_ids)
+    if any(booking.id not in confirmed for booking in bookings):
+        raise ClosureNeedsConfirmation(_affected_out(bookings))
 
 
 def add_unavailability(
@@ -1387,11 +1506,17 @@ def add_unavailability(
     now: datetime,
 ) -> VenueUnavailabilityPeriod:
     """Story 9.4 AC1/AC5: mark ``venue_id`` unavailable from ``starts_at`` to ``ends_at`` for a
-    reason. A period may start in the past and may overlap another of the venue's; bookings in
-    the way do not stop it being saved (AC2)."""
-    get_venue(db, venue_id)
+    reason. A period may start in the past and may overlap another of the venue's.
+
+    Story 9.5 AC1-AC4: saving rejects each pending request and cancels each approved booking the
+    period covers (``end_bookings_for_closure``), in the same transaction. The bookings are
+    locked and compared with ``data.confirmed_booking_ids`` before anything is written: one the
+    caller did not confirm refuses the save (``ClosureNeedsConfirmation``)."""
+    venue = get_venue(db, venue_id)
     _check_period(data.starts_at, data.ends_at, description=data.description)
     _check_horizon(data.ends_at, now=now)
+    covered = _lock_covered_bookings(db, venue_id, [(data.starts_at, data.ends_at)], now=now)
+    _confirmed(covered, data.confirmed_booking_ids)
     period = VenueUnavailabilityPeriod(
         venue_id=venue_id,
         starts_at=data.starts_at,
@@ -1411,9 +1536,28 @@ def add_unavailability(
         details={"venue_id": str(venue_id), **_snapshot(period)},
         commit=False,
     )
+    _end_covered(db, venue, period, covered, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
+
+
+def _end_covered(
+    db: Session,
+    venue: Venue,
+    period: VenueUnavailabilityPeriod,
+    covered: list[VenueBooking],
+    *,
+    actor: User,
+    now: datetime,
+) -> None:
+    """Story 9.5: end ``covered`` through the one function beside ``release_booking``. Imported
+    where it is used: the bookings service imports this module."""
+    if not covered:
+        return
+    from app.bookings import service as bookings_service
+
+    bookings_service.end_bookings_for_closure(db, venue, period, covered, actor=actor, now=now)
 
 
 def edit_unavailability(
@@ -1428,7 +1572,11 @@ def edit_unavailability(
     """Story 9.4 AC6: change a period's start, end, reason or description - only the fields
     sent - or, with ``end_now``, end it (``end_unavailability``). The rules of AC1 and AC5 are
     applied to the period as it would become, so moving only the start past the end is refused.
-    The audit row keeps what was replaced."""
+    The audit row keeps what was replaced.
+
+    Story 9.5 AC1 (D22): an edit ends only the bookings in the slices it adds - an earlier start,
+    a later end - and only those the caller confirmed. A change of text, a shorter period and
+    End now end nothing and tell nobody."""
     if data.end_now:
         return end_unavailability(db, venue_id, period_id, actor=actor, now=now)
     period = _get_period(db, venue_id, period_id)
@@ -1444,6 +1592,10 @@ def edit_unavailability(
     _check_period(starts_at, ends_at, description=description)
     if "ends_at" in sent:
         _check_horizon(ends_at, now=now)
+    covered = _lock_covered_bookings(
+        db, venue_id, _added_slices(period, starts_at, ends_at), now=now
+    )
+    _confirmed(covered, data.confirmed_booking_ids)
 
     before = _snapshot(period)
     period.starts_at, period.ends_at = starts_at, ends_at
@@ -1458,6 +1610,7 @@ def edit_unavailability(
         details={"venue_id": str(venue_id), "before": before, "after": _snapshot(period)},
         commit=False,
     )
+    _end_covered(db, get_venue(db, venue_id), period, covered, actor=actor, now=now)
     db.commit()
     db.refresh(period)
     return period
@@ -1535,47 +1688,43 @@ def list_affected_bookings(
     starts_at: datetime,
     ends_at: datetime,
     now: datetime,
+    period_id: uuid.UUID | None = None,
 ) -> list[AffectedBookingOut]:
-    """Story 9.4 AC2: the pending and approved bookings of ``venue_id`` whose held period - setup
-    and teardown included - overlaps ``starts_at``..``ends_at``, soonest first, so Venue Staff
-    see them before saving. Half-open, as bookings are (AC5): one that only touches is not
-    listed. Only a booking of an event that is Planning, Awaiting Safety Check or Confirmed, and
-    only what is still to come of its held period against what is still to come of the period,
-    count (AC8), as when the period is saved. Reads only."""
+    """Story 9.4 AC2, extended by story 9.5 AC1: the pending and approved bookings of ``venue_id``
+    whose held period - setup and teardown included - overlaps ``starts_at``..``ends_at``,
+    soonest first, so Venue Staff see them before saving; saving rejects each request and cancels
+    each booking. Half-open, as bookings are (9.4 AC5): one that only touches is not listed. Only
+    a booking of an event that is Planning, Awaiting Safety Check or Confirmed, and only what is
+    still to come of its held period against what is still to come of the period, count (9.4
+    AC8, 9.5 AC5), as when the period is saved.
+
+    With ``period_id`` the range is an edit of that period (D22): only the slices it adds are
+    read, so a booking the period already covered, and a change of text, list nothing. Reads
+    only."""
     get_venue(db, venue_id)
     if ends_at <= starts_at:
         raise InvalidDateRange(PERIOD_END_NOT_AFTER_START_MESSAGE)
-    rows = db.execute(
-        select(
-            VenueBooking.id,
-            VenueBooking.event_id,
-            Event.name,
-            VenueBooking.status,
-            VenueBooking.held_from,
-            VenueBooking.held_until,
+    if period_id is None:
+        slices = [(starts_at, ends_at)]
+    else:
+        period = db.scalar(
+            select(VenueUnavailabilityPeriod).where(
+                VenueUnavailabilityPeriod.id == period_id,
+                VenueUnavailabilityPeriod.venue_id == venue_id,
+            )
         )
-        .join(Event, Event.id == VenueBooking.event_id)
-        .where(
-            VenueBooking.venue_id == venue_id,
-            VenueBooking.status.in_(_HOLDING_STATUSES),
-            Event.status.in_(_FLAGGABLE_EVENT_STATUSES),
-            VenueBooking.held_until > now,
-            func.greatest(VenueBooking.held_from, now) < ends_at,
-            VenueBooking.held_until > starts_at,
-        )
+        if period is None:
+            raise UnavailabilityNotFound(period_id)
+        slices = _added_slices(period, starts_at, ends_at)
+    if not slices:
+        return []
+    rows = db.scalars(
+        select(VenueBooking)
+        .options(joinedload(VenueBooking.event))
+        .where(*_candidate_bookings(venue_id, slices, now))
         .order_by(VenueBooking.held_from, VenueBooking.id)
     ).all()
-    return [
-        AffectedBookingOut(
-            booking_id=row.id,
-            event_id=row.event_id,
-            event_name=row.name,
-            status=row.status,
-            held_from=row.held_from,
-            held_until=row.held_until,
-        )
-        for row in rows
-    ]
+    return _affected_out(rows)
 
 
 # --- pictures (story 8.3 AC5-AC10, bug f8.3.2) --------------------------------------------
