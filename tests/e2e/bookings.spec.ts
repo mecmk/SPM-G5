@@ -239,7 +239,8 @@ test('15.2.1 AC2: the subtitle says what the selected tab holds', async ({ page 
   await expect(
     page.getByText(
       'Released because the event was cancelled, a change to it no longer fit, a replacement ' +
-        'venue was approved, or a safety review released it. Read-only.',
+        'venue was approved, a safety review released it, or the coordinator cancelled it. ' +
+        'Read-only.',
     ),
   ).toBeVisible()
 

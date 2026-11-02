@@ -1,8 +1,9 @@
 import { api } from './client'
 
 /** Values of `ReleaseCause` (backend/app/bookings/models.py): why a cancelled booking was
- * released (story 21.3). */
-export type ReleaseCause = 'EVENT_CANCELLED' | 'CHANGE_APPROVED' | 'REPLACED' | 'SAFETY_REVIEW'
+ * released (story 21.3, story 12.8). */
+export type ReleaseCause =
+  'EVENT_CANCELLED' | 'CHANGE_APPROVED' | 'REPLACED' | 'SAFETY_REVIEW' | 'COORDINATOR_CANCELLED'
 
 /** Story 12.7 AC3: EXPIRED is an approved booking whose hold lapsed before its event was
  * confirmed. */
@@ -355,6 +356,26 @@ export function withdrawBooking(bookingId: string, venueName: string): Promise<B
     notify: {
       title: 'Booking withdrawn',
       message: `The request for ${venueName} was withdrawn.`,
+    },
+  })
+}
+
+/** Story 12.8 AC1: the assigned coordinator cancels an approved booking with a reason. 403
+ * (`NOT_PERMITTED`) once the caller is not the event's assigned coordinator; 409
+ * (`BOOKING_CANCEL_REFUSED`) once it is not approved, has a replacement pending or the event is
+ * within 24 hours of its set-up time - each with the backend's own sentence. */
+export function cancelBooking(
+  bookingId: string,
+  reason: string,
+  venueName: string,
+): Promise<Booking> {
+  return api<Booking>(`/bookings/${bookingId}/cancel`, {
+    method: 'POST',
+    body: { reason },
+    errorCodes: { 404: 'BOOKING_NOT_FOUND', 409: 'BOOKING_CANCEL_REFUSED' },
+    notify: {
+      title: 'Booking cancelled',
+      message: `The booking of ${venueName} was cancelled and the venue released.`,
     },
   })
 }
