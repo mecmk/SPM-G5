@@ -100,11 +100,13 @@ function fakeQueueEntry(index: number) {
     created_at: '2026-09-20T01:00:00Z',
     decided_at: null,
     cancelled_at: null,
-    // Story 12.6: the queue entry's fields for a replacement and a released original, none set here.
+    // Story 12.6: the queue entry's fields for a replacement and a released original, none set
+    // here; story 9.5's, for a request or booking a venue closure ended, likewise.
     replaces_venue_name: null,
     approval_releases_venue_name: null,
-    original_is_marked: null,
     released_at: null,
+    closure_reason: null,
+    closure_description: null,
   }
 }
 
@@ -239,8 +241,8 @@ test('15.2.1 AC2: the subtitle says what the selected tab holds', async ({ page 
   await expect(
     page.getByText(
       'Released because the event was cancelled, a change to it no longer fit, a replacement ' +
-        'venue was approved, a safety review released it, or the coordinator cancelled it. ' +
-        'Read-only.',
+        'venue was approved, a safety review released it, the coordinator cancelled it, or the ' +
+        'venue closed. Read-only.',
     ),
   ).toBeVisible()
 
@@ -717,7 +719,9 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     setup_minutes: 60,
     teardown_minutes: 60,
     cancelled_at: null,
-    // Story 12.6: the fields every outcome now carries, none of them set for these three.
+    // Story 12.6 and 9.5: the fields every outcome now carries, none of them set for these three.
+    closure_reason: null,
+    closure_description: null,
     replaces_booking_id: null,
     replaced_by_booking_id: null,
     replaces_venue_name: null,

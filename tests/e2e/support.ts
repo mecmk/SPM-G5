@@ -119,30 +119,12 @@ export const EVENTS = {
   // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
   // a setup that starts before Seminar Room 2.1 opens.
   supplierInduction: '33333333-0000-0000-0000-000000000046',
-  // Story 9.4, Planning, organiser: organiser2, coordinator, October 2028. Each has one pending
-  // request at a venue dedicated to the 9.4 spec (see VENUES below); only that spec saves a
-  // closure over them.
-  choirShowcase: '33333333-0000-0000-0000-000000000060',
-  artMarket: '33333333-0000-0000-0000-000000000061',
-  // Story 12.6, organiser: organiser2, February 2029. Each has a booking at Exhibition Foyer that
-  // its day's closure has marked "Venue unavailable - alternative needed" (the closure and the mark
-  // are seeded); Grand Hall is free for every one. Coordinator's unless said otherwise.
-  lanternShowcase: '33333333-0000-0000-0000-000000012662', // approved; read only
-  makerFaire: '33333333-0000-0000-0000-000000012663', // an approved additional venue, marked
-  springExpo: '33333333-0000-0000-0000-000000012664', // the spec raises a replacement
-  awardsEvening: '33333333-0000-0000-0000-000000012665', // ... and Venue Staff approve it
-  pitchNight: '33333333-0000-0000-0000-000000012666', // ... withdrawn, then asked for again
-  neighbourhoodSummit: '33333333-0000-0000-0000-000000012667', // ... the closure removed first
-  heritageWalk: '33333333-0000-0000-0000-000000012668', // CANCELLED, its marked booking cancelled with it
-  productShowcase: '33333333-0000-0000-0000-000000012669', // a marked PENDING booking
-  roboticsOpenHouse: '33333333-0000-0000-0000-000000012678', // coordinator2's; read only
-  wellnessExpo: '33333333-0000-0000-0000-000000012679', // coordinator2's; the spec asks for one
-  craftMarket: '33333333-0000-0000-0000-000000012680', // an additional venue, marked; its closure is removed, then a request
-  harvestFair: '33333333-0000-0000-0000-000000012681', // an additional venue, marked; replaced, then Back
-  openStudios: '33333333-0000-0000-0000-000000012682', // a marked pending replacement; read only
-  nightBazaar: '33333333-0000-0000-0000-000000012683', // a marked pending additional venue; read only
-  springFair: '33333333-0000-0000-0000-000000012684', // a replacement is raised, then rejected
-  gardenFair: '33333333-0000-0000-0000-000000012685', // a pending request and an older withdrawn one; a switch is sent
+  // Story 9.5, organiser: organiser, coordinator, June 2029 (the 0095NN block). Seminar Room 2.1 is
+  // closed on the 12th by venue-closure-ends-bookings.spec.ts over the first two; the third is a
+  // booking already replaced, only read.
+  closureConfirmed: '33333333-0000-0000-0000-000000009501', // Confirmed; its approved booking 09:00-12:00
+  closurePlanning: '33333333-0000-0000-0000-000000009504', // Planning; its pending request 14:00-17:00
+  closureReplaced: '33333333-0000-0000-0000-000000009507', // the original at Grand Hall replaced by Seminar Room 2.1
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
   // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
   // the clinic and the workshop await the check; the summit was sent back with its venue flagged
@@ -183,14 +165,14 @@ export const EVENTS = {
 } as const
 
 /** Venue names from backend/db/seed/020_sample_data.sql (mirrored in
- *  backend/tests/support/seed.py::Venues). The three below are dedicated to the 9.4 spec. */
+ *  backend/tests/support/seed.py::Venues). The first is the 9.4 spec's, the others 9.5's. */
 export const VENUES = {
   // No booking: the spec adds, edits and ends closures here.
   gardenAtrium: 'Garden Atrium',
-  // One pending request, the choir showcase's, at 14 October 2028: the preview lists it.
-  harbourPavilion: 'Harbour Pavilion',
-  // One pending request, the art market's, at 21 October 2028: a closure marks it.
-  sunriseStudio: 'Sunrise Studio',
+  // Story 9.5: closed on 12 June 2029 over two bookings by venue-closure-ends-bookings.spec.ts.
+  seminarRoom: 'Seminar Room 2.1',
+  // Story 9.5: the venue of the replaced booking's original.
+  grandHall: 'Grand Hall',
 } as const
 
 /** Open the event's page an event's card links to, by the link, its title (18.1 and 18.2 AC9). */

@@ -127,11 +127,11 @@ function fakeBooking(index: number, name: string) {
     held_until: '2027-03-01T03:00:00Z',
     venue_operating_hours_start: null,
     venue_operating_hours_end: null,
-    venue_unavailable_marked_at: null,
     replaces_venue_name: null,
     approval_releases_venue_name: null,
-    original_is_marked: null,
     released_at: null,
+    closure_reason: null,
+    closure_description: null,
   }
 }
 
