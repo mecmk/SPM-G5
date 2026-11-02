@@ -19,6 +19,10 @@ export const NONE = 'None'
  * its event, or by an approved change (19.2). */
 export const CANCELLED_AT_LABEL = 'Cancelled at'
 
+/** Story 17.2 AC4: the label of when a withdrawn equipment request was withdrawn, on Technical
+ *  Support's queue card and on the request's own page. */
+export const WITHDRAWN_AT_LABEL = 'Withdrawn at'
+
 /** What a page shows for a venue requirement or booking that asks for no particular layout. */
 export const ANY_LAYOUT = 'Any'
 

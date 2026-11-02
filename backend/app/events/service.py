@@ -138,6 +138,10 @@ ADDITIONAL_VENUE_NO_LONGER_FITS_MESSAGE = (
     "event's own dates and attendance. Keep them within what was booked, or withdraw the booking "
     "first if it is still pending."
 )
+SENT_ITEM_REMOVED_MESSAGE = (
+    "{item} has been sent to Technical Support, so withdraw it instead of removing it."
+)
+ACCEPTED_ITEM_CHANGED_MESSAGE = "Technical Support accepted {item}, so it can no longer be changed."
 EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE = (
     "This event has been approved, so its equipment can no longer be changed here. While the "
     "event is in Planning, change it in the Equipment requirements section of the event page."
@@ -202,6 +206,14 @@ _HELD_ITEM_STATUSES = (
     EquipmentRequestStatus.PENDING,
     EquipmentRequestStatus.ACCEPTED,
 )
+# Story 19.2 AC5: items Technical Support has been sent, whose holds they are working from. Story
+# 17.2 AC2/AC6: the only items that can be withdrawn, and so never dropped from a correction.
+WITH_TECHNICAL_SUPPORT = frozenset(
+    {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
+)
+# Story 6.2, 19.2, 17.2 AC3: no longer the event's, kept for Technical Support's record. A 7.2
+# correction neither holds, edits nor removes them.
+KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
 
 # Story 2.6 AC9: the most requests one call to the organiser's list returns, which is also what a
 # call that names no limit gets. The offset stops at the largest value a database INTEGER holds.
@@ -318,6 +330,16 @@ class EquipmentChangedAfterApproval(InvalidEventRequest):
 
     def __init__(self):
         super().__init__(EQUIPMENT_CHANGED_AFTER_APPROVAL_MESSAGE)
+
+
+class SentEquipmentChanged(InvalidEventRequest):
+    """Story 7.2 AC4, 17.2 AC2: a correction before approval cannot drop an item sent to Technical
+    Support or swap it for another type: it is withdrawn, so they know. Nor can it change an
+    Accepted one (15.1 AC7)."""
+
+    def __init__(self, name: str, *, is_removed: bool):
+        message = SENT_ITEM_REMOVED_MESSAGE if is_removed else ACCEPTED_ITEM_CHANGED_MESSAGE
+        super().__init__(message.format(item=name))
 
 
 class EquipmentHoldNotCovering(InvalidEventRequest):
@@ -1092,13 +1114,20 @@ def _check_equipment_available(
         raise EquipmentNotAvailable(short)
 
 
+def _current_lines(event: Event) -> list[EventEquipmentRequest]:
+    """Story 6.2, 19.2, 17.2 AC3: the event's equipment lines, leaving out those kept only for
+    Technical Support's record, which a correction neither holds, edits nor removes."""
+    return [line for line in event.equipment_requests if line.status not in KEPT_FOR_RECORD]
+
+
 def _hold_equipment(db: Session, event: Event, actor: User, *, notes: str) -> None:
     """AC11: hold the request's equipment for its dates. The types are locked first, so two
     requests for the last units cannot both be held; the loser is refused and nothing is held.
     Story 15.1 AC1/AC2: the lines stay REQUESTED - held, but not yet sent to Technical Support,
-    which is the assigned coordinator's step.
+    which is the assigned coordinator's step. Only Requested, Pending and Accepted lines are held:
+    one sent to Technical Support keeps its hold when the dates move (7.2 AC7).
     ``notes`` says why the hold was placed: on submission, or again after a 7.2 correction."""
-    lines = list(event.equipment_requests)
+    lines = [line for line in event.equipment_requests if line.status in _HELD_ITEM_STATUSES]
     if not lines or event.starts_at is None or event.ends_at is None:
         return
     type_ids = sorted({line.equipment_type_id for line in lines})
@@ -1194,11 +1223,14 @@ def _replace_equipment(
     event: Event, items: list[EventEquipmentIn], types: dict[str, EquipmentType], *, actor: User
 ) -> None:
     """AC6/AC7: make the request's equipment lines match ``items``. A line whose ``id`` is sent is
-    kept and edited; one left out is removed; one without an ``id`` is new. New lines get
-    increasing creation times so the request lists them in the order they were added."""
-    existing = {line.id: line for line in event.equipment_requests}
+    kept and edited; one left out is removed; one without an ``id`` is new. A line kept for the
+    record is left as it is, and one sent to Technical Support was never left out
+    (``_check_sent_equipment_kept``). New lines get increasing creation times so the request
+    lists them in the order they were added."""
+    current = _current_lines(event)
+    existing = {line.id: line for line in current}
     kept_ids = {item.id for item in items if item.id is not None}
-    for line in [line for line in event.equipment_requests if line.id not in kept_ids]:
+    for line in [line for line in current if line.id not in kept_ids]:
         event.equipment_requests.remove(line)
     added_at = datetime.now(UTC)
     for position, item in enumerate(items):
@@ -1342,7 +1374,7 @@ def _is_hold_changed(
     if items is None:
         return False
     stored = Counter(
-        (line.id, line.equipment_type_id, line.quantity) for line in event.equipment_requests
+        (line.id, line.equipment_type_id, line.quantity) for line in _current_lines(event)
     )
     edited = Counter((item.id, types[item.equipment_type_code].id, item.quantity) for item in items)
     return edited != stored
@@ -1444,7 +1476,7 @@ def _validate_request_edit(
         )
         # Checked before anything is changed, so a refused edit leaves the request as it was.
         _check_equipment_lines(
-            data.equipment, owned_line_ids={line.id for line in event.equipment_requests}
+            data.equipment, owned_line_ids={line.id for line in _current_lines(event)}
         )
 
     is_hold_changed = False
@@ -1452,7 +1484,7 @@ def _validate_request_edit(
         lines = (
             [(types[e.equipment_type_code], e.quantity) for e in data.equipment]
             if data.equipment is not None
-            else [(line.equipment_type, line.quantity) for line in event.equipment_requests]
+            else [(line.equipment_type, line.quantity) for line in _current_lines(event)]
         )
         is_hold_changed = _is_hold_changed(event, starts_at, ends_at, data.equipment, types)
         if is_stock_checked and (recheck_resent_equipment or is_hold_changed):
@@ -2435,7 +2467,7 @@ def _request_values(event: Event) -> dict[str, Any]:
                 "quantity": line.quantity,
                 "technical_notes": line.technical_notes,
             }
-            for line in event.equipment_requests
+            for line in _current_lines(event)
         ),
         key=lambda item: item["equipment_type_code"],
     )
@@ -2470,7 +2502,7 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
         return
     stored = Counter(
         (line.id, line.equipment_type.code, line.quantity, line.technical_notes)
-        for line in event.equipment_requests
+        for line in _current_lines(event)
     )
     sent = Counter(
         (item.id, item.equipment_type_code, item.quantity, item.technical_notes)
@@ -2478,6 +2510,25 @@ def _check_equipment_unchanged(event: Event, data: EventReviewCorrection) -> Non
     )
     if sent != stored:
         raise EquipmentChangedAfterApproval()
+
+
+def _check_sent_equipment_kept(event: Event, data: EventReviewCorrection) -> None:
+    """Story 7.2 AC4, 17.2 AC2, 15.1 AC7: every item sent to Technical Support comes back as the
+    same type, since another type would remove it without telling them, and an Accepted one
+    exactly as it is. A Pending one's quantity and notes can still be edited (15.1 AC2)."""
+    if data.equipment is None:
+        return
+    resent = {item.id: item for item in data.equipment if item.id is not None}
+    for line in _current_lines(event):
+        if line.status not in WITH_TECHNICAL_SUPPORT:
+            continue
+        item = resent.get(line.id)
+        if item is None or item.equipment_type_code != line.equipment_type.code:
+            raise SentEquipmentChanged(line.equipment_type.name, is_removed=True)
+        if line.status == EquipmentRequestStatus.ACCEPTED and (
+            (item.quantity, item.technical_notes) != (line.quantity, line.technical_notes)
+        ):
+            raise SentEquipmentChanged(line.equipment_type.name, is_removed=False)
 
 
 def _check_equipment_holds_cover(db: Session, event: Event, data: EventReviewCorrection) -> None:
@@ -2730,6 +2781,8 @@ def _apply_correction(
         _check_equipment_unchanged(event, data)
         _check_equipment_holds_cover(db, event, data)
         booked = _live_bookings(db, event)
+    else:
+        _check_sent_equipment_kept(event, data)
     before = _request_values(event)
     attendance_before = event.expected_attendance
     edit = _validate_request_edit(
