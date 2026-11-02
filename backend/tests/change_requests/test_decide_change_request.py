@@ -469,8 +469,10 @@ def test_queue_is_empty_when_nothing_waits(client, db: Session):
 def test_the_queue_reads_each_events_values_in_a_fixed_number_of_queries(db: Session):
     """AC1/AC7: every row says whether it is out of date, which reads its event's venue
     requirements and equipment. They are loaded with the queue, not once per row."""
+    made: set[uuid.UUID] = set()
     for _ in range(3):
         event = _planning_event(db)
+        made.add(event.id)
         make_venue_requirement(db, event.id, facilities=(("PROJECTOR", 1, None),))
         make_equipment_item(db, event=event, equipment_type=make_equipment_type(db), quantity=1)
         make_change_request(db, event=event, field="venue_requirements", current=[], proposed=[])
@@ -482,11 +484,13 @@ def test_the_queue_reads_each_events_values_in_a_fixed_number_of_queries(db: Ses
     sa_event.listen(db.get_bind(), "before_cursor_execute", listener)
     try:
         queue = change_requests_service.list_coordinator_change_requests(db, viewer=coordinator)
-        flags = [change_requests_service.is_out_of_date(request) for request in queue]
+        for request in queue:
+            change_requests_service.is_out_of_date(request)
     finally:
         sa_event.remove(db.get_bind(), "before_cursor_execute", listener)
 
-    assert len(flags) == 6
+    # the seed's own requests are in the queue too; the statements are the same however many
+    assert len([request for request in queue if request.event_id in made]) == 6
     # the queue with its events, then their requirements, facilities and equipment
     assert len(statements) == 4, statements
 
@@ -1204,7 +1208,11 @@ def test_a_request_still_matching_the_event_is_not_out_of_date(coordinator_clien
     event = _planning_event(db, expected_attendance=100)
     make_change_request(db, event=event, current=100, proposed=150)
 
-    [entry] = coordinator_client.get("/change-requests").json()
+    [entry] = [
+        row
+        for row in coordinator_client.get("/change-requests").json()
+        if row["event_id"] == str(event.id)
+    ]
 
     assert entry["is_out_of_date"] is False
 

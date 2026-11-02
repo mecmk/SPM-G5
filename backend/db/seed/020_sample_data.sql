@@ -10,6 +10,7 @@
 --                  dddd.. equipment out of service   eeee.. equipment holds
 --                  ffff.. safety reviews   aaaa.. coordinator assignments
 --                  1818.. event registrations (stories 18.1, 18.2)
+--                  1919.. event change requests (c14; Nadia's keeps eeee..)
 -- * Every login has the password  Password123!
 -- * Idempotent: UPSERTs, so `npm run db:ready` re-applies canonical values
 --   to these rows on every start without touching rows you created.
@@ -2021,7 +2022,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- the order it walks them. Her event is in planning, coordinated by Carl and self-assigned as
 -- 3333..80 is, so it does not move story 5.1's round robin. Every id is in the story's 0202NN
 -- block: 01 her, 02 her event, 03 its venue requirement, 04 its assignment, 05 its status
--- history, 06 the change request one notification names, 07 to 15 her nine notifications,
+-- history, 06 the change request one notification names (c14, below), 07 to 15 her nine notifications,
 -- newest first. Seven are unread; the two oldest were read. The fifth, newest first, is about
 -- Olivia's draft (3333..01), which Nadia cannot open, so its target is none (20.2 AC4).
 -- ---------------------------------------------------------------------
@@ -2065,13 +2066,14 @@ INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigne
 ON CONFLICT (id) DO NOTHING;
 
 -- Nadia's nine notifications are fixtures for exercising the bell. They do not describe her event's
--- real history: it has no booking, safety review or change request behind them.
+-- real history: it has no booking or safety review behind them. The change request the second
+-- names is one of c14's, at the end of this file.
 INSERT INTO notifications (id, recipient_id, event_id, notification_type, title, message, related_entity_type, related_entity_id, created_at, read_at) VALUES
     ('dddddddd-0000-0000-0000-000000020207', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
      'EVENT_CONFIRMED', '"Harbour Lights Gala" is confirmed', 'Sam Safety confirmed the event after it passed the safety review.',
      'event', '33333333-0000-0000-0000-000000020202', '2026-10-19 17:45:00+08', NULL),
-    -- The change-approved notice's related_entity_id (eeeeeeee..020206) points at no row: no change
-    -- request is inserted.
+    -- The change-approved notice's related_entity_id (eeeeeeee..020206) is the change request c14
+    -- inserts at the end of this file.
     ('dddddddd-0000-0000-0000-000000020208', '11111111-0000-0000-0000-000000020201', '33333333-0000-0000-0000-000000020202',
      'EVENT_CHANGE_APPROVED', 'Change approved for Harbour Lights Gala', 'Carl Coordinator approved your request to change the expected attendance.',
      'event_change_request', 'eeeeeeee-0000-0000-0000-000000020206', '2026-10-19 17:30:00+08', NULL),
@@ -2793,3 +2795,46 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
     ('99999999-0000-0000-0000-000000012804', '33333333-0000-0000-0000-000000012801', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
+-- c14: sample change requests, one per status, so a coordinator's queue and an organiser's event
+-- pages have some to show on a fresh database. Each is on an event no other test raises one on
+-- (a pending request blocks its field, story 19.1 AC6), and each id ends in its event's number,
+-- 19191919-..-NN, except Nadia's, which keeps the eeeeeeee id her "Change approved" notification
+-- already names (20.2). Values are the canonical JSON the service writes (sorted keys, UTC).
+-- Every pending one records the value its event has now, so it is not out of date; every approved
+-- one records the figure before the change, and the event already has the new one.
+--   23 pending, Omar to Chloe: attendance 150 to 180      24 pending, Omar to Carl: a day later
+--   10 approved by Chloe: 180 to 200 (Olivia)              16 rejected by Chloe, with her reason
+--   22 withdrawn by Omar: 45 to 60                         20206 approved by Carl, on Nadia's event
+-- Like the rows above they are re-applied on every start, so a decision made on a seeded one in
+-- the development database is undone by the next `npm run db:ready`.
+-- ---------------------------------------------------------------------
+INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, current_value, proposed_value, reason, status,
+                                   decided_by_id, decided_at, decision_reason, created_at, updated_at) VALUES
+    ('19191919-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000023', '11111111-0000-0000-0000-000000000002',
+     'expected_attendance', '150', '180', 'Registrations are ahead of plan after the partner mailout.', 'PENDING',
+     NULL, NULL, NULL, '2026-10-14 10:30+08', '2026-10-14 10:30+08'),
+    ('19191919-0000-0000-0000-000000000024', '33333333-0000-0000-0000-000000000024', '11111111-0000-0000-0000-000000000002',
+     'schedule', '{"ends_at":"2027-08-18T10:00:00+00:00","starts_at":"2027-08-18T01:00:00+00:00"}',
+     '{"ends_at":"2027-08-19T10:00:00+00:00","starts_at":"2027-08-19T01:00:00+00:00"}',
+     'The keynote speaker is only free the day after.', 'PENDING',
+     NULL, NULL, NULL, '2026-10-16 15:10+08', '2026-10-16 15:10+08'),
+    ('19191919-0000-0000-0000-000000000010', '33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001',
+     'expected_attendance', '180', '200', 'Two more partner teams asked to join the fireside chat.', 'APPROVED',
+     '11111111-0000-0000-0000-000000000003', '2026-10-02 11:20+08', NULL, '2026-10-01 14:05+08', '2026-10-02 11:20+08'),
+    ('19191919-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000001',
+     'expected_attendance', '220', '400', 'We would like to open the gala to the whole company.', 'REJECTED',
+     '11111111-0000-0000-0000-000000000003', '2026-10-06 10:00+08', 'The banquet venues we can book do not seat 400 guests.',
+     '2026-10-05 16:40+08', '2026-10-06 10:00+08'),
+    ('19191919-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000022', '11111111-0000-0000-0000-000000000002',
+     'expected_attendance', '45', '60', 'A few clients asked to bring colleagues.', 'WITHDRAWN',
+     NULL, NULL, NULL, '2026-10-08 09:45+08', '2026-10-09 08:30+08'),
+    ('eeeeeeee-0000-0000-0000-000000020206', '33333333-0000-0000-0000-000000020202', '11111111-0000-0000-0000-000000020201',
+     'expected_attendance', '40', '60', 'The gala now has a guest list of sixty.', 'APPROVED',
+     '11111111-0000-0000-0000-000000000004', '2026-10-19 17:30+08', NULL, '2026-10-17 11:00+08', '2026-10-19 17:30+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, requested_by_id = EXCLUDED.requested_by_id, field_name = EXCLUDED.field_name,
+    current_value = EXCLUDED.current_value, proposed_value = EXCLUDED.proposed_value, reason = EXCLUDED.reason,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at;

@@ -545,3 +545,37 @@ class Notifications:
             True,
         ),
     )
+
+
+def _cr(n: int) -> uuid.UUID:
+    return uuid.UUID(f"19191919-0000-0000-0000-{n:012d}")
+
+
+class ChangeRequests:
+    """c14: the sample change requests, one per status, each on an event no other test raises one
+    on. Each id ends in its event's number, and each asks to change the event's expected
+    attendance except the Sales Kickoff's, which moves its date. A coordinator's queue holds the
+    pending ones first, then the record of the rest."""
+
+    # Pending: Events.CUSTOMER_FORUM (organiser 2, coordinator 1), 150 to 180 people.
+    CUSTOMER_FORUM_ATTENDANCE = _cr(23)
+    # Pending: Events.SALES_KICKOFF (organiser 2, coordinator 2), one day later.
+    SALES_KICKOFF_SCHEDULE = _cr(24)
+    # Approved by coordinator 1: Events.APPROVED_4 (organiser 1), 180 to the 200 it has now.
+    FIRESIDE_ATTENDANCE = _cr(10)
+    # Rejected by coordinator 1, with a reason: Events.APPROVED_6 (organiser 1), 220 to 400.
+    CHARITY_GALA_ATTENDANCE = _cr(16)
+    # Withdrawn by organiser 2: Events.FINTECH_BREAKFAST (coordinator 2), 45 to 60.
+    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
+    # Approved by coordinator 2: Events.NOTICE_GALA (Nadia), 40 to the 60 it has now. The request
+    # the "Change approved" notification in Notifications names, before c14 a row that did not
+    # exist. Its id keeps the notification's eeeeeeee prefix.
+    NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
+
+    PENDING = (CUSTOMER_FORUM_ATTENDANCE, SALES_KICKOFF_SCHEDULE)
+    DECIDED_OR_WITHDRAWN = (
+        FIRESIDE_ATTENDANCE,
+        CHARITY_GALA_ATTENDANCE,
+        FINTECH_BREAKFAST_ATTENDANCE,
+        NOTICE_GALA_ATTENDANCE,
+    )
