@@ -85,7 +85,7 @@ from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, EventStatusHistory
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
-from app.safety.service import current_facts
+from app.safety.service import BOOKING_CANCELLED_SINCE_REVIEW, current_facts
 from app.venues import service as venue_service
 from app.venues.models import Venue, VenueUnavailabilityPeriod
 from app.venues.schemas import VenueUnavailabilityCreate
@@ -1028,6 +1028,48 @@ def test_a_planning_events_safety_approval_no_longer_allows_confirm(
     response = login_as(Users.COORDINATOR).post(f"/events/{secured.event.id}/confirm")
     assert response.status_code == 409
     assert APPROVAL_OUT_OF_DATE in response.json()["detail"]
+
+
+@pytest.mark.story("9.5", ac=3)
+def test_booking_the_closed_venue_again_does_not_bring_the_approval_back(
+    db, venue_staff_client, login_as
+):
+    """AC3: a closure cancels the approved booking of an event with a safety approval; the closure
+    is then removed, the coordinator books the same venue for the same times and Venue Staff
+    approve it, so the facts read as they did at the approval. Confirm is still refused, saying a
+    booking was cancelled after it (``BOOKING_CANCELLED_SINCE_REVIEW``), until a new safety
+    review approves the event."""
+    main = make_venue(db, capacity=500)
+    secured = make_secured_event(
+        db,
+        starts_at=_day(10, 1),
+        ends_at=_day(10, 9),
+        venue_id=main.id,
+        expected_attendance=60,
+    )
+    _approve_safety(db, secured.event)
+    db.commit()
+    period = _add(venue_staff_client, main.id, _day(9), _day(11), secured.booking)
+    assert _stored(db, secured.booking.id).status == "CANCELLED"
+    assert venue_staff_client.delete(_url(main.id, uuid.UUID(period["id"]))).status_code == 204
+    coordinator = login_as(Users.COORDINATOR)
+    raised = coordinator.post(
+        "/bookings",
+        json={
+            "event_id": str(secured.event.id),
+            "venue_id": str(main.id),
+            "venue_requirement_id": str(secured.requirement_id),
+        },
+    )
+    assert raised.status_code == 201, raised.text
+    approved = _approve(login_as(Users.VENUE_STAFF), raised.json()["id"])
+    assert approved.status_code == 200, approved.text
+
+    refused = login_as(Users.COORDINATOR).post(f"/events/{secured.event.id}/confirm")
+
+    assert refused.status_code == 409, refused.text
+    assert BOOKING_CANCELLED_SINCE_REVIEW in refused.json()["detail"]
+    assert APPROVAL_OUT_OF_DATE not in refused.json()["detail"]
 
 
 @pytest.mark.story("9.5", ac=3)
