@@ -299,45 +299,72 @@ def test_seed_constants_match_database(db: Session):
         (Events.SPRING_FAIR, "PLANNING"),
         (Events.GARDEN_FAIR, "PLANNING"),
         (Events.LEADERSHIP_RETREAT, "PLANNING"),
+        (Events.CLOSURE_CONFIRMED, "CONFIRMED"),
+        (Events.CLOSURE_PLANNING, "PLANNING"),
+        (Events.CLOSURE_REPLACED, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
             == status
         )
-    # Story 12.6's e2e bookings: each marked, bar the maker faire's requirement booking, with the
-    # closure of its day; the product showcase's is pending and the rest approved.
-    for booking_id, status, is_marked in (
-        (Bookings.LANTERN_SHOWCASE_FOYER, "APPROVED", True),
-        (Bookings.MAKER_FAIRE_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.MAKER_FAIRE_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.SPRING_EXPO_FOYER, "APPROVED", True),
-        (Bookings.AWARDS_EVENING_FOYER, "APPROVED", True),
-        (Bookings.PITCH_NIGHT_FOYER, "APPROVED", True),
-        (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, "APPROVED", True),
-        (Bookings.HERITAGE_WALK_FOYER, "APPROVED", True),
-        (Bookings.PRODUCT_SHOWCASE_FOYER, "PENDING", True),
-        (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, "APPROVED", True),
-        (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
-        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.OPEN_STUDIOS_HARBOUR, "APPROVED", False),
-        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, "PENDING", True),
-        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, "PENDING", True),
-        (Bookings.SPRING_FAIR_FOYER, "APPROVED", True),
-        (Bookings.GARDEN_FAIR_PENDING, "PENDING", False),
-        (Bookings.GARDEN_FAIR_WITHDRAWN, "WITHDRAWN", False),
+    # Story 12.6's e2e bookings as story 9.5's migration left them: the ones a closure marked are
+    # now ended - the approved cancelled with the cause VENUE_UNAVAILABLE, the pending rejected,
+    # each with the closure's reason - bar the heritage walk's, released with its cancelled event;
+    # the rest are as they were.
+    closed = ("CANCELLED", "VENUE_UNAVAILABLE", "MAINTENANCE")
+    rejected_by_closure = ("REJECTED", None, "MAINTENANCE")
+    event_cancelled = ("CANCELLED", "EVENT_CANCELLED", None)
+    for booking_id, expected in (
+        (Bookings.LANTERN_SHOWCASE_FOYER, closed),
+        (Bookings.MAKER_FAIRE_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.MAKER_FAIRE_ADDITIONAL_FOYER, closed),
+        (Bookings.SPRING_EXPO_FOYER, closed),
+        (Bookings.AWARDS_EVENING_FOYER, closed),
+        (Bookings.PITCH_NIGHT_FOYER, closed),
+        (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, closed),
+        (Bookings.HERITAGE_WALK_FOYER, event_cancelled),
+        (Bookings.PRODUCT_SHOWCASE_FOYER, rejected_by_closure),
+        (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, closed),
+        (Bookings.WELLNESS_EXPO_FOYER, closed),
+        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, closed),
+        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, closed),
+        (Bookings.OPEN_STUDIOS_HARBOUR, ("APPROVED", None, None)),
+        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, rejected_by_closure),
+        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, rejected_by_closure),
+        (Bookings.SPRING_FAIR_FOYER, closed),
+        (Bookings.GARDEN_FAIR_PENDING, ("PENDING", None, None)),
+        (Bookings.GARDEN_FAIR_WITHDRAWN, ("WITHDRAWN", None, None)),
+        # Story 9.5's own block: the two a closure of 12 June ends, and the replaced pair.
+        (Bookings.CLOSURE_CONFIRMED_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.CLOSURE_PLANNING_SEMINAR_ROOM, ("PENDING", None, None)),
+        (Bookings.CLOSURE_REPLACED_ORIGINAL, ("CANCELLED", "REPLACED", None)),
+        (Bookings.CLOSURE_REPLACED_REPLACEMENT, ("APPROVED", None, None)),
     ):
         row = db.execute(
-            text(
-                "SELECT status, venue_unavailable_marked_at IS NOT NULL AS is_marked"
-                " FROM venue_bookings WHERE id = :id"
-            ),
+            text("SELECT status, release_cause, closure_reason FROM venue_bookings WHERE id = :id"),
             {"id": booking_id},
         ).one()
-        assert (row.status, row.is_marked) == (status, is_marked)
+        assert tuple(row) == expected
+    # Story 9.5: the replaced pair is linked both ways, and the confirmed event's hold is complete.
+    linked = db.execute(
+        text("SELECT replaced_by_booking_id FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.CLOSURE_REPLACED_ORIGINAL},
+    ).scalar()
+    assert linked == Bookings.CLOSURE_REPLACED_REPLACEMENT
+    assert (
+        db.execute(
+            text("SELECT replaces_booking_id FROM venue_bookings WHERE id = :id"),
+            {"id": Bookings.CLOSURE_REPLACED_REPLACEMENT},
+        ).scalar()
+        == Bookings.CLOSURE_REPLACED_ORIGINAL
+    )
+    assert db.execute(
+        text("SELECT hold_completed_at IS NOT NULL FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.CLOSURE_CONFIRMED_SEMINAR_ROOM},
+    ).scalar()
     for period_id in (
         Unavailability.FOYER_LANTERN_SHOWCASE,
         Unavailability.FOYER_NEIGHBOURHOOD_SUMMIT,
