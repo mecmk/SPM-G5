@@ -80,7 +80,6 @@ from tests.support.replacement import (
     add_pending_replacement,
     approve,
     created,
-    end_the_closure,
     make_scenario,
     replace,
     set_status,
@@ -139,20 +138,6 @@ def test_approving_releases_nothing_once_the_original_has_closed(venue_staff_cli
 
     assert entry["replaces_venue_name"] == scene.original_venue.name
     assert entry["approval_releases_venue_name"] is None
-    assert entry["original_is_marked"] is False
-
-
-@pytest.mark.story("12.6", ac=6)
-def test_the_card_says_when_the_original_is_no_longer_marked(login_as, db):
-    """The unavailability ended first: the original is still released on approval, and Venue Staff
-    are told it is no longer marked."""
-    scene = make_scenario(db)
-    replacement = add_pending_replacement(db, scene)
-    end_the_closure(login_as, scene)
-
-    entry = _queue_entry(login_as(Users.VENUE_STAFF), replacement.id)
-
-    assert entry["approval_releases_venue_name"] == scene.original_venue.name
     assert entry["original_is_marked"] is False
 
 

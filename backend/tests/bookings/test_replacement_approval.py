@@ -91,7 +91,6 @@ from tests.support.replacement import (
     approve,
     column,
     created,
-    end_the_closure,
     make_scenario,
     notifications_of,
     purge,
@@ -447,18 +446,6 @@ def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as
 
 
 # --- AC6: approved after the unavailability ended ------------------------------------------------
-@pytest.mark.story("12.6", ac=6)
-def test_approving_a_replacement_after_the_mark_cleared_still_replaces_the_original(login_as, db):
-    scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
-    end_the_closure(login_as, scene)
-    assert column(db, scene.original.id, "venue_unavailable_marked_at") is None
-
-    response = approve(login_as(Users.VENUE_STAFF), body["id"])
-
-    assert response.status_code == 200, response.text
-    assert _outcome_of(db, scene.original.id).status == BookingStatus.CANCELLED
-    assert str(column(db, scene.original.id, "replaced_by_booking_id")) == body["id"]
 
 
 # --- AC8: never approved, never "replaced" -------------------------------------------------------

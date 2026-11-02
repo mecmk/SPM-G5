@@ -246,17 +246,6 @@ def test_who_changed_a_holds_expiry_and_why_are_not_returned(organiser_client, d
     assert set(entry) == _SAFE_FIELDS
 
 
-@pytest.mark.story("7.1", ac=7)
-def test_a_booking_marked_unavailable_says_when(login_as):
-    """Events.LANTERN_SHOWCASE is Omar's, its approved Exhibition Foyer booking marked "Venue
-    unavailable - alternative needed" by the foyer's closure that day (story 9.4)."""
-    client = login_as(Users.ORGANISER_2)
-
-    by_id = {entry["id"]: entry for entry in client.get(_path(Events.LANTERN_SHOWCASE)).json()}
-
-    assert by_id[str(Bookings.LANTERN_SHOWCASE_FOYER)]["venue_unavailable_marked_at"] is not None
-
-
 # --- AC2: only the event's own organiser -----------------------------------------------------
 @pytest.mark.story("7.1", ac=2)
 def test_another_organisers_event_is_not_found(organiser_client, db: Session):

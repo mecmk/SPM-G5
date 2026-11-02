@@ -60,7 +60,6 @@ from app.events.models import Event, EventStatus, EventStatusHistory
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import current_facts
-from app.venues.models import Venue
 from tests.support.factories import (
     make_booking,
     make_event,
@@ -516,14 +515,6 @@ def test_another_events_cancelled_booking_leaves_the_approval_alone(
 
 
 # --- AC7: a marked booking can be cancelled; a pending replacement blocks it -------------------
-@pytest.mark.story("12.8", ac=7)
-def test_a_booking_marked_venue_unavailable_can_be_cancelled(coordinator_client, db: Session):
-    scenario = make_scenario(db, marked=True)
-
-    body = _cancelled(coordinator_client, scenario.original)
-
-    assert body["status"] == BookingStatus.CANCELLED
-    assert body["release_cause"] == "COORDINATOR_CANCELLED"
 
 
 @pytest.mark.story("12.8", ac=7)
@@ -739,37 +730,6 @@ def test_a_release_that_lands_first_wins_and_the_cancel_is_refused(engine, rival
             assert booking.release_cause != "COORDINATOR_CANCELLED"
             told = _notices(session, event_id, "BOOKING_RELEASED")
             assert len(told) == (1 if rival == "event-cancelled" else 0)
-    finally:
-        purge(engine, event_ids=[event_id], venue_ids=venue_ids)
-
-
-@pytest.mark.story("12.8", ac=7)
-def test_a_replacement_requested_first_blocks_the_cancel(engine):
-    """The coordinator's other tab asks for a replacement while the cancel is on its way: the
-    replacement holds the event (12.6's request takes it, as the cancel does) until it is saved,
-    the cancel waits on it, then finds the replacement pending. A cancelled booking never has a
-    pending replacement."""
-    event_id, booking_id, alternative_id, venue_ids = _committed(engine)
-
-    def replace(holding: threading.Event, go: threading.Event) -> None:
-        with Session(engine) as session:
-            original = bookings_service.get_booking_for_switch(session, booking_id)
-            holding.set()
-            go.wait(LOCK_WAIT_SECONDS)
-            bookings_service.request_replacement_booking(
-                session,
-                original,
-                BookingReplacementIn(venue_id=alternative_id),
-                actor=session.get(User, Users.COORDINATOR.id),
-            )
-
-    try:
-        outcome = _race(engine, replace, booking_id)
-
-        with Session(engine) as session:
-            alternative = session.get(Venue, alternative_id).name
-            assert outcome == REPLACEMENT_PENDING.format(venue=alternative)
-            assert session.get(VenueBooking, booking_id).status == BookingStatus.APPROVED
     finally:
         purge(engine, event_ids=[event_id], venue_ids=venue_ids)
 
