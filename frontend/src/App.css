@@ -472,9 +472,9 @@
   line-height: 1.3;
 }
 
-/* Story 13.2.1: the booking queue card's title, unlike .item-card-title above, links to the
-   booking detail page rather than the item itself - scoped here so it does not also recolor
-   the venue catalogue's (story 8.1) title links. */
+/* Stories 8.1, 13.1, 13.2.1: a card's title links to its page but keeps the title's own colour
+   rather than the link blue, in the venue catalogue and the queues alike. */
+.item-card-title a,
 .queue-card-title a {
   color: inherit;
   text-decoration: none;
