@@ -44,6 +44,7 @@ class ReleaseCause:
     REPLACED = "REPLACED"  # story 12.6: its replacement was approved
     SAFETY_REVIEW = "SAFETY_REVIEW"  # story 21.3: the Safety Officer named it in a finding
     COORDINATOR_CANCELLED = "COORDINATOR_CANCELLED"  # story 12.8: its coordinator cancelled it
+    VENUE_UNAVAILABLE = "VENUE_UNAVAILABLE"  # story 9.5: a closure of its venue was saved
 
 
 class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -101,23 +102,17 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     hold_expiry_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Story 9.4 AC3/AC6: when the booking was marked "Venue unavailable - alternative needed",
-    # while a period its venue is unavailable for overlaps its held period; NULL when unmarked.
-    # Only the part of the held period still to come counts: it overlaps a period from the later
-    # of now and the period's start to its end, so a period wholly in the past marks nothing
-    # (PO decision, AC6/AC8). Read it through ``venue_unavailable_mark``, which leaves out a
-    # booking that no longer holds the venue.
-    venue_unavailable_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Story 6.2 AC16: when the booking was cancelled - with its event, or by an approved change
     # (19.2); NULL otherwise, and for one cancelled before migration 026.
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Story 12.6 AC2: the booking this one replaces, which Venue Staff's closure made unavailable -
-    # a booking of the same event (composite FK fk_venue_bookings_replaces); None for any other.
-    # AC3: on an original released by its replacement, the replacement whose approval released it,
-    # set in that release and only on a CANCELLED booking. AC10: replaces_live_original is set on
-    # a replacement when it is requested, which the one-per-requirement index reads only while the
-    # replacement is pending, leaving it out; the database clears it on a pending replacement when
-    # the original stops holding its venue, and a decided replacement keeps what it had.
+    # Story 12.6 AC2, retired by story 9.5: the booking this one was requested to replace, a booking
+    # of the same event (composite FK fk_venue_bookings_replaces); None for any other. A request
+    # raised before 9.5 keeps it while its original holds the venue; the database clears it, with
+    # replaces_live_original, when the original stops holding (9.5 AC8), except on the replacement
+    # whose approval released the original. AC3: on an original released by its replacement, the
+    # replacement whose approval released it, set in that release and only on a CANCELLED booking.
+    # AC10: replaces_live_original is set on a replacement, which the one-per-requirement index
+    # reads only while the replacement is pending, leaving it out.
     replaces_booking_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     replaced_by_booking_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venue_bookings.id")
@@ -133,6 +128,11 @@ class VenueBooking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     released_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
+    # Story 9.5 AC2: the reason and description of the venue closure that ended the booking -
+    # REJECTED for a pending request, CANCELLED (release_cause VENUE_UNAVAILABLE) for an approved
+    # booking - copied at the save; both set or both NULL.
+    closure_reason: Mapped[str | None] = mapped_column(Text)
+    closure_description: Mapped[str | None] = mapped_column(Text)
 
     # Story 13.1: the queue's entry shape needs the event and venue names, not just their ids.
     # Not lazy="joined": Event's own eager relationships (e.g. assigned_coordinator, nullable)

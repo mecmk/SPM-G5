@@ -760,10 +760,9 @@ def test_the_closure_columns_hold_to_their_constraints(db):
     """AC2 (D18): the reason and description are both set or both null; only on a REJECTED or
     CANCELLED booking; a CANCELLED booking has the cause VENUE_UNAVAILABLE exactly when they are
     set; release_cause takes all six causes; and each new constraint has a comment."""
-    venue = make_venue(db)
 
     def refused(status: str, cause: str | None, reason: str | None, description: str | None):
-        booking = _booking(db, venue.id, _day(3), _day(3, 12), status="PENDING")
+        booking = _booking(db, make_venue(db).id, _day(3), _day(3, 12), status="PENDING")
         values = {
             "id": booking.id,
             "status": status,
@@ -1589,11 +1588,16 @@ def test_a_pending_replacement_of_a_holding_original_no_longer_blocks_confirm(
 MIGRATIONS = Path(__file__).resolve().parents[2] / "db" / "migrations"
 FALLBACK_DESCRIPTION = "The closure was no longer on record when story 9.5 shipped."
 
-# The table as it stood before migration 035: no closure columns, the five release causes, and the
-# 9.4 mark. IF EXISTS keeps this valid on a database 035 has not reached.
+# The table as it stood before migration 035: no closure constraints and no closure record (the
+# columns stay, since the model writes them), the five release causes (the closure's own cancelled
+# bookings, which the seed holds, taken for event cancellations), and the 9.4 mark.
 PRE_035_SCHEMA = """
-ALTER TABLE venue_bookings DROP COLUMN IF EXISTS closure_reason;
-ALTER TABLE venue_bookings DROP COLUMN IF EXISTS closure_description;
+ALTER TABLE venue_bookings DROP CONSTRAINT IF EXISTS ck_venue_bookings_closure_reason;
+ALTER TABLE venue_bookings DROP CONSTRAINT IF EXISTS ck_venue_bookings_closure_fields;
+ALTER TABLE venue_bookings DROP CONSTRAINT IF EXISTS ck_venue_bookings_closure_release;
+UPDATE venue_bookings SET release_cause = 'EVENT_CANCELLED'
+    WHERE release_cause = 'VENUE_UNAVAILABLE';
+UPDATE venue_bookings SET closure_reason = NULL, closure_description = NULL;
 ALTER TABLE venue_bookings ADD COLUMN IF NOT EXISTS venue_unavailable_marked_at timestamptz;
 ALTER TABLE venue_bookings DROP CONSTRAINT ck_venue_bookings_release_cause;
 ALTER TABLE venue_bookings ADD CONSTRAINT ck_venue_bookings_release_cause CHECK
@@ -1665,9 +1669,9 @@ def _migrated_scene(db: Session):
     for booking in (pending, approved, cancelled_event):
         _mark_in_sql(db, booking.id)
 
-    linked = make_scenario(db, marked=False)
+    linked = make_scenario(db)
     link_replacement = add_pending_replacement(db, linked)
-    alone = make_scenario(db, marked=False)
+    alone = make_scenario(db)
     alone_replacement = add_pending_replacement(db, alone)
     for scenario, ids in ((linked, (linked.original.id, link_replacement.id)), (alone, ())):
         for venue_of in (scenario.original_venue, scenario.alternative):
