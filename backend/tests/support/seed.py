@@ -224,8 +224,8 @@ class Events:
     NIGHT_BAZAAR = _e(12683)  # a pending additional venue the closure rejected: read only
     SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
-    # Story 9.5's e2e events, organiser 1, coordinator 1, June 2029 (the 0095NN block): Seminar
-    # Room 2.1 is closed over the first two on 12 June, and the third is a replaced pair.
+    # Story 9.5's e2e events, organiser 1, coordinator 1, October 2028 (the 0095NN block): Seminar
+    # Room 2.1 is closed over the first two on 24 October, and the third is a replaced pair.
     CLOSURE_CONFIRMED = _e(9501)  # CONFIRMED; its approved booking 09:00-12:00 is cancelled
     CLOSURE_PLANNING = _e(9504)  # PLANNING; its pending request 14:00-17:00 is rejected
     CLOSURE_REPLACED = _e(9507)  # PLANNING; an original released by its approved replacement
@@ -348,9 +348,9 @@ class Bookings:
     SPRING_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012641")
     GARDEN_FAIR_PENDING = uuid.UUID("44444444-0000-0000-0000-000000012642")  # plain, pending
     GARDEN_FAIR_WITHDRAWN = uuid.UUID("44444444-0000-0000-0000-000000012643")  # older, closed
-    # Story 9.5's, in the 0095NN block (see Events): at Seminar Room 2.1 on 12 June 2029, the
+    # Story 9.5's, in the 0095NN block (see Events): at Seminar Room 2.1 on 24 October 2028, the
     # approved one 09:00-12:00 with its hold completed and the pending one 14:00-17:00; and a pair
-    # on 14 June, the original at Grand Hall released when its replacement was approved.
+    # on 25 October, the original at Grand Hall released when its replacement was approved.
     CLOSURE_CONFIRMED_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000009503")
     CLOSURE_PLANNING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000009506")
     CLOSURE_REPLACED_ORIGINAL = uuid.UUID("44444444-0000-0000-0000-000000009509")

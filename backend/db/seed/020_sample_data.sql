@@ -2803,13 +2803,13 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
 -- Story 9.5: tests/e2e/venue-closure-ends-bookings.spec.ts. Venue Staff close Seminar Room 2.1 for
--- 12 June 2029, a day nothing else uses, over two events of organiser 1 and coordinator 1:
+-- 24 October 2028, a day nothing else uses, over two events of organiser 1 and coordinator 1:
 --   * 3333..009501, Confirmed, with one requirement ("Main hall") booked and approved 09:00-12:00,
 --     its hold completed by the confirmation - the closure cancels it and sends the event back to
 --     Planning;
 --   * 3333..009504, in Planning, with one requirement and a pending request for the same room
 --     14:00-17:00 - the closure rejects it, and the event stays in Planning.
--- And a pair already replaced, on 14 June 2029, for the spec that checks "Replaced by <venue>"
+-- And a pair already replaced, on 25 October 2028, for the spec that checks "Replaced by <venue>"
 -- survives the retirement of 12.6: 3333..009507's original booking at Grand Hall was released when
 -- its replacement at Seminar Room 2.1 was approved. Every id is in the story's 0095NN block.
 -- ---------------------------------------------------------------------
@@ -2817,15 +2817,15 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
                     contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id, confirmed_at) VALUES
     ('33333333-0000-0000-0000-000000009501', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Alumni Networking Brunch', 'Networking', 'A morning brunch for the alumni network.', '2029-06-12 09:00+08', '2029-06-12 12:00+08', 40, 'CONFIRMED',
+     'Alumni Networking Brunch', 'Networking', 'A morning brunch for the alumni network.', '2028-10-24 09:00+08', '2028-10-24 12:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
      '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', '2026-10-05 10:00+08'),
     ('33333333-0000-0000-0000-000000009504', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Partner Workshop Afternoon', 'Workshop', 'An afternoon workshop for the partner team.', '2029-06-12 14:00+08', '2029-06-12 17:00+08', 40, 'PLANNING',
+     'Partner Workshop Afternoon', 'Workshop', 'An afternoon workshop for the partner team.', '2028-10-24 14:00+08', '2028-10-24 17:00+08', 40, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
      '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
     ('33333333-0000-0000-0000-000000009507', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Product Forum', 'Forum', 'A forum on the new product range.', '2029-06-14 10:00+08', '2029-06-14 16:00+08', 40, 'PLANNING',
+     'Product Forum', 'Forum', 'A forum on the new product range.', '2028-10-25 10:00+08', '2028-10-25 16:00+08', 40, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
      '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003', NULL)
 ON CONFLICT (id) DO UPDATE SET
@@ -2841,11 +2841,11 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000009502', '33333333-0000-0000-0000-000000009501', 0, 'Main hall', 40,
-     '2029-06-12 09:00+08', '2029-06-12 12:00+08', 'CLASSROOM'),
+     '2028-10-24 09:00+08', '2028-10-24 12:00+08', 'CLASSROOM'),
     ('cccccccc-0000-0000-0000-000000009505', '33333333-0000-0000-0000-000000009504', 0, 'Main hall', 40,
-     '2029-06-12 14:00+08', '2029-06-12 17:00+08', 'CLASSROOM'),
+     '2028-10-24 14:00+08', '2028-10-24 17:00+08', 'CLASSROOM'),
     ('cccccccc-0000-0000-0000-000000009508', '33333333-0000-0000-0000-000000009507', 0, 'Main hall', 40,
-     '2029-06-14 10:00+08', '2029-06-14 16:00+08', 'CLASSROOM')
+     '2028-10-25 10:00+08', '2028-10-25 16:00+08', 'CLASSROOM')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
@@ -2857,17 +2857,17 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             venue_requirement_id, hold_expires_at, hold_completed_at, cancelled_at, release_cause, released_by_id) VALUES
     ('44444444-0000-0000-0000-000000009503', '33333333-0000-0000-0000-000000009501', '22222222-0000-0000-0000-000000000002',
-     '11111111-0000-0000-0000-000000000003', '2029-06-12 09:00+08', '2029-06-12 12:00+08', 0, 0,
+     '11111111-0000-0000-0000-000000000003', '2028-10-24 09:00+08', '2028-10-24 12:00+08', 0, 0,
      40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
-     'cccccccc-0000-0000-0000-000000009502', '2029-06-12 08:00+08', '2026-10-05 10:00+08', NULL, NULL, NULL),
+     'cccccccc-0000-0000-0000-000000009502', '2028-10-24 08:00+08', '2026-10-05 10:00+08', NULL, NULL, NULL),
     ('44444444-0000-0000-0000-000000009506', '33333333-0000-0000-0000-000000009504', '22222222-0000-0000-0000-000000000002',
-     '11111111-0000-0000-0000-000000000003', '2029-06-12 14:00+08', '2029-06-12 17:00+08', 0, 0,
+     '11111111-0000-0000-0000-000000000003', '2028-10-24 14:00+08', '2028-10-24 17:00+08', 0, 0,
      40, 'CLASSROOM', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-02 13:00+08',
      'cccccccc-0000-0000-0000-000000009505', NULL, NULL, NULL, NULL, NULL),
     ('44444444-0000-0000-0000-000000009509', '33333333-0000-0000-0000-000000009507', '22222222-0000-0000-0000-000000000001',
-     '11111111-0000-0000-0000-000000000003', '2029-06-14 10:00+08', '2029-06-14 16:00+08', 0, 0,
+     '11111111-0000-0000-0000-000000000003', '2028-10-25 10:00+08', '2028-10-25 16:00+08', 0, 0,
      40, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', 'Replaced by Seminar Room 2.1', '2026-10-02 12:00+08',
-     'cccccccc-0000-0000-0000-000000009508', '2029-06-14 09:00+08', NULL, '2026-10-05 11:00+08', 'REPLACED', '11111111-0000-0000-0000-000000000005')
+     'cccccccc-0000-0000-0000-000000009508', '2028-10-25 09:00+08', NULL, '2026-10-05 11:00+08', 'REPLACED', '11111111-0000-0000-0000-000000000005')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -2886,9 +2886,9 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
                             expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
                             venue_requirement_id, hold_expires_at, replaces_booking_id) VALUES
     ('44444444-0000-0000-0000-000000009510', '33333333-0000-0000-0000-000000009507', '22222222-0000-0000-0000-000000000002',
-     '11111111-0000-0000-0000-000000000003', '2029-06-14 10:00+08', '2029-06-14 16:00+08', 0, 0,
+     '11111111-0000-0000-0000-000000000003', '2028-10-25 10:00+08', '2028-10-25 16:00+08', 0, 0,
      40, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-05 11:00+08', NULL, '2026-10-04 12:00+08',
-     'cccccccc-0000-0000-0000-000000009508', '2029-06-14 09:00+08', '44444444-0000-0000-0000-000000009509')
+     'cccccccc-0000-0000-0000-000000009508', '2028-10-25 09:00+08', '44444444-0000-0000-0000-000000009509')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -2919,7 +2919,7 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
      'APPROVED',
      '{"description": "A morning brunch for the alumni network.",
        "expected_attendance": 40,
-       "starts_at": "2029-06-12T01:00:00+00:00", "ends_at": "2029-06-12T04:00:00+00:00",
+       "starts_at": "2028-10-24T01:00:00+00:00", "ends_at": "2028-10-24T04:00:00+00:00",
        "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 40, "layout": "CLASSROOM", "layout_name": "Classroom"}],
        "accessibility": [], "accessibility_notes": null, "equipment": []}')
 ON CONFLICT (id) DO UPDATE SET

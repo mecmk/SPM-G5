@@ -81,6 +81,9 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.TRADE_FAIR),
         str(Events.CHOIR_SHOWCASE),
         str(Events.ART_MARKET),
+        str(Events.CLOSURE_CONFIRMED),
+        str(Events.CLOSURE_PLANNING),
+        str(Events.CLOSURE_REPLACED),
         str(Events.CODING_BOOTCAMP),
         str(Events.DATA_SUMMIT),
         str(Events.DESIGN_SPRINT),
@@ -101,9 +104,6 @@ def test_the_pick_list_offers_the_coordinators_approved_events(coordinator_clien
         str(Events.SAFETY_RELEASE),
         str(Events.LEADERSHIP_RETREAT),
         str(Events.PRODUCT_BRIEFING),
-        str(Events.CLOSURE_CONFIRMED),
-        str(Events.CLOSURE_PLANNING),
-        str(Events.CLOSURE_REPLACED),
     ]
 
 
