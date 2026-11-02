@@ -41,7 +41,7 @@ from itertools import pairwise
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import Select, and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager
 from sqlalchemy.sql.elements import ColumnElement
@@ -781,6 +781,40 @@ def in_coordinator_queue(*, viewer: User) -> ColumnElement[bool]:
     )
 
 
+def _with_events() -> Select[tuple[EventChangeRequest]]:
+    """Change requests joined to their events, each event's venue requirements and equipment
+    loaded with it, since every listed row says whether it is out of date (19.2 AC7)."""
+    with_event = contains_eager(EventChangeRequest.event)
+    return (
+        select(EventChangeRequest)
+        .join(EventChangeRequest.event)
+        .options(
+            with_event.selectinload(Event.venue_requirements).selectinload(
+                VenueRequirement.facilities
+            ),
+            with_event.selectinload(Event.equipment_requests),
+        )
+    )
+
+
+def list_organiser_change_requests(db: Session, *, viewer: User) -> list[EventChangeRequest]:
+    """Story 19.4 AC1/AC2/AC4: every change request on the events ``viewer`` organises, whatever
+    its status - pending ones first, then the rest, newest raised first within each. Scoped here,
+    not only by the route's permission, so another organiser's requests never come back."""
+    is_pending = EventChangeRequest.status == ChangeRequestStatus.PENDING
+    return list(
+        db.scalars(
+            _with_events()
+            .where(Event.organiser_id == viewer.id)
+            .order_by(
+                case((is_pending, 0), else_=1),
+                EventChangeRequest.created_at.desc(),
+                EventChangeRequest.id,
+            )
+        ).all()
+    )
+
+
 def list_coordinator_change_requests(db: Session, *, viewer: User) -> list[EventChangeRequest]:
     """AC1: the change requests on the events ``viewer`` is assigned to, each with its event -
     what waits for their decision first, oldest first, the order to work through it in; then their
@@ -789,17 +823,9 @@ def list_coordinator_change_requests(db: Session, *, viewer: User) -> list[Event
     decided before the event closed stays in the record. Each event's venue requirements and
     equipment are loaded with it, since every row says whether it is out of date (AC7)."""
     is_pending = EventChangeRequest.status == ChangeRequestStatus.PENDING
-    with_event = contains_eager(EventChangeRequest.event)
     return list(
         db.scalars(
-            select(EventChangeRequest)
-            .join(EventChangeRequest.event)
-            .options(
-                with_event.selectinload(Event.venue_requirements).selectinload(
-                    VenueRequirement.facilities
-                ),
-                with_event.selectinload(Event.equipment_requests),
-            )
+            _with_events()
             .where(in_coordinator_queue(viewer=viewer))
             .order_by(
                 case((is_pending, 0), else_=1),
