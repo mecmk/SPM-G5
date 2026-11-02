@@ -1,5 +1,6 @@
-"""Story 9.1: venue availability calendar (the 14-criterion version; AC6, the Venue Schedule page
-for Venue Staff, is a later step and is not covered here).
+"""Story 9.1: venue availability calendar (the 14-criterion version). Its AC6, a Venue Schedule
+page for Venue Staff, left the backlog: the calendar is on each venue's page and each booking
+request's (c9, 1.2 AC5).
 
 AC1  a calendar shows availability for one venue across a range of dates (the page asks for one
      month at a time).

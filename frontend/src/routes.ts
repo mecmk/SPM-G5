@@ -191,11 +191,10 @@ export function venueSwitchPath(
 }
 
 // Story 13.1: the venue staff booking requests queue. Venue Staff's own section is structured as
-// separate concerns (team decision, 21 Sep 2026): booking requests, schedule, and venues (which reuses the venue catalogue
-// above rather than a duplicate).
+// separate concerns (team decision, 21 Sep 2026): booking requests, and venues (which reuses the
+// venue catalogue above rather than a duplicate).
 export const BOOKING_REQUESTS_PATH = '/venue-staff/booking-requests'
 export const BOOKING_REQUEST_PATH = '/venue-staff/booking-requests/:bookingId'
-export const VENUE_SCHEDULE_PATH = '/venue-staff/schedule'
 
 export function bookingRequestPath(bookingId: string): string {
   return BOOKING_REQUEST_PATH.replace(':bookingId', encodeURIComponent(bookingId))
@@ -273,6 +272,10 @@ export const EVENT_EDIT_PATH = '/events/:eventId/edit'
 export function eventEditPath(eventId: string): string {
   return EVENT_EDIT_PATH.replace(':eventId', encodeURIComponent(eventId))
 }
+
+// c9 (1.2 AC5): no story delivers an All events page, so this address is kept only to redirect
+// old links to the main page. Without it, EVENT_PATH would read "all" as an event's id.
+export const ALL_EVENTS_PATH = '/events/all'
 
 // Story 7.1: the canonical event details page, for every role related to the event.
 export const EVENT_PATH = '/events/:eventId'

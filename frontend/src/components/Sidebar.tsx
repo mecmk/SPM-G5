@@ -10,8 +10,6 @@ export interface SidebarNavItem {
   /** Section heading this item is grouped under. Items without one render first, ungrouped. */
   group?: string
   icon?: IconName
-  /** A short tag after the label, e.g. "soon". Hidden from screen readers. */
-  hint?: string
 }
 
 export interface SidebarProps {
@@ -122,11 +120,6 @@ export function Sidebar({
                 {!isCollapsed && (
                   <span className="nav-label" title={item.label}>
                     {item.label}
-                  </span>
-                )}
-                {!isCollapsed && item.hint && (
-                  <span className="nav-hint" aria-hidden="true">
-                    {item.hint}
                   </span>
                 )}
               </NavLink>
