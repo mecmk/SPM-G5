@@ -56,8 +56,3 @@ export const BOOKING_OUTCOME: Record<BookingStatus, BookingOutcomePresentation> 
  * not read as confirmed for good. */
 export const OPEN_HOLD_MESSAGE =
   'Venue Staff approved this booking. The venue is held for the event until it is confirmed, or until the hold expires.'
-
-/** Story 9.4 AC3: under the "Venue unavailable - alternative needed" chip, on the coordinator's
- * and (fix f7.1.2 AC7) the organiser's booking card. */
-export const VENUE_UNAVAILABLE_NOTE =
-  'Venue Staff marked this venue unavailable for part of the booked period. The booking is kept for reference.'

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { ApiError, formatApiError } from '../api/client'
 import {
   addUnavailability,
+  bookingsInRefusal,
   editUnavailability,
   fetchAffectedBookings,
   UNAVAILABILITY_REASON_NAMES,
@@ -10,7 +11,6 @@ import {
   type UnavailabilityInput,
   type UnavailabilityReason,
 } from '../api/venues'
-import { Chip } from '../components/Chip'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import type { DayClosure } from '../components/venueCalendarDays'
@@ -20,7 +20,9 @@ import { formatDateTime, instantToInput, inputToInstant } from '../shared/format
 import {
   BLOCK_OFF_LABEL,
   EDIT_BLOCK_OFF_LABEL,
-  blockOffLabel,
+  END_BOOKINGS_CANCEL_LABEL,
+  END_BOOKINGS_LABEL,
+  END_BOOKINGS_WARNING,
   blockOffTitle,
 } from './blockOffLabels'
 
@@ -77,14 +79,16 @@ interface PreviewResult {
  * start, an end, a reason and a description, which every reason needs. An end that is not after
  * the start is refused in the form, beside the fields, before anything is sent. Once both ends
  * make a period, the pending and approved bookings it would affect - setup and teardown included -
- * are listed before Save; saving is allowed with some, after one confirmation that names them. A
- * refusal from the server, such as a missing description, shows the backend's own sentence and
+ * are listed before Save. Story 9.5 AC1: saving rejects each pending request and cancels each
+ * approved booking listed, so Save asks first, in a confirmation that lists them; the ones listed
+ * are sent as confirmed (`confirmed_booking_ids`), and a booking raised since refuses the save,
+ * which reopens the confirmation with the fresh list. A refusal from the server, such as a missing description, shows the backend's own sentence and
  * nothing is saved. The page only shows this to a role holding the manage permission; the backend
  * refuses everyone else.
  *
  * Story 9.4 AC6: the same form edits a closure - its start, end, reason and description - opened
- * from the closure's row. The bookings its new period would affect are listed the same way, those
- * already flagged marked as such, and only bookings it would newly flag ask for a confirmation.
+ * from the closure's row. Only the bookings its change newly covers (a start moved earlier, an end
+ * moved later) are listed and ask for a confirmation; a change of text lists none.
  */
 export function VenueUnavailabilitySection({
   venueId,
@@ -136,7 +140,7 @@ export function VenueUnavailabilitySection({
   useEffect(() => {
     if (period === null || previewKey === null) return
     let cancelled = false
-    fetchAffectedBookings(venueId, period.startsAt, period.endsAt)
+    fetchAffectedBookings(venueId, period.startsAt, period.endsAt, editing?.id)
       .then((bookings) => {
         if (!cancelled) setPreview({ key: previewKey, bookings, error: null })
       })
@@ -146,11 +150,10 @@ export function VenueUnavailabilitySection({
     return () => {
       cancelled = true
     }
-  }, [venueId, period, previewKey, previewAttempt])
+  }, [venueId, editing, period, previewKey, previewAttempt])
 
   const isPreviewCurrent = preview !== null && preview.key === previewKey
   const affected = isPreviewCurrent ? (preview.bookings ?? []) : []
-  const newlyAffected = affected.filter((booking) => !booking.already_marked)
   /** Story 9.4 AC2: the form saves only once the list for these very dates has answered. */
   const canSave = period !== null && isPreviewCurrent && preview.error === null
   /** Story 9.4 AC5: both ends given and the end not after the start. */
@@ -196,19 +199,31 @@ export function VenueUnavailabilitySection({
         reason,
         description: description.trim() === '' ? null : description.trim(),
       }
+      const confirmed = affected.map((booking) => booking.booking_id)
       if (editing === null || opened === null) {
-        await addUnavailability(venueId, venueName, input)
+        await addUnavailability(venueId, venueName, input, confirmed)
       } else {
         // Only what changed is sent, so an edit never overwrites a field someone else changed.
         const changes = changedFields(opened, { starts, ends, reason, description }, input)
         if (Object.keys(changes).length > 0) {
-          await editUnavailability(venueId, editing.id, changes)
+          await editUnavailability(venueId, editing.id, changes, confirmed)
         }
       }
       close()
       onSaved()
     } catch (err) {
       setSaveError(formatApiError(err))
+      // A booking was raised since the list was shown: the refusal carries the fresh list, which
+      // replaces it, and the confirmation reopens on it.
+      const fresh =
+        err instanceof ApiError && err.code === 'UNAVAILABILITY_NEEDS_CONFIRMATION'
+          ? bookingsInRefusal(err.detail)
+          : null
+      if (fresh !== null && previewKey !== null) {
+        setPreview({ key: previewKey, bookings: fresh, error: null })
+        setIsConfirming(true)
+        return
+      }
       setIsConfirming(false)
       // The closure is gone (404) or no longer what the form opened on (409), so the page's
       // calendar is out of date.
@@ -226,7 +241,7 @@ export function VenueUnavailabilitySection({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canSave) return
-    if (newlyAffected.length > 0) {
+    if (affected.length > 0) {
       setSaveError(null)
       setIsConfirming(true)
       return
@@ -351,7 +366,6 @@ export function VenueUnavailabilitySection({
                       </span>
                     </span>
                     <StatusBadge status={booking.status} />
-                    {booking.already_marked && <Chip tone="warning" label="Already marked" />}
                   </li>
                 ))}
               </ul>
@@ -386,21 +400,20 @@ export function VenueUnavailabilitySection({
       {isConfirming && (
         <ConfirmDialog
           title={blockOffTitle(editing !== null, venueName)}
-          confirmLabel={blockOffLabel(editing !== null)}
+          confirmLabel={END_BOOKINGS_LABEL}
+          cancelLabel={END_BOOKINGS_CANCEL_LABEL}
           tone="primary"
           isBusy={isSaving}
           error={saveError}
           onConfirm={save}
           onCancel={cancelConfirm}
         >
-          <p>
-            These bookings fall in that period. They are kept for reference. Events that were
-            Confirmed or awaiting their safety check go back to Planning for their coordinators to
-            find another venue; the others stay as they are.
-          </p>
+          <p>{END_BOOKINGS_WARNING}</p>
           <ul>
-            {newlyAffected.map((booking) => (
-              <li key={booking.booking_id}>{booking.event_name}</li>
+            {affected.map((booking) => (
+              <li key={booking.booking_id}>
+                {booking.event_name} <StatusBadge status={booking.status} />
+              </li>
             ))}
           </ul>
         </ConfirmDialog>

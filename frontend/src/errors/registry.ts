@@ -32,6 +32,7 @@ export type ErrorCode =
   | 'UNAVAILABILITY_NOT_FOUND'
   | 'UNAVAILABILITY_CANNOT_BE_ENDED'
   | 'UNAVAILABILITY_CANNOT_BE_REMOVED'
+  | 'UNAVAILABILITY_NEEDS_CONFIRMATION'
   | 'UNAVAILABILITY_END_BEFORE_START'
   | 'VENUE_NAME_REQUIRED'
   | 'VENUE_LOCATION_REQUIRED'
@@ -250,6 +251,13 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   UNAVAILABILITY_CANNOT_BE_REMOVED: {
     title: 'Closure cannot be removed',
     message: 'This closure has already started. End it instead.',
+  },
+  // Story 9.5 AC1 (D21): a booking was raised since the list was shown. The backend's own sentence
+  // says so, and the page shows the fresh list it carries.
+  UNAVAILABILITY_NEEDS_CONFIRMATION: {
+    title: 'Bookings changed',
+    message:
+      'Bookings changed since you reviewed the list, so this closure was not saved. Review the list and save again.',
   },
   // Checked in the form before anything is sent; the backend refuses it too, in its own words.
   UNAVAILABILITY_END_BEFORE_START: {

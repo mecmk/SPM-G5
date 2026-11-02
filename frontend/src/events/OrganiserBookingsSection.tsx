@@ -1,14 +1,8 @@
 import { useCallback } from 'react'
 import { listBookingsForOwnEvent } from '../api/bookings'
-import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import {
-  HOLD_EXPIRES_LABEL,
-  openHoldExpiry,
-  turnaroundLine,
-  VENUE_UNAVAILABLE_LABEL,
-} from '../shared/bookingStatus'
+import { HOLD_EXPIRES_LABEL, openHoldExpiry, turnaroundLine } from '../shared/bookingStatus'
 import {
   ADDITIONAL_VENUE,
   formatDate,
@@ -18,7 +12,7 @@ import {
 } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
-import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE } from './bookingOutcome'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
@@ -117,13 +111,6 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                   <Icon name={bookingOutcome.icon} size={18} />
                   <div>
                     <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
-                    {booking.venue_unavailable_marked_at !== null && (
-                      <p>
-                        <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
-                        <br />
-                        <span className="small muted">{VENUE_UNAVAILABLE_NOTE}</span>
-                      </p>
-                    )}
                     {openHold && (
                       <p>
                         <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>
