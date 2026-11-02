@@ -146,13 +146,6 @@ def make_scenario(
     )
 
 
-def replace(client, original_id: uuid.UUID, venue: Venue, **extra):
-    """``POST /bookings/{id}/replacements``: ask for ``venue`` to replace the booking."""
-    return client.post(
-        f"{BOOKINGS_PATH}/{original_id}/replacements", json={"venue_id": str(venue.id), **extra}
-    )
-
-
 def approve(client, booking_id: uuid.UUID, **extra):
     """``POST /bookings/{id}/approve`` as Venue Staff, with a valid hold expiry."""
     return client.post(f"{BOOKINGS_PATH}/{booking_id}/approve", json=approval_payload() | extra)
@@ -198,6 +191,14 @@ def add_pending_replacement(
     ).scalar_one()
     db.expire_all()
     return db.get(VenueBooking, row)
+
+
+def request_replacement(db: Session, scenario: Scenario, venue: Venue | None = None) -> dict:
+    """A pending replacement for the scenario's original, as ``POST /bookings/{id}/replacements``
+    left one before story 9.5 removed that route (D2): the row in SQL, returned as the
+    ``{"id": ...}`` body the tests read. The replacement a request raised before 9.5 leaves
+    behind is all that is left of the feature, so a test that needs one writes it."""
+    return {"id": str(add_pending_replacement(db, scenario, venue=venue).id)}
 
 
 def column(db: Session, booking_id: uuid.UUID, name: str):

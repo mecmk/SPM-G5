@@ -11,9 +11,16 @@ AC1 The organiser sees each approved or pending booking of their event (Q91, CL-
     cancelled, expired - hold nothing, so they are left out. Only those fields are returned.
 AC2 Another organiser's event, or one that does not exist, is not found; every other role is
     refused, and an organiser is still refused ``/bookings/for-event``.
-AC7 (CL-184, Q94-Q96) An open hold carries its expiry, so the page does not show it as confirmed,
-    and a hold its event's confirmation completed says when; who changed the expiry, and why, is
-    not returned. A booking marked under story 9.4 says when it was marked.
+AC5 Rejected, withdrawn, cancelled and expired bookings are not shown to the organiser. Released
+    bookings (21.3) and bookings a venue closure cancelled (9.5) are among the cancelled ones;
+    showing them is f7.1.3. (f7.1.2, CL-183; 9.5, CL-194)
+AC7 An approved booking whose hold is still open (12.7 AC1) is not shown as confirmed: it says the
+    venue is held for the event until the event is confirmed or the hold expires, with the expiry
+    date and time, as the coordinator's card does. Who changed the expiry, and why, is not shown.
+    Nothing is marked "Venue unavailable – alternative needed" any more (9.5 AC7): a booking a
+    venue closure ends is rejected or cancelled, so it leaves this section (AC5), and the
+    organiser learns of it from the closure's notice (9.5 AC4). A cancelled one shows again with
+    f7.1.3. (f7.1.2, CL-184; 9.5, CL-194)
 
 AC4, AC8 and AC9 are how the page shows these bookings: tests/e2e/events.spec.ts.
 
@@ -56,7 +63,6 @@ _SAFE_FIELDS = {
     "status",
     "hold_expires_at",
     "hold_completed_at",
-    "venue_unavailable_marked_at",
 }
 
 
@@ -206,7 +212,7 @@ def test_only_the_organisers_fields_are_returned(organiser_client, db: Session):
     assert set(entry) == _SAFE_FIELDS
 
 
-# --- AC7: the hold, and a venue marked unavailable --------------------------------------------
+# --- AC7: the hold ------------------------------------------------------------------------------
 @pytest.mark.story("7.1", ac=7)
 def test_an_open_hold_carries_its_expiry(organiser_client, db: Session):
     event = _event(db)

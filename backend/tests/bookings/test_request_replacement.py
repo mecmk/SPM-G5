@@ -1,5 +1,10 @@
 """Story 12.6 - Request a replacement venue for an affected booking
 
+Retired by 9.5 (CL-193, 1 Nov 2026), kept as history: a venue closure now ends the bookings it
+covers, so nothing is marked and no replacement is requested. A booking already replaced still
+shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
+normal pending request once its original closes (9.5 AC8, CL-194).
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
@@ -85,11 +90,10 @@ from tests.support.replacement import (
     add_pending_replacement,
     approve,
     column,
-    created,
     end_the_closure,
     hall,
     make_scenario,
-    replace,
+    request_replacement,
     set_status,
 )
 from tests.support.seed import Users
@@ -109,7 +113,7 @@ def test_the_original_is_untouched_while_a_replacement_is_pending(coordinator_cl
         scene.original.venue_unavailable_marked_at,
     )
 
-    created(replace(coordinator_client, scene.original.id, scene.alternative))
+    request_replacement(db, scene)
 
     db.expire_all()
     original = db.get(VenueBooking, scene.original.id)
@@ -128,7 +132,7 @@ def test_the_event_list_names_the_pending_replacement_on_the_original(coordinato
     """What the page reads to say "Replacement requested: <venue>" on the original's card, and
     "Replaces <venue>" on the replacement's."""
     scene = make_scenario(db)
-    body = created(replace(coordinator_client, scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
 
     listed = coordinator_client.get(f"{BOOKINGS_PATH}/for-event/{scene.event.id}").json()
 
@@ -149,7 +153,7 @@ def test_the_event_list_names_the_pending_replacement_on_the_original(coordinato
 @pytest.mark.story("12.6", ac=6)
 def test_a_pending_replacement_can_still_be_withdrawn_after_the_mark_clears(login_as, db):
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     end_the_closure(login_as, scene)
     assert column(db, scene.original.id, "venue_unavailable_marked_at") is None
 
@@ -174,7 +178,7 @@ def test_a_reassigned_coordinator_can_withdraw_the_pending_replacement(login_as,
     """The assignment is read as it stands: once Carl holds the event he, not Chloe, withdraws
     the replacement Chloe asked for."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     scene.event.assigned_coordinator_id = Users.COORDINATOR_2.id
     db.flush()
 
@@ -217,7 +221,7 @@ def test_an_approved_replacement_covers_the_requirement_so_a_normal_request_is_r
     """Only a PENDING replacement is left out of the one-per-requirement rule: once approved it
     is the requirement's live booking, and the original is released."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     assert approve(login_as(Users.VENUE_STAFF), body["id"]).status_code == 200
 
     response = login_as(Users.COORDINATOR).post(
@@ -233,16 +237,17 @@ def test_an_approved_replacement_covers_the_requirement_so_a_normal_request_is_r
     assert scene.alternative.name in response.json()["detail"]
 
 
-@pytest.mark.story("12.6", ac=10)
+@pytest.mark.story("9.5", ac=8)
 @pytest.mark.parametrize("closed_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED])
 def test_after_the_original_closes_a_normal_request_is_refused_and_approving_does_not_error(
     login_as, db, closed_as
 ):
-    """The carve-out ends with the original: once it expires or is cancelled by any path, the
-    pending replacement is the requirement's request. A normal request is refused (not allowed in
+    """The carve-out ends with the original: once it expires or is cancelled by any path - a
+    venue closure (9.5) among them - the pending replacement is the requirement's request and no
+    longer reads as a replacement (CL-194 (8)). A normal request is refused (not allowed in
     beside it), and approving the replacement is a plain approval - not a unique-index failure."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     set_status(db, scene.original.id, closed_as)
 
     normal = login_as(Users.COORDINATOR).post(
@@ -258,6 +263,25 @@ def test_after_the_original_closes_a_normal_request_is_refused_and_approving_doe
     assert normal.status_code == 409, normal.text
     assert scene.alternative.name in normal.json()["detail"]
     assert approved.status_code == 200, approved.text
+    assert column(db, uuid.UUID(body["id"]), "replaces_booking_id") is None
+
+
+@pytest.mark.story("9.5", ac=8)
+@pytest.mark.parametrize("closed_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED])
+def test_after_the_original_closes_the_leftover_request_can_be_switched(login_as, db, closed_as):
+    """CL-194 (8), 12.5: with its link gone the leftover request is an ordinary pending request,
+    so the coordinator can switch it to another venue, which withdraws it."""
+    scene = make_scenario(db)
+    body = request_replacement(db, scene)
+    set_status(db, scene.original.id, closed_as)
+
+    switched = login_as(Users.COORDINATOR).post(
+        f"{BOOKINGS_PATH}/{body['id']}/switch", json={"venue_id": str(hall(db).id)}
+    )
+
+    assert switched.status_code in (200, 201), switched.text
+    db.expire_all()
+    assert db.get(VenueBooking, uuid.UUID(body["id"])).status == BookingStatus.WITHDRAWN
 
 
 @pytest.mark.story("12.6", ac=10)
@@ -267,7 +291,7 @@ def test_a_pending_replacement_cannot_be_switched_and_the_refusal_says_to_withdr
     """12.5's Switch would withdraw the replacement and ask for a normal request the original
     still blocks: it is refused first, saying what to do."""
     scene = make_scenario(db)
-    body = created(replace(coordinator_client, scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
 
     response = coordinator_client.post(
         f"{BOOKINGS_PATH}/{body['id']}/switch", json={"venue_id": str(hall(db).id)}

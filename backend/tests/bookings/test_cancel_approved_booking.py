@@ -17,13 +17,14 @@ Edge
     again. The organiser and the Safety Officers are notified.
 6. If the event is in Planning, it stays in Planning, but a safety approval it already has no
     longer allows Confirm (21.2 AC14).
-7. A booking marked "Venue unavailable - alternative needed" (9.4) can be cancelled like any
-    other. A booking with a pending replacement (12.6) cannot be cancelled until the replacement
-    is withdrawn.
+7. Nothing is marked "Venue unavailable – alternative needed" any more: a booking a venue
+    closure covers is cancelled by the closure itself (9.5). An approved booking can still be
+    cancelled when a pending request raised before 9.5 names it as its replacement (12.6); if
+    that request is approved later, the cancelled booking stays as it is. (9.5, CL-194)
 
 Permission
 8. Only the assigned coordinator can cancel the event's bookings. The API refuses a cancellation
-    with no reason, after the cut-off, or while a replacement is pending.
+    with no reason or after the cut-off. (9.5, CL-194)
 
 Technical (team note)
 9. Cancelling uses the same release path as 21.3 (19.2's ``release_booking``) with its own cause,
@@ -61,6 +62,7 @@ from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import current_facts
 from tests.support.factories import (
+    approval_payload,
     make_booking,
     make_event,
     make_secured_event,
@@ -81,10 +83,6 @@ SETUP_MINUTES = 30
 RELEASED_TITLE = "A venue booking was released"
 NOT_ASSIGNED = "Only the coordinator assigned to this event can cancel its venue bookings."
 NOT_APPROVED = "Only an approved booking can be cancelled. This one is {status}."
-REPLACEMENT_PENDING = (
-    "A replacement at {venue} is waiting for Venue Staff. Withdraw it before cancelling this "
-    "booking."
-)
 CLOSED = "Cancelling this event's venue bookings closed 24 hours before its set-up time."
 RETURNED_TITLE = '"{event}" is back in Planning'
 RETURNED_MESSAGE = (
@@ -518,20 +516,37 @@ def test_another_events_cancelled_booking_leaves_the_approval_alone(
 
 
 @pytest.mark.story("12.8", ac=7)
-def test_a_pending_replacement_blocks_the_cancel_until_it_is_withdrawn(
-    coordinator_client, db: Session
+def test_a_pending_replacement_does_not_block_the_cancel_and_its_approval_leaves_it_cancelled(
+    login_as, db: Session
 ):
-    scenario = make_scenario(db, marked=True)
+    """Updated by 9.5 (CL-194): an approved booking can still be cancelled when a pending request
+    raised before 9.5 names it as its replacement (12.6). If that request is approved later, the
+    cancelled booking stays as it is: nothing is released again and nothing says it was (D12)."""
+    scenario = make_scenario(db)
     replacement = add_pending_replacement(db, scenario)
 
-    response = _cancel(coordinator_client, scenario.original)
+    response = _cancel(login_as(Users.COORDINATOR), scenario.original)
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == REPLACEMENT_PENDING.format(venue=scenario.alternative.name)
-    _untouched(db, scenario.original, scenario.event, EventStatus.PLANNING)
-    withdrawn = coordinator_client.post(f"/bookings/{replacement.id}/withdraw")
-    assert withdrawn.status_code == 200, withdrawn.text
-    assert _cancel(coordinator_client, scenario.original).status_code == 200
+    assert response.status_code == 200, response.text
+    cancelled = _fresh(db, scenario.original)
+    assert cancelled.status == BookingStatus.CANCELLED
+    assert cancelled.release_cause == "COORDINATOR_CANCELLED"
+    approval = login_as(Users.VENUE_STAFF).post(
+        f"/bookings/{replacement.id}/approve", json=approval_payload()
+    )
+    assert approval.status_code == 200, approval.text
+    assert _fresh(db, replacement).status == BookingStatus.APPROVED
+    again = _fresh(db, scenario.original)
+    assert (again.status, again.release_cause, again.replaced_by_booking_id) == (
+        BookingStatus.CANCELLED,
+        "COORDINATOR_CANCELLED",
+        None,
+    )
+    sentence = bookings_service.ORIGINAL_RELEASED_SENTENCE.format(
+        venue=scenario.original_venue.name
+    )
+    told = _notices(db, scenario.event.id, "BOOKING_APPROVED")
+    assert told and all(sentence not in notice.message for notice in told)
 
 
 # --- AC8: who may cancel, and what the API refuses ---------------------------------------------

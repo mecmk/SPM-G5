@@ -1047,8 +1047,8 @@ def test_a_booking_approved_for_an_event_already_confirmed_is_held_for_good(venu
 @pytest.mark.story("12.7", ac=4)
 def test_confirming_an_event_completes_only_its_own_open_holds_for_good(db):
     """R4: not its pending request, its expired booking or its booking approved before holds
-    expired, nor another event's hold. Sent back to Planning (9.4 AC3, 19.2 AC8), the event keeps
-    its completed hold: a sweep past the old expiry leaves it booked."""
+    expired, nor another event's hold. Sent back to Planning (9.5 AC3, 12.8 AC5, 19.2 AC8), the
+    event keeps its completed hold: a sweep past the old expiry leaves it booked."""
     event = _event(db)
     expiry = _in(days=2)
     open_hold = _hold(db, event=event, expires_at=expiry)

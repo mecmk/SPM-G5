@@ -1,5 +1,10 @@
 """Story 12.6 - Request a replacement venue for an affected booking
 
+Retired by 9.5 (CL-193, 1 Nov 2026), kept as history: a venue closure now ends the bookings it
+covers, so nothing is marked and no replacement is requested. A booking already replaced still
+shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
+normal pending request once its original closes (9.5 AC8, CL-194).
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
@@ -79,9 +84,8 @@ from tests.support.replacement import (
     BOOKINGS_PATH,
     add_pending_replacement,
     approve,
-    created,
     make_scenario,
-    replace,
+    request_replacement,
     set_status,
 )
 from tests.support.seed import Users
@@ -125,20 +129,19 @@ def test_the_request_page_says_which_venue_it_replaces_and_will_release(venue_st
     assert body["original_is_marked"] is True
 
 
-@pytest.mark.story("12.6", ac=3)
+@pytest.mark.story("9.5", ac=8)
 @pytest.mark.parametrize("closed_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED])
 def test_approving_releases_nothing_once_the_original_has_closed(venue_staff_client, db, closed_as):
-    """Still a replacement - the card says what it replaces - but approving it releases nothing,
-    so the warning is not shown."""
+    """No longer a replacement once its original has closed (CL-194 (8)): the card says nothing of
+    what it replaces or will release, as for any ordinary request."""
     scene = make_scenario(db)
     replacement = add_pending_replacement(db, scene)
     set_status(db, scene.original.id, closed_as)
 
     entry = _queue_entry(venue_staff_client, replacement.id)
 
-    assert entry["replaces_venue_name"] == scene.original_venue.name
+    assert entry["replaces_venue_name"] is None
     assert entry["approval_releases_venue_name"] is None
-    assert entry["original_is_marked"] is False
 
 
 @pytest.mark.story("12.6", ac=3)
@@ -157,7 +160,7 @@ def test_the_queue_carries_the_time_a_released_original_was_released(login_as, d
     """The queue card of a released original says "Closed at": the release, which is when its
     replacement was approved, not the original's own approval."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     staff = login_as(Users.VENUE_STAFF)
     assert approve(staff, body["id"]).status_code == 200
 

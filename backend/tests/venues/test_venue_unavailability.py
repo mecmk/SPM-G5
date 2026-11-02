@@ -2,9 +2,11 @@
 
 The reasons a period can carry (migration 022).
 Add, edit, end and remove a period, the preview of what it would affect, and who may.
-The bookings a period affects are marked, and the mark follows it (migration 023).
-The event goes back to Planning and its coordinator and organiser are told.
-A pending request that overlaps a period cannot be approved while it stands.
+What a saved period does to the bookings it covers - rejecting each pending request and cancelling
+each approved booking, the event going back to Planning, who is told - is story 9.5's, which
+replaced 9.4 AC3, AC4, AC6 and AC10 (CL-193) and extends AC2:
+tests/venues/test_closure_ends_bookings.py.
+A pending request that overlaps a period cannot be approved while it stands (AC7).
 
 AC1  Venue Staff mark a venue unavailable from a start to an end with a reason: Maintenance,
      Equipment failure, Renovation, Safety concern or Other, and a description, which every
@@ -196,6 +198,7 @@ def test_the_calendar_carries_each_reason_with_its_description(db, venue_staff_c
 
 
 @pytest.mark.story("9.4", ac=1)
+@pytest.mark.story("9.5", ac=6)
 def test_a_venue_closed_for_equipment_failure_cannot_be_requested(db, coordinator_client):
     """12.1 AC14 for the new reason: the refusal says why the venue is closed."""
     venue = make_venue(db)
@@ -1009,6 +1012,7 @@ def _write(client, method: str, venue_id: uuid.UUID, period_id: uuid.UUID):
 
 
 @pytest.mark.story("9.4", ac=9)
+@pytest.mark.story("9.5", ac=9)
 @pytest.mark.parametrize("method", WRITES)
 @pytest.mark.parametrize(
     "role", [Users.COORDINATOR, Users.LEAD, Users.TECH_SUPPORT, Users.SAFETY_OFFICER]
@@ -1030,6 +1034,7 @@ def test_other_internal_roles_cannot_add_edit_or_end(db, login_as, role, method)
 
 
 @pytest.mark.story("9.4", ac=9)
+@pytest.mark.story("9.5", ac=9)
 @pytest.mark.parametrize("method", WRITES)
 @pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE, None])
 def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, role, method):
@@ -1048,6 +1053,7 @@ def test_external_roles_and_the_signed_out_cannot_add_edit_or_end(db, login_as, 
 
 @pytest.mark.story("9.4", ac=9)
 @pytest.mark.story("9.4", ac=2)
+@pytest.mark.story("9.5", ac=9)
 @pytest.mark.parametrize(
     "role",
     [
@@ -1326,6 +1332,7 @@ def _stored(db: Session, booking_id: uuid.UUID) -> VenueBooking:
 
 # --- AC7: the refusal ------------------------------------------------------------------------
 @pytest.mark.story("9.4", ac=7)
+@pytest.mark.story("9.5", ac=10)
 def test_a_request_overlapping_a_period_cannot_be_approved_until_it_ends(db, login_as):
     """AC7: 409, still pending with no hold and nobody's decision; once the
     period is removed the same request is approved."""
@@ -1349,19 +1356,19 @@ def test_a_request_overlapping_a_period_cannot_be_approved_until_it_ends(db, log
 
 
 @pytest.mark.story("9.4", ac=7)
-def test_the_refusal_uses_the_live_overlap_not_the_mark(db, login_as):
-    """AC7: a period written straight to the table leaves its booking unmarked and the
-    request is still refused; a stale mark on a request no period overlaps does not refuse it."""
+def test_the_refusal_uses_the_live_overlap(db, login_as):
+    """AC7, re-pointed by 9.5 (nothing is marked any more): a closure written straight to the
+    table sits over a request no save ended - one a save missed - and the request is still
+    refused; a request no closure overlaps is approved. cannot fail first: the refusal reads
+    the closure itself and is in place today."""
     venue, elsewhere = make_venue(db), make_venue(db)
-    unmarked = _live(db, venue.id, _day(3))
+    missed = _live(db, venue.id, _day(3))
     _period(db, venue.id, _day(2), _day(7))
-    stale = _live(db, elsewhere.id, _day(3))
-    _mark_in_sql(db, stale.id, datetime.now(UTC))
+    unaffected = _live(db, elsewhere.id, _day(3))
     staff = login_as(Users.VENUE_STAFF)
 
-    assert _marked_at(db, unmarked.id) is None
-    assert _approve(staff, unmarked.id).status_code == 409
-    assert _approve(staff, stale.id).status_code == 200
+    assert _approve(staff, missed.id).status_code == 409
+    assert _approve(staff, unaffected.id).status_code == 200
 
 
 @pytest.mark.story("9.4", ac=7)
@@ -1398,35 +1405,20 @@ def test_a_period_that_only_touches_the_request_does_not_stop_its_approval(db, l
 
 
 @pytest.mark.story("9.4", ac=7)
-@pytest.mark.parametrize("action", ["reject", "withdraw", "change_hold_expiry"])
-def test_a_marked_booking_can_still_be_rejected_withdrawn_or_given_a_new_expiry(
-    db, login_as, action
-):
-    """AC7. cannot fail first: the guard touches approval only, and these already
-    work; it pins that nothing else refuses a marked booking."""
+@pytest.mark.parametrize("action", ["reject", "withdraw"])
+def test_a_request_a_save_missed_can_still_be_rejected_or_withdrawn(db, login_as, action):
+    """AC7, re-pointed by 9.5: the guard touches approval only. A request that sits inside a
+    closure no save ended can still be rejected by Venue Staff or withdrawn by its coordinator.
+    cannot fail first: these already work; it pins that nothing else refuses such a request."""
     venue = make_venue(db)
     staff = login_as(Users.VENUE_STAFF)
-    if action == "change_hold_expiry":
-        booking = _booking(
-            db, venue.id, _day(3), _day(3, 12), status="APPROVED", hold_expires_at=_day(1)
-        )
-    else:
-        booking = _live(db, venue.id, _day(3))
-    _add(staff, venue.id, _day(2), _day(7))
-    assert _marked_at(db, booking.id) is not None
+    booking = _live(db, venue.id, _day(3))
+    _period(db, venue.id, _day(2), _day(7))
 
     if action == "reject":
         response = staff.post(f"/bookings/{booking.id}/reject", json={"decision_reason": "No."})
-    elif action == "withdraw":
-        response = login_as(Users.COORDINATOR).post(f"/bookings/{booking.id}/withdraw")
     else:
-        response = staff.patch(
-            f"/bookings/{booking.id}",
-            json={
-                "hold_expires_at": _day(2).isoformat(),
-                "hold_expiry_change_reason": "The organiser asked for more time.",
-            },
-        )
+        response = login_as(Users.COORDINATOR).post(f"/bookings/{booking.id}/withdraw")
 
     assert response.status_code == 200, response.text
 
