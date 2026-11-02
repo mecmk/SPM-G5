@@ -18,10 +18,8 @@ import { ReviewQueuePage } from './events/ReviewQueuePage'
 import { AssignmentOverviewPage } from './events/AssignmentOverviewPage'
 import { UnassignedQueuePage } from './events/UnassignedQueuePage'
 import { AppLayout } from './layout/AppLayout'
-import { NAV_ITEMS } from './layout/navigation'
 import { NotificationProvider } from './notifications/NotificationProvider'
 import { ServerNotificationProvider } from './notifications/ServerNotificationProvider'
-import { ComingSoonPage } from './pages/ComingSoonPage'
 import { ComponentGalleryPage } from './pages/ComponentGalleryPage'
 import { HomePage } from './pages/HomePage'
 import { AttendeeEventPage } from './registrations/AttendeeEventPage'
@@ -76,8 +74,7 @@ import './App.css'
 /**
  * The route map. Signed-in pages sit inside <RequireAuth> and render within <AppLayout>
  * (story 1.1); a role-restricted page also sits inside <RequirePermission> for its permission
- * (story 1.2). Sections whose page is not built yet (NAV_ITEMS with isAvailable: false) get a
- * placeholder. The log of the user's own actions and their server notifications (story 20.2) wrap
+ * (story 1.2). The log of the user's own actions and their server notifications (story 20.2) wrap
  * the signed-in frame, so signing out clears them.
  * The story c3 component gallery stays reachable in development builds.
  */
@@ -236,12 +233,6 @@ function App() {
                   element={<EventRequestFormPage key="coordinator-edit" isCoordinatorEdit />}
                 />
               </Route>
-
-              {NAV_ITEMS.filter((item) => !item.isAvailable).map((item) => (
-                <Route key={item.to} element={<RequirePermission permission={item.permission} />}>
-                  <Route path={item.to} element={<ComingSoonPage item={item} />} />
-                </Route>
-              ))}
             </Route>
           </Route>
           <Route path="*" element={<Navigate to={HOME_PATH} replace />} />

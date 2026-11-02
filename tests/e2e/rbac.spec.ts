@@ -21,7 +21,7 @@ interface SidebarExpectation {
 }
 
 const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
-  // Chore c9 (1.2 AC5): an organiser raises and follows a change request on the event's page
+  // c9 (1.2 AC5): an organiser raises and follows a change request on the event's page
   // (19.1 AC1), so unlike the coordinator they have no Change requests section.
   {
     role: 'organiser',
@@ -52,14 +52,14 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
     ],
   },
   // Stories 5.4 and 5.5: the Lead works from the unassigned queue and the assignments overview.
-  // Chore c9 (1.2 AC5): they were the last role listing All events, which no story delivers.
+  // c9 (1.2 AC5): they were the last role listing All events, which no story delivers.
   {
     role: 'coordinator lead',
     email: ACCOUNTS.lead,
     visible: ['Unassigned events', 'Assignments', 'Venue catalogue'],
     hidden: ['All events', 'Events inbox', 'My events', 'Booking Requests', 'Equipment requests'],
   },
-  // Chore c9 (1.2 AC5): no Venue Schedule section. The calendar is on each venue's page (9.1)
+  // c9 (1.2 AC5): no Venue Schedule section. The calendar is on each venue's page (9.1)
   // and on each booking request's (13.1.3).
   {
     role: 'venue staff',
@@ -74,7 +74,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
       'Venue Schedule',
     ],
   },
-  // Chore c9 (1.2 AC5): no Equipment holds section. Story 15.3 merged into the queue (15.2).
+  // c9 (1.2 AC5): no Equipment holds section. Story 15.3 merged into the queue (15.2).
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
@@ -155,7 +155,8 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
 
-// Chore c9: the address of each section no story delivers, with the role that was offered it.
+// c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Stories
+// 19.4 and 17.3 bring back the first and the last: each drops its row when it ships.
 const RETIRED_SECTIONS = [
   { role: 'an organiser', email: ACCOUNTS.organiser, address: '/change-requests' },
   { role: 'a coordinator lead', email: ACCOUNTS.lead, address: '/events/all' },
@@ -172,7 +173,6 @@ for (const { role, email, address } of RETIRED_SECTIONS) {
 
     await expect(page).toHaveURL('/')
     await expect(page.getByRole('heading', { name: /^Welcome, /, level: 1 })).toBeVisible()
-    await expect(page.getByText('This page is on its way.')).toHaveCount(0)
   })
 }
 

@@ -137,9 +137,8 @@ Permission codes are constants in `src/auth/permissions.ts`, mirrored from
 `backend/app/auth/permissions.py`. Every section of the app is one `NavItem` in
 `src/layout/navigation.ts`, with the permission it needs, and both the sidebar and the main page
 are built from that list (team decision, 17 Sep 2026: a role sees everything it can use there).
-An item whose page is not built yet has `isAvailable: false`, and `App.tsx` routes it to
-`ComingSoonPage`, which names the story that delivers it. A story that puts the work on another
-page removes the item instead (1.2 AC5).
+An item is listed only once a backlog story delivers its page (1.2 AC5), so the story that builds
+the page adds it, and a story that puts the work on another page adds none.
 
 ## Do not
 
@@ -167,9 +166,8 @@ Adding `<feature>` end to end, after the backend endpoints exist:
    errors through `formatApiError` into `<p role="alert" className="error">`.
 3. `src/App.tsx` — add the route inside `<RequireAuth>` / `<AppLayout>`, behind
    `<RequirePermission>` when the feature is role-restricted.
-4. `src/layout/navigation.ts` — set the section's `isAvailable` to `true` (or add a `NavItem`
-   if the section is new). The sidebar and main page pick it up for every role holding its
-   permission.
+4. `src/layout/navigation.ts` — add a `NavItem` for the section. The sidebar and main page pick
+   it up for every role holding its permission.
 5. `src/auth/homeFor.ts` — only if a role should land on this page after login.
 6. `src/App.css` — any new class names, following the existing flat naming.
 7. `tests/e2e/<feature>.spec.ts` — in the `tests/` subsystem, since nothing here runs tests.

@@ -23,10 +23,9 @@ import {
  * Story 1.2 AC1/AC2: every section of the app, and the permission a role needs to see it.
  *
  * The sidebar and the main page are both built from this list, so a role sees everything it can
- * use and nothing else (team decision, 17 Sep 2026). A section whose page is still being built
- * is listed with `isAvailable: false` and opens a "coming soon" page naming its story; the story
- * that builds the page flips the flag and adds its own route in App.tsx. A story that puts the
- * work on another page removes the item instead (1.2 AC5).
+ * use and nothing else (team decision, 17 Sep 2026). A section is listed only once a backlog story
+ * delivers its page (1.2 AC5): the story that builds the page adds its item here and its route in
+ * App.tsx. A story that puts the work on another page adds no item.
  */
 export interface NavItem {
   /** Route path, unique across the app. */
@@ -38,7 +37,6 @@ export interface NavItem {
   permission: Permission
   /** Backlog story that delivers the page. */
   story: string
-  isAvailable: boolean
 }
 
 export interface NavSection {
@@ -57,7 +55,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'calendar',
         permission: PERMISSIONS.EVENTS_READ_OWN,
         story: '2.6',
-        isAvailable: true,
       },
       {
         to: EVENTS_INBOX_PATH,
@@ -66,7 +63,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'inbox',
         permission: PERMISSIONS.EVENTS_REVIEW,
         story: '4.1',
-        isAvailable: true,
       },
       {
         to: EVENTS_UNASSIGNED_PATH,
@@ -75,7 +71,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'inbox',
         permission: PERMISSIONS.EVENTS_ASSIGN,
         story: '5.4',
-        isAvailable: true,
       },
       {
         to: EVENTS_ASSIGNMENTS_PATH,
@@ -84,7 +79,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'people',
         permission: PERMISSIONS.EVENTS_ASSIGN,
         story: '5.5',
-        isAvailable: true,
       },
       // c9 (1.2 AC5): this is the coordinator's queue. An organiser raises and follows change
       // requests on the event's page (19.1), so they have no section for them.
@@ -95,7 +89,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE,
         story: '19.2',
-        isAvailable: true,
       },
       {
         to: REGISTRATIONS_REPORT_PATH,
@@ -104,7 +97,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'people',
         permission: PERMISSIONS.REGISTRATIONS_VIEW,
         story: '18.3',
-        isAvailable: true,
       },
     ],
   },
@@ -120,7 +112,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'building',
         permission: PERMISSIONS.VENUES_READ,
         story: '8.1',
-        isAvailable: true,
       },
       // f12.1.1: no "Request a venue" section. A venue is requested from its event: Find a venue
       // on the event's page, then Request this venue in the catalogue (12.1 AC15).
@@ -131,12 +122,9 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'calendar-check',
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
-        isAvailable: true,
       },
       // Story 8.6 AC1/AC9: every role that reads venues sees the room layouts; Venue Staff also
       // add, rename and delete them there.
-      // c9 (1.2 AC5): no Venue Schedule section. The availability calendar is on each venue's
-      // page (9.1) and on each booking request's (13.1.3).
       {
         to: ROOM_LAYOUTS_PATH,
         label: 'Room layouts',
@@ -144,8 +132,9 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'grid',
         permission: PERMISSIONS.VENUES_READ,
         story: '8.6',
-        isAvailable: true,
       },
+      // c9 (1.2 AC5): no Venue Schedule section. The availability calendar is on each venue's
+      // page (9.1) and on each booking request's (13.1.3).
     ],
   },
   {
@@ -158,7 +147,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'inbox',
         permission: PERMISSIONS.EQUIPMENT_MANAGE,
         story: '15.2',
-        isAvailable: true,
       },
       {
         to: EQUIPMENT_CATALOGUE_PATH,
@@ -167,7 +155,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'grid',
         permission: PERMISSIONS.EQUIPMENT_MANAGE,
         story: '16.2',
-        isAvailable: true,
       },
     ],
   },
@@ -181,7 +168,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'check-circle',
         permission: PERMISSIONS.SAFETY_REVIEW,
         story: '21.1',
-        isAvailable: true,
       },
     ],
   },
@@ -195,7 +181,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.1',
-        isAvailable: true,
       },
       {
         to: MY_REGISTRATIONS_PATH,
@@ -204,7 +189,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'ticket',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.2',
-        isAvailable: true,
       },
       {
         to: PROFILE_PATH,
@@ -213,13 +197,10 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'person',
         permission: PERMISSIONS.REGISTRATIONS_SELF,
         story: '18.4',
-        isAvailable: true,
       },
     ],
   },
 ]
-
-export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((section) => section.items)
 
 /** Story 1.2 AC2: the sections, trimmed to the items the signed-in role may use. */
 export function visibleNavSections(can: (permission: Permission) => boolean): NavSection[] {
