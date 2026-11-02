@@ -24,14 +24,7 @@ from app.db import Base
 from app.dbtool import migrate
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationStatus
-from app.safety.models import SafetyReviewOutcome
-from app.safety.service import (
-    booked_venue_blockers,
-    comparable_facts,
-    current_facts,
-    latest_review,
-    missing_arrangements,
-)
+from app.safety.service import confirm_blockers
 from tests.support.seed import (
     Bookings,
     Clarifications,
@@ -575,14 +568,10 @@ def test_seeded_confirmed_events_meet_what_confirming_requires(db: Session):
     ).all()
     offenders = {}
     for event in events:
-        problems = [*missing_arrangements(db, event), *booked_venue_blockers(db, event)]
-        review = latest_review(db, event.id)
-        if review is None or review.outcome != SafetyReviewOutcome.APPROVED:
-            problems.append("no approving review")
-        elif comparable_facts(review.facts) != comparable_facts(current_facts(db, event)):
-            problems.append("review out of date")
-        if problems:
-            offenders[event.name] = problems
+        # confirm_blockers answers for a Planning event; the fixture rolls this back.
+        event.status = EventStatus.PLANNING
+        if blockers := confirm_blockers(db, event):
+            offenders[event.name] = blockers
     assert not offenders
 
 

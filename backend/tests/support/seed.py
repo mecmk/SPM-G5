@@ -197,7 +197,7 @@ class Events:
     BOARD_GAMES_SOCIAL = _e(72)  # CONFIRMED; the spec double-clicks Withdraw
     SUNSET_YOGA = _e(73)  # CONFIRMED; only read
     HERITAGE_TRAIL = _e(74)  # CONFIRMED; he withdrew
-    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration still active
+    CHARITY_FUN_RUN = _e(75)  # CANCELLED, his registration cancelled with it
     BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
     LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
@@ -471,8 +471,8 @@ class SafetyReviews:
     NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")
     # Story 21.2: Events.DATA_SUMMIT's, with one finding flagging its venue bookings.
     DATA_SUMMIT_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000004")
-    # c8: every other Confirmed or Completed event's approving review is
-    # ffffffff-0000-0000-0008-<its event's last twelve digits>, e.g. the town hall's.
+    # c8: every other Confirmed or Completed event's approving review, bar Events.CONFIRMED's (it
+    # has none), is ffffffff-0000-0000-0008-<its event's last twelve digits>, e.g. the town hall's.
     TOWN_HALL_APPROVED = uuid.UUID("ffffffff-0000-0000-0008-000000000014")
 
 
