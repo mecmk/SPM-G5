@@ -67,7 +67,7 @@ const BOARD_GAMES_SOCIAL = 'Board Games Social' // Withdraw double-clicked once
 const SUNSET_YOGA = 'Sunset Yoga by the Bay' // only read
 const LANTERN_PAINTING = 'Lantern Painting Workshop' // withdrawn once the server answers again
 const HERITAGE_TRAIL = 'Heritage Trail Tour' // Aiden withdrew
-const CHARITY_FUN_RUN = 'Charity Fun Run' // cancelled, Aiden's registration still active
+const CHARITY_FUN_RUN = 'Charity Fun Run' // cancelled, Aiden's registration with it
 const BOOK_SWAP = 'Autumn Book Swap' // started on 3 Oct 2026
 
 const EVENT_STARTED_MESSAGE = 'This event has started, so you can no longer withdraw.'
@@ -843,9 +843,9 @@ test.describe('withdraws its seeded registration once', () => {
 test('18.2 AC8/AC10: an event no longer listed keeps its page, offering Withdraw while the registration stands', async ({
   page,
 }) => {
-  // The yoga's page as the server sends it once the event is no longer listed. Which events those
-  // are is a backend case.
-  await changeEventPage<EventPageBody>(page, (body) => ({ ...body, listing: null }))
+  // The yoga's page as the server sends it once the event is no longer listed, with no venue
+  // left booked. Which events those are is a backend case.
+  await changeEventPage<EventPageBody>(page, (body) => ({ ...body, listing: null, venues: [] }))
   await signIn(page, ACCOUNTS.attendee)
   await openRegisteredEvent(page, SUNSET_YOGA)
 
@@ -854,7 +854,7 @@ test('18.2 AC8/AC10: an event no longer listed keeps its page, offering Withdraw
   await expect(box).not.toContainText('places left')
   await expect(withdrawButton(page, SUNSET_YOGA)).toBeEnabled()
   await expect(box.getByRole('button', { name: `Register for ${SUNSET_YOGA}` })).toHaveCount(0)
-  // The yoga has no venue booked, and an event no longer listed has none on the way.
+  // An event no longer listed has no venue on the way.
   await expect(page.getByRole('main')).not.toContainText('Venue to be confirmed')
 })
 

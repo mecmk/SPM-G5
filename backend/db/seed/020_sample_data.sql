@@ -191,7 +191,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000012', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
      'Regional Sales Summit', 'Sales enablement', 'Two-day summit for the regional sales teams.', NULL, '2026-12-15 09:00+08', '2026-12-16 17:00+08', 220, 'PLANNING',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-12 09:00+08', '2026-09-14 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
-    -- 3333..13: confirmed - venue and equipment arranged, event still in the future
+    -- 3333..13: confirmed, event still in the future; no venue booked and no safety review, as
+    -- tests/e2e/booking-requests.spec.ts requests a venue for its Main venue (c8)
     ('33333333-0000-0000-0000-000000000013', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Partner Appreciation Dinner', 'Partner relations', 'A formal dinner thanking key channel partners.', NULL, '2027-02-10 18:30+08', '2027-02-10 22:00+08', 90, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-13 09:00+08', '2026-09-15 09:00+08', '11111111-0000-0000-0000-000000000003', NULL),
@@ -308,7 +309,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-29 09:00+08', '2026-10-01 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
     -- 3333..37 and 3333..38: reviewed by the Safety Officer and no longer awaiting the check, for
     -- story 21.1's Accepted and Declined tabs. The 37 was approved and is now Confirmed; the 38
-    -- was sent back to Planning and not sent again. Neither has a venue booked.
+    -- was sent back to Planning and not sent again. The 37's Main venue is booked at Grand Hall
+    -- (below); the 38 has no venue booked.
     ('33333333-0000-0000-0000-000000000037', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Marina Food Festival', 'Community event', 'Food stalls along the waterfront promenade.', NULL, '2028-09-02 11:00+08', '2028-09-02 21:00+08', 200, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, FALSE, NULL, NULL, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-25 09:00+08', '2026-09-27 09:00+08', '11111111-0000-0000-0000-000000000004', NULL),
@@ -380,9 +382,8 @@ ON CONFLICT (id) DO UPDATE SET
 -- registered for once per run; the portfolio review (43, one place) is full with Bella's place
 -- below; the wine appreciation (44) closed on 1 Oct 2026; the Lunar New Year market (45) opens on
 -- 10 Jan 2028. Organiser 2, coordinator 2. The jazz evening has the seeded cover picture (18.1 AC8,
--- fix f18.1.1), which the spec looks for on its card. Only the jazz evening has its venues booked (below): the
--- others show "Venue to be confirmed", as a Confirmed event with no approved booking does, and Venue Staff's
--- Approved tab stays on one page (tests/e2e/bookings.spec.ts, 13.1.2 AC1).
+-- fix f18.1.1), which the spec looks for on its card. The jazz evening has two venues booked (below); each
+-- other has its Main venue booked at Exhibition Foyer and an approving safety review (c8, below).
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
@@ -437,10 +438,10 @@ ON CONFLICT (id) DO UPDATE SET
 -- (71) is withdrawn from and registered for again; Withdraw is double-clicked on the board games
 -- social (72); the lantern painting (77) is withdrawn from once the server can be reached again.
 -- The yoga (73), with the seeded cover picture, is only read, by every case that only reads.
--- Aiden withdrew from the heritage trail (74); the fun run (75) was cancelled with his
--- registration still active, as an event sent back to Planning after confirmation and then
--- cancelled can be (18.1 AC4, 6.2); the book swap (76) started on 3 Oct 2026. Organiser 2,
--- coordinator 2, no venue booked, as 18.1's.
+-- Aiden withdrew from the heritage trail (74); the fun run (75) was cancelled by Omar, which
+-- cancelled his registration with it (6.2, c8 below); the book swap (76) started on 3 Oct 2026.
+-- Organiser 2, coordinator 2. Each confirmed one has its Main venue booked at Exhibition Foyer
+-- and an approving safety review (c8, below).
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, accessibility_none_required, is_public,
                     registration_required, registration_opens_at, registration_closes_at,
@@ -474,8 +475,8 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Charity Fun Run', 'Community event', 'A 5 km run along the park connector, for charity.', '2027-04-10 07:00+08', '2027-04-10 10:00+08', 200, 'CANCELLED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-09 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-10-12 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-05 09:00+08',
-     'The park connector is closed for works on the day.', NULL),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-05 09:00+08',
+     NULL, NULL),
     ('33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Autumn Book Swap', 'Community event', 'Bring a book, take a book.', '2026-10-03 10:00+08', '2026-10-03 13:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2026-10-02 18:00+08',
@@ -542,9 +543,25 @@ INSERT INTO sample_venue_requirements (id, event_id, layout_code) VALUES
     ('cccccccc-0000-0000-0000-000000000015', '33333333-0000-0000-0000-000000000015', 'STANDING'),
     ('cccccccc-0000-0000-0000-000000000018', '33333333-0000-0000-0000-000000000018', 'CLASSROOM'),
     ('cccccccc-0000-0000-0000-000000000033', '33333333-0000-0000-0000-000000000033', 'CLASSROOM'),
-    -- Story 18.1's jazz evening (3333..39), the one of its events with venues booked.
+    -- Story 18.1's jazz evening (3333..39), with a second venue booked besides its Main venue.
     ('cccccccc-0000-0000-0000-000000000039', '33333333-0000-0000-0000-000000000039', 'STANDING'),
-    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM');
+    ('cccccccc-0000-0000-0000-000000000046', '33333333-0000-0000-0000-000000000046', 'CLASSROOM'),
+    -- Confirmed events' Main venues, each booked (c8), as 18.4's and 18.5's are further down:
+    -- story 21.1's food festival (3333..37), and 18.1's and 18.2's events (40-45, 70-77).
+    ('cccccccc-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000037', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000040', '33333333-0000-0000-0000-000000000040', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000041', '33333333-0000-0000-0000-000000000041', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000042', '33333333-0000-0000-0000-000000000042', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000043', '33333333-0000-0000-0000-000000000043', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000044', '33333333-0000-0000-0000-000000000044', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000045', '33333333-0000-0000-0000-000000000045', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000070', '33333333-0000-0000-0000-000000000070', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000071', '33333333-0000-0000-0000-000000000071', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000072', '33333333-0000-0000-0000-000000000072', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000073', '33333333-0000-0000-0000-000000000073', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000074', '33333333-0000-0000-0000-000000000074', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000076', '33333333-0000-0000-0000-000000000076', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000000077', '33333333-0000-0000-0000-000000000077', 'STANDING');
 
 DELETE FROM venue_requirements AS r
 USING sample_venue_requirements AS sample
@@ -1115,7 +1132,88 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000000014', '33333333-0000-0000-0000-000000000039', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000004', '2028-10-07 20:00+08', '2028-10-07 22:00+08', 0, 0,
      120, 'EXHIBITION', 'Food stalls.', 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
-     NULL, '2028-10-07 20:00+08', '2026-10-10 09:00+08')
+     NULL, '2028-10-07 20:00+08', '2026-10-10 09:00+08'),
+    -- c8: two more Confirmed events with their Main venue booked, each hold completed when the
+    -- event was confirmed: story 21.1's food festival (3333..37) at Grand Hall, approved before it
+    -- was sent for its safety check, and 18.2's yoga (73) at the Exhibition Foyer.
+    ('44444444-0000-0000-0000-000000000037', '33333333-0000-0000-0000-000000000037', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000004', '2028-09-02 11:00+08', '2028-09-02 21:00+08', 0, 0,
+     200, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-30 15:00+08', NULL, '2026-09-30 11:00+08',
+     'cccccccc-0000-0000-0000-000000000037', '2028-09-02 11:00+08', '2026-10-09 10:00+08'),
+    ('44444444-0000-0000-0000-000000000073', '33333333-0000-0000-0000-000000000073', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-03-27 18:00+08', '2027-03-27 19:00+08', 0, 0,
+     40, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     'cccccccc-0000-0000-0000-000000000073', '2027-03-27 18:00+08', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+
+-- c8: every other confirmed event's Main venue, approved by Vera and its hold completed when the
+-- event was confirmed, as confirming requires (21.2 AC7): the town hall (14), confirmed before it
+-- took place, at Grand Hall; and 18.1's and 18.2's events at Exhibition Foyer, which has no
+-- opening hours to keep and was free on each of their dates. The dinner (3333..13) is left
+-- unbooked: tests/e2e/booking-requests.spec.ts requests a venue for its Main venue.
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0008-000000000014', '33333333-0000-0000-0000-000000000014', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000003', '2026-08-01 09:00+08', '2026-08-01 11:00+08', 0, 0,
+     300, 'THEATRE', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-06-23 15:00+08', NULL, '2026-06-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000014', '2026-08-01 09:00+08', '2026-06-26 09:00+08'),
+    ('44444444-0000-0000-0008-000000000040', '33333333-0000-0000-0000-000000000040', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-10-14 09:00+08', '2028-10-14 17:00+08', 0, 0,
+     60, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000040', '2028-10-14 09:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000041', '33333333-0000-0000-0000-000000000041', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-10-21 18:30+08', '2028-10-21 20:30+08', 0, 0,
+     80, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000041', '2028-10-21 18:30+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000042', '33333333-0000-0000-0000-000000000042', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-10-28 10:00+08', '2028-10-28 11:00+08', 0, 0,
+     1, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000042', '2028-10-28 10:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000043', '33333333-0000-0000-0000-000000000043', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-11-04 10:00+08', '2028-11-04 11:00+08', 0, 0,
+     1, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000043', '2028-11-04 10:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000044', '33333333-0000-0000-0000-000000000044', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-11-11 18:00+08', '2028-11-11 21:00+08', 0, 0,
+     40, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000044', '2028-11-11 18:00+08', '2026-09-25 09:00+08'),
+    ('44444444-0000-0000-0008-000000000045', '33333333-0000-0000-0000-000000000045', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-01-26 10:00+08', '2028-01-26 18:00+08', 0, 0,
+     250, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000045', '2028-01-26 10:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000070', '33333333-0000-0000-0000-000000000070', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-03-06 19:00+08', '2027-03-06 21:00+08', 0, 0,
+     1, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000070', '2027-03-06 19:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000071', '33333333-0000-0000-0000-000000000071', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-03-13 09:00+08', '2027-03-13 12:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000071', '2027-03-13 09:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000072', '33333333-0000-0000-0000-000000000072', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-03-20 19:00+08', '2027-03-20 22:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000072', '2027-03-20 19:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000000074', '33333333-0000-0000-0000-000000000074', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-04-03 09:00+08', '2027-04-03 12:00+08', 0, 0,
+     40, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000074', '2027-04-03 09:00+08', '2026-10-01 09:00+08'),
+    ('44444444-0000-0000-0008-000000000076', '33333333-0000-0000-0000-000000000076', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2026-10-03 10:00+08', '2026-10-03 13:00+08', 0, 0,
+     60, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-04 15:00+08', NULL, '2026-09-04 11:00+08',
+     'cccccccc-0000-0000-0000-000000000076', '2026-10-03 10:00+08', '2026-09-20 09:00+08'),
+    ('44444444-0000-0000-0008-000000000077', '33333333-0000-0000-0000-000000000077', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2027-04-17 14:00+08', '2027-04-17 16:00+08', 0, 0,
+     20, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000000077', '2027-04-17 14:00+08', '2026-10-10 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
     starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
@@ -1142,7 +1240,7 @@ WHERE NOT EXISTS (
       AND newer.id <> EXCLUDED.id AND newer.status = 'REGISTERED');
 
 -- Story 18.2: Aiden's registrations for the events above (3333..70-77), one each. Only the heritage
--- trail's (74) is withdrawn; the fun run's (75) is still active on a cancelled event. A row whose
+-- trail's (74) is withdrawn; the fun run's (75) was cancelled with its event. A row whose
 -- attendee has registered for its event again since is left as it is, whether or not that later
 -- registration is still active: My registrations shows the latest one, so making this one
 -- Registered again would hold a place that the page offers no way to withdraw.
@@ -1158,7 +1256,7 @@ INSERT INTO event_registrations (id, event_id, attendee_id, status, registered_a
     ('18181818-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000007',
      'WITHDRAWN', '2026-10-05 09:30+08', '2026-10-08 20:45+08'),
     ('18181818-0000-0000-0000-000000000007', '33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000007',
-     'REGISTERED', '2026-10-06 12:00+08', NULL),
+     'CANCELLED', '2026-10-06 12:00+08', NULL),
     ('18181818-0000-0000-0000-000000000008', '33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000007',
      'REGISTERED', '2026-09-25 08:00+08', NULL),
     ('18181818-0000-0000-0000-000000000009', '33333333-0000-0000-0000-000000000077', '11111111-0000-0000-0000-000000000007',
@@ -1194,7 +1292,9 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
      '{"description": "Food stalls along the waterfront promenade.",
        "expected_attendance": 200,
        "starts_at": "2028-09-02T03:00:00+00:00", "ends_at": "2028-09-02T13:00:00+00:00",
-       "venues": [], "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+       "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "people_to_hold": 200,
+                   "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
     ('ffffffff-0000-0000-0000-000000000003', '33333333-0000-0000-0000-000000000038', '11111111-0000-0000-0000-000000000009', '2026-10-08 10:00+08',
      'CHANGES_REQUESTED',
      '{"description": "A guided evening walk with paper lanterns.",
@@ -1514,7 +1614,7 @@ ON CONFLICT (id) DO NOTHING;
 --   64 the spec raises a replacement       65 ... and Venue Staff approve it
 --   66 ... and the coordinator withdraws it, then asks again
 --   67 ... and Venue Staff remove the closure before it is approved
---   68 a CANCELLED event whose booking is still marked: no replacement is offered
+--   68 a CANCELLED event, its marked booking cancelled with it: no replacement is offered
 --   69 a marked PENDING booking: Switch is offered, not a replacement
 --   80 a second additional venue (booking 34, marked) beside a requirement booked at Seminar Room
 --      2.1: its closure is removed and a replacement requested after it, so the step must refuse
@@ -1688,7 +1788,7 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
      'cccccccc-0000-0000-0126-000000006701', '2029-02-13 09:00+08', '2026-10-17 10:00+08'),
     ('44444444-0000-0000-0000-000000012629', '33333333-0000-0000-0000-000000012668', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000003', '2029-02-14 10:00+08', '2029-02-14 16:00+08', 30, 30,
-     100, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
+     100, 'STANDING', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-10 09:00+08', NULL, '2026-10-09 12:00+08',
      'cccccccc-0000-0000-0126-000000006801', '2029-02-14 09:00+08', '2026-10-17 10:00+08'),
     ('44444444-0000-0000-0000-000000012630', '33333333-0000-0000-0000-000000012669', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000003', '2029-02-15 10:00+08', '2029-02-15 16:00+08', 30, 30,
@@ -2018,7 +2118,8 @@ ON CONFLICT (id) DO UPDATE SET
 -- 09-11 the registrations. Cara registers for the pottery taster (04), then the watercolour
 -- class (05); Dion for the book club (06). The food tasting walk (08) closed on 1 Oct 2026 with
 -- Aiden and Bella registered, so its registration list never changes: the organiser reads their
--- details there.
+-- details there. Each has its Main venue booked and an approving safety review (c8, below): the
+-- pottery taster's at Seminar Room 2.1, the others' at Exhibition Foyer.
 -- ---------------------------------------------------------------------
 INSERT INTO users (id, email, password_hash, full_name, role_code, organisation_id, phone, department,
                    dietary_requirements, attendee_details_confirmed_at) VALUES
@@ -2111,6 +2212,78 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- c8: the pottery taster's Main venue, Seminar Room 2.1, approved by Vera and its hold completed
+-- when the event was confirmed, so 18.4's December events show one booked venue beside the rest.
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000018404', '33333333-0000-0000-0000-000000018404', 0, 'Main venue', 30,
+     '2028-12-02 10:00+08', '2028-12-02 12:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0000-000000018404', '33333333-0000-0000-0000-000000018404', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000004', '2028-12-02 10:00+08', '2028-12-02 12:00+08', 0, 0,
+     30, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-01 15:00+08', NULL, '2026-10-01 11:00+08',
+     'cccccccc-0000-0000-0000-000000018404', '2028-12-02 10:00+08', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+
+-- c8: 18.4's other events' Main venues at Exhibition Foyer, approved and their holds completed
+-- when the events were confirmed.
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000018405', '33333333-0000-0000-0000-000000018405', 0, 'Main venue', 30,
+     '2028-12-09 18:00+08', '2028-12-09 20:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000018406', '33333333-0000-0000-0000-000000018406', 0, 'Main venue', 30,
+     '2028-12-16 19:00+08', '2028-12-16 21:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000018407', '33333333-0000-0000-0000-000000018407', 0, 'Main venue', 60,
+     '2028-12-23 19:00+08', '2028-12-23 22:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000018408', '33333333-0000-0000-0000-000000018408', 0, 'Main venue', 20,
+     '2028-12-30 14:00+08', '2028-12-30 17:00+08', 'STANDING')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0008-000000018405', '33333333-0000-0000-0000-000000018405', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-12-09 18:00+08', '2028-12-09 20:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018405', '2028-12-09 18:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000018406', '33333333-0000-0000-0000-000000018406', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-12-16 19:00+08', '2028-12-16 21:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018406', '2028-12-16 19:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000018407', '33333333-0000-0000-0000-000000018407', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-12-23 19:00+08', '2028-12-23 22:00+08', 0, 0,
+     60, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018407', '2028-12-23 19:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000018408', '33333333-0000-0000-0000-000000018408', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2028-12-30 14:00+08', '2028-12-30 17:00+08', 0, 0,
+     20, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018408', '2028-12-30 14:00+08', '2026-09-25 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
 
 -- ---------------------------------------------------------------------
 -- Fix f7.1.2 (story 7.1 AC4, AC8): tests/e2e/events.spec.ts. The leadership retreat (3333..7012)
@@ -2229,6 +2402,282 @@ WHERE NOT EXISTS (
     SELECT 1 FROM event_registrations AS newer
     WHERE newer.event_id = EXCLUDED.event_id AND newer.attendee_id = EXCLUDED.attendee_id
       AND newer.id <> EXCLUDED.id AND newer.registered_at > EXCLUDED.registered_at);
+
+-- ---------------------------------------------------------------------
+-- c8: 18.5's events' Main venues at Exhibition Foyer, approved and their holds completed when
+-- the events were confirmed.
+-- ---------------------------------------------------------------------
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000018503', '33333333-0000-0000-0000-000000018503', 0, 'Main venue', 30,
+     '2029-01-06 10:00+08', '2029-01-06 13:00+08', 'STANDING'),
+    ('cccccccc-0000-0000-0000-000000018504', '33333333-0000-0000-0000-000000018504', 0, 'Main venue', 30,
+     '2029-01-13 15:00+08', '2029-01-13 18:00+08', 'STANDING')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, hold_completed_at) VALUES
+    ('44444444-0000-0000-0008-000000018503', '33333333-0000-0000-0000-000000018503', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2029-01-06 10:00+08', '2029-01-06 13:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018503', '2029-01-06 10:00+08', '2026-10-10 09:00+08'),
+    ('44444444-0000-0000-0008-000000018504', '33333333-0000-0000-0000-000000018504', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000004', '2029-01-13 15:00+08', '2029-01-13 18:00+08', 0, 0,
+     30, 'STANDING', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-09-23 15:00+08', NULL, '2026-09-23 11:00+08',
+     'cccccccc-0000-0000-0000-000000018504', '2029-01-13 15:00+08', '2026-10-10 09:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at;
+
+-- ---------------------------------------------------------------------
+-- c8: the cancelled events' cancellations, as cancelling records them (6.2): who cancelled and
+-- why, and every venue booking still holding released with it. Omar cancelled the fun run
+-- (3333..75) after it was confirmed, which cancelled Aiden's registration (above); he cancelled
+-- the heritage walk (12668) after its Foyer booking was marked unavailable, which cancelled that
+-- booking (above), so it has nothing left to replace (12.6 AC8). The events' own inserts leave
+-- these columns alone.
+-- ---------------------------------------------------------------------
+UPDATE events SET
+    cancelled_at = '2026-10-12 09:00+08', cancelled_by_id = '11111111-0000-0000-0000-000000000002',
+    cancellation_reason = 'The park connector is closed for works on the day.'
+WHERE id = '33333333-0000-0000-0000-000000000075';
+
+UPDATE events SET
+    cancelled_at = '2026-10-18 09:00+08', cancelled_by_id = '11111111-0000-0000-0000-000000000002',
+    cancellation_reason = 'The launch is postponed until the Foyer reopens.'
+WHERE id = '33333333-0000-0000-0000-000000012668';
+
+UPDATE venue_bookings SET
+    cancelled_at = '2026-10-18 09:00+08', release_cause = 'EVENT_CANCELLED',
+    released_by_id = '11111111-0000-0000-0000-000000000002'
+WHERE id = '44444444-0000-0000-0000-000000012629';
+
+-- ---------------------------------------------------------------------
+-- c8: Sam's approving review of every other confirmed event bar the unbooked dinner (3333..13),
+-- which confirming needs (21.2 AC7):
+-- each made after its venue was approved and before the event was confirmed, its facts the
+-- event as it stands, so none is out of date (AC14). The town hall's was before it took place.
+-- Each opens from the Safety Officer's Accepted tab (21.1).
+-- ---------------------------------------------------------------------
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
+    -- New Year Town Hall
+    ('ffffffff-0000-0000-0008-000000000014', '33333333-0000-0000-0000-000000000014', '11111111-0000-0000-0000-000000000009', '2026-06-25 10:00+08',
+     'APPROVED',
+     '{"description": "Company-wide briefing on the year ahead.",
+       "expected_attendance": 300,
+       "starts_at": "2026-08-01T01:00:00+00:00", "ends_at": "2026-08-01T03:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "people_to_hold": 300, "layout": "THEATRE", "layout_name": "Theatre"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Harbourfront Jazz Evening
+    ('ffffffff-0000-0000-0008-000000000039', '33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000009', '2026-10-02 10:00+08',
+     'APPROVED',
+     '{"description": "Live jazz on the waterfront, with food stalls in the foyer.",
+       "expected_attendance": 120,
+       "starts_at": "2028-10-07T11:00:00+00:00", "ends_at": "2028-10-07T14:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000001", "name": "Grand Hall", "capacity": 400, "people_to_hold": 120, "layout": "STANDING", "layout_name": "Standing / reception"},
+                   {"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 120, "layout": "EXHIBITION", "layout_name": "Exhibition"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Design Thinking Masterclass
+    ('ffffffff-0000-0000-0008-000000000040', '33333333-0000-0000-0000-000000000040', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "A hands-on day of design thinking exercises.",
+       "expected_attendance": 60,
+       "starts_at": "2028-10-14T01:00:00+00:00", "ends_at": "2028-10-14T09:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 60, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Startup Founders Fireside
+    ('ffffffff-0000-0000-0008-000000000041', '33333333-0000-0000-0000-000000000041', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Three founders on their first five years.",
+       "expected_attendance": 80,
+       "starts_at": "2028-10-21T10:30:00+00:00", "ends_at": "2028-10-21T12:30:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 80, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Career Mentoring Slot
+    ('ffffffff-0000-0000-0008-000000000042', '33333333-0000-0000-0000-000000000042', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "One hour with a senior mentor.",
+       "expected_attendance": 1,
+       "starts_at": "2028-10-28T02:00:00+00:00", "ends_at": "2028-10-28T03:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 1, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Portfolio Review Slot
+    ('ffffffff-0000-0000-0008-000000000043', '33333333-0000-0000-0000-000000000043', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "One portfolio, reviewed by a design lead.",
+       "expected_attendance": 1,
+       "starts_at": "2028-11-04T02:00:00+00:00", "ends_at": "2028-11-04T03:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 1, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Autumn Wine Appreciation
+    ('ffffffff-0000-0000-0008-000000000044', '33333333-0000-0000-0000-000000000044', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Six wines from three regions, with a sommelier.",
+       "expected_attendance": 40,
+       "starts_at": "2028-11-11T10:00:00+00:00", "ends_at": "2028-11-11T13:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 40, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Lunar New Year Market
+    ('ffffffff-0000-0000-0008-000000000045', '33333333-0000-0000-0000-000000000045', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Festive stalls, lion dance and calligraphy.",
+       "expected_attendance": 250,
+       "starts_at": "2028-01-26T02:00:00+00:00", "ends_at": "2028-01-26T10:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 250, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Riverside Poetry Night
+    ('ffffffff-0000-0000-0008-000000000070', '33333333-0000-0000-0000-000000000070', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Open-mic poetry by the river.",
+       "expected_attendance": 1,
+       "starts_at": "2027-03-06T11:00:00+00:00", "ends_at": "2027-03-06T13:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 1, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Urban Sketching Walk
+    ('ffffffff-0000-0000-0008-000000000071', '33333333-0000-0000-0000-000000000071', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Sketch the shophouses of Joo Chiat with a local artist.",
+       "expected_attendance": 30,
+       "starts_at": "2027-03-13T01:00:00+00:00", "ends_at": "2027-03-13T04:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Board Games Social
+    ('ffffffff-0000-0000-0008-000000000072', '33333333-0000-0000-0000-000000000072', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "An evening of strategy and party games.",
+       "expected_attendance": 30,
+       "starts_at": "2027-03-20T11:00:00+00:00", "ends_at": "2027-03-20T14:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Sunset Yoga by the Bay
+    ('ffffffff-0000-0000-0008-000000000073', '33333333-0000-0000-0000-000000000073', '11111111-0000-0000-0000-000000000009', '2026-10-02 10:00+08',
+     'APPROVED',
+     '{"description": "An hour of gentle yoga as the sun goes down.",
+       "expected_attendance": 40,
+       "starts_at": "2027-03-27T10:00:00+00:00", "ends_at": "2027-03-27T11:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 40, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Heritage Trail Tour
+    ('ffffffff-0000-0000-0008-000000000074', '33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "A guided walk through Kampong Glam.",
+       "expected_attendance": 40,
+       "starts_at": "2027-04-03T01:00:00+00:00", "ends_at": "2027-04-03T04:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 40, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Autumn Book Swap
+    ('ffffffff-0000-0000-0008-000000000076', '33333333-0000-0000-0000-000000000076', '11111111-0000-0000-0000-000000000009', '2026-09-05 10:00+08',
+     'APPROVED',
+     '{"description": "Bring a book, take a book.",
+       "expected_attendance": 60,
+       "starts_at": "2026-10-03T02:00:00+00:00", "ends_at": "2026-10-03T05:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 60, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Lantern Painting Workshop
+    ('ffffffff-0000-0000-0008-000000000077', '33333333-0000-0000-0000-000000000077', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Paint a paper lantern to take home.",
+       "expected_attendance": 20,
+       "starts_at": "2027-04-17T06:00:00+00:00", "ends_at": "2027-04-17T08:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 20, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Riverside Pottery Taster
+    ('ffffffff-0000-0000-0008-000000018404', '33333333-0000-0000-0000-000000018404', '11111111-0000-0000-0000-000000000009', '2026-10-02 10:00+08',
+     'APPROVED',
+     '{"description": "Try the wheel with a resident potter.",
+       "expected_attendance": 30,
+       "starts_at": "2028-12-02T02:00:00+00:00", "ends_at": "2028-12-02T04:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 30, "layout": "CLASSROOM", "layout_name": "Classroom"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Evening Watercolour Class
+    ('ffffffff-0000-0000-0008-000000018405', '33333333-0000-0000-0000-000000018405', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Paint the skyline in watercolour.",
+       "expected_attendance": 30,
+       "starts_at": "2028-12-09T10:00:00+00:00", "ends_at": "2028-12-09T12:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Community Book Club
+    ('ffffffff-0000-0000-0008-000000018406', '33333333-0000-0000-0000-000000018406', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "This month: a novel set in old Singapore.",
+       "expected_attendance": 30,
+       "starts_at": "2028-12-16T11:00:00+00:00", "ends_at": "2028-12-16T13:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Neighbourhood Charity Quiz
+    ('ffffffff-0000-0000-0008-000000018407', '33333333-0000-0000-0000-000000018407', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Teams of four, all proceeds to the food bank.",
+       "expected_attendance": 60,
+       "starts_at": "2028-12-23T11:00:00+00:00", "ends_at": "2028-12-23T14:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 60, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Food Tasting Walk
+    ('ffffffff-0000-0000-0008-000000018408', '33333333-0000-0000-0000-000000018408', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Six hawker stalls, one afternoon.",
+       "expected_attendance": 20,
+       "starts_at": "2028-12-30T06:00:00+00:00", "ends_at": "2028-12-30T09:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 20, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Batik Printing Workshop
+    ('ffffffff-0000-0000-0008-000000018503', '33333333-0000-0000-0000-000000018503', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Wax, dye and a cotton square to take home.",
+       "expected_attendance": 30,
+       "starts_at": "2029-01-06T02:00:00+00:00", "ends_at": "2029-01-06T05:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}'),
+    -- Kite Flying Afternoon
+    ('ffffffff-0000-0000-0008-000000018504', '33333333-0000-0000-0000-000000018504', '11111111-0000-0000-0000-000000000009', '2026-09-24 10:00+08',
+     'APPROVED',
+     '{"description": "Bring a kite, or make one on the day.",
+       "expected_attendance": 30,
+       "starts_at": "2029-01-13T07:00:00+00:00", "ends_at": "2029-01-13T10:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000004", "name": "Exhibition Foyer", "capacity": 250, "people_to_hold": 30, "layout": "STANDING", "layout_name": "Standing / reception"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+-- c8: when each event above entered the safety check, sent by its coordinator once its venue was
+-- approved, which orders the Safety Officer's tabs (21.1 AC2).
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0008-000000000014', '33333333-0000-0000-0000-000000000014', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-06-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000039', '33333333-0000-0000-0000-000000000039', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000040', '33333333-0000-0000-0000-000000000040', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000041', '33333333-0000-0000-0000-000000000041', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000042', '33333333-0000-0000-0000-000000000042', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000043', '33333333-0000-0000-0000-000000000043', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000044', '33333333-0000-0000-0000-000000000044', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000045', '33333333-0000-0000-0000-000000000045', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000070', '33333333-0000-0000-0000-000000000070', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000071', '33333333-0000-0000-0000-000000000071', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000072', '33333333-0000-0000-0000-000000000072', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000073', '33333333-0000-0000-0000-000000000073', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000074', '33333333-0000-0000-0000-000000000074', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000076', '33333333-0000-0000-0000-000000000076', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-05 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000000077', '33333333-0000-0000-0000-000000000077', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018404', '33333333-0000-0000-0000-000000018404', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018405', '33333333-0000-0000-0000-000000018405', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018406', '33333333-0000-0000-0000-000000018406', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018407', '33333333-0000-0000-0000-000000018407', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018408', '33333333-0000-0000-0000-000000018408', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018503', '33333333-0000-0000-0000-000000018503', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL),
+    ('99999999-0000-0000-0008-000000018504', '33333333-0000-0000-0000-000000018504', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000004', '2026-09-24 09:00+08', NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, from_status = EXCLUDED.from_status, to_status = EXCLUDED.to_status,
+    changed_by_id = EXCLUDED.changed_by_id, changed_at = EXCLUDED.changed_at, reason = EXCLUDED.reason;
 
 -- ---------------------------------------------------------------------
 -- Story 21.3: tests/e2e/safety-release.spec.ts. The venue safety walkthrough (3333..021301) is

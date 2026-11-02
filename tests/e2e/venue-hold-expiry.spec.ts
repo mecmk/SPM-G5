@@ -181,6 +181,8 @@ test('12.7 AC1: an approved booking’s queue card shows when its hold expires',
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
   await page.getByRole('tab', { name: /^Approved/ }).click()
+  // The Approved tab runs to several pages of seeded bookings, so the card is searched for.
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(WORKSHOP.name)
 
   const card = page.getByRole('listitem').filter({ hasText: WORKSHOP.name })
   await expect(card.getByText('Hold expires', { exact: true })).toBeVisible()
