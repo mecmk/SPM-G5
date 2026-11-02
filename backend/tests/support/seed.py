@@ -558,7 +558,7 @@ class ChangeRequests:
     coordinator's queue holds the pending ones first, then the record of the rest."""
 
     # Pending. Chloe: Events.CUSTOMER_FORUM 150 to 180 people; Events.APPROVED_3 (Product Roadmap
-    # Townhall) 300 to 260; Events.APPROVED_4 (Founders Day) an hour later. Carl:
+    # Townhall) 300 to 350; Events.APPROVED_4 (Founders Day) an hour later. Carl:
     # Events.SALES_KICKOFF a day later; Events.PARTNER_GALA 180 to 220.
     CUSTOMER_FORUM_ATTENDANCE = _cr(23)
     ROADMAP_TOWNHALL_ATTENDANCE = _cr(101)
@@ -574,7 +574,7 @@ class ChangeRequests:
     ROADMAP_TOWNHALL_SCHEDULE = _cr(104)
     NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
     DEMO_DAY_ATTENDANCE = _cr(105)
-    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 400.
+    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 450.
     # Carl: Events.APPROVED_7 (Alumni Homecoming) 100 to 250; Events.APPROVED_5 to an evening start.
     CHARITY_GALA_ATTENDANCE = _cr(16)
     HOMECOMING_ATTENDANCE = _cr(106)

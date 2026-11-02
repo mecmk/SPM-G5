@@ -2823,8 +2823,8 @@ INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, cu
      'expected_attendance', '180', '200', 'Two more partner teams asked to join the fireside chat.', 'APPROVED',
      '11111111-0000-0000-0000-000000000003', '2026-10-02 11:20+08', NULL, '2026-10-01 14:05+08', '2026-10-02 11:20+08'),
     ('19191919-0000-0000-0000-000000000016', '33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000001',
-     'expected_attendance', '220', '400', 'We would like to open the gala to the whole company.', 'REJECTED',
-     '11111111-0000-0000-0000-000000000003', '2026-10-06 10:00+08', 'No banquet venue we can book seats 400.',
+     'expected_attendance', '220', '450', 'We would like to open the gala to the whole company.', 'REJECTED',
+     '11111111-0000-0000-0000-000000000003', '2026-10-06 10:00+08', 'The largest venue we can book, the Grand Hall, seats 400.',
      '2026-10-05 16:40+08', '2026-10-06 10:00+08'),
     ('19191919-0000-0000-0000-000000000022', '33333333-0000-0000-0000-000000000022', '11111111-0000-0000-0000-000000000002',
      'expected_attendance', '45', '60', 'A few clients asked to bring colleagues.', 'WITHDRAWN',
@@ -2834,7 +2834,7 @@ INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, cu
      '11111111-0000-0000-0000-000000000004', '2026-10-19 17:30+08', NULL, '2026-10-17 11:00+08', '2026-10-19 17:30+08'),
     -- Pending, Chloe: the Product Roadmap Townhall (3333..09) and the Founders Day Fireside Chat (..10)
     ('19191919-0000-0000-0000-000000000101', '33333333-0000-0000-0000-000000000009', '11111111-0000-0000-0000-000000000002',
-     'expected_attendance', '300', '260', 'Two regional offices will join by livestream instead.', 'PENDING',
+     'expected_attendance', '300', '350', 'More head office staff asked to attend in person.', 'PENDING',
      NULL, NULL, NULL, '2026-10-22 09:15+08', '2026-10-22 09:15+08'),
     ('19191919-0000-0000-0000-000000000102', '33333333-0000-0000-0000-000000000010', '11111111-0000-0000-0000-000000000001',
      'schedule', '{"ends_at":"2027-06-01T09:00:00+00:00","starts_at":"2027-06-01T07:00:00+00:00"}',
@@ -2857,19 +2857,19 @@ INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, cu
     -- Rejected by Carl, each with his reason: the Alumni Homecoming Weekend and the Investor Demo Day
     ('19191919-0000-0000-0000-000000000106', '33333333-0000-0000-0000-000000000017', '11111111-0000-0000-0000-000000000002',
      'expected_attendance', '100', '250', 'The alumni association wants to open it to all graduates.', 'REJECTED',
-     '11111111-0000-0000-0000-000000000004', '2026-10-23 14:30+08', 'The campus venues we hold seat far fewer than that.',
+     '11111111-0000-0000-0000-000000000004', '2026-10-23 14:30+08', 'The venue booking is for 100 guests. Change the venue requirements first.',
      '2026-10-22 13:05+08', '2026-10-23 14:30+08'),
     ('19191919-0000-0000-0000-000000000107', '33333333-0000-0000-0000-000000000011', '11111111-0000-0000-0000-000000000002',
      'schedule', '{"ends_at":"2027-07-01T04:00:00+00:00","starts_at":"2027-07-01T01:00:00+00:00"}',
      '{"ends_at":"2027-07-01T13:00:00+00:00","starts_at":"2027-07-01T10:00:00+00:00"}',
      'Investors prefer an evening session.', 'REJECTED',
-     '11111111-0000-0000-0000-000000000004', '2026-10-26 10:15+08', 'The venue is booked that evening, so the time stays.',
+     '11111111-0000-0000-0000-000000000004', '2026-10-26 10:15+08', 'The investors have already confirmed the morning, so the time stays.',
      '2026-10-25 18:00+08', '2026-10-26 10:15+08'),
     -- Withdrawn by Olivia: the Winter Charity Gala's date, a week later
     ('19191919-0000-0000-0000-000000000108', '33333333-0000-0000-0000-000000000016', '11111111-0000-0000-0000-000000000001',
      'schedule', '{"ends_at":"2027-08-01T14:00:00+00:00","starts_at":"2027-08-01T10:00:00+00:00"}',
      '{"ends_at":"2027-08-08T14:00:00+00:00","starts_at":"2027-08-08T10:00:00+00:00"}',
-     'Hoping for a weekend with fewer clashes.', 'WITHDRAWN',
+     'A partner asked for the second Sunday of August instead.', 'WITHDRAWN',
      NULL, NULL, NULL, '2026-10-21 12:00+08', '2026-10-22 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, requested_by_id = EXCLUDED.requested_by_id, field_name = EXCLUDED.field_name,

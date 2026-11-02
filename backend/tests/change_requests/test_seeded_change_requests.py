@@ -71,9 +71,15 @@ _CHARITY_GALA_NEXT_WEEK = {
 }
 
 _REJECTION_REASONS = {
-    ChangeRequests.CHARITY_GALA_ATTENDANCE: "No banquet venue we can book seats 400.",
-    ChangeRequests.HOMECOMING_ATTENDANCE: "The campus venues we hold seat far fewer than that.",
-    ChangeRequests.DEMO_DAY_SCHEDULE: "The venue is booked that evening, so the time stays.",
+    ChangeRequests.CHARITY_GALA_ATTENDANCE: (
+        "The largest venue we can book, the Grand Hall, seats 400."
+    ),
+    ChangeRequests.HOMECOMING_ATTENDANCE: (
+        "The venue booking is for 100 guests. Change the venue requirements first."
+    ),
+    ChangeRequests.DEMO_DAY_SCHEDULE: (
+        "The investors have already confirmed the morning, so the time stays."
+    ),
 }
 
 
@@ -119,7 +125,7 @@ SEEDED = (
         Users.ORGANISER_2,
         Users.COORDINATOR,
         300,
-        260,
+        350,
         "PENDING",
     ),
     _schedule(
@@ -201,7 +207,7 @@ SEEDED = (
         Users.ORGANISER,
         Users.COORDINATOR,
         220,
-        400,
+        450,
         "REJECTED",
     ),
     _attendance(
