@@ -119,8 +119,8 @@ export const EVENTS = {
   // requirement (Classroom with a projector, 30) and no bookings. The 12.1 spec's real send with
   // a setup that starts before Seminar Room 2.1 opens.
   supplierInduction: '33333333-0000-0000-0000-000000000046',
-  // Story 9.5, organiser: organiser, coordinator, June 2029 (the 0095NN block). Seminar Room 2.1 is
-  // closed on the 12th by venue-closure-ends-bookings.spec.ts over the first two; the third is a
+  // Story 9.5, organiser: organiser, coordinator, October 2028 (the 0095NN block). Seminar Room 2.1 is
+  // closed on the 24th by venue-closure-ends-bookings.spec.ts over the first two; the third is a
   // booking already replaced, only read.
   closureConfirmed: '33333333-0000-0000-0000-000000009501', // Confirmed; its approved booking 09:00-12:00
   closurePlanning: '33333333-0000-0000-0000-000000009504', // Planning; its pending request 14:00-17:00
@@ -169,7 +169,7 @@ export const EVENTS = {
 export const VENUES = {
   // No booking: the spec adds, edits and ends closures here.
   gardenAtrium: 'Garden Atrium',
-  // Story 9.5: closed on 12 June 2029 over two bookings by venue-closure-ends-bookings.spec.ts.
+  // Story 9.5: closed on 24 October 2028 over two bookings by venue-closure-ends-bookings.spec.ts.
   seminarRoom: 'Seminar Room 2.1',
   // Story 9.5: the venue of the replaced booking's original.
   grandHall: 'Grand Hall',

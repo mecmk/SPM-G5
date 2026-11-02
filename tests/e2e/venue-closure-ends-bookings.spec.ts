@@ -18,7 +18,7 @@
  * migration, permissions, races) are backend cases: backend/tests/venues/test_closure_ends_bookings.py.
  *
  * Seed (backend/db/seed/020_sample_data.sql, the story's 0095NN block), dedicated to this spec:
- * Seminar Room 2.1 on 12 June 2029 holds the Alumni Networking Brunch's approved booking
+ * Seminar Room 2.1 on 24 October 2028 holds the Alumni Networking Brunch's approved booking
  * (09:00-12:00, a Confirmed event) and the Partner Workshop Afternoon's pending request
  * (14:00-17:00, a Planning event). The Product Forum's original booking at Grand Hall was
  * released when its replacement at Seminar Room 2.1 was approved. The tests run in order on that
@@ -31,7 +31,7 @@ import { ACCOUNTS, EVENTS, VENUES, signIn, uniqueName, venueCard } from './suppo
 test.describe.configure({ mode: 'serial', retries: 0 })
 test.use({ timezoneId: 'Asia/Singapore' })
 
-const PINNED_NOW = new Date('2029-06-01T10:00:00+08:00')
+const PINNED_NOW = new Date('2028-10-10T10:00:00+08:00')
 const PHONE = { width: 390, height: 844 }
 const DESKTOP = { width: 1280, height: 720 }
 
@@ -73,12 +73,12 @@ async function openVenue(page: Page) {
   await expect(page.getByText('Loading availability…')).toHaveCount(0)
 }
 
-/** Open the add form and fill a closure over the whole of 12 June, then wait for its list. */
+/** Open the add form and fill a closure over the whole of 24 October, then wait for its list. */
 async function fillClosure(page: Page) {
   const card = blockOffCard(page)
   await card.getByRole('button', { name: 'Block off time' }).click()
-  await card.getByLabel('Starts').fill('2029-06-12T08:00')
-  await card.getByLabel('Ends').fill('2029-06-12T18:00')
+  await card.getByLabel('Starts').fill('2028-10-24T08:00')
+  await card.getByLabel('Ends').fill('2028-10-24T18:00')
   await card.getByLabel('Reason').selectOption({ label: 'Maintenance' })
   await card.getByLabel('Description').fill(DESCRIPTION)
   await expect(blockOff(page).getByRole('region', { name: 'Affected bookings' })).toContainText(
@@ -93,6 +93,16 @@ async function openConfirmation(page: Page) {
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText(DIALOG_TEXT)
   return dialog
+}
+
+/** The closed day's list, opened if it is not open already (the calendar may keep it open). */
+async function openDay(page: Page) {
+  const list = page.getByRole('region', { name: /24 Oct 2028/ })
+  if (!(await list.isVisible())) {
+    await page.getByRole('button', { name: /^24 October 2028/ }).click()
+  }
+  await expect(list).toBeVisible()
+  return list
 }
 
 function section(page: Page, name: string) {
@@ -124,8 +134,7 @@ test('9.5 AC1: the confirmation lists what the closure ends, Go back saves nothi
   await expect(pending).toContainText('Pending')
   await dialog.getByRole('button', { name: 'Go back' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await page.getByRole('button', { name: /^12 June 2029/ }).click()
-  await expect(page.getByRole('region', { name: /12 Jun 2029/ })).not.toContainText('Unavailable')
+  await expect(await openDay(page)).not.toContainText('Unavailable')
 
   // At the desktop's: confirming saves, and the calendar shows the closure.
   await page.setViewportSize(DESKTOP)
@@ -137,10 +146,7 @@ test('9.5 AC1: the confirmation lists what the closure ends, Go back saves nothi
   )
   await dialog.getByRole('button', { name: 'Save and end these bookings' }).click()
   expect((await landed).ok()).toBe(true)
-  await page.getByRole('button', { name: /^12 June 2029/ }).click()
-  await expect(page.getByRole('region', { name: /12 Jun 2029/ })).toContainText(
-    'Unavailable – Maintenance',
-  )
+  await expect(await openDay(page)).toContainText('Unavailable – Maintenance')
 })
 
 test("9.5 AC2: the Cancelled tab, the Rejected tab and the coordinator's event page show how each booking ended", async ({
