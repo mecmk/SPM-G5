@@ -2,8 +2,8 @@
  * Story 8.1: browse the venue catalogue - with 10.1 merged in for Sprint 2 (built as s8.1): the
  * filter panel, the search on the server, and the filters kept in the page address.
  *
- * AC1  All venues in service are listed with name, location and capacity; selecting one opens
- *      its full record.
+ * AC1  All venues in service are listed with name, location and capacity; selecting one, or
+ *      clicking anywhere on its card, opens its full record.
  * AC2  Withdrawn venues are not listed.
  * AC3  One filter panel: capacity, start and end, name or location, facilities, accessibility
  *      features and room layout. Only venues matching every criterion and free for the period
@@ -94,6 +94,26 @@ test('8.1 AC1: selecting a venue opens its full record', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Grand Hall' })).toBeVisible()
   await expect(page.getByText('Tower A, Level 1')).toBeVisible()
   await expect(page.getByText('Quick facts')).toBeVisible()
+})
+
+test('8.1 AC1: clicking anywhere on a venue card opens its full record', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto('/venues')
+
+  await venueCard(page, 'Grand Hall').getByText('Tower A, Level 1').click()
+
+  await expect(page).toHaveURL(/\/venues\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: 'Grand Hall' })).toBeVisible()
+})
+
+test('8.1 AC1: a control on a venue card keeps its own click', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues')
+
+  await venueCard(page, 'Grand Hall').getByRole('button', { name: 'Delete', exact: true }).click()
+
+  await expect(page.getByRole('dialog', { name: 'Delete Grand Hall?' })).toBeVisible()
+  await expect(page).toHaveURL(/\/venues$/)
 })
 
 test('8.1 AC3: the catalogue can be filtered by a capacity range', async ({ page }) => {

@@ -16,14 +16,24 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
-import { CHANGE_REQUEST_QUEUE_PATH, eventPath } from '../routes'
-import { formatDateTime, formatSchedule, shortReference } from '../shared/format'
+import {
+  CHANGE_REQUEST_QUEUE_PATH,
+  CHANGE_REQUESTS_HEADING,
+  CHANGE_REQUESTS_TITLE,
+  eventPath,
+} from '../routes'
+import {
+  formatDateTime,
+  formatSchedule,
+  REQUESTED_AT_LABEL,
+  shortReference,
+} from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
-import { changeTitle, OUT_OF_DATE_NOTE, STATUS_LABELS } from './changeRequestValues'
+import { changeTitle, OUT_OF_DATE_NOTE, STATUS_LABELS, VIEW_EVENT } from './changeRequestValues'
 
 type QueueTabKey = 'ALL' | ChangeRequestStatus
 
@@ -41,7 +51,7 @@ const QUEUE_TABS: { key: QueueTabKey; label: string }[] = [
 /** An event opened from a card here leads back to the queue, not to Home (story 7.1's back link). */
 const BACK_TO_QUEUE: EventCardBackState = {
   from: CHANGE_REQUEST_QUEUE_PATH,
-  fromLabel: 'Change requests',
+  fromLabel: CHANGE_REQUESTS_TITLE,
 }
 
 /** What each tab says when it has nothing in it. */
@@ -147,7 +157,7 @@ export function ChangeRequestQueuePage() {
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Change Requests"
+        title={CHANGE_REQUESTS_HEADING}
         subtitle="Changes organisers have asked for on your events: those waiting for your decision, and those already decided."
       />
 
@@ -211,7 +221,7 @@ export function ChangeRequestQueuePage() {
                     <p className="fact-value">{entry.requested_by_name}</p>
                   </div>
                   <div className="subtle-block">
-                    <p className="fact-label">Requested at</p>
+                    <p className="fact-label">{REQUESTED_AT_LABEL}</p>
                     <p className="fact-value">{formatDateTime(entry.created_at)}</p>
                   </div>
                 </div>
@@ -264,7 +274,7 @@ export function ChangeRequestQueuePage() {
                     </div>
                   )}
                   <Link to={eventPath(entry.event_id)} state={BACK_TO_QUEUE} className="link">
-                    View event →
+                    {VIEW_EVENT}
                   </Link>
                 </div>
               </li>

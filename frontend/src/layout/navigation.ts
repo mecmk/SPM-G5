@@ -3,6 +3,7 @@ import type { IconName } from '../components/Icon'
 import {
   BOOKING_REQUESTS_PATH,
   CHANGE_REQUEST_QUEUE_PATH,
+  CHANGE_REQUESTS_TITLE,
   EQUIPMENT_CATALOGUE_PATH,
   EQUIPMENT_CATALOGUE_TITLE,
   EQUIPMENT_REQUESTS_PATH,
@@ -14,6 +15,7 @@ import {
   ROOM_LAYOUTS_PATH,
   SAFETY_CHECKS_PATH,
   UPCOMING_EVENTS_PATH,
+  MY_CHANGE_REQUESTS_PATH,
   MY_REGISTRATIONS_PATH,
   PROFILE_PATH,
   VENUE_CATALOGUE_PATH,
@@ -80,11 +82,20 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.EVENTS_ASSIGN,
         story: '5.5',
       },
-      // c9 (1.2 AC5): this is the coordinator's queue. An organiser raises and follows change
-      // requests on the event's page (19.1), so they have no section for them.
+      // Story 19.4: the organiser's change requests across all their events, added back after
+      // c9 removed the placeholder (decided 2 Nov 2026). Raising and withdrawing one stays on the
+      // event's page (19.1).
+      {
+        to: MY_CHANGE_REQUESTS_PATH,
+        label: CHANGE_REQUESTS_TITLE,
+        description: 'Every change you have asked for on your events, and where each one stands.',
+        icon: 'swap',
+        permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_CREATE,
+        story: '19.4',
+      },
       {
         to: CHANGE_REQUEST_QUEUE_PATH,
-        label: 'Change requests',
+        label: CHANGE_REQUESTS_TITLE,
         description: 'Changes organisers have asked for on your events, waiting for your decision.',
         icon: 'swap',
         permission: PERMISSIONS.EVENT_CHANGE_REQUESTS_DECIDE,

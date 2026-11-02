@@ -3147,7 +3147,7 @@ def check_proposed_venue_requirements(
 def check_proposed_equipment(db: Session, event: Event, items: list[EventEquipmentIn]) -> None:
     """Story 19.1 AC4: proposed equipment names active types and only this event's own lines
     (2.1 AC6/AC7). Availability is not judged here - stock can change before a coordinator
-    decides, so it belongs to the impact view and the decision (stories 19.3, 19.4)."""
+    decides, so it belongs to the impact view and the decision (stories 19.3, 19.2)."""
     _known(
         db,
         EquipmentType,

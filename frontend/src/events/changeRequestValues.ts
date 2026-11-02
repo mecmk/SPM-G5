@@ -57,6 +57,12 @@ const REQUIREMENT_PART_ICONS: Record<string, IconName> = {
 // How a side reads when the thing is not there on it.
 const NOT_THERE_NOW = 'Not requested'
 export const NOT_THERE_REQUESTED = 'Removed'
+
+/** The label of the organiser's own reason, on their event (19.1) and their list (19.4). */
+export const YOUR_REASON = 'Your reason'
+
+/** The link from a change request card to its event (19.2, 19.4). */
+export const VIEW_EVENT = 'View event →'
 const NONE = 'None'
 
 /** The canonical value shapes the backend stores (app/change_requests/service.py). */

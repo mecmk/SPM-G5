@@ -232,6 +232,13 @@ export function safetyCheckPath(eventId: string): string {
 // Story 19.2: the coordinator's queue of change requests waiting for a decision.
 export const CHANGE_REQUEST_QUEUE_PATH = '/change-requests/review'
 
+// Story 19.4: the organiser's own change requests, across all their events.
+export const MY_CHANGE_REQUESTS_PATH = '/change-requests'
+/** Both change request pages' sidebar entry and the back link to them from an event (19.2, 19.4). */
+export const CHANGE_REQUESTS_TITLE = 'Change requests'
+/** Both change request pages' heading (19.2, 19.4). */
+export const CHANGE_REQUESTS_HEADING = 'Change Requests'
+
 // Story 18.1: the events an attendee can browse and register for.
 export const UPCOMING_EVENTS_PATH = '/browse'
 // Story 18.1 AC9 (fix f18.1.2): one event's page, where the attendee registers.
