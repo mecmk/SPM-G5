@@ -484,8 +484,8 @@
 }
 
 /* Story 19.2: a list of queue cards (change requests, since story 15.2.1 bookings and equipment,
-   and since c3.1 safety checks), without bullets or the list's indent, so each card lines up with
-   the page heading. */
+   and since c3.1 safety checks and room layouts), without bullets or the list's indent, so each
+   card lines up with the page heading. */
 .queue-list {
   list-style: none;
   margin: 0;

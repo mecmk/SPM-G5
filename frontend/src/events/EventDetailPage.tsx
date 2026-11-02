@@ -400,7 +400,13 @@ export function EventDetailPage() {
       </div>
     )
   }
-  if (!event) return <LoadingState label="Loading the event…" />
+  if (!event) {
+    return (
+      <div className="page page-wide">
+        <LoadingState label="Loading the event…" />
+      </div>
+    )
+  }
 
   function markImageFailed() {
     setHasImageFailed(true)
