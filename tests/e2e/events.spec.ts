@@ -155,7 +155,7 @@ test('7.1 AC8: a rejected or cancelled event has no Venue bookings section', asy
   await expect(page.getByText('Rejected', { exact: true }).first()).toBeVisible()
   await expect(organiserBookings(page)).toHaveCount(0)
 
-  // The heritage walk was cancelled with its booking still marked (story 12.6's seed).
+  // The heritage walk's marked booking was cancelled with it (story 12.6's seed).
   await page.goto(`/events/${EVENTS.heritageWalk}`)
   await expect(page.getByText('Cancelled', { exact: true }).first()).toBeVisible()
   await expect(organiserBookings(page)).toHaveCount(0)

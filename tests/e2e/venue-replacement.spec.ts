@@ -648,8 +648,9 @@ test('12.6 AC6: when the closure is removed the button goes and the pending repl
 // --- AC8 ----------------------------------------------------------------------------------------
 test('12.6 AC8: a cancelled event offers no Find a replacement venue', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
-  // The same coordinator is offered it on an event that is going ahead, so its absence below is the
-  // cancellation's doing.
+  // The same coordinator is offered it on an event that is going ahead. Cancelling this one closed
+  // its booking, so nothing is left to replace; the API's refusal of a stale mark on a cancelled
+  // event is proved in test_request_replacement.py.
   await openEvent(page, LANTERN)
   await expect(page.getByRole('link', { name: FIND_REPLACEMENT })).toBeVisible()
   await page.goto(`/events/${HERITAGE.id}`)
