@@ -7,6 +7,9 @@ export interface AuthContextValue {
   user: CurrentUser | null
   /** True until the first session lookup finishes, so a reload does not bounce to sign-in. */
   isLoading: boolean
+  /** Chore c18: true from a sign-out until the next sign-in, so the redirect to sign-in that
+   *  follows a sign-out does not remember the page, unlike a signed-out visitor's bounce. */
+  hasSignedOut: boolean
   /** Story 1.1 AC1: start a session and remember who signed in. */
   signIn: (email: string, password: string) => Promise<CurrentUser>
   /** Story 1.1 AC5: end the session on the server, then forget the user. */

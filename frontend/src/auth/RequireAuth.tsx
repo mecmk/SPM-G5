@@ -7,10 +7,14 @@ import type { Permission } from './permissions'
 
 /** Story 1.1 AC4: send signed-out visitors to sign-in, remembering where they were headed. */
 export function RequireAuth() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, hasSignedOut } = useAuth()
   const location = useLocation()
   if (isLoading) return <LoadingState label="Checking your session…" />
-  if (!user) return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />
+  if (!user) {
+    // Chore c18: after a sign-out the next sign-in, maybe by another role, starts at the main page.
+    const state = hasSignedOut ? undefined : { from: location.pathname }
+    return <Navigate to={LOGIN_PATH} replace state={state} />
+  }
   return <Outlet />
 }
 

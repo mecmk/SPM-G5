@@ -800,11 +800,10 @@ def test_editing_or_removing_the_closure_afterwards_leaves_the_record_as_it_was(
 
 
 @pytest.mark.story("9.5", ac=2)
-def test_the_booking_records_carry_the_closure_fields_and_the_organisers_do_not(
-    db, venue_staff_client, login_as
-):
+def test_the_booking_records_carry_the_closure_fields(db, venue_staff_client):
     """AC2 (D18): BookingOut, the queue entry and the event page's outcome carry the closure's
-    reason and description; the organiser's own list carries neither - f7.1.3 adds the reason."""
+    reason and description. The organiser's own list carries the reason alone (story 7.1 AC10,
+    tests/bookings/test_organiser_bookings.py)."""
     venue = make_venue(db)
     event = _event_for(db, EventStatus.PLANNING)
     booking = _pending_of(db, event, venue.id, _day(3), status="APPROVED")
@@ -823,10 +822,6 @@ def test_the_booking_records_carry_the_closure_fields_and_the_organisers_do_not(
             "SAFETY",
             "Scheduled servicing",
         )
-    organiser = login_as(Users.ORGANISER).get(f"/bookings/for-my-event/{event.id}")
-    assert organiser.status_code == 200, organiser.text
-    for shown in organiser.json():
-        assert "closure_reason" not in shown and "closure_description" not in shown
 
 
 @pytest.mark.story("9.5", ac=2)

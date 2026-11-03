@@ -411,10 +411,20 @@ export interface OrganiserBooking {
   /** AC7 (CL-184): the hold, so an open one does not read as confirmed. */
   hold_expires_at: string | null
   hold_completed_at: string | null
+  /** Fix f7.1.3 (AC10): why the safety review released it, or the coordinator cancelled it. Both
+   * are null for any other booking, and `release_reason` for a closure's too: a closure's
+   * booking carries `release_cause` `VENUE_UNAVAILABLE` and its reason is `closure_reason`. Who
+   * released it is not sent. */
+  release_cause: ReleaseCause | null
+  release_reason: string | null
+  /** Fix f7.1.3 (AC10): the reason of the venue closure that cancelled it; null for any other
+   * booking. The closure's description is not sent. */
+  closure_reason: UnavailabilityReason | null
 }
 
 /** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most
- * recent first. Another organiser's event answers 404 (AC2). */
+ * recent first. Another organiser's event answers 404 (AC2). Fix f7.1.3 (AC10): with them, the
+ * ones the safety review released, the coordinator cancelled or a venue closure cancelled. */
 export function listBookingsForOwnEvent(eventId: string): Promise<OrganiserBooking[]> {
   return api<OrganiserBooking[]>(`/bookings/for-my-event/${eventId}`)
 }
