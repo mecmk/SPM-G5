@@ -1800,8 +1800,11 @@ def _delete_venue_image_files(urls: Iterable[str]) -> None:
     """Remove the files behind ``urls``. An absent file is not an error, and neither is one that
     cannot be removed (locked on Windows, say): this runs after the change was committed, so
     failing here would report a change that worked as a failure. It is logged, and the file is
-    left behind."""
+    left behind. A url that is not one of ours (a seeded picture served by the frontend) has no file
+    here and is skipped."""
     for url in urls:
+        if not url.startswith(VENUE_IMAGE_URL_PREFIX):
+            continue
         path = venue_image_path(url.removeprefix(VENUE_IMAGE_URL_PREFIX))
         try:
             path.unlink(missing_ok=True)

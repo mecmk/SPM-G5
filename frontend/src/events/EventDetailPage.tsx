@@ -103,6 +103,7 @@ import {
   unnamedRequirementLabel,
   venueSearchFor,
 } from '../shared/venueRequest'
+import { BookingVenueThumb } from './BookingVenueThumb'
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
@@ -1153,9 +1154,7 @@ export function EventDetailPage() {
                   className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
                 >
                   <div className="booking-outcome-main">
-                    <div className="booking-outcome-thumb" aria-hidden="true">
-                      <Icon name="image" size={28} />
-                    </div>
+                    <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
 
                     <div className="booking-outcome-body">
                       <div className="booking-outcome-heading-row">

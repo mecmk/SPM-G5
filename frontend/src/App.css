@@ -368,6 +368,13 @@
   border-radius: var(--radius-sm);
   background: var(--surface-alt);
   color: var(--text-muted);
+  overflow: hidden;
+}
+
+.booking-outcome-thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .booking-outcome-body {

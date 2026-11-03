@@ -3437,3 +3437,19 @@ FROM (VALUES
     ('33333333-0000-0000-0000-000000018504', '/images/events/kites.jpg')  -- Kite Flying Afternoon
 ) AS pictures (id, url)
 WHERE events.id = pictures.id::uuid;
+
+-- Chore c19: a sample picture for every seeded venue that is in use, so the catalogue cards, a
+-- venue's banner and its record's pictures look as they would in use. Each is a file in
+-- frontend/public/images/venues, which the frontend serves at its address. Fixed ids and position
+-- 1, so re-running the seed puts each picture back. Old Annex Room is withdrawn and keeps none.
+INSERT INTO venue_images (id, venue_id, url, position, created_by_id) VALUES
+    ('22222222-1000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000001', '/images/venues/grand-hall.jpg',        1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000002', '/images/venues/seminar-room.jpg',      1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000003', '/images/venues/boardroom.jpg',         1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000004', '22222222-0000-0000-0000-000000000004', '/images/venues/exhibition-foyer.jpg',  1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000006', '/images/venues/garden-atrium.jpg',     1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000007', '22222222-0000-0000-0000-000000000007', '/images/venues/harbour-pavilion.jpg',  1, '11111111-0000-0000-0000-000000000005'),
+    ('22222222-1000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000008', '/images/venues/sunrise-studio.jpg',    1, '11111111-0000-0000-0000-000000000005')
+ON CONFLICT (id) DO UPDATE SET
+    venue_id = EXCLUDED.venue_id, url = EXCLUDED.url, position = EXCLUDED.position,
+    created_by_id = EXCLUDED.created_by_id;
