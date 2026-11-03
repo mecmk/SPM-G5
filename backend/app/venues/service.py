@@ -1490,11 +1490,11 @@ def _lock_covered_bookings(
     )
 
 
-def _confirmed(bookings: list[VenueBooking], data_ids: Iterable[uuid.UUID]) -> None:
+def _require_confirmed(bookings: list[VenueBooking], confirmed_ids: Iterable[uuid.UUID]) -> None:
     """Story 9.5 AC1 (D21): every booking the save would end was confirmed. One that left the list
     meanwhile - withdrawn, expired - is not in ``bookings`` and so cannot stop the save; one
     approved meanwhile is still on it."""
-    confirmed = set(data_ids)
+    confirmed = set(confirmed_ids)
     if any(booking.id not in confirmed for booking in bookings):
         raise ClosureNeedsConfirmation(_affected_out(bookings))
 
@@ -1518,7 +1518,7 @@ def add_unavailability(
     _check_period(data.starts_at, data.ends_at, description=data.description)
     _check_horizon(data.ends_at, now=now)
     covered = _lock_covered_bookings(db, venue_id, [(data.starts_at, data.ends_at)], now=now)
-    _confirmed(covered, data.confirmed_booking_ids)
+    _require_confirmed(covered, data.confirmed_booking_ids)
     period = VenueUnavailabilityPeriod(
         venue_id=venue_id,
         starts_at=data.starts_at,
@@ -1597,7 +1597,7 @@ def edit_unavailability(
     covered = _lock_covered_bookings(
         db, venue_id, _added_slices(period, starts_at, ends_at), now=now
     )
-    _confirmed(covered, data.confirmed_booking_ids)
+    _require_confirmed(covered, data.confirmed_booking_ids)
 
     before = _snapshot(period)
     period.starts_at, period.ends_at = starts_at, ends_at
