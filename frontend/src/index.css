@@ -1,37 +1,44 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
 /*
  * Design tokens. Every colour used anywhere in the app is one of these custom properties, defined
  * once for light and once for dark so a component adapts without knowing which theme it is in.
- * Component classes live in App.css and reference these by name only.
+ * Component classes live in App.css and reference these by name only; theme.css restyles the
+ * shared ones on top.
  *
- * Values come from the Figma prototype's Tailwind classes: the named hexes are its palette, the
- * status families are Tailwind's emerald / amber / red / blue / violet / teal / orange / gray
- * shades (50 = bg, 100 = soft, 200 = border, 600-700 = text, 800 = deep text for alerts).
+ * The "paper notebook" theme (UI refactor PR 1): a warm canvas, white hairline cards, one blue
+ * primary, and status hues Marigold (warning), Vermillion (danger), Sky (info), Saffron (orange),
+ * Coral and Mocha, each as a tint with its hue darkened for text. Every text colour here passes
+ * WCAG AA (4.5:1) on the surfaces it is used on, and --control-border passes 3:1 as a field's edge.
  */
 :root {
   /* surfaces */
-  --bg: #f7f6f3;
+  --bg: #f6f5f4;
   --surface: #ffffff;
-  --surface-alt: #ebe9e3;
-  --surface-inset: #fdfcfa;
-  --surface-hover: rgba(255, 255, 255, 0.5);
-  --border: #d9d6ce;
-  --hairline: #f0ede8;
+  --surface-alt: #efedeb;
+  --surface-inset: #fbfaf9;
+  --surface-hover: #f6f5f4;
+  --border: #e3e2e0;
+  --hairline: #efeeec;
+  /* the edge of a field a user types in, which needs 3:1 against the page (WCAG 1.4.11) */
+  --control-border: #8a8987;
 
-  /* text */
-  --text: #1a2332;
-  --text-h: #1a2332;
-  --text-muted: #6b7280;
-  --text-faint: #9ca3af;
+  /* text: near-black headings, warm grey body, and grey for what is secondary */
+  --text: #615d59;
+  --text-h: #151514;
+  --text-muted: #6c6c6b;
+  --text-faint: #6e6e6e;
 
-  /* primary (navy) and brand (green) actions */
-  --accent: #1a2332;
-  --accent-hover: #243044;
+  /* the one primary colour: --accent and --brand are the same blue, so every primary action
+     looks alike. --primary-text is that blue darkened enough to pass AA as text. */
+  --accent: #0075de;
+  --accent-hover: #005eb2;
   --accent-contrast: #ffffff;
-  --brand: #2d6b5a;
-  --brand-hover: #235347;
+  --brand: #0075de;
+  --brand-hover: #005eb2;
   --brand-contrast: #ffffff;
+  --primary-text: #0069c8;
+  --primary-ghost: #e6f3fe;
 
   /* semantic status tints */
   --success: #047857;
@@ -39,34 +46,58 @@
   --success-bg: #ecfdf5;
   --success-soft: #d1fae5;
   --success-border: #a7f3d0;
-  --warning: #b45309;
-  --warning-deep: #92400e;
-  --warning-bg: #fffbeb;
-  --warning-soft: #fef3c7;
-  --warning-border: #fde68a;
-  --danger: #dc2626;
-  --danger-strong: #b91c1c;
-  --danger-deep: #991b1b;
-  --danger-bg: #fef2f2;
-  --danger-soft: #fee2e2;
-  --danger-border: #fecaca;
-  --info: #1d4ed8;
-  --info-deep: #1e40af;
-  --info-bg: #eff6ff;
-  --info-soft: #dbeafe;
-  --info-border: #bfdbfe;
+  /* Marigold */
+  --warning: #735007;
+  --warning-deep: #5a3e05;
+  --warning-bg: #fff3db;
+  --warning-soft: #ffe6b3;
+  --warning-border: #f5c96b;
+  /* Vermillion */
+  --danger: #cc2812;
+  --danger-strong: #b62410;
+  --danger-deep: #661409;
+  --danger-bg: #fdeeeb;
+  --danger-soft: #fbdcd7;
+  --danger-border: #ef9a8d;
+  /* Sky */
+  --info: #2c4e6c;
+  --info-deep: #213a51;
+  --info-bg: #e7f3fd;
+  --info-soft: #cfe6fb;
+  --info-border: #99c8f2;
   --highlight: #6d28d9;
   --highlight-bg: #f5f3ff;
   --highlight-border: #ddd6fe;
   --teal: #0f766e;
   --teal-bg: #f0fdfa;
   --teal-border: #99f6e4;
-  --orange: #c2410c;
-  --orange-bg: #fff7ed;
-  --orange-border: #fed7aa;
-  --neutral: #4b5563;
-  --neutral-bg: #f3f4f6;
-  --neutral-border: #e5e7eb;
+  /* Saffron */
+  --orange: #684700;
+  --orange-bg: #fcf0d9;
+  --orange-border: #eac173;
+  /* Coral and Mocha: status pills only */
+  --coral: #6f2116;
+  --coral-bg: #fee4e0;
+  --coral-border: #f9a698;
+  --mocha: #503a2d;
+  --mocha-bg: #f3ece8;
+  --mocha-border: #d3bcad;
+  --neutral: #57534f;
+  --neutral-bg: #efedeb;
+  --neutral-border: #d6d3d0;
+
+  /* Status pills: the hue itself as the fill, with near-black text (white on the red), each
+     pair 5:1 or more. The same in both themes, as a printed label would be. */
+  --pill-ink: #111111;
+  --pill-ink-inverse: #ffffff;
+  --pill-marigold: #ffb110;
+  --pill-saffron: #e89d01;
+  --pill-coral: #f64932;
+  --pill-vermillion: #d42a13;
+  --pill-sky: #62aef0;
+  --pill-mocha: #b18164;
+  --pill-green: #3fbf7f;
+  --pill-neutral: #e3e2e0;
 
   /* the sign-in page's brand panel: dark in both themes (story 1.1) */
   --brand-panel: #1a2332;
@@ -90,9 +121,15 @@
   --viewer-text: #f5f4f0;
   --viewer-text-muted: rgba(245, 244, 240, 0.7);
 
-  /* shape and type. --radius-sm is 0 on purpose: the prototype's `rounded-sm` resolves to 0px. */
-  --radius: 4px;
-  --radius-sm: 0;
+  /* the sidebar's soft edge, the only shadow on a resting surface: content cards have none */
+  --shadow-nav: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+
+  /* shape, motion and type. Nothing rectangular is rounder than --radius-card. */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+  --transition: 200ms ease;
   --sidebar-width: 15.5rem;
   --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
@@ -110,56 +147,75 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1916;
-    --surface: #23221e;
-    --surface-alt: #2a2924;
-    --surface-inset: #1f1e1a;
-    --surface-hover: rgba(255, 255, 255, 0.06);
-    --border: #3b3933;
-    --hairline: #2e2c27;
+    --bg: #191918;
+    --surface: #222220;
+    --surface-alt: #2a2a28;
+    --surface-inset: #1e1e1c;
+    --surface-hover: #2a2a28;
+    --border: #353533;
+    --hairline: #2b2b29;
+    --control-border: #7d7c79;
 
-    --text: #e8e6e1;
-    --text-h: #f4f2ed;
-    --text-muted: #a3a099;
-    --text-faint: #77746d;
+    --text: #c9c5c0;
+    --text-h: #f2f1ef;
+    --text-muted: #a5a29d;
+    --text-faint: #9a9792;
 
-    --accent: #d5dce8;
-    --accent-hover: #e3e8f0;
-    --accent-contrast: #1a2332;
-    --brand: #7bbfa8;
-    --brand-hover: #93cdb9;
-    --brand-contrast: #0e2019;
+    --accent: #62aef0;
+    --accent-hover: #8cc4f4;
+    --accent-contrast: #0b1a29;
+    --brand: #62aef0;
+    --brand-hover: #8cc4f4;
+    --brand-contrast: #0b1a29;
+    --primary-text: #8cc4f4;
+    --primary-ghost: #12263a;
 
     --success: #6ee7b7;
     --success-deep: #a7f3d0;
     --success-bg: #0c2b22;
     --success-soft: #134e3a;
     --success-border: #146c4b;
-    --warning: #fcd34d;
-    --warning-deep: #fde68a;
+    --warning: #ffcd6b;
+    --warning-deep: #ffe2a8;
     --warning-bg: #33260a;
     --warning-soft: #4a3610;
     --warning-border: #8a5a0c;
-    --danger: #f87171;
-    --danger-strong: #fca5a5;
-    --danger-deep: #fecaca;
-    --danger-bg: #351313;
-    --danger-soft: #4a1d1d;
-    --danger-border: #8f2727;
-    --info: #93c5fd;
-    --info-deep: #bfdbfe;
-    --info-bg: #12203a;
-    --info-soft: #1b2f57;
-    --info-border: #274a8a;
+    --danger: #ff8a78;
+    --danger-strong: #ffab9e;
+    --danger-deep: #ffd0c8;
+    --danger-bg: #3a1510;
+    --danger-soft: #52201a;
+    --danger-border: #9a3324;
+    --info: #9ccbf5;
+    --info-deep: #cfe5fa;
+    --info-bg: #12263a;
+    --info-soft: #1a3756;
+    --info-border: #2f5f8f;
     --highlight: #c4b5fd;
     --highlight-bg: #221a3c;
     --highlight-border: #4f3a9a;
     --teal: #5eead4;
     --teal-bg: #0b2a27;
     --teal-border: #0f5f58;
-    --orange: #fdba74;
-    --orange-bg: #3a2210;
-    --orange-border: #8a4a12;
+    --orange: #f2c25c;
+    --orange-bg: #36270b;
+    --orange-border: #8a6512;
+    --coral: #ff9f8f;
+    --coral-bg: #3d1813;
+    --coral-border: #a1392a;
+    --mocha: #d9b9a4;
+    --mocha-bg: #2e231c;
+    --mocha-border: #6e5444;
+    --pill-ink: #111111;
+    --pill-ink-inverse: #ffffff;
+    --pill-marigold: #ffb110;
+    --pill-saffron: #e89d01;
+    --pill-coral: #f64932;
+    --pill-vermillion: #d42a13;
+    --pill-sky: #62aef0;
+    --pill-mocha: #b18164;
+    --pill-green: #3fbf7f;
+    --pill-neutral: #e3e2e0;
     --neutral: #a8a29e;
     --neutral-bg: #2a2924;
     --neutral-border: #3b3933;
@@ -172,6 +228,7 @@
     --hero-shade: rgba(0, 0, 0, 0.78);
     --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
     --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    --shadow-nav: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
 
     --picture-control: rgba(0, 0, 0, 0.62);
     --picture-control-hover: rgba(0, 0, 0, 0.85);

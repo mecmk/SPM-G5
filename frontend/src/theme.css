@@ -1,0 +1,410 @@
+/*
+ * The "paper notebook" theme (UI refactor PR 1): the shared pieces restyled on top of App.css.
+ * Loaded after App.css (main.tsx), so a rule here wins a tie with App.css's own. It changes how
+ * things look and nothing else: no behaviour, no wording.
+ *
+ * Colour comes only from the tokens in index.css, as in App.css (frontend/STYLE.md, Styling).
+ * The base text size stays 14px here; the page frame and type scale are the refactor's next PR.
+ *
+ * Type: Inter for everything a user reads or operates - labels, table headers, pills, nav - at
+ * 12px or more. DM Serif Display stays on page titles (h1) only, and DM Mono only on numbers
+ * that line up in columns (.mono).
+ */
+
+/* ---------- headings ---------- */
+
+h2,
+h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+}
+
+h3 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+/* ---------- sidebar and phone bar ---------- */
+
+.sidebar {
+  background: var(--surface);
+  border-right-color: var(--border);
+  box-shadow: var(--shadow-nav);
+}
+
+.sidebar-brand,
+.sidebar-footer {
+  border-color: var(--border);
+}
+
+.wordmark-tagline,
+.nav-group-label,
+.user-role {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.user-role {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Muted links that darken on hover; the current page is the blue ghost. */
+.sidebar-nav a {
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-weight: 500;
+  transition:
+    color var(--transition),
+    background-color var(--transition);
+}
+
+.sidebar-nav a:hover {
+  color: var(--text-h);
+  background: var(--surface-hover);
+}
+
+.sidebar-nav a.active {
+  color: var(--primary-text);
+  background: var(--primary-ghost);
+  box-shadow: none;
+}
+
+.mobile-bar {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-nav);
+}
+
+/* ---------- page furniture ---------- */
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* A status shown on its own in a column keeps its own width rather than stretching across. */
+.stack > .badge,
+.stat > .badge {
+  align-self: flex-start;
+}
+
+.back-link {
+  color: var(--text-muted);
+}
+
+/* ---------- cards and states: white, hairline, 12px corners, no shadow ---------- */
+
+.card {
+  padding: 1.5rem;
+  border-color: var(--border);
+  border-radius: var(--radius-card);
+}
+
+.card-tight {
+  padding: 1rem;
+}
+
+.empty,
+.tile,
+.stat,
+.stat-card,
+.item-card,
+.event-card {
+  border-radius: var(--radius-card);
+}
+
+/* Content cards rest flat: a hover darkens the edge instead of lifting the card. */
+.tile:hover,
+.event-card:hover {
+  box-shadow: none;
+  border-color: var(--control-border);
+}
+
+/* ---------- labels: Inter, 12px, as written rather than upper-cased ---------- */
+
+label,
+th,
+.fact-label,
+.item-card-capacity-label,
+.filter-section-title,
+.table-summary,
+.notification-unread-tag,
+.notification-age,
+.picture-tile-cover {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.filter-count,
+.notification-count,
+.notification-time {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+}
+
+/* ---------- fields: white, a visible edge, 8px corners, a clear blue focus ring ---------- */
+
+label input,
+label select,
+label textarea,
+.inline-fields input {
+  border-color: var(--control-border);
+  border-radius: var(--radius);
+  transition:
+    border-color var(--transition),
+    outline-color var(--transition);
+}
+
+label input:focus,
+label select:focus,
+label textarea:focus,
+.inline-fields input:focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- buttons: one solid primary; outlined, ghost and danger beside it ---------- */
+
+button,
+.button {
+  padding: 0.375rem 0.9375rem;
+  border-radius: var(--radius);
+  transition:
+    color var(--transition),
+    background-color var(--transition),
+    border-color var(--transition);
+}
+
+/* Outlined: a dark 1px edge and 4px corners, quieter than the one blue primary. */
+.button.secondary,
+button.secondary {
+  padding: 0.3125rem 0.625rem;
+  border-color: var(--text-h);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+}
+
+.button.secondary:hover,
+button.secondary:hover {
+  background: var(--surface-alt);
+  border-color: var(--text-h);
+}
+
+.button.ghost,
+button.ghost {
+  background: var(--primary-ghost);
+  border-color: transparent;
+  color: var(--primary-text);
+}
+
+/* Hover darkens the text and draws an edge; a darker fill would take the blue text below AA. */
+.button.ghost:hover,
+button.ghost:hover {
+  background: var(--primary-ghost);
+  border-color: var(--info-border);
+  color: var(--accent-hover);
+}
+
+.link,
+button.link,
+.empty a {
+  color: var(--primary-text);
+}
+
+/* At least 24px tall to tap (WCAG 2.2 AA), however small the link's text. */
+.link,
+button.link {
+  padding-block: 0.125rem;
+}
+
+.link:hover,
+button.link:hover {
+  color: var(--primary-text);
+}
+
+/* ---------- tables ---------- */
+
+th {
+  color: var(--text-muted);
+  background: var(--surface-inset);
+}
+
+/* ---------- status pills: the status's hue as a solid fill ---------- */
+
+.badge,
+.booking-status-pill {
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-color: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pill-ink);
+  background: var(--pill-neutral);
+}
+
+.badge-sm {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.booking-status-pill {
+  font-weight: 500;
+}
+
+/* Marigold: waiting on someone. */
+.badge-under_review,
+.badge-pending,
+.badge-requested,
+.badge-warning {
+  color: var(--pill-ink);
+  background: var(--pill-marigold);
+  border-color: transparent;
+}
+
+/* Saffron: one step from done. */
+.badge-awaiting_safety_check,
+.badge-partially_reserved {
+  color: var(--pill-ink);
+  background: var(--pill-saffron);
+  border-color: transparent;
+}
+
+/* Coral: waiting on the person reading. */
+.badge-clarification_requested,
+.badge-changes_requested {
+  color: var(--pill-ink);
+  background: var(--pill-coral);
+  border-color: transparent;
+}
+
+/* Vermillion: refused or stopped. White text: near-black would fall under 4.5:1 on red. */
+.badge-rejected,
+.badge-declined,
+.badge-cancelled,
+.badge-event_cancelled,
+.badge-unavailable,
+.badge-danger {
+  color: var(--pill-ink-inverse);
+  background: var(--pill-vermillion);
+  border-color: transparent;
+}
+
+/* Sky: under way. Registered stays apart from Open's green (fix f18.1.2). */
+.badge-planning,
+.badge-registered,
+.badge-info {
+  color: var(--pill-ink);
+  background: var(--pill-sky);
+  border-color: transparent;
+}
+
+/* Green: done and agreed. */
+.badge-active,
+.badge-approved,
+.badge-accepted,
+.badge-reserved,
+.badge-confirmed,
+.badge-success {
+  color: var(--pill-ink);
+  background: var(--pill-green);
+  border-color: transparent;
+}
+
+/* Mocha: over. */
+.badge-completed {
+  color: var(--pill-ink);
+  background: var(--pill-mocha);
+  border-color: transparent;
+}
+
+/* Grey: set aside. */
+.badge-draft,
+.badge-released,
+.badge-withdrawn,
+.badge-expired,
+.badge-neutral {
+  color: var(--pill-ink);
+  background: var(--pill-neutral);
+  border-color: transparent;
+}
+
+.chip {
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+}
+
+/* ---------- tabs and filter pills ---------- */
+
+.tab {
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+
+/* On a wide screen a long row of tabs scrolls sideways inside itself rather than wrapping onto a
+   second row. A phone keeps wrapping, so no tab is hidden off the edge of a small screen. */
+@media (min-width: 641px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  .tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
+.pill {
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  text-transform: none;
+}
+
+/* ---------- overlays: dialogs, toasts and the notification panel keep their lift ---------- */
+
+.dialog,
+.toast,
+.notification-panel {
+  border-radius: var(--radius-card);
+}
+
+/* A dialog taller than the screen scrolls inside itself (centred by transform, it would otherwise
+   run off the top and bottom of a short screen), and its buttons stay pinned at its foot, always
+   on screen. The negative margin lets the pinned row cover the dialog's bottom padding, so a
+   dialog short enough not to scroll is spaced exactly as before. */
+.dialog {
+  max-height: calc(100svh - 2rem);
+  overflow-y: auto;
+}
+
+.dialog-actions {
+  position: sticky;
+  bottom: 0;
+  margin-bottom: -1.5rem;
+  padding: 0.75rem 0 1.5rem;
+  background: var(--surface);
+}
