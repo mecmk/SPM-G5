@@ -3321,6 +3321,7 @@ FROM (VALUES
     -- Conferences, summits and talks on a stage
     ('33333333-0000-0000-0000-000000000024', '/images/events/conference.jpg'),  -- Annual Sales Kickoff
     ('33333333-0000-0000-0000-000000000010', '/images/events/conference.jpg'),  -- Founders Day Fireside Chat
+    ('33333333-0000-0000-0000-000000007013', '/images/events/conference.jpg'),  -- Harbourfront Partner Summit
     ('33333333-0000-0000-0000-000000000003', '/images/events/conference.jpg'),  -- Nimbus Developer Conference
     ('33333333-0000-0000-0000-000000000048', '/images/events/conference.jpg'),  -- Open Data Summit
     ('33333333-0000-0000-0000-000000000021', '/images/events/conference.jpg'),  -- Regional Partner Roadshow
