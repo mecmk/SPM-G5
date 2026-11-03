@@ -263,7 +263,8 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
         pytest.param(
             "venue_bookings",
             "status = 'CANCELLED', cancelled_at = now(), release_cause = 'EVENT_CANCELLED',"
-            " released_by_id = :user WHERE status <> 'CANCELLED'",
+            " released_by_id = :user, closure_reason = NULL, closure_description = NULL"
+            " WHERE status <> 'CANCELLED'",
             "status, cancelled_at, release_cause, release_reason, released_by_id,"
             " replaced_by_booking_id, replaces_live_original",
             id="6.2-booking-released",
@@ -374,7 +375,10 @@ def test_reseeding_leaves_a_booking_closed_once_its_slot_is_taken(db: Session):
 
 def _withdraw(conn, *booking_ids) -> None:
     conn.execute(
-        text("UPDATE venue_bookings SET status = 'WITHDRAWN' WHERE id = ANY(:ids)"),
+        text(
+            "UPDATE venue_bookings SET status = 'WITHDRAWN', closure_reason = NULL,"
+            " closure_description = NULL WHERE id = ANY(:ids)"
+        ),
         {"ids": list(booking_ids)},
     )
 
@@ -404,7 +408,11 @@ def _approve_replacement(conn, replacement) -> None:
         {"replacement": replacement, "id": Bookings.OPEN_STUDIOS_HARBOUR},
     )
     conn.execute(
-        text("UPDATE venue_bookings SET status = 'APPROVED' WHERE id = :id"), {"id": replacement}
+        text(
+            "UPDATE venue_bookings SET status = 'APPROVED', closure_reason = NULL,"
+            " closure_description = NULL WHERE id = :id"
+        ),
+        {"id": replacement},
     )
 
 
