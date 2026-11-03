@@ -33,6 +33,14 @@ h1 {
   letter-spacing: -0.03em;
 }
 
+/* A phone steps the title down, so "Welcome, <name>" takes two lines rather than three. */
+@media (max-width: 640px) {
+  h1 {
+    font-size: 2rem;
+    line-height: 2.5rem;
+  }
+}
+
 h2 {
   font-size: 1.375rem;
   font-weight: 700;
@@ -100,6 +108,11 @@ h3 {
     margin: 0;
   }
 
+  /* Collapsed, the bell and the toggle stay side by side, so the bar keeps its height. */
+  .app-shell > .sidebar.is-collapsed .sidebar-brand-actions {
+    flex-direction: row;
+  }
+
   .app-shell > .sidebar .wordmark-tagline,
   .app-shell > .sidebar .nav-group-label,
   .app-shell > .sidebar .nav-group-divider {
@@ -164,6 +177,16 @@ h3 {
 
   .app-main {
     padding: 3rem 2rem 5rem;
+  }
+
+  /* The bell's panel opens under the bar at the bell's side, not at the old sidebar's edge. Where
+     Technical Support's links take two rows (1100-1279px) it overlaps the second row a little,
+     as a popover does; a lower top would leave a gap under everyone else's one-row bar. */
+  .notification-panel,
+  .notification-panel.is-sidebar-collapsed {
+    top: 4.5rem;
+    left: 1.5rem;
+    max-height: min(34rem, calc(100svh - 5.25rem));
   }
 }
 
