@@ -671,14 +671,22 @@ def list_bookings_for_own_event(
     """Fix f7.1.2 (story 7.1 AC1): the bookings of the viewer's own event that hold a venue -
     approved, or pending while Venue Staff decide - most recent first, as
     ``list_bookings_for_event`` orders them. AC2: an event that is not the viewer's is not
-    found, as ``events_service.get_event`` answers it."""
+    found, as ``events_service.get_event`` answers it. Fix f7.1.3 (AC10): with them, each one the
+    safety review released, the coordinator cancelled or a venue closure cancelled; AC11: no
+    request a closure rejected, and no booking cancelled any other way."""
     event = db.get(Event, event_id)
     if event is None or event.organiser_id != viewer.id:
         raise EventNotFound(event_id)
     return list(
         db.scalars(
             select(VenueBooking)
-            .where(VenueBooking.event_id == event_id, VenueBooking.status.in_(_HOLDING_STATUSES))
+            .where(
+                VenueBooking.event_id == event_id,
+                or_(
+                    VenueBooking.status.in_(_HOLDING_STATUSES),
+                    VenueBooking.release_cause.in_(_RELEASES_THE_ORGANISER_SEES),
+                ),
+            )
             .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.venue_requirement))
             .order_by(VenueBooking.created_at.desc(), VenueBooking.id.desc())
         ).all()
@@ -762,6 +770,8 @@ def _notify_venue_staff_of_replacement(
 _RELEASES_WITH_REASON = frozenset({ReleaseCause.SAFETY_REVIEW, ReleaseCause.COORDINATOR_CANCELLED})
 # Story 9.5 AC2: a venue closure ends an approved booking only; a pending request is rejected.
 _RELEASES_APPROVED_ONLY = _RELEASES_WITH_REASON | {ReleaseCause.VENUE_UNAVAILABLE}
+# Fix f7.1.3 (story 7.1 AC10): the releases the organiser is shown, each with why.
+_RELEASES_THE_ORGANISER_SEES = _RELEASES_WITH_REASON | {ReleaseCause.VENUE_UNAVAILABLE}
 
 
 def release_booking(
