@@ -112,6 +112,10 @@ RELEASED = "BOOKING_RELEASED"
 REJECTED = "BOOKING_REJECTED"
 RETURNED_TO_PLANNING = "EVENT_RETURNED_TO_PLANNING"
 RELEASED_TITLE = "A venue booking was released"
+# What the coordinator's and the organiser's notice add when the event went back to Planning.
+BACK_IN_PLANNING = (
+    "It is back in Planning and needs a new safety check before it is confirmed again."
+)
 APPROVAL_OUT_OF_DATE = (
     "The event's venue bookings changed after the safety approval; request a safety review again."
 )
@@ -976,6 +980,9 @@ def test_a_planning_event_stays_in_planning(db, venue_staff_client):
     assert _status_of(db, event.id) == EventStatus.PLANNING
     assert len(_history(db, event.id)) == history_before
     assert _audit(db, RETURNED_TO_PLANNING, event.id) == []
+    notices = _told(db, event.id)
+    assert len(notices) == 2
+    assert all(BACK_IN_PLANNING not in notice.message for notice in notices)
 
 
 @pytest.mark.story("9.5", ac=3)
@@ -1054,6 +1061,9 @@ def test_a_confirmed_event_stays_confirmed_when_only_a_request_is_rejected(db, v
     assert _status_of(db, event.id) == EventStatus.CONFIRMED
     assert _returned(db, event.id) == []
     assert _audit(db, RETURNED_TO_PLANNING, event.id) == []
+    notices = _told(db, event.id)
+    assert len(notices) == 2
+    assert all(BACK_IN_PLANNING not in notice.message for notice in notices)
 
 
 @pytest.mark.story("9.5", ac=3)
@@ -1205,7 +1215,7 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
             _on_singapore_date(ends_at),
             "Renovation",
             *(_booked_line(*each) for each in listed),
-            "It is back in Planning and needs a new safety check before it is confirmed again.",
+            BACK_IN_PLANNING,
         ):
             assert wanted in notice.message
         # By booked start (Fri, Sat, Sun), not by booking id: ids are random.
