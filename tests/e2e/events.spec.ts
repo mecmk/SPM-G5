@@ -27,6 +27,10 @@
  * leaves this section, and the organiser learns of it from the closure's notice (9.5 AC4). The AC4/AC8 test
  * cancels the seeded Lakeside Leadership Retreat; the other events it reads are never changed.
  *
+ * f21.3.1 (12.1 AC3): the coordinator's Venue booking card names both dates of a booking over
+ * more than one day, and a one-day booking reads as before. The two-day test reads only the venue
+ * and its dates, since the AC4/AC8 test above can cancel the same event before or after it.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -190,7 +194,7 @@ function venueCardDetails(page: Page, ...texts: string[]) {
     .last()
 }
 
-test("f21.3.1 / 12.1 AC3: the coordinator's card names both dates of a multi-day booking", async ({
+test("12.1 AC3: the coordinator's card names both dates of a multi-day booking", async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -206,7 +210,7 @@ test("f21.3.1 / 12.1 AC3: the coordinator's card names both dates of a multi-day
   await expect(card).toBeVisible()
 })
 
-test("f21.3.1: a one-day booking's card reads as before", async ({ page }) => {
+test("12.1 AC3: a one-day booking's card reads as before", async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(`/events/${EVENTS.approved}`)
 
