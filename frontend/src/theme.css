@@ -3,6 +3,10 @@
  * Loaded after App.css (main.tsx), so a rule here wins a tie with App.css's own. It changes how
  * things look and nothing else: no behaviour, no wording.
  *
+ * A one-class rule here beats App.css's one-class rules on the same element, not just its own
+ * twin: .card's padding would reach .notice-block, and .button's .button-sm. Where an App.css
+ * variant should keep its own value, say so beside the rule that would override it.
+ *
  * Colour comes only from the tokens in index.css, as in App.css (frontend/STYLE.md, Styling).
  * The base text size stays 14px here; the page frame and type scale are the refactor's next PR.
  *
@@ -111,6 +115,18 @@ h3 {
   border-radius: var(--radius-card);
 }
 
+/* On a phone a card keeps App.css's 1.25rem, so its fields still span the screen (18.4 AC1). */
+@media (max-width: 640px) {
+  .card {
+    padding: 1.25rem;
+  }
+}
+
+/* A notice (Not permitted, an empty state) keeps App.css's taller padding inside its card. */
+.notice-block {
+  padding: 2.5rem 1.5rem;
+}
+
 .card-tight {
   padding: 1rem;
 }
@@ -188,6 +204,11 @@ button,
     color var(--transition),
     background-color var(--transition),
     border-color var(--transition);
+}
+
+/* A small button keeps App.css's narrower sides. */
+.button-sm {
+  padding-inline: 0.75rem;
 }
 
 /* Outlined: a dark 1px edge and 4px corners, quieter than the one blue primary. */
@@ -360,22 +381,6 @@ th {
   transition:
     color var(--transition),
     border-color var(--transition);
-}
-
-/* On a wide screen a long row of tabs scrolls sideways inside itself rather than wrapping onto a
-   second row. A phone keeps wrapping, so no tab is hidden off the edge of a small screen. */
-@media (min-width: 641px) {
-  .tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-  }
-
-  .tab {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
 }
 
 .pill {

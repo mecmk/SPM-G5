@@ -23,7 +23,10 @@
   /* the edge of a field a user types in, which needs 3:1 against the page (WCAG 1.4.11) */
   --control-border: #8a8987;
 
-  /* text: near-black headings, warm grey body, and grey for what is secondary */
+  /* text: near-black headings, warm grey body, and grey for what is secondary. --text-muted and
+     --text-faint are a shade apart, not a step: both had to darken to pass AA on the page and on
+     cards, so "faint" no longer reads quieter. They keep two names so the pages using each can
+     still be told apart if the palette moves again. */
   --text: #615d59;
   --text-h: #151514;
   --text-muted: #6c6c6b;
