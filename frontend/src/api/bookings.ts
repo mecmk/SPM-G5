@@ -328,8 +328,8 @@ export function withdrawBooking(bookingId: string, venueName: string): Promise<B
 
 /** Story 12.8 AC1: the assigned coordinator cancels an approved booking with a reason. 403
  * (`NOT_PERMITTED`) once the caller is not the event's assigned coordinator; 409
- * (`BOOKING_CANCEL_REFUSED`) once it is not approved, has a replacement pending or the event is
- * within 24 hours of its set-up time - each with the backend's own sentence. */
+ * (`BOOKING_CANCEL_REFUSED`) once it is not approved or the event is within 24 hours of its
+ * set-up time - each with the backend's own sentence. */
 export function cancelBooking(
   bookingId: string,
   reason: string,

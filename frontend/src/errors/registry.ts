@@ -719,8 +719,8 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Cannot withdraw this request',
     message: 'This request cannot be withdrawn in its current state.',
   },
-  /** Story 12.8 AC4/AC7/AC8: the booking is no longer approved, has a replacement pending, or
-   *  the event is within 24 hours of its set-up time; the backend's own sentence says which. */
+  /** Story 12.8 AC4/AC8: the booking is no longer approved, or the event is within 24 hours of
+   *  its set-up time; the backend's own sentence says which. */
   BOOKING_CANCEL_REFUSED: {
     title: 'Cannot cancel this booking',
     message: 'This booking cannot be cancelled now.',
