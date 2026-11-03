@@ -5,7 +5,8 @@ import { STATUS_LABELS } from './changeRequestValues'
 
 /**
  * Story 19.2 AC2/AC3: who decided a change request and when, with a rejection's reason - on the
- * event page, in the coordinator's queue and in the organiser's list (19.4). Nothing shows while it waits or once withdrawn.
+ * event page, in the coordinator's queue and in the organiser's list (19.4). Nothing shows while
+ * it waits or once withdrawn.
  */
 export function ChangeRequestDecision({ request }: { request: ChangeRequest }) {
   if (request.decided_by_name === null || request.decided_at === null) return null

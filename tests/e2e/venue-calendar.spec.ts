@@ -12,8 +12,9 @@
  * AC8 previous / next keep the venue and the calendar, whatever is loading or has failed.
  * AC10 a venue with nothing booked shows no unavailable days.
  * AC11 (restricted to every internal role, as VENUE_CALENDAR_READ is in _INTERNAL_COMMON): the
- * refusals are a backend case, backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles;
- * here Venue Staff and Technical Support open a venue from the catalogue and see its calendar.
+ * refusals are a backend case, backend/tests/venues/test_venue_calendar.py::
+ * test_calendar_is_restricted_to_internal_roles; here Venue Staff and Technical Support open a
+ * venue from the catalogue and see its calendar.
  * A day with entries opens a list of that day's items in time order. No criterion names the list:
  * a test of what it says carries the AC that shows, and a test of how it opens carries none.
  * The calendar opens on the current month, and the real-seed tests reach November 2026 (where the

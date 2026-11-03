@@ -6,8 +6,8 @@
  * AC4 after sign-in the user is redirected to the appropriate authenticated page.
  * AC5 after sign-out the session is invalidated.
  * AC6 repeated failed sign-ins lock sign-in for that email for a while, and the page counts down
- *     the minutes left (bug f1.1.2). The countdown never reads a clock time, so these cases move the
- *     browser's clock across leap days and daylight-saving changes to prove it does not care.
+ *     the minutes left (bug f1.1.2). The countdown never reads a clock time, so these cases move
+ *     the browser's clock across leap days and daylight-saving changes to prove it does not care.
  * AC3 (credentials stored hashed) is backend-only: backend/tests/auth/test_passwords.py.
  */
 import { expect, test, type Page } from '@playwright/test'

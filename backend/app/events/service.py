@@ -174,7 +174,8 @@ _SORT_COLUMNS = {
 }
 
 # Story 7.2 AC1: the only columns a routine-information edit may touch. Deliberately narrow -
-# never widen this to accept arbitrary Event fields (important fields go through story 7.3).
+# never widen this to accept arbitrary Event fields: the organiser's details change through a
+# correction (``correct_event_under_review``, 7.2 AC4) or a change request (story 19.1).
 _ROUTINE_FIELDS = ("internal_notes",)
 # Story 7.2 AC4: the audit action of a coordinator's correction.
 _CORRECTION_ACTION = "EVENT_DETAILS_CORRECTED"
@@ -2296,13 +2297,13 @@ def update_routine_information(
 ) -> None:
     """AC1-AC3: the coordinator assigned to ``event`` edits its routine fields directly. Only
     the fields sent change, and only ``_ROUTINE_FIELDS`` may ever be touched - never the
-    important fields story 7.3 owns. AC3's status gate is checked before the assignment check,
-    so a closed event always refuses with 409 regardless of who is asking, rather than a 403
-    that names the wrong reason. The write itself stays conditional on the event not yet being
-    in a closed status, so a routine edit racing another request's status change still cannot
-    land on a request AC3 says is frozen - the same shape as ``submit_event``'s and ``_decide``'s
-    guard against a racing status change. A body with nothing to change is a no-op: no write, no
-    audit entry, ``updated_at`` untouched."""
+    organiser's details, which a correction (AC4) or a change request (19.1) changes. AC3's
+    status gate is checked before the assignment check, so a closed event always refuses with
+    409 regardless of who is asking, rather than a 403 that names the wrong reason. The write
+    itself stays conditional on the event not yet being in a closed status, so a routine edit
+    racing another request's status change still cannot land on a request AC3 says is frozen -
+    the same shape as ``submit_event``'s and ``_decide``'s guard against a racing status change.
+    A body with nothing to change is a no-op: no write, no audit entry, ``updated_at`` untouched."""
     if event.status in _ROUTINE_EDIT_CLOSED_STATUSES:
         raise RoutineEditClosed(event.status)
     _assert_assigned_coordinator(event, actor, verb="edit")
@@ -2780,10 +2781,7 @@ def correct_event_under_review(
     equipment lines and its holds are left exactly as they were (AC7). Each saved correction
     writes one ``EVENT_DETAILS_CORRECTED`` audit row holding every changed field's old and new
     value, and one change-history entry per field (story 7.4); one that changes nothing writes
-    nothing.
-
-    AC9's organiser-vs-coordinator case needs story 4.3, which will let an organiser edit a
-    submitted request; that edit must claim the row the same way."""
+    nothing."""
     _refuse_unless_correctable(event)
     _assert_assigned_coordinator(event, actor, verb="edit")
     _claim_for_correction(db, event, expected_updated_at=data.expected_updated_at)

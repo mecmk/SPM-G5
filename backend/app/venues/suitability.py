@@ -1,7 +1,7 @@
 """Story 11.1: whether one venue suits one venue requirement, and every criterion it fails.
 
 Pure on purpose: no database, no framework, no event or booking rows - only the plain values
-below. The catalogue search and the booking request will both build these values from their own
+below. The catalogue search and the booking request both build these values from their own
 records and call ``judge_suitability``, so the two can never judge a venue differently.
 
 A requirement is one venue an event needs (story 2.7): the people it must hold, a layout, the
@@ -179,8 +179,7 @@ def _facility_failure(
 def judge_suitability(needs: RequirementNeeds, venue: VenueCharacteristics) -> Suitability:
     """AC1: Suitable or Unsuitable for one requirement, from that requirement and the venue's
     recorded characteristics only, listing every failed criterion. One requirement at a time,
-    so each of an event's requirements is judged on its own - groundwork for AC8, whose
-    booking-level part waits for story 12.5."""
+    so each of an event's requirements is judged on its own (AC8), as story 12.5 books them."""
     failures = [_capacity_failure(needs, venue)]
     if needs.layout is not None:
         failures.append(_missing_item(needs.layout, venue.layouts, Criterion.LAYOUT))

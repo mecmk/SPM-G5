@@ -186,8 +186,8 @@ export interface VenueFilterPanelProps {
  *
  * Each range - capacity from and to, the dates from and to - sits together as one filter and goes
  * into the address as one change, so raising its lower end past the upper one, which takes the
- * upper one along, never sends a backwards search. The header counts the filters in use. On a phone the panel starts folded under that header, so the
- * venues come first.
+ * upper one along, never sends a backwards search. The header counts the filters in use. On a
+ * phone the panel starts folded under that header, so the venues come first.
  */
 export function VenueFilterPanel({
   search,

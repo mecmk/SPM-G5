@@ -221,8 +221,7 @@ export interface ChosenVenueImages {
 /**
  * Story 8.3 AC7: which of `files`, in order, a venue already holding `count` pictures can take.
  * Each file is checked on its own - `validateVenueImage`, then room under `MAX_VENUE_IMAGES` - so
- * one that does not fit never stops the rest, and every one refused is named with its reason
- * (bug found on 6 Oct: a batch holding one file over 5 MB looked refused as a whole).
+ * one that does not fit never stops the rest, and every one refused is named with its reason.
  */
 export function chooseVenueImages(files: File[], count: number): ChosenVenueImages {
   const accepted: File[] = []

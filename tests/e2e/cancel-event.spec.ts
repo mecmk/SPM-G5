@@ -53,8 +53,7 @@ const SEEDED_REASON = 'The rooftop terrace is closed for repairs that week.'
 
 const CHARITY_RUN = 'Lakeside Charity Run'
 // The charity run's approved Sunrise Studio booking and its wireless microphones
-// (backend/db/seed/020_sample_data.sql), cancelled with it; and its Harbour Pavilion booking, which
-// an earlier change cancelled.
+// (backend/db/seed/020_sample_data.sql), both cancelled with it.
 const CHARITY_RUN_STUDIO_BOOKING = '44444444-0000-0000-0000-000000000062'
 const CHARITY_RUN_MICROPHONES = '66666666-0000-0000-0000-000000000062'
 

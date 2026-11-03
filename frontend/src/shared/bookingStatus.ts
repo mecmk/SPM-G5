@@ -81,7 +81,8 @@ export function releasedByLabel(booking: Pick<Booking, 'release_cause'>): string
 
 /** Story 21.3 AC2, story 12.8 AC2: why a closed booking was closed, as its page words it - the
  * finding's required change for a booking the safety review released, the coordinator's reason
- * for one they cancelled, otherwise the decision's own reason. */
+ * for one they cancelled, otherwise the decision's own reason. Null for a booking a closure
+ * cancelled, whose reason is `closureReasonLine`'s. */
 export function closingReason(
   booking: Pick<Booking, 'decision_reason' | 'release_cause' | 'release_reason'>,
 ): string | null {

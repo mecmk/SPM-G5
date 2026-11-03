@@ -2,13 +2,13 @@ import { expect, test, type Page } from '@playwright/test'
 import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signIn } from './support'
 
 /**
- * Story 16.2 - mark equipment out of service. END-TO-END tests: what Technical Support and a
- * coordinator click through.
+ * Story 16.2 - mark equipment out of service: what Technical Support and a coordinator click
+ * through.
  *
- * Level: e2e. The rules behind what the pages show - how many units may go out over a period,
- * which holds a shortage leaves short, who is told, who may call each endpoint, the races - are
- * proven in backend/tests/equipment/test_equipment_out_of_service_*.py, not repeated here. The
- * exceptions are the form's own checks, which stop a save before anything is sent.
+ * The rules behind what the pages show - how many units may go out over a period, which holds a
+ * shortage leaves short, who is told, who may call each endpoint, the races - are proven in
+ * backend/tests/equipment/test_equipment_out_of_service_*.py, not repeated here. The exceptions
+ * are the form's own checks, which stop a save before anything is sent.
  *
  * AC1 Technical Support records units of a type as out of service: how many, why, an optional
  *     note, from when and, optionally, until when.
@@ -28,7 +28,7 @@ import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signI
  * Specs share one database and run in parallel, so each flow that records units uses a window
  * of its own on a type no other flow here records against: the conference phones in 2031, and
  * from now until tomorrow for the one record in force (the seeded conference phone holds are in
- * 2027), and the mobile LED screens over the evening of Events.LIGHT_SHOWCASE in February 2030,
+ * 2027), and the mobile LED screens over the evening of EVENTS.lightShowcase in February 2030,
  * which nothing else holds. None moves a figure another spec reads.
  */
 

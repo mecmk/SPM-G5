@@ -137,7 +137,8 @@ function App() {
                 <Route path={EVENTS_MINE_PATH} element={<MyEventsPage />} />
               </Route>
 
-              {/* Story 4.1: the coordinator review queue. */}
+              {/* Story 4.1: the coordinator review queue is the Events inbox, under EVENTS_REVIEW
+                  below. */}
               {/*
                 Story 12.1: the Event Coordinator raises a venue booking request. f12.1.1: for the
                 event and venue in the address, reached from the catalogue in that event's

@@ -214,8 +214,8 @@ def _notifications(db: Session, event_id: uuid.UUID, notification_type: str) -> 
 def _insert_change_request(
     db: Session, event_id: uuid.UUID, *, field: str = "expected_attendance", status: str = "PENDING"
 ) -> uuid.UUID:
-    """A change request written in SQL, so a test can start from any status (as 19.4/19.5 would
-    leave it) without those stories existing."""
+    """A change request written in SQL, so a test can start from any status - as a decision
+    (19.2) or a withdrawal would leave it - without going through either."""
     return db.execute(
         text(
             "INSERT INTO event_change_requests"

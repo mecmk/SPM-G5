@@ -23,9 +23,9 @@ export interface EventCardProps {
 }
 
 /**
- * One card style for every list of events (team decision, 17 Sep 2026): a full-width row with a square picture
- * on the left. The square shows `imageUrl` when the event has one and it loads, and a placeholder
- * icon otherwise.
+ * One card style for every list of events (team decision, 17 Sep 2026): a full-width row with a
+ * square picture on the left. The square shows `imageUrl` when the event has one and it loads, and
+ * a placeholder icon otherwise.
  *
  * Story 7.1: a card opens its event. The title is the one real link, so a keyboard user and a
  * screen reader get a single link named for the event, and it can be opened in a new tab. A click

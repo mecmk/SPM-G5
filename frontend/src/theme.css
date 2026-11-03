@@ -64,14 +64,15 @@ h3 {
 /* ---------- the frame: a sticky top bar on a wide screen ---------- */
 
 /* From 1100px, the sidebar's three parts - wordmark, Main navigation, the signed-in user - lie in
-   one row across the top, at least 64px tall. Its links, their order, the bell, Collapse and Sign out are the
-   same elements as before; only where they sit changes. Narrower than 1100px the longest role's
-   links would not fit with their names, so the sidebar stays at the side down to 861px, and
-   App.css's phone bar takes over at 860px and under. The phone drawer reuses Sidebar, so this
-   is scoped to the frame's own copy (.app-shell > .sidebar). */
+   one row across the top, at least 64px tall. Its links, their order, the bell, Collapse and Sign
+   out are the sidebar's own elements; only where they sit changes. Narrower than 1100px the
+   longest role's links would not fit with their names, so the sidebar stays at the side down to
+   861px, and App.css's phone bar takes over at 860px and under. The phone drawer reuses Sidebar,
+   so this is scoped to the frame's own copy (.app-shell > .sidebar). */
 @media (min-width: 1100px) {
   /* Whatever is scrolled into view - a focused field, a link's target - stops below the sticky
-     bar instead of under it (WCAG 2.4.11, focus not obscured), even when its links take two rows. */
+     bar instead of under it (WCAG 2.4.11, focus not obscured), even when its links take two
+     rows. */
   html {
     scroll-padding-top: 6.5rem;
   }
@@ -137,7 +138,7 @@ h3 {
     display: contents;
   }
 
-  /* Names alone, as the reference's bar has them, unless the bar is collapsed to icons. */
+  /* Names alone on the bar, without their icons, unless it is collapsed to icons. */
   .app-shell > .sidebar:not(.is-collapsed) .sidebar-nav a > svg {
     display: none;
   }
@@ -179,7 +180,7 @@ h3 {
     padding: 3rem 2rem 5rem;
   }
 
-  /* The bell's panel opens under the bar at the bell's side, not at the old sidebar's edge. Where
+  /* The bell's panel opens under the bar at the bell's side, not at the sidebar's edge. Where
      Technical Support's links take two rows (1100-1279px) it overlaps the second row a little,
      as a popover does; a lower top would leave a gap under everyone else's one-row bar. */
   .notification-panel,
@@ -654,7 +655,7 @@ th {
 /* A dialog taller than the screen scrolls inside itself (centred by transform, it would otherwise
    run off the top and bottom of a short screen), and its buttons stay pinned at its foot, always
    on screen. The negative margin lets the pinned row cover the dialog's bottom padding, so a
-   dialog short enough not to scroll is spaced exactly as before. */
+   dialog short enough not to scroll keeps App.css's spacing. */
 .dialog {
   max-height: calc(100svh - 2rem);
   overflow-y: auto;

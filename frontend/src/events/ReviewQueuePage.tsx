@@ -53,17 +53,16 @@ function withoutRepeats(
  * AC1: requests awaiting a decision, assigned to the signed-in coordinator.
  * AC2: each entry shows the event name, organiser, proposed date and submission date.
  * AC3: the queue can be ordered by submission date or proposed event date.
- * AC4: drafts and already-decided requests never appear — the backend query excludes them.
+ * AC4: drafts never appear - the backend leaves them out.
  *
- * Story 6.1: the tab strip is now the shared All-plus-seven-visible-statuses set, backed by
- * `/events/assigned-to-me` (every event assigned to this coordinator, any status) rather than
- * the old review-only `/events/review-queue`. "Load more" mirrors MyEventsPage's pattern - the
+ * Story 6.1: the tab strip is the shared All-plus-every-visible-status set, backed by
+ * `/events/assigned-to-me` (every event assigned to this coordinator, any status), so a decided
+ * request stays listed under its own tab. "Load more" mirrors MyEventsPage's pattern - the
  * backend pages the same way `/mine` does.
  */
 export function ReviewQueuePage() {
   const { data: list, error, isLoading, setData: setList } = useLoaded(loadFirstPage)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  // Each list has its own Load more, so each keeps its own failure: one list's is not the other's.
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('submitted_at')
   const [search, setSearch] = useState('')

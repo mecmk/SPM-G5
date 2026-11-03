@@ -51,9 +51,8 @@ const LOCKED_HINT =
   'Event details can no longer be edited directly once the event is confirmed. Further changes must go through the change request process.'
 const EQUIPMENT_HINT =
   'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
-// An organiser submits, then the auto-assigned coordinator signs in and edits: two full sign-in
-// cycles take longer than the default per-test budget - the same reasoning as
-// request-clarification.spec.ts and coordinator-reassignment.spec.ts.
+// An organiser submits, the Lead assigns (5.4), then the coordinator signs in and edits: three
+// sign-in cycles take longer than the default per-test budget.
 const TWO_USER_TIMEOUT = 90_000
 // Story 15.1 AC6: the organiser, the Lead, the coordinator and Technical Support each sign in.
 const DECLINED_ITEM_TIMEOUT = 120_000

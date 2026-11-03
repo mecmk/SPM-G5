@@ -1,5 +1,7 @@
-"""Request / response shapes for venue bookings: raising a request (story 12.1), the venue
-staff queue (story 13.1), and approval / rejection / read (stories 13.2, 13.2.1).
+"""Request / response shapes for venue bookings: raising a request (story 12.1) and switching it
+(story 12.5), the venue staff queue (stories 13.1, 13.3), approval / rejection / read (stories
+13.2, 13.2.1), a hold's expiry (story 12.7), cancelling an approved booking (story 12.8) and an
+organiser's view of their own event's bookings (fix f7.1.2).
 """
 
 from __future__ import annotations
@@ -69,11 +71,11 @@ class BookingRequestIn(BaseModel):
     venue that does not suit the event. Trimmed, and blank counts as not given; the service
     decides whether one is needed.
 
-    f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): a client sends the setup and
-    teardown as well, in whole minutes, which widen the booked period before the request's own
-    start and after its own end. Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES``
-    (14 days), so a negative, fractional or longer value is refused (422) - and, as the event's
-    own whole numbers are (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
+    f12.1.2 (story 12.1 AC1/AC5): a client sends the setup and teardown as well, in whole
+    minutes, which widen the booked period before the request's own start and after its own end.
+    Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES`` (14 days), so a negative,
+    fractional or longer value is refused (422) - and, as the event's own whole numbers are
+    (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
     """
 
     event_id: uuid.UUID

@@ -48,8 +48,8 @@ from tests.support.seed import Events, Users
 
 MY_EVENTS_PATH = "/events/mine"
 ENTRY_FIELDS = {"id", "name", "starts_at", "ends_at", "status", "cover_image_url"}
-# Derived, so a status added later (stories 6.x) is covered without anyone remembering to
-# add it here.
+# Derived, so a status added to ``EventStatus`` is covered without anyone remembering to add it
+# here.
 ALL_STATUSES = [value for name, value in vars(EventStatus).items() if name.isupper()]
 # Later than any seeded or freshly created row, so the ordering tests own the top of the list.
 _NEWER = datetime(2030, 2, 1, 9, 0, tzinfo=UTC)
