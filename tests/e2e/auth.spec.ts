@@ -194,6 +194,26 @@ test('1.1 AC4: a signed-out visitor is sent to sign in, then back where they sta
   await expectSignedIn(page)
 })
 
+/**
+ * Regression test for chore c18: signing out is not a bounce, so the next sign-in, maybe by another
+ * role, lands on the main page instead of the page signed out from.
+ */
+test('1.1 AC4: signing out and back in lands on the main page, not the page signed out from', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await expectSignedIn(page)
+  await page.goto('/venue-staff/booking-requests')
+  await expect(page).toHaveURL(/\/venue-staff\/booking-requests$/)
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await signIn(page, ACCOUNTS.organiser)
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: /Welcome, Olivia Organiser/ })).toBeVisible()
+})
+
 test('1.1 AC5: signing out ends the session', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await expectSignedIn(page)
