@@ -2,7 +2,7 @@
 (story 13.1), searched and ordered (story 13.3), approval and rejection (stories 13.2, 13.2.1),
 the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
 coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
-a replacement for an approved booking whose venue became unavailable (story 12.6), and an
+the approval of a replacement raised before story 9.5 removed that request (story 12.6), and an
 organiser's read-only view of their own event's bookings (fix f7.1.2), and the coordinator
 cancelling an approved booking (story 12.8).
 
@@ -314,8 +314,8 @@ def cancel_booking(
     """Story 12.8 AC1-AC9: the assigned coordinator cancels an approved booking with a reason - the
     release, Venue Staff's notice and any return to Planning together. Refused (422) without a
     reason, (403) for anyone but the event's assigned coordinator (AC8), (409) for a booking that
-    is not approved (AC8), one with a replacement pending (AC7) and once the event is within 24
-    hours of its set-up time (AC4), and (404) for an unknown booking.
+    is not approved (AC8) and once the event is within 24 hours of its set-up time (AC4), and (404)
+    for an unknown booking.
     """
     try:
         booking = service.cancel_booking(db, booking_id, payload, actor=actor)

@@ -1595,45 +1595,26 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
--- Story 12.6: tests/e2e/venue-replacement.spec.ts. Eleven events of organiser 2, February 2029, each
--- with a booking at Exhibition Foyer (2222..04) that Venue Staff's closure of its day has marked
--- "Venue unavailable - alternative needed" (the closure and the mark are both seeded: a spec may
--- not reach the API, and the mark is otherwise only written by saving a closure). The
--- replacements are found among the other venues, Grand Hall above all.
+-- Story 12.6, as story 9.5 left it. Eleven events of organiser 2, February 2029, each with a booking
+-- at Exhibition Foyer (2222..04) on a day Venue Staff closed (the closures 8888..0126NN below).
+-- Story 12.6 marked those bookings "Venue unavailable - alternative needed" and let a replacement
+-- be requested; story 9.5 retired both, and its migration 035 ended each marked booking the way a
+-- saved closure does: an approved one is CANCELLED with the cause VENUE_UNAVAILABLE, a pending
+-- request REJECTED with "Venue closed: <reason>", both with the closure's reason and description.
+-- The rows below are written in that final shape. tests/e2e/venue-replacement.spec.ts, which
+-- walked the retired flow, is gone; the backend tests that count or read these rows are
+-- test_list_bookings.py, test_closure_ends_bookings.py and the test_replacement_*.py files, which
+-- keep 12.6's rules that still hold (a replacement raised before 9.5 and its original).
 --
 -- Every id of this story is in a block of its own that no other story counts up into, ending
 -- 0126NN: events 3333..0126NN, bookings 4444..0126NN, closures 8888..0126NN, and requirements
 -- cccccccc-0000-0000-0126-000000EEII (EE the event's NN, II the requirement's own number). NN is
 -- the number below, so a story that numbers on from 3333..80 or 4444..34 cannot land on these.
---
--- Each flow that changes something has an event of its own, so specs running in parallel never
--- share one (events are named by their NN):
---   62 read only: the entry point, the pre-filled catalogue, who is offered it, both sizes;
---      a second requirement, Breakout room, has no booking, so Find a venue opens on it
---   63 an additional venue (booking 24, marked) beside a requirement booked at Seminar Room 2.1
---   64 the spec raises a replacement       65 ... and Venue Staff approve it
---   66 ... and the coordinator withdraws it, then asks again
---   67 ... and Venue Staff remove the closure before it is approved
---   68 a CANCELLED event, its marked booking cancelled with it: no replacement is offered
---   69 a marked PENDING booking: Switch is offered, not a replacement
---   80 a second additional venue (booking 34, marked) beside a requirement booked at Seminar Room
---      2.1: its closure is removed and a replacement requested after it, so the step must refuse
---   81 an additional venue (booking 36, marked) beside a requirement booked at Seminar Room 2.1: the
---      spec asks for a replacement, then presses Back
---   82 a marked pending replacement (booking 38, marked by its own venue's closure) of an approved
---      booking at Harbour Pavilion (37): its way out is Withdraw, and no way to another venue
---   83 a marked pending additional venue (booking 40) beside a requirement booked at Seminar Room
---      2.1: the page offers Withdraw, not a catalogue that would add a second venue
---   84 the spec raises a replacement and Venue Staff reject it
---   85 a requirement's plain pending request (booking 42) beside an older withdrawn one (43), nothing
---      marked: the request step is opened with the withdrawn one named as `replacing`
---   78 and 79 coordinator 2's, for the "Venue unavailable" tab; the spec only reads 78, and raises
---      a replacement for 79. Nothing else may be marked on coordinator 2.
--- Nothing else may book Exhibition Foyer or Grand Hall on these days. Grand Hall (400, standing)
--- takes every one of these requirements, so a replacement is always found there.
--- Once one of these bookings has been replaced (a replacement raised and approved) the seed cannot be
--- applied again over it: its upsert puts status back to APPROVED but leaves replaced_by_booking_id,
--- which ck_venue_bookings_replaced_by_cancelled refuses. Run npm run db:reset instead of db:ready.
+-- The NNs are 62 to 69 and 78 to 85: 62 is the read-only event, 68 a CANCELLED
+-- event whose booking was cancelled with it (the heritage walk, as story 6.2 leaves it), 78 and 79
+-- are coordinator 2's, and 82 holds a pre-9.5 replacement (booking 38) of an approved booking
+-- (37), described where it is inserted.
+-- Nothing else may book Exhibition Foyer or Grand Hall on these days.
 -- ---------------------------------------------------------------------
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
@@ -1734,7 +1715,7 @@ ON CONFLICT (id) DO UPDATE SET
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     layout_code = EXCLUDED.layout_code;
 
--- Exhibition Foyer is closed for each of these days; the marks below are the closure's doing.
+-- Exhibition Foyer is closed for each of these days; the closures below are what ended the bookings.
 INSERT INTO venue_unavailability_periods (id, venue_id, starts_at, ends_at, reason, notes, created_by_id) VALUES
     ('88888888-0000-0000-0000-000000012602', '22222222-0000-0000-0000-000000000004', '2029-02-05 00:00+08', '2029-02-06 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),
     ('88888888-0000-0000-0000-000000012603', '22222222-0000-0000-0000-000000000004', '2029-02-07 00:00+08', '2029-02-08 00:00+08', 'MAINTENANCE', 'Floor resurfacing', '11111111-0000-0000-0000-000000000005'),

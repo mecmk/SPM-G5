@@ -2891,7 +2891,7 @@ def lock_event(db: Session, event_id: uuid.UUID) -> Event | None:
     way, so each waits for the other. ``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a Venue Staff
     approval holds its booking and then writes a notice that names the event, which only
     ``FOR UPDATE`` would make wait - while the cancellation waited on that booking: a deadlock
-    (story 9.4's re-check takes the event the same way, for the same reason).
+    (story 9.5's closure takes the event the same way, for the same reason).
 
     The lock is taken in one statement and the event read in the next. A locking read that waits
     re-checks only the row it locks, so the coordinator ``Event`` joins in would come back as the

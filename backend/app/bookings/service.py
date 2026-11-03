@@ -102,8 +102,7 @@ booking with a reason, without cancelling the event (``cancel_booking``). It is 
 ``release_booking`` as COORDINATOR_CANCELLED, its requirement needs a venue again and Venue Staff
 are told. An event Awaiting Safety Check or Confirmed goes back to Planning, and either way it needs
 a new safety approval before it is confirmed. Refused for anyone but the assigned coordinator, for a
-booking that is not approved or has a replacement pending, and once the 24-hour cut-off before
-set-up has passed.
+booking that is not approved, and once the 24-hour cut-off before set-up has passed.
 
 Story 13.3 - "As a Venue Staff or Technical Support Staff member I want to search and sort the
 requests in my queue so that I can find a particular request quickly and work through them in the
@@ -875,7 +874,7 @@ def release_booking(
 
 def lock_holding_bookings(db: Session, event_id: uuid.UUID) -> list[VenueBooking]:
     """Story 6.2 AC2/AC12: the event's pending and approved bookings, each row locked until the
-    transaction ends and read as it now stands, in id order, as story 9.4's re-check takes them.
+    transaction ends and read as it now stands, in id order, as story 9.5's closure takes them.
     A Venue Staff decision holding one is waited for, so the booking is released as it lands."""
     return list(
         db.scalars(
@@ -911,11 +910,11 @@ def lock_named_bookings(
 
 
 def get_booking_for_switch(db: Session, booking_id: uuid.UUID) -> VenueBooking:
-    """Story 12.5's switch and story 12.6's replacement request, row-locked as
-    ``get_booking_for_decision`` locks it, with its event locked first. Each requests another venue
-    for the event, so it must read the event under lock (``_bookable_event``); taking the event
-    before the booking, as story 6.2's cancellation, story 9.4's re-check and story 12.8's cancel
-    do, means the two can never each hold what the other waits for."""
+    """Story 12.5's switch, row-locked as ``get_booking_for_decision`` locks it, with its event
+    locked first. It requests another venue for the event, so it must read the event under lock
+    (``_bookable_event``); taking the event before the booking, as story 6.2's cancellation,
+    story 9.5's closure and story 12.8's cancel do, means the two can never each hold what the
+    other waits for."""
     event_id = db.scalar(select(VenueBooking.event_id).where(VenueBooking.id == booking_id))
     if event_id is None:
         raise BookingNotFound(booking_id)
@@ -1043,7 +1042,7 @@ def approve_booking(
     is not PENDING (``BookingNotPending``), whose venue is unavailable for part of its held period
     (``VenueBlocked``, story 9.4 AC7: the same refusal the request step gives, read in a query of
     its own once the row is locked so a period saved a moment ago is seen, and from the live
-    periods, not the mark) or whose period would double-book its venue (``BookingConflict``,
+    periods) or whose period would double-book its venue (``BookingConflict``,
     AC4 / 14.2 AC1-AC2). The refusals come in that order, then the hold's own (12.7 AC5).
 
     Since the venue hold (migration 010) a pending request already holds its slot, so no other
@@ -1306,8 +1305,8 @@ def cancel_booking(
     without cancelling the event (AC1).
 
     Locks are taken event first (``lock_event``, as story 6.2's cancellation, 21.3's safety
-    decision and 12.6's replacement request through ``get_booking_for_switch`` do), then the
-    booking, so an event cancellation, a hold expiring or a replacement being asked for meanwhile
+    decision and 12.5's switch through ``get_booking_for_switch`` do), then the
+    booking, so an event cancellation, a hold expiring or a switch being asked for meanwhile
     is waited for and then seen. Refusals come in this order, each changing nothing: not the
     event's assigned coordinator (``NotAssignedCoordinator``, AC8); a booking that is not APPROVED
     (``BookingNotApproved``, AC8); the 24-hour cut-off before set-up passed (``CancellingClosed``,
@@ -1736,8 +1735,8 @@ def find_covering_booking(db: Session, requirement_id: uuid.UUID) -> VenueBookin
 
     Story 12.6 AC10: a pending replacement whose original still holds its venue covers nothing
     either - the original does - exactly as ``uq_venue_bookings_one_per_requirement`` leaves it
-    out. Once the original stops holding, the database clears the flag and the replacement is the
-    requirement's request."""
+    out. Once the original stops holding, the database clears the flag and the link, and the
+    replacement is the requirement's request."""
     return db.scalar(
         select(VenueBooking).where(
             VenueBooking.venue_requirement_id == requirement_id,

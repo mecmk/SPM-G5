@@ -1165,33 +1165,16 @@ def _add(client, venue_id: uuid.UUID, starts_at: datetime, ends_at: datetime, **
     return response.json()
 
 
-# --- AC3: the mark ---------------------------------------------------------------------------
-
-
-# --- AC5: touching and overlapping, against the held period ----------------------------------
-
-
-# --- AC6: end, remove, shorten, extend: the marks follow -------------------------------------
-
-
-# --- AC8: which bookings are candidates ------------------------------------------------------
-
-
-# --- 12.7 alongside the mark -----------------------------------------------------------------
-
-
-# --- AC2: the preview knows which bookings are already marked ----------------------
-
-
 # =====================================================================================
 # The event goes back to Planning, and its coordinator and organiser are told.
 #
-# For each event with a booking newly marked in a save (``RecheckResult.newly_marked``):
+# For each event with a booking a save ends (story 9.5, which replaced 9.4's marking):
 #   * CONFIRMED -> PLANNING, once, with an event_status_history row (its reason naming the
 #     venue) and an audit entry EVENT_RETURNED_TO_PLANNING; PLANNING stays; nothing else moves.
 #   * one BOOKING_VENUE_UNAVAILABLE notification each to the event's assigned coordinator (when
 #     it has one) and its organiser, naming the venue, the period and the reason. The Venue Staff
-#     member who saved is never told. Clearing a mark sends nothing and leaves the status alone.
+#     member who saved is never told. Ending a closure early or removing it sends nothing and
+#     leaves the status alone.
 # Awaiting Safety Check (story 21.1) goes back to Planning as a Confirmed event does.
 # =====================================================================================
 VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
@@ -1636,8 +1619,8 @@ def test_the_approval_refusal_is_measured_against_the_held_period(
     db, login_as, period, expected_status
 ):
     """AC7: the guard reads the held period, setup and teardown included, half-open at both
-    edges, as the marking does. The period is written straight to the table, so it is the
-    guard, not the mark, that decides."""
+    edges, as the preview and the save do. The period is written straight to the table, so it is
+    the guard that decides."""
     venue = make_venue(db)
     booking = _booking(
         db,
@@ -1676,7 +1659,7 @@ def test_a_period_wholly_in_the_past_flags_nothing_and_the_preview_lists_nothing
 ):
     """AC8 (PO decision): only the time still to come counts. A period that began three days ago
     and ended yesterday overlapped part of a booking that is in progress, but that part is
-    already over, so the booking is neither flagged nor listed."""
+    already over, so the booking is neither listed nor ended."""
     venue = make_venue(db)
     booking = _booking(
         db,

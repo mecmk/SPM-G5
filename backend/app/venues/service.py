@@ -246,9 +246,10 @@ SEARCH_GROUP_LABELS = {
 # Story 8.1 AC3: the bookings that take a venue out of a search - the hold's rule (s12.1), the
 # same list as ex_venue_bookings_no_double_booking's WHERE since migration 010.
 _HOLDING_STATUSES = (BookingStatus.PENDING, BookingStatus.APPROVED)
-# Story 9.4 AC8: the events whose bookings a closure can flag - the ones still being arranged or
-# going ahead. A list of what counts, so a status added later is left out until it is said to.
-_FLAGGABLE_EVENT_STATUSES = (
+# Story 9.4 AC8, story 9.5 AC5: the events whose bookings a closure can end - the ones still being
+# arranged or going ahead. A list of what counts, so a status added later is left out until it is
+# said to.
+_ENDABLE_EVENT_STATUSES = (
     EventStatus.PLANNING,
     EventStatus.AWAITING_SAFETY_CHECK,
     EventStatus.CONFIRMED,
@@ -1431,7 +1432,7 @@ def _candidate_bookings(
     return (
         VenueBooking.venue_id == venue_id,
         VenueBooking.status.in_(_HOLDING_STATUSES),
-        VenueBooking.event.has(Event.status.in_(_FLAGGABLE_EVENT_STATUSES)),
+        VenueBooking.event.has(Event.status.in_(_ENDABLE_EVENT_STATUSES)),
         VenueBooking.held_until > now,
         _covered_by(slices, now),
     )

@@ -396,8 +396,7 @@ class OrganiserBooking(BaseModel):
     venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
     Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
     out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
-    confirmed, and when the booking was marked under story 9.4 - but not who changed the expiry,
-    or why."""
+    confirmed - but not who changed the expiry, or why."""
 
     id: uuid.UUID
     venue_name: str
