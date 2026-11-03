@@ -416,57 +416,16 @@ def _approve_replacement(conn, replacement) -> None:
     )
 
 
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=3)
-def test_reseeding_keeps_a_booking_replaced_by_the_seeded_replacement(db: Session):
-    """Venue Staff approved the seeded replacement. Its original cannot come back beside it, and
-    it must not go back to waiting on an original that is gone, so the seed leaves both."""
-    conn = db.connection()
-    original, replacement = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _approve_replacement(conn, replacement)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [original, replacement]) == {
-        original: "CANCELLED",
-        replacement: "APPROVED",
-    }
-
-
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=3)
-def test_reseeding_keeps_a_booking_replaced_by_a_newer_replacement(db: Session):
-    """The same for a replacement raised through the app. The seeded one, withdrawn to make way,
-    must not come back either."""
-    conn = db.connection()
-    original, seeded = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _withdraw(conn, seeded)
-    newer = _raise_replacement(conn)
-    _approve_replacement(conn, newer)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [original, seeded, newer]) == {
-        original: "CANCELLED",
-        seeded: "WITHDRAWN",
-        newer: "APPROVED",
-    }
-
-
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=10)
-def test_reseeding_leaves_a_replacement_closed_once_a_newer_one_is_pending(db: Session):
-    """The seeded replacement was withdrawn and another raised (12.6). Making the seeded one
-    pending again would give the booking two, which uq_venue_bookings_one_pending_replacement
-    refuses."""
-    conn = db.connection()
-    seeded = Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _withdraw(conn, seeded)
-    newer = _raise_replacement(conn)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [seeded, newer]) == {seeded: "WITHDRAWN", newer: "PENDING"}
+# Three more of these tests - an approved seeded replacement, a newer approved replacement and a
+# newer pending replacement - each began from the seeded pending replacement of the Open Studios
+# booking (12.6, event 82). Story 9.5 retired 12.6's replacement request (CL-193, D5) and its
+# migration rejected that row, so the seed has no pending replacement any more and the scenarios
+# cannot happen. What they protected, that a re-run does not put a seeded booking back live beside
+# a newer booking that took its slot or its venue requirement, is still proven by
+# test_reseeding_leaves_a_booking_closed_once_its_slot_is_taken and
+# test_reseeding_leaves_a_booking_closed_once_a_newer_one_holds_its_requirement above, and the
+# link a booking no longer replaced loses by
+# test_reseeding_clears_the_link_of_a_booking_no_longer_replaced.
 
 
 @pytest.mark.story("1", ac=3)
