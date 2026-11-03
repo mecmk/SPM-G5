@@ -573,6 +573,7 @@ def test_seed_constants_match_database(db: Session):
         (Events.CLOSURE_CONFIRMED, "CONFIRMED"),
         (Events.CLOSURE_PLANNING, "PLANNING"),
         (Events.CLOSURE_REPLACED, "PLANNING"),
+        (Events.BAYFRONT_SHOWCASE, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
@@ -680,7 +681,8 @@ def test_seed_constants_match_database(db: Session):
     # out-of-service record that leaves no video camera free for the showcase. Story 15.2's: one
     # item per Technical Support tab, and the out-of-service record that leaves the pending one
     # short. Story 17.1's: three released items on a cancelled event, holding nothing, and a
-    # pending one with its hold.
+    # pending one with its hold. Story 17.3's: one item in each status that holds units, each with
+    # its hold, and a declined one.
     for item_id, status in (
         (EquipmentItems.WORKSHOP_PROJECTORS, "REQUESTED"),
         (EquipmentItems.SHOWCASE_SPEAKERS, "PENDING"),
@@ -698,6 +700,10 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentItems.MIXER_WIRELESS_MICS, "CANCELLED"),
         (EquipmentItems.MIXER_PROJECTOR, "CANCELLED"),
         (EquipmentItems.DEMO_LAPTOPS, "PENDING"),
+        (EquipmentItems.BAYFRONT_WIRELESS_MICS, "ACCEPTED"),
+        (EquipmentItems.BAYFRONT_SPEAKERS, "PENDING"),
+        (EquipmentItems.BAYFRONT_LAPTOPS, "REQUESTED"),
+        (EquipmentItems.BAYFRONT_CAMERA, "DECLINED"),
     ):
         assert (
             db.execute(
@@ -718,6 +724,9 @@ def test_seed_constants_match_database(db: Session):
         (EquipmentHolds.OFFSITE_WIRELESS_MICS, EquipmentItems.OFFSITE_WIRELESS_MICS),
         (EquipmentHolds.OFFSITE_CAMERAS, EquipmentItems.OFFSITE_CAMERAS),
         (EquipmentHolds.DEMO_LAPTOPS, EquipmentItems.DEMO_LAPTOPS),
+        (EquipmentHolds.BAYFRONT_WIRELESS_MICS, EquipmentItems.BAYFRONT_WIRELESS_MICS),
+        (EquipmentHolds.BAYFRONT_SPEAKERS, EquipmentItems.BAYFRONT_SPEAKERS),
+        (EquipmentHolds.BAYFRONT_LAPTOPS, EquipmentItems.BAYFRONT_LAPTOPS),
     ):
         assert (
             db.execute(

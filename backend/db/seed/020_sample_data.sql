@@ -3077,3 +3077,60 @@ INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, out
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
     outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+-- ---------------------------------------------------------------------
+-- Story 17.3: tests/e2e/equipment-holds.spec.ts. The bayfront product showcase (3333..017301) is
+-- in Planning with one item in each status that holds units - wireless microphones Technical
+-- Support accepted, a speaker set still pending and presentation laptops not yet sent, each held
+-- for the event's day - and a video camera they declined, which holds nothing. Organiser 2 and
+-- coordinator 2, whose events only tests/events/test_my_event_requests.py lists in full, and it
+-- names this one; 9 April 2031, which no other seed row or spec holds any of these types over.
+-- The spec only reads it. Every id is in the story's 0173NN block: 01 the event, 02 to 05 its
+-- items, and 02 to 04 the holds of the three that hold units, numbered as their items.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, venue_none_required, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000017301', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Bayfront Product Showcase', 'Product launch', 'Live demonstrations of the new product range for partners.', '2031-04-09 09:00+08', '2031-04-09 17:00+08', 120, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower B', TRUE, TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-20 09:00+08', '2026-10-20 12:00+08', '11111111-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    venue_none_required = EXCLUDED.venue_none_required,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
+    ('66666666-0000-0000-0000-000000017302', '33333333-0000-0000-0000-000000017301', '77777777-0000-0000-0000-000000000002', 3, 'For the demonstration stage', 'ACCEPTED', NULL,
+     '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-21 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-10-22 10:00+08'),
+    ('66666666-0000-0000-0000-000000017303', '33333333-0000-0000-0000-000000017301', '77777777-0000-0000-0000-000000000005', 1, 'For the partner lounge', 'PENDING', NULL,
+     '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-21 10:00+08', NULL, NULL),
+    ('66666666-0000-0000-0000-000000017304', '33333333-0000-0000-0000-000000017301', '77777777-0000-0000-0000-000000000004', 2, 'For the product demos', 'REQUESTED', NULL,
+     '11111111-0000-0000-0000-000000000004', NULL, NULL, NULL, NULL),
+    ('66666666-0000-0000-0000-000000017305', '33333333-0000-0000-0000-000000017301', '77777777-0000-0000-0000-000000000006', 1, 'To record the keynote', 'DECLINED', 'Every video camera is booked that week.',
+     '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-21 10:00+08', '11111111-0000-0000-0000-000000000006', '2026-10-22 10:00+08')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
+    created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
+    submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+
+INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
+    ('eeeeeeee-0000-0000-0000-000000017302', '33333333-0000-0000-0000-000000017301', '66666666-0000-0000-0000-000000017302', '77777777-0000-0000-0000-000000000002', 3,
+     '2031-04-09 09:00+08', '2031-04-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-21 09:00+08', 'Held for the coordinator''s equipment request.'),
+    ('eeeeeeee-0000-0000-0000-000000017303', '33333333-0000-0000-0000-000000017301', '66666666-0000-0000-0000-000000017303', '77777777-0000-0000-0000-000000000005', 1,
+     '2031-04-09 09:00+08', '2031-04-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-21 09:00+08', 'Held for the coordinator''s equipment request.'),
+    ('eeeeeeee-0000-0000-0000-000000017304', '33333333-0000-0000-0000-000000017301', '66666666-0000-0000-0000-000000017304', '77777777-0000-0000-0000-000000000004', 2,
+     '2031-04-09 09:00+08', '2031-04-09 17:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-21 09:00+08', 'Held for the coordinator''s equipment request.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, status = EXCLUDED.status, reserved_by_id = EXCLUDED.reserved_by_id,
+    reserved_at = EXCLUDED.reserved_at, notes = EXCLUDED.notes, released_quantity = 0, released_at = NULL;

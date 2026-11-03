@@ -18,6 +18,7 @@ from app.change_requests.router import router as change_requests_router
 from app.config import settings
 from app.coordination.router import router as coordination_router
 from app.db import SessionLocal
+from app.equipment.router import holds_router as equipment_holds_router
 from app.equipment.router import queue_router as equipment_queue_router
 from app.equipment.router import router as equipment_router
 from app.equipment.router import types_router as equipment_types_router
@@ -98,6 +99,7 @@ app.include_router(coordination_router)
 app.include_router(equipment_router)
 app.include_router(equipment_queue_router)
 app.include_router(equipment_types_router)
+app.include_router(equipment_holds_router)
 app.include_router(events_router)
 app.include_router(notifications_router)
 app.include_router(registrations_router)

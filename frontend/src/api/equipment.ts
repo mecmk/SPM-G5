@@ -427,3 +427,66 @@ export function removeOutOfService(
 export function listEventShortages(eventId: string): Promise<EquipmentShortage[]> {
   return api<EquipmentShortage[]>(`/events/${encodeURIComponent(eventId)}/equipment-shortages`)
 }
+
+// =============================================================================================
+// Story 17.3: the equipment holds schedule
+// =============================================================================================
+
+/** Story 17.3 AC1/AC2: the statuses of an item that holds units - not yet sent, Pending or
+ *  Accepted. Mirrors `HeldItemStatus`. */
+export type HeldItemStatus = 'REQUESTED' | 'PENDING' | 'ACCEPTED'
+
+/** Mirrors `EquipmentHoldOut`: story 17.3 AC1, one hold - its event, the units it still holds, the
+ *  dates it runs from and to, and its item's status. AC4: `item_id` opens a sent hold's request. */
+export interface EquipmentHold {
+  id: string
+  event_id: string
+  event_name: string
+  item_id: string
+  quantity: number
+  starts_at: string
+  ends_at: string
+  status: HeldItemStatus
+}
+
+/** Mirrors `EquipmentHoldTypeOut`: story 17.3 AC3, an active type the filter offers. */
+export interface EquipmentHoldType {
+  code: string
+  name: string
+}
+
+/** Mirrors `EquipmentHoldGroupOut`: story 17.3 AC1, one type and its holds, soonest first; AC6,
+ *  none when nothing of it is held. */
+export interface EquipmentHoldGroup {
+  equipment_type_code: string
+  equipment_type_name: string
+  holds: EquipmentHold[]
+}
+
+/** Mirrors `EquipmentHoldsOut`: story 17.3, every active type for the filter, and the groups. */
+export interface EquipmentHoldsSchedule {
+  types: EquipmentHoldType[]
+  groups: EquipmentHoldGroup[]
+}
+
+/** Story 17.3 AC3: the schedule's filters - a type's code, and the range's first and last days as
+ *  `YYYY-MM-DD` Singapore days; blank for one not set. */
+export interface EquipmentHoldFilters {
+  type: string
+  from: string
+  to: string
+}
+
+/** Story 17.3 AC1-AC3: the schedule, filtered. A blank filter is left out. 422
+ *  (`EQUIPMENT_HOLDS_INVALID`) for a range or type the server refuses, with its sentence. */
+export function listEquipmentHolds(filters: EquipmentHoldFilters): Promise<EquipmentHoldsSchedule> {
+  const params = new URLSearchParams()
+  if (filters.type !== '') params.set('type', filters.type)
+  if (filters.from !== '') params.set('from', filters.from)
+  if (filters.to !== '') params.set('to', filters.to)
+  const query = params.toString()
+  return api<EquipmentHoldsSchedule>(
+    query === '' ? '/equipment-holds' : `/equipment-holds?${query}`,
+    { errorCodes: { 422: 'EQUIPMENT_HOLDS_INVALID' } },
+  )
+}

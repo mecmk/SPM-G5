@@ -134,6 +134,12 @@ export type ErrorCode =
   | 'OUT_OF_SERVICE_END_BEFORE_START'
   | 'OUT_OF_SERVICE_DATE_INCOMPLETE'
   | 'OUT_OF_SERVICE_DATE_INVALID'
+  | 'EQUIPMENT_HOLDS_INVALID'
+  | 'EQUIPMENT_HOLDS_START_BEFORE_TODAY'
+  | 'EQUIPMENT_HOLDS_END_BEFORE_START'
+  | 'EQUIPMENT_HOLDS_END_BEFORE_TODAY'
+  | 'EQUIPMENT_HOLDS_DATE_INCOMPLETE'
+  | 'EQUIPMENT_HOLDS_DATE_INVALID'
   | 'CHANGE_REQUEST_REFUSED'
   | 'CHANGE_REQUEST_INVALID'
   | 'CHANGE_REQUEST_FIELD_REQUIRED'
@@ -832,6 +838,39 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   OUT_OF_SERVICE_DATE_INVALID: {
     title: 'Check the dates',
     message: 'Enter a valid date and time, with a four-digit year.',
+  },
+
+  // Story 17.3: the equipment holds schedule's filters.
+  /** AC3: a type or range the server refused; it sends its own sentence. */
+  EQUIPMENT_HOLDS_INVALID: {
+    title: 'Check the filters',
+    message: 'These filters cannot be shown.',
+  },
+  /** AC3: worded as the backend's HOLDS_START_BEFORE_TODAY_MESSAGE. */
+  EQUIPMENT_HOLDS_START_BEFORE_TODAY: {
+    title: 'Check the dates',
+    message: 'The start date cannot be before today.',
+  },
+  /** AC3: worded as the backend's HOLDS_END_BEFORE_START_MESSAGE. */
+  EQUIPMENT_HOLDS_END_BEFORE_START: {
+    title: 'Check the dates',
+    message: 'The end date cannot be before the start date.',
+  },
+  /** AC3: worded as the backend's HOLDS_END_BEFORE_TODAY_MESSAGE. */
+  EQUIPMENT_HOLDS_END_BEFORE_TODAY: {
+    title: 'Check the dates',
+    message: 'The end date cannot be before today.',
+  },
+  /** AC3: a date started but not finished, which the picker reports as blank - no side of the
+   *  range at all, if it were let through. */
+  EQUIPMENT_HOLDS_DATE_INCOMPLETE: {
+    title: 'Check the dates',
+    message: 'Finish entering the date, and check the day exists in that month.',
+  },
+  /** AC3: a year of five or six digits, which a picker can hold and the server cannot read. */
+  EQUIPMENT_HOLDS_DATE_INVALID: {
+    title: 'Check the dates',
+    message: 'Enter a valid date, with a four-digit year.',
   },
 
   // Story 19.1: change requests and the point of contact on an approved event.
