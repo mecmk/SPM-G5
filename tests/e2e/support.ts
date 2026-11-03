@@ -75,6 +75,9 @@ export const EVENTS = {
   // Story 16.1, Planning, organiser: organiser2, coordinator, dated December 2027. Six pending
   // equipment items; the 16.1 spec accepts and declines them.
   equipmentDecisions: '33333333-0000-0000-0000-000000000027',
+  // Fix f16.1.1, Planning, organiser: organiser2, coordinator2, dated March 2030. Two pending
+  // equipment items, both decided by the 16.1 spec's AC10 test alone.
+  volunteerEvening: '33333333-0000-0000-0000-000000016110',
   // Story 17.1, organiser: organiser2, coordinator. The Summer Rooftop Mixer was cancelled with
   // three items on it, all released; nothing changes them. The waterfront demo is Planning,
   // dated January 2028, with one pending item the 17.1 spec has Technical Support accept.

@@ -118,6 +118,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PARTNER_BRIEFING),
         str(Events.EQUIPMENT_ROADSHOW),
         str(Events.LIGHT_SHOWCASE),
+        str(Events.VOLUNTEER_EVENING),
         str(Events.FINTECH_BREAKFAST),
         str(Events.CUSTOMER_FORUM),
         str(Events.SALES_KICKOFF),

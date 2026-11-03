@@ -9,6 +9,8 @@ Plus guard-rails that keep the ORM models, the seed constants and the SQL in ste
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ import app.venues.models  # noqa: F401
 from app.bookings.models import BookingStatus, VenueBooking
 from app.db import Base
 from app.dbtool import migrate
+from app.dbtool.__main__ import main as dbtool
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationStatus
 from app.safety.service import confirm_blockers
@@ -49,6 +52,8 @@ CORE_TABLES = {
 
 # *_id columns that intentionally have no FK (polymorphic references).
 POLYMORPHIC_ID_COLUMNS = {("notifications", "related_entity_id"), ("audit_log", "entity_id")}
+
+LIVE_BOOKING = "('PENDING', 'APPROVED')"
 
 
 @pytest.mark.story("1", ac=1)
@@ -216,6 +221,282 @@ def test_reseeding_leaves_a_registration_alone_once_a_newer_one_was_withdrawn_to
         ).all()
     )
     assert statuses == {Registrations.SKETCHING_WALK: "WITHDRAWN", newer: "WITHDRAWN"}
+
+
+def _reseed(conn) -> None:
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+
+def _rows(conn, table: str, columns: str) -> set:
+    return {tuple(row) for row in conn.execute(text(f"SELECT id, {columns} FROM {table}"))}
+
+
+def _booking_statuses(conn, ids: list) -> dict:
+    return dict(
+        conn.execute(
+            text("SELECT id, status FROM venue_bookings WHERE id = ANY(:ids)"), {"ids": ids}
+        ).all()
+    )
+
+
+def _live_booking_ids(conn, condition: str = "TRUE") -> list:
+    return list(
+        conn.execute(
+            text(f"SELECT id FROM venue_bookings WHERE status IN {LIVE_BOOKING} AND {condition}")
+        ).scalars()
+    )
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.parametrize(
+    ("table", "closing", "columns"),
+    [
+        pytest.param(
+            "events",
+            "status = 'CANCELLED', cancelled_at = now(), cancelled_by_id = :user,"
+            " cancellation_reason = 'Closed' WHERE status NOT IN ('CANCELLED', 'DRAFT')",
+            "status, cancelled_at, cancelled_by_id, cancellation_reason",
+            id="6.2-event-cancelled",
+        ),
+        pytest.param(
+            "venue_bookings",
+            "status = 'CANCELLED', cancelled_at = now(), release_cause = 'EVENT_CANCELLED',"
+            " released_by_id = :user WHERE status <> 'CANCELLED'",
+            "status, cancelled_at, release_cause, release_reason, released_by_id,"
+            " replaced_by_booking_id, replaces_live_original",
+            id="6.2-booking-released",
+        ),
+        pytest.param(
+            "event_equipment_requests",
+            "status = 'CANCELLED', cancelled_at = now()"
+            " WHERE status NOT IN ('CANCELLED', 'WITHDRAWN')",
+            "status, cancelled_at, withdrawn_at, withdrawn_by_id",
+            id="6.2-equipment-cancelled",
+        ),
+        pytest.param(
+            "event_equipment_requests",
+            "status = 'WITHDRAWN', withdrawn_at = now(), withdrawn_by_id = :user"
+            " WHERE status NOT IN ('CANCELLED', 'WITHDRAWN')",
+            "status, cancelled_at, withdrawn_at, withdrawn_by_id",
+            id="17.2-equipment-withdrawn",
+        ),
+    ],
+)
+def test_reseeding_puts_every_closed_row_back(db: Session, table, closing, columns):
+    """`npm run db:ready` re-applies the seed to a database people have used. Every seeded row of
+    the table is closed at once, so an upsert that puts a status back but keeps its closing stamp
+    fails here, whichever row it holds, and a check constraint would abort the seed."""
+    conn = db.connection()
+    seeded = _rows(conn, table, columns)
+    conn.execute(text(f"UPDATE {table} SET {closing}"), {"user": Users.COORDINATOR.id})
+
+    _reseed(conn)
+
+    assert _rows(conn, table, columns) == seeded
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("12.5", ac=10)
+def test_reseeding_leaves_a_booking_closed_once_a_newer_one_holds_its_requirement(db: Session):
+    """A seeded booking was withdrawn and its requirement requested again (12.5). Making the seeded
+    one live again would give the requirement two requests, which
+    uq_venue_bookings_one_per_requirement refuses. Every live seeded booking is closed at once, so
+    an upsert that lacks the check fails here, whichever row it holds."""
+    conn = db.connection()
+    seeded = _live_booking_ids(conn, "venue_requirement_id IS NOT NULL")
+    _withdraw(conn, *seeded)
+    newer = list(
+        conn.execute(
+            text(
+                "INSERT INTO venue_bookings (event_id, venue_id, requested_by_id, starts_at,"
+                " ends_at, expected_attendance, venue_requirement_id)"
+                " SELECT DISTINCT ON (venue_requirement_id) event_id, venue_id, requested_by_id,"
+                " starts_at + interval '20 years', ends_at + interval '20 years',"
+                " expected_attendance, venue_requirement_id"
+                " FROM venue_bookings WHERE id = ANY(:ids) RETURNING id"
+            ),
+            {"ids": seeded},
+        ).scalars()
+    )
+
+    _reseed(conn)
+
+    assert set(_booking_statuses(conn, seeded).values()) == {"WITHDRAWN"}
+    assert set(_booking_statuses(conn, newer).values()) == {"PENDING"}
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("14.2", ac=1)
+def test_reseeding_leaves_a_booking_closed_once_its_slot_is_taken(db: Session):
+    """A seeded booking released its venue and another booking took the slot. Making the seeded
+    one live again would double-book the venue, which ex_venue_bookings_no_double_booking refuses.
+    Every live seeded booking is closed at once, so an upsert that lacks the check fails here."""
+    conn = db.connection()
+    seeded = _live_booking_ids(conn)
+    _withdraw(conn, *seeded)
+    newer = list(
+        conn.execute(
+            text(
+                "INSERT INTO venue_bookings (event_id, venue_id, requested_by_id, starts_at,"
+                " ends_at, expected_attendance)"
+                " SELECT event_id, venue_id, requested_by_id, starts_at, ends_at,"
+                " expected_attendance FROM venue_bookings WHERE id = ANY(:ids) RETURNING id"
+            ),
+            {"ids": seeded},
+        ).scalars()
+    )
+
+    _reseed(conn)
+
+    assert set(_booking_statuses(conn, seeded).values()) == {"WITHDRAWN"}
+    assert set(_booking_statuses(conn, newer).values()) == {"PENDING"}
+
+
+def _withdraw(conn, *booking_ids) -> None:
+    conn.execute(
+        text("UPDATE venue_bookings SET status = 'WITHDRAWN' WHERE id = ANY(:ids)"),
+        {"ids": list(booking_ids)},
+    )
+
+
+def _raise_replacement(conn) -> uuid.UUID:
+    """A new pending replacement of the Open Studios booking, as 12.6 raises one."""
+    return conn.execute(
+        text(
+            "INSERT INTO venue_bookings (event_id, venue_id, requested_by_id, starts_at, ends_at,"
+            " expected_attendance, venue_requirement_id, replaces_booking_id,"
+            " replaces_live_original)"
+            " SELECT event_id, :venue, requested_by_id, starts_at, ends_at, expected_attendance,"
+            " venue_requirement_id, id, TRUE"
+            " FROM venue_bookings WHERE id = :original RETURNING id"
+        ),
+        {"venue": Venues.GRAND_HALL, "original": Bookings.OPEN_STUDIOS_HARBOUR},
+    ).scalar_one()
+
+
+def _approve_replacement(conn, replacement) -> None:
+    """What Venue Staff's approval does (12.6 AC3): it releases the original, naming itself."""
+    conn.execute(
+        text(
+            "UPDATE venue_bookings SET status = 'CANCELLED', cancelled_at = now(),"
+            " release_cause = 'REPLACED', replaced_by_booking_id = :replacement WHERE id = :id"
+        ),
+        {"replacement": replacement, "id": Bookings.OPEN_STUDIOS_HARBOUR},
+    )
+    conn.execute(
+        text("UPDATE venue_bookings SET status = 'APPROVED' WHERE id = :id"), {"id": replacement}
+    )
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("12.6", ac=3)
+def test_reseeding_keeps_a_booking_replaced_by_the_seeded_replacement(db: Session):
+    """Venue Staff approved the seeded replacement. Its original cannot come back beside it, and
+    it must not go back to waiting on an original that is gone, so the seed leaves both."""
+    conn = db.connection()
+    original, replacement = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
+    _approve_replacement(conn, replacement)
+
+    _reseed(conn)
+
+    assert _booking_statuses(conn, [original, replacement]) == {
+        original: "CANCELLED",
+        replacement: "APPROVED",
+    }
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("12.6", ac=3)
+def test_reseeding_keeps_a_booking_replaced_by_a_newer_replacement(db: Session):
+    """The same for a replacement raised through the app. The seeded one, withdrawn to make way,
+    must not come back either."""
+    conn = db.connection()
+    original, seeded = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
+    _withdraw(conn, seeded)
+    newer = _raise_replacement(conn)
+    _approve_replacement(conn, newer)
+
+    _reseed(conn)
+
+    assert _booking_statuses(conn, [original, seeded, newer]) == {
+        original: "CANCELLED",
+        seeded: "WITHDRAWN",
+        newer: "APPROVED",
+    }
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.story("12.6", ac=10)
+def test_reseeding_leaves_a_replacement_closed_once_a_newer_one_is_pending(db: Session):
+    """The seeded replacement was withdrawn and another raised (12.6). Making the seeded one
+    pending again would give the booking two, which uq_venue_bookings_one_pending_replacement
+    refuses."""
+    conn = db.connection()
+    seeded = Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
+    _withdraw(conn, seeded)
+    newer = _raise_replacement(conn)
+
+    _reseed(conn)
+
+    assert _booking_statuses(conn, [seeded, newer]) == {seeded: "WITHDRAWN", newer: "PENDING"}
+
+
+@pytest.mark.story("1", ac=3)
+def test_reseeding_clears_the_link_of_a_booking_no_longer_replaced(db: Session):
+    """Once the booking that replaced a seeded one is closed too, nothing holds the seeded one's
+    requirement, so it comes back, without the link ck_venue_bookings_replaced_by_cancelled allows
+    only on a CANCELLED booking."""
+    conn = db.connection()
+    _withdraw(conn, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER)
+    newer = _raise_replacement(conn)
+    _approve_replacement(conn, newer)
+    _withdraw(conn, newer)
+
+    _reseed(conn)
+
+    row = conn.execute(
+        text("SELECT status, replaced_by_booking_id FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.OPEN_STUDIOS_HARBOUR},
+    ).one()
+    assert tuple(row) == ("APPROVED", None)
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.parametrize("command", [["seed"], ["ready", "--no-docs"]], ids=["seed", "ready"])
+def test_a_seed_the_database_refuses_says_how_to_recover(
+    engine, test_database_url, capsys, command
+):
+    """A newer row can take a name a seeded row needs: here a venue was renamed and a new one given
+    its old name. No upsert can get past that, so `npm run db:ready` says what stopped it and how
+    to recover, rather than ending in a traceback."""
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE venues SET name = 'Grand Hall (old)' WHERE id = :id"),
+            {"id": Venues.GRAND_HALL},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO venues (name, location, capacity) VALUES ('Grand Hall', 'Tower A', 50)"
+            )
+        )
+    try:
+        exit_code = dbtool(["--url", test_database_url, *command])
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM venues WHERE name = 'Grand Hall' AND id <> :id"),
+                {"id": Venues.GRAND_HALL},
+            )
+            conn.execute(
+                text("UPDATE venues SET name = 'Grand Hall' WHERE id = :id"),
+                {"id": Venues.GRAND_HALL},
+            )
+
+    printed = capsys.readouterr().out
+    assert exit_code == 1
+    assert "uq_venues_name" in printed
+    assert "npm run db:reset" in printed
 
 
 @pytest.mark.story("1")
