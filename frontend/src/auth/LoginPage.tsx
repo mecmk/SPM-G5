@@ -1,23 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { ApiError, formatApiError } from '../api/client'
-import { getHealth } from '../api/health'
 import { LoadingState } from '../layout/LoadingState'
 import { useAuth } from './authContext'
 import { homeFor } from './homeFor'
 import { SignInLockedAlert, type SignInLock } from './SignInLockedAlert'
-
-const SAMPLE_PASSWORD = 'Password123!'
-
-/** Seed accounts from backend/db/seed/020_sample_data.sql, offered in development builds only. */
-const SAMPLE_ACCOUNTS: { role: string; email: string }[] = [
-  { role: 'Event Organiser', email: 'organiser@acme.example' },
-  { role: 'Event Coordinator', email: 'coordinator@connectsphere.example' },
-  { role: 'Event Coordinator Lead', email: 'lead@connectsphere.example' },
-  { role: 'Venue Staff', email: 'venue@connectsphere.example' },
-  { role: 'Technical Support', email: 'tech@connectsphere.example' },
-  { role: 'Attendee', email: 'attendee@example.com' },
-]
 
 const PLATFORM_FEATURES = [
   'Event requests and approvals',
@@ -41,21 +28,6 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [lock, setLock] = useState<SignInLock | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [backendStatus, setBackendStatus] = useState('checking…')
-
-  useEffect(() => {
-    let cancelled = false
-    getHealth()
-      .then((health) => {
-        if (!cancelled) setBackendStatus(health.status)
-      })
-      .catch(() => {
-        if (!cancelled) setBackendStatus('unreachable')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Until `/auth/me` answers the session is unknown, so show the check instead of flashing the
   // sign-in form at someone who is already signed in. RequireAuth guards the same way.
@@ -92,11 +64,6 @@ export function LoginPage() {
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  function fillSampleAccount(sampleEmail: string) {
-    setEmail(sampleEmail)
-    setPassword(SAMPLE_PASSWORD)
   }
 
   return (
@@ -159,33 +126,6 @@ export function LoginPage() {
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-
-          {import.meta.env.DEV && (
-            <details className="sample-accounts">
-              <summary>Sample accounts for local testing</summary>
-              <p className="small muted">
-                Every account uses the password <code>{SAMPLE_PASSWORD}</code>.
-              </p>
-              <ul className="sample-account-list">
-                {SAMPLE_ACCOUNTS.map((account) => (
-                  <li key={account.email}>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => fillSampleAccount(account.email)}
-                    >
-                      {account.role}
-                    </button>
-                    <span className="small muted"> · {account.email}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-
-          <p className="small muted login-status">
-            Backend status: <strong>{backendStatus}</strong>
-          </p>
         </div>
       </main>
     </div>
