@@ -1097,7 +1097,8 @@ ON CONFLICT (id) DO UPDATE SET
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
     hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
@@ -1150,7 +1151,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 12.5: the earlier seeded bookings name the requirement they were made for: each its
@@ -1205,7 +1207,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- c8: every other confirmed event's Main venue, approved by Vera and its hold completed when the
@@ -1278,7 +1281,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- Story 18.1: Bella's place at the Portfolio Review Slot (3333..43) - its only place, so the slot
@@ -1566,7 +1570,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
@@ -1656,7 +1661,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
@@ -1987,7 +1993,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
     release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
@@ -2007,7 +2014,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at,
     release_cause = EXCLUDED.release_cause, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
@@ -2365,7 +2373,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- c8: 18.4's other events' Main venues at Exhibition Foyer, approved and their holds completed
@@ -2413,7 +2422,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- ---------------------------------------------------------------------
@@ -2464,7 +2474,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
     release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
@@ -2572,7 +2583,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = EXCLUDED.hold_completed_at,
     cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 -- ---------------------------------------------------------------------
@@ -2874,7 +2886,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
     release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
@@ -2930,7 +2943,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
     hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
     release_cause = NULL, release_reason = NULL, released_by_id = NULL,
-    replaced_by_booking_id = NULL
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
 WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
 
 INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
