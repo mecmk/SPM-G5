@@ -127,8 +127,9 @@ file, and mirror any row tests need in `backend/tests/support/seed.py`. Keep eve
 `npm run db:ready` re-applies the seed to a database people have used, so a sample row the app has
 closed comes back:
 
-- An upsert into `events`, `venue_bookings` or `event_equipment_requests` sets every closing stamp,
-  to `NULL` unless the row is seeded closed: a check constraint refuses a stamp beside the status the
+- An upsert into `events`, `venue_bookings` or `event_equipment_requests` sets every closing stamp
+  (on a booking that includes the reason and description of the venue closure that ended it,
+  `closure_reason` and `closure_description`), to `NULL` unless the row is seeded closed: a check constraint refuses a stamp beside the status the
   upsert puts back.
 - An upsert into `venue_bookings` ends with `WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED)`,
   which leaves the row as it is when a newer booking holds its slot, venue requirement or original.

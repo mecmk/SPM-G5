@@ -3,17 +3,10 @@ import { Link } from 'react-router'
 import type { BookingOutcome } from '../api/bookings'
 import type { EventDetail, VenueRequirement } from '../api/events'
 import { eventPath } from '../routes'
-import {
-  replacementRequestedLine,
-  replacingLine,
-  venueUnavailableLine,
-} from '../shared/bookingStatus'
 import { formatSchedule } from '../shared/format'
 import {
   coveringBooking,
   isBooked,
-  isMarked,
-  pendingReplacementFor,
   requirementName,
   venueRequirementTerms,
 } from '../shared/venueRequest'
@@ -31,18 +24,9 @@ function describeRequirement(event: EventDetail, requirement: VenueRequirement):
 }
 
 /** Story 12.5 AC2: "Needs a venue", "Requested: <venue>" while its request is pending, or
- *  "Booked: <venue>" once approved. Story 12.6 AC4: a booking marked "Venue unavailable" reads
- *  "Venue unavailable: <venue>", or "Replacement requested: <venue>" while one is pending. */
-function describeCoverage(
-  covering: BookingOutcome | null,
-  pendingReplacement: BookingOutcome | null,
-): string {
+ *  "Booked: <venue>" once approved. */
+function describeCoverage(covering: BookingOutcome | null): string {
   if (covering === null) return 'Needs a venue'
-  if (isMarked(covering)) {
-    return pendingReplacement === null
-      ? venueUnavailableLine(covering.venue_name)
-      : replacementRequestedLine(pendingReplacement.venue_name)
-  }
   return `${isBooked(covering) ? 'Booked' : 'Requested'}: ${covering.venue_name}`
 }
 
@@ -52,8 +36,6 @@ interface ListedRequirement {
   /** Story 12.5 AC2: its pending or approved request, null while it needs a venue - or undefined
    *  when the event's bookings are not known, and nothing is said either way. */
   covering: BookingOutcome | null | undefined
-  /** Story 12.6 AC4: the replacement asked for a marked booking, while it is pending. */
-  pendingReplacement: BookingOutcome | null
 }
 
 /**
@@ -66,12 +48,7 @@ function listRequirements(
 ): ListedRequirement[] {
   const listed = requirements.map((requirement) => {
     const covering = bookings === null ? undefined : coveringBooking(requirement, bookings)
-    return {
-      requirement,
-      covering,
-      pendingReplacement:
-        bookings === null || !covering ? null : pendingReplacementFor(covering, bookings),
-    }
+    return { requirement, covering }
   })
   return [
     ...listed.filter((item) => !item.covering),
@@ -79,25 +56,16 @@ function listRequirements(
   ]
 }
 
-/** The class of a requirement in the banner: greyed once it has a venue (decided 10 Oct 2026) -
- *  not while that venue is marked unavailable (story 12.6 AC4), which still needs attention. */
+/** The class of a requirement in the banner: greyed once it has a venue (decided 10 Oct 2026). */
 function requirementClassName(base: string, covering: BookingOutcome | null | undefined): string {
-  return covering && !isMarked(covering) ? `${base} requirement-covered` : base
+  return covering ? `${base} requirement-covered` : base
 }
 
 /** Story 12.5 AC2: its status line, when the event's bookings are known. */
-function CoverageLine({
-  id,
-  covering,
-  pendingReplacement,
-}: {
-  id?: string
-  covering: BookingOutcome | null
-  pendingReplacement: BookingOutcome | null
-}) {
+function CoverageLine({ id, covering }: { id?: string; covering: BookingOutcome | null }) {
   return (
     <span id={id} className="small requirement-coverage">
-      {describeCoverage(covering, pendingReplacement)}
+      {describeCoverage(covering)}
     </span>
   )
 }
@@ -119,7 +87,7 @@ function RequirementChoice({ event, listed, isSelected, onSelect }: RequirementC
   const nameId = useId()
   const factsId = useId()
   const coverageId = useId()
-  const { requirement, covering, pendingReplacement } = listed
+  const { requirement, covering } = listed
 
   function select() {
     onSelect(requirement)
@@ -140,9 +108,7 @@ function RequirementChoice({ event, listed, isSelected, onSelect }: RequirementC
       <span id={factsId} className="small muted">
         {describeRequirement(event, requirement)}
       </span>
-      {covering !== undefined && (
-        <CoverageLine id={coverageId} covering={covering} pendingReplacement={pendingReplacement} />
-      )}
+      {covering !== undefined && <CoverageLine id={coverageId} covering={covering} />}
     </button>
   )
 }
@@ -154,14 +120,12 @@ interface RequirementSummaryProps {
 
 /** Story 8.4 AC5: the event's one venue requirement, shown alone - there is nothing to choose. */
 function RequirementSummary({ event, listed }: RequirementSummaryProps) {
-  const { requirement, covering, pendingReplacement } = listed
+  const { requirement, covering } = listed
   return (
     <div className={requirementClassName('requirement-summary', covering)}>
       <span className="requirement-choice-name">{requirementName(event, requirement)}</span>
       <span className="small muted">{describeRequirement(event, requirement)}</span>
-      {covering !== undefined && (
-        <CoverageLine covering={covering} pendingReplacement={pendingReplacement} />
-      )}
+      {covering !== undefined && <CoverageLine covering={covering} />}
     </div>
   )
 }
@@ -176,10 +140,6 @@ interface RequestingEventBannerProps {
   hasChangedFilters: boolean
   /** Story 12.5 AC5: no requirement is selected, so a venue requested now is an additional one. */
   isAdditionalVenue: boolean
-  /** Story 12.6 AC1: the booking this catalogue is finding a replacement for, named in the banner. */
-  replacingBooking: BookingOutcome | null
-  /** Story 12.6 AC10: why the booking the address names cannot be replaced, when it cannot. */
-  replacementRefusal: string | null
   onSelectRequirement: (requirement: VenueRequirement) => void
 }
 
@@ -204,8 +164,6 @@ export function RequestingEventBanner({
   selectedRequirement,
   hasChangedFilters,
   isAdditionalVenue,
-  replacingBooking,
-  replacementRefusal,
   onSelectRequirement,
 }: RequestingEventBannerProps) {
   const requirementsId = useId()
@@ -225,13 +183,6 @@ export function RequestingEventBanner({
         </Link>
       </div>
       {facts.length > 0 && <p className="small muted">{facts.join(' · ')}</p>}
-      {replacingBooking !== null && (
-        <p>
-          <strong>{replacingLine(replacingBooking.venue_name)}</strong>, whose venue is unavailable
-          for the booked period. Choose another venue to request in its place.
-        </p>
-      )}
-      {replacementRefusal !== null && <p>{replacementRefusal}</p>}
       {listed.length > 0 && (
         <div>
           <p id={requirementsId} className="eyebrow">

@@ -16,9 +16,15 @@
  * f7.1.2 (AC1): the organiser sees their event's approved and pending venue bookings, read-only.
  * Which bookings, and that only the event's own organiser gets them, is proven in
  * backend/tests/bookings/test_organiser_bookings.py. CL-184: a booking over two days names both
- * dates (AC4); an open hold is not shown as confirmed, and a booking marked under 9.4 says so
- * (AC7); there is no section on a Rejected or Cancelled event, and it goes as soon as the organiser
- * cancels (AC8); a safety review flagging venue bookings flags the section (AC9). The AC4/AC8 test
+ * dates (AC4); an open hold is not shown as confirmed (AC7); there is no section on a Rejected or
+ * Cancelled event, and it goes as soon as the organiser cancels (AC8); a safety review flagging
+ * venue bookings flags the section (AC9). The sheet's AC5 and AC7, as 9.5 (CL-194) reworded them:
+ * rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, released
+ * bookings (21.3) and those a venue closure cancelled (9.5) among the cancelled ones, which
+ * showing is f7.1.3; an open hold is not shown as confirmed but as held until the event is
+ * confirmed or the hold expires, with the expiry; and nothing is marked "Venue unavailable –
+ * alternative needed" any more (9.5 AC7): a booking a closure ends is rejected or cancelled, so it
+ * leaves this section, and the organiser learns of it from the closure's notice (9.5 AC4). The AC4/AC8 test
  * cancels the seeded Lakeside Leadership Retreat; the other events it reads are never changed.
  *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
@@ -128,17 +134,6 @@ test('7.1 AC7: an open hold reads as held until the event is confirmed, with whe
   await expect(grandHall).not.toContainText('the venue is confirmed for this event')
 })
 
-test('7.1 AC7: a booking whose venue was marked unavailable says an alternative is needed', async ({
-  page,
-}) => {
-  await signIn(page, ACCOUNTS.organiser2)
-  await page.goto(`/events/${EVENTS.lanternShowcase}`)
-
-  await expect(
-    organiserBookings(page).getByText('Venue unavailable – alternative needed'),
-  ).toBeVisible()
-})
-
 test('7.1 AC9: the section is flagged when the latest safety review flags venue bookings', async ({
   page,
 }) => {
@@ -155,7 +150,7 @@ test('7.1 AC8: a rejected or cancelled event has no Venue bookings section', asy
   await expect(page.getByText('Rejected', { exact: true }).first()).toBeVisible()
   await expect(organiserBookings(page)).toHaveCount(0)
 
-  // The heritage walk's marked booking was cancelled with it (story 12.6's seed).
+  // The heritage walk was cancelled by Omar (c8), which cancelled its Foyer booking with it.
   await page.goto(`/events/${EVENTS.heritageWalk}`)
   await expect(page.getByText('Cancelled', { exact: true }).first()).toBeVisible()
   await expect(organiserBookings(page)).toHaveCount(0)

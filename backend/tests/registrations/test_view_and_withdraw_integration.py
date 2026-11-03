@@ -34,9 +34,11 @@ AC6 The API returns only the caller's own registrations: 401 signed out, 403 for
     page of an unlisted event only another attendee registered for.
 AC7 A double-click withdraws once: one status change, one withdrawal time, one audit entry, also
     when both requests arrive at once.
-AC8 A registration shows as Event cancelled when its event was cancelled or it was cancelled with
-    the event, and cannot be withdrawn. One on an event sent back to Planning stays Registered and
-    can be withdrawn.
+AC8 A registration shows as Event cancelled when its event was cancelled, or when the registration
+    was cancelled along with it (6.2). It cannot be withdrawn. A Confirmed event sent back to
+    Planning (9.5 AC3, 12.8 AC5, 19.2 AC8) keeps its registrations (18.1 AC4), which stay
+    Registered and can be withdrawn; if that event is then cancelled, they show as Event
+    cancelled. A registration the attendee already withdrew stays Withdrawn. (9.5, CL-194)
 
 Event page (fix f18.2.1):
 AC9 Clicking anywhere on a registration's card opens its event's page (18.1 AC9), which also shows
@@ -717,8 +719,8 @@ def test_a_registration_on_a_cancelled_event_shows_as_cancelled_and_cannot_be_wi
     attendee_client, db: Session
 ):
     """The event Cancelled with its registrations untouched: a Confirmed event sent back to
-    Planning (9.4 AC3, 19.2 AC8) keeps its registrations (18.1 AC4), and may then be cancelled
-    (6.2) with them still active."""
+    Planning (9.5 AC3, 12.8 AC5, 19.2 AC8) keeps its registrations (18.1 AC4), and may then be
+    cancelled (6.2) with them still active."""
     event = _event(db, starts_at=future_datetime(days=40), status=EventStatus.CANCELLED)
     registration = _registration(db, event, Users.ATTENDEE.id)
 

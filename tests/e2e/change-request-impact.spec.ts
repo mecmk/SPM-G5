@@ -21,7 +21,8 @@
  * the request, in the coordinator's queue and in the approval dialog, one row each for venue
  * bookings, equipment and registrations that says at a glance how much is affected and opens onto
  * each arrangement. A booking the change no longer fits is cancelled, Venue Staff are told and
- * need do nothing, and a replacement is requested from the event page (19.2's own behaviour); each
+ * need do nothing, and the coordinator asks for another venue from the event page as for any
+ * request (19.2's own behaviour; 12.6's replacement request is retired, story 9.5); each
  * booking also says where it stands now. For AC7, another session adds equipment the new dates
  * must hold; the new assessment is marked as updated, and nothing is applied until the coordinator
  * approves again.

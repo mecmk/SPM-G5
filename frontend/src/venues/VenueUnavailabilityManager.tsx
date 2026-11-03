@@ -83,8 +83,9 @@ export function VenueUnavailabilityManager({
       <fieldset className="card stack">
         <legend>{blockOffLabel(editingClosure !== null)}</legend>
         <p className="muted">
-          Close this venue for a period, for example for maintenance. Any bookings in that period
-          will be flagged and their coordinators told.
+          Close this venue for a period, for example for maintenance. Bookings in that period are
+          listed before you save. Saving rejects each pending request and cancels each approved
+          booking, and their coordinators are told.
         </p>
         <VenueUnavailabilitySection
           key={editingClosure?.id ?? 'new'}

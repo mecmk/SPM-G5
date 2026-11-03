@@ -34,7 +34,11 @@ import {
  * AC6 A withdrawal answered "not found" says so (whose registrations the API answers for is a
  *     backend case).
  * AC7 A double-click withdraws once.
- * AC8 A registration for a cancelled event shows as Event cancelled, with no Withdraw.
+ * AC8 A registration shows as Event cancelled when its event was cancelled, or when the
+ *     registration was cancelled along with it (6.2). It cannot be withdrawn. A Confirmed event
+ *     sent back to Planning (9.5 AC3, 12.8 AC5, 19.2 AC8) keeps its registrations (18.1 AC4), which
+ *     stay Registered and can be withdrawn; if that event is then cancelled, they show as Event
+ *     cancelled. A registration the attendee already withdrew stays Withdrawn. (9.5, CL-194)
  * AC9 (fix f18.2.1) Clicking anywhere on a registration's card opens its event's page (18.1
  *     AC9), which also shows where the attendee stands - one badge - and when they registered,
  *     while they still are. Withdraw is only on this page, and red; once withdrawn, the page shows
