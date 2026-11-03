@@ -1411,6 +1411,14 @@ def _notify_venue_staff_of_closure_rejection(
 _ADDITIONAL_VENUE_PHRASE = "an additional venue"
 
 
+def _notice_order(booking: VenueBooking) -> tuple:
+    """Story 9.5 AC4: the order a notice lists an event's ended bookings in - by booked start, then
+    by requirement name, a booking for no requirement last when the starts are equal, and by id
+    only to make the order total."""
+    label = booking.requirement_label
+    return (booking.starts_at, label is None, label or "", booking.id)
+
+
 def _ended_line(booking: VenueBooking, *, noun: str, outcome: str) -> str:
     """Story 9.5 AC4: a booking a closure ended as the notice lists it - the booking (or, for a
     request, the request) for the requirement it is for, or for an additional venue, its booked
@@ -1494,7 +1502,7 @@ def end_bookings_for_closure(
     for event_bookings in by_event.values():
         event = event_bookings[0].event
         cancelled = 0
-        ended: list[str] = []
+        ended: list[tuple[VenueBooking, str]] = []
         for booking in event_bookings:
             if booking.status == BookingStatus.PENDING:
                 _mark_rejected(
@@ -1508,7 +1516,9 @@ def end_bookings_for_closure(
                 _notify_venue_staff_of_closure_rejection(
                     db, booking, actor=actor, reason_name=reason_name
                 )
-                ended.append(_ended_line(booking, noun="request", outcome="was rejected"))
+                ended.append(
+                    (booking, _ended_line(booking, noun="request", outcome="was rejected"))
+                )
             elif release_booking(
                 db,
                 booking,
@@ -1520,7 +1530,9 @@ def end_bookings_for_closure(
                 closure=closure,
             ):
                 cancelled += 1
-                ended.append(_ended_line(booking, noun="booking", outcome="was cancelled"))
+                ended.append(
+                    (booking, _ended_line(booking, noun="booking", outcome="was cancelled"))
+                )
         is_returned = bool(cancelled) and events_service.return_event_to_planning(
             db,
             event,
@@ -1536,7 +1548,7 @@ def end_bookings_for_closure(
             venue,
             period,
             event,
-            ended=ended,
+            ended=[line for _, line in sorted(ended, key=lambda each: _notice_order(each[0]))],
             is_returned=is_returned,
             actor=actor,
         )
