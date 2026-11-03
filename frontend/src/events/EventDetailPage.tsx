@@ -86,6 +86,7 @@ import {
   CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
+  formatPeriodDays,
   formatSchedule,
   formatTime,
   isMultiDay,
@@ -891,8 +892,12 @@ export function EventDetailPage() {
           <div className="stat">
             <Icon name="calendar" />
             <div className="stat-body">
+              {/* Fix f13.1.5 (7.1 AC1, CL-217): an event over more than one day names both days; the
+                  top line has the full schedule. */}
               <p className="stat-value">
-                {event.starts_at ? formatDate(event.starts_at) : NOT_RECORDED}
+                {event.starts_at
+                  ? formatPeriodDays(event.starts_at, event.ends_at ?? event.starts_at)
+                  : NOT_RECORDED}
               </p>
               <p className="eyebrow">Date</p>
             </div>

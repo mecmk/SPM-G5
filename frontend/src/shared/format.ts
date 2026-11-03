@@ -102,6 +102,18 @@ export function isMultiDay(startsAt: string, endsAt: string): boolean {
   return formatDate(startsAt) !== formatDate(endsAt)
 }
 
+/**
+ * Fix f13.1.5 (stories 7.1 AC1, 13.1 AC2, 13.2 AC1; CL-217): a period's days for a tile too
+ * narrow for the whole schedule. A period inside one day reads as `formatDate` does, "Wed, 18 Nov
+ * 2026"; one over more than one day names both days, without weekdays or times, "9 May 2029 –
+ * 10 May 2029", as the officer's choice does (21.3 AC1).
+ */
+export function formatPeriodDays(startsAt: string, endsAt: string): string {
+  return isMultiDay(startsAt, endsAt)
+    ? `${formatCalendarDate(startsAt)} – ${formatCalendarDate(endsAt)}`
+    : formatDate(startsAt)
+}
+
 export function formatDateTime(stamp: string): string {
   return `${formatDate(stamp)}, ${formatTime(stamp)}`
 }

@@ -38,6 +38,7 @@ import {
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  turnaroundLine,
   withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
@@ -46,9 +47,11 @@ import {
   CLEAR_SEARCH,
   formatDate,
   formatDateTime,
+  formatSchedule,
   formatTime,
   inputToInstant,
   instantToInput,
+  isMultiDay,
   nowAsInput,
   shortReference,
 } from '../shared/format'
@@ -398,12 +401,20 @@ export function BookingRequestsPage() {
                       <StatusBadge status={entry.status} />
                       <span className="small muted mono">{shortReference(entry.id)}</span>
                     </div>
-                    <div className="item-card-capacity">
-                      <div>{formatDate(entry.starts_at)}</div>
-                      <div className="small muted">
-                        {formatTime(entry.starts_at)}–{formatTime(entry.ends_at)}
+                    {/* Fix f13.1.5 (13.1 AC2): a booking over more than one day names both dates,
+                        as the equipment queue's period does (f7.1.1), and may wrap on a phone. */}
+                    {isMultiDay(entry.starts_at, entry.ends_at) ? (
+                      <div className="item-card-capacity item-card-period">
+                        <div>{formatSchedule(entry.starts_at, entry.ends_at)}</div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="item-card-capacity">
+                        <div>{formatDate(entry.starts_at)}</div>
+                        <div className="small muted">
+                          {formatTime(entry.starts_at)}–{formatTime(entry.ends_at)}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -415,6 +426,9 @@ export function BookingRequestsPage() {
                     <p className="muted">
                       {entry.venue_name} · {entry.venue_location}
                     </p>
+                    {/* Fix f13.1.5 (CL-217): what the period is made of, as the event page's
+                        booking card says it. */}
+                    <p className="small muted">{turnaroundLine(entry)}</p>
                   </div>
 
                   <OutsideHoursNotice entry={entry} />
@@ -544,10 +558,17 @@ export function BookingRequestsPage() {
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
+          {/* Fix f13.1.5 (13.2 AC1): a booking over more than one day names both dates. */}
           <p>
             {pendingApprove.venue_name} will be booked for {pendingApprove.event_name} from{' '}
-            {formatDate(pendingApprove.starts_at)}, {formatTime(pendingApprove.starts_at)}–
-            {formatTime(pendingApprove.ends_at)}.
+            {isMultiDay(pendingApprove.starts_at, pendingApprove.ends_at) ? (
+              <>{formatSchedule(pendingApprove.starts_at, pendingApprove.ends_at)}.</>
+            ) : (
+              <>
+                {formatDate(pendingApprove.starts_at)}, {formatTime(pendingApprove.starts_at)}–
+                {formatTime(pendingApprove.ends_at)}.
+              </>
+            )}
           </p>
           {/* Story 12.7 AC1/AC5: the hold this approval starts, and when it expires. */}
           <p>
