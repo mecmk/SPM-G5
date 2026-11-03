@@ -758,8 +758,9 @@ export function EventDetailPage() {
     mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
   const shownRequestWindow = readRequestWindow?.window ?? null
   const canRequestChanges = shownRequestWindow?.is_open === true
-  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window the
-   *  server sent hides the cancel; until it is read, or if it can't be, the server still refuses. */
+  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window
+   *  the server sent hides the cancel; until it is read, or if it can't be, the server still
+   *  refuses. */
   const isBookingCancelClosed =
     requestWindow?.eventId === eventId && requestWindow.window?.is_open === false
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an

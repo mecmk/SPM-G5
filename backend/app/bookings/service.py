@@ -16,7 +16,7 @@ that Venue Staff can assess and confirm it":
   story 13.2's ``approve_booking`` below both read;
 * AC4 refused unless the actor is the event's ``assigned_coordinator_id``.
 
-Setup and teardown - Sprint 2's 12.1 AC1/AC5/AC9, built as f12.1.2: a request carries the setup
+Setup and teardown - 12.1 AC1/AC5/AC9, built as f12.1.2: a request carries the setup
 and teardown minutes sent with it - 0 when not sent, and whole minutes up to 14 days, which
 ``BookingRequestIn`` enforces (AC5) - and its held period is its own times widened by them, from
 the setup before its start to the teardown after its end (AC1). A setup that would start that
@@ -25,7 +25,7 @@ still ahead; once that has passed too, the refusal is 12.7's ``HoldPeriodStarted
 venue's opening hours are checked on the request's own times alone (12.1 AC16): its setup and
 teardown may run outside them, for Venue Staff to weigh when they approve (Q28, Q51).
 
-The venue hold - Sprint 2's 12.1 AC3/AC12/AC14, built as s12.1: a PENDING request holds
+The venue hold - 12.1 AC3/AC12/AC14, built as s12.1: a PENDING request holds
 its venue for its held period, as an APPROVED booking does. ``create_booking_request`` refuses a
 period that overlaps a pending or approved booking of the same venue (``VenueHeld``, naming it in
 Singapore time), and since migration 010 the exclusion constraint covers PENDING rows too, so two
@@ -47,9 +47,8 @@ Race safety: ``find_conflicting_booking`` / ``assert_no_conflict`` are a fast, f
 pre-check only - they do not by themselves close the race between two concurrent approvals
 (two overlapping requests could both pass the check before either commits). Since the hold,
 such a pair can no longer both be pending, so this approval-time check is a safety net. The
-database's
-``ex_venue_bookings_no_double_booking`` exclusion constraint is the actual last word, so
-``approve_booking`` attempts the write directly and translates that constraint's
+database's ``ex_venue_bookings_no_double_booking`` exclusion constraint is the actual last word,
+so ``approve_booking`` attempts the write directly and translates that constraint's
 ``IntegrityError`` into ``BookingConflict``, mirroring ``app/venues/service.py::create_venue``'s
 write-then-catch pattern. That constraint only guards two *different* overlapping bookings; it
 does nothing to stop two concurrent approvals of the *same* booking (both could read PENDING
@@ -1132,7 +1131,7 @@ def reject_booking(
     request that is not PENDING (``BookingNotPending``).
 
     AC6: unlike ``approve_booking``, this can never trip the exclusion constraint - rejecting
-    only takes a request out of the venue hold (12.1 AC4), so it cannot double-book anything and
+    only takes a request out of the venue hold (12.1 AC3), so it cannot double-book anything and
     there is no conflict to translate. Callers must fetch ``booking`` via
     ``get_booking_for_decision`` - see the module docstring's concurrency note.
     """
@@ -1580,8 +1579,8 @@ def list_reference_data(db: Session, *, actor: User) -> dict[str, list[Event]]:
     """AC1 and AC4 as a read: the events ``actor`` may raise a booking for, soonest first.
 
     The same two rules ``create_booking_request`` enforces, so the form cannot offer a choice
-    the write would refuse. Story 5.3 owns the general "events assigned to me" list; this is
-    narrower on purpose.
+    the write would refuse. Story 6.1's ``/events/assigned-to-me`` is the general "events
+    assigned to me" list; this is narrower on purpose.
     """
     return {
         "events": list(
@@ -1809,12 +1808,12 @@ def create_booking_request(db: Session, data: BookingRequestIn, *, actor: User) 
     at once can both pass that check, and ``uq_venue_bookings_one_per_requirement`` then refuses
     the second, which becomes the same ``RequirementAlreadyRequested``.
 
-    f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): the request carries the
-    setup and teardown sent with it, and its booked period is its own times widened by them, from
-    the setup before its start to the teardown after its end. That is the period it holds, and
-    the one the hold and closure checks above are made on. AC16: the opening hours are checked
-    on its own times alone, since its setup and teardown may run outside them, for Venue Staff
-    to weigh when they approve (Q28, Q51).
+    f12.1.2 (story 12.1 AC1/AC5): the request carries the setup and teardown sent with it, and
+    its booked period is its own times widened by them, from the setup before its start to the
+    teardown after its end. That is the period it holds, and the one the hold and closure checks
+    above are made on. AC16: the opening hours are checked on its own times alone, since its
+    setup and teardown may run outside them, for Venue Staff to weigh when they approve (Q28,
+    Q51).
 
     Story 12.7: lapsed holds are expired first, so one never blocks the request (AC3, AC6, AC11).
     A booked period that has already started is refused: the request could never be approved,

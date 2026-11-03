@@ -2,7 +2,7 @@
 (story 13.1), searched and ordered (story 13.3), approval and rejection (stories 13.2, 13.2.1),
 the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
 coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
-the approval of a replacement raised before story 9.5 removed that request (story 12.6), and an
+the approval of a replacement raised before story 9.5 removed that request (story 12.6), an
 organiser's read-only view of their own event's bookings (fix f7.1.2), and the coordinator
 cancelling an approved booking (story 12.8).
 
@@ -81,9 +81,9 @@ def create_booking_request(
     be the event's (404) and have no pending or approved request yet (409). Story 12.7 AC5: a
     pending request has no expiry - its hold starts when Venue Staff approve it - but a booked
     period already started cannot be requested, since it could never be approved (409).
-    f12.1.2 (story 12.1 AC1/AC5/AC9 in the backlog's current numbering): it carries the setup and
-    teardown sent with it, whole minutes up to 14 days (422 otherwise), which widen its booked
-    period; a setup that would start in the past is refused (409).
+    f12.1.2 (story 12.1 AC1/AC5/AC9): it carries the setup and teardown sent with it, whole
+    minutes up to 14 days (422 otherwise), which widen its booked period; a setup that would
+    start in the past is refused (409).
     """
     try:
         booking = service.create_booking_request(db, payload, actor=actor)
@@ -177,7 +177,7 @@ def list_bookings_for_own_event(
 
 @router.get("/{booking_id}", response_model=BookingOut, dependencies=[CanRead])
 def get_booking(booking_id: uuid.UUID, db: DbSession) -> BookingOut:
-    """AC3: lets the requesting coordinator (and other internal staff) read the outcome."""
+    """13.2 AC3: lets the requesting coordinator (and other internal staff) read the outcome."""
     try:
         return BookingOut.model_validate(service.get_booking(db, booking_id))
     except service.BookingNotFound:
@@ -223,8 +223,8 @@ def approve_booking(
     db: DbSession,
     actor: Annotated[CurrentUser, CanDecide],
 ) -> BookingOut:
-    """AC1: sets the booking to confirmed, recording the approver and time. AC4: refused where
-    the period conflicts with an existing confirmed booking.
+    """13.2 AC1: sets the booking to approved, recording the approver and time. AC4: refused
+    where the period conflicts with an existing approved booking.
 
     Story 12.7 AC1/AC5: the approval starts the booking's hold, with the expiry Venue Staff give
     (422 without one, or with one in the past or after the booked period starts); a booked period

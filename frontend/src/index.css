@@ -6,7 +6,7 @@
  * Component classes live in App.css and reference these by name only; theme.css restyles the
  * shared ones on top.
  *
- * The "paper notebook" theme (UI refactor PR 1): a warm canvas, white hairline cards, one blue
+ * The "paper notebook" theme (c15.1): a warm canvas, white hairline cards, one blue
  * primary, and status hues Marigold (warning), Vermillion (danger), Sky (info), Saffron (orange),
  * Coral and Mocha, each as a tint with its hue darkened for text. Every text colour here passes
  * WCAG AA (4.5:1) on the surfaces it is used on, and --control-border passes 3:1 as a field's edge.
