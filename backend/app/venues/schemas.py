@@ -431,7 +431,7 @@ class VenueUnavailableWindowOut(BaseModel):
     pre-expanded per day - the frontend expands each into the calendar days it touches.
 
     ``starts_at`` / ``ends_at`` are the period the venue is blocked: for a booking, its held
-    period (setup and teardown included). AC5: ``booking_starts_at`` / ``booking_ends_at`` are
+    period (setup and teardown included). AC2: ``booking_starts_at`` / ``booking_ends_at`` are
     the booking's own requested period inside it - which may cover only part of its event's own
     schedule - so a day's list can show both; None for a closure, which has no booking.
 

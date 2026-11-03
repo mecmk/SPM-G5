@@ -30,7 +30,7 @@ export interface CalendarProps {
   /** Called with a day's `YYYY-MM-DD` when a day with no entries is clicked. Omit for read-only. */
   onSelectDay?: (date: string) => void
   /**
-   * Story 9.1 AC5: called with a day's `YYYY-MM-DD` when a day that has entries is pressed, so the
+   * Story 9.1: called with a day's `YYYY-MM-DD` when a day that has entries is pressed, so the
    * parent can list them. Omit and a day with entries is not pressable, as before.
    */
   onOpenDay?: (date: string) => void
@@ -51,7 +51,7 @@ export interface CalendarProps {
 const MAX_ENTRIES_SHOWN = 2
 
 /**
- * Story 9.1 AC5: an openable day's name for assistive tech - the date, how many items, and the
+ * Story 9.1: an openable day's name for assistive tech - the date, how many items, and the
  * entries its cell shows, "+N more" included, so the name contains the visible text (WCAG 2.5.3)
  * and not only a count.
  */
@@ -83,7 +83,7 @@ function strongestTone(entries: CalendarEntry[]): CalendarEntryTone | null {
  * Story c3 - a month calendar for showing venue and equipment availability. Presentational and
  * controlled: the parent owns which month is open and what happens when a free day is clicked.
  *
- * Story 9.1 AC5: with `onOpenDay`, a day that has entries is a button the parent answers by
+ * Story 9.1: with `onOpenDay`, a day that has entries is a button the parent answers by
  * listing them (`openDay` marks the open one). Without it the calendar is as it was.
  */
 export function Calendar({
