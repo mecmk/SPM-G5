@@ -68,12 +68,13 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
       'Venue Schedule',
     ],
   },
-  // c9 (1.2 AC5): no Equipment holds section. Story 15.3 merged into the queue (15.2).
+  // Story 17.3: the Equipment holds schedule, which c9 (1.2 AC5) had removed until a story
+  // delivered it.
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
-    visible: ['Venue catalogue', 'Equipment requests', 'Equipment catalogue'],
-    hidden: ['All events', 'Manage venues', 'Booking Requests', 'Equipment holds'],
+    visible: ['Venue catalogue', 'Equipment requests', 'Equipment catalogue', 'Equipment holds'],
+    hidden: ['All events', 'Manage venues', 'Booking Requests'],
   },
   // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the
   // catalogue (venues:read).
@@ -149,12 +150,12 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
 
-// c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Story
-// 17.3 brings back the last: it drops its row when it ships (19.4 dropped the organiser's).
+// c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Stories
+// 19.4 and 17.3 brought back the organiser's Change requests and Technical Support's Equipment
+// holds, so their rows are gone.
 const RETIRED_SECTIONS = [
   { role: 'a coordinator lead', email: ACCOUNTS.lead, address: '/events/all' },
   { role: 'venue staff', email: ACCOUNTS.venueStaff, address: '/venue-staff/schedule' },
-  { role: 'technical support', email: ACCOUNTS.techSupport, address: '/equipment/holds' },
 ]
 
 for (const { role, email, address } of RETIRED_SECTIONS) {

@@ -242,6 +242,9 @@ class Events:
     # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
     # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
     PRODUCT_BRIEFING = _e(12801)
+    # Story 17.3: PLANNING; organiser 2, coordinator 2, 9 April 2031. One item in each status
+    # that holds units, and a declined one (EquipmentItems.BAYFRONT_*); the spec only reads it.
+    BAYFRONT_SHOWCASE = _e(17301)
 
 
 class Bookings:
@@ -450,6 +453,11 @@ class EquipmentItems:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
     # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
+    # Story 17.3's, on Events.BAYFRONT_SHOWCASE: the first three hold units for its day.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000017302")  # 3, accepted
+    BAYFRONT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000017303")  # 1, pending
+    BAYFRONT_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000017304")  # 2, not yet sent
+    BAYFRONT_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000017305")  # 1, declined, no hold
     # Fix f16.1.1's, on Events.VOLUNTEER_EVENING, both pending and holding their units.
     VOLUNTEER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000016111")
     VOLUNTEER_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000016112")
@@ -476,6 +484,10 @@ class EquipmentHolds:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
     # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
+    # Story 17.3: the holds of Events.BAYFRONT_SHOWCASE's items, numbered as the items.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017302")
+    BAYFRONT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017303")
+    BAYFRONT_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017304")
 
 
 class EquipmentOutOfService:
@@ -552,3 +564,43 @@ class Notifications:
             True,
         ),
     )
+
+
+def _cr(n: int) -> uuid.UUID:
+    return uuid.UUID(f"19191919-0000-0000-0000-{n:012d}")
+
+
+class ChangeRequests:
+    """c14: the sample change requests, a spread of every status as a real queue would hold, on
+    events no other test raises one on. The first six end in their event's number, the rest are
+    numbered from 101. Each asks to change the event's expected attendance or its schedule. A
+    coordinator's queue holds the pending ones first, then the record of the rest."""
+
+    # Pending. Chloe: Events.CUSTOMER_FORUM 150 to 180 people; Events.APPROVED_3 (Product Roadmap
+    # Townhall) 300 to 350; Events.APPROVED_4 (Founders Day) an hour later. Carl:
+    # Events.SALES_KICKOFF a day later; Events.PARTNER_GALA 180 to 220.
+    CUSTOMER_FORUM_ATTENDANCE = _cr(23)
+    ROADMAP_TOWNHALL_ATTENDANCE = _cr(101)
+    FIRESIDE_SCHEDULE = _cr(102)
+    SALES_KICKOFF_SCHEDULE = _cr(24)
+    PARTNER_GALA_ATTENDANCE = _cr(103)
+    # Approved. Chloe: Events.APPROVED_4 180 to the 200 it has now; Events.APPROVED_3 moved to the
+    # date it has now. Carl: Events.NOTICE_GALA (Nadia) 40 to the 60 it has now, the request the
+    # "Change approved" notification in Notifications names (before c14 a row that did not exist;
+    # its id keeps that notification's eeeeeeee prefix); Events.APPROVED_5 (Investor Demo Day)
+    # 80 to the 100 it has now.
+    FIRESIDE_ATTENDANCE = _cr(10)
+    ROADMAP_TOWNHALL_SCHEDULE = _cr(104)
+    NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
+    DEMO_DAY_ATTENDANCE = _cr(105)
+    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 450.
+    # Carl: Events.APPROVED_7 (Alumni Homecoming) 100 to 250; Events.APPROVED_5 to an evening start.
+    CHARITY_GALA_ATTENDANCE = _cr(16)
+    HOMECOMING_ATTENDANCE = _cr(106)
+    DEMO_DAY_SCHEDULE = _cr(107)
+    # Withdrawn by their organiser: Omar's Events.FINTECH_BREAKFAST 45 to 60 (coordinator 2) and
+    # Olivia's Events.APPROVED_6 to a week later (coordinator 1).
+    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
+    CHARITY_GALA_SCHEDULE = _cr(108)
+    # Cancelled with its event, while pending (6.2 AC4): Omar's Events.CHARITY_FUN_RUN 200 to 250.
+    FUN_RUN_ATTENDANCE = _cr(109)

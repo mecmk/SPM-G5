@@ -15,12 +15,15 @@ its out-of-service records as a sub-resource, with a read-only ``check`` of a re
 saved. Ending a record in force is ``{"end_now": true}`` on its PATCH, as 9.4's venue closures
 are; one not yet started is removed with DELETE. An event's items left short by them are
 ``/events/{event_id}/equipment-shortages``.
+
+Story 17.3: the equipment holds schedule spans every event and type, so it has a path of its own,
+``/equipment-holds``, beside the queue and the catalogue. It only reads.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -35,6 +38,7 @@ from app.equipment import service
 from app.equipment.schemas import (
     EquipmentCatalogueEntryOut,
     EquipmentDecisionIn,
+    EquipmentHoldsOut,
     EquipmentItemIn,
     EquipmentItemUpdate,
     EquipmentQueue,
@@ -57,6 +61,7 @@ from app.events.schemas import EquipmentLineOut
 router = APIRouter(prefix="/events", tags=["equipment"])
 queue_router = APIRouter(prefix="/equipment-requests", tags=["equipment"])
 types_router = APIRouter(prefix="/equipment-types", tags=["equipment"])
+holds_router = APIRouter(prefix="/equipment-holds", tags=["equipment"])
 
 CanRead = Depends(require_permission(Permission.EQUIPMENT_READ))
 CanRequest = Depends(require_permission(Permission.EQUIPMENT_REQUEST))
@@ -413,3 +418,29 @@ def remove_out_of_service(
         service.remove_out_of_service(db, type_id, record_id, actor=actor, now=datetime.now(UTC))
     except _REFUSALS as exc:
         raise _out_of_service_refusal(exc) from None
+
+
+# =============================================================================================
+# Story 17.3: the equipment holds schedule
+# =============================================================================================
+@holds_router.get("", response_model=EquipmentHoldsOut, dependencies=[CanManage])
+def list_equipment_holds(
+    db: DbSession,
+    type_code: Annotated[str | None, Query(alias="type", min_length=1)] = None,
+    from_date: Annotated[date | None, Query(alias="from")] = None,
+    to_date: Annotated[date | None, Query(alias="to")] = None,
+) -> EquipmentHoldsOut:
+    """Story 17.3 AC1/AC2/AC5/AC6: every active type, by name, with its holds still reserved and
+    not yet ended, soonest first. AC3: ``?type=`` keeps that type's group, ``?from=`` and ``?to=``
+    the holds with any part in the range, its days Singapore's; a range reaching before today, an
+    end before the start, or an unknown or inactive type is a 422 saying why, and a value that is
+    not a date is a 422 too. AC7: Technical Support only. Reads only."""
+    try:
+        schedule = service.list_equipment_holds(
+            db, type_code=type_code, from_date=from_date, to_date=to_date, now=datetime.now(UTC)
+        )
+    except service.InvalidHoldRange as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.UnknownEquipmentType as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    return EquipmentHoldsOut.from_schedule(schedule)

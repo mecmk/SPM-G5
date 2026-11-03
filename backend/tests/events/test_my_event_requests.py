@@ -178,6 +178,8 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.FOOD_TASTING_WALK),
         str(Events.BATIK_WORKSHOP),
         str(Events.KITE_AFTERNOON),
+        # Story 17.3's e2e event.
+        str(Events.BAYFRONT_SHOWCASE),
     }
 
 

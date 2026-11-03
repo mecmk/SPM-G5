@@ -660,7 +660,10 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
   await signIn(page, ACCOUNTS.coordinator2)
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  await expect(page.getByText('Rejected', { exact: true })).toBeVisible()
+  // The booking's own status: the seed gives this event a rejected change request too (c14), whose
+  // badge also reads Rejected.
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Rejected', { exact: true })).toBeVisible()
   await expect(page.getByText('The venue is unavailable that weekend.')).toBeVisible()
 
   // AC4 continued: raising a fresh request for the same event does not replace the rejected one
@@ -680,7 +683,6 @@ test('13.2.1 AC3/AC4: rejecting from the detail page shows the outcome to venue 
 
   await page.goto('/events/inbox')
   await page.getByRole('link', { name: 'Alumni Homecoming Weekend' }).click()
-  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
   // The rejected request and the fresh one are both for Exhibition Foyer.
   await expect(bookingSection.getByText('Exhibition Foyer', { exact: true })).toHaveCount(2)
   await expect(bookingSection.getByText('Pending', { exact: true })).toBeVisible()

@@ -7,6 +7,8 @@ event page already reads, so an item looks the same whichever of those endpoints
 
 Story 16.2: an equipment type's units out of service - a record as Technical Support sends it and
 as the type's page shows it, the catalogue, and the holds a record leaves short.
+
+Story 17.3: the equipment holds schedule - every active type, and each type's current holds.
 """
 
 from __future__ import annotations
@@ -36,7 +38,14 @@ from app.events.models import (
 from app.events.schemas import PositiveWholeNumber
 
 if TYPE_CHECKING:
-    from app.equipment.service import CatalogueEntry, ShortHold, TypePage
+    from app.equipment.service import (
+        CatalogueEntry,
+        HoldGroup,
+        HoldsSchedule,
+        ScheduledHold,
+        ShortHold,
+        TypePage,
+    )
 
 # Story 15.1 AC5: the longest technical note, counted once surrounding spaces are trimmed. Keep in
 # step with the frontend's TECHNICAL_NOTES_MAX_LENGTH.
@@ -461,3 +470,83 @@ class EquipmentShortageOut(BaseModel):
 
     item_id: uuid.UUID
     units_short: int
+
+
+# =============================================================================================
+# Story 17.3: the equipment holds schedule
+# =============================================================================================
+class HeldItemStatus(StrEnum):
+    """Story 17.3 AC1/AC2: the statuses of an item that holds units - not yet sent to Technical
+    Support (15.1 AC2), Pending or Accepted. An item in any other holds nothing (AC5)."""
+
+    REQUESTED = EquipmentRequestStatus.REQUESTED
+    PENDING = EquipmentRequestStatus.PENDING
+    ACCEPTED = EquipmentRequestStatus.ACCEPTED
+
+
+class EquipmentHoldOut(BaseModel):
+    """Story 17.3 AC1: one hold - its event, the units it still holds, the dates it runs from and
+    to, which are its own, and its item's status. AC4: ``item_id`` is the item's, whose request
+    page (16.1) a sent hold opens. No defaults (response schema)."""
+
+    id: uuid.UUID
+    event_id: uuid.UUID
+    event_name: str
+    item_id: uuid.UUID
+    quantity: int
+    starts_at: datetime
+    ends_at: datetime
+    status: HeldItemStatus
+
+    @classmethod
+    def from_held(cls, held: ScheduledHold) -> EquipmentHoldOut:
+        return cls(
+            id=held.hold.id,
+            event_id=held.hold.event_id,
+            event_name=held.event_name,
+            item_id=held.hold.equipment_request_id,
+            quantity=held.units,
+            starts_at=held.hold.starts_at,
+            ends_at=held.hold.ends_at,
+            status=HeldItemStatus(held.item_status),
+        )
+
+
+class EquipmentHoldTypeOut(BaseModel):
+    """Story 17.3 AC3: an active equipment type, as the schedule's type filter offers it. No
+    defaults (response schema)."""
+
+    code: str
+    name: str
+
+
+class EquipmentHoldGroupOut(BaseModel):
+    """Story 17.3 AC1: one equipment type and its holds, soonest first. AC6: none, when nothing
+    of the type is held in the range. No defaults (response schema)."""
+
+    equipment_type_code: str
+    equipment_type_name: str
+    holds: list[EquipmentHoldOut]
+
+    @classmethod
+    def from_group(cls, group: HoldGroup) -> EquipmentHoldGroupOut:
+        return cls(
+            equipment_type_code=group.equipment_type.code,
+            equipment_type_name=group.equipment_type.name,
+            holds=[EquipmentHoldOut.from_held(held) for held in group.holds],
+        )
+
+
+class EquipmentHoldsOut(BaseModel):
+    """Story 17.3: the schedule - every active type for the filter (AC3), and a group for each
+    type by name, or for the filtered type alone (AC1). No defaults (response schema)."""
+
+    types: list[EquipmentHoldTypeOut]
+    groups: list[EquipmentHoldGroupOut]
+
+    @classmethod
+    def from_schedule(cls, schedule: HoldsSchedule) -> EquipmentHoldsOut:
+        return cls(
+            types=[EquipmentHoldTypeOut(code=kind.code, name=kind.name) for kind in schedule.types],
+            groups=[EquipmentHoldGroupOut.from_group(group) for group in schedule.groups],
+        )
