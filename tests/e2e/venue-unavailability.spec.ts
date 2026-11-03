@@ -603,6 +603,13 @@ test('9.4 AC6: an edit the server refuses says why in the form, and the calendar
 
   await expect(blockOff(page).getByRole('alert')).toHaveText('This period has already ended.')
   await reloaded
+
+  // The failed change is reported under its own title, with the backend's sentence: the edit's
+  // 409s are not all the bookings-changed refusal of story 9.5 AC1.
+  const failure = page.getByRole('status').filter({ hasText: 'This period has already ended.' })
+  await expect(failure).toBeVisible()
+  await expect(failure).toContainText('Conflicting change')
+  await expect(failure).not.toContainText('Bookings changed')
 })
 
 test('9.4 AC6: a closure whose start has seconds is edited by the field that changed, and nothing else', async ({
