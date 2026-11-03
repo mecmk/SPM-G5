@@ -1051,7 +1051,8 @@ ON CONFLICT (id) DO UPDATE SET
     required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
-    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL;
+    hold_expires_at = EXCLUDED.hold_expires_at, hold_reminded_at = NULL, hold_completed_at = NULL,
+    cancelled_at = NULL, release_cause = NULL, release_reason = NULL, released_by_id = NULL;
 
 -- Story 12.5: the Coastal Resilience Workshop's (3333..30) one venue requirement, already booked:
 -- Seminar Room 2.1, approved by Vera. Its e2e spec reads the "All required venues booked" state
@@ -2799,7 +2800,8 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- c14: sample change requests, a spread of every status as a real queue would hold: five pending
 -- (three for Chloe, two for Carl, raised over a fortnight), four approved, three rejected with a
--- reason and two withdrawn, from both organisers. Each is on an event no other test raises one on
+-- reason, two withdrawn and one closed by its event's cancellation (story 6.2 AC4), from both
+-- organisers. Each is on an event no other test raises one on
 -- (a pending request blocks its field, story 19.1 AC6; an event can carry one per field). The first
 -- six ids end in their event's number, 19191919-..-NN, except Nadia's, which keeps the eeeeeeee id
 -- her "Change approved" notification already names (20.2); the rest are numbered from 101. Values
@@ -2807,7 +2809,9 @@ ON CONFLICT (id) DO NOTHING;
 -- its event has now, so it is not out of date; every approved one records the value before the
 -- change, and the event already has the new one.
 -- Like the rows above they are re-applied on every start, so a decision made on a seeded one in
--- the development database is undone by the next `npm run db:ready`.
+-- the development database is undone by the next `npm run db:ready`. On a database where its field
+-- has another pending request since, the row is left as it is: making it PENDING again would give
+-- the field two, which uq_event_change_requests_pending_field refuses, and db:ready would fail.
 -- ---------------------------------------------------------------------
 INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, current_value, proposed_value, reason, status,
                                    decided_by_id, decided_at, decision_reason, created_at, updated_at) VALUES
@@ -2870,9 +2874,17 @@ INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, cu
      'schedule', '{"ends_at":"2027-08-01T14:00:00+00:00","starts_at":"2027-08-01T10:00:00+00:00"}',
      '{"ends_at":"2027-08-08T14:00:00+00:00","starts_at":"2027-08-08T10:00:00+00:00"}',
      'A partner asked for the second Sunday of August instead.', 'WITHDRAWN',
-     NULL, NULL, NULL, '2026-10-21 12:00+08', '2026-10-22 09:00+08')
+     NULL, NULL, NULL, '2026-10-21 12:00+08', '2026-10-22 09:00+08'),
+    -- Cancelled with its event: the Charity Fun Run (..75), still pending when it was cancelled
+    ('19191919-0000-0000-0000-000000000109', '33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000002',
+     'expected_attendance', '200', '250', 'Two more sponsors asked to bring running teams.', 'CANCELLED',
+     NULL, NULL, NULL, '2026-10-05 10:20+08', '2026-10-12 09:00+08')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, requested_by_id = EXCLUDED.requested_by_id, field_name = EXCLUDED.field_name,
     current_value = EXCLUDED.current_value, proposed_value = EXCLUDED.proposed_value, reason = EXCLUDED.reason,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at;
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_change_requests AS newer
+    WHERE newer.event_id = EXCLUDED.event_id AND newer.field_name = EXCLUDED.field_name
+      AND newer.id <> EXCLUDED.id AND newer.status = 'PENDING');

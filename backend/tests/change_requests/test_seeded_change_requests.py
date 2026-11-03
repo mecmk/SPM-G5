@@ -39,13 +39,14 @@ from datetime import UTC
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.change_requests.models import EventChangeRequest
+from app.dbtool import migrate
 from app.events.models import Event
 from app.notifications.models import Notification
-from tests.support.seed import ChangeRequests, Events, Notifications, Users
+from tests.support.seed import Bookings, ChangeRequests, Events, Notifications, Users
 
 _SALES_KICKOFF = {"ends_at": "2027-08-18T10:00:00+00:00", "starts_at": "2027-08-18T01:00:00+00:00"}
 _SALES_KICKOFF_NEXT_DAY = {
@@ -251,6 +252,17 @@ SEEDED = (
         _CHARITY_GALA_NEXT_WEEK,
         "WITHDRAWN",
     ),
+    # Cancelled with its event (6.2 AC4)
+    _attendance(
+        ChangeRequests.FUN_RUN_ATTENDANCE,
+        Events.CHARITY_FUN_RUN,
+        "Charity Fun Run",
+        Users.ORGANISER_2,
+        Users.COORDINATOR_2,
+        200,
+        250,
+        "CANCELLED",
+    ),
 )
 _IDS = lambda seeded: f"{seeded.event_name} {seeded.field} {seeded.status}"  # noqa: E731
 
@@ -266,6 +278,22 @@ def _queue(client, coordinator) -> dict[str, dict]:
     response = client.get("/change-requests")
     assert response.status_code == 200, response.text
     return {entry["id"]: entry for entry in response.json()}
+
+
+def _reseed(db: Session) -> None:
+    conn = db.connection()
+    for seed_file in migrate.list_seeds():
+        conn.exec_driver_sql(seed_file.read())
+
+
+def _status(db: Session, request_id: uuid.UUID) -> str:
+    return (
+        db.connection()
+        .execute(
+            text("SELECT status FROM event_change_requests WHERE id = :id"), {"id": request_id}
+        )
+        .scalar_one()
+    )
 
 
 def _event_value(event: Event, field: str) -> Any:
@@ -359,6 +387,7 @@ def test_the_sample_spreads_over_every_status_as_a_real_queue_does(db: Session):
         "APPROVED": 4,
         "REJECTED": 3,
         "WITHDRAWN": 2,
+        "CANCELLED": 1,
     }
     assert (
         Counter((seeded.coordinator, seeded.status) for seeded in SEEDED)[
@@ -451,7 +480,7 @@ def test_an_organiser_reads_their_requests_on_their_events_in_every_status(clien
         assert row["proposed_value"] == seeded.proposed
         seen.append(row["status"])
 
-    assert set(seen) == {"PENDING", "APPROVED", "REJECTED", "WITHDRAWN"}
+    assert set(seen) >= {"PENDING", "APPROVED", "REJECTED", "WITHDRAWN"}
 
 
 @pytest.mark.story("19.2", ac=1)
@@ -467,3 +496,67 @@ def test_nadias_change_approved_notification_names_a_request_that_exists(db: Ses
     assert request.event_id == notification.event_id == Events.NOTICE_GALA
     assert request.status == "APPROVED"
     assert request.requested_by_id == notification.recipient_id == Users.NOTICE.id
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_reseeding_undoes_a_decision_on_a_seeded_request(db: Session):
+    db.connection().execute(
+        text("UPDATE event_change_requests SET status = 'WITHDRAWN' WHERE id = :id"),
+        {"id": ChangeRequests.CUSTOMER_FORUM_ATTENDANCE},
+    )
+
+    _reseed(db)
+
+    assert _status(db, ChangeRequests.CUSTOMER_FORUM_ATTENDANCE) == "PENDING"
+
+
+@pytest.mark.story("19.2", ac=1)
+@pytest.mark.parametrize("seeded", [s for s in SEEDED if s.status == "PENDING"], ids=_IDS)
+def test_reseeding_leaves_a_seeded_request_alone_once_its_field_has_a_newer_one(
+    db: Session, seeded: Seeded
+):
+    """`npm run db:ready` re-applies the seed to a database people have used. Once a seeded pending
+    request was withdrawn and its organiser asked again (19.1 AC9), making the seeded one PENDING
+    again would give the field two, which uq_event_change_requests_pending_field refuses, and the
+    seed would fail."""
+    conn = db.connection()
+    conn.execute(
+        text("UPDATE event_change_requests SET status = 'WITHDRAWN' WHERE id = :id"),
+        {"id": seeded.id},
+    )
+    newer = conn.execute(
+        text(
+            "INSERT INTO event_change_requests"
+            " (event_id, requested_by_id, field_name, proposed_value, reason)"
+            " VALUES (:event, :organiser, :field, '1', 'Asked again.') RETURNING id"
+        ),
+        {"event": seeded.event_id, "organiser": seeded.organiser.id, "field": seeded.field},
+    ).scalar_one()
+
+    _reseed(db)
+
+    assert _status(db, seeded.id) == "WITHDRAWN"
+    assert _status(db, newer) == "PENDING"
+
+
+@pytest.mark.story("19.2", ac=1)
+def test_reseeding_puts_back_the_booking_an_approved_seeded_request_released(db: Session):
+    """Approving the Fireside Chat's new time releases its Grand Hall request, stamping it. The seed
+    makes it PENDING again, so it clears the stamps too, or ck_venue_bookings_cancelled_at refuses
+    the row and the seed fails."""
+    conn = db.connection()
+    conn.execute(
+        text(
+            "UPDATE venue_bookings SET status = 'CANCELLED', cancelled_at = now(),"
+            " release_cause = 'CHANGE_APPROVED' WHERE id = :id"
+        ),
+        {"id": Bookings.PENDING_APPROVE_E2E_CARD},
+    )
+
+    _reseed(db)
+
+    status = conn.execute(
+        text("SELECT status FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.PENDING_APPROVE_E2E_CARD},
+    ).scalar_one()
+    assert status == "PENDING"

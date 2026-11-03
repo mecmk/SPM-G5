@@ -583,11 +583,5 @@ class ChangeRequests:
     # Olivia's Events.APPROVED_6 to a week later (coordinator 1).
     FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
     CHARITY_GALA_SCHEDULE = _cr(108)
-
-    PENDING = (
-        CUSTOMER_FORUM_ATTENDANCE,
-        ROADMAP_TOWNHALL_ATTENDANCE,
-        FIRESIDE_SCHEDULE,
-        SALES_KICKOFF_SCHEDULE,
-        PARTNER_GALA_ATTENDANCE,
-    )
+    # Cancelled with its event, while pending (6.2 AC4): Omar's Events.CHARITY_FUN_RUN 200 to 250.
+    FUN_RUN_ATTENDANCE = _cr(109)
