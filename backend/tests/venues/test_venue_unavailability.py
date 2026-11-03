@@ -1166,16 +1166,9 @@ def _add(client, venue_id: uuid.UUID, starts_at: datetime, ends_at: datetime, **
 
 
 # =====================================================================================
-# The event goes back to Planning, and its coordinator and organiser are told.
-#
-# For each event with a booking a save ends (story 9.5, which replaced 9.4's marking):
-#   * CONFIRMED -> PLANNING, once, with an event_status_history row (its reason naming the
-#     venue) and an audit entry EVENT_RETURNED_TO_PLANNING; PLANNING stays; nothing else moves.
-#   * one BOOKING_VENUE_UNAVAILABLE notification each to the event's assigned coordinator (when
-#     it has one) and its organiser, naming the venue, the period and the reason. The Venue Staff
-#     member who saved is never told. Ending a closure early or removing it sends nothing and
-#     leaves the status alone.
-# Awaiting Safety Check (story 21.1) goes back to Planning as a Confirmed event does.
+# The event's status, and who is told. What a save does to the events whose bookings it ends -
+# back to Planning, the coordinator and organiser told - is story 9.5's, in
+# test_closure_ends_bookings.py; here, a closure alone and a refused save do neither.
 # =====================================================================================
 VENUE_UNAVAILABLE = "BOOKING_VENUE_UNAVAILABLE"
 
@@ -1576,15 +1569,6 @@ def test_a_period_ending_in_the_year_9999_is_refused_on_add_and_on_edit(db, venu
     assert _stored_period(db, period.id).ends_at == ends_before
 
 
-# --- AC3/AC4: which period a notice names; ending and removing settle too ---------------------
-
-
-# --- AC4: who sees the description -------------------------------------------------------------
-
-
-# --- AC8: which events are candidates ----------------------------------------------------------
-
-
 # --- the preview, scoped and half-open ------------------------------------------------------
 @pytest.mark.story("9.4", ac=2)
 def test_the_preview_leaves_out_a_booking_that_only_touches_the_end_of_the_period(
@@ -1688,12 +1672,6 @@ def test_the_preview_lists_a_booking_in_progress_under_a_period_in_force(db, ven
     assert _ids(preview) == {str(booking.id)}
 
 
-# --- housekeeping: the write endpoints and the preview release lapsed holds -----------------
-
-
-# --- the notice does not say who saved ---------------------------------------------------------
-
-
 # --- AC6: ending a period that ends exactly now -------------------------------------------------
 @pytest.mark.story("9.4", ac=6)
 def test_a_period_ending_exactly_now_cannot_be_edited(db):
@@ -1714,9 +1692,6 @@ def test_a_period_ending_exactly_now_cannot_be_edited(db):
         )
 
     assert _stored_period(db, period.id).notes == "Painted"
-
-
-# --- housekeeping: an edit and a removal release lapsed holds too ---------------------------------
 
 
 # --- AC6: two writers to one period, in a forced order --------------------------------------------
@@ -1881,6 +1856,3 @@ def test_a_removal_that_waited_for_an_edit_sees_what_the_edit_made(engine, monke
             assert session.get(VenueUnavailabilityPeriod, period_id) is not None
     finally:
         _remove_period_rows(engine, venue_id)
-
-
-# --- AC10: the save first, then the confirmation, then the save settles ---------------------------

@@ -1270,7 +1270,7 @@ def test_an_edit_that_touches_no_booking_saves_and_leaves_the_booking_alone(logi
 # AC12: confirmation landing while the form is open still locks the details.
 @pytest.mark.story("7.2", ac=12)
 def test_a_correction_arriving_after_confirmation_is_refused(login_as, db: Session):
-    """No story confirms an event yet (21.x), so the status is set directly."""
+    """Confirmed directly, not through 21.2's Confirm, which needs a safety approval first."""
     event, _ = _planning_event(db)
     db.commit()
     client = login_as(Users.COORDINATOR)

@@ -75,16 +75,16 @@ interface PreviewResult {
 }
 
 /**
- * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its Edit venue page. The form takes a
- * start, an end, a reason and a description, which every reason needs. An end that is not after
- * the start is refused in the form, beside the fields, before anything is sent. Once both ends
- * make a period, the pending and approved bookings it would affect - setup and teardown included -
- * are listed before Save. Story 9.5 AC1: saving rejects each pending request and cancels each
- * approved booking listed, so Save asks first, in a confirmation that lists them; the ones listed
- * are sent as confirmed (`confirmed_booking_ids`), and a booking raised since refuses the save,
- * which reopens the confirmation with the fresh list. A refusal from the server, such as a missing description, shows the backend's own sentence and
- * nothing is saved. The page only shows this to a role holding the manage permission; the backend
- * refuses everyone else.
+ * Story 9.4 AC1/AC2/AC5/AC9: Venue Staff block off time at the venue from its Edit venue page.
+ * The form takes a start, an end, a reason and a description, which every reason needs. An end
+ * that is not after the start is refused in the form, beside the fields, before anything is sent.
+ * Once both ends make a period, the pending and approved bookings it would affect - setup and
+ * teardown included - are listed before Save. Story 9.5 AC1: saving rejects each pending request
+ * and cancels each approved booking listed, so Save asks first, in a confirmation that lists them;
+ * the ones listed are sent as confirmed (`confirmed_booking_ids`), and a booking raised since
+ * refuses the save, which reopens the confirmation with the fresh list. A refusal from the server,
+ * such as a missing description, shows the backend's own sentence and nothing is saved. The page
+ * only shows this to a role holding the manage permission; the backend refuses everyone else.
  *
  * Story 9.4 AC6: the same form edits a closure - its start, end, reason and description - opened
  * from the closure's row. Only the bookings its change newly covers (a start moved earlier, an end

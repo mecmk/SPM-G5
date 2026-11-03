@@ -120,9 +120,9 @@ function describeRelaxHint(hint: RelaxHint): string {
  * from there, as from the event's page (12.2), and each venue below offers Switch to this
  * venue instead, through the request step; the empty list reads "No other venues".
  *
- * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate
- * one. Holding VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every
- * card; the backend still refuses those writes to anyone else.
+ * AC12 (f8.1.1): Venue Staff manage venues from this same page, not a separate one. Holding
+ * VENUES_MANAGE adds New venue, Show withdrawn venues, and Edit and Delete on every card; the
+ * backend still refuses those writes to anyone else.
  */
 export function VenueCataloguePage() {
   const location = useLocation()

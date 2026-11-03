@@ -271,10 +271,9 @@ export function newEventForm(): EventFormState {
  * Story 2.7 AC2/AC6: bring each card's defaults in line with the event as it now stands, so the
  * order the form is filled in does not matter - a card added before the dates or attendance were
  * known picks them up when they arrive (the times once they are a valid start and end, fix
- * f2.7.4). Only
- * defaults move: a value the organiser edited is theirs and stays put, so moving the event past it
- * is refused instead (AC10). A saved value counts as a default while it still matches the event
- * (`venueRequirementDraftFrom`).
+ * f2.7.4). Only defaults move: a value the organiser edited is theirs and stays put, so moving the
+ * event past it is refused instead (AC10). A saved value counts as a default while it still
+ * matches the event (`venueRequirementDraftFrom`).
  */
 export function withEventDefaults(form: EventFormState): EventFormState {
   const { startsAt, endsAt } = defaultTimesFor(form)
@@ -500,11 +499,11 @@ export function getLatestEndInput(startsAt: string): string {
 }
 
 /**
- * Story 2.1 AC2/AC3/AC6 and story 2.7: the first problem with the form (an error-registry code and the field to
- * fix), or null. The backend checks the same rules again; this only saves a round trip. A date
- * already saved on the draft is not judged again unless it was changed, as on the backend. What a
- * request needs before it can be submitted (AC10) is left to the backend, which names anything
- * missing.
+ * Story 2.1 AC2/AC3/AC6 and story 2.7: the first problem with the form (an error-registry code and
+ * the field to fix), or null. The backend checks the same rules again; this only saves a round
+ * trip. A date already saved on the draft is not judged again unless it was changed, as on the
+ * backend. What a request needs before it can be submitted (AC10) is left to the backend, which
+ * names anything missing.
  */
 export function validateEventForm(
   form: EventFormState,

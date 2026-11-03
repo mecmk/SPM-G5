@@ -184,7 +184,8 @@
   }
 }
 
-/* Always keep the scrollbar's space, so centred pages sit at the same x whether or not they scroll (c3.1). */
+/* Always keep the scrollbar's space, so centred pages sit at the same x whether or not they
+   scroll (c3.1). */
 html {
   scrollbar-gutter: stable;
 }

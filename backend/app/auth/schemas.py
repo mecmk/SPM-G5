@@ -1,3 +1,9 @@
+"""Request and response shapes for sign-in (story 1.1) and the signed-in user (story 1.2).
+
+``UserOut`` is mirrored by hand as ``CurrentUser`` in frontend/src/api/auth.ts - change one and
+change the other.
+"""
+
 from __future__ import annotations
 
 import uuid

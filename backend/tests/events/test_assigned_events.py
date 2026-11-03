@@ -82,8 +82,8 @@ def test_an_event_assigned_to_another_coordinator_is_not_listed(login_as):
 
 @pytest.mark.story("6.1", ac=2)
 def test_a_draft_is_never_listed(coordinator_client, db: Session):
-    """A draft has no assigned coordinator (assignment happens at submission), so it can never
-    match the `assigned_coordinator_id` filter regardless of who is signed in."""
+    """A draft has no assigned coordinator (the Lead assigns only a submitted event, 5.4), so it
+    can never match the `assigned_coordinator_id` filter regardless of who is signed in."""
     draft = make_event(db, status=EventStatus.DRAFT, assigned_coordinator_id=None)
 
     assert str(draft.id) not in _ids(coordinator_client)

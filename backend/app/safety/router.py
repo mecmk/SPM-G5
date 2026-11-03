@@ -30,6 +30,8 @@ from app.safety.schemas import (
 router = APIRouter(prefix="/safety-checks", tags=["safety"])
 # Story 21.2: the coordinator's side of the review lives on the event.
 events_router = APIRouter(prefix="/events", tags=["safety"])
+# Story 12.7 AC4/AC6: a lapsed hold counts for nothing from its expiry, so every route here sweeps
+# (``ReleaseLapsedHolds``) before answering - the timer only runs once a minute.
 
 SAFETY_CHECK_NOT_FOUND_MESSAGE = "No event awaiting a safety check was found."
 EVENT_NOT_FOUND_MESSAGE = "Event not found."
@@ -37,8 +39,6 @@ EVENT_NOT_FOUND_MESSAGE = "Event not found."
 CanReviewSafety = Depends(require_permission(Permission.SAFETY_REVIEW))
 # 21.2 AC17: only a coordinator requests a review or confirms; which one is the service's rule.
 CanCoordinate = Depends(require_permission(Permission.EVENTS_REVIEW))
-# Story 12.7 AC4/AC6: a lapsed hold counts for nothing from its expiry, so every route here sweeps
-# before answering - the timer only runs once a minute.
 CanReadEvent = Depends(
     require_any_permission(Permission.EVENTS_READ_OWN, Permission.EVENTS_READ_ALL)
 )

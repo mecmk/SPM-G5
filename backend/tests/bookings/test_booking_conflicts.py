@@ -1,10 +1,9 @@
 """Story 14.2 - be: block approval of conflicting bookings.
 
-Scope note: story 13.2 ("approve venue booking request", teammate Yu Bing) does not exist
-yet, so there is no HTTP endpoint to test here - these tests exercise the conflict-detection
-service directly (app/bookings/service.py). The ``_approve`` helper below is test scaffolding
-standing in for that future endpoint - it delegates to ``service.approve_booking``, which is
-what 13.2's real endpoint must call, so AC3 can be demonstrated end-to-end here.
+These tests exercise the conflict-detection service directly (app/bookings/service.py), not
+story 13.2's approve endpoint, which test_approve_booking.py covers. The ``_approve`` helper
+below delegates to ``service.approve_booking``, the call that endpoint makes, so AC3 is
+demonstrated end-to-end here.
 
 AC1 Approval is refused where the requested period overlaps a confirmed booking for the same
     venue.
@@ -36,7 +35,7 @@ from tests.support.seed import Bookings, Users, Venues
 
 
 def _approve(db: Session, booking: VenueBooking, *, actor_id: uuid.UUID) -> None:
-    """Stand-in for story 13.2's approve action - delegates to service.approve_booking, with the
+    """Story 13.2's approve action without its endpoint - service.approve_booking, with the
     hold's expiry Venue Staff give since story 12.7 a day from now."""
     service.approve_booking(
         db,

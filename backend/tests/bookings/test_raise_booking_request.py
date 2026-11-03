@@ -625,7 +625,7 @@ def test_a_coordinator_cannot_raise_a_request_for_someone_elses_event(client, db
 def test_an_event_with_no_coordinator_assigned_cannot_raise_a_request(
     coordinator_client, db: Session
 ):
-    """Story 5.1 assigns the coordinator. Until an event has one, nobody is "the assigned
+    """The Lead assigns the coordinator (5.4). Until an event has one, nobody is "the assigned
     coordinator", so there is no one who may raise its booking."""
     event = make_event(db, status=EventStatus.PLANNING, assigned_coordinator_id=None)
 

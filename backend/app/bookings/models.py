@@ -1,8 +1,7 @@
 """ORM model for venue bookings (stories 12.x request, 13.x approval, 14.x conflicts).
 
-Mirrors backend/db/migrations. Added by story 14.2, which is the first story that needs to
-read booking rows; later stories in the 12.x / 13.x epics should extend this class rather than
-mapping ``venue_bookings`` a second time - two declarative classes on one table raise
+Mirrors backend/db/migrations. A story that needs more of the table extends this class rather
+than mapping ``venue_bookings`` a second time - two declarative classes on one table raise
 ``InvalidRequestError``.
 """
 

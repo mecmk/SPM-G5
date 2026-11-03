@@ -1,5 +1,5 @@
 """Request / response shapes for the venue catalogue (story 8.3, read side reused by 8.1/8.2), a
-venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2) and its availability
+venue's pictures (story 8.3 AC5-AC10), its search (story 8.1) and its availability
 calendar (story 9.1)."""
 
 from __future__ import annotations
@@ -310,7 +310,7 @@ class VenueOut(VenueSummary):
         )
 
 
-# --- search (story 8.1, Sprint 2) --------------------------------------------------------
+# --- search (story 8.1) ------------------------------------------------------------------
 class VenueSearchQuery(BaseModel):
     """Story 8.1 AC3/AC4: the catalogue's filters, as ``GET /venues/search`` reads them from the
     query string. Every field is optional; the service checks how they combine (AC8)."""

@@ -43,9 +43,8 @@ const AWAITING_RESPONSE_SENTENCE =
 test('4.2 AC1/AC3/AC4/AC7: the coordinator asks, asks again, and a double-click sends once', async ({
   page,
 }) => {
-  // Two full sign-in cycles (organiser, then the auto-assigned coordinator) genuinely take
-  // longer than the default per-test budget - see coordinator-reassignment.spec.ts for the same
-  // reasoning with two.
+  // Three sign-in cycles (the organiser, the Lead who assigns, then the coordinator) take longer
+  // than the default per-test budget.
   test.setTimeout(90_000)
 
   const name = uniqueName('Clarify')

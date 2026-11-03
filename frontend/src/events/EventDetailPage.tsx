@@ -708,12 +708,12 @@ export function EventDetailPage() {
     event.assigned_coordinator_id !== null &&
     ACTIVE_EVENT_STATUSES.includes(event.status)
 
-  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
-   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
-   *  mirroring the backend's own checks. Everyone else sees the list alone. */
   // Story 21.2 AC4: the sections the latest review says must change.
   const flagged = flaggedArrangements(safety)
   const isVenueFlagged = flagged.includes('VENUE_BOOKINGS')
+  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
+   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
+   *  mirroring the backend's own checks. Everyone else sees the list alone. */
   const canChangeEquipment =
     can(PERMISSIONS.EQUIPMENT_REQUEST) &&
     isAssignedCoordinator &&
@@ -1308,9 +1308,9 @@ export function EventDetailPage() {
                     </div>
                   )}
                   {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
-                   *  only an approved booking (a replacement still pending from before story 9.5 does not
-                   *  stop it, AC7), before the
-                   *  cut-off (AC4) - mirrors the backend's own checks. */}
+                   *  only an approved booking (a replacement still pending from before story 9.5
+                   *  does not stop it, AC7), before the cut-off (AC4) - mirrors the backend's own
+                   *  checks. */}
                   {booking.status === APPROVED_BOOKING_STATUS &&
                     !isBookingCancelClosed &&
                     isAssignedCoordinator && (
