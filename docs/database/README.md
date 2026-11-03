@@ -135,8 +135,12 @@ closed comes back:
   The seeded registrations do the same with a `WHERE NOT EXISTS` of their own.
 
 `tests/test_schema.py::test_reseeding_puts_every_closed_row_back` closes every row of those tables and
-re-runs the seed, so an upsert that misses a stamp fails there. A venue requirement replaced by a new
-one of the same name is the one case the seed cannot get past: `npm run db:reset` recovers it.
+re-runs the seed, so an upsert that misses a stamp fails there.
+
+The seed cannot get past a name a newer row has taken: a venue requirement removed and added again
+under the same name, or a seeded venue renamed or deleted and a new one given its name. `db:ready`
+then stops, rolls the seed file back and names the rule that refused the row. `npm run db:reset`
+recovers it.
 
 ## Design decisions (and why)
 

@@ -24,6 +24,7 @@ import app.venues.models  # noqa: F401
 from app.bookings.models import BookingStatus, VenueBooking
 from app.db import Base
 from app.dbtool import migrate
+from app.dbtool.__main__ import main as dbtool
 from app.events.models import Event, EventStatus
 from app.registrations.models import EventRegistration, RegistrationStatus
 from app.safety.service import confirm_blockers
@@ -459,6 +460,43 @@ def test_reseeding_clears_the_link_of_a_booking_no_longer_replaced(db: Session):
         {"id": Bookings.OPEN_STUDIOS_HARBOUR},
     ).one()
     assert tuple(row) == ("APPROVED", None)
+
+
+@pytest.mark.story("1", ac=3)
+@pytest.mark.parametrize("command", [["seed"], ["ready", "--no-docs"]], ids=["seed", "ready"])
+def test_a_seed_the_database_refuses_says_how_to_recover(
+    engine, test_database_url, capsys, command
+):
+    """A newer row can take a name a seeded row needs: here a venue was renamed and a new one given
+    its old name. No upsert can get past that, so `npm run db:ready` says what stopped it and how
+    to recover, rather than ending in a traceback."""
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE venues SET name = 'Grand Hall (old)' WHERE id = :id"),
+            {"id": Venues.GRAND_HALL},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO venues (name, location, capacity) VALUES ('Grand Hall', 'Tower A', 50)"
+            )
+        )
+    try:
+        exit_code = dbtool(["--url", test_database_url, *command])
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM venues WHERE name = 'Grand Hall' AND id <> :id"),
+                {"id": Venues.GRAND_HALL},
+            )
+            conn.execute(
+                text("UPDATE venues SET name = 'Grand Hall' WHERE id = :id"),
+                {"id": Venues.GRAND_HALL},
+            )
+
+    printed = capsys.readouterr().out
+    assert exit_code == 1
+    assert "uq_venues_name" in printed
+    assert "npm run db:reset" in printed
 
 
 @pytest.mark.story("1")
