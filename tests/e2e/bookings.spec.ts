@@ -68,9 +68,24 @@
  * AC2 the booking queue's subtitle says what the selected tab holds, as the equipment queue's
  *     does (AC1, in equipment-queue.spec.ts): Expired and Cancelled say why a booking ended up
  *     there. Purely client-side text, so there is no backend case.
+ *
+ * f13.1.5 (13.1 AC2, 13.2 AC1): a booking over more than one day names both dates of its own
+ * period on the queue card, in the Approve dialog, on the request's page and in its approve
+ * notice, so Venue Staff never approve one seeing a single date; a one-day booking reads as
+ * before. The two-day test raises its own request through the UI, on a fresh two-day event, and
+ * closes each dialog without approving it. The one-day test reads the seeded Community Choir
+ * Showcase request, which no spec decides, and closes each dialog too.
  */
 import { expect, test, type Page, type Route } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, EVENTS, signIn, venueCard } from './support'
+import {
+  ACCOUNTS,
+  approvedEvent,
+  corsHeaders,
+  EVENTS,
+  inFuture,
+  signIn,
+  venueCard,
+} from './support'
 
 const QUEUE_PAGE_SIZE = 10
 const FAKE_QUEUE_LENGTH = 25
@@ -1039,4 +1054,152 @@ test('13.1.3 AC4: rejecting on the detail page reloads the calendar, and the req
 
   await expect(dayList).not.toContainText('Nimbus Developer Conference')
   await expect(dayList).toContainText('Morning Leadership Workshop')
+})
+
+// --- f13.1.5: both dates of a multi-day booking, in Venue Staff's views ---------------------------
+
+const SUNRISE_STUDIO = 'Sunrise Studio'
+const DAY_MS = 24 * 60 * 60 * 1000
+/** The seeded Smart Cities Expo's first day, 14 Mar 2028: venue-requirement-search.spec.ts needs
+ *  its venues free on it and the day after. */
+const EXPO_STARTS = Date.parse('2028-03-14T00:00:00+08:00')
+/** What a booking with no setup or teardown says under the venue: its times only, as the event
+ *  page's booking card does. */
+const TWO_DAY_SETUP_LINE = 'Setup: None · Event: 09:00–17:00 · Teardown: None'
+
+/**
+ * The first day of a two-day event that books Sunrise Studio: a slot between 400 and 520 days
+ * ahead, two days wide, that the Expo's days do not touch. The slot follows the minute, so a CI
+ * retry or a repeat on the same database, minutes apart within the hour, takes another slot and
+ * never meets its own earlier hold. No seeded booking and no other spec holds Sunrise Studio
+ * then: the seed's holds are in Oct 2028 and 2029, and 9.4's closures are in Oct 2028 and now.
+ */
+function twoDayEventStart(): number {
+  const expo = Math.floor((EXPO_STARTS - Date.now()) / DAY_MS)
+  const slots: number[] = []
+  for (let day = 400; day < 520; day += 2) {
+    if (day + 1 < expo - 8 || day > expo + 3) slots.push(day)
+  }
+  return slots[Math.floor(Date.now() / 60_000) % slots.length]
+}
+
+/** The day and year `inFuture(days)` names, as the pages print them ("9", "2029"). */
+function dayAndYear(days: number): { day: string; year: string } {
+  const [year, , day] = inFuture(days).slice(0, 10).split('-')
+  return { day: String(Number(day)), year }
+}
+
+/** The text of a period over two days, "Wed, 9 May 2029, 09:00 – Thu, 10 May 2029, 17:00", as a
+ *  pattern of the days the event runs on: a month reads "May" or "Sept". */
+function twoDaySchedule(startDays: number): string {
+  const first = dayAndYear(startDays)
+  const last = dayAndYear(startDays + 1)
+  const when = (each: { day: string; year: string }, time: string) =>
+    `[A-Z][a-z]{2}, ${each.day} [A-Za-z]{3,4} ${each.year}, ${time}`
+  return `${when(first, '09:00')} – ${when(last, '17:00')}`
+}
+
+/** The Date tile of that period, "9 May 2029 – 10 May 2029". */
+function twoDayTile(startDays: number): RegExp {
+  const first = dayAndYear(startDays)
+  const last = dayAndYear(startDays + 1)
+  return new RegExp(
+    `^${first.day} [A-Za-z]{3,4} ${first.year} – ${last.day} [A-Za-z]{3,4} ${last.year}$`,
+  )
+}
+
+test('13.1 AC2/13.2 AC1: Venue Staff see both dates of a multi-day booking before approving it', async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  const start = twoDayEventStart()
+  const { eventId, name, coordinator } = await approvedEvent(
+    page,
+    'Two-day booking',
+    start,
+    start + 1,
+  )
+
+  // As the coordinator, through story 12.5's own steps: Sunrise Studio for the Main venue.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, coordinator)
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('link', { name: 'Find a venue' }).click()
+  await expect(page.getByRole('region', { name: `Finding a venue for ${name}` })).toBeVisible()
+  await venueCard(page, SUNRISE_STUDIO).getByRole('link', { name: 'Request this venue' }).click()
+  await page.getByRole('button', { name: 'Send request' }).click()
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+
+  // As Venue Staff, the queue card, found by the event's own name.
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(name)
+  const card = page.getByRole('listitem').filter({ hasText: name })
+  const schedule = twoDaySchedule(start)
+  const sentence = new RegExp(
+    `^${SUNRISE_STUDIO} will be booked for ${name} from ${schedule}\\.$`,
+  )
+  await expect(card.getByText(new RegExp(`^${schedule}$`))).toBeVisible()
+  await expect(card.getByText(TWO_DAY_SETUP_LINE, { exact: true })).toBeVisible()
+
+  // The queue's Approve dialog names both dates, and is closed without approving.
+  await card.getByRole('button', { name: 'Approve' }).click()
+  const queueDialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await expect(queueDialog.getByText(sentence)).toBeVisible()
+  await queueDialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(queueDialog).toHaveCount(0)
+
+  // The request's page: the Date tile names both days, the Time tile is as before, and the setup
+  // and teardown line shows.
+  await card.getByRole('link', { name }).click()
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+  await expect(page.getByText(twoDayTile(start))).toBeVisible()
+  await expect(page.getByText('09:00 – 17:00', { exact: true })).toBeVisible()
+  await expect(page.getByText(TWO_DAY_SETUP_LINE, { exact: true })).toBeVisible()
+
+  // Its approve notice names both dates, and is closed without approving.
+  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  const pageDialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await expect(pageDialog.getByText(sentence)).toBeVisible()
+  await pageDialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(pageDialog).toHaveCount(0)
+})
+
+const CHOIR_SHOWCASE = 'Community Choir Showcase'
+const CHOIR_DATE = 'Sat, 14 Oct 2028'
+const CHOIR_SENTENCE = `Harbour Pavilion will be booked for ${CHOIR_SHOWCASE} from ${CHOIR_DATE}, 18:00–21:00.`
+/** What a two-date line looks like: a second date after the first. */
+const SECOND_DATE = /^[A-Z][a-z]{2}, \d{1,2} [A-Za-z]{3,4} \d{4}, \d{2}:\d{2} – /
+
+test('13.1 AC2/13.2 AC1: a one-day booking reads as before in the Venue Staff views', async ({
+  page,
+}) => {
+  // The seeded Community Choir Showcase request (14 Oct 2028, 18:00-21:00, Harbour Pavilion) is
+  // pending, and no spec approves, rejects, withdraws or closes over it.
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(CHOIR_SHOWCASE)
+  const card = page.getByRole('listitem').filter({ hasText: CHOIR_SHOWCASE })
+  await expect(card.getByText(CHOIR_DATE, { exact: true })).toBeVisible()
+  await expect(card.getByText('18:00–21:00', { exact: true })).toBeVisible()
+  await expect(card.getByText(SECOND_DATE)).toHaveCount(0)
+
+  await card.getByRole('button', { name: 'Approve' }).click()
+  const queueDialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await expect(queueDialog.getByText(CHOIR_SENTENCE, { exact: true })).toBeVisible()
+  await queueDialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(queueDialog).toHaveCount(0)
+
+  await card.getByRole('link', { name: CHOIR_SHOWCASE }).click()
+  await expect(page.getByRole('heading', { name: CHOIR_SHOWCASE, level: 1 })).toBeVisible()
+  await expect(page.getByText(CHOIR_DATE, { exact: true })).toBeVisible()
+  await expect(page.getByText('18:00 – 21:00', { exact: true })).toBeVisible()
+  await expect(page.getByText(SECOND_DATE)).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  const pageDialog = page.getByRole('dialog', { name: 'Approve this booking?' })
+  await expect(pageDialog.getByText(CHOIR_SENTENCE, { exact: true })).toBeVisible()
+  await pageDialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(pageDialog).toHaveCount(0)
 })
