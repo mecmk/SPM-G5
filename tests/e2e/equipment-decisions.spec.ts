@@ -357,13 +357,15 @@ test("16.1 AC10: two decisions reach the coordinator as one notice, which opens 
     .filter({ hasText: title });
   await expect(notice).toHaveCount(1);
   await expect(notice).toContainText("Unread");
-  const decisions = notice.locator(".notification-message");
-  await expect(decisions).toContainText("Theo Tech accepted 1 × Portable projector.");
-  await expect(decisions).toContainText(
-    `Theo Tech declined 1 × Video camera. Reason: ${reason}`,
-  );
-  // One line each: a notice of many decisions has to stay readable.
-  await expect(decisions).toHaveCSS("white-space", "pre-line");
+  // One line each: a notice of many decisions has to stay readable. innerText follows the line
+  // breaks on screen, so two decisions run together on one line fail here.
+  const lines = () => notice.innerText().then((text) => text.split("\n"));
+  await expect
+    .poll(lines)
+    .toContain("Theo Tech accepted 1 × Portable projector.");
+  await expect
+    .poll(lines)
+    .toContain(`Theo Tech declined 1 × Video camera. Reason: ${reason}`);
 
   await notice.getByRole("button", { name: title }).click();
   await expect(page).toHaveURL(`/events/${EVENTS.volunteerEvening}`);
