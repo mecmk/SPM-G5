@@ -6,10 +6,11 @@
  * AC2 a hold on an item not yet sent is listed (the seeded presentation laptops).
  * AC3 filtered by type and by either end of a date range, just the filters set kept in the page
  *     address; a range starting before today, an end before the start or before today, a
- *     five-digit year, a date left half typed and an address date no picker can hold are refused on
- *     the page before anything is sent. Changed filters hide the old holds while they load, and a
- *     refusal with no sentence of its own (stubbed) names the filters. The range's own edges,
- *     Singapore days and the server's refusals are backend cases.
+ *     five-digit year, a date left half typed and an address date no picker can hold (a time, or a
+ *     day its month does not have) are refused on the page before anything is sent. A type in the
+ *     address the server refuses stays in the type box. Changed filters hide the old holds while
+ *     they load, and a refusal with no sentence of its own (stubbed) names the filters. The range's
+ *     own edges, Singapore days and the server's refusals are backend cases.
  * AC4 a sent hold opens its equipment request page, whose back link returns to the schedule as it
  *     was filtered, or unfiltered; a hold not yet sent has no page to open, and the schedule offers
  *     no Accept or Decline. The request page opened by its address leads back to the queue, and
@@ -41,6 +42,8 @@ const HOLDS_PATH = '/equipment/holds'
 const HOLDS_API_PATH = '/equipment-holds'
 const SHOWCASE = 'Bayfront Product Showcase'
 const SHOWCASE_DAY = '2031-04-09'
+const SHOWCASE_FROM = 'Wed, 9 Apr 2031, 09:00'
+const SHOWCASE_TO = 'Wed, 9 Apr 2031, 17:00'
 // A range ending the day before leaves the showcase out.
 const BEFORE_SHOWCASE_DAY = '2031-04-08'
 // The seeded roadshow's microphones, accepted, in June 2027: outside the showcase's day.
@@ -136,15 +139,31 @@ test('17.3 AC1/AC2: Technical Support opens the schedule and sees the showcase h
       name: 'Wireless microphone holds',
     }),
   ).toBeVisible()
-  const mics = showcaseRow(page, 'Wireless microphone')
-  await expect(mics).toContainText('3')
-  await expect(mics).toContainText('9 Apr 2031, 09:00')
-  await expect(mics).toContainText('9 Apr 2031, 17:00')
-  await expect(mics).toContainText('Accepted (reserved)')
-  await expect(showcaseRow(page, 'Portable speaker set')).toContainText('Pending')
-  const laptops = showcaseRow(page, 'Presentation laptop')
-  await expect(laptops).toContainText('2')
-  await expect(laptops).toContainText('Not yet sent')
+  // Cell by cell - event, quantity, from, to, status, link - so each is read from its own column.
+  await expect(showcaseRow(page, 'Wireless microphone').getByRole('cell')).toHaveText([
+    SHOWCASE,
+    '3',
+    SHOWCASE_FROM,
+    SHOWCASE_TO,
+    'Accepted (reserved)',
+    'View request →',
+  ])
+  await expect(showcaseRow(page, 'Portable speaker set').getByRole('cell')).toHaveText([
+    SHOWCASE,
+    '1',
+    SHOWCASE_FROM,
+    SHOWCASE_TO,
+    'Pending',
+    'View request →',
+  ])
+  await expect(showcaseRow(page, 'Presentation laptop').getByRole('cell')).toHaveText([
+    SHOWCASE,
+    '2',
+    SHOWCASE_FROM,
+    SHOWCASE_TO,
+    'Not yet sent',
+    '',
+  ])
   // AC5: Technical Support declined the camera, so it holds nothing.
   await expect(group(page, 'Video camera')).toBeVisible()
   await expect(showcaseRow(page, 'Video camera')).toHaveCount(0)
@@ -296,13 +315,32 @@ test('17.3 AC3: a date in the address that no picker can hold is named when Show
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
-  await page.goto(`${HOLDS_PATH}?from=${SHOWCASE_DAY}T09:00`)
   const form = filters(page)
 
-  await form.getByRole('button', { name: 'Show holds' }).click()
+  // A date with a time, and a day the month does not have.
+  for (const from of [`${SHOWCASE_DAY}T09:00`, '2032-02-30']) {
+    await page.goto(`${HOLDS_PATH}?from=${from}`)
+    await form.getByRole('button', { name: 'Show holds' }).click()
 
-  await expect(form.getByRole('alert').filter({ hasText: DATE_INVALID })).toBeVisible()
-  await expect(form.getByLabel('From date')).toBeFocused()
+    await expect(form.getByRole('alert').filter({ hasText: DATE_INVALID })).toBeVisible()
+    await expect(form.getByLabel('From date')).toBeFocused()
+  }
+})
+
+test('17.3 AC3: a type in the address the server refuses stays in the type box, so what it shows is what is sent', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.techSupport)
+  await page.goto(`${HOLDS_PATH}?type=NO_SUCH_KIT`)
+  const type = filters(page).getByLabel('Equipment type')
+
+  await expect(page.getByRole('alert')).toHaveText('Unknown equipment type: NO_SUCH_KIT.')
+  await expect(type).toHaveValue('NO_SUCH_KIT')
+
+  await type.selectOption({ label: 'All types' })
+  await showHolds(page)
+  await expect(page).toHaveURL(new RegExp(`${HOLDS_PATH}$`))
+  await expect(roadshowMics(page)).toHaveCount(1)
 })
 
 test('17.3 AC4: a sent hold opens its request, which leads back to the schedule as filtered; one not yet sent has no page', async ({

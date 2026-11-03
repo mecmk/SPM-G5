@@ -429,6 +429,19 @@ def test_a_side_of_the_range_left_out_leaves_it_open(tech_client, db: Session):
 
 
 @pytest.mark.story("17.3", ac=3)
+@pytest.mark.parametrize("from_date", [None, THE_DAY], ids=["to alone", "from and to"])
+def test_a_range_ending_on_the_last_day_there_is_is_read(tech_client, db: Session, from_date):
+    """31 December 9999 is a date the page can send, and no day follows it: the range is read as
+    open at its end, not refused or failed."""
+    kit = make_equipment_type(db)
+    hold = _on_the_day(db, kit)
+
+    body = _schedule(tech_client, from_date=from_date, to_date=date.max)
+
+    assert _ids(body, kit) == [str(hold.id)]
+
+
+@pytest.mark.story("17.3", ac=3)
 @pytest.mark.parametrize(
     ("days", "detail"),
     [

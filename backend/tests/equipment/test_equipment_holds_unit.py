@@ -142,6 +142,15 @@ def test_a_side_left_out_leaves_the_range_open_on_that_side():
     assert service.hold_window(None, None) == HoldWindow(starts_at=None, ends_at=None)
 
 
+@pytest.mark.story("17.3", ac=3)
+def test_a_range_ending_on_the_last_day_there_is_is_open_at_its_end():
+    """No day follows 31 December 9999, so there is no midnight after it to end on."""
+    assert service.hold_window(date(2031, 4, 9), date.max) == HoldWindow(
+        starts_at=datetime(2031, 4, 9, 0, 0, tzinfo=SGT), ends_at=None
+    )
+    assert service.hold_window(None, date.max) == HoldWindow(starts_at=None, ends_at=None)
+
+
 # =============================================================================================
 # AC3 - which ranges are refused
 # =============================================================================================
