@@ -169,6 +169,7 @@ test('21.3 AC8: Venue Staff find the released booking under Cancelled and All, r
     .filter({ hasText: 'Seminar Room 2.1' })
 
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(EVENT_NAME)
   await expect(released.getByRole('heading', { name: EVENT_NAME })).toBeVisible()
   await expect(released.getByText(RELEASED_LINE, { exact: true })).toBeVisible()
   await expect(released.getByText('Approved at', { exact: true })).toBeVisible()

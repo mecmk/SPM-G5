@@ -64,7 +64,7 @@ const EVENTS_API_PATH = '/registrations/events'
 // AC8: a picture is decorative - no alt text, hidden from assistive technology - so it has no role
 // or name, and is found by its tag. The jazz evening has the seeded one; an uploaded one is served
 // by the API (mediaUrl).
-const JAZZ_PICTURE = '/images/events/cat.jpg'
+const JAZZ_PICTURE = '/images/events/concert.jpg'
 const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-pictured-gala.png'
 const REGISTER_API_PATH = '/registrations'
 const NOT_OPEN_MESSAGE = 'This event is not open for registration.'

@@ -167,6 +167,7 @@ test('6.2 AC14/AC15/AC16: Venue Staff and Technical Support find what was releas
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venue-staff/booking-requests')
   await page.getByRole('tab', { name: /^Cancelled/ }).click()
+  await page.getByRole('searchbox', { name: 'Search requests' }).fill(CHARITY_RUN)
   const booking = page
     .getByRole('listitem')
     .filter({ hasText: CHARITY_RUN })

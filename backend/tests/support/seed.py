@@ -205,24 +205,32 @@ class Events:
     BOOK_SWAP = _e(76)  # CONFIRMED, started on 3 Oct 2026
     LANTERN_PAINTING = _e(77)  # CONFIRMED; the spec withdraws once the server answers again
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
-    # that its day's closure (Unavailability.FOYER_*) has marked "Venue unavailable - alternative
-    # needed". Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
-    LANTERN_SHOWCASE = _e(12662)  # read only; APPROVED marked booking
-    MAKER_FAIRE = _e(12663)  # an APPROVED marked additional venue beside a requirement booked
+    # that its day's closure (Unavailability.FOYER_*) covered. Story 9.5's migration ended those
+    # bookings (cancelled or rejected, with the closure's reason), as saving the closure would
+    # now. Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
+    LANTERN_SHOWCASE = _e(12662)  # read only; its booking was cancelled by the closure
+    MAKER_FAIRE = _e(
+        12663
+    )  # an additional venue cancelled by the closure beside a requirement booked
     SPRING_EXPO = _e(12664)  # the spec raises a replacement
     AWARDS_EVENING = _e(12665)  # ... and Venue Staff approve it
     PITCH_NIGHT = _e(12666)  # ... and the coordinator withdraws it, then asks again
     NEIGHBOURHOOD_SUMMIT = _e(12667)  # ... and Venue Staff remove the closure first
-    HERITAGE_WALK = _e(12668)  # CANCELLED, its marked booking cancelled with it
-    PRODUCT_SHOWCASE = _e(12669)  # a marked PENDING booking
+    HERITAGE_WALK = _e(12668)  # CANCELLED, its booking released with it (EVENT_CANCELLED)
+    PRODUCT_SHOWCASE = _e(12669)  # a PENDING request the closure rejected
     ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; read only
     WELLNESS_EXPO = _e(12679)  # coordinator 2's; the spec raises a replacement
     CRAFT_MARKET = _e(12680)  # an additional venue, marked: its closure is removed, then a request
     HARVEST_FAIR = _e(12681)  # an additional venue, marked: the spec replaces it, then presses Back
-    OPEN_STUDIOS = _e(12682)  # a marked pending replacement of an approved booking: read only
-    NIGHT_BAZAAR = _e(12683)  # a marked pending additional venue: read only
+    OPEN_STUDIOS = _e(12682)  # a rejected replacement of a booking that still holds: read only
+    NIGHT_BAZAAR = _e(12683)  # a pending additional venue the closure rejected: read only
     SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
+    # Story 9.5's e2e events, organiser 1, coordinator 1, October 2028 (the 0095NN block): Seminar
+    # Room 2.1 is closed over the first two on 24 October, and the third is a replaced pair.
+    CLOSURE_CONFIRMED = _e(9501)  # CONFIRMED; its approved booking 09:00-12:00 is cancelled
+    CLOSURE_PLANNING = _e(9504)  # PLANNING; its pending request 14:00-17:00 is rejected
+    CLOSURE_REPLACED = _e(9507)  # PLANNING; an original released by its approved replacement
     # Story 20.2: Nadia Notice's, in planning with Carl, the event nine notifications are about.
     NOTICE_GALA = _e(20202)
     # Story 18.4's, all CONFIRMED and Public: organiser 2, coordinator 2, December 2028. The
@@ -316,10 +324,10 @@ class Bookings:
     SAFETY_RELEASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021304")
     # Story 12.8: Events.PRODUCT_BRIEFING's requirement "Main hall" at Seminar Room 2.1, approved.
     PRODUCT_BRIEFING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012803")
-    # Story 12.6's, at Exhibition Foyer unless said otherwise, each marked (see Events): approved,
-    # except the product showcase's, which is pending.
+    # Story 12.6's, at Exhibition Foyer unless said otherwise, each ended by its closure (see
+    # Events): cancelled, except the product showcase's, which was pending and is rejected.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
-    MAKER_FAIRE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012623")  # unmarked
+    MAKER_FAIRE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012623")  # unaffected
     # Marked, and for no requirement: an additional venue.
     MAKER_FAIRE_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012624")
     SPRING_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012625")
@@ -330,17 +338,28 @@ class Bookings:
     PRODUCT_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012630")  # pending
     ROBOTICS_OPEN_HOUSE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012631")
     WELLNESS_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012632")
-    CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012633")  # unmarked
-    CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012634")  # marked
-    HARVEST_FAIR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012635")  # unmarked
-    HARVEST_FAIR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012636")  # marked
-    OPEN_STUDIOS_HARBOUR = uuid.UUID("44444444-0000-0000-0000-000000012637")  # approved, unmarked
-    OPEN_STUDIOS_REPLACEMENT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012638")  # pending
-    NIGHT_BAZAAR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012639")  # unmarked
-    NIGHT_BAZAAR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012640")  # pending
+    CRAFT_MARKET_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012633")  # unaffected
+    CRAFT_MARKET_ADDITIONAL_FOYER = uuid.UUID(
+        "44444444-0000-0000-0000-000000012634"
+    )  # cancelled by the closure
+    HARVEST_FAIR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012635")  # unaffected
+    HARVEST_FAIR_ADDITIONAL_FOYER = uuid.UUID(
+        "44444444-0000-0000-0000-000000012636"
+    )  # cancelled by the closure
+    OPEN_STUDIOS_HARBOUR = uuid.UUID("44444444-0000-0000-0000-000000012637")  # approved, unaffected
+    OPEN_STUDIOS_REPLACEMENT_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012638")  # rejected
+    NIGHT_BAZAAR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012639")  # unaffected
+    NIGHT_BAZAAR_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012640")  # rejected
     SPRING_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012641")
-    GARDEN_FAIR_PENDING = uuid.UUID("44444444-0000-0000-0000-000000012642")  # plain, unmarked
+    GARDEN_FAIR_PENDING = uuid.UUID("44444444-0000-0000-0000-000000012642")  # plain, pending
     GARDEN_FAIR_WITHDRAWN = uuid.UUID("44444444-0000-0000-0000-000000012643")  # older, closed
+    # Story 9.5's, in the 0095NN block (see Events): at Seminar Room 2.1 on 24 October 2028, the
+    # approved one 09:00-12:00 with its hold completed and the pending one 14:00-17:00; and a pair
+    # on 25 October, the original at Grand Hall released when its replacement was approved.
+    CLOSURE_CONFIRMED_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000009503")
+    CLOSURE_PLANNING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000009506")
+    CLOSURE_REPLACED_ORIGINAL = uuid.UUID("44444444-0000-0000-0000-000000009509")
+    CLOSURE_REPLACED_REPLACEMENT = uuid.UUID("44444444-0000-0000-0000-000000009510")
 
 
 class Registrations:
@@ -564,3 +583,43 @@ class Notifications:
             True,
         ),
     )
+
+
+def _cr(n: int) -> uuid.UUID:
+    return uuid.UUID(f"19191919-0000-0000-0000-{n:012d}")
+
+
+class ChangeRequests:
+    """c14: the sample change requests, a spread of every status as a real queue would hold, on
+    events no other test raises one on. The first six end in their event's number, the rest are
+    numbered from 101. Each asks to change the event's expected attendance or its schedule. A
+    coordinator's queue holds the pending ones first, then the record of the rest."""
+
+    # Pending. Chloe: Events.CUSTOMER_FORUM 150 to 180 people; Events.APPROVED_3 (Product Roadmap
+    # Townhall) 300 to 350; Events.APPROVED_4 (Founders Day) an hour later. Carl:
+    # Events.SALES_KICKOFF a day later; Events.PARTNER_GALA 180 to 220.
+    CUSTOMER_FORUM_ATTENDANCE = _cr(23)
+    ROADMAP_TOWNHALL_ATTENDANCE = _cr(101)
+    FIRESIDE_SCHEDULE = _cr(102)
+    SALES_KICKOFF_SCHEDULE = _cr(24)
+    PARTNER_GALA_ATTENDANCE = _cr(103)
+    # Approved. Chloe: Events.APPROVED_4 180 to the 200 it has now; Events.APPROVED_3 moved to the
+    # date it has now. Carl: Events.NOTICE_GALA (Nadia) 40 to the 60 it has now, the request the
+    # "Change approved" notification in Notifications names (before c14 a row that did not exist;
+    # its id keeps that notification's eeeeeeee prefix); Events.APPROVED_5 (Investor Demo Day)
+    # 80 to the 100 it has now.
+    FIRESIDE_ATTENDANCE = _cr(10)
+    ROADMAP_TOWNHALL_SCHEDULE = _cr(104)
+    NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
+    DEMO_DAY_ATTENDANCE = _cr(105)
+    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 450.
+    # Carl: Events.APPROVED_7 (Alumni Homecoming) 100 to 250; Events.APPROVED_5 to an evening start.
+    CHARITY_GALA_ATTENDANCE = _cr(16)
+    HOMECOMING_ATTENDANCE = _cr(106)
+    DEMO_DAY_SCHEDULE = _cr(107)
+    # Withdrawn by their organiser: Omar's Events.FINTECH_BREAKFAST 45 to 60 (coordinator 2) and
+    # Olivia's Events.APPROVED_6 to a week later (coordinator 1).
+    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
+    CHARITY_GALA_SCHEDULE = _cr(108)
+    # Cancelled with its event, while pending (6.2 AC4): Omar's Events.CHARITY_FUN_RUN 200 to 250.
+    FUN_RUN_ATTENDANCE = _cr(109)

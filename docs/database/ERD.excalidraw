@@ -4971,7 +4971,7 @@
       "x": 2700,
       "y": 1016,
       "width": 400,
-      "height": 577
+      "height": 593
     },
     {
       "angle": 0,
@@ -5000,9 +5000,9 @@
       "x": 2708,
       "y": 1024,
       "width": 384,
-      "height": 561,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool\n    cancelled_at?                  timestamptz\n    release_cause?                 text\n    release_reason?                text\nFK  released_by_id?                uuid",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    venue_unavailable_marked_at?   timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool\n    cancelled_at?                  timestamptz\n    release_cause?                 text\n    release_reason?                text\nFK  released_by_id?                uuid",
+      "height": 577,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool\n    cancelled_at?                  timestamptz\n    release_cause?                 text\n    release_reason?                text\nFK  released_by_id?                uuid\n    closure_reason?                text\n    closure_description?           text",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  venue_id                       uuid\nFK  requested_by_id                uuid\n    starts_at                      timestamptz\n    ends_at                        timestamptz\n    setup_minutes                  int\n    teardown_minutes               int\n    held_from                      timestamptz\n    held_until                     timestamptz\n    expected_attendance            int\nFK  required_layout_code?          text\n    requirement_notes?             text\n    suitability_override_reason?   text\n    status                         text\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    decision_reason?               text\n    alternative_suggestion?        text\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  venue_requirement_id?          uuid\n    hold_expires_at?               timestamptz\n    hold_reminded_at?              timestamptz\n    hold_completed_at?             timestamptz\n    hold_expiry_change_reason?     text\nFK  hold_expiry_changed_by_id?     uuid\n    hold_expiry_changed_at?        timestamptz\n    replaces_booking_id?           uuid\nFK  replaced_by_booking_id?        uuid\n    replaces_live_original         bool\n    cancelled_at?                  timestamptz\n    release_cause?                 text\n    release_reason?                text\nFK  released_by_id?                uuid\n    closure_reason?                text\n    closure_description?           text",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -11387,7 +11387,7 @@
       "x": 2900.0,
       "y": 982,
       "width": 0.0,
-      "height": 611,
+      "height": 627,
       "points": [
         [
           0,
@@ -11395,7 +11395,7 @@
         ],
         [
           0.0,
-          611
+          627
         ]
       ],
       "lastCommittedPoint": null,
@@ -11438,7 +11438,7 @@
       "id": "text-37997b9a04ee",
       "type": "text",
       "x": 2840.0,
-      "y": 1279.5,
+      "y": 1287.5,
       "width": 120,
       "height": 16,
       "text": "replaced_by_booking_id",

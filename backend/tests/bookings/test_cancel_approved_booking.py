@@ -17,13 +17,14 @@ Edge
     again. The organiser and the Safety Officers are notified.
 6. If the event is in Planning, it stays in Planning, but a safety approval it already has no
     longer allows Confirm (21.2 AC14).
-7. A booking marked "Venue unavailable - alternative needed" (9.4) can be cancelled like any
-    other. A booking with a pending replacement (12.6) cannot be cancelled until the replacement
-    is withdrawn.
+7. Nothing is marked "Venue unavailable – alternative needed" any more: a booking a venue
+    closure covers is cancelled by the closure itself (9.5). An approved booking can still be
+    cancelled when a pending request raised before 9.5 names it as its replacement (12.6); if
+    that request is approved later, the cancelled booking stays as it is. (9.5, CL-194)
 
 Permission
 8. Only the assigned coordinator can cancel the event's bookings. The API refuses a cancellation
-    with no reason, after the cut-off, or while a replacement is pending.
+    with no reason or after the cut-off. (9.5, CL-194)
 
 Technical (team note)
 9. Cancelling uses the same release path as 21.3 (19.2's ``release_booking``) with its own cause,
@@ -50,18 +51,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
-from app.bookings import router as bookings_router
 from app.bookings import service as bookings_service
 from app.bookings.models import BookingStatus, VenueBooking
-from app.bookings.schemas import BookingReplacementIn
 from app.cancellations import service as cancellations_service
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, EventStatusHistory
 from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import current_facts
-from app.venues.models import Venue
 from tests.support.factories import (
+    approval_payload,
     make_booking,
     make_event,
     make_secured_event,
@@ -82,10 +81,6 @@ SETUP_MINUTES = 30
 RELEASED_TITLE = "A venue booking was released"
 NOT_ASSIGNED = "Only the coordinator assigned to this event can cancel its venue bookings."
 NOT_APPROVED = "Only an approved booking can be cancelled. This one is {status}."
-REPLACEMENT_PENDING = (
-    "A replacement at {venue} is waiting for Venue Staff. Withdraw it before cancelling this "
-    "booking."
-)
 CLOSED = "Cancelling this event's venue bookings closed 24 hours before its set-up time."
 RETURNED_TITLE = '"{event}" is back in Planning'
 RETURNED_MESSAGE = (
@@ -516,31 +511,40 @@ def test_another_events_cancelled_booking_leaves_the_approval_alone(
 
 
 # --- AC7: a marked booking can be cancelled; a pending replacement blocks it -------------------
-@pytest.mark.story("12.8", ac=7)
-def test_a_booking_marked_venue_unavailable_can_be_cancelled(coordinator_client, db: Session):
-    scenario = make_scenario(db, marked=True)
-
-    body = _cancelled(coordinator_client, scenario.original)
-
-    assert body["status"] == BookingStatus.CANCELLED
-    assert body["release_cause"] == "COORDINATOR_CANCELLED"
 
 
 @pytest.mark.story("12.8", ac=7)
-def test_a_pending_replacement_blocks_the_cancel_until_it_is_withdrawn(
-    coordinator_client, db: Session
+def test_a_pending_replacement_does_not_block_the_cancel_and_its_approval_leaves_it_cancelled(
+    login_as, db: Session
 ):
-    scenario = make_scenario(db, marked=True)
+    """Updated by 9.5 (CL-194): an approved booking can still be cancelled when a pending request
+    raised before 9.5 names it as its replacement (12.6). If that request is approved later, the
+    cancelled booking stays as it is: nothing is released again and nothing says it was (D12)."""
+    scenario = make_scenario(db)
     replacement = add_pending_replacement(db, scenario)
 
-    response = _cancel(coordinator_client, scenario.original)
+    response = _cancel(login_as(Users.COORDINATOR), scenario.original)
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == REPLACEMENT_PENDING.format(venue=scenario.alternative.name)
-    _untouched(db, scenario.original, scenario.event, EventStatus.PLANNING)
-    withdrawn = coordinator_client.post(f"/bookings/{replacement.id}/withdraw")
-    assert withdrawn.status_code == 200, withdrawn.text
-    assert _cancel(coordinator_client, scenario.original).status_code == 200
+    assert response.status_code == 200, response.text
+    cancelled = _fresh(db, scenario.original)
+    assert cancelled.status == BookingStatus.CANCELLED
+    assert cancelled.release_cause == "COORDINATOR_CANCELLED"
+    approval = login_as(Users.VENUE_STAFF).post(
+        f"/bookings/{replacement.id}/approve", json=approval_payload()
+    )
+    assert approval.status_code == 200, approval.text
+    assert _fresh(db, replacement).status == BookingStatus.APPROVED
+    again = _fresh(db, scenario.original)
+    assert (again.status, again.release_cause, again.replaced_by_booking_id) == (
+        BookingStatus.CANCELLED,
+        "COORDINATOR_CANCELLED",
+        None,
+    )
+    sentence = bookings_service.ORIGINAL_RELEASED_SENTENCE.format(
+        venue=scenario.original_venue.name
+    )
+    told = _notices(db, scenario.event.id, "BOOKING_APPROVED")
+    assert told and all(sentence not in notice.message for notice in told)
 
 
 # --- AC8: who may cancel, and what the API refuses ---------------------------------------------
@@ -639,7 +643,7 @@ def _committed(engine: Engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, list[uu
     sessions can meet on its rows. Returns the event, the booking, the alternative venue and the
     venues to purge."""
     with Session(engine) as session:
-        scenario = make_scenario(session, marked=True)
+        scenario = make_scenario(session)
         session.commit()
         return (
             scenario.event.id,
@@ -663,8 +667,6 @@ def _cancel_in(engine: Engine, booking_id: uuid.UUID, pids: dict[str, int]) -> s
                 actor=session.get(User, Users.COORDINATOR.id),
             )
         except bookings_service.BookingNotApproved as refused:
-            return str(refused)
-        except bookings_service.ReplacementPending as refused:
             return str(refused)
         return "cancelled"
 
@@ -739,73 +741,5 @@ def test_a_release_that_lands_first_wins_and_the_cancel_is_refused(engine, rival
             assert booking.release_cause != "COORDINATOR_CANCELLED"
             told = _notices(session, event_id, "BOOKING_RELEASED")
             assert len(told) == (1 if rival == "event-cancelled" else 0)
-    finally:
-        purge(engine, event_ids=[event_id], venue_ids=venue_ids)
-
-
-@pytest.mark.story("12.8", ac=7)
-def test_a_replacement_requested_first_blocks_the_cancel(engine):
-    """The coordinator's other tab asks for a replacement while the cancel is on its way: the
-    replacement holds the event (12.6's request takes it, as the cancel does) until it is saved,
-    the cancel waits on it, then finds the replacement pending. A cancelled booking never has a
-    pending replacement."""
-    event_id, booking_id, alternative_id, venue_ids = _committed(engine)
-
-    def replace(holding: threading.Event, go: threading.Event) -> None:
-        with Session(engine) as session:
-            original = bookings_service.get_booking_for_switch(session, booking_id)
-            holding.set()
-            go.wait(LOCK_WAIT_SECONDS)
-            bookings_service.request_replacement_booking(
-                session,
-                original,
-                BookingReplacementIn(venue_id=alternative_id),
-                actor=session.get(User, Users.COORDINATOR.id),
-            )
-
-    try:
-        outcome = _race(engine, replace, booking_id)
-
-        with Session(engine) as session:
-            alternative = session.get(Venue, alternative_id).name
-            assert outcome == REPLACEMENT_PENDING.format(venue=alternative)
-            assert session.get(VenueBooking, booking_id).status == BookingStatus.APPROVED
-    finally:
-        purge(engine, event_ids=[event_id], venue_ids=venue_ids)
-
-
-@pytest.mark.story("12.8", ac=7)
-def test_the_replacement_route_takes_the_event_before_the_booking(engine):
-    """The cancel locks the event and then the booking, so the route must too, or each could hold
-    what the other waits for. While the route stands waiting on the event, the booking is free."""
-    event_id, booking_id, alternative_id, venue_ids = _committed(engine)
-    pids: dict[str, int] = {}
-
-    def route() -> None:
-        with Session(engine) as session:
-            pids["route"] = backend_pid(session)
-            bookings_router.request_replacement_booking(
-                booking_id,
-                BookingReplacementIn(venue_id=alternative_id),
-                session,
-                session.get(User, Users.COORDINATOR.id),
-            )
-
-    try:
-        with Session(engine) as holder, ThreadPoolExecutor(max_workers=1) as pool:
-            holder.execute(
-                select(Event.id).where(Event.id == event_id).with_for_update(key_share=True)
-            )
-            requested = pool.submit(route)
-            try:
-                wait_until_waiting(engine, pids, "route")
-                assert holder.scalar(
-                    select(VenueBooking.id)
-                    .where(VenueBooking.id == booking_id)
-                    .with_for_update(nowait=True)
-                )
-            finally:
-                holder.rollback()
-            requested.result(timeout=LOCK_WAIT_SECONDS)
     finally:
         purge(engine, event_ids=[event_id], venue_ids=venue_ids)

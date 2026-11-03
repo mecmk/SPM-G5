@@ -13,9 +13,11 @@ AC1 The attendee sees their registrations with event name, date and status (Regi
 AC3 Withdrawal is allowed until the event starts: a moment before it is accepted, at or after it
     refused.
 AC7 A double-click withdraws once: a second withdrawal is refused as already withdrawn.
-AC8 A registration shows as Event cancelled when its event was cancelled or it was cancelled with
-    the event; one the attendee withdrew stays Withdrawn. Neither can be withdrawn. An event sent
-    back to Planning keeps its registration Registered.
+AC8 A registration shows as Event cancelled when its event was cancelled, or when the registration
+    was cancelled along with it (6.2). It cannot be withdrawn. A Confirmed event sent back to
+    Planning (9.5 AC3, 12.8 AC5, 19.2 AC8) keeps its registrations (18.1 AC4), which stay
+    Registered and can be withdrawn; if that event is then cancelled, they show as Event
+    cancelled. A registration the attendee already withdrew stays Withdrawn. (9.5, CL-194)
 """
 
 from __future__ import annotations
@@ -92,8 +94,8 @@ def test_a_registration_cancelled_with_its_event_is_event_cancelled(event_status
 # --- AC8: a cancelled event, and one sent back to Planning ----------------------------------------
 @pytest.mark.story("18.2", ac=8)
 def test_an_active_registration_on_a_cancelled_event_is_event_cancelled():
-    """A Confirmed event sent back to Planning (9.4 AC3, 19.2 AC8) keeps its registrations (18.1
-    AC4), and may then be cancelled (6.2) with them still active."""
+    """A Confirmed event sent back to Planning (9.5 AC3, 12.8 AC5, 19.2 AC8) keeps its registrations
+    (18.1 AC4), and may then be cancelled (6.2) with them still active."""
     assert (
         registration_standing(
             registration_status=RegistrationStatus.REGISTERED, event_status=EventStatus.CANCELLED
