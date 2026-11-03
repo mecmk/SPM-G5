@@ -249,6 +249,7 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
 
 
 @pytest.mark.story("1", ac=3)
+@pytest.mark.story("9.5", ac=2)
 @pytest.mark.parametrize(
     ("table", "closing", "columns"),
     [
@@ -266,6 +267,24 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
             "status, cancelled_at, release_cause, release_reason, released_by_id,"
             " replaced_by_booking_id, replaces_live_original",
             id="6.2-booking-released",
+        ),
+        pytest.param(
+            "venue_bookings",
+            "status = 'CANCELLED', cancelled_at = now(), release_cause = 'VENUE_UNAVAILABLE',"
+            " released_by_id = :user, closure_reason = 'MAINTENANCE',"
+            " closure_description = 'Floor relaid' WHERE status = 'APPROVED'",
+            "status, cancelled_at, release_cause, release_reason, released_by_id,"
+            " closure_reason, closure_description",
+            id="9.5-booking-cancelled-by-closure",
+        ),
+        pytest.param(
+            "venue_bookings",
+            "status = 'REJECTED', decided_by_id = :user, decided_at = now(),"
+            " decision_reason = 'Venue closed: Maintenance', closure_reason = 'MAINTENANCE',"
+            " closure_description = 'Floor relaid' WHERE status = 'PENDING'",
+            "status, decided_by_id, decided_at, decision_reason, closure_reason,"
+            " closure_description",
+            id="9.5-request-rejected-by-closure",
         ),
         pytest.param(
             "event_equipment_requests",
