@@ -52,7 +52,7 @@ test('7.1 AC1: a coordinator opens an event from the review queue and sees its f
   await expect(page.getByText('No accessibility needs recorded.')).toBeVisible()
   await expect(page.getByText('Portable projector')).toBeVisible()
   await expect(page.getByText('Room already has one; spare requested')).toBeVisible()
-  await expect(page.locator('img').first()).toHaveAttribute('src', '/images/events/cat.jpg')
+  await expect(page.locator('img').first()).toHaveAttribute('src', '/images/events/training.jpg')
 })
 
 test('7.1: the back link returns to wherever the event was opened from', async ({ page }) => {
