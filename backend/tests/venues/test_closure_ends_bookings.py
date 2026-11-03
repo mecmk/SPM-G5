@@ -1149,12 +1149,12 @@ def test_the_requirement_needs_a_venue_again_and_the_event_is_never_cancelled(
 
 
 # --- AC4: who is told --------------------------------------------------------------------------
-def _booked_line(booking: VenueBooking, label: str, outcome: str) -> str:
-    """One booking as the notice lists it: ``Main hall (on Tue 3 Mar 2027 from 10:00 to 12:00) was
-    cancelled``, in Singapore time."""
+def _booked_line(booking: VenueBooking, subject: str, outcome: str) -> str:
+    """One booking as the notice lists it: ``the booking for Main hall (on Tue 3 Mar 2027 from
+    10:00 to 12:00) was cancelled``, in Singapore time."""
     start, end = booking.starts_at.astimezone(SGT), booking.ends_at.astimezone(SGT)
     day = f"{start:%a} {start.day} {start:%b %Y}"
-    return f"{label} (on {day} from {start:%H:%M} to {end:%H:%M}) {outcome}"
+    return f"{subject} (on {day} from {start:%H:%M} to {end:%H:%M}) {outcome}"
 
 
 @pytest.mark.story("9.5", ac=4)
@@ -1199,9 +1199,9 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
             _on_singapore_date(starts_at),
             _on_singapore_date(ends_at),
             "Renovation",
-            _booked_line(approved, "Main hall", "was cancelled"),
-            _booked_line(pending, "Breakout room", "request was rejected"),
-            _booked_line(additional, "Additional venue", "was cancelled"),
+            _booked_line(approved, "the booking for Main hall", "was cancelled"),
+            _booked_line(pending, "the request for Breakout room", "was rejected"),
+            _booked_line(additional, "the booking for an additional venue", "was cancelled"),
             "It is back in Planning and needs a new safety check before it is confirmed again.",
         ):
             assert wanted in notice.message
