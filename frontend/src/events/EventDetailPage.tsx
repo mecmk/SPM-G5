@@ -1145,6 +1145,7 @@ export function EventDetailPage() {
               const outcomeLabels = bookingOutcomeLabels(booking)
               const openHold = openHoldExpiry(booking)
               const forRequirement = bookedRequirementName(event, booking)
+              const isOverOneDay = formatDate(booking.starts_at) !== formatDate(booking.ends_at)
               return (
                 <div
                   key={booking.id}
@@ -1170,15 +1171,26 @@ export function EventDetailPage() {
                         {forRequirement === null ? 'Additional venue' : `For ${forRequirement}`}
                       </p>
                       <p className="muted">{booking.venue_location}</p>
+                      {/* Fix f21.3.1 (story 12.1 AC3): a booking over more than one day names both
+                          dates, as the organiser's section does (7.1 AC4). */}
                       <div className="booking-outcome-schedule small muted">
-                        <span className="booking-outcome-schedule-item">
-                          <Icon name="calendar" size={14} />
-                          {formatDate(booking.starts_at)}
-                        </span>
-                        <span className="booking-outcome-schedule-item">
-                          <Icon name="calendar-check" size={14} />
-                          {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
-                        </span>
+                        {isOverOneDay ? (
+                          <span className="booking-outcome-schedule-item">
+                            <Icon name="calendar" size={14} />
+                            {formatSchedule(booking.starts_at, booking.ends_at)}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="booking-outcome-schedule-item">
+                              <Icon name="calendar" size={14} />
+                              {formatDate(booking.starts_at)}
+                            </span>
+                            <span className="booking-outcome-schedule-item">
+                              <Icon name="calendar-check" size={14} />
+                              {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
+                            </span>
+                          </>
+                        )}
                       </div>
                       <p className="small muted">{turnaroundLine(booking)}</p>
                     </div>

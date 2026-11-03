@@ -14,7 +14,7 @@ import {
   type StatusErrorCodes,
 } from '../errors/registry'
 
-export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 /** Where the backend serves uploaded pictures from (story 2.1 AC14). */

@@ -59,14 +59,16 @@ author's call. Never flatten a `taste` into a "must".
 ## Styling
 
 - `expected` — **Use the custom properties from `src/index.css` for colour; never a raw hex or
-  `rgba()` in `src/App.css`.**
+  `rgba()` in `src/App.css` or `src/theme.css`.**
   `index.css` defines the tokens and redefines the colour ones under
   `@media (prefers-color-scheme: dark)`, so a token adapts and a literal does not. This was not
   hypothetical: `.error` used to be `#b91c1c` on a `--bg` of `#16171d` in dark mode — dark red
   text on a near-black panel, which is the one message the alert rule above exists to make
   readable. Opacity-composited colours have the same defect, compositing against whatever sits
-  behind them. The token values are the Figma prototype's Tailwind classes; `--radius-sm` is `0`
-  on purpose because the prototype's `rounded-sm` resolves to 0px.
+  behind them. The token values are the "paper notebook" theme's (UI refactor, `index.css`'s
+  header): every text colour passes WCAG AA on the surfaces it is used on, in both blocks, so a
+  new pair needs checking before it is used. `src/theme.css`, loaded after `App.css`, restyles
+  the shared classes on top of it.
 
   ```css
   /* Good */
@@ -83,8 +85,8 @@ author's call. Never flatten a `taste` into a "must".
   Adding a colour means adding a token to `index.css` in **both** the light block and the
   `prefers-color-scheme: dark` block, then referencing it.
 
-  _`expected` · exemplars `src/App.css` (`.error`, `.badge-active`, `.calendar-entry-danger`);
-  every colour in `src/App.css` is a `var(--…)`_
+  _`expected` · exemplars `src/App.css` (`.error`, `.badge-active`, `.calendar-entry-danger`) and
+  `src/theme.css` (`.badge-planning`); every colour in both is a `var(--…)`_
 
 ## Control flow and failure
 
@@ -345,7 +347,7 @@ in an unrelated PR.**
 | One exported constant for a cross-file string       | the `'Requested at'` label written out in `BookingRequestsPage`, `EquipmentRequestsPage` and `EquipmentRequestDetailPage`, and `'Change requests'` written out in `LoginPage`'s feature list and `ChangeRequestsSection`'s heading                                                                                                   | known, not precedent — `REQUESTED_AT_LABEL` in `src/shared/format.ts` and `CHANGE_REQUESTS_TITLE` in `src/routes.ts` (story 19.4) are the constants to import; the older sites move to them under their own chore                                                             |
 | One exported constant for a cross-file string       | the `'Reason'` label written out in `BookingRequestDetailPage`, `EquipmentRequestDetailPage` and `EquipmentRequestsPage`                                                                                                                                                                                                             | known, not precedent — `REASON_LABEL` in `src/shared/bookingStatus.ts` (fix f7.1.3) is the constant to import; the older sites move to it under their own chore                                                                                                               |
 | Extract named handlers                              | single-expression inline arrows in the pages, most in `EventRequestFormPage` and `VenueFormPage`; no multi-statement one remains                                                                                                                                                                                                     | carried rule, newly adopted — most are the licensed form-setter shape                                                                                                                                                                                                         |
-| Colour comes from a token, never a literal          | none: `src/App.css` is token-only (story c3)                                                                                                                                                                                                                                                                                         | resolved                                                                                                                                                                                                                                                                      |
+| Colour comes from a token, never a literal          | none: `src/App.css` (story c3) and `src/theme.css` (UI refactor) are token-only                                                                                                                                                                                                                                                      | resolved                                                                                                                                                                                                                                                                      |
 | Boolean `is`/`can`/`has` prefix                     | none left: `loading`, `submitting` and `saving` were renamed                                                                                                                                                                                                                                                                         | resolved                                                                                                                                                                                                                                                                      |
 | Components use named exports                        | `App` in `src/App.tsx`                                                                                                                                                                                                                                                                                                               | licensed exception — conventional default export for the Vite entry point                                                                                                                                                                                                     |
 | API error text comes from `formatApiError`          | `showSaveRefusal` in `src/events/EventRequestFormPage.tsx`, for a refusal whose `loc` names a venue requirement field (story 2.7 AC11); `describeRefusal` in `src/events/ChangeRequestsSection.tsx`, for the same kind of refusal of a proposed change (story 19.1 AC4)                                                              | licensed exception — it shows the backend's own `msg` for that field, which `formatApiError` would prefix with the field path (`venue_requirements.1.ends_at: …`); every other error still goes through `formatApiError`                                                      |

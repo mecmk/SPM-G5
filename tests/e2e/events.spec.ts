@@ -30,6 +30,10 @@
  * closure's reason, never its description. Which cancelled bookings are returned, and that who
  * released them is not, is proven in test_organiser_bookings.py.
  *
+ * f21.3.1 (12.1 AC3): the coordinator's Venue booking card names both dates of a booking over
+ * more than one day, and a one-day booking reads as before. The two-day test reads only the venue
+ * and its dates, since the AC4/AC8 test above can cancel the same event before or after it.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -204,6 +208,51 @@ test('7.1 AC10: bookings the safety review released, the coordinator cancelled o
   await expect(closed).not.toContainText("Replacing the foyer's ceiling lights.")
 
   await expect(organiserBookings(page).getByRole('button')).toHaveCount(0)
+})
+
+/**
+ * f21.3.1: the details of one venue's card in the coordinator's Venue booking section - the
+ * innermost block holding every text given. The card has no role or label of its own, so it is
+ * found by what it says, and each text is matched whole: the line under the dates repeats the
+ * times inside a longer sentence, which an exact match leaves out.
+ */
+function venueCardDetails(page: Page, ...texts: string[]) {
+  return texts
+    .reduce(
+      (blocks, text) => blocks.filter({ has: page.getByText(text, { exact: true }) }),
+      page.getByRole('region', { name: 'Venue booking', exact: true }).locator('div'),
+    )
+    .last()
+}
+
+test("12.1 AC3: the coordinator's card names both dates of a multi-day booking", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.leadershipRetreat}`)
+
+  // Only the venue and its dates are read: the card's status changes once the test above cancels
+  // this event, and with fullyParallel this one can run before or after it.
+  const card = venueCardDetails(
+    page,
+    'Sunrise Studio',
+    'Wed, 9 May 2029, 09:00 – Thu, 10 May 2029, 17:00',
+  )
+  await expect(card).toBeVisible()
+})
+
+test("12.1 AC3: a one-day booking's card reads as before", async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  // The seeded Grand Hall booking, 25 Nov 2026 09:00-18:00: the date and the times each alone, and
+  // no second date after the first. The block is the card's details, which leave out the hold's
+  // expiry, "Wed, 25 Nov 2026, 08:00", below it.
+  const card = venueCardDetails(page, 'Grand Hall', 'Wed, 25 Nov 2026', '09:00–18:00')
+  await expect(card).toBeVisible()
+  await expect(card.getByText('Wed, 25 Nov 2026', { exact: true })).toHaveCount(1)
+  await expect(card.getByText('09:00–18:00', { exact: true })).toHaveCount(1)
+  await expect(card.getByText(/^Wed, 25 Nov 2026, /)).toHaveCount(0)
 })
 
 test('7.1 AC1: a draft with no dates or attendance shows clear empty states', async ({ page }) => {
