@@ -137,7 +137,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      NULL, NULL, FALSE, FALSE, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     -- 3333..02: under review, assigned to Chloe, waiting for her decision
     ('33333333-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
-     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', '/images/events/cat.jpg', '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'UNDER_REVIEW',
+     'Data Literacy Workshop', 'Staff training', 'One-day hands-on workshop.', NULL /* the picture: chore c13's block at the end of this file */, '2026-11-18 09:00+08', '2026-11-18 17:00+08', 60, 'UNDER_REVIEW',
      '11111111-0000-0000-0000-000000000003', 'Tower A', TRUE, FALSE, NULL, NULL, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233', '2026-09-08 10:15+08', NULL, NULL, NULL),
     -- 3333..03: in planning and assigned; has an approved venue booking
     ('33333333-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
@@ -399,7 +399,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
     ('33333333-0000-0000-0000-000000000039', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Harbourfront Jazz Evening', 'Community event', 'Live jazz on the waterfront, with food stalls in the foyer.', '2028-10-07 19:00+08', '2028-10-07 22:00+08', 120, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-05 18:00+08',
-     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', '/images/events/cat.jpg'),
+     'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08', NULL /* the picture: chore c13's block at the end of this file */),
     ('33333333-0000-0000-0000-000000000040', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Design Thinking Masterclass', 'Professional development', 'A hands-on day of design thinking exercises.', '2028-10-14 09:00+08', '2028-10-14 17:00+08', 60, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2028-10-12 18:00+08',
@@ -474,7 +474,7 @@ INSERT INTO events (id, organiser_id, organisation_id, name, purpose, descriptio
      'Sunset Yoga by the Bay', 'Community event', 'An hour of gentle yoga as the sun goes down.', '2027-03-27 18:00+08', '2027-03-27 19:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-03-26 18:00+08',
      'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344', '2026-09-20 09:00+08', '2026-09-22 09:00+08', '11111111-0000-0000-0000-000000000004', '2026-10-10 09:00+08',
-     NULL, '/images/events/cat.jpg'),
+     NULL, NULL /* the picture: chore c13's block at the end of this file */),
     ('33333333-0000-0000-0000-000000000074', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
      'Heritage Trail Tour', 'Community event', 'A guided walk through Kampong Glam.', '2027-04-03 09:00+08', '2027-04-03 12:00+08', 40, 'CONFIRMED',
      '11111111-0000-0000-0000-000000000004', TRUE, TRUE, TRUE, NULL, '2027-04-02 18:00+08',
@@ -3006,3 +3006,126 @@ ON CONFLICT (id) DO UPDATE SET
     equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity, starts_at = EXCLUDED.starts_at,
     ends_at = EXCLUDED.ends_at, status = EXCLUDED.status, reserved_by_id = EXCLUDED.reserved_by_id,
     reserved_at = EXCLUDED.reserved_at, notes = EXCLUDED.notes, released_quantity = 0, released_at = NULL;
+
+-- Chore c13: a sample picture for every seeded event past Draft, so the pages that show one - the
+-- events attendees browse (story 18.1 AC8), My events and an event's page - look as they would in
+-- use. Each is a file in frontend/public/images/events, credited in its CREDITS.md, which the
+-- frontend serves at its address. The draft keeps the placeholder, which 7.1 AC1's test reads.
+-- Set here, after every event is written, so re-running the seed puts each picture back.
+UPDATE events SET cover_image_url = pictures.url
+FROM (VALUES
+    -- Conferences, summits and talks on a stage
+    ('33333333-0000-0000-0000-000000000024', '/images/events/conference.jpg'),  -- Annual Sales Kickoff
+    ('33333333-0000-0000-0000-000000000010', '/images/events/conference.jpg'),  -- Founders Day Fireside Chat
+    ('33333333-0000-0000-0000-000000000003', '/images/events/conference.jpg'),  -- Nimbus Developer Conference
+    ('33333333-0000-0000-0000-000000000048', '/images/events/conference.jpg'),  -- Open Data Summit
+    ('33333333-0000-0000-0000-000000000021', '/images/events/conference.jpg'),  -- Regional Partner Roadshow
+    ('33333333-0000-0000-0000-000000000012', '/images/events/conference.jpg'),  -- Regional Sales Summit
+    ('33333333-0000-0000-0000-000000000081', '/images/events/conference.jpg'),  -- Riverside Partner Summit
+    ('33333333-0000-0000-0000-000000012666', '/images/events/conference.jpg'),  -- Startup Pitch Night
+    -- Forums, town halls and briefings
+    ('33333333-0000-0000-0000-000000000023', '/images/events/forum.jpg'),  -- Customer Success Forum
+    ('33333333-0000-0000-0000-000000000006', '/images/events/forum.jpg'),  -- Diversity & Inclusion Forum
+    ('33333333-0000-0000-0000-000000012667', '/images/events/forum.jpg'),  -- Neighbourhood Summit
+    ('33333333-0000-0000-0000-000000000014', '/images/events/forum.jpg'),  -- New Year Town Hall
+    ('33333333-0000-0000-0000-000000000009', '/images/events/forum.jpg'),  -- Product Roadmap Townhall
+    ('33333333-0000-0000-0000-000000000018', '/images/events/forum.jpg'),  -- Quarterly Partner Briefing
+    ('33333333-0000-0000-0000-000000012801', '/images/events/forum.jpg'),  -- Riverside Product Briefing
+    ('33333333-0000-0000-0000-000000000029', '/images/events/forum.jpg'),  -- Urban Mobility Forum
+    -- Hands-on technical workshops
+    ('33333333-0000-0000-0000-000000000049', '/images/events/workshop.jpg'),  -- Applied AI Workshop
+    ('33333333-0000-0000-0000-000000000030', '/images/events/workshop.jpg'),  -- Coastal Resilience Workshop
+    ('33333333-0000-0000-0000-000000000050', '/images/events/workshop.jpg'),  -- Coding Bootcamp Day
+    ('33333333-0000-0000-0000-000000000019', '/images/events/workshop.jpg'),  -- Robotics Hands-on Workshop
+    ('33333333-0000-0000-0000-000000012678', '/images/events/workshop.jpg'),  -- Robotics Open House
+    -- Training, clinics and one-to-one sessions
+    ('33333333-0000-0000-0000-000000000042', '/images/events/training.jpg'),  -- Career Mentoring Slot
+    ('33333333-0000-0000-0000-000000000047', '/images/events/training.jpg'),  -- Cyber Security Clinic
+    ('33333333-0000-0000-0000-000000000002', '/images/events/training.jpg'),  -- Data Literacy Workshop
+    ('33333333-0000-0000-0000-000000000051', '/images/events/training.jpg'),  -- Design Sprint Day
+    ('33333333-0000-0000-0000-000000000040', '/images/events/training.jpg'),  -- Design Thinking Masterclass
+    ('33333333-0000-0000-0000-000000000043', '/images/events/training.jpg'),  -- Portfolio Review Slot
+    ('33333333-0000-0000-0000-000000000033', '/images/events/training.jpg'),  -- Reseller Pricing Clinic
+    ('33333333-0000-0000-0000-000000000031', '/images/events/training.jpg'),  -- Sales Onboarding Day
+    ('33333333-0000-0000-0000-000000000046', '/images/events/training.jpg'),  -- Supplier Induction Morning
+    ('33333333-0000-0000-0000-000000021301', '/images/events/training.jpg'),  -- Venue Safety Walkthrough
+    -- Art and craft classes
+    ('33333333-0000-0000-0000-000000018503', '/images/events/art-class.jpg'),  -- Batik Printing Workshop
+    ('33333333-0000-0000-0000-000000018405', '/images/events/art-class.jpg'),  -- Evening Watercolour Class
+    ('33333333-0000-0000-0000-000000012682', '/images/events/art-class.jpg'),  -- Open Studios Day
+    ('33333333-0000-0000-0000-000000018404', '/images/events/art-class.jpg'),  -- Riverside Pottery Taster
+    -- Music and performance
+    ('33333333-0000-0000-0000-000000000060', '/images/events/concert.jpg'),  -- Community Choir Showcase
+    ('33333333-0000-0000-0000-000000000035', '/images/events/concert.jpg'),  -- Harbour Lights Concert
+    ('33333333-0000-0000-0000-000000000039', '/images/events/concert.jpg'),  -- Harbourfront Jazz Evening
+    ('33333333-0000-0000-0000-000000000070', '/images/events/concert.jpg'),  -- Riverside Poetry Night
+    -- Galas, dinners and awards
+    ('33333333-0000-0000-0000-000000020202', '/images/events/gala.jpg'),  -- Harbour Lights Gala
+    ('33333333-0000-0000-0000-000000000013', '/images/events/gala.jpg'),  -- Partner Appreciation Dinner
+    ('33333333-0000-0000-0000-000000012665', '/images/events/gala.jpg'),  -- Regional Awards Evening
+    ('33333333-0000-0000-0000-000000000016', '/images/events/gala.jpg'),  -- Winter Charity Gala
+    ('33333333-0000-0000-0000-000000000026', '/images/events/gala.jpg'),  -- Year-End Partner Gala
+    -- Mixers, breakfasts and networking
+    ('33333333-0000-0000-0000-000000000017', '/images/events/networking.jpg'),  -- Alumni Homecoming Weekend
+    ('33333333-0000-0000-0000-000000000022', '/images/events/networking.jpg'),  -- Fintech Leaders Breakfast
+    ('33333333-0000-0000-0000-000000000004', '/images/events/networking.jpg'),  -- Rooftop Networking Night
+    ('33333333-0000-0000-0000-000000000041', '/images/events/networking.jpg'),  -- Startup Founders Fireside
+    ('33333333-0000-0000-0000-000000000015', '/images/events/networking.jpg'),  -- Summer Rooftop Mixer
+    -- Receptions and tastings
+    ('33333333-0000-0000-0000-000000000044', '/images/events/reception.jpg'),  -- Autumn Wine Appreciation
+    ('33333333-0000-0000-0000-000000016110', '/images/events/reception.jpg'),  -- Volunteer Thank-You Evening
+    -- Night markets and food festivals
+    ('33333333-0000-0000-0000-000000018408', '/images/events/night-market.jpg'),  -- Food Tasting Walk
+    ('33333333-0000-0000-0000-000000000045', '/images/events/night-market.jpg'),  -- Lunar New Year Market
+    ('33333333-0000-0000-0000-000000000037', '/images/events/night-market.jpg'),  -- Marina Food Festival
+    ('33333333-0000-0000-0000-000000012683', '/images/events/night-market.jpg'),  -- Night Bazaar Weekend
+    -- Daytime fairs and markets
+    ('33333333-0000-0000-0000-000000000034', '/images/events/fair.jpg'),  -- Community Craft Fair
+    ('33333333-0000-0000-0000-000000012680', '/images/events/fair.jpg'),  -- Craft Market Weekend
+    ('33333333-0000-0000-0000-000000012685', '/images/events/fair.jpg'),  -- Garden Fair Day
+    ('33333333-0000-0000-0000-000000012681', '/images/events/fair.jpg'),  -- Harvest Fair Weekend
+    ('33333333-0000-0000-0000-000000000061', '/images/events/fair.jpg'),  -- Neighbourhood Art Market
+    ('33333333-0000-0000-0000-000000000036', '/images/events/fair.jpg'),  -- Riverside Book Fair
+    ('33333333-0000-0000-0000-000000012684', '/images/events/fair.jpg'),  -- Spring Fair Preview
+    -- Expos and trade fairs
+    ('33333333-0000-0000-0000-000000000025', '/images/events/expo.jpg'),  -- Graduate Recruitment Fair
+    ('33333333-0000-0000-0000-000000000032', '/images/events/expo.jpg'),  -- Harbourfront Trade Fair
+    ('33333333-0000-0000-0000-000000012663', '/images/events/expo.jpg'),  -- Maker Faire Weekend
+    ('33333333-0000-0000-0000-000000000028', '/images/events/expo.jpg'),  -- Smart Cities Expo
+    ('33333333-0000-0000-0000-000000012664', '/images/events/expo.jpg'),  -- Spring Expo Preview
+    -- Product showcases, launches and demos
+    ('33333333-0000-0000-0000-000000017301', '/images/events/product-showcase.jpg'),  -- Bayfront Product Showcase
+    ('33333333-0000-0000-0000-000000000011', '/images/events/product-showcase.jpg'),  -- Investor Demo Day
+    ('33333333-0000-0000-0000-000000000020', '/images/events/product-showcase.jpg'),  -- Product Launch Showcase
+    ('33333333-0000-0000-0000-000000012669', '/images/events/product-showcase.jpg'),  -- Product Showcase Day
+    ('33333333-0000-0000-0000-000000000080', '/images/events/product-showcase.jpg'),  -- Waterfront Product Demo
+    -- Runs
+    ('33333333-0000-0000-0000-000000000075', '/images/events/run.jpg'),  -- Charity Fun Run
+    ('33333333-0000-0000-0000-000000000062', '/images/events/run.jpg'),  -- Lakeside Charity Run
+    -- Wellness
+    ('33333333-0000-0000-0000-000000000008', '/images/events/yoga.jpg'),  -- Annual Wellness Summit
+    ('33333333-0000-0000-0000-000000000073', '/images/events/yoga.jpg'),  -- Sunset Yoga by the Bay
+    ('33333333-0000-0000-0000-000000012679', '/images/events/yoga.jpg'),  -- Wellness Expo Weekend
+    ('33333333-0000-0000-0000-000000000007', '/images/events/yoga.jpg'),  -- Wellness Week Kickoff
+    -- Lanterns and lights
+    ('33333333-0000-0000-0000-000000012662', '/images/events/lanterns.jpg'),  -- Lantern Festival Showcase
+    ('33333333-0000-0000-0000-000000000038', '/images/events/lanterns.jpg'),  -- Lantern Night Walk
+    ('33333333-0000-0000-0000-000000000077', '/images/events/lanterns.jpg'),  -- Lantern Painting Workshop
+    ('33333333-0000-0000-0000-000000016201', '/images/events/lanterns.jpg'),  -- Riverside Light Showcase
+    -- Offsites and retreats
+    ('33333333-0000-0000-0000-000000007012', '/images/events/offsite.jpg'),  -- Lakeside Leadership Retreat
+    ('33333333-0000-0000-0000-000000000027', '/images/events/offsite.jpg'),  -- Leadership Offsite
+    ('33333333-0000-0000-0000-000000000005', '/images/events/offsite.jpg'),  -- Nimbus Leadership Offsite
+    -- Walking tours
+    ('33333333-0000-0000-0000-000000000074', '/images/events/walking-tour.jpg'),  -- Heritage Trail Tour
+    ('33333333-0000-0000-0000-000000012668', '/images/events/walking-tour.jpg'),  -- Heritage Walk Launch
+    ('33333333-0000-0000-0000-000000000071', '/images/events/walking-tour.jpg'),  -- Urban Sketching Walk
+    -- Clubs, quizzes and socials
+    ('33333333-0000-0000-0000-000000000076', '/images/events/book-club.jpg'),  -- Autumn Book Swap
+    ('33333333-0000-0000-0000-000000000072', '/images/events/book-club.jpg'),  -- Board Games Social
+    ('33333333-0000-0000-0000-000000018406', '/images/events/book-club.jpg'),  -- Community Book Club
+    ('33333333-0000-0000-0000-000000018407', '/images/events/book-club.jpg'),  -- Neighbourhood Charity Quiz
+    -- Outdoor afternoons
+    ('33333333-0000-0000-0000-000000018504', '/images/events/kites.jpg')  -- Kite Flying Afternoon
+) AS pictures (id, url)
+WHERE events.id = pictures.id::uuid;
