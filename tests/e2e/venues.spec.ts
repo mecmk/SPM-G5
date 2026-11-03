@@ -645,6 +645,8 @@ test('8.3 AC5: pictures shift aside as a picture is dragged across them', async 
   await choosePictures(page, pictureFile('a.png'), pictureFile('b.png'), pictureFile('c.png'))
   const previews = page.getByRole('list', { name: 'Pictures to save' })
   await expect(previews.getByRole('img')).toHaveCount(3)
+  // The mouse only reaches what is on screen, and a taller form puts the previews below it.
+  await previews.scrollIntoViewIfNeeded()
   const [a, b, c] = await sourcesIn(previews)
   const from = await centreOf(previews.getByRole('img', { name: 'Picture 3 preview' }))
   const to = await centreOf(previews.getByRole('img', { name: 'Picture 1 preview' }))
