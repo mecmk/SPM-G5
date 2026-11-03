@@ -242,6 +242,9 @@ class Events:
     # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
     # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
     PRODUCT_BRIEFING = _e(12801)
+    # Story 17.3: PLANNING; organiser 2, coordinator 2, 9 April 2031. One item in each status
+    # that holds units, and a declined one (EquipmentItems.BAYFRONT_*); the spec only reads it.
+    BAYFRONT_SHOWCASE = _e(17301)
 
 
 class Bookings:
@@ -450,6 +453,11 @@ class EquipmentItems:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
     # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
+    # Story 17.3's, on Events.BAYFRONT_SHOWCASE: the first three hold units for its day.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000017302")  # 3, accepted
+    BAYFRONT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000017303")  # 1, pending
+    BAYFRONT_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000017304")  # 2, not yet sent
+    BAYFRONT_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000017305")  # 1, declined, no hold
     # Fix f16.1.1's, on Events.VOLUNTEER_EVENING, both pending and holding their units.
     VOLUNTEER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000016111")
     VOLUNTEER_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000016112")
@@ -476,6 +484,10 @@ class EquipmentHolds:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
     # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
+    # Story 17.3: the holds of Events.BAYFRONT_SHOWCASE's items, numbered as the items.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017302")
+    BAYFRONT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017303")
+    BAYFRONT_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017304")
 
 
 class EquipmentOutOfService:
