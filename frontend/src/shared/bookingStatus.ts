@@ -133,6 +133,10 @@ export function openHoldExpiry(
  * note of its own). */
 const CLOSED_WITHOUT_DECISION: readonly BookingStatus[] = ['WITHDRAWN', 'CANCELLED']
 
+/** Story 13.1.2 AC3: the label of why a booking was decided or closed. Fix f7.1.3 (AC10): also of
+ * why the organiser's released or cancelled booking was released. */
+export const REASON_LABEL = 'Reason'
+
 /** How to label a finished request's `decided_at` and `decision_reason`. */
 export interface BookingOutcomeLabels {
   when: string
@@ -148,13 +152,13 @@ export interface BookingOutcomeLabels {
 export function bookingOutcomeLabels(
   booking: Pick<Booking, 'status' | 'cancelled_at'>,
 ): BookingOutcomeLabels {
-  if (booking.status === EXPIRED_BOOKING_STATUS) return { when: 'Approved at', why: 'Reason' }
+  if (booking.status === EXPIRED_BOOKING_STATUS) return { when: 'Approved at', why: REASON_LABEL }
   if (booking.status === 'CANCELLED' && booking.cancelled_at !== null) {
-    return { when: 'Approved at', why: 'Reason' }
+    return { when: 'Approved at', why: REASON_LABEL }
   }
   return CLOSED_WITHOUT_DECISION.includes(booking.status)
     ? { when: 'Closed at', why: 'Note' }
-    : { when: 'Decided at', why: 'Reason' }
+    : { when: 'Decided at', why: REASON_LABEL }
 }
 
 /** Story 12.6 AC3: when a withdrawn or cancelled request closed - the release, for an original a
