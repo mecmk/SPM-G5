@@ -15,7 +15,9 @@
  *     replaced keeps showing "Replaced by <venue>".
  *
  * AC4-AC6 and AC8-AC10 (who is told, what a closure touches, what is never restored, the
- * migration, permissions, races) are backend cases: backend/tests/venues/test_closure_ends_bookings.py.
+ * migration, permissions, races) are backend cases, mostly in
+ * backend/tests/venues/test_closure_ends_bookings.py; some carry a second marker in
+ * test_venue_unavailability.py and the test_replacement_*.py files.
  *
  * Seed (backend/db/seed/020_sample_data.sql, the story's 0095NN block), dedicated to this spec:
  * Seminar Room 2.1 on 24 October 2028 holds the Alumni Networking Brunch's approved booking
