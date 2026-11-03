@@ -380,6 +380,8 @@ TARGET_CASES = [
     _case(_T.EVENT_CANCELLED, Users.LEAD, "event", "event", "event"),
     # Story 16.2: an item units out of service leave short goes to its event's coordinator.
     _case(_T.EQUIPMENT_SHORT, Users.COORDINATOR, "event", "event", "event"),
+    # Story 16.1 AC10: a decision goes to the event's coordinator, on the event's page.
+    _case(_T.EQUIPMENT_DECIDED, Users.COORDINATOR, "event", "event", "event"),
     _case(_T.REGISTRATION_CANCELLED, Users.ATTENDEE, "event", "registrations", None),
 ]
 

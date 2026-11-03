@@ -23,7 +23,7 @@ import {
   describeItemShort,
   withdrawnWhenAndBy,
 } from '../shared/equipmentStatus'
-import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import { CANCEL, CLOSE, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 
 /** AC2/AC7: the items the coordinator may still edit, mirroring the backend's
@@ -423,7 +423,7 @@ export function EquipmentRequestsSection({
                       disabled={isSaving}
                       onClick={stopEditing}
                     >
-                      Cancel
+                      {CANCEL}
                     </button>
                   </span>
                 </form>
@@ -656,7 +656,7 @@ export function EquipmentRequestsSection({
           isBusy={isWithdrawing}
           error={withdrawError}
           canConfirm={canConfirmWithdrawal}
-          cancelLabel={canConfirmWithdrawal ? 'Cancel' : 'Close'}
+          cancelLabel={canConfirmWithdrawal ? CANCEL : CLOSE}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >
