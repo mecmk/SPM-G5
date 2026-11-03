@@ -1406,8 +1406,16 @@ def _notify_venue_staff_of_closure_rejection(
         )
 
 
-def _count_phrase(count: int, noun: str, plural: str, verb: str) -> str:
-    return f"its {noun} was {verb}" if count == 1 else f"its {count} {plural} were {verb}"
+# The name safety/service.py gives a booking that is for no requirement.
+_ADDITIONAL_VENUE_LABEL = "Additional venue"
+
+
+def _ended_line(booking: VenueBooking, outcome: str) -> str:
+    """Story 9.5 AC4: a booking a closure ended as the notice lists it - the requirement it is for
+    (or "Additional venue"), its booked times and what happened to it: ``Main hall (on Tue 3 Mar
+    2027 from 10:00 to 12:00) was cancelled``."""
+    label = booking.requirement_label or _ADDITIONAL_VENUE_LABEL
+    return f"{label} ({_describe_held_period(booking.starts_at, booking.ends_at)}) {outcome}"
 
 
 def _notify_event_of_closure(
@@ -1416,24 +1424,17 @@ def _notify_event_of_closure(
     period: VenueUnavailabilityPeriod,
     event: Event,
     *,
-    cancelled: int,
-    rejected: int,
+    ended: list[str],
     is_returned: bool,
     actor: User,
 ) -> None:
     """Story 9.5 AC4: the event's assigned coordinator, if it has one, and its organiser are told
-    once - however many of its bookings ended - the venue, the period, the reason and what happened
-    to its bookings. The coordinator's notice carries the closure's description; the organiser's
-    does not. The member who saved is never told (20.1 AC3)."""
+    once - however many of its bookings ended - the venue, the period, the reason and which of its
+    bookings were cancelled or had their request rejected (``ended``, one ``_ended_line`` each). The
+    coordinator's notice carries the closure's description; the organiser's does not. The member who
+    saved is never told (20.1 AC3)."""
     reason_name = venue_service.CLOSURE_REASON_LABELS[period.reason]
-    outcomes = []
-    if cancelled:
-        outcomes.append(
-            _count_phrase(cancelled, "approved booking", "approved bookings", "cancelled")
-        )
-    if rejected:
-        outcomes.append(_count_phrase(rejected, "pending request", "pending requests", "rejected"))
-    what_happened = f'For "{event.name}", {" and ".join(outcomes)}.'
+    what_happened = f'For "{event.name}": {"; ".join(ended)}.'
     if is_returned:
         what_happened += (
             " It is back in Planning and needs a new safety check before it is confirmed again."
@@ -1489,7 +1490,8 @@ def end_bookings_for_closure(
         by_event.setdefault(booking.event_id, []).append(booking)
     for event_bookings in by_event.values():
         event = event_bookings[0].event
-        cancelled = rejected = 0
+        cancelled = 0
+        ended: list[str] = []
         for booking in event_bookings:
             if booking.status == BookingStatus.PENDING:
                 _mark_rejected(
@@ -1503,7 +1505,7 @@ def end_bookings_for_closure(
                 _notify_venue_staff_of_closure_rejection(
                     db, booking, actor=actor, reason_name=reason_name
                 )
-                rejected += 1
+                ended.append(_ended_line(booking, "request was rejected"))
             elif release_booking(
                 db,
                 booking,
@@ -1515,6 +1517,7 @@ def end_bookings_for_closure(
                 closure=closure,
             ):
                 cancelled += 1
+                ended.append(_ended_line(booking, "was cancelled"))
         is_returned = bool(cancelled) and events_service.return_event_to_planning(
             db,
             event,
@@ -1530,8 +1533,7 @@ def end_bookings_for_closure(
             venue,
             period,
             event,
-            cancelled=cancelled,
-            rejected=rejected,
+            ended=ended,
             is_returned=is_returned,
             actor=actor,
         )
