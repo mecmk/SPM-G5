@@ -1,22 +1,21 @@
 /**
- * Story 9.1: venue availability calendar (the 14-criterion version). Its AC6, a Venue Schedule
- * page for Venue Staff, left the backlog: the calendar is on each venue's page and each booking
- * request's (c9, 1.2 AC5).
+ * Story 9.1: venue availability calendar. A Venue Schedule page for Venue Staff left the backlog:
+ * the calendar is on each venue's page and each booking request's (c9, 1.2 AC5).
  * AC1 one venue, one month at a time, with previous / next.
  * AC2 a confirmed booking is unavailable; a pending request shows as "Held - pending", with the
  * words as well as the colour.
  * AC3 each occupied period shows its event's name.
- * AC5 a day with entries opens a list of that day's items in time order - event name, times,
- * booked or held - with setup and teardown, and closures with their reason.
- * AC7 / AC8 / AC9 several events on one day, back-to-back events, and a multi-day booking are
+ * AC5 / AC6 / AC7 several events on one day, back-to-back events, and a multi-day booking are
  * listed separately, the last on every day it covers. The seed has none of these on one venue,
  * so they stub the calendar fetch (tests/CLAUDE.md's exception for a state the seed cannot
  * reach); backend/tests/venues/test_venue_calendar.py covers the data itself.
- * AC10 previous / next keep the venue and the calendar, whatever is loading or has failed.
- * AC12 a venue with nothing booked shows no unavailable days.
- * AC13 (restricted to Event Coordinator, Venue Staff and Technical Support): the refusals are a
- * backend case, backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles;
+ * AC8 previous / next keep the venue and the calendar, whatever is loading or has failed.
+ * AC10 a venue with nothing booked shows no unavailable days.
+ * AC11 (restricted to every internal role, as VENUE_CALENDAR_READ is in _INTERNAL_COMMON): the
+ * refusals are a backend case, backend/tests/venues/test_venue_calendar.py::test_calendar_is_restricted_to_internal_roles;
  * here Venue Staff and Technical Support open a venue from the catalogue and see its calendar.
+ * A day with entries opens a list of that day's items in time order. No criterion names the list:
+ * a test of what it says carries the AC that shows, and a test of how it opens carries none.
  * The calendar opens on the current month, and the real-seed tests reach November 2026 (where the
  * seed data's bookings and maintenance period live) by pressing Next twice from September. Left
  * to the real clock that only works during September 2026 - from 1 October every "November 2026"
@@ -81,7 +80,7 @@ test('9.1 AC2: a maintenance period shows as unavailable, named by its reason, w
   await expect(dayList(page, /2 Nov 2026/)).toContainText('Annual air-con servicing')
 })
 
-test('9.1 AC12: a venue with nothing booked shows no unavailable days', async ({ page }) => {
+test('9.1 AC10: a venue with nothing booked shows no unavailable days', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await page.getByRole('link', { name: 'Boardroom 3.4' }).click()
@@ -132,7 +131,7 @@ async function interceptNextCalendarFetch(page: Page, fulfill: (route: Route) =>
  * delay: a hard-coded timeout races the test's own assertions on a slow CI runner, where enough
  * of them together could eat the delay before the loading check even runs.
  */
-test('9.1 AC10: the calendar and its controls stay visible while the next range is slow to load', async ({
+test('9.1 AC8: the calendar and its controls stay visible while the next range is slow to load', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -174,7 +173,7 @@ test('9.1 AC10: the calendar and its controls stay visible while the next range 
  * genuinely free, or unknown because its fetch failed - so a failed re-fetch must render as
  * visibly unknown, not as a normal fully-available month, while still leaving Prev/Next usable.
  */
-test('9.1 AC10: a failed re-fetch shows availability as unknown, not a dead end', async ({
+test('9.1 AC8: a failed re-fetch shows availability as unknown, not a dead end', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -197,7 +196,7 @@ test('9.1 AC10: a failed re-fetch shows availability as unknown, not a dead end'
 
   await expect(page.getByText('October 2026')).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('The server hit a problem')
-  // AC10: shown as unknown, not silently rendered as if the month were confirmed available.
+  // AC8: shown as unknown, not silently rendered as if the month were confirmed available.
   await expect(page.getByRole('status')).toHaveText(/Availability unknown/)
   await expect(section.getByRole('button', { name: '← Prev' })).toBeVisible()
 
@@ -208,7 +207,7 @@ test('9.1 AC10: a failed re-fetch shows availability as unknown, not a dead end'
   await expect(page.getByRole('status')).toHaveText('')
 })
 
-/** Story 9.1 AC5: the button that opens a day's list - a day cell with entries. Its name is the
+/** Story 9.1: the button that opens a day's list - a day cell with entries. Its name is the
  *  date, how many items it holds and what the cell shows of them, so it can be found by any of
  *  those without the grid's own text. */
 function dayButton(page: Page, name: RegExp = /, \d+ items?/) {
@@ -233,7 +232,7 @@ test('9.1 AC2: a pending request shows as held, in words as well as colour', asy
   await expect(section.getByText('Held – pending', { exact: true })).toBeVisible()
 })
 
-test('9.1 AC5: opening a day lists its booking with the event, times and "Booked"', async ({
+test('9.1 AC3: opening a day lists its booking with the event, times and "Booked"', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -254,7 +253,7 @@ test('9.1 AC5: opening a day lists its booking with the event, times and "Booked
   await expect(list).toContainText('Setup and teardown included: 08:00–19:00')
 })
 
-test('9.1 AC5: a held request in the day list says "Held – pending" with its setup and teardown', async ({
+test('9.1 AC2: a held request in the day list says "Held – pending" with its setup and teardown', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -271,7 +270,7 @@ test('9.1 AC5: a held request in the day list says "Held – pending" with its s
   await expect(list).toContainText('Setup and teardown included: 12:30–18:15')
 })
 
-test('9.1 AC5: a closure in the day list shows its reason', async ({ page }) => {
+test('9.1 AC2: a closure in the day list shows its reason', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await page.getByRole('link', { name: 'Seminar Room 2.1' }).click()
@@ -284,7 +283,7 @@ test('9.1 AC5: a closure in the day list shows its reason', async ({ page }) => 
   await expect(list).toContainText('Unavailable – Maintenance')
 })
 
-test('9.1 AC5: a day opens and closes from the keyboard', async ({ page }) => {
+test('9.1: a day opens and closes from the keyboard', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await page.getByRole('link', { name: 'Grand Hall' }).click()
@@ -303,7 +302,7 @@ test('9.1 AC5: a day opens and closes from the keyboard', async ({ page }) => {
   await expect(dayList(page, /25 Nov 2026/)).toHaveCount(0)
 })
 
-test('9.1 AC5: opening a day does not move the month grid', async ({ page }) => {
+test('9.1: opening a day does not move the month grid', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto('/venues')
   await page.getByRole('link', { name: 'Grand Hall' }).click()
@@ -330,7 +329,7 @@ test('9.1 AC5: opening a day does not move the month grid', async ({ page }) => 
   expect(await pageBox(button)).toEqual(buttonBefore)
 })
 
-test('9.1 AC10: previous and next close an open day and keep the calendar working', async ({
+test('9.1 AC8: previous and next close an open day and keep the calendar working', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -433,7 +432,7 @@ test('9.4 AC1: a past booking stays red, an ended closure is muted, and a day wi
   await expect(dayButton(page, /^9 September 2026/)).toHaveClass(/calendar-cell-danger/)
 })
 
-test('9.1 AC7/AC8: several events on one day are all listed in time order, back-to-back apart', async ({
+test('9.1 AC5/AC6: several events on one day are all listed in time order, back-to-back apart', async ({
   page,
 }) => {
   // Given out of order on purpose. The evening one runs 16:00-18:00 with 30 minutes of setup.
@@ -469,7 +468,7 @@ test('9.1 AC7/AC8: several events on one day are all listed in time order, back-
   ])
 })
 
-test('9.1 AC9: a multi-day booking is listed on every day it covers, with that day’s part', async ({
+test('9.1 AC7: a multi-day booking is listed on every day it covers, with that day’s part', async ({
   page,
 }) => {
   // The event runs the 10th 20:00 to the 12th 10:00, with a whole day of setup and of teardown.
@@ -513,7 +512,7 @@ test('9.1 AC9: a multi-day booking is listed on every day it covers, with that d
   await expect(list).not.toContainText('Booked')
 })
 
-test('9.1 AC9: a held request on a day only its setup reaches says held, not booked', async ({
+test('9.1 AC7: a held request on a day only its setup reaches says held, not booked', async ({
   page,
 }) => {
   // Held from the 11th 20:00; the event itself is on the 12th, 10:00-11:00.
@@ -546,7 +545,7 @@ for (const viewer of [
   { who: 'Venue Staff', email: ACCOUNTS.venueStaff },
   { who: 'Technical Support', email: ACCOUNTS.techSupport },
 ]) {
-  test(`9.1 AC13: ${viewer.who} open a venue from the catalogue and see its calendar`, async ({
+  test(`9.1 AC11: ${viewer.who} open a venue from the catalogue and see its calendar`, async ({
     page,
   }) => {
     await signIn(page, viewer.email)
@@ -561,7 +560,7 @@ for (const viewer of [
 }
 
 // D3: the button's name carries what its cell shows, not just how many items there are.
-test('9.1 AC5: a day’s button is named with its date and what the cell shows, overflow included', async ({
+test('9.1: a day’s button is named with its date and what the cell shows, overflow included', async ({
   page,
 }) => {
   await stubCalendar(page, (month) => [
@@ -586,7 +585,7 @@ test('9.1 AC5: a day’s button is named with its date and what the cell shows, 
 })
 
 // D2: the list opens under the grid and legend, which on a short screen is below the fold.
-test('9.1 AC5: opening a day brings its list into view and leaves focus on the day', async ({
+test('9.1: opening a day brings its list into view and leaves focus on the day', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 400 })

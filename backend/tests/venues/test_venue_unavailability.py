@@ -1117,7 +1117,7 @@ def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role
 @pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE])
 def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
     """AC9. cannot fail first: they hold neither venues:read nor venue_calendar:read today
-    (9.1 AC13), so the refusal is already in place; pinned so a later change cannot expose a
+    (9.1 AC11), so the refusal is already in place; pinned so a later change cannot expose a
     closure's reason to them."""
     venue = make_venue(db)
     period = _period(db, venue.id, _days_from_now(10), _days_from_now(12), reason="SAFETY")

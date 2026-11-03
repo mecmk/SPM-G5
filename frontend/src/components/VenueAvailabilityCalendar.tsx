@@ -53,7 +53,7 @@ export function VenueAvailabilityCalendar({
   initialOpenDay = null,
   renderClosureActions,
 }: VenueAvailabilityCalendarProps) {
-  /** Story 9.1 AC5: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
+  /** Story 9.1: the day (`YYYY-MM-DD`) whose list is open under the calendar, if any. */
   const [openDay, setOpenDay] = useState<string | null>(initialOpenDay)
   // A day open on arrival stays where it is: scrolling to it would carry the page away from
   // what is above the calendar, a booking request's Approve and Reject among them.
@@ -68,7 +68,7 @@ export function VenueAvailabilityCalendar({
       ? 'unknown'
       : 'ready'
 
-  /** Story 9.1 AC5/AC9: each window split into the part on every day it covers. */
+  /** Story 9.1 AC7: each window split into the part on every day it covers. */
   const dayItems = useMemo(() => buildDayItems(windows, now), [windows, now])
   const itemsByDate = useMemo(() => groupDayItemsByDate(dayItems), [dayItems])
   const calendarEntries = useMemo(() => dayItems.map(toCalendarEntry), [dayItems])

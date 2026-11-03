@@ -22,7 +22,7 @@ export const UNAVAILABLE_LABEL = 'Unavailable'
 export const ENDED_LABEL = 'Ended'
 
 const HELD_ENTRY_PREFIX = 'Held'
-// Story 9.1 AC5: on a day the booking's own period is on, but the venue is blocked for longer
+// Story 9.1 AC2: on a day the booking's own period is on, but the venue is blocked for longer
 // (setup before it, teardown after it, or both), which side names the second line.
 const TURNAROUND_SETUP_LABEL = 'Setup included'
 const TURNAROUND_TEARDOWN_LABEL = 'Teardown included'
@@ -49,7 +49,7 @@ interface DaySlice {
 }
 
 /**
- * Story 9.1 AC5/AC9: one window's part of one Singapore day, ready to list. A booking that runs
+ * Story 9.1 AC7: one window's part of one Singapore day, ready to list. A booking that runs
  * over several days has one of these on each, holding only the part that falls on that day.
  */
 /** Story 9.4 AC6: the closure a day item is a part of, so Venue Staff can edit or end it from
@@ -137,7 +137,7 @@ function bookingKindLabel(isHeld: boolean, isTurnaroundOnly: boolean): string {
   return isHeld ? HELD_LABEL : BOOKED_LABEL
 }
 
-/** Story 9.1 AC5: which side of the booking's own period the extra blocked time on this day
+/** Story 9.1 AC2: which side of the booking's own period the extra blocked time on this day
  *  falls on - before it (setup), after it (teardown), or both. */
 function turnaroundSideLabel(bookingSlice: DaySlice, blocked: DaySlice): string {
   const hasSetup = blocked.start < bookingSlice.start
@@ -221,7 +221,7 @@ function itemsForWindow(window: VenueUnavailableWindow, index: number, now: numb
   })
 }
 
-/** Story 9.1 AC5/AC9: every window split into the part on each day it covers, in date then time
+/** Story 9.1 AC7: every window split into the part on each day it covers, in date then time
  *  order - so a day's items, and the entries a cell shows, are already in the order to list.
  *  `now` is the moment a closure counts as ended from (story 9.4 AC6). */
 export function buildDayItems(windows: VenueUnavailableWindow[], now: number): DayItem[] {

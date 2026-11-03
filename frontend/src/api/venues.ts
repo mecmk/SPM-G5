@@ -380,7 +380,7 @@ export const HELD_REASON = 'HELD'
 /** Mirrors `VenueUnavailableWindowOut` (story 9.1). One blocked period - a flat list, not
  * pre-expanded per day. `starts_at` / `ends_at` are the period the venue is blocked: for a
  * booking, its held period, setup and teardown included. `booking_starts_at` / `booking_ends_at`
- * (AC5) are the booking's own requested period inside it - which may cover only part of its
+ * (AC2) are the booking's own requested period inside it - which may cover only part of its
  * event's own schedule - null for a closure. */
 export interface VenueUnavailableWindow {
   /** Story 9.4: a closure's id, which an edit or an end names; null for a booking. */
