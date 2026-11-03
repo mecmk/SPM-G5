@@ -99,6 +99,7 @@ from tests.support.factories import (
     make_unavailability,
     make_user,
     make_venue,
+    make_venue_requirement,
 )
 from tests.support.locks import LOCK_WAIT_SECONDS, backend_pid, wait_until_waiting
 from tests.support.seed import Users
@@ -1148,17 +1149,33 @@ def test_the_requirement_needs_a_venue_again_and_the_event_is_never_cancelled(
 
 
 # --- AC4: who is told --------------------------------------------------------------------------
+def _booked_line(booking: VenueBooking, label: str, outcome: str) -> str:
+    """One booking as the notice lists it: ``Main hall (on Tue 3 Mar 2027 from 10:00 to 12:00) was
+    cancelled``, in Singapore time."""
+    start, end = booking.starts_at.astimezone(SGT), booking.ends_at.astimezone(SGT)
+    day = f"{start:%a} {start.day} {start:%b %Y}"
+    return f"{label} (on {day} from {start:%H:%M} to {end:%H:%M}) {outcome}"
+
+
 @pytest.mark.story("9.5", ac=4)
 def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
     db, venue_staff_client
 ):
     """AC4: one notice each, about the event, with the venue, the period, the reason and which
-    booking was cancelled and which request rejected; not one per booking. The coordinator's
-    carries the description and the organiser's does not."""
+    booking was cancelled and which request rejected - each named by its requirement (or
+    "Additional venue") and its booked times, so two bookings at one venue can be told apart; not
+    one notice per booking. The coordinator's carries the description and the organiser's does
+    not. The event was Confirmed, so each also says it is back in Planning and needs a new safety
+    check."""
     venue = make_venue(db)
-    event = _event_for(db)
-    approved = _pending_of(db, event, venue.id, _day(3), status="APPROVED")
-    pending = _pending_of(db, event, venue.id, _day(4))
+    event = _event_for(db, EventStatus.CONFIRMED)
+    main_hall = make_venue_requirement(db, event.id, position=0, name="Main hall")
+    breakout = make_venue_requirement(db, event.id, position=1, name="Breakout room")
+    approved = _pending_of(
+        db, event, venue.id, _day(3), status="APPROVED", venue_requirement_id=main_hall
+    )
+    pending = _pending_of(db, event, venue.id, _day(4), venue_requirement_id=breakout)
+    additional = _pending_of(db, event, venue.id, _day(5), status="APPROVED")
     starts_at, ends_at = _day(2), _day(7)
 
     _add(
@@ -1168,6 +1185,7 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
         ends_at,
         approved,
         pending,
+        additional,
         reason="RENOVATION",
         description="Floor relaid",
     )
@@ -1181,8 +1199,10 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
             _on_singapore_date(starts_at),
             _on_singapore_date(ends_at),
             "Renovation",
-            "cancelled",
-            "rejected",
+            _booked_line(approved, "Main hall", "was cancelled"),
+            _booked_line(pending, "Breakout room", "request was rejected"),
+            _booked_line(additional, "Additional venue", "was cancelled"),
+            "It is back in Planning and needs a new safety check before it is confirmed again.",
         ):
             assert wanted in notice.message
         assert (notice.related_entity_type, notice.related_entity_id) == ("event", event.id)
