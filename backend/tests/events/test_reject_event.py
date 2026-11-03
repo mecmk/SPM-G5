@@ -96,8 +96,7 @@ def test_rejection_with_an_unknown_field_is_refused(coordinator_client):
 def test_reject_event_refuses_a_blank_reason_even_bypassing_the_schema(db: Session):
     # AC1's mandatory-reason rule is enforced again in the service (service.py's reject_event),
     # not only by EventRejection's Pydantic validator, so a caller other than this HTTP endpoint
-    # (a future 4.6 clarification flow, 6.5 cancellation, a seed script) cannot persist a
-    # REJECTED request with no reason.
+    # (a seed script, say) cannot persist a REJECTED request with no reason.
     event = make_event(
         db, status=EventStatus.UNDER_REVIEW, assigned_coordinator_id=Users.COORDINATOR.id
     )

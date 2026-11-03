@@ -1,9 +1,7 @@
 """ORM models for the event lifecycle (stories 2.x-7.x). Mirrors backend/db/migrations.
 
-Added by story 14.2, which is the first story on this branch that needs to reference an event
-row (a venue booking always belongs to one). The mapping covers the whole ``events`` table so
-later stories in the 2.x / 3.x / 4.x / 5.x / 6.x / 7.x epics **extend this class** rather than
-mapping ``events`` a second time - two declarative classes on one table raise
+The mapping covers the whole ``events`` table: a story that needs more of it **extends this
+class** rather than mapping ``events`` a second time - two declarative classes on one table raise
 ``InvalidRequestError``.
 
 Story 2.1 adds the request's child rows: accessibility needs, equipment lines (with the
@@ -255,9 +253,9 @@ class EquipmentUnavailabilityPeriod(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class EventStatusHistory(UUIDPrimaryKeyMixin, Base):
-    """Append-only log of every event status transition (stories 4.6, 6.1, 6.4). Written by
-    story 4.4/4.5's approve/reject and, later, 6.1/6.4's other transitions - never updated or
-    deleted. No ``created_at``/``updated_at``: ``changed_at`` is the only timestamp.
+    """Append-only log of every event status transition (stories 4.6, 6.1, 6.4), written through
+    ``events.service.record_transition`` - never updated or deleted. No
+    ``created_at``/``updated_at``: ``changed_at`` is the only timestamp.
     """
 
     __tablename__ = "event_status_history"

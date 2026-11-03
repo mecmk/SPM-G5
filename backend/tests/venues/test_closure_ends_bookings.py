@@ -700,9 +700,9 @@ def test_two_bookings_of_one_event_are_both_ended(db, venue_staff_client):
 
 @pytest.mark.story("9.5", ac=2)
 def test_a_booking_outside_the_closure_or_at_another_venue_is_not_touched(db, venue_staff_client):
-    """AC2. cannot fail first on its own assertions - nothing is ended today - so it is paired
-    with the case above, which carries the red. The same venue outside the period, and another
-    venue under a closure written without a save, are left alone."""
+    """AC2. could not fail first on its own assertions - nothing was ended before 9.5 - so it is
+    paired with the case above, which carries the red. The same venue outside the period, and
+    another venue under a closure written without a save, are left alone."""
     venue, elsewhere = make_venue(db), make_venue(db)
     inside = _live(db, venue.id, _day(3))
     outside = _live(db, venue.id, _day(20))
@@ -958,8 +958,8 @@ def _approve_safety(db: Session, event: Event) -> None:
 
 @pytest.mark.story("9.5", ac=3)
 def test_a_planning_event_stays_in_planning(db, venue_staff_client):
-    """AC3. cannot fail first on the status - nothing returns a Planning event today - so it
-    is paired with the Confirmed case below, which carries the red; what it adds is that a
+    """AC3. could not fail first on the status - nothing returned a Planning event before 9.5 -
+    so it is paired with the Confirmed case below, which carries the red; what it adds is that a
     cancelled booking and a rejected request both leave the event in Planning with no history
     row and no audit entry."""
     venue = make_venue(db)
@@ -1409,8 +1409,8 @@ def test_overlapping_a_held_period_by_one_minute_ends_the_booking(db, venue_staf
 
 @pytest.mark.story("9.5", ac=5)
 def test_a_period_that_only_touches_the_booking_does_not_end_it(db, venue_staff_client):
-    """AC5. cannot fail first on the status - nothing is ended today - so it is paired with
-    the one-minute case above. A closure ending exactly where the booking's held period starts,
+    """AC5. could not fail first on the status - nothing was ended before 9.5 - so it is paired
+    with the one-minute case above. A closure ending exactly where the booking's held period starts,
     and one starting exactly where it ends, leave it as it is, and neither is a 409."""
     venue = make_venue(db)
     booking = _live(db, venue.id, _day(3, 10))
@@ -1436,8 +1436,8 @@ def test_the_overlap_is_measured_against_the_held_period(
 ):
     """AC5: setup and teardown count, and the held period's own edges are half-open. The booking
     is 10:00-12:00 with 60 minutes' setup and 30 minutes' teardown: held 09:00-12:30. The two
-    cases that touch an edge cannot fail first - nothing is ended today - and are paired with the
-    two that overlap."""
+    cases that touch an edge could not fail first - nothing was ended before 9.5 - and are paired
+    with the two that overlap."""
     venue = make_venue(db)
     booking = _booking(
         db,
@@ -1463,8 +1463,8 @@ def test_the_overlap_is_measured_against_the_held_period(
 
 @pytest.mark.story("9.5", ac=5)
 def test_a_completed_events_booking_is_not_listed_or_ended(db, venue_staff_client):
-    """AC5. cannot fail first on the status of the completed one - it is not marked today
-    either - so it is paired with the in-progress case, whose period covers both; the pair's
+    """AC5. could not fail first on the status of the completed one - it was not marked before
+    9.5 either - so it is paired with the in-progress case, whose period covers both; the pair's
     red is that the in-progress one is ended."""
     venue = make_venue(db)
     now = datetime.now(UTC)
@@ -1496,7 +1496,7 @@ def test_a_completed_events_booking_is_not_listed_or_ended(db, venue_staff_clien
 
 @pytest.mark.story("9.5", ac=5)
 def test_a_booking_whose_held_period_is_over_is_not_ended(db, venue_staff_client):
-    """AC5. cannot fail first, as above: a closure saved over days already gone ends nothing,
+    """AC5. could not fail first, as above: a closure saved over days already gone ends nothing,
     though the booking was inside it, and lists nothing. Paired with the in-progress case."""
     venue = make_venue(db)
     gone = _booking(db, venue.id, _day(-6), _day(-6, 12), status="APPROVED")
@@ -1533,7 +1533,7 @@ def test_only_planning_awaiting_and_confirmed_events_are_candidates(
 ):
     """AC5: a booking of an event in any other status is neither listed nor ended - a list of the
     statuses that count, so a status added later is left out until someone says it counts.
-    cannot fail first: nothing is ended today; it is paired with the candidates below."""
+    could not fail first: nothing was ended before 9.5; it is paired with the candidates below."""
     venue = make_venue(db)
     booking = _booking(
         db, venue.id, _day(3), _day(3, 12), status="PENDING", event_status=event_status

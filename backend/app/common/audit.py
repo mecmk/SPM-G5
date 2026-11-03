@@ -1,4 +1,4 @@
-"""Append-only audit trail (auditability requirement; story 7.4 later builds on it).
+"""Append-only audit trail (the auditability requirement).
 
 Call ``record_audit`` from a service after a significant action, inside the same transaction::
 

@@ -2,10 +2,10 @@
  * Story 9.4: mark a venue temporarily unavailable, even with events booked there.
  *
  * AC1  Venue Staff add a closure from the venue's Edit venue page (fix f9.4.1 moved the
- *      controls there from its details page) - a start, an end, a reason and a
- *      description, which every reason needs - and the calendar shows it as "Unavailable" with
- *      its reason; a block off with no description is refused in the backend's own words, and
- *      the month grid's chip names the reason, or the description for Other.
+ *      controls there from its details page) - a start, an end, a reason and a description,
+ *      which every reason needs - and the calendar shows it as "Unavailable" with its reason; a
+ *      block off with no description is refused in the backend's own words, and the month grid's
+ *      chip names the reason, or the description for Other.
  * AC5  An end not after the start is refused in the form, before anything is sent.
  * AC2  Before Save, the bookings the closure would affect are listed; Save waits for the list and
  *      is blocked when it cannot be had. (Extended by 9.5 AC1, CL-193: the list asks for a
@@ -13,8 +13,8 @@
  * AC3  (Replaced by 9.5 AC2 and AC3, CL-193: a closure ends the bookings it covers instead of
  *      flagging them.)
  * AC6  A closure is edited, then ended, from the day it falls on, each action saying what it does;
- *      an ended one shows as "Ended", muted, with no actions;
- *      editing one that was removed meanwhile says so.
+ *      an ended one shows as "Ended", muted, with no actions; editing one that was removed
+ *      meanwhile says so.
  * AC7  A request a closure covers cannot be approved while it stands; the backend refuses it
  *      (backend/tests/venues/test_venue_unavailability.py), and no longer marks it.
  * AC9  Only Venue Staff see the Block off time card; the coordinator and the Safety Officer see
@@ -30,10 +30,9 @@
  * requests, which no spec closes over any more.
  *
  * The calendar opens on the current month, so the tests pin the page's own clock to 10 October
- * 2028. Only the browser's Date moves; the server
- * keeps real time, which is why a closure over October 2028 is still "not started" for it. The
- * test that ends a closure needs one already started by the server's clock, so it keeps the real
- * one and works on today.
+ * 2028. Only the browser's Date moves; the server keeps real time, which is why a closure over
+ * October 2028 is still "not started" for it. The test that ends a closure needs one already
+ * started by the server's clock, so it keeps the real one and works on today.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import {
@@ -57,7 +56,6 @@ const END_NOW_HINT = 'Ends the whole closure now; the time already passed is kep
 
 /** The "Availability" card: a region on the details page, a group on the Edit venue page. */
 function availability(page: Page) {
-  // A region on the venue's details page; on the Edit venue page a fieldset, which is a group.
   return page
     .getByRole('region', { name: 'Availability', exact: true })
     .or(page.getByRole('group', { name: 'Availability', exact: true }))

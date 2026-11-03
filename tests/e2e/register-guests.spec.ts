@@ -15,12 +15,12 @@ import {
 } from './support'
 
 /**
- * Story 18.5 - register guests with my registration. END-TO-END tests: what an attendee and an
- * organiser click through.
+ * Story 18.5 - register guests with my registration: what an attendee and an organiser click
+ * through.
  *
- * Level: e2e. The rules behind these pages - at most 10 guests, a guest's name and dietary limits,
- * the places a group takes, when guests can no longer change, who may change them, and two
- * requests for the last places - are proven in
+ * The rules behind these pages - at most 10 guests, a guest's name and dietary limits, the places
+ * a group takes, when guests can no longer change, who may change them, and two requests for the
+ * last places - are proven in
  * backend/tests/registrations/test_register_guests_*.py, not repeated here. The exceptions are
  * AC1/AC6's checks in the browser, which stop an 11th guest or a guest with no name before any
  * request is sent, so no backend test can see them.

@@ -41,8 +41,6 @@ import {
   uniqueName,
 } from './support'
 
-/* ---------- Story 5.6: the Event Coordinator Lead reassigns ---------- */
-
 const [CHLOE, CARL] = COORDINATORS
 const STALE_MESSAGE =
   "This event's coordinator has changed since you opened it. Reload the event and try again."

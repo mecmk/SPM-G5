@@ -62,7 +62,7 @@ function loadFirstPage() {
  *
  * AC10: the status badge (shared with the draft editor and the event details page) is the same
  * component and colour mapping wherever it renders, so the status can never disagree with itself.
- * AC11: a tab strip (All plus the seven visible statuses) filters the currently-loaded page
+ * AC11: a tab strip (All plus every visible status) filters the currently-loaded page
  * client-side; "Load more" still fetches the next page of everything, regardless of tab.
  *
  * AC10/AC11 are the organiser-facing half of this same status/tab display; the coordinator's own

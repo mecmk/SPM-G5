@@ -13,11 +13,11 @@ import {
 } from './support'
 
 /**
- * Story 18.4 - autofill attendee profile details. END-TO-END tests: what an attendee and an
- * organiser click through, at a phone's width (375x667) and a desktop's (1280x800).
+ * Story 18.4 - autofill attendee profile details: what an attendee and an organiser click
+ * through, at a phone's width (375x667) and a desktop's (1280x800).
  *
- * Level: e2e. The rules behind what these pages show - the phone and dietary limits, who may read
- * or change a profile, which list rows show details, two saves in a row - are proven in
+ * The rules behind what these pages show - the phone and dietary limits, who may read or change a
+ * profile, which list rows show details, two saves in a row - are proven in
  * backend/tests/registrations/test_attendee_profile_*.py and backend/tests/common/, not repeated
  * here. The exceptions are AC6/AC7's checks in the browser, which block a save before any request
  * is sent, so no backend test can see them, and AC9 as the page shows it: the server's rule is a

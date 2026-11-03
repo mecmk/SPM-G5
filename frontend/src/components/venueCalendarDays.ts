@@ -48,10 +48,6 @@ interface DaySlice {
   end: number
 }
 
-/**
- * Story 9.1 AC7: one window's part of one Singapore day, ready to list. A booking that runs
- * over several days has one of these on each, holding only the part that falls on that day.
- */
 /** Story 9.4 AC6: the closure a day item is a part of, so Venue Staff can edit or end it from
  *  the day it falls on. `description` is the closure's own text, or null when it has none. */
 export interface DayClosure {
@@ -62,6 +58,10 @@ export interface DayClosure {
   description: string | null
 }
 
+/**
+ * Story 9.1 AC7: one window's part of one Singapore day, ready to list. A booking that runs
+ * over several days has one of these on each, holding only the part that falls on that day.
+ */
 export interface DayItem {
   id: string
   /** `YYYY-MM-DD`, Singapore time. */
