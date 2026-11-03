@@ -7,6 +7,9 @@ rules an upload must (story 2.1 AC14): the file is there, its bytes are a JPEG, 
 is no bigger than an upload may be. A picture that fails to load gives way to the placeholder
 (18.1 AC8), so a broken path would otherwise fail nothing and show only as a placeholder.
 
+It also checks that every seeded event past Draft has a picture, so a seeding change that adds one
+cannot leave it on the placeholder unnoticed, as #159's three were.
+
 Which event shows which picture is e2e-tested where a page shows it: Harbourfront Jazz Evening in
 attendee-registration.spec.ts, Sunset Yoga by the Bay in my-registrations.spec.ts and Data
 Literacy Workshop in events.spec.ts.
@@ -20,20 +23,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.events.models import Event
-from app.events.service import MAX_COVER_IMAGE_BYTES
+from app.events import service
+from app.events.models import Event, EventStatus
 
 # The frontend serves a seeded picture from here: its address is a path under it.
 FRONTEND_PUBLIC = Path(__file__).resolve().parents[3] / "frontend" / "public"
 SEEDED_PICTURE_PREFIX = "/images/events/"
-# How a JPEG and a PNG begin; a WebP is a RIFF file whose format is WEBP (2.1 AC14).
-JPEG_START = b"\xff\xd8\xff"
-PNG_START = b"\x89PNG\r\n\x1a\n"
-
-
-def _is_an_upload_format(content: bytes) -> bool:
-    is_webp = content[:4] == b"RIFF" and content[8:12] == b"WEBP"
-    return content.startswith((JPEG_START, PNG_START)) or is_webp
 
 
 @pytest.mark.story("2.1", ac=14)
@@ -54,5 +49,23 @@ def test_every_seeded_event_picture_is_one_an_upload_could_be(db: Session):
         path = FRONTEND_PUBLIC / url.removeprefix("/")
         assert path.is_file(), f"{url} names no file in frontend/public"
         content = path.read_bytes()
-        assert _is_an_upload_format(content), f"{url} is not a JPEG, PNG or WebP"
-        assert len(content) <= MAX_COVER_IMAGE_BYTES, f"{url} is bigger than an upload may be"
+        # The service's own reading of an upload's format, so the two cannot drift apart.
+        is_an_upload_format = service._cover_image_extension(content) is not None
+        assert is_an_upload_format, f"{url} is not a JPEG, PNG or WebP"
+        assert len(content) <= service.MAX_COVER_IMAGE_BYTES, (
+            f"{url} is bigger than an upload may be"
+        )
+
+
+@pytest.mark.story("18.1", ac=8)
+def test_every_seeded_event_past_draft_has_a_picture(db: Session):
+    """Every seeded event someone can open shows a picture; the drafts keep the placeholder, which
+    7.1 AC1's e2e test reads. A seeding change that adds an event past Draft gives it a picture in
+    c13's block at the end of 020_sample_data.sql."""
+    without_a_picture = db.scalars(
+        select(Event.name)
+        .where(Event.status != EventStatus.DRAFT, Event.cover_image_url.is_(None))
+        .order_by(Event.name)
+    ).all()
+
+    assert without_a_picture == []
