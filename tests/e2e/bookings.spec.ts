@@ -1069,10 +1069,12 @@ const TWO_DAY_SETUP_LINE = 'Setup: None · Event: 09:00–17:00 · Teardown: Non
 
 /**
  * The first day of a two-day event that books Sunrise Studio: a slot between 400 and 520 days
- * ahead, two days wide, that the Expo's days do not touch. The slot follows the minute, so a CI
- * retry or a repeat on the same database, minutes apart within the hour, takes another slot and
- * never meets its own earlier hold. No seeded booking and no other spec holds Sunrise Studio
- * then: the seed's holds are in Oct 2028 and 2029, and 9.4's closures are in Oct 2028 and now.
+ * ahead, two days wide, that the Expo's days do not touch. Each attempt of the test draws from
+ * its own share of the slots - every `attempts`th one, from its retry number - so a CI retry,
+ * which keeps the database its first attempt booked in, can never take that attempt's slot,
+ * whatever the time. Within an attempt the slot follows the minute. No seeded booking and no
+ * other spec holds Sunrise Studio then: the seed's holds are in Oct 2028 and 2029, and 9.4's
+ * closures are in Oct 2028 and now.
  */
 function twoDayEventStart(): number {
   const expo = Math.floor((EXPO_STARTS - Date.now()) / DAY_MS)
@@ -1080,7 +1082,10 @@ function twoDayEventStart(): number {
   for (let day = 400; day < 520; day += 2) {
     if (day + 1 < expo - 8 || day > expo + 3) slots.push(day)
   }
-  return slots[Math.floor(Date.now() / 60_000) % slots.length]
+  const { retry, project } = test.info()
+  const attempts = Math.max(project.retries, retry) + 1
+  const own = slots.filter((_, index) => index % attempts === retry)
+  return own[Math.floor(Date.now() / 60_000) % own.length]
 }
 
 /** The day and year `inFuture(days)` names, as the pages print them ("9", "2029"). */
@@ -1137,9 +1142,7 @@ test('13.1 AC2/13.2 AC1: Venue Staff see both dates of a multi-day booking befor
   await page.getByRole('searchbox', { name: 'Search requests' }).fill(name)
   const card = page.getByRole('listitem').filter({ hasText: name })
   const schedule = twoDaySchedule(start)
-  const sentence = new RegExp(
-    `^${SUNRISE_STUDIO} will be booked for ${name} from ${schedule}\\.$`,
-  )
+  const sentence = new RegExp(`^${SUNRISE_STUDIO} will be booked for ${name} from ${schedule}\\.$`)
   await expect(card.getByText(new RegExp(`^${schedule}$`))).toBeVisible()
   await expect(card.getByText(TWO_DAY_SETUP_LINE, { exact: true })).toBeVisible()
 
