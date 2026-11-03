@@ -35,6 +35,6 @@ export function blockOffTitle(isEditing: boolean, venueName: string): string {
 /** Story 9.5 AC1 (D27): the confirmation a save needs when it would reject or cancel bookings -
  * what it says, and the buttons that save and that close it without saving. */
 export const END_BOOKINGS_WARNING =
-  'Saving this closure rejects each pending request and cancels each approved booking listed. Their coordinators and organisers are told, and an event that was Confirmed or awaiting its safety check goes back to Planning.'
+  'Saving this closure rejects each pending request and cancels each approved booking listed. Their coordinators and organisers are told, and an event that was Confirmed or awaiting its safety check goes back to Planning when one of its approved bookings is cancelled.'
 export const END_BOOKINGS_LABEL = 'Save and end these bookings'
 export const END_BOOKINGS_CANCEL_LABEL = 'Go back'
