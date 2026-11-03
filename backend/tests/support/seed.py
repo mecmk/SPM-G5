@@ -362,6 +362,8 @@ class Registrations:
 
 class Unavailability:
     MAINTENANCE_SEMINAR_ROOM = uuid.UUID("88888888-0000-0000-0000-000000000001")
+    # 4 to 6 Jun 2029: still ahead when a test searches for it or requests the venue.
+    MAINTENANCE_SEMINAR_ROOM_AHEAD = uuid.UUID("88888888-0000-0000-0000-000000000002")
     # Story 12.6: Exhibition Foyer closed on each of its events' days, in the story's 0126NN block
     # (8888..0126NN), one after another in the order of the events; the marks on its bookings are
     # this closure's doing.

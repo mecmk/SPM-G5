@@ -114,7 +114,10 @@ INSERT INTO venue_accessibility_features (venue_id, feature_code, notes) VALUES
 ON CONFLICT (venue_id, feature_code) DO UPDATE SET notes = EXCLUDED.notes;
 
 INSERT INTO venue_unavailability_periods (id, venue_id, starts_at, ends_at, reason, notes, created_by_id) VALUES
-    ('88888888-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002', '2026-11-02 00:00+08', '2026-11-04 00:00+08', 'MAINTENANCE', 'Annual air-con servicing', '11111111-0000-0000-0000-000000000005')
+    ('88888888-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002', '2026-11-02 00:00+08', '2026-11-04 00:00+08', 'MAINTENANCE', 'Annual air-con servicing', '11111111-0000-0000-0000-000000000005'),
+    -- Far enough ahead that a search or a request can still name it: a closure in the past can't
+    -- be searched for, so a test that needs one to be ahead uses this one, not the row above.
+    ('88888888-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000002', '2029-06-04 00:00+08', '2029-06-06 00:00+08', 'MAINTENANCE', 'Air-con replacement', '11111111-0000-0000-0000-000000000005')
 ON CONFLICT (id) DO UPDATE SET
     venue_id = EXCLUDED.venue_id, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     reason = EXCLUDED.reason, notes = EXCLUDED.notes;
