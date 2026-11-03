@@ -7,6 +7,7 @@ import type { Permission } from './permissions'
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasSignedOut, setHasSignedOut] = useState(false)
 
   // Story 1.1 AC1: a reload keeps the session, because the HttpOnly cookie is still there.
   useEffect(() => {
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const me = await login(email, password)
     setUser(me)
+    setHasSignedOut(false)
     return me
   }, [])
 
@@ -37,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await logout()
     } finally {
       setUser(null)
+      setHasSignedOut(true)
     }
   }, [])
 
@@ -50,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, signIn, signOut, can, setFullName }),
-    [user, isLoading, signIn, signOut, can, setFullName],
+    () => ({ user, isLoading, hasSignedOut, signIn, signOut, can, setFullName }),
+    [user, isLoading, hasSignedOut, signIn, signOut, can, setFullName],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
