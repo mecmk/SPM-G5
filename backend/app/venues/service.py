@@ -1396,14 +1396,15 @@ def describe_period(starts_at: datetime, ends_at: datetime) -> str:
 def _added_slices(
     period: VenueUnavailabilityPeriod, starts_at: datetime, ends_at: datetime
 ) -> list[tuple[datetime, datetime]]:
-    """Story 9.5 AC1 (D22): what an edit newly covers - [new start, old start) when the start
-    moves earlier, and (old end, new end] when the end moves later. Shortening, ending early and
-    a change of text add nothing."""
+    """Story 9.5 AC1 (D22): what an edit newly covers - the new range less the old one: [new
+    start, old start) when the start moves earlier, and (old end, new end] when the end moves
+    later, each cut to the new range, so a closure moved clear of its old dates covers its new
+    dates only, not the gap between. Shortening, ending early and a change of text add nothing."""
     slices = []
     if starts_at < period.starts_at:
-        slices.append((starts_at, period.starts_at))
+        slices.append((starts_at, min(period.starts_at, ends_at)))
     if ends_at > period.ends_at:
-        slices.append((period.ends_at, ends_at))
+        slices.append((max(period.ends_at, starts_at), ends_at))
     return slices
 
 
